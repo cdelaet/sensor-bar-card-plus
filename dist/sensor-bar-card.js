@@ -19,10 +19,13 @@
  *   show_peak: true               # show peak marker (highest value seen this session)
  *   peak_color: '#888'             # colour of the peak marker (default grey)
  *   target: 2400                   # optional fixed target marker (absolute value, same scale as min/max)
+ *   target_entity: sensor.my_target_sensor   # optional entity providing the target marker value
  *   target_color: '#4a9eff'        # colour of the target marker (default grey)
  *   decimal: 1                     # decimal places for displayed value (null = use raw value)
  *   min: 0                        # minimum value
+ *   min_entity: sensor.my_min_sensor         # optional entity providing the minimum value
  *   max: 100                      # maximum value
+ *   max_entity: sensor.my_max_sensor         # optional entity providing the maximum value
  *   height: 38                    # bar height in px
  *   unit: W                       # override unit of measurement
  *   severity:                     # colour bands, used when color_mode is 'severity'
@@ -43,7 +46,10 @@
  *       name: My Sensor           # display name
  *       icon: mdi:thermometer     # any mdi icon
  *       min: 0
+ *       min_entity: sensor.my_min_sensor
  *       max: 100
+ *       max_entity: sensor.my_max_sensor
+ *       target_entity: sensor.my_target_sensor
  *       unit: °C
  *       height: 38
  *       label_position: left
@@ -67,6 +73,16 @@
  *       name: Kettle
  *       icon: mdi:kettle
  *       max: 3000
+ *
+ *  Dynamic scaling from sensors:
+ *   type: custom:sensor-bar-card
+ *   title: Grid Peak Monitoring
+ *   entities:
+ *     - entity: sensor.grid_projected_peak_power
+ *       name: Projected Peak
+ *       min: 0
+ *       max_entity: sensor.grid_peak_limit
+ *       target_entity: sensor.grid_peak_warning
  *
  *  Temperature:
  *   type: custom:sensor-bar-card
@@ -125,11 +141,14 @@ class SensorBarCard extends HTMLElement {
       show_peak: false,
       peak_color: '#888',
       target: null,
+      target_entity: null,
       target_color: '#888',
       decimal: null,
       gradient_stops: null,
       min: 0,
+      min_entity: null,
       max: 100,
+      max_entity: null,
       height: 38,
       label_width: 100,
       severity: [
@@ -152,8 +171,17 @@ class SensorBarCard extends HTMLElement {
   }
 
   set hass(hass) {
+    const oldHass = this._hass;
     this._hass = hass;
-    this._update();
+    
+    if (!oldHass) {
+      this._update();
+      return;
+    }
+    
+    if (this._shouldUpdate(oldHass, hass)) {
+      this._update();
+    }
   }
 
   // Merge global config with per-entity overrides
@@ -161,7 +189,9 @@ class SensorBarCard extends HTMLElement {
     const g = this._config;
     return {
       min:            entityCfg.min            ?? g.min,
+      min_entity:     entityCfg.min_entity     ?? g.min_entity ?? null,
       max:            entityCfg.max            ?? g.max,
+      max_entity:     entityCfg.max_entity     ?? g.max_entity ?? null,
       height:         entityCfg.height         ?? g.height,
       label_position: entityCfg.label_position ?? g.label_position,
       animated:       entityCfg.animated       ?? g.animated,
@@ -171,6 +201,7 @@ class SensorBarCard extends HTMLElement {
       show_peak:      entityCfg.show_peak      ?? g.show_peak,
       peak_color:     entityCfg.peak_color     ?? g.peak_color,
       target:         entityCfg.target         ?? g.target,
+      target_entity:  entityCfg.target_entity  ?? g.target_entity ?? null,
       target_color:   entityCfg.target_color   ?? g.target_color,
       decimal:        entityCfg.decimal        ?? g.decimal,
       label_width:    entityCfg.label_width    ?? g.label_width,
@@ -181,6 +212,45 @@ class SensorBarCard extends HTMLElement {
     };
   }
 
+  _shouldUpdate(oldHass, newHass) {
+    if (!this._config || !this._config.entities) return true;
+    
+    for (const entityCfg of this._config.entities) {
+      const ecfg = this._resolve(entityCfg);
+      const entitiesToWatch = [
+        entityCfg.entity,
+        ecfg.min_entity,
+        ecfg.max_entity,
+        ecfg.target_entity
+      ].filter(Boolean);
+      
+      for (const ent of entitiesToWatch) {
+        if (!oldHass.states[ent] || !newHass.states[ent]) continue;
+        if (oldHass.states[ent] !== newHass.states[ent]) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  
+  _getEntityNumericValue(entityId) {
+    if (!entityId || !this._hass?.states?.[entityId]) return null;
+    const raw = this._hass.states[entityId].state;
+    const num = parseFloat(raw);
+    return Number.isFinite(num) ? num : null;
+  }
+  
+  _getNumericValue(value, entityId = null) {
+    const entityValue = this._getEntityNumericValue(entityId);
+    if (entityValue !== null) return entityValue;
+    
+    if (value === null || value === undefined || value === '') return null;
+    
+    const num = parseFloat(value);
+    return Number.isFinite(num) ? num : null;
+  }
+  
   _getColor(pct, ecfg) {
     if (ecfg.color_mode === 'single') return ecfg.color;
 
@@ -489,12 +559,18 @@ class SensorBarCard extends HTMLElement {
         const ecfg      = this._resolve(entityCfg);
         const rawVal    = parseFloat(stateObj.state);
         const unit      = ecfg.unit ?? stateObj.attributes?.unit_of_measurement ?? '';
-        const pct       = Math.min(100, Math.max(0, ((rawVal - ecfg.min) / (ecfg.max - ecfg.min)) * 100));
+        const minVal    = this._getNumericValue(ecfg.min, ecfg.min_entity);
+        const maxVal    = this._getNumericValue(ecfg.max, ecfg.max_entity);
+        const targetVal = this._getNumericValue(ecfg.target, ecfg.target_entity);
+        const safeMin   = Number.isFinite(minVal) ? minVal : 0;
+        const safeMax   = Number.isFinite(maxVal) ? maxVal : 100;
+        const range     = safeMax - safeMin || 1;
+        const pct       = Math.min(100, Math.max(0, ((rawVal - safeMin) / range) * 100));
         const color     = this._getColor(pct, ecfg);
         const display   = isNaN(rawVal) ? stateObj.state : (ecfg.decimal !== null ? parseFloat(rawVal.toFixed(ecfg.decimal)).toLocaleString() : rawVal.toLocaleString());
         let targetPct   = null;
-        if (ecfg.target !== null && ecfg.target !== undefined) {
-          targetPct = Math.min(100, Math.max(0, ((ecfg.target - ecfg.min) / (ecfg.max - ecfg.min)) * 100));
+        if (targetVal !== null) {
+          targetPct = Math.min(100, Math.max(0, ((targetVal - safeMin) / range) * 100));
         }
         let peakPct = null, peakDisplay = null;
         if (ecfg.show_peak && !isNaN(rawVal)) {
@@ -528,7 +604,13 @@ class SensorBarCard extends HTMLElement {
       const ecfg    = this._resolve(entityCfg);
       const rawVal  = parseFloat(stateObj.state);
       const unit    = ecfg.unit ?? stateObj.attributes?.unit_of_measurement ?? '';
-      const pct     = Math.min(100, Math.max(0, ((rawVal - ecfg.min) / (ecfg.max - ecfg.min)) * 100));
+      const minVal    = this._getNumericValue(ecfg.min, ecfg.min_entity);
+      const maxVal    = this._getNumericValue(ecfg.max, ecfg.max_entity);
+      const targetVal = this._getNumericValue(ecfg.target, ecfg.target_entity);
+      const safeMin   = Number.isFinite(minVal) ? minVal : 0;
+      const safeMax   = Number.isFinite(maxVal) ? maxVal : 100;
+      const range     = safeMax - safeMin || 1;
+      const pct     = Math.min(100, Math.max(0, ((rawVal - safeMin) / range) * 100));
       const color   = this._getColor(pct, ecfg);
       const display = isNaN(rawVal) ? stateObj.state : (ecfg.decimal !== null ? parseFloat(rawVal.toFixed(ecfg.decimal)).toLocaleString() : rawVal.toLocaleString());
 
@@ -570,11 +652,16 @@ class SensorBarCard extends HTMLElement {
           this._peaks[key] = rawVal;
         }
         const peakVal = this._peaks[key];
-        const peakPct = Math.min(100, Math.max(0, ((peakVal - ecfg.min) / (ecfg.max - ecfg.min)) * 100));
+        const peakPct = Math.min(100, Math.max(0, ((peakVal - safeMin) / range) * 100));
         const peakEl  = row.querySelector('.peak-marker');
         if (peakEl) peakEl.style.left = `${peakPct}%`;
       }
-
+      // Update target marker position (for dynamic target_entity)
+      if (targetVal !== null) {
+        const targetPct = Math.min(100, Math.max(0, ((targetVal - safeMin) / range) * 100));
+        const targetEl  = row.querySelector('.target-marker');
+        if (targetEl) targetEl.style.left = `${targetPct}%`;
+      }
       rowIdx++;
     }
   }
