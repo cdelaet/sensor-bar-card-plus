@@ -5,6 +5,20 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Thanks!-%23FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/tommysharpnz)
 
+> [!NOTE]
+> This repository is a fork of the original project by TommySharpNZ:
+> https://github.com/TommySharpNZ/sensor-bar-card
+> 
+> This fork contains additional improvements including:
+> 
+> - layout refactor for consistent bar alignment
+> - dynamic min/max/target entities
+> - target marker and label system
+> - responsive alignment during resizing
+> - various bug fixes and rendering improvements
+> 
+> The original README from the upstream project is preserved below.
+
 A polished, highly configurable bar card for [Home Assistant](https://www.home-assistant.io/) Lovelace dashboards. Display any sensor as an animated, colour-coded horizontal bar.
 
 Works great for power, temperature, humidity, battery, CO₂, water flow, and any other numeric sensor.
