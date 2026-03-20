@@ -21,6 +21,7 @@
  *   target: 2400                   # optional fixed target marker (absolute value, same scale as min/max)
  *   target_entity: sensor.my_target_sensor   # optional entity providing the target marker value
  *   target_color: '#4a9eff'        # colour of the target marker (default grey)
+ *   above_target_color: '#F44336' # optional color for filled bar section beyond the target
  *   decimal: 1                     # decimal places for displayed value (null = use raw value)
  *   min: 0                        # minimum value
  *   min_entity: sensor.my_min_sensor         # optional entity providing the minimum value
@@ -55,6 +56,7 @@
  *       label_position: left
  *       color_mode: gradient
  *       color: '#4a9eff'
+ *       above_target_color: '#F44336'
  *       animated: true
  *       show_peak: true
  *       severity:
@@ -83,6 +85,7 @@
  *       min: 0
  *       max_entity: sensor.grid_peak_limit
  *       target_entity: sensor.grid_peak_warning
+ *       above_target_color: '#FF66AA'
  *
  *  Temperature:
  *   type: custom:sensor-bar-card
@@ -144,7 +147,9 @@ class SensorBarCard extends HTMLElement {
       target: null,
       target_entity: null,
       target_color: '#888',
+      target: null,
       show_target_label: false,
+      above_target_color: null, 
       decimal: null,
       gradient_stops: null,
       min: 0,
@@ -206,6 +211,7 @@ class SensorBarCard extends HTMLElement {
       target_entity:  entityCfg.target_entity  ?? g.target_entity ?? null,
       target_color:   entityCfg.target_color   ?? g.target_color,
       show_target_label: entityCfg.show_target_label ?? g.show_target_label,
+      above_target_color: entityCfg.above_target_color ?? g.above_target_color ?? null,
       decimal:        entityCfg.decimal        ?? g.decimal,
       label_width:    entityCfg.label_width    ?? g.label_width,
       gradient_stops: entityCfg.gradient_stops ?? g.gradient_stops,
@@ -329,6 +335,46 @@ class SensorBarCard extends HTMLElement {
       if (pct >= s.from && pct <= s.to) return s.color;
     }
     return ecfg.color;
+  }
+
+  _getFillStyle(pct, h, color, ecfg, targetPct = null) {
+    const borderRadius = pct >= 97 ? 'border-radius:6px;' : 'border-radius:6px 0 0 6px;';
+    const widthStyle = `width:${pct}%;height:${h}px;`;
+
+    const hasAboveTargetColor =
+      ecfg.above_target_color &&
+      targetPct !== null &&
+      Number.isFinite(targetPct) &&
+      pct > targetPct;
+
+    if (hasAboveTargetColor) {
+      const normalStop = Math.max(0, Math.min(100, (targetPct / pct) * 100));
+      return (
+        widthStyle +
+        borderRadius +
+        `background:linear-gradient(to right, ` +
+        `${color} 0%, ` +
+        `${color} ${normalStop}%, ` +
+        `${ecfg.above_target_color} ${normalStop}%, ` +
+        `${ecfg.above_target_color} 100%);`
+      );
+    }
+
+    if (ecfg.color_mode === 'gradient') {
+      const gs = ecfg.gradient_stops && ecfg.gradient_stops.length >= 2
+        ? [...ecfg.gradient_stops].sort((a,b)=>a.pos-b.pos).map(s=>`${s.color} ${s.pos}%`).join(',')
+        : '#4CAF50 0%,#FF9800 50%,#F44336 100%';
+
+      return (
+        widthStyle +
+        borderRadius +
+        'background:linear-gradient(to right,' + gs + ');' +
+        'background-size:' + ((100 / pct) * 100).toFixed(1) + '% 100%;' +
+        'background-repeat:no-repeat;'
+      );
+    }
+
+    return widthStyle + borderRadius + 'background:' + color + ';';
   }
 
   _render() {
@@ -615,16 +661,7 @@ class SensorBarCard extends HTMLElement {
             <div class="bar-wrap">
               <div class="bar-track" style="height:${h}px;">
                 <div class="bar-fill${ecfg.animated ? '' : ' no-anim'}"
-                  style="width:${pct}%;height:${h}px;${pct >= 97 ? 'border-radius:6px;' : ''}${
-                    ecfg.color_mode === 'gradient'
-                    ? (() => {
-                        const gs = ecfg.gradient_stops && ecfg.gradient_stops.length >= 2
-                          ? [...ecfg.gradient_stops].sort((a,b)=>a.pos-b.pos).map(s=>`${s.color} ${s.pos}%`).join(',')
-                          : '#4CAF50 0%,#FF9800 50%,#F44336 100%';
-                        return 'background:linear-gradient(to right,' + gs + ');background-size:' + ((100/pct)*100).toFixed(1) + '% 100%;background-repeat:no-repeat;';
-                    })()
-                    : 'background:' + color + ';'
-                  }"></div>
+                  style="${this._getFillStyle(pct, h, color, ecfg, targetPct)}"></div>
                 ${innerLabel}
                 ${peakMarker}
                 ${targetMarker}
@@ -729,19 +766,14 @@ class SensorBarCard extends HTMLElement {
 
       // Update bar fill width and colour in-place — this is what triggers the CSS transition
       const fill = row.querySelector('.bar-fill');
+      let liveTargetPct = null;
+      if (targetVal !== null) {
+        liveTargetPct = Math.min(100, Math.max(0, ((targetVal - safeMin) / range) * 100));
+      }
+
       if (fill) {
-        if (ecfg.color_mode === 'gradient') {
-          fill.style.width = `${pct}%`;
-          fill.style.backgroundSize = `${(100 / pct * 100).toFixed(1)}% 100%`;
-        } else {
-          fill.style.width = `${pct}%`;
-          fill.style.background = color;
-        }
-        if (pct >= 97) {
-          fill.style.borderRadius = '6px';
-        } else {
-          fill.style.borderRadius = '6px 0 0 6px';
-        }
+        fill.style.cssText = this._getFillStyle(pct, ecfg.height, color, ecfg, liveTargetPct);
+        fill.className = `bar-fill${ecfg.animated ? '' : ' no-anim'}`;
       }
 
       // Update displayed value
