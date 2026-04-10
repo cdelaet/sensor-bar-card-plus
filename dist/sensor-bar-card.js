@@ -125,6 +125,7 @@ class SensorBarCard extends HTMLElement {
     this._hass = null;
     this._peaks = {};
     this._rendered = false;
+    this._resizeObserver = null;
   }
 
   setConfig(config) {
@@ -143,6 +144,7 @@ class SensorBarCard extends HTMLElement {
       target: null,
       target_entity: null,
       target_color: '#888',
+      show_target_label: false,
       decimal: null,
       gradient_stops: null,
       min: 0,
@@ -203,6 +205,7 @@ class SensorBarCard extends HTMLElement {
       target:         entityCfg.target         ?? g.target,
       target_entity:  entityCfg.target_entity  ?? g.target_entity ?? null,
       target_color:   entityCfg.target_color   ?? g.target_color,
+      show_target_label: entityCfg.show_target_label ?? g.show_target_label,
       decimal:        entityCfg.decimal        ?? g.decimal,
       label_width:    entityCfg.label_width    ?? g.label_width,
       gradient_stops: entityCfg.gradient_stops ?? g.gradient_stops,
@@ -232,6 +235,45 @@ class SensorBarCard extends HTMLElement {
       }
     }
     return false;
+  }
+  
+  _repositionAllTargetLabels() {
+    if (!this.shadowRoot) return;
+    
+    this.shadowRoot.querySelectorAll('.row[data-entity]').forEach(row => {
+      this._positionTargetLabel(row);
+    });
+  }
+  
+  _positionTargetLabel(row) {
+    const track = row.querySelector('.bar-track');
+    const label = row.querySelector('.target-value-label');
+    const marker = row.querySelector('.target-marker');
+    
+    if (!track || !label || !marker) return;
+    
+    if (marker.style.display === 'none' || !label.textContent.trim()) {
+      label.style.visibility = 'hidden';
+      return;
+    }
+    
+    const trackRect = track.getBoundingClientRect();
+    const labelRect = label.getBoundingClientRect();
+    
+    const markerPercent = parseFloat(marker.style.left);
+    if (!Number.isFinite(markerPercent) || trackRect.width <= 0 || labelRect.width <= 0) {
+      label.style.visibility = 'hidden';
+      return;
+    }
+    
+    const markerX = (markerPercent / 100) * trackRect.width;
+    const halfLabel = labelRect.width / 2;
+    
+    const clampedX = Math.max(halfLabel, Math.min(trackRect.width - halfLabel, markerX));
+    
+    label.style.left = `${clampedX}px`;
+    label.style.transform = 'translateX(-50%)';
+    label.style.visibility = 'visible';
   }
   
   _getEntityNumericValue(entityId) {
@@ -311,17 +353,23 @@ class SensorBarCard extends HTMLElement {
           margin-bottom: 14px;
         }
         .row {
-          display: flex;
-          align-items: center;
           margin-bottom: 10px;
-          gap: 10px;
           cursor: pointer;
           border-radius: 8px;
           padding: 2px 4px;
         }
         .row:last-child { margin-bottom: 0; }
+        .row-stack {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
         .row:hover .bar-track { filter: brightness(0.95); transition: filter 0.15s; }
-
+        .main-line {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
         .icon-wrap {
           display: flex;
           align-items: center;
@@ -329,9 +377,12 @@ class SensorBarCard extends HTMLElement {
           flex-shrink: 0;
           width: 28px;
           color: var(--primary-text-color, #333);
+          line-height: 1;
         }
-        ha-icon { --mdc-icon-size: 20px; }
-
+        ha-icon {
+          --mdc-icon-size: 20px;
+          display: block;
+        }
         .label-left {
           flex-shrink: 0;
           font-size: 13px;
@@ -340,19 +391,13 @@ class SensorBarCard extends HTMLElement {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          display: flex;
+          align-items: center;
         }
         .bar-wrap {
           flex: 1;
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-        .bar-label-above {
-          display: flex;
-          justify-content: space-between;
-          font-size: 12px;
-          color: var(--secondary-text-color, #888);
-          margin-bottom: 2px;
+          min-width: 0;
+          position: relative;
         }
         .bar-track {
           position: relative;
@@ -392,7 +437,32 @@ class SensorBarCard extends HTMLElement {
           padding: 2px 8px;
           border-radius: 20px;
         }
-
+        .target-value-label {
+          position: absolute;
+          top: calc(100% - 2px);
+          font-size: 12px;
+          color: var(--secondary-text-color, #888);
+          white-space: nowrap;
+          pointer-events: none;
+          z-index: 5;
+          visibility: hidden;
+        }
+        .above-line {
+          display: flex;
+          gap: 10px;
+        }
+        .above-icon-spacer {
+          flex: 0 0 28px;
+        }
+        .above-bar-label {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          justify-content: space-between;
+          font-size: 12px;
+          color: var(--secondary-text-color, #888);
+          margin-bottom: 2px;
+        }
         /* ── Shared marker base ── */
         .peak-marker, .target-marker {
           position: absolute;
@@ -451,6 +521,9 @@ class SensorBarCard extends HTMLElement {
           font-weight: 600;
           color: var(--primary-text-color, #333);
           font-variant-numeric: tabular-nums;
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
         }
         .value-right .unit {
           font-size: 11px;
@@ -467,11 +540,25 @@ class SensorBarCard extends HTMLElement {
         </div>
       </ha-card>
     `;
-
+    
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+    }
+    
+    this._resizeObserver = new ResizeObserver(() => {
+      requestAnimationFrame(() => {
+        this._repositionAllTargetLabels();
+      });
+    });
+    
+    const card = this.shadowRoot.querySelector('.card');
+    if (card) {
+      this._resizeObserver.observe(card);
+    }
     this._update();
   }
 
-  _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, peakColor, targetColor) {
+  _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor) {
     const ecfg = this._resolve(entityCfg);
     const lp   = ecfg.label_position;
     const h    = ecfg.height;
@@ -487,16 +574,22 @@ class SensorBarCard extends HTMLElement {
       </div>` : '';
 
     // Target marker — same but chevron at bottom pointing up
-    const targetMarker = targetPct !== null ? `
-      <div class="target-marker" style="left:${targetPct}%;--marker-color:${targetColor || '#888'};">
+    const targetMarker = `
+      <div class="target-marker" style="left:${targetPct !== null ? targetPct : 0}%;--marker-color:${targetColor || '#888'};display:${targetPct !== null ? '' : 'none'};">
         <div class="target-line"></div>
         <div class="target-chevron"></div>
+      </div>`;
+    const targetValueLabel = ecfg.show_target_label ? `
+      <div class="target-value-label" style="left:${targetPct !== null ? targetPct : 0}%;">
+        ${targetDisplay !== null ? targetDisplay : ''}
       </div>` : '';
-
     const aboveLabel = lp === 'above' ? `
-      <div class="bar-label-above">
-        <span>${name}</span>
-        <span>${stateDisplay}${unit ? ' ' + unit : ''}</span>
+      <div class="above-line">
+        ${ecfg.icon && ecfg.icon !== false ? `<div class="above-icon-spacer"></div>` : ''}
+        <div class="above-bar-label">
+          <span>${name}</span>
+          <span>${stateDisplay}${unit ? ' ' + unit : ''}</span>
+        </div>
       </div>` : '';
 
     const innerLabel = lp === 'inside' ? `
@@ -505,38 +598,42 @@ class SensorBarCard extends HTMLElement {
         <span>${stateDisplay}${unit ? ' ' + unit : ''}</span>
       </div>` : '';
 
-    const leftLabel  = lp === 'left' ? `<div class="label-left" style="width:${ecfg.label_width}px;">${name}</div>` : '';
-
-    const rightValue = lp !== 'inside' && lp !== 'above'
-      ? `<div class="value-right">${stateDisplay}${unit ? `<span class="unit"> ${unit}</span>` : ''}</div>`
+    const leftLabel  = lp === 'left' 
+      ? `<div class="label-left" style="width:${ecfg.label_width}px;height:${h}px;">${name}</div>` 
       : '';
-
+    const rightValue = lp !== 'inside' && lp !== 'above'
+      ? `<div class="value-right" style="height:${h}px;">${stateDisplay}${unit ? `<span class="unit"> ${unit}</span>` : ''}</div>`
+      : '';    
+      
     return `
       <div class="row" data-entity="${entityCfg.entity}">
-        ${ecfg.icon && ecfg.icon !== false ? `<div class="icon-wrap"><ha-icon icon="${ecfg.icon}"></ha-icon></div>` : ''}
-        ${leftLabel}
-        <div class="bar-wrap">
+        <div class="row-stack">
           ${aboveLabel}
-          <div style="position:relative;height:${h}px;">
-            <div class="bar-track" style="position:absolute;inset:0;height:${h}px;">
-              <div class="bar-fill${ecfg.animated ? '' : ' no-anim'}"
-                style="width:${pct}%;height:${h}px;${pct >= 97 ? 'border-radius:6px;' : ''}${
-                  ecfg.color_mode === 'gradient'
+          <div class="main-line" style="height:${h}px;">
+            ${ecfg.icon && ecfg.icon !== false ? `<div class="icon-wrap" style="height:${h}px;min-height:${h}px;"><ha-icon icon="${ecfg.icon}"></ha-icon></div>` : ''}
+            ${leftLabel}
+            <div class="bar-wrap">
+              <div class="bar-track" style="height:${h}px;">
+                <div class="bar-fill${ecfg.animated ? '' : ' no-anim'}"
+                  style="width:${pct}%;height:${h}px;${pct >= 97 ? 'border-radius:6px;' : ''}${
+                    ecfg.color_mode === 'gradient'
                     ? (() => {
-                      const gs = ecfg.gradient_stops && ecfg.gradient_stops.length >= 2
-                        ? [...ecfg.gradient_stops].sort((a,b)=>a.pos-b.pos).map(s=>`${s.color} ${s.pos}%`).join(',')
-                        : '#4CAF50 0%,#FF9800 50%,#F44336 100%';
-                      return 'background:linear-gradient(to right,' + gs + ');background-size:' + ((100/pct)*100).toFixed(1) + '% 100%;background-repeat:no-repeat;';
+                        const gs = ecfg.gradient_stops && ecfg.gradient_stops.length >= 2
+                          ? [...ecfg.gradient_stops].sort((a,b)=>a.pos-b.pos).map(s=>`${s.color} ${s.pos}%`).join(',')
+                          : '#4CAF50 0%,#FF9800 50%,#F44336 100%';
+                        return 'background:linear-gradient(to right,' + gs + ');background-size:' + ((100/pct)*100).toFixed(1) + '% 100%;background-repeat:no-repeat;';
                     })()
                     : 'background:' + color + ';'
-                }"></div>
-              ${innerLabel}
+                  }"></div>
+                ${innerLabel}
+                ${peakMarker}
+                ${targetMarker}
+              </div>
+              ${targetValueLabel}
             </div>
-            ${peakMarker}
-            ${targetMarker}
+            ${rightValue}
           </div>
         </div>
-        ${rightValue}
       </div>`;
   }
 
@@ -565,12 +662,18 @@ class SensorBarCard extends HTMLElement {
         const safeMin   = Number.isFinite(minVal) ? minVal : 0;
         const safeMax   = Number.isFinite(maxVal) ? maxVal : 100;
         const range     = safeMax - safeMin || 1;
-        const pct       = Math.min(100, Math.max(0, ((rawVal - safeMin) / range) * 100));
+        const pct = Number.isFinite(rawVal)
+          ? Math.min(100, Math.max(0, ((rawVal - safeMin) / range) * 100))
+          : 0;        
         const color     = this._getColor(pct, ecfg);
         const display   = isNaN(rawVal) ? stateObj.state : (ecfg.decimal !== null ? parseFloat(rawVal.toFixed(ecfg.decimal)).toLocaleString() : rawVal.toLocaleString());
         let targetPct   = null;
         if (targetVal !== null) {
           targetPct = Math.min(100, Math.max(0, ((targetVal - safeMin) / range) * 100));
+        }
+        let targetDisplay = null;
+        if (targetVal !== null) {
+          targetDisplay = targetVal.toLocaleString() + (unit ? ' ' + unit : '');
         }
         let peakPct = null, peakDisplay = null;
         if (ecfg.show_peak && !isNaN(rawVal)) {
@@ -578,11 +681,16 @@ class SensorBarCard extends HTMLElement {
           peakPct     = pct;
           peakDisplay = display;
         }
-        html += this._buildRow(entityCfg, display, unit, pct, color, peakPct, peakDisplay, targetPct, ecfg.peak_color, ecfg.target_color);
+        html += this._buildRow(entityCfg, display, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_color, ecfg.target_color);
       }
       rowsEl.innerHTML = html;
       this._rendered = true;
-
+      requestAnimationFrame(() => {
+        rowsEl.querySelectorAll('.row[data-entity]').forEach(row => {
+          this._positionTargetLabel(row);
+        });
+      });
+      
       // Attach click handlers
       rowsEl.querySelectorAll('.row[data-entity]').forEach(row => {
         row.addEventListener('click', () => {
@@ -610,7 +718,9 @@ class SensorBarCard extends HTMLElement {
       const safeMin   = Number.isFinite(minVal) ? minVal : 0;
       const safeMax   = Number.isFinite(maxVal) ? maxVal : 100;
       const range     = safeMax - safeMin || 1;
-      const pct     = Math.min(100, Math.max(0, ((rawVal - safeMin) / range) * 100));
+      const pct = Number.isFinite(rawVal)
+        ? Math.min(100, Math.max(0, ((rawVal - safeMin) / range) * 100))
+        : 0;      
       const color   = this._getColor(pct, ecfg);
       const display = isNaN(rawVal) ? stateObj.state : (ecfg.decimal !== null ? parseFloat(rawVal.toFixed(ecfg.decimal)).toLocaleString() : rawVal.toLocaleString());
 
@@ -665,9 +775,36 @@ class SensorBarCard extends HTMLElement {
       if (targetVal !== null) {
         const targetPct = Math.min(100, Math.max(0, ((targetVal - safeMin) / range) * 100));
         const targetEl  = row.querySelector('.target-marker');
-        if (targetEl) targetEl.style.left = `${targetPct}%`;
+        if (targetEl) {
+          targetEl.style.display = '';
+          targetEl.style.left = `${targetPct}%`;
+        }
+        
+        const targetLabelEl = row.querySelector('.target-value-label');
+        if (targetLabelEl) {
+          targetLabelEl.textContent = targetVal.toLocaleString() + (unit ? ' ' + unit : '');
+          targetLabelEl.style.left = `${targetPct}%`;
+          targetLabelEl.style.visibility = 'hidden';
+        }
       }
+      else {
+        const targetEl = row.querySelector('.target-marker');
+        if (targetEl) targetEl.style.display = 'none';
+        
+        const targetLabelEl = row.querySelector('.target-value-label');
+        if (targetLabelEl) targetLabelEl.style.visibility = 'hidden';
+      }
+      requestAnimationFrame(() => {
+        this._positionTargetLabel(row);
+      });
       rowIdx++;
+    }
+  }
+  
+  disconnectedCallback() {
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
     }
   }
 }
