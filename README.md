@@ -37,6 +37,7 @@ Clicking any bar opens the native Home Assistant entity dialog with full history
 - 📍 **Four label positions** — left, above, inside the bar, or off
 - 📈 **Optional peak marker** — a subtle chevron and line marking the highest value seen this session
 - 🎯 **Optional target marker** — a fixed chevron and line marking a configurable goal or threshold
+- 🚨 **Optional above-target color** — highlight the filled bar segment beyond the target with a separate color
 - 🔄 **Dynamic min/max/target support** — optionally source `min`, `max`, and `target` from other entity states
 - 🏷️ **Optional target value label** — show the target value below the marker
 - ↔️ **Responsive label alignment** — above labels and target labels stay aligned during resize and zoom
@@ -108,6 +109,7 @@ All options can be set at the **card level as global defaults** and overridden i
 | `target` | number | — | Fixed target marker value (same scale as `min`/`max`) |
 | `target_entity` | string | — | Entity whose numeric state is used as the target marker value |
 | `target_color` | string | `#888` | Colour of the target marker |
+| `above_target_color` | string | — | Colour used for the filled portion of the bar beyond the target |
 | `show_target_label` | boolean | `false` | Show the target value as a label below the target marker |
 | `decimal` | number | — | Decimal places to show in the value (e.g. `0`, `1`, `2`) |
 | `min` | number | `0` | Minimum value (shown as 0% bar width) |
@@ -251,6 +253,8 @@ You can also provide `min_entity`, `max_entity`, and `target_entity` to source t
 When `target_entity` changes, the target marker position updates during subsequent renders so it can be used as a dynamic indicator without reloading the dashboard.
 
 Set `show_target_label: true` to display the target value below the marker. The label follows the marker as values update and is automatically clamped so it stays within the bar width, including near the left and right edges.
+
+Set `above_target_color` to give the filled section beyond the target a different color. This only applies when the current value exceeds the target, making it easy to distinguish the portion that is over the goal or threshold.
 
 ---
 
@@ -662,6 +666,36 @@ entities:
     target: 150
     target_color: "#4CAF50"
     show_target_label: true
+```
+
+---
+
+### Above-Target Color
+
+Use `above_target_color` to highlight only the part of the filled bar that extends beyond the target marker. This is useful when you want the normal range to keep its existing bar color while clearly calling out the exceeded portion.
+
+```yaml
+type: custom:sensor-bar-card
+title: Above Target Highlight
+label_position: left
+entities:
+  - entity: input_number.bar_card_test_power
+    name: Grid Import
+    icon: mdi:transmission-tower-import
+    min: 0
+    max: 3000
+    target: 2000
+    target_color: "#4a9eff"
+    above_target_color: "#F44336"
+    show_target_label: true
+  - entity: input_number.bar_card_test_power
+    name: Solar Export
+    icon: mdi:solar-power
+    min: 0
+    max: 3000
+    target: 1200
+    target_color: "#FF9800"
+    above_target_color: "#FF66AA"
 ```
 
 ---
