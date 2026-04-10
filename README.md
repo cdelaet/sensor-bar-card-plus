@@ -37,6 +37,7 @@ Clicking any bar opens the native Home Assistant entity dialog with full history
 - 📍 **Four label positions** — left, above, inside the bar, or off
 - 📈 **Optional peak marker** — a subtle chevron and line marking the highest value seen this session
 - 🎯 **Optional target marker** — a fixed chevron and line marking a configurable goal or threshold
+- 🔄 **Dynamic min/max/target support** — optionally source `min`, `max`, and `target` from other entity states
 - ✨ **Animated fill** — smooth bar width and colour transitions on value change
 - 🖱️ **Native HA entity dialog** — click any bar to open the Home Assistant more-info popup with history
 - 🔧 **Per-entity overrides** — every option can be set as a global default and overridden per entity
@@ -103,10 +104,13 @@ All options can be set at the **card level as global defaults** and overridden i
 | `show_peak` | boolean | `false` | Show peak marker for the highest value seen this session |
 | `peak_color` | string | `#888` | Colour of the peak marker |
 | `target` | number | — | Fixed target marker value (same scale as `min`/`max`) |
+| `target_entity` | string | — | Entity whose numeric state is used as the target marker value |
 | `target_color` | string | `#888` | Colour of the target marker |
 | `decimal` | number | — | Decimal places to show in the value (e.g. `0`, `1`, `2`) |
 | `min` | number | `0` | Minimum value (shown as 0% bar width) |
+| `min_entity` | string | — | Entity whose numeric state is used as the minimum value |
 | `max` | number | `100` | Maximum value (shown as 100% bar width) |
+| `max_entity` | string | — | Entity whose numeric state is used as the maximum value |
 | `height` | number | `38` | Bar height in pixels |
 | `label_width` | number | `100` | Width of the name label column in pixels — only applies when `label_position: left` |
 | `unit` | string | — | Override the unit of measurement displayed next to the value |
@@ -239,6 +243,10 @@ The target chevron points **up** from the bottom of the bar while the peak chevr
 
 The target value uses the same scale as `min` and `max` — so if `max: 3000` and you want a target at 2000W, set `target: 2000`.
 
+You can also provide `min_entity`, `max_entity`, and `target_entity` to source those values from other Home Assistant entities. If both a constant value and an entity are provided, the entity value takes precedence. If the entity state is unavailable or non-numeric, the card falls back to the constant value.
+
+When `target_entity` changes, the target marker position updates during subsequent renders so it can be used as a dynamic indicator without reloading the dashboard.
+
 ---
 
 ## Unit Override
@@ -270,6 +278,23 @@ If an entity ID is not found in Home Assistant (e.g. a typo or a device that's b
 ---
 
 ## Examples
+
+---
+
+### Dynamic Min / Max / Target Entities
+
+Use entity states to drive the scale and target marker dynamically. This is useful when thresholds or limits are managed elsewhere in Home Assistant.
+
+```yaml
+type: custom:sensor-bar-card
+entities:
+  - entity: sensor.grid_import_qh_projected_end_w
+    min: 0
+    max_entity: sensor.grid_peak_limit
+    target_entity: sensor.grid_peak_warning
+```
+
+If both a fixed value and an entity are configured for the same setting, the entity is used. If the entity state is unavailable or non-numeric, the fixed value is used instead.
 
 ---
 
