@@ -600,7 +600,7 @@ class SensorBarCard extends HTMLElement {
         .bar-inner-label[data-inside-density="compressed"] {
           display: none;
         }
-        .bar-inner-label span {
+        .bar-inner-label > span {
           background: rgba(0,0,0,0.35);
           backdrop-filter: blur(4px);
           -webkit-backdrop-filter: blur(4px);
@@ -631,6 +631,50 @@ class SensorBarCard extends HTMLElement {
         .bar-inner-label .inside-value {
           flex: 0 0 auto;
           max-width: 56%;
+          display: inline-flex;
+          align-items: baseline;
+        }
+        .bar-inner-label .inside-value-text {
+          display: inline-flex;
+          align-items: baseline;
+          gap: 0;
+          max-width: 100%;
+          min-width: 0;
+          overflow: hidden;
+          white-space: nowrap;
+          background: transparent;
+          padding: 0;
+          border-radius: 0;
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
+        }
+        .bar-inner-label .inside-value-text.has-unit {
+          gap: 2px;
+        }
+        .bar-inner-label .inside-value-text.tight-unit {
+          gap: 0;
+        }
+        .bar-inner-label .inside-number {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          background: transparent;
+          padding: 0;
+          border-radius: 0;
+        }
+        .bar-inner-label .inside-unit {
+          flex: 0 1 auto;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: clip;
+          white-space: nowrap;
+          font-size: 11px;
+          font-weight: 400;
+          color: rgba(255, 255, 255, 0.72);
+          background: transparent;
+          padding: 0;
+          border-radius: 0;
         }
         .target-value-label {
           position: absolute;
@@ -1149,6 +1193,13 @@ class SensorBarCard extends HTMLElement {
     return `<span class="above-bar-label-value ${unitModeClass}"><span class="above-bar-label-number">${display}</span><span class="above-bar-label-unit">${cleanUnit}</span></span>`;
   }
 
+  _formatInsideValueMarkup(display, unit) {
+    if (!unit) return `<span class="inside-value-text"><span class="inside-number">${display}</span></span>`;
+    const cleanUnit = String(unit);
+    const unitModeClass = this._isTightUnit(cleanUnit) ? 'tight-unit' : 'has-unit';
+    return `<span class="inside-value-text ${unitModeClass}"><span class="inside-number">${display}</span><span class="inside-unit">${cleanUnit}</span></span>`;
+  }
+
   _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor) {
     const ecfg = this._resolve(entityCfg);
     const lp   = ecfg.label_position;
@@ -1190,7 +1241,7 @@ class SensorBarCard extends HTMLElement {
     const innerLabel = lp === 'inside' ? `
       <div class="bar-inner-label">
         <span class="inside-name">${name}</span>
-        <span class="inside-value">${this._formatDisplayWithUnit(stateDisplay, unit)}</span>
+        <span class="inside-value">${this._formatInsideValueMarkup(stateDisplay, unit)}</span>
       </div>` : '';
 
     const leftLabel  = lp === 'left'
@@ -1248,11 +1299,13 @@ class SensorBarCard extends HTMLElement {
         const safeMin   = Number.isFinite(minVal) ? minVal : 0;
         const safeMax   = Number.isFinite(maxVal) ? maxVal : 100;
         const range     = safeMax - safeMin || 1;
+        const isNumericState = Number.isFinite(rawVal);
         const pct = Number.isFinite(rawVal)
           ? Math.min(100, Math.max(0, ((rawVal - safeMin) / range) * 100))
           : 0;        
         const color     = this._getColor(pct, ecfg);
         const display   = isNaN(rawVal) ? stateObj.state : (ecfg.decimal !== null ? parseFloat(rawVal.toFixed(ecfg.decimal)).toLocaleString() : rawVal.toLocaleString());
+        const displayUnit = isNumericState ? unit : '';
         let targetPct   = null;
         if (targetVal !== null) {
           targetPct = Math.min(100, Math.max(0, ((targetVal - safeMin) / range) * 100));
@@ -1267,7 +1320,7 @@ class SensorBarCard extends HTMLElement {
           peakPct     = pct;
           peakDisplay = display;
         }
-        html += this._buildRow(entityCfg, display, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_color, ecfg.target_color);
+        html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_color, ecfg.target_color);
       }
       rowsEl.innerHTML = html;
       this._rendered = true;
@@ -1300,11 +1353,13 @@ class SensorBarCard extends HTMLElement {
       const safeMin   = Number.isFinite(minVal) ? minVal : 0;
       const safeMax   = Number.isFinite(maxVal) ? maxVal : 100;
       const range     = safeMax - safeMin || 1;
+      const isNumericState = Number.isFinite(rawVal);
       const pct = Number.isFinite(rawVal)
         ? Math.min(100, Math.max(0, ((rawVal - safeMin) / range) * 100))
         : 0;      
       const color   = this._getColor(pct, ecfg);
       const display = isNaN(rawVal) ? stateObj.state : (ecfg.decimal !== null ? parseFloat(rawVal.toFixed(ecfg.decimal)).toLocaleString() : rawVal.toLocaleString());
+      const displayUnit = isNumericState ? unit : '';
 
       const row = rows[rowIdx];
       if (!row) { rowIdx++; continue; }
@@ -1325,18 +1380,18 @@ class SensorBarCard extends HTMLElement {
       const valueEl = row.querySelector('.value-right');
       if (valueEl) {
         valueEl.dataset.display = this._encodeDataAttr(display);
-        valueEl.dataset.unit = this._encodeDataAttr(unit);
+        valueEl.dataset.unit = this._encodeDataAttr(displayUnit);
         valueEl.dataset.hideUnit = 'false';
-        valueEl.innerHTML = this._formatRightValueMarkup(display, unit, false);
+        valueEl.innerHTML = this._formatRightValueMarkup(display, displayUnit, false);
       }
       const innerLabel = row.querySelector('.bar-inner-label');
       if (innerLabel) {
         const valueSpan = innerLabel.querySelector('.inside-value');
-        if (valueSpan) valueSpan.textContent = this._formatDisplayWithUnit(display, unit);
+        if (valueSpan) valueSpan.innerHTML = this._formatInsideValueMarkup(display, displayUnit);
       }
       const aboveLabel = row.querySelector('.above-bar-label');
       if (aboveLabel) {
-        aboveLabel.innerHTML = `<span class="above-bar-label-name">${ecfg.name || stateObj.attributes?.friendly_name || entityCfg.entity}</span>${this._formatAboveValueMarkup(display, unit)}`;
+        aboveLabel.innerHTML = `<span class="above-bar-label-name">${ecfg.name || stateObj.attributes?.friendly_name || entityCfg.entity}</span>${this._formatAboveValueMarkup(display, displayUnit)}`;
       }
 
       // Update peak marker position
