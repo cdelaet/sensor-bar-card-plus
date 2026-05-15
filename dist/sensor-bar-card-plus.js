@@ -555,9 +555,26 @@ class SensorBarCard extends HTMLElement {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          gap: 6px;
           padding: 0 6px;
           pointer-events: none;
           z-index: 2;
+        }
+        .bar-inner-label[data-inside-density="compact"] {
+          gap: 5px;
+          padding: 0 5px;
+        }
+        .bar-inner-label[data-inside-density="tight"] {
+          gap: 4px;
+          padding: 0 4px;
+        }
+        .bar-inner-label[data-inside-density="dense"] {
+          gap: 0;
+          padding: 0 4px;
+          justify-content: flex-end;
+        }
+        .bar-inner-label[data-inside-density="compressed"] {
+          display: none;
         }
         .bar-inner-label span {
           background: rgba(0,0,0,0.35);
@@ -573,6 +590,23 @@ class SensorBarCard extends HTMLElement {
           max-width: 100%;
           overflow: hidden;
           text-overflow: ellipsis;
+        }
+        .bar-inner-label .inside-name {
+          flex: 1 1 auto;
+          max-width: 58%;
+        }
+        .bar-inner-label[data-inside-density="compact"] .inside-name {
+          max-width: 52%;
+        }
+        .bar-inner-label[data-inside-density="tight"] .inside-name {
+          max-width: 44%;
+        }
+        .bar-inner-label[data-inside-density="dense"] .inside-name {
+          display: none;
+        }
+        .bar-inner-label .inside-value {
+          flex: 0 0 auto;
+          max-width: 56%;
         }
         .target-value-label {
           position: absolute;
@@ -745,6 +779,7 @@ class SensorBarCard extends HTMLElement {
       requestAnimationFrame(() => {
         this._applyCompactTier();
         this._applyLeftModeDensity();
+        this._applyInsideLabelDensity();
         this._repositionAllTargetLabels();
       });
     });
@@ -795,6 +830,27 @@ class SensorBarCard extends HTMLElement {
       }
 
       mainLine.dataset.leftDensity = density;
+    });
+  }
+
+  _applyInsideLabelDensity() {
+    if (!this.shadowRoot) return;
+    this.shadowRoot.querySelectorAll('.bar-inner-label').forEach(innerLabel => {
+      const track = innerLabel.closest('.bar-track');
+      const nameEl = innerLabel.querySelector('.inside-name');
+      const valueEl = innerLabel.querySelector('.inside-value');
+      if (!track || !nameEl || !valueEl) return;
+
+      const trackWidth = track.getBoundingClientRect().width;
+      const valueWidth = valueEl.scrollWidth;
+      let density = 'normal';
+
+      if (trackWidth < Math.max(72, valueWidth + 12)) density = 'compressed';
+      else if (trackWidth < valueWidth + 56) density = 'dense';
+      else if (trackWidth < valueWidth + 92) density = 'tight';
+      else if (trackWidth < valueWidth + 128) density = 'compact';
+
+      innerLabel.dataset.insideDensity = density;
     });
   }
 
@@ -853,8 +909,8 @@ class SensorBarCard extends HTMLElement {
 
     const innerLabel = lp === 'inside' ? `
       <div class="bar-inner-label">
-        <span>${name}</span>
-        <span>${this._formatDisplayWithUnit(stateDisplay, unit)}</span>
+        <span class="inside-name">${name}</span>
+        <span class="inside-value">${this._formatDisplayWithUnit(stateDisplay, unit)}</span>
       </div>` : '';
 
     const leftLabel  = lp === 'left'
@@ -937,6 +993,7 @@ class SensorBarCard extends HTMLElement {
       this._rendered = true;
       requestAnimationFrame(() => {
         this._applyLeftModeDensity();
+        this._applyInsideLabelDensity();
         rowsEl.querySelectorAll('.row[data-entity]').forEach(row => {
           this._positionTargetLabel(row);
         });
@@ -997,8 +1054,8 @@ class SensorBarCard extends HTMLElement {
       }
       const innerLabel = row.querySelector('.bar-inner-label');
       if (innerLabel) {
-        const spans = innerLabel.querySelectorAll('span');
-        if (spans[1]) spans[1].textContent = this._formatDisplayWithUnit(display, unit);
+        const valueSpan = innerLabel.querySelector('.inside-value');
+        if (valueSpan) valueSpan.textContent = this._formatDisplayWithUnit(display, unit);
       }
       const aboveLabel = row.querySelector('.above-bar-label');
       if (aboveLabel) {
@@ -1044,6 +1101,7 @@ class SensorBarCard extends HTMLElement {
     }
     requestAnimationFrame(() => {
       this._applyLeftModeDensity();
+      this._applyInsideLabelDensity();
       rows.forEach(row => {
         this._positionTargetLabel(row);
       });
