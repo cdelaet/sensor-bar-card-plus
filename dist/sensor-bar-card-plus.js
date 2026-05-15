@@ -602,8 +602,9 @@ class SensorBarCard extends HTMLElement {
           align-items: center;
           gap: var(--sbcp-main-gap);
           font-size: 12px;
+          line-height: 1.15;
           color: var(--secondary-text-color, #888);
-          margin-bottom: 4px;
+          margin-bottom: 2px;
           min-height: 16px;
         }
         .above-bar-label-name {
