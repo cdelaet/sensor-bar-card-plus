@@ -388,6 +388,7 @@ class SensorBarCard extends HTMLElement {
           --sbcp-main-gap: 8px;
           --sbcp-icon-width: 28px;
           --sbcp-above-gap: 10px;
+          --sbcp-left-label-share: 34%;
           --sbcp-value-width: 62px;
           --sbcp-bar-min-width: 48px;
           --sbcp-target-label-font-size: 12px;
@@ -403,6 +404,7 @@ class SensorBarCard extends HTMLElement {
           --sbcp-main-gap: 6px;
           --sbcp-icon-width: 26px;
           --sbcp-above-gap: 8px;
+          --sbcp-left-label-share: 28%;
           --sbcp-value-width: 56px;
           --sbcp-bar-min-width: 44px;
           --sbcp-target-label-font-size: 11px;
@@ -413,17 +415,30 @@ class SensorBarCard extends HTMLElement {
           --sbcp-main-gap: 5px;
           --sbcp-icon-width: 24px;
           --sbcp-above-gap: 6px;
+          --sbcp-left-label-share: 24%;
           --sbcp-value-width: 52px;
           --sbcp-bar-min-width: 40px;
           --sbcp-target-label-font-size: 11px;
           --sbcp-inline-label-padding-x: 6px;
           --sbcp-inline-label-font-size: 11px;
         }
-        .card[data-compact="critical"] {
+        .card[data-compact="dense"] {
+          --sbcp-main-gap: 4px;
+          --sbcp-icon-width: 23px;
+          --sbcp-above-gap: 5px;
+          --sbcp-left-label-share: 20%;
+          --sbcp-value-width: 48px;
+          --sbcp-bar-min-width: 38px;
+          --sbcp-target-label-font-size: 10px;
+          --sbcp-inline-label-padding-x: 5px;
+          --sbcp-inline-label-font-size: 10px;
+        }
+        .card[data-compact="compressed"] {
           --sbcp-main-gap: 4px;
           --sbcp-icon-width: 22px;
           --sbcp-above-gap: 4px;
-          --sbcp-value-width: 48px;
+          --sbcp-left-label-share: 18%;
+          --sbcp-value-width: 44px;
           --sbcp-bar-min-width: 36px;
           --sbcp-target-label-font-size: 10px;
           --sbcp-inline-label-padding-x: 5px;
@@ -456,6 +471,26 @@ class SensorBarCard extends HTMLElement {
           gap: var(--sbcp-main-gap);
           min-width: 0;
         }
+        .main-line.left-mode[data-left-density="normal"] {
+          --sbcp-left-label-share: 32%;
+          --sbcp-value-width: 62px;
+        }
+        .main-line.left-mode[data-left-density="compact"] {
+          --sbcp-left-label-share: 28%;
+          --sbcp-value-width: 58px;
+        }
+        .main-line.left-mode[data-left-density="tight"] {
+          --sbcp-left-label-share: 24%;
+          --sbcp-value-width: 54px;
+        }
+        .main-line.left-mode[data-left-density="dense"] {
+          --sbcp-left-label-share: 20%;
+          --sbcp-value-width: 50px;
+        }
+        .main-line.left-mode[data-left-density="compressed"] {
+          --sbcp-left-label-share: 17%;
+          --sbcp-value-width: 46px;
+        }
         .icon-wrap {
           display: flex;
           align-items: center;
@@ -464,6 +499,13 @@ class SensorBarCard extends HTMLElement {
           width: var(--sbcp-icon-width);
           color: var(--primary-text-color, #333);
           line-height: 1;
+        }
+        .main-line.left-mode[data-left-density="dense"] .value-right .unit-group,
+        .main-line.left-mode[data-left-density="compressed"] .value-right .unit-group {
+          display: none;
+        }
+        .main-line.left-mode[data-left-density="compressed"] .icon-wrap {
+          display: none;
         }
         ha-icon {
           --mdc-icon-size: 20px;
@@ -638,20 +680,51 @@ class SensorBarCard extends HTMLElement {
           display: flex;
           align-items: center;
           justify-content: flex-end;
+          overflow: hidden;
           min-width: 0;
         }
         .value-right-text {
-          display: block;
+          display: inline-flex;
+          align-items: baseline;
+          justify-content: flex-end;
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          overflow: hidden;
+          white-space: nowrap;
+        }
+        .value-right-number {
+          flex: 0 1 auto;
           min-width: 0;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          line-height: 1.1;
+        }
+        .value-right .unit-group {
+          flex: 0 1 auto;
+          display: inline-flex;
+          align-items: baseline;
+          min-width: 0;
+          overflow: hidden;
+          white-space: nowrap;
+          margin-left: 2px;
+          line-height: 1.1;
+        }
+        .value-right .unit-group.tight-unit {
+          margin-left: 0;
         }
         .value-right .unit {
+          flex: 0 1 auto;
+          min-width: 0;
+          display: inline-block;
+          overflow: hidden;
+          text-overflow: clip;
+          white-space: nowrap;
           font-size: 11px;
           font-weight: 400;
           color: var(--secondary-text-color, #888);
-          margin-left: 1px;
+          line-height: 1.1;
         }
       </style>
 
@@ -670,6 +743,7 @@ class SensorBarCard extends HTMLElement {
     this._resizeObserver = new ResizeObserver(() => {
       requestAnimationFrame(() => {
         this._applyCompactTier();
+        this._applyLeftModeDensity();
         this._repositionAllTargetLabels();
       });
     });
@@ -688,10 +762,58 @@ class SensorBarCard extends HTMLElement {
     if (!card) return;
     const width = card.getBoundingClientRect().width;
     let tier = 'normal';
-    if (width < 220) tier = 'critical';
+    if (width < 180) tier = 'compressed';
+    else if (width < 220) tier = 'dense';
     else if (width < 280) tier = 'tight';
     else if (width < 360) tier = 'compact';
     card.dataset.compact = tier;
+  }
+
+  _applyLeftModeDensity() {
+    if (!this.shadowRoot) return;
+    const densities = ['normal', 'compact', 'tight', 'dense', 'compressed'];
+    this.shadowRoot.querySelectorAll('.main-line.left-mode').forEach(mainLine => {
+      const width = mainLine.getBoundingClientRect().width;
+      let density = 'normal';
+      if (width < 170) density = 'compressed';
+      else if (width < 210) density = 'dense';
+      else if (width < 255) density = 'tight';
+      else if (width < 320) density = 'compact';
+
+      const labelText = mainLine.querySelector('.label-left-text');
+      const naturalLabelWidth = labelText ? labelText.scrollWidth : Number.POSITIVE_INFINITY;
+      let relaxBy = 0;
+      if (Number.isFinite(naturalLabelWidth)) {
+        if (naturalLabelWidth <= 72 && width >= 185) relaxBy = 1;
+        if (naturalLabelWidth <= 44 && width >= 205) relaxBy = 2;
+      }
+
+      const currentIndex = densities.indexOf(density);
+      if (currentIndex !== -1 && relaxBy > 0) {
+        density = densities[Math.max(0, currentIndex - relaxBy)];
+      }
+
+      mainLine.dataset.leftDensity = density;
+    });
+  }
+
+  _isTightUnit(unit) {
+    return ['h', 'm', 's'].includes(String(unit || '').trim());
+  }
+
+  _formatDisplayWithUnit(display, unit) {
+    if (!unit) return String(display);
+    const cleanUnit = String(unit);
+    return `${display}${this._isTightUnit(cleanUnit) ? '' : ' '}${cleanUnit}`;
+  }
+
+  _formatRightValueMarkup(display, unit) {
+    if (!unit) {
+      return `<span class="value-right-text"><span class="value-right-number">${display}</span></span>`;
+    }
+    const cleanUnit = String(unit);
+    const unitGroupClass = this._isTightUnit(cleanUnit) ? 'unit-group tight-unit' : 'unit-group';
+    return `<span class="value-right-text"><span class="value-right-number">${display}</span><span class="${unitGroupClass}"><span class="unit">${cleanUnit}</span></span></span>`;
   }
 
   _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor) {
@@ -724,28 +846,28 @@ class SensorBarCard extends HTMLElement {
         ${ecfg.icon && ecfg.icon !== false ? `<div class="above-icon-spacer"></div>` : ''}
         <div class="above-bar-label">
           <span class="above-bar-label-name">${name}</span>
-          <span class="above-bar-label-value">${stateDisplay}${unit ? ' ' + unit : ''}</span>
+          <span class="above-bar-label-value">${this._formatDisplayWithUnit(stateDisplay, unit)}</span>
         </div>
       </div>` : '';
 
     const innerLabel = lp === 'inside' ? `
       <div class="bar-inner-label">
         <span>${name}</span>
-        <span>${stateDisplay}${unit ? ' ' + unit : ''}</span>
+        <span>${this._formatDisplayWithUnit(stateDisplay, unit)}</span>
       </div>` : '';
 
-    const leftLabel  = lp === 'left' 
-      ? `<div class="label-left" style="flex:0 1 min(${ecfg.label_width}px, 40%);max-width:min(${ecfg.label_width}px, 40%);height:${h}px;"><span class="label-left-text">${name}</span></div>` 
+    const leftLabel  = lp === 'left'
+      ? `<div class="label-left" style="flex:0 1 min(${ecfg.label_width}px, var(--sbcp-left-label-share));max-width:min(${ecfg.label_width}px, var(--sbcp-left-label-share));height:${h}px;"><span class="label-left-text">${name}</span></div>`
       : '';
     const rightValue = lp !== 'inside' && lp !== 'above'
-      ? `<div class="value-right" style="height:${h}px;"><span class="value-right-text">${stateDisplay}${unit ? `<span class="unit"> ${unit}</span>` : ''}</span></div>`
+      ? `<div class="value-right" style="height:${h}px;">${this._formatRightValueMarkup(stateDisplay, unit)}</div>`
       : '';    
       
     return `
       <div class="row" data-entity="${entityCfg.entity}">
         <div class="row-stack">
           ${aboveLabel}
-          <div class="main-line" style="height:${h}px;">
+          <div class="main-line${lp === 'left' ? ' left-mode' : ''}" style="height:${h}px;">
             ${ecfg.icon && ecfg.icon !== false ? `<div class="icon-wrap" style="height:${h}px;min-height:${h}px;"><ha-icon icon="${ecfg.icon}"></ha-icon></div>` : ''}
             ${leftLabel}
             <div class="bar-wrap">
@@ -800,7 +922,7 @@ class SensorBarCard extends HTMLElement {
         }
         let targetDisplay = null;
         if (targetVal !== null) {
-          targetDisplay = targetVal.toLocaleString() + (unit ? ' ' + unit : '');
+          targetDisplay = this._formatDisplayWithUnit(targetVal.toLocaleString(), unit);
         }
         let peakPct = null, peakDisplay = null;
         if (ecfg.show_peak && !isNaN(rawVal)) {
@@ -813,6 +935,7 @@ class SensorBarCard extends HTMLElement {
       rowsEl.innerHTML = html;
       this._rendered = true;
       requestAnimationFrame(() => {
+        this._applyLeftModeDensity();
         rowsEl.querySelectorAll('.row[data-entity]').forEach(row => {
           this._positionTargetLabel(row);
         });
@@ -869,17 +992,17 @@ class SensorBarCard extends HTMLElement {
       // Update displayed value
       const valueEl = row.querySelector('.value-right');
       if (valueEl) {
-        valueEl.innerHTML = `<span class="value-right-text">${display}${unit ? `<span class="unit"> ${unit}</span>` : ''}</span>`;
+        valueEl.innerHTML = this._formatRightValueMarkup(display, unit);
       }
       const innerLabel = row.querySelector('.bar-inner-label');
       if (innerLabel) {
         const spans = innerLabel.querySelectorAll('span');
-        if (spans[1]) spans[1].textContent = display + (unit ? ' ' + unit : '');
+        if (spans[1]) spans[1].textContent = this._formatDisplayWithUnit(display, unit);
       }
       const aboveLabel = row.querySelector('.above-bar-label');
       if (aboveLabel) {
         const spans = aboveLabel.querySelectorAll('span');
-        if (spans[1]) spans[1].textContent = display + (unit ? ' ' + unit : '');
+        if (spans[1]) spans[1].textContent = this._formatDisplayWithUnit(display, unit);
       }
 
       // Update peak marker position
@@ -904,7 +1027,7 @@ class SensorBarCard extends HTMLElement {
         
         const targetLabelEl = row.querySelector('.target-value-label');
         if (targetLabelEl) {
-          targetLabelEl.textContent = targetVal.toLocaleString() + (unit ? ' ' + unit : '');
+          targetLabelEl.textContent = this._formatDisplayWithUnit(targetVal.toLocaleString(), unit);
           targetLabelEl.style.left = `${targetPct}%`;
           targetLabelEl.style.visibility = 'hidden';
         }
@@ -916,11 +1039,14 @@ class SensorBarCard extends HTMLElement {
         const targetLabelEl = row.querySelector('.target-value-label');
         if (targetLabelEl) targetLabelEl.style.visibility = 'hidden';
       }
-      requestAnimationFrame(() => {
-        this._positionTargetLabel(row);
-      });
       rowIdx++;
     }
+    requestAnimationFrame(() => {
+      this._applyLeftModeDensity();
+      rows.forEach(row => {
+        this._positionTargetLabel(row);
+      });
+    });
   }
   
   disconnectedCallback() {
