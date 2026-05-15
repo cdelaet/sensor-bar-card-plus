@@ -264,10 +264,13 @@ class SensorBarCard extends HTMLElement {
     }
     
     const trackRect = track.getBoundingClientRect();
+    const maxLabelWidth = Math.max(0, Math.floor(trackRect.width - 4));
+    label.style.maxWidth = `${maxLabelWidth}px`;
+
     const labelRect = label.getBoundingClientRect();
     
     const markerPercent = parseFloat(marker.style.left);
-    if (!Number.isFinite(markerPercent) || trackRect.width <= 0 || labelRect.width <= 0) {
+    if (!Number.isFinite(markerPercent) || trackRect.width <= 0 || labelRect.width <= 0 || maxLabelWidth <= 10) {
       label.style.visibility = 'hidden';
       return;
     }
@@ -632,11 +635,14 @@ class SensorBarCard extends HTMLElement {
         .target-value-label {
           position: absolute;
           top: 100%;
-          margin-top: 1px;
+          margin-top: 3px;
           font-size: var(--sbcp-target-label-font-size);
           line-height: 1;
           color: var(--secondary-text-color, #888);
           white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          box-sizing: border-box;
           pointer-events: none;
           z-index: 5;
           visibility: hidden;
@@ -667,7 +673,7 @@ class SensorBarCard extends HTMLElement {
           font-size: 12px;
           line-height: 1.15;
           color: var(--secondary-text-color, #888);
-          margin-bottom: 2px;
+          margin-bottom: 3px;
           min-height: 16px;
         }
         .above-bar-label-name {
@@ -698,49 +704,64 @@ class SensorBarCard extends HTMLElement {
           position: absolute;
           top: 0;
           bottom: 0;
-          width: 2px;
+          width: 0;
           transform: translateX(-50%);
-          z-index: 4;
           pointer-events: none;
           transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
           --marker-color: #888;
+          --marker-contrast-color: #f3f4f6;
         }
-        /* Vertical lines */
-        .peak-marker .peak-line,
-        .target-marker .target-line {
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          left: 0;
-          width: 2px;
-          background: var(--marker-color);
-          z-index: 1;
+        .target-marker {
+          z-index: 4;
         }
-        /* Peak: chevron at TOP pointing down */
-        .peak-marker .peak-chevron {
+        .peak-marker {
+          z-index: 5;
+        }
+        .peak-marker .peak-inset,
+        .peak-marker .peak-outset,
+        .target-marker .target-inset,
+        .target-marker .target-outset {
           position: absolute;
-          top: 0;
           left: 50%;
           transform: translateX(-50%);
           width: 0;
           height: 0;
-          border-left: 6px solid transparent;
-          border-right: 6px solid transparent;
-          border-top: 8px solid var(--marker-color);
-          z-index: 2;
         }
-        /* Target: chevron at BOTTOM pointing up */
-        .target-marker .target-chevron {
-          position: absolute;
-          bottom: 0;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 0;
-          height: 0;
-          border-left: 6px solid transparent;
-          border-right: 6px solid transparent;
-          border-bottom: 8px solid var(--marker-color);
+        /* Peak marker: large triangle intrudes into the bar, small one sits just above it. */
+        .peak-marker .peak-inset {
+          top: 0;
+          border-left: 7px solid transparent;
+          border-right: 7px solid transparent;
+          border-top: 11px solid var(--marker-color);
           z-index: 2;
+          filter:
+            drop-shadow(0 0 1.2px var(--marker-contrast-color))
+            drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
+        }
+        .peak-marker .peak-outset {
+          top: -4px;
+          border-left: 5px solid transparent;
+          border-right: 5px solid transparent;
+          border-bottom: 4px solid var(--marker-color);
+          z-index: 3;
+        }
+        /* Target marker: large triangle intrudes into the bar, small one sits just below it. */
+        .target-marker .target-inset {
+          bottom: 0;
+          border-left: 7px solid transparent;
+          border-right: 7px solid transparent;
+          border-bottom: 11px solid var(--marker-color);
+          z-index: 2;
+          filter:
+            drop-shadow(0 0 1.2px var(--marker-contrast-color))
+            drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
+        }
+        .target-marker .target-outset {
+          bottom: -4px;
+          border-left: 5px solid transparent;
+          border-right: 5px solid transparent;
+          border-top: 4px solid var(--marker-color);
+          z-index: 3;
         }
 
         .value-right {
@@ -1032,6 +1053,79 @@ class SensorBarCard extends HTMLElement {
     return decodeURIComponent(String(value ?? ''));
   }
 
+  _parseColorToRgb(color) {
+    const value = String(color || '').trim();
+    if (!value) return null;
+
+    const hexMatch = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hexMatch) {
+      const hex = hexMatch[1];
+      const full = hex.length === 3
+        ? hex.split('').map(c => c + c).join('')
+        : hex;
+      return {
+        r: parseInt(full.slice(0, 2), 16),
+        g: parseInt(full.slice(2, 4), 16),
+        b: parseInt(full.slice(4, 6), 16),
+      };
+    }
+
+    const rgbMatch = value.match(/^rgba?\(([^)]+)\)$/i);
+    if (rgbMatch) {
+      const parts = rgbMatch[1].split(',').map(p => p.trim());
+      if (parts.length >= 3) {
+        return {
+          r: Math.max(0, Math.min(255, parseFloat(parts[0]))),
+          g: Math.max(0, Math.min(255, parseFloat(parts[1]))),
+          b: Math.max(0, Math.min(255, parseFloat(parts[2]))),
+        };
+      }
+    }
+
+    return null;
+  }
+
+  _rgbToHsl({ r, g, b }) {
+    const rn = r / 255;
+    const gn = g / 255;
+    const bn = b / 255;
+    const max = Math.max(rn, gn, bn);
+    const min = Math.min(rn, gn, bn);
+    const l = (max + min) / 2;
+
+    if (max === min) {
+      return { h: 0, s: 0, l: l * 100 };
+    }
+
+    const d = max - min;
+    const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    let h;
+
+    switch (max) {
+      case rn:
+        h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6;
+        break;
+      case gn:
+        h = ((bn - rn) / d + 2) / 6;
+        break;
+      default:
+        h = ((rn - gn) / d + 4) / 6;
+        break;
+    }
+
+    return { h: h * 360, s: s * 100, l: l * 100 };
+  }
+
+  _getMarkerContrastColor(color) {
+    const rgb = this._parseColorToRgb(color);
+    if (!rgb) return '#f3f4f6';
+
+    const { h, s, l } = this._rgbToHsl(rgb);
+    const contrastL = Math.abs(l - 90) >= Math.abs(l - 10) ? 90 : 10;
+    const contrastS = Math.max(40, Math.min(100, s));
+    return `hsl(${Math.round(h)} ${Math.round(contrastS)}% ${Math.round(contrastL)}%)`;
+  }
+
   _formatDisplayWithUnit(display, unit) {
     if (!unit) return String(display);
     const cleanUnit = String(unit);
@@ -1062,19 +1156,23 @@ class SensorBarCard extends HTMLElement {
     const name = ecfg.name
       || this._hass?.states[entityCfg.entity]?.attributes?.friendly_name
       || entityCfg.entity;
+    const peakMarkerColor = peakColor || '#888';
+    const targetMarkerColor = targetColor || '#888';
+    const peakContrastColor = this._getMarkerContrastColor(peakMarkerColor);
+    const targetContrastColor = this._getMarkerContrastColor(targetMarkerColor);
 
     // Peak marker — chevron top, line full height, configurable colour
     const peakMarker = ecfg.show_peak && peakPct !== null ? `
-      <div class="peak-marker" style="left:${peakPct}%;--marker-color:${peakColor || '#888'};">
-        <div class="peak-chevron"></div>
-        <div class="peak-line"></div>
+      <div class="peak-marker" style="left:${peakPct}%;--marker-color:${peakMarkerColor};--marker-contrast-color:${peakContrastColor};">
+        <div class="peak-outset"></div>
+        <div class="peak-inset"></div>
       </div>` : '';
 
     // Target marker — same but chevron at bottom pointing up
     const targetMarker = `
-      <div class="target-marker" style="left:${targetPct !== null ? targetPct : 0}%;--marker-color:${targetColor || '#888'};display:${targetPct !== null ? '' : 'none'};">
-        <div class="target-line"></div>
-        <div class="target-chevron"></div>
+      <div class="target-marker" style="left:${targetPct !== null ? targetPct : 0}%;--marker-color:${targetMarkerColor};--marker-contrast-color:${targetContrastColor};display:${targetPct !== null ? '' : 'none'};">
+        <div class="target-inset"></div>
+        <div class="target-outset"></div>
       </div>`;
     const targetValueLabel = ecfg.show_target_label ? `
       <div class="target-value-label" style="left:${targetPct !== null ? targetPct : 0}%;">

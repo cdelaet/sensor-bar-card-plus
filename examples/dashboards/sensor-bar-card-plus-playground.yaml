@@ -855,6 +855,35 @@ views:
               - entity: sensor.sbcp_playground_sensor
                 name: Sensor
           - type: custom:sensor-bar-card-plus
+            title: Peak / target overlap
+            color_mode: gradient
+            label_position: left
+            label_width: 170
+            show_peak: true
+            show_target_label: true
+            peak_color: '#7c3aed'
+            target_color: '#0f766e'
+            min_entity: sensor.sbcp_playground_min
+            max_entity: sensor.sbcp_playground_max
+            target_entity: sensor.sbcp_playground_target
+            entities:
+              - entity: sensor.sbcp_playground_target
+                name: Overlap reference
+          - type: custom:sensor-bar-card-plus
+            title: Long target label clamp
+            color_mode: gradient
+            label_position: left
+            label_width: 170
+            decimal: 1
+            unit: kilowatt-hours equivalent
+            show_target_label: true
+            min_entity: sensor.sbcp_playground_min
+            max_entity: sensor.sbcp_playground_max
+            target_entity: sensor.sbcp_playground_target
+            entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Sensor
+          - type: custom:sensor-bar-card-plus
             title: Above target color
             color_mode: single
             color: '#2563eb'
@@ -1089,17 +1118,41 @@ views:
         target_entity: sensor.sbcp_playground_target
         entities:
           - entity: sensor.sbcp_stress_01
+            peak_color: '#7c3aed'
+            target_color: '#0f766e'
           - entity: sensor.sbcp_stress_02
+            peak_color: '#ef4444'
+            target_color: '#f97316'
           - entity: sensor.sbcp_stress_03
+            peak_color: '#2563eb'
+            target_color: '#06b6d4'
           - entity: sensor.sbcp_stress_04
+            peak_color: '#111827'
+            target_color: '#f3f4f6'
           - entity: sensor.sbcp_stress_05
+            peak_color: '#22c55e'
+            target_color: '#84cc16'
           - entity: sensor.sbcp_stress_06
+            peak_color: '#fb7185'
+            target_color: '#f9a8d4'
           - entity: sensor.sbcp_stress_07
+            peak_color: '#0ea5e9'
+            target_color: '#a5f3fc'
           - entity: sensor.sbcp_stress_08
+            peak_color: '#a855f7'
+            target_color: '#d8b4fe'
           - entity: sensor.sbcp_stress_09
+            peak_color: '#f59e0b'
+            target_color: '#fde68a'
           - entity: sensor.sbcp_stress_10
+            peak_color: '#1f2937'
+            target_color: '#9ca3af'
           - entity: sensor.sbcp_stress_11
+            peak_color: '#dc2626'
+            target_color: '#fecaca'
           - entity: sensor.sbcp_stress_12
+            peak_color: '#ffffff'
+            target_color: '#000000'
 
       # Smaller grouped stress cards for grid rendering without making the main
       # showcase page collapse into tiny unreadable panels.
