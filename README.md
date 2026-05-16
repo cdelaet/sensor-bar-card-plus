@@ -81,6 +81,8 @@ entities:
     max: 3000
 ```
 
+![Basic example](images/example-basic.png)
+
 ## Demo Assets
 
 The repository includes a full demo playground and a dedicated screenshot board:
@@ -328,25 +330,37 @@ entities:
 
 ### Peak marker example
 
-![Peak plus target label](images/example-peak-and-without-peak-marker.png)
+![Peak marker](images/example-peak.png)
 
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Peak Marker
 label_position: left
+show_peak: true
 entities:
-  - entity: sensor.sbcp_screenshot_caravan_power
-    name: With Peak
+  - entity: sensor.caravan_power
+    name: Caravan
     icon: mdi:caravan
     min: 0
     max: 3000
-    show_peak: true
-  - entity: sensor.sbcp_screenshot_caravan_power
-    name: Without Peak
+```
+
+### Target marker example
+
+![Target marker](images/example-target.png)
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Target Marker
+label_position: left
+target: 2000
+target_color: '#9ca3af'
+entities:
+  - entity: sensor.caravan_power
+    name: Caravan
     icon: mdi:caravan
     min: 0
     max: 3000
-    show_peak: false
 ```
 
 ## Dynamic Min / Max / Target Entities
@@ -393,43 +407,41 @@ If both a fixed value and an entity are configured, the entity takes precedence.
 
 ## Formatting, Text States, And Units
 
-The card handles:
+The card handles four related display concerns:
 
 - decimal precision
 - unit override
 - tight time units like `43s` or `4h`
 - textual states such as `unknown`, `unavailable`, and custom text pass-through
 
-| Tight time units | Text states |
-|---|---|
-| ![Seconds formatting](images/playground-formatting-seconds.png)<br>![Hours formatting](images/playground-formatting-hours.png) | ![Text states](images/playground-text-states.png) |
+### Decimal Precision
+
+Use `decimal` to control how many decimal places are shown per row.
+
+![Decimal places](images/example-decimal.png)
 
 ```yaml
 type: custom:sensor-bar-card-plus
-title: Tight Time Unit - Seconds
-color_mode: single
-color: '#2563eb'
-entities:
-  - entity: sensor.response_time
-    name: Response time
-    unit: s
-    min: 0
-    max: 60
-```
-
-```yaml
-type: custom:sensor-bar-card-plus
-title: Unknown And Unavailable
-color_mode: severity
+title: Decimal Places
 label_position: left
+min: 0
+max: 40
+label_width: 160
 entities:
-  - entity: sensor.status_unknown
-    name: Unknown
-  - entity: sensor.status_unavailable
-    name: Unavailable
+  - entity: sensor.temperature
+    name: No decimal (0)
+    decimal: 0
+  - entity: sensor.temperature
+    name: One decimal (1)
+    decimal: 1
+  - entity: sensor.temperature
+    name: Two decimals (2)
+    decimal: 2
+  - entity: sensor.temperature
+    name: Raw (no decimal set)
 ```
 
-## Unit Override
+### Unit Override
 
 By default the card displays the entity's unit of measurement. Use `unit` to override that when you want a shorter, normalized, or more readable display unit.
 
@@ -444,6 +456,45 @@ entities:
     unit: kWh
 ```
 
+### Tight Time Units
+
+Time units `h`, `m`, and `s` render tight, for example `43s` and `4h`, instead of showing an extra space.
+
+| Seconds | Hours |
+|---|---|
+| ![Seconds formatting](images/playground-formatting-seconds.png) | ![Hours formatting](images/playground-formatting-hours.png) |
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Tight Time Unit - Seconds
+color_mode: single
+color: '#2563eb'
+entities:
+  - entity: sensor.response_time
+    name: Response time
+    unit: s
+    min: 0
+    max: 60
+```
+
+### Text States
+
+Non-numeric current states are handled as first-class display states rather than treated like broken numeric rows.
+
+![Text states](images/playground-text-states.png)
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Unknown And Unavailable
+color_mode: severity
+label_position: left
+entities:
+  - entity: sensor.status_unknown
+    name: Unknown
+  - entity: sensor.status_unavailable
+    name: Unavailable
+```
+
 ## Clicking A Bar
 
 Clicking any row opens Home Assistant's native more-info dialog for that entity, including history and attributes.
@@ -456,9 +507,40 @@ If an entity is missing, unavailable to the card, or misconfigured, the card ren
 
 Other rows continue to render normally.
 
+## Bar Height Variations
+
+Use `height` globally or per entity to make rows more compact or more prominent.
+
+![Bar height variations](images/example-bar-heights-4up.png)
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Bar Heights
+label_position: left
+max: 3000
+entities:
+  - entity: sensor.power_usage
+    name: 24px Compact
+    icon: mdi:minus
+    height: 24
+  - entity: sensor.power_usage
+    name: Default (38px)
+    icon: mdi:minus
+  - entity: sensor.power_usage
+    name: 52px Tall
+    icon: mdi:minus
+    height: 52
+  - entity: sensor.power_usage
+    name: 70px Taller
+    icon: mdi:minus
+    height: 70
+```
+
 ## Per-Entity Overrides
 
 Every card-level option can be overridden per entity.
+
+![Per-entity overrides](images/example-overrides-refresh.png)
 
 ```yaml
 type: custom:sensor-bar-card-plus
