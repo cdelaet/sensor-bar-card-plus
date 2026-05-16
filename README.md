@@ -311,6 +311,10 @@ The target marker sits on the bottom edge of the bar. The peak marker sits on th
 
 ![Dynamic target and above-target color](images/above-target-small.gif)
 
+### Above-target color <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20">
+
+Use `above_target_color` when you want the filled section beyond the target to stand out as a different state. The marker, target label, and color split animate together so the threshold remains readable while the target changes.
+
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Above Target Color
@@ -327,6 +331,9 @@ entities:
     max: 100
 ```
 
+### Target value label <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20">
+
+Set `show_target_label: true` to render the numeric target below the marker. The label is clamped so it stays inside the track area near the edges and follows dynamic target changes smoothly.
 
 ### Peak marker example
 
@@ -363,15 +370,21 @@ entities:
     max: 3000
 ```
 
+### Marker coexistence
+
+Peak and target markers can occupy the same position without becoming ambiguous because they live on opposite bar edges. That makes them suitable for shared-threshold visualizations and future multi-reference extensions.
+
 ## Dynamic Min / Max / Target Entities
 
 <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20">
 
-You can source `min`, `max`, and `target` from other entities.
+You can source `min`, `max`, and `target` from other entities instead of hardcoding them in the card config.
 
-This is especially useful when the scale and threshold are driven by other helpers or template sensors.
+This is especially useful when the scale and threshold are driven by other helpers, automations, or template sensors.
 
 ![Dynamic min and max entities](images/example-dynamic-min-max-entity.png)
+
+### Dynamic `min_entity` and `max_entity`
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -384,9 +397,13 @@ entities:
     name: Fully dynamic scale
 ```
 
-For a moving target, use `target_entity`. The static screenshot shows the layout, and the GIF above shows the target changing over time.
+This makes the full bar scale adaptive. The current value stays the same entity, but the visible scale can expand or contract around it.
 
 ![Dynamic target entity](images/example-dynamic-target-entity.png)
+
+### Dynamic `target_entity`
+
+For a moving threshold, use `target_entity`. This is useful for projected limits, tariff boundaries, ramping goals, or automation-driven targets.
 
 ```yaml
 type: custom:sensor-bar-card-plus
