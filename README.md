@@ -245,6 +245,56 @@ The screenshot uses this same single sensor in four separate cards, changing onl
 - `label_position: inside`
 - `label_position: off`
 
+## Label Width
+
+When `label_position: left` is used, all names share a fixed label column so the bars line up cleanly. The default width is `100px`, but you can override it globally or per entity.
+
+![Label width](images/example-label-width.png)
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Label Width
+label_position: left
+color_mode: single
+color: '#4a9eff'
+max: 3000
+entities:
+  - entity: sensor.power_usage
+    name: Label
+    label_width: 35
+  - entity: sensor.power_usage
+    name: Label
+    label_width: 75
+  - entity: sensor.power_usage
+    name: Label
+```
+
+## Icons
+
+Each row resolves its icon in this order:
+
+1. `icon: false` hides the icon and removes its reserved space
+2. `icon: mdi:something` uses that explicit icon
+3. otherwise the card uses the entity's own Home Assistant icon
+
+![Icon control](images/example-icon-control-3up.png)
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Icon Control
+label_position: left
+max: 3000
+entities:
+  - entity: sensor.power_usage
+    name: Auto (entity icon)
+  - entity: sensor.power_usage
+    name: Explicit icon
+    icon: mdi:flash
+  - entity: sensor.power_usage
+    name: No icon
+    icon: false
+```
+
 ## Target, Peak, And Dynamic References
 
 The card supports:
@@ -378,6 +428,33 @@ entities:
   - entity: sensor.status_unavailable
     name: Unavailable
 ```
+
+## Unit Override
+
+By default the card displays the entity's unit of measurement. Use `unit` to override that when you want a shorter, normalized, or more readable display unit.
+
+```yaml
+type: custom:sensor-bar-card-plus
+entities:
+  - entity: sensor.solar_power
+    name: Solar
+    unit: W
+  - entity: sensor.daily_energy
+    name: Today
+    unit: kWh
+```
+
+## Clicking A Bar
+
+Clicking any row opens Home Assistant's native more-info dialog for that entity, including history and attributes.
+
+No extra configuration is required.
+
+## Error Handling
+
+If an entity is missing, unavailable to the card, or misconfigured, the card renders an inline row-level error instead of crashing the whole card.
+
+Other rows continue to render normally.
 
 ## Per-Entity Overrides
 
