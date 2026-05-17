@@ -4,40 +4,25 @@
 [![GitHub release](https://img.shields.io/github/release/cdelaet/sensor-bar-card-plus.svg)](https://github.com/cdelaet/sensor-bar-card-plus/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+A modern sensor visualization card for Home Assistant dashboards, with dynamic min/max/target sources, flexible bar rendering, severity-aware coloring, target and peak markers, and compact information-dense layouts.
 
-A polished, configurable Lovelace bar card for Home Assistant with responsive layouts, dynamic scale entities, animated target/peak markers, and richer color systems.
-
-Works well for power, temperature, humidity, battery, CO2, water flow, response times, quotas, and any other numeric sensor.
+It is built for dashboards where the visual context should follow live Home Assistant data instead of staying hardcoded. Sensor Bar Card Plus works well for power, temperature, humidity, battery, CO2, water flow, response times, quotas, and other numeric sensors, while still fitting cleanly into modern Lovelace layouts with smooth rendering and responsive label behavior.
 
 ![Sensor Bar Card Plus showcase](images/hero.png)
-
-## Why This Fork Exists
-
-This repository is a separate card based on the original project by TommySharpNZ:
-
-- original project: <https://github.com/TommySharpNZ/sensor-bar-card>
-- this fork is **not** a drop-in replacement for `custom:sensor-bar-card`
-- resource path: `/local/sensor-bar-card-plus.js`
-- card type: `custom:sensor-bar-card-plus`
-
-The fork exists to ship additional features and rendering fixes without conflicting with the original card.
 
 [![Buy me a coffee on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/chrisdelaet)
 
 ## Highlights
 
-- 🎨 **Four color modes**: `gradient`, `severity`, `single`, and <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> `severity_gradient`
-- 📍 **Four label positions**: `left`, `above`, `inside`, and `off`
-- 📈 **Peak marker**: top-edge reference marker for the highest seen value in the current session
-- 🎯 **Target marker**: bottom-edge reference marker with optional target label
-- <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> **Severity gradient mode**: smooth interpolation using severity ranges as color anchors
-- <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> **Above-target color**: highlight the filled section beyond the target in a different color
-- <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> **Dynamic min / max / target entities**
-- <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> **Target value label**
-- <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> **Responsive label and marker layout**
+- <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> **Dynamic min / max / target entities** for data-driven scales and references
+- 📈 **Target and peak markers** with optional target value labels
+- 🎨 **Severity gradient and severity-based coloring** with `gradient`, `severity`, `single`, and <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> `severity_gradient`
+- <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> **Above-target color** for visually separating the portion beyond a live or fixed threshold
+- 📍 **Inline / inside / above / left label placement** with `left`, `above`, `inside`, and `off`
+- <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> **Responsive label and marker layout** for tighter dashboard spaces
+- 🔧 **Per-entity overrides** for nearly every card option
 - ✨ **Smooth animation** with stable color geometry
 - 🖱️ **Native Home Assistant more-info dialog** on click
-- 🔧 **Per-entity overrides** for nearly every card option
 
 ## Installation
 
@@ -385,6 +370,8 @@ You can source `min`, `max`, and `target` from other entities instead of hardcod
 
 This is especially useful when the scale and threshold are driven by other helpers, automations, or template sensors.
 
+Why dynamic sources matter: the card can follow real Home Assistant entities for scale and target context instead of baking those values into YAML. That makes the visualization adapt naturally to batteries, grid limits, quotas, thresholds, changing operating modes, and dashboards where the meaning of "full", "safe", or "on target" changes over time.
+
 ![Dynamic min and max entities](images/example-dynamic-min-max-entity.png)
 
 ### Dynamic `min_entity` and `max_entity`
@@ -652,27 +639,33 @@ Each entry in `entities` accepts the card-level options above plus:
 - Time units `h`, `m`, and `s` render tight, for example `43s` and `4h`.
 - Responsive fallbacks preserve readability instead of letting labels and values collide.
 
-## Origin And Etiquette
+## Project Origin
 
-This card began as a fork of TommySharpNZ's original Sensor Bar Card. The original project is here:
+Sensor Bar Card Plus was originally inspired by Sensor Bar Card by TommySharpNZ. The original project is here:
 
 <https://github.com/TommySharpNZ/sensor-bar-card>
 
-If you want to support the original author:
+This project uses its own resource path and card type so both cards can coexist safely in the same Home Assistant installation:
+
+- original card type: `custom:sensor-bar-card`
+- this card type: `custom:sensor-bar-card-plus`
+- this resource path: `/local/sensor-bar-card-plus.js`
+
+It is not a drop-in replacement for the original card.
+
+If you want to support the original author directly:
 
 <https://buymeacoffee.com/tommysharpnz>
 
-This fork intentionally ships under a separate resource path and separate card type so both cards can coexist safely in the same Home Assistant installation.
+## What This Project Adds
 
-## What This Fork Materially Changes
-
-Compared to the original card, this fork adds or reworks:
+Compared to the original card, Sensor Bar Card Plus adds or reworks:
 
 - layout refactor for consistent bar alignment and more truthful row geometry
 - responsive label/value fallback behavior during resize, zoom, and cramped widths
 - dynamic `min_entity`, `max_entity`, and `target_entity`
 - target marker, target value label, and above-target color highlighting
-- synchronized target animation so marker, label, and threshold split move together
+- synchronized target animation so marker, label, and above-target split move together
 - `severity_gradient` as a separate color mode, alongside proper fixed-band `severity`
 - stable animated color scales so severity bands and target thresholds do not stretch or wobble
 - improved marker rendering and marker coexistence

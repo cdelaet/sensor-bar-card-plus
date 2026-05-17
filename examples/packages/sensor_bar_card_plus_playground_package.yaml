@@ -65,6 +65,22 @@ input_number:
     initial: 12
     unit_of_measurement: s
 
+  sbcp_showcase_phase:
+    name: SBCP Showcase Phase
+    min: 0
+    max: 359
+    step: 1
+    mode: box
+    initial: 0
+
+  sbcp_hero_phase:
+    name: SBCP Hero Showcase Phase
+    min: 0
+    max: 359
+    step: 1
+    mode: box
+    initial: 0
+
 input_boolean:
   sbcp_animated:
     name: SBCP Animated
@@ -89,6 +105,14 @@ input_boolean:
   sbcp_wave_enabled:
     name: SBCP Wave Enabled
     initial: false
+
+  sbcp_showcase_enabled:
+    name: SBCP Showcase Enabled
+    initial: true
+
+  sbcp_hero_showcase_enabled:
+    name: SBCP Hero Showcase Enabled
+    initial: true
 
 input_select:
   sbcp_color_mode:
@@ -298,6 +322,247 @@ sensor:
         icon_template: mdi:flash-outline
         value_template: "{{ (states('input_number.sbcp_current_value') | float(0) * 1.25 + 24) | round(1) }}"
 
+      # Showcase-only synthetic telemetry. These are deterministic animated
+      # entities for the promotional hero scene in the screenshots dashboard.
+      sbcp_showcase_daylight:
+        friendly_name: Daylight Progress
+        unit_of_measurement: '%'
+        icon_template: mdi:white-balance-sunny
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (((sin((p - 90) * pi / 180) + 1) / 2) * 100) | round(1) }}
+
+      sbcp_showcase_solar:
+        friendly_name: Solar Production
+        unit_of_measurement: W
+        icon_template: mdi:solar-power
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {% set base = ((sin((p - 90) * pi / 180) + 1) / 2) %}
+          {% set shimmer = ((sin((p + 35) * pi / 180) + 1) / 2) %}
+          {{ (base * 6200 + shimmer * 700) | round(1) }}
+
+      sbcp_showcase_battery:
+        friendly_name: Home Battery
+        unit_of_measurement: '%'
+        icon_template: mdi:home-battery
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (58 + 24 * sin((p + 110) * pi / 180)) | round(1) }}
+
+      sbcp_showcase_consumption:
+        friendly_name: House Consumption
+        unit_of_measurement: W
+        icon_template: mdi:home-lightning-bolt
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (1850 + 420 * sin((p + 40) * pi / 180) + 180 * sin((p * 2) * pi / 180)) | round(1) }}
+
+      sbcp_showcase_grid:
+        friendly_name: Grid Flow
+        unit_of_measurement: W
+        icon_template: mdi:transmission-tower
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (-350 + 980 * sin((p + 205) * pi / 180) + 260 * sin((p * 2 - 25) * pi / 180)) | round(1) }}
+
+      sbcp_showcase_ev:
+        friendly_name: EV Charging
+        unit_of_measurement: W
+        icon_template: mdi:car-electric
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {% set wave = sin((p + 250) * pi / 180) %}
+          {{ ([0, 3200 + 2900 * wave] | max) | round(1) }}
+
+      sbcp_showcase_outdoor_temp:
+        friendly_name: Outdoor Temperature
+        unit_of_measurement: °C
+        icon_template: mdi:thermometer-lines
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (17 + 5.8 * sin((p - 70) * pi / 180)) | round(1) }}
+
+      sbcp_showcase_indoor_temp:
+        friendly_name: Indoor Temperature
+        unit_of_measurement: °C
+        icon_template: mdi:sofa-outline
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (21.8 + 1.1 * sin((p + 25) * pi / 180)) | round(1) }}
+
+      sbcp_showcase_humidity:
+        friendly_name: Comfort Humidity
+        unit_of_measurement: '%'
+        icon_template: mdi:water-percent
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (49 + 8 * sin((p + 155) * pi / 180)) | round(1) }}
+
+      sbcp_showcase_uv:
+        friendly_name: UV Index
+        unit_of_measurement: UVI
+        icon_template: mdi:weather-sunny-alert
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ ((((sin((p - 90) * pi / 180) + 1) / 2) * 9.5)) | round(1) }}
+
+      sbcp_showcase_cloud_cover:
+        friendly_name: Cloud Cover
+        unit_of_measurement: '%'
+        icon_template: mdi:weather-partly-cloudy
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (42 + 24 * sin((p + 210) * pi / 180) - 10 * sin((p * 2) * pi / 180)) | round(1) }}
+
+      sbcp_showcase_cpu:
+        friendly_name: CPU
+        unit_of_measurement: '%'
+        icon_template: mdi:chip
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (36 + 11 * sin((p + 5) * pi / 180) + 4 * sin((p * 2 + 20) * pi / 180)) | round(1) }}
+
+      sbcp_showcase_network:
+        friendly_name: Network
+        unit_of_measurement: '%'
+        icon_template: mdi:wifi
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (28 + 15 * sin((p + 50) * pi / 180)) | round(1) }}
+
+      sbcp_showcase_water:
+        friendly_name: Water
+        unit_of_measurement: '%'
+        icon_template: mdi:water-outline
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (61 + 8 * sin((p + 125) * pi / 180)) | round(1) }}
+
+      sbcp_showcase_air:
+        friendly_name: Air
+        unit_of_measurement: '%'
+        icon_template: mdi:air-filter
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (52 + 10 * sin((p + 185) * pi / 180)) | round(1) }}
+
+      sbcp_showcase_storage:
+        friendly_name: Storage
+        unit_of_measurement: '%'
+        icon_template: mdi:database
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (73 + 5 * sin((p + 260) * pi / 180)) | round(1) }}
+
+      sbcp_showcase_latency:
+        friendly_name: Latency
+        unit_of_measurement: ms
+        icon_template: mdi:timer-sand
+        value_template: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (18 + 8 * sin((p + 320) * pi / 180)) | round(1) }}
+
+      # Hero-showcase telemetry. Slower, calmer motion for promo captures.
+      sbcp_hero_daylight:
+        friendly_name: Daylight Progress
+        unit_of_measurement: '%'
+        icon_template: mdi:white-balance-sunny
+        value_template: >-
+          {% set p = states('input_number.sbcp_hero_phase') | float(0) %}
+          {% set cycle = (p % 360) / 360 %}
+          {% set day_start = 1 / 6 %}
+          {% set day_end = 5 / 6 %}
+          {% set day_fraction = day_end - day_start %}
+          {% set twilight_floor = 0.1 %}
+          {% if cycle < day_start %}
+            {% set dawn_t = cycle / day_start %}
+            {% set sky_progress = twilight_floor * (dawn_t * dawn_t * (3 - 2 * dawn_t)) %}
+          {% elif cycle > day_end %}
+            {% set dusk_t = (1 - cycle) / (1 - day_end) %}
+            {% set sky_progress = twilight_floor * (dusk_t * dusk_t * (3 - 2 * dusk_t)) %}
+          {% else %}
+            {% set day_t = (cycle - day_start) / day_fraction %}
+            {% set sun_shape = sin(day_t * pi) %}
+            {% set circadian = sun_shape ** 0.82 %}
+            {% set daylight = circadian * circadian * (3 - 2 * circadian) %}
+            {% set sky_progress = twilight_floor + (1 - twilight_floor) * daylight %}
+          {% endif %}
+          {{ (sky_progress * 100) | round(1) }}
+
+      sbcp_hero_solar:
+        friendly_name: Solar Production
+        unit_of_measurement: W
+        icon_template: mdi:solar-power
+        value_template: >-
+          {% set p = states('input_number.sbcp_hero_phase') | float(0) %}
+          {% set cycle = (p % 360) / 360 %}
+          {% set day_start = 1 / 6 %}
+          {% set day_end = 5 / 6 %}
+          {% set day_fraction = day_end - day_start %}
+          {% if cycle <= day_start or cycle >= day_end %}
+            {% set daylight = 0 %}
+          {% else %}
+            {% set day_t = (cycle - day_start) / day_fraction %}
+            {% set sun_shape = sin(day_t * pi) %}
+            {% set circadian = sun_shape ** 0.82 %}
+            {% set daylight = circadian * circadian * (3 - 2 * circadian) %}
+          {% endif %}
+          {% set solar_shape = [0, ((daylight - 0.04) / 0.96)] | max %}
+          {% set base = (solar_shape ** 2.35) * 5250 %}
+          {% set shimmer = solar_shape * 110 * sin((p * 2 + 20) * pi / 180) %}
+          {{ ([0, base + shimmer] | max) | round(1) }}
+
+      sbcp_hero_battery:
+        friendly_name: Home Battery Power
+        unit_of_measurement: W
+        icon_template: mdi:home-battery-outline
+        value_template: >-
+          {% set solar = states('sensor.sbcp_hero_solar') | float(0) %}
+          {% set house = states('sensor.sbcp_hero_consumption') | float(0) %}
+          {{ (solar - house) | round(1) }}
+
+      sbcp_hero_consumption:
+        friendly_name: House Consumption
+        unit_of_measurement: W
+        icon_template: mdi:home-lightning-bolt
+        value_template: >-
+          {% set p = states('input_number.sbcp_hero_phase') | float(0) %}
+          {% set cycle = (p % 360) / 360 %}
+          {% set day_start = 1 / 6 %}
+          {% set day_end = 5 / 6 %}
+          {% set day_fraction = day_end - day_start %}
+          {% if cycle <= day_start or cycle >= day_end %}
+            {% set daylight = 0 %}
+          {% else %}
+            {% set day_t = (cycle - day_start) / day_fraction %}
+            {% set sun_shape = sin(day_t * pi) %}
+            {% set circadian = sun_shape ** 0.82 %}
+            {% set daylight = circadian * circadian * (3 - 2 * circadian) %}
+          {% endif %}
+          {{ (1650 + 520 * daylight + 250 * sin((p + 20) * pi / 180) + 120 * sin((p * 2 + 10) * pi / 180)) | round(1) }}
+
+      sbcp_hero_grid_intensity:
+        friendly_name: Grid Carbon Intensity
+        unit_of_measurement: gCO2/kWh
+        icon_template: mdi:leaf-circle-outline
+        value_template: >-
+          {% set p = states('input_number.sbcp_hero_phase') | float(0) %}
+          {% set cycle = (p % 360) / 360 %}
+          {% set day_start = 1 / 6 %}
+          {% set day_end = 5 / 6 %}
+          {% set day_fraction = day_end - day_start %}
+          {% if cycle <= day_start or cycle >= day_end %}
+            {% set daylight = 0 %}
+          {% else %}
+            {% set day_t = (cycle - day_start) / day_fraction %}
+            {% set sun_shape = sin(day_t * pi) %}
+            {% set circadian = sun_shape ** 0.82 %}
+            {% set daylight = circadian * circadian * (3 - 2 * circadian) %}
+          {% endif %}
+          {% set night_bias = 1 - daylight %}
+          {{ (185 + 160 * night_bias + 22 * sin((p + 35) * pi / 180) + 10 * sin((p * 2 - 15) * pi / 180)) | round(1) }}
+
 automation:
   - id: sbcp_wave_driver
     alias: SBCP Wave Driver
@@ -346,3 +611,69 @@ automation:
             data:
               value: "{{ wave_value }}"
     mode: single
+
+  - id: sbcp_showcase_phase_driver
+    alias: SBCP Showcase Phase Driver
+    description: Loop a deterministic showcase phase for cinematic demo views.
+    trigger:
+      - platform: homeassistant
+        event: start
+      - platform: state
+        entity_id: input_boolean.sbcp_showcase_enabled
+        to: "on"
+    condition:
+      - condition: state
+        entity_id: input_boolean.sbcp_showcase_enabled
+        state: "on"
+    action:
+      - repeat:
+          while:
+            - condition: state
+              entity_id: input_boolean.sbcp_showcase_enabled
+              state: "on"
+          sequence:
+            - variables:
+                next_phase: >-
+                  {{ ((states('input_number.sbcp_showcase_phase') | int(0) + 15) % 360) }}
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.sbcp_showcase_phase
+              data:
+                value: "{{ next_phase }}"
+            - delay:
+                milliseconds: 250
+    mode: restart
+
+  - id: sbcp_hero_showcase_phase_driver
+    alias: SBCP Hero Showcase Phase Driver
+    description: Loop a slower, calmer deterministic phase for the cinematic hero showcase.
+    trigger:
+      - platform: homeassistant
+        event: start
+      - platform: event
+        event_type: automation_reloaded
+      - platform: state
+        entity_id: input_boolean.sbcp_hero_showcase_enabled
+        to: "on"
+    condition:
+      - condition: state
+        entity_id: input_boolean.sbcp_hero_showcase_enabled
+        state: "on"
+    action:
+      - repeat:
+          while:
+            - condition: state
+              entity_id: input_boolean.sbcp_hero_showcase_enabled
+              state: "on"
+          sequence:
+            - variables:
+                next_phase: >-
+                  {{ ((states('input_number.sbcp_hero_phase') | int(0) + 6) % 360) }}
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.sbcp_hero_phase
+              data:
+                value: "{{ next_phase }}"
+            - delay:
+                milliseconds: 400
+    mode: restart

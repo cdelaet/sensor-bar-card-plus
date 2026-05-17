@@ -1013,3 +1013,407 @@ views:
               <<: *screenshot_min_eq_max
               target: null
               show_target_label: false
+
+  - title: Showcase
+    path: sensor-bar-card-plus-showcase
+    icon: mdi:star-four-points-circle
+    badges: []
+    cards:
+      # A self-running, synthetic hero scene for promo captures and GIFs.
+      - type: custom:sensor-bar-card-plus
+        title: Daylight Progress
+        color_mode: gradient
+        label_position: above
+        animated: true
+        height: 72
+        gradient_stops:
+          - pos: 0
+            color: '#0f172a'
+          - pos: 18
+            color: '#1d4ed8'
+          - pos: 42
+            color: '#38bdf8'
+          - pos: 65
+            color: '#f59e0b'
+          - pos: 82
+            color: '#fb7185'
+          - pos: 100
+            color: '#4c1d95'
+        entities:
+          - entity: sensor.sbcp_showcase_daylight
+            name: Sky window
+            icon: mdi:white-balance-sunny
+            min: 0
+            max: 100
+            target: 62
+            target_color: '#f8fafc'
+
+      - type: grid
+        title: Energy
+        square: false
+        columns: 2
+        cards:
+          - type: custom:sensor-bar-card-plus
+            title: Solar Production
+            color_mode: gradient
+            label_position: left
+            label_width: 150
+            show_peak: true
+            peak_color: '#fde68a'
+            entities:
+              - entity: sensor.sbcp_showcase_solar
+                name: Rooftop Array
+                icon: mdi:solar-power
+                min: 0
+                max: 7200
+                target: 5400
+                target_color: '#fef3c7'
+                above_target_color: '#f97316'
+
+          - type: custom:sensor-bar-card-plus
+            title: Home Battery
+            color_mode: severity_gradient
+            label_position: left
+            label_width: 150
+            severity:
+              - from: 0
+                to: 18
+                color: '#ef4444'
+              - from: 18
+                to: 45
+                color: '#f59e0b'
+              - from: 45
+                to: 75
+                color: '#22c55e'
+              - from: 75
+                to: 100
+                color: '#06b6d4'
+            entities:
+              - entity: sensor.sbcp_showcase_battery
+                name: Home Battery
+                icon: mdi:home-battery
+                min: 0
+                max: 100
+                target: 80
+                target_color: '#e2e8f0'
+
+          - type: custom:sensor-bar-card-plus
+            title: House Consumption
+            color_mode: gradient
+            label_position: left
+            label_width: 150
+            entities:
+              - entity: sensor.sbcp_showcase_consumption
+                name: House Load
+                icon: mdi:home-lightning-bolt
+                min: 0
+                max: 3200
+                target: 2400
+                target_color: '#d1d5db'
+                show_target_label: true
+                above_target_color: '#ef4444'
+
+          - type: custom:sensor-bar-card-plus
+            title: Grid Import / Export
+            color_mode: severity_gradient
+            label_position: left
+            label_width: 150
+            severity:
+              - from: 0
+                to: 25
+                color: '#22c55e'
+              - from: 25
+                to: 50
+                color: '#06b6d4'
+              - from: 50
+                to: 75
+                color: '#f59e0b'
+              - from: 75
+                to: 100
+                color: '#ef4444'
+            entities:
+              - entity: sensor.sbcp_showcase_grid
+                name: Grid Flow
+                icon: mdi:transmission-tower
+                min: -2500
+                max: 2500
+                target: 0
+                target_color: '#e2e8f0'
+                show_target_label: true
+
+          - type: custom:sensor-bar-card-plus
+            title: EV Charging
+            color_mode: single
+            color: '#0ea5e9'
+            label_position: left
+            label_width: 150
+            entities:
+              - entity: sensor.sbcp_showcase_ev
+                name: EV Session
+                icon: mdi:car-electric
+                min: 0
+                max: 7600
+                target: 6800
+                target_color: '#bae6fd'
+
+      - type: grid
+        title: Environment
+        square: false
+        columns: 2
+        cards:
+          - type: custom:sensor-bar-card-plus
+            title: Outdoor Temperature
+            color_mode: severity_gradient
+            label_position: left
+            label_width: 150
+            severity:
+              - from: 0
+                to: 25
+                color: '#2563eb'
+              - from: 25
+                to: 50
+                color: '#22c55e'
+              - from: 50
+                to: 75
+                color: '#f59e0b'
+              - from: 75
+                to: 100
+                color: '#ef4444'
+            entities:
+              - entity: sensor.sbcp_showcase_outdoor_temp
+                name: Outside
+                icon: mdi:pine-tree
+                min: -5
+                max: 35
+
+          - type: custom:sensor-bar-card-plus
+            title: Indoor Temperature
+            color_mode: single
+            color: '#14b8a6'
+            label_position: left
+            label_width: 150
+            entities:
+              - entity: sensor.sbcp_showcase_indoor_temp
+                name: Living Room
+                icon: mdi:sofa-outline
+                min: 18
+                max: 28
+
+          - type: custom:sensor-bar-card-plus
+            title: Comfort Humidity
+            color_mode: severity
+            label_position: left
+            label_width: 150
+            severity:
+              - from: 0
+                to: 30
+                color: '#f59e0b'
+              - from: 30
+                to: 60
+                color: '#22c55e'
+              - from: 60
+                to: 100
+                color: '#0ea5e9'
+            entities:
+              - entity: sensor.sbcp_showcase_humidity
+                name: Comfort
+                icon: mdi:water-percent
+                min: 20
+                max: 80
+
+          - type: custom:sensor-bar-card-plus
+            title: UV And Cloud Cover
+            color_mode: gradient
+            label_position: left
+            label_width: 150
+            entities:
+              - entity: sensor.sbcp_showcase_uv
+                name: UV Index
+                icon: mdi:weather-sunny-alert
+                min: 0
+                max: 11
+                color_mode: severity_gradient
+                severity:
+                  - from: 0
+                    to: 25
+                    color: '#22c55e'
+                  - from: 25
+                    to: 50
+                    color: '#facc15'
+                  - from: 50
+                    to: 75
+                    color: '#f97316'
+                  - from: 75
+                    to: 100
+                    color: '#ef4444'
+              - entity: sensor.sbcp_showcase_cloud_cover
+                name: Cloud Cover
+                icon: mdi:weather-partly-cloudy
+                min: 0
+                max: 100
+                color_mode: gradient
+                gradient_stops:
+                  - pos: 0
+                    color: '#38bdf8'
+                  - pos: 60
+                    color: '#94a3b8'
+                  - pos: 100
+                    color: '#e2e8f0'
+
+      - type: custom:sensor-bar-card-plus
+        title: Dense Telemetry
+        label_position: left
+        label_width: 110
+        color_mode: gradient
+        height: 24
+        gradient_stops:
+          - pos: 0
+            color: '#22c55e'
+          - pos: 55
+            color: '#f59e0b'
+          - pos: 100
+            color: '#ef4444'
+        entities:
+          - entity: sensor.sbcp_showcase_cpu
+            name: CPU
+            icon: mdi:chip
+            min: 0
+            max: 100
+          - entity: sensor.sbcp_showcase_network
+            name: Network
+            icon: mdi:wifi
+            min: 0
+            max: 100
+          - entity: sensor.sbcp_showcase_water
+            name: Water
+            icon: mdi:water-outline
+            min: 0
+            max: 100
+          - entity: sensor.sbcp_showcase_air
+            name: Air
+            icon: mdi:air-filter
+            min: 0
+            max: 100
+          - entity: sensor.sbcp_showcase_storage
+            name: Storage
+            icon: mdi:database
+            min: 0
+            max: 100
+          - entity: sensor.sbcp_showcase_latency
+            name: Latency
+            icon: mdi:timer-sand
+            min: 0
+            max: 40
+
+  - title: Hero Showcase
+    path: sensor-bar-card-plus-hero-showcase
+    icon: mdi:movie-open-star
+    badges: []
+    cards:
+      # Primary promo surface for GIFs, embeds, and screenshots.
+      # Causal telemetry model:
+      # - daylight drives solar
+      # - battery power = solar production - house consumption
+      # - grid carbon intensity rises overnight and eases in daytime
+      - type: vertical-stack
+        cards:
+          - type: custom:sensor-bar-card-plus
+            title: ""
+            color_mode: gradient
+            label_position: inside
+            animated: true
+            height: 56
+            gradient_stops:
+              - pos: 0
+                color: '#091223'
+              - pos: 14
+                color: '#1e3a8a'
+              - pos: 30
+                color: '#0ea5e9'
+              - pos: 50
+                color: '#7dd3fc'
+              - pos: 68
+                color: '#fde68a'
+              - pos: 82
+                color: '#fb923c'
+              - pos: 92
+                color: '#f472b6'
+              - pos: 100
+                color: '#1f2a5a'
+            entities:
+              - entity: sensor.sbcp_hero_daylight
+                name: Daylight Progress
+                icon: mdi:white-balance-sunny
+                min: 0
+                max: 100
+
+          - type: custom:sensor-bar-card-plus
+            title: ""
+            label_position: above
+            animated: true
+            height: 30
+            entities:
+              - entity: sensor.sbcp_hero_solar
+                name: Solar Production
+                icon: mdi:solar-power
+                min: 0
+                max: 5500
+                color_mode: gradient
+                gradient_stops:
+                  - pos: 0
+                    color: '#0f172a'
+                  - pos: 18
+                    color: '#1d4ed8'
+                  - pos: 42
+                    color: '#38bdf8'
+                  - pos: 74
+                    color: '#facc15'
+                  - pos: 100
+                    color: '#fb923c'
+              # Battery is computed from solar minus house load, so the 0 W
+              # target marker anchors the neutral point between discharge/charge.
+              - entity: sensor.sbcp_hero_battery
+                name: Home Battery Power
+                icon: mdi:home-battery-outline
+                min: -3200
+                max: 3200
+                target: 0
+                target_color: '#f59e0b'
+                show_target_label: true
+                above_target_color: '#34d399'
+                color_mode: single
+                color: '#f59e0b'
+              - entity: sensor.sbcp_hero_consumption
+                name: House Consumption
+                icon: mdi:home-lightning-bolt
+                min: 0
+                max: 2600
+                target: 2100
+                target_color: '#cbd5e1'
+                above_target_color: '#ef4444'
+                color_mode: gradient
+                gradient_stops:
+                  - pos: 0
+                    color: '#2F5BEA'
+                  - pos: 100
+                    color: '#6476F7'
+              - entity: sensor.sbcp_hero_grid_intensity
+                name: Grid Carbon Intensity
+                icon: mdi:leaf-circle-outline
+                min: 150
+                max: 380
+                label_position: inside
+                color_mode: severity_gradient
+                severity:
+                  - from: 0
+                    to: 25
+                    color: '#22c55e'
+                  - from: 25
+                    to: 50
+                    color: '#84cc16'
+                  - from: 50
+                    to: 75
+                    color: '#f59e0b'
+                  - from: 75
+                    to: 100
+                    color: '#ef4444'
