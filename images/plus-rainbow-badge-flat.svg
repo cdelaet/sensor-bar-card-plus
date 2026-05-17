@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="20" role="img" aria-label="PLUS">
+  <title>PLUS</title>
+  <defs>
+    <linearGradient id="plus-rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ff3b30"/>
+      <stop offset="16%" stop-color="#ff9500"/>
+      <stop offset="32%" stop-color="#ffcc00"/>
+      <stop offset="48%" stop-color="#34c759"/>
+      <stop offset="64%" stop-color="#00c7be"/>
+      <stop offset="80%" stop-color="#007aff"/>
+      <stop offset="100%" stop-color="#af52de"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="20" rx="3" fill="#555"/>
+  <text x="24" y="14" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11" font-weight="700" fill="url(#plus-rainbow)">PLUS</text>
+</svg>

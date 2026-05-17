@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="20" role="img" aria-label="PLUS">
+  <linearGradient id="b" x2="0" y2="100%">
+    <stop offset="0" stop-color="#ffffff" stop-opacity=".7"/>
+    <stop offset=".1" stop-opacity=".1"/>
+    <stop offset=".9" stop-opacity=".3"/>
+    <stop offset="1" stop-opacity=".5"/>
+  </linearGradient>
+
+  <clipPath id="r">
+    <rect width="48" height="20" rx="3" fill="#ffffff"/>
+  </clipPath>
+
+  <g clip-path="url(#r)">
+    <rect width="48" height="20" fill="#f3f4f6"/>
+    <rect width="48" height="20" fill="url(#b)"/>
+  </g>
+
+  <g fill="none" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11" font-weight="700" text-anchor="middle">
+    <linearGradient id="rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ff004d"/>
+      <stop offset="20%" stop-color="#ff7a00"/>
+      <stop offset="40%" stop-color="#ffe600"/>
+      <stop offset="60%" stop-color="#00d26a"/>
+      <stop offset="80%" stop-color="#00a2ff"/>
+      <stop offset="100%" stop-color="#b400ff"/>
+    </linearGradient>
+
+    <text x="24" y="15" fill="#010101" fill-opacity=".25">PLUS</text>
+    <text x="24" y="14" fill="url(#rainbow)">PLUS</text>
+  </g>
+</svg>
