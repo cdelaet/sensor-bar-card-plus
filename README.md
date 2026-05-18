@@ -421,7 +421,7 @@ If both a fixed value and an entity are configured, the entity takes precedence.
 
 ## Formatting, Text States, And Units
 
-The card handles four related display concerns:
+The card handles five related display concerns:
 
 - decimal precision
 - target label decimal precision
