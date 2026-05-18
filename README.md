@@ -328,7 +328,7 @@ entities:
 
 ### Target value label <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20">
 
-Set `show_target_label: true` to render the numeric target below the marker. The label is clamped so it stays inside the track area near the edges and follows dynamic target changes smoothly.
+Set `show_target_label: true` to render the numeric target below the marker. The label is clamped so it stays inside the track area near the edges and follows dynamic target changes smoothly. Use `target_decimal` when you want the target label precision to differ from the main value precision.
 
 ### Peak marker example
 
@@ -424,6 +424,7 @@ If both a fixed value and an entity are configured, the entity takes precedence.
 The card handles four related display concerns:
 
 - decimal precision
+- target label decimal precision
 - unit override
 - tight time units like `43s` or `4h`
 - textual states such as `unknown`, `unavailable`, and custom text pass-through
@@ -453,6 +454,23 @@ entities:
     decimal: 2
   - entity: sensor.temperature
     name: Raw (no decimal set)
+```
+
+Use `target_decimal` to control how many decimal places are shown for the optional target label independently from `decimal`.
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Target Label Precision
+label_position: left
+min: 0
+max: 40
+target: 21.375
+show_target_label: true
+decimal: 1
+target_decimal: 3
+entities:
+  - entity: sensor.temperature
+    name: Sensor
 ```
 
 ### Unit Override
@@ -626,6 +644,7 @@ All options can be set globally at card level and overridden per entity.
 | `height` | number | `38` | Bar height in pixels | - |
 | `label_width` | number | `100` | Fixed label width for `left` mode | - |
 | `decimal` | number | auto | Decimal places | - |
+| `target_decimal` | number | auto | Decimal places for target label | <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> |
 | `unit` | string | entity unit | Unit override | - |
 
 ### Entity Options
