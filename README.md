@@ -15,7 +15,7 @@ It is built for dashboards where the visual context should follow live Home Assi
 
 ## Highlights
 
-- <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> **Dynamic min / max / target entities** for data-driven scales and references
+- <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> **Dynamic min / max / target / baseline entities** for data-driven scales and references
 - 📈 **Target and peak markers** with optional target value labels
 - 🎨 **Severity gradient and severity-based coloring** with `gradient`, `severity`, `single`, and <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> `severity_gradient`
 - <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> **Above-target color** for visually separating the portion beyond a live or fixed threshold
@@ -369,11 +369,11 @@ entities:
 
 Peak and target markers can occupy the same position without becoming ambiguous because they live on opposite bar edges. That makes them suitable for shared-threshold visualizations and future multi-reference extensions.
 
-## Dynamic Min / Max / Target Entities
+## Dynamic Min / Max / Target / Baseline Entities
 
 <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20">
 
-You can source `min`, `max`, and `target` from other entities instead of hardcoding them in the card config.
+You can source `min`, `max`, `target`, and `baseline` from other entities instead of hardcoding them in the card config.
 
 This is especially useful when the scale and threshold are driven by other helpers, automations, or template sensors.
 
@@ -417,7 +417,41 @@ Animated example:
 
 ![above-target-small.gif](images/above-target-small.gif)
 
-If both a fixed value and an entity are configured, the entity takes precedence. If the entity is unavailable or non-numeric, the fixed value is used as fallback.
+### `baseline` and dynamic `baseline_entity`
+
+Use `baseline` to control where the bar fill starts. By default the card fills from `min`, but setting a baseline lets you anchor the fill elsewhere on the same scale.
+
+This is especially useful for mixed negative/positive ranges where you want negative values to fill from `0` instead of from the far left edge.
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Negative values from zero
+color_mode: gradient
+min: -100
+max: 100
+baseline: 0
+target: 0
+show_target_label: true
+entities:
+  - entity: sensor.power_balance
+    name: Net power
+```
+
+For a moving fill origin, use `baseline_entity`.
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Dynamic baseline_entity
+color_mode: gradient
+min_entity: sensor.dynamic_min
+max_entity: sensor.dynamic_max
+baseline_entity: sensor.dynamic_baseline
+entities:
+  - entity: sensor.live_value
+    name: Adaptive baseline
+```
+
+If both a fixed value and an entity are configured, the entity takes precedence. If the entity is unavailable or non-numeric, the fixed value is used as fallback. This precedence applies to `min_entity`, `max_entity`, `target_entity`, and `baseline_entity`.
 
 ## Formatting, Text States, And Units
 
@@ -623,6 +657,8 @@ All options can be set globally at card level and overridden per entity.
 | `min_entity` | string | - | Dynamic minimum entity | <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> |
 | `max` | number | `100` | Maximum scale value | - |
 | `max_entity` | string | - | Dynamic maximum entity | <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> |
+| `baseline` | number | `min` | Fill start value | <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> |
+| `baseline_entity` | string | - | Dynamic baseline entity | <img src="images/plus-rainbow-badge.svg" alt="PLUS" height="20"> |
 | `height` | number | `38` | Bar height in pixels | - |
 | `label_width` | number | `100` | Fixed label width for `left` mode | - |
 | `decimal` | number | auto | Decimal places | - |
@@ -670,7 +706,7 @@ Compared to the original card, Sensor Bar Card Plus adds or reworks:
 
 - layout refactor for consistent bar alignment and more truthful row geometry
 - responsive label/value fallback behavior during resize, zoom, and cramped widths
-- dynamic `min_entity`, `max_entity`, and `target_entity`
+- dynamic `min_entity`, `max_entity`, `target_entity`, and `baseline_entity`
 - target marker, target value label, and above-target color highlighting
 - synchronized target animation so marker, label, and above-target split move together
 - `severity_gradient` as a separate color mode, alongside proper fixed-band `severity`

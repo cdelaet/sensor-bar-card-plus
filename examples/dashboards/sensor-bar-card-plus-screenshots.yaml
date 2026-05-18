@@ -949,6 +949,7 @@ views:
               label_width: 190
               min: -100
               max: 100
+              baseline: 0
               target: 0
               show_target_label: true
               entities:
