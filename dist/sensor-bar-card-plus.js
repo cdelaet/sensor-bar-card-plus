@@ -23,6 +23,7 @@
  *   target_color: '#4a9eff'        # colour of the target marker (default grey)
  *   above_target_color: '#F44336' # optional color for filled bar section beyond the target
  *   decimal: 1                     # decimal places for displayed value (null = use raw value)
+ *   target_decimal: 1              # decimal places for target label (null = use raw value)
  *   min: 0                        # minimum value
  *   min_entity: sensor.my_min_sensor         # optional entity providing the minimum value
  *   max: 100                      # maximum value
@@ -151,6 +152,7 @@ class SensorBarCard extends HTMLElement {
       show_target_label: false,
       above_target_color: null, 
       decimal: null,
+      target_decimal: null,
       gradient_stops: null,
       min: 0,
       min_entity: null,
@@ -213,6 +215,7 @@ class SensorBarCard extends HTMLElement {
       show_target_label: entityCfg.show_target_label ?? g.show_target_label,
       above_target_color: entityCfg.above_target_color ?? g.above_target_color ?? null,
       decimal:        entityCfg.decimal        ?? g.decimal,
+      target_decimal: entityCfg.target_decimal ?? g.target_decimal,
       label_width:    entityCfg.label_width    ?? g.label_width,
       gradient_stops: entityCfg.gradient_stops ?? g.gradient_stops,
       unit:           entityCfg.unit           ?? g.unit ?? null,
@@ -1269,6 +1272,14 @@ class SensorBarCard extends HTMLElement {
     return `${display}${this._isTightUnit(cleanUnit) ? '' : ' '}${cleanUnit}`;
   }
 
+  _formatNumericDisplay(value, decimal = null) {
+    if (!Number.isFinite(value)) return String(value);
+    if (decimal !== null && decimal !== undefined) {
+      return Number(value.toFixed(decimal)).toLocaleString();
+    }
+    return value.toLocaleString();
+  }
+
   _formatRightValueMarkup(display, unit, hideUnit = false) {
     if (!unit || hideUnit) {
       return `<span class="value-right-text"><span class="value-right-number">${display}</span></span>`;
@@ -1399,7 +1410,7 @@ class SensorBarCard extends HTMLElement {
           ? Math.min(100, Math.max(0, ((rawVal - safeMin) / range) * 100))
           : 0;        
         const color     = this._getColor(pct, ecfg);
-        const display   = isNaN(rawVal) ? stateObj.state : (ecfg.decimal !== null ? parseFloat(rawVal.toFixed(ecfg.decimal)).toLocaleString() : rawVal.toLocaleString());
+        const display   = isNaN(rawVal) ? stateObj.state : this._formatNumericDisplay(rawVal, ecfg.decimal);
         const displayUnit = isNumericState ? unit : '';
         let targetPct   = null;
         if (targetVal !== null) {
@@ -1407,7 +1418,7 @@ class SensorBarCard extends HTMLElement {
         }
         let targetDisplay = null;
         if (targetVal !== null) {
-          targetDisplay = this._formatDisplayWithUnit(targetVal.toLocaleString(), unit);
+          targetDisplay = this._formatDisplayWithUnit(this._formatNumericDisplay(targetVal, ecfg.target_decimal), unit);
         }
         let peakPct = null, peakDisplay = null;
         if (ecfg.show_peak && !isNaN(rawVal)) {
@@ -1453,7 +1464,7 @@ class SensorBarCard extends HTMLElement {
         ? Math.min(100, Math.max(0, ((rawVal - safeMin) / range) * 100))
         : 0;      
       const color   = this._getColor(pct, ecfg);
-      const display = isNaN(rawVal) ? stateObj.state : (ecfg.decimal !== null ? parseFloat(rawVal.toFixed(ecfg.decimal)).toLocaleString() : rawVal.toLocaleString());
+      const display = isNaN(rawVal) ? stateObj.state : this._formatNumericDisplay(rawVal, ecfg.decimal);
       const displayUnit = isNumericState ? unit : '';
 
       const row = rows[rowIdx];
@@ -1520,7 +1531,7 @@ class SensorBarCard extends HTMLElement {
         
         const targetLabelEl = row.querySelector('.target-value-label');
         if (targetLabelEl) {
-          targetLabelEl.textContent = this._formatDisplayWithUnit(targetVal.toLocaleString(), unit);
+          targetLabelEl.textContent = this._formatDisplayWithUnit(this._formatNumericDisplay(targetVal, ecfg.target_decimal), unit);
           targetLabelEl.style.left = `${targetPct}%`;
           targetLabelEl.style.visibility = 'hidden';
         }
