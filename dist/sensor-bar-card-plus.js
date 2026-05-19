@@ -154,7 +154,6 @@ class SensorBarCard extends HTMLElement {
       target: null,
       target_entity: null,
       target_color: '#888',
-      target: null,
       show_target_label: false,
       above_target_color: null, 
       decimal: null,
@@ -241,6 +240,9 @@ class SensorBarCard extends HTMLElement {
     return normalizedEntity;
   }
 
+  // Internal resolvable shape used to preserve today's flat `value + *_entity`
+  // model while giving future work one consistent place to look up dynamic
+  // versus fallback-backed values.
   normalizeResolvableValue(value, entityValue, fallbackValue) {
     return {
       value: value ?? null,
@@ -249,15 +251,18 @@ class SensorBarCard extends HTMLElement {
     };
   }
 
-  normalizeScaleConfig(entityConfig, cardConfig) {
+  normalizeScaleBound(entityConfig, cardConfig, key, defaultValue) {
     const cardScale = cardConfig?.scale;
-    const minFallback = entityConfig.min ?? cardScale?.min?.fallback ?? cardConfig?.min ?? 0;
-    const minEntity = entityConfig.min_entity ?? cardScale?.min?.entity ?? cardConfig?.min_entity ?? null;
-    const maxFallback = entityConfig.max ?? cardScale?.max?.fallback ?? cardConfig?.max ?? 100;
-    const maxEntity = entityConfig.max_entity ?? cardScale?.max?.entity ?? cardConfig?.max_entity ?? null;
+    const entityKey = `${key}_entity`;
+    const fallback = entityConfig[key] ?? cardScale?.[key]?.fallback ?? cardConfig?.[key] ?? defaultValue;
+    const entity = entityConfig[entityKey] ?? cardScale?.[key]?.entity ?? cardConfig?.[entityKey] ?? null;
+    return this.normalizeResolvableValue(fallback, entity, fallback);
+  }
+
+  normalizeScaleConfig(entityConfig, cardConfig) {
     return {
-      min: this.normalizeResolvableValue(minFallback, minEntity, minFallback),
-      max: this.normalizeResolvableValue(maxFallback, maxEntity, maxFallback),
+      min: this.normalizeScaleBound(entityConfig, cardConfig, 'min', 0),
+      max: this.normalizeScaleBound(entityConfig, cardConfig, 'max', 100),
     };
   }
 
@@ -340,9 +345,9 @@ class SensorBarCard extends HTMLElement {
       const ecfg = this._resolve(entityCfg);
       const entitiesToWatch = [
         entityCfg.entity,
-        ecfg.min_entity,
-        ecfg.max_entity,
-        ecfg.target_entity
+        ecfg.scale?.min?.entity,
+        ecfg.scale?.max?.entity,
+        ecfg.target_marker?.source?.entity
       ].filter(Boolean);
       
       for (const ent of entitiesToWatch) {
@@ -434,7 +439,7 @@ class SensorBarCard extends HTMLElement {
   }
 
   _getSeverityInterpolationStops(ecfg) {
-    const bands = Array.isArray(ecfg.severity) ? [...ecfg.severity] : [];
+    const bands = Array.isArray(ecfg.bar?.severity) ? [...ecfg.bar.severity] : [];
     const sorted = bands
       .filter(s => Number.isFinite(s?.from) && Number.isFinite(s?.to) && s?.color)
       .sort((a, b) => a.from - b.from);
@@ -463,7 +468,7 @@ class SensorBarCard extends HTMLElement {
   }
 
   _getSeverityBandGradientCss(ecfg) {
-    const bands = Array.isArray(ecfg.severity) ? [...ecfg.severity] : [];
+    const bands = Array.isArray(ecfg.bar?.severity) ? [...ecfg.bar.severity] : [];
     const sorted = bands
       .filter(s => Number.isFinite(s?.from) && Number.isFinite(s?.to) && s?.color)
       .sort((a, b) => a.from - b.from);
@@ -478,14 +483,14 @@ class SensorBarCard extends HTMLElement {
   }
   
   _getColor(pct, ecfg) {
-    if (ecfg.color_mode === 'single') return ecfg.color;
+    if (ecfg.bar.color_mode === 'single') return ecfg.bar.color;
 
-    if (ecfg.color_mode === 'gradient' || ecfg.color_mode === 'severity_gradient') {
+    if (ecfg.bar.color_mode === 'gradient' || ecfg.bar.color_mode === 'severity_gradient') {
       let stops;
-      if (ecfg.color_mode === 'severity_gradient') {
+      if (ecfg.bar.color_mode === 'severity_gradient') {
         stops = this._getSeverityInterpolationStops(ecfg);
-      } else if (ecfg.gradient_stops && ecfg.gradient_stops.length >= 2) {
-        stops = ecfg.gradient_stops.map(s => {
+      } else if (ecfg.bar.gradient_stops && ecfg.bar.gradient_stops.length >= 2) {
+        stops = ecfg.bar.gradient_stops.map(s => {
           const hex = s.color.replace('#','');
           const full = hex.length === 3
             ? hex.split('').map(c => c+c).join('')
@@ -500,7 +505,7 @@ class SensorBarCard extends HTMLElement {
           { p: 100, r: 244, g: 67,  b: 54  },
         ];
       }
-      if (!stops || !stops.length) return ecfg.color;
+      if (!stops || !stops.length) return ecfg.bar.color;
       let lo = stops[0], hi = stops[stops.length - 1];
       for (let i = 0; i < stops.length - 1; i++) {
         if (pct >= stops[i].p && pct <= stops[i + 1].p) {
@@ -512,16 +517,16 @@ class SensorBarCard extends HTMLElement {
     }
 
     // Severity mode
-    for (const s of (ecfg.severity || [])) {
+    for (const s of (ecfg.bar.severity || [])) {
       if (pct >= s.from && pct <= s.to) return s.color;
     }
-    return ecfg.color;
+    return ecfg.bar.color;
   }
 
   _getScaleStyle(color, ecfg) {
     const sizeStyle = 'width:100%;height:100%;';
 
-    if (ecfg.color_mode === 'severity') {
+    if (ecfg.bar.color_mode === 'severity') {
       const severityGradient = this._getSeverityBandGradientCss(ecfg);
       if (severityGradient) {
         return (
@@ -532,9 +537,9 @@ class SensorBarCard extends HTMLElement {
       }
     }
 
-    if (ecfg.color_mode === 'gradient') {
-      const gs = ecfg.gradient_stops && ecfg.gradient_stops.length >= 2
-        ? [...ecfg.gradient_stops].sort((a,b)=>a.pos-b.pos).map(s=>`${s.color} ${s.pos}%`).join(',')
+    if (ecfg.bar.color_mode === 'gradient') {
+      const gs = ecfg.bar.gradient_stops && ecfg.bar.gradient_stops.length >= 2
+        ? [...ecfg.bar.gradient_stops].sort((a,b)=>a.pos-b.pos).map(s=>`${s.color} ${s.pos}%`).join(',')
         : '#4CAF50 0%,#FF9800 50%,#F44336 100%';
 
       return (
@@ -549,7 +554,7 @@ class SensorBarCard extends HTMLElement {
 
   _getAboveTargetOverlayStyle(pct, h, ecfg, targetPct = null) {
     const hasAboveTargetColor =
-      ecfg.above_target_color &&
+      ecfg.bar.above_target_color &&
       targetPct !== null &&
       Number.isFinite(targetPct) &&
       targetPct >= 0 &&
@@ -561,7 +566,7 @@ class SensorBarCard extends HTMLElement {
     }
 
     const left = Math.min(100, Math.max(0, targetPct));
-    return `left:${left}%;height:${h}px;background:${ecfg.above_target_color};display:block;`;
+    return `left:${left}%;height:${h}px;background:${ecfg.bar.above_target_color};display:block;`;
   }
 
   _getMaskStyle(pct, h) {
@@ -1412,8 +1417,12 @@ class SensorBarCard extends HTMLElement {
 
   _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor) {
     const ecfg = this._resolve(entityCfg);
-    const lp   = ecfg.label_position;
-    const h    = ecfg.height;
+    const layout = ecfg.layout;
+    const bar = ecfg.bar;
+    const targetMarkerCfg = ecfg.target_marker;
+    const peakMarkerCfg = ecfg.peak_marker;
+    const lp   = layout.label_position;
+    const h    = layout.height;
     const name = ecfg.name
       || this._hass?.states[entityCfg.entity]?.attributes?.friendly_name
       || entityCfg.entity;
@@ -1423,7 +1432,7 @@ class SensorBarCard extends HTMLElement {
     const targetContrastColor = this._getMarkerContrastColor(targetMarkerColor);
 
     // Peak marker — chevron top, line full height, configurable colour
-    const peakMarker = ecfg.show_peak && peakPct !== null ? `
+    const peakMarker = peakMarkerCfg.show && peakPct !== null ? `
       <div class="peak-marker" style="left:${peakPct}%;--marker-color:${peakMarkerColor};--marker-contrast-color:${peakContrastColor};">
         <div class="peak-outset"></div>
         <div class="peak-inset"></div>
@@ -1435,7 +1444,7 @@ class SensorBarCard extends HTMLElement {
         <div class="target-inset"></div>
         <div class="target-outset"></div>
       </div>`;
-    const targetValueLabel = ecfg.show_target_label ? `
+    const targetValueLabel = targetMarkerCfg.show_label ? `
       <div class="target-value-label" style="left:${targetPct !== null ? targetPct : 0}%;">
         ${targetDisplay !== null ? targetDisplay : ''}
       </div>` : '';
@@ -1455,7 +1464,7 @@ class SensorBarCard extends HTMLElement {
       </div>` : '';
 
     const leftLabel  = lp === 'left'
-      ? `<div class="label-left" style="flex:0 1 min(${ecfg.label_width}px, var(--sbcp-left-label-share));max-width:min(${ecfg.label_width}px, var(--sbcp-left-label-share));height:${h}px;"><span class="label-left-text">${name}</span></div>`
+      ? `<div class="label-left" style="flex:0 1 min(${layout.label_width}px, var(--sbcp-left-label-share));max-width:min(${layout.label_width}px, var(--sbcp-left-label-share));height:${h}px;"><span class="label-left-text">${name}</span></div>`
       : '';
     const rightValue = lp !== 'inside' && lp !== 'above'
       ? `<div class="value-right" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}" data-hide-unit="false" style="height:${h}px;">${this._formatRightValueMarkup(stateDisplay, unit, false)}</div>`
@@ -1471,8 +1480,8 @@ class SensorBarCard extends HTMLElement {
             <div class="bar-wrap">
               <div class="bar-track" style="height:${h}px;">
                 <div class="bar-scale" style="${this._getScaleStyle(color, ecfg)}"></div>
-                <div class="bar-above-target${ecfg.animated ? '' : ' no-anim'}" style="${this._getAboveTargetOverlayStyle(pct, h, ecfg, targetPct)}"></div>
-                <div class="bar-fill${ecfg.animated ? '' : ' no-anim'}"
+                <div class="bar-above-target${bar.animated ? '' : ' no-anim'}" style="${this._getAboveTargetOverlayStyle(pct, h, ecfg, targetPct)}"></div>
+                <div class="bar-fill${bar.animated ? '' : ' no-anim'}"
                   style="${this._getMaskStyle(pct, h)}"></div>
                 ${innerLabel}
                 ${peakMarker}
