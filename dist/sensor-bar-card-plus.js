@@ -136,7 +136,14 @@ class SensorBarCard extends HTMLElement {
       throw new Error('You must define entities or entity');
     }
     this._rendered = false; // force full rebuild on config change
-    this._config = {
+    this._config = this.normalizeCardConfig(config);
+    this._render();
+  }
+
+  // The normalized model is internal only. It preserves today's flat YAML
+  // while giving future work one structured compatibility layer to build on.
+  normalizeCardConfig(rawConfig) {
+    const baseConfig = {
       title: '',
       label_position: 'left',
       color_mode: 'severity',
@@ -163,18 +170,143 @@ class SensorBarCard extends HTMLElement {
         { from: 33, to: 75,  color: '#FF9800' },
         { from: 75, to: 100, color: '#F44336' },
       ],
-      ...config,
+      ...rawConfig,
     };
 
     // Normalise single entity shorthand to array
-    if (this._config.entity && !this._config.entities) {
-      this._config.entities = [{ entity: this._config.entity }];
+    if (baseConfig.entity && !baseConfig.entities) {
+      baseConfig.entities = [{ entity: baseConfig.entity }];
     }
-    this._config.entities = this._config.entities.map(e =>
+    baseConfig.entities = baseConfig.entities.map(e =>
       typeof e === 'string' ? { entity: e } : e
     );
 
-    this._render();
+    const normalizedCard = {
+      ...baseConfig,
+      _normalized: true,
+    };
+
+    normalizedCard.layout = this.normalizeLayoutConfig(baseConfig, null);
+    normalizedCard.scale = this.normalizeScaleConfig(baseConfig, null);
+    normalizedCard.bar = this.normalizeBarConfig(baseConfig, null);
+    normalizedCard.formatting = this.normalizeFormattingConfig(baseConfig, null);
+    normalizedCard.target_marker = this.normalizeTargetMarkerConfig(baseConfig, null);
+    normalizedCard.peak_marker = this.normalizePeakMarkerConfig(baseConfig, null);
+    normalizedCard.entities = baseConfig.entities.map(entityCfg =>
+      this.normalizeEntityConfig(entityCfg, normalizedCard)
+    );
+
+    return normalizedCard;
+  }
+
+  normalizeEntityConfig(entityConfig, cardConfig) {
+    const normalizedEntity = {
+      ...entityConfig,
+      _normalized: true,
+      entity: entityConfig.entity,
+      name: entityConfig.name ?? null,
+      icon: entityConfig.icon,
+    };
+
+    normalizedEntity.layout = this.normalizeLayoutConfig(entityConfig, cardConfig);
+    normalizedEntity.scale = this.normalizeScaleConfig(entityConfig, cardConfig);
+    normalizedEntity.bar = this.normalizeBarConfig(entityConfig, cardConfig);
+    normalizedEntity.formatting = this.normalizeFormattingConfig(entityConfig, cardConfig);
+    normalizedEntity.target_marker = this.normalizeTargetMarkerConfig(entityConfig, cardConfig);
+    normalizedEntity.peak_marker = this.normalizePeakMarkerConfig(entityConfig, cardConfig);
+
+    // Keep flat aliases so current rendering code and public YAML stay stable.
+    normalizedEntity.min = normalizedEntity.scale.min.fallback;
+    normalizedEntity.min_entity = normalizedEntity.scale.min.entity;
+    normalizedEntity.max = normalizedEntity.scale.max.fallback;
+    normalizedEntity.max_entity = normalizedEntity.scale.max.entity;
+    normalizedEntity.height = normalizedEntity.layout.height;
+    normalizedEntity.label_position = normalizedEntity.layout.label_position;
+    normalizedEntity.label_width = normalizedEntity.layout.label_width;
+    normalizedEntity.color_mode = normalizedEntity.bar.color_mode;
+    normalizedEntity.color = normalizedEntity.bar.color;
+    normalizedEntity.gradient_stops = normalizedEntity.bar.gradient_stops;
+    normalizedEntity.severity = normalizedEntity.bar.severity;
+    normalizedEntity.animated = normalizedEntity.bar.animated;
+    normalizedEntity.above_target_color = normalizedEntity.bar.above_target_color;
+    normalizedEntity.decimal = normalizedEntity.formatting.decimal;
+    normalizedEntity.unit = normalizedEntity.formatting.unit;
+    normalizedEntity.target = normalizedEntity.target_marker.source.fallback;
+    normalizedEntity.target_entity = normalizedEntity.target_marker.source.entity;
+    normalizedEntity.target_color = normalizedEntity.target_marker.color;
+    normalizedEntity.show_target_label = normalizedEntity.target_marker.show_label;
+    normalizedEntity.show_peak = normalizedEntity.peak_marker.show;
+    normalizedEntity.peak_color = normalizedEntity.peak_marker.color;
+
+    return normalizedEntity;
+  }
+
+  normalizeResolvableValue(value, entityValue, fallbackValue) {
+    return {
+      value: value ?? null,
+      entity: entityValue ?? null,
+      fallback: fallbackValue ?? value ?? null,
+    };
+  }
+
+  normalizeScaleConfig(entityConfig, cardConfig) {
+    const cardScale = cardConfig?.scale;
+    const minFallback = entityConfig.min ?? cardScale?.min?.fallback ?? cardConfig?.min ?? 0;
+    const minEntity = entityConfig.min_entity ?? cardScale?.min?.entity ?? cardConfig?.min_entity ?? null;
+    const maxFallback = entityConfig.max ?? cardScale?.max?.fallback ?? cardConfig?.max ?? 100;
+    const maxEntity = entityConfig.max_entity ?? cardScale?.max?.entity ?? cardConfig?.max_entity ?? null;
+    return {
+      min: this.normalizeResolvableValue(minFallback, minEntity, minFallback),
+      max: this.normalizeResolvableValue(maxFallback, maxEntity, maxFallback),
+    };
+  }
+
+  normalizeBarConfig(entityConfig, cardConfig) {
+    const cardBar = cardConfig?.bar;
+    return {
+      color_mode: entityConfig.color_mode ?? cardBar?.color_mode ?? cardConfig?.color_mode ?? 'severity',
+      color: entityConfig.color ?? cardBar?.color ?? cardConfig?.color ?? '#4a9eff',
+      gradient_stops: entityConfig.gradient_stops ?? cardBar?.gradient_stops ?? cardConfig?.gradient_stops ?? null,
+      severity: entityConfig.severity ?? cardBar?.severity ?? cardConfig?.severity ?? null,
+      animated: entityConfig.animated ?? cardBar?.animated ?? cardConfig?.animated ?? true,
+      above_target_color: entityConfig.above_target_color ?? cardBar?.above_target_color ?? cardConfig?.above_target_color ?? null,
+    };
+  }
+
+  normalizeLayoutConfig(entityConfig, cardConfig) {
+    const cardLayout = cardConfig?.layout;
+    return {
+      label_position: entityConfig.label_position ?? cardLayout?.label_position ?? cardConfig?.label_position ?? 'left',
+      label_width: entityConfig.label_width ?? cardLayout?.label_width ?? cardConfig?.label_width ?? 100,
+      height: entityConfig.height ?? cardLayout?.height ?? cardConfig?.height ?? 38,
+    };
+  }
+
+  normalizeFormattingConfig(entityConfig, cardConfig) {
+    const cardFormatting = cardConfig?.formatting;
+    return {
+      decimal: entityConfig.decimal ?? cardFormatting?.decimal ?? cardConfig?.decimal ?? null,
+      unit: entityConfig.unit ?? cardFormatting?.unit ?? cardConfig?.unit ?? null,
+    };
+  }
+
+  normalizeTargetMarkerConfig(entityConfig, cardConfig) {
+    const cardTarget = cardConfig?.target_marker;
+    const fallback = entityConfig.target ?? cardTarget?.source?.fallback ?? cardConfig?.target ?? null;
+    const entity = entityConfig.target_entity ?? cardTarget?.source?.entity ?? cardConfig?.target_entity ?? null;
+    return {
+      source: this.normalizeResolvableValue(fallback, entity, fallback),
+      color: entityConfig.target_color ?? cardTarget?.color ?? cardConfig?.target_color ?? '#888',
+      show_label: entityConfig.show_target_label ?? cardTarget?.show_label ?? cardConfig?.show_target_label ?? false,
+    };
+  }
+
+  normalizePeakMarkerConfig(entityConfig, cardConfig) {
+    const cardPeak = cardConfig?.peak_marker;
+    return {
+      show: entityConfig.show_peak ?? cardPeak?.show ?? cardConfig?.show_peak ?? false,
+      color: entityConfig.peak_color ?? cardPeak?.color ?? cardConfig?.peak_color ?? '#888',
+    };
   }
 
   set hass(hass) {
@@ -193,31 +325,11 @@ class SensorBarCard extends HTMLElement {
 
   // Merge global config with per-entity overrides
   _resolve(entityCfg) {
-    const g = this._config;
+    const ecfg = entityCfg?._normalized ? entityCfg : this.normalizeEntityConfig(entityCfg, this._config);
     return {
-      min:            entityCfg.min            ?? g.min,
-      min_entity:     entityCfg.min_entity     ?? g.min_entity ?? null,
-      max:            entityCfg.max            ?? g.max,
-      max_entity:     entityCfg.max_entity     ?? g.max_entity ?? null,
-      height:         entityCfg.height         ?? g.height,
-      label_position: entityCfg.label_position ?? g.label_position,
-      animated:       entityCfg.animated       ?? g.animated,
-      color_mode:     entityCfg.color_mode     ?? g.color_mode,
-      color:          entityCfg.color          ?? g.color,
-      severity:       entityCfg.severity       ?? g.severity,
-      show_peak:      entityCfg.show_peak      ?? g.show_peak,
-      peak_color:     entityCfg.peak_color     ?? g.peak_color,
-      target:         entityCfg.target         ?? g.target,
-      target_entity:  entityCfg.target_entity  ?? g.target_entity ?? null,
-      target_color:   entityCfg.target_color   ?? g.target_color,
-      show_target_label: entityCfg.show_target_label ?? g.show_target_label,
-      above_target_color: entityCfg.above_target_color ?? g.above_target_color ?? null,
-      decimal:        entityCfg.decimal        ?? g.decimal,
-      label_width:    entityCfg.label_width    ?? g.label_width,
-      gradient_stops: entityCfg.gradient_stops ?? g.gradient_stops,
-      unit:           entityCfg.unit           ?? g.unit ?? null,
-      icon:           entityCfg.icon === false ? false : (entityCfg.icon ?? this._hass?.states[entityCfg.entity]?.attributes?.icon ?? null),
-      name:           entityCfg.name           ?? null,
+      ...ecfg,
+      icon: ecfg.icon === false ? false : (ecfg.icon ?? this._hass?.states[ecfg.entity]?.attributes?.icon ?? null),
+      name: ecfg.name ?? null,
     };
   }
 
@@ -300,6 +412,11 @@ class SensorBarCard extends HTMLElement {
     
     const num = parseFloat(value);
     return Number.isFinite(num) ? num : null;
+  }
+
+  _getNormalizedResolvableNumericValue(resolvable) {
+    if (!resolvable) return null;
+    return this._getNumericValue(resolvable.fallback ?? resolvable.value, resolvable.entity);
   }
 
   _hexToRgb(color) {
@@ -1387,10 +1504,10 @@ class SensorBarCard extends HTMLElement {
         }
         const ecfg      = this._resolve(entityCfg);
         const rawVal    = parseFloat(stateObj.state);
-        const unit      = ecfg.unit ?? stateObj.attributes?.unit_of_measurement ?? '';
-        const minVal    = this._getNumericValue(ecfg.min, ecfg.min_entity);
-        const maxVal    = this._getNumericValue(ecfg.max, ecfg.max_entity);
-        const targetVal = this._getNumericValue(ecfg.target, ecfg.target_entity);
+        const unit      = ecfg.formatting.unit ?? stateObj.attributes?.unit_of_measurement ?? '';
+        const minVal    = this._getNormalizedResolvableNumericValue(ecfg.scale.min);
+        const maxVal    = this._getNormalizedResolvableNumericValue(ecfg.scale.max);
+        const targetVal = this._getNormalizedResolvableNumericValue(ecfg.target_marker.source);
         const safeMin   = Number.isFinite(minVal) ? minVal : 0;
         const safeMax   = Number.isFinite(maxVal) ? maxVal : 100;
         const range     = safeMax - safeMin || 1;
@@ -1399,7 +1516,7 @@ class SensorBarCard extends HTMLElement {
           ? Math.min(100, Math.max(0, ((rawVal - safeMin) / range) * 100))
           : 0;        
         const color     = this._getColor(pct, ecfg);
-        const display   = isNaN(rawVal) ? stateObj.state : (ecfg.decimal !== null ? parseFloat(rawVal.toFixed(ecfg.decimal)).toLocaleString() : rawVal.toLocaleString());
+        const display   = isNaN(rawVal) ? stateObj.state : (ecfg.formatting.decimal !== null ? parseFloat(rawVal.toFixed(ecfg.formatting.decimal)).toLocaleString() : rawVal.toLocaleString());
         const displayUnit = isNumericState ? unit : '';
         let targetPct   = null;
         if (targetVal !== null) {
@@ -1410,12 +1527,12 @@ class SensorBarCard extends HTMLElement {
           targetDisplay = this._formatDisplayWithUnit(targetVal.toLocaleString(), unit);
         }
         let peakPct = null, peakDisplay = null;
-        if (ecfg.show_peak && !isNaN(rawVal)) {
+        if (ecfg.peak_marker.show && !isNaN(rawVal)) {
           this._peaks[entityCfg.entity] = rawVal;
           peakPct     = pct;
           peakDisplay = display;
         }
-        html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_color, ecfg.target_color);
+        html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_marker.color, ecfg.target_marker.color);
       }
       rowsEl.innerHTML = html;
       this._rendered = true;
@@ -1441,10 +1558,10 @@ class SensorBarCard extends HTMLElement {
 
       const ecfg    = this._resolve(entityCfg);
       const rawVal  = parseFloat(stateObj.state);
-      const unit    = ecfg.unit ?? stateObj.attributes?.unit_of_measurement ?? '';
-      const minVal    = this._getNumericValue(ecfg.min, ecfg.min_entity);
-      const maxVal    = this._getNumericValue(ecfg.max, ecfg.max_entity);
-      const targetVal = this._getNumericValue(ecfg.target, ecfg.target_entity);
+      const unit    = ecfg.formatting.unit ?? stateObj.attributes?.unit_of_measurement ?? '';
+      const minVal    = this._getNormalizedResolvableNumericValue(ecfg.scale.min);
+      const maxVal    = this._getNormalizedResolvableNumericValue(ecfg.scale.max);
+      const targetVal = this._getNormalizedResolvableNumericValue(ecfg.target_marker.source);
       const safeMin   = Number.isFinite(minVal) ? minVal : 0;
       const safeMax   = Number.isFinite(maxVal) ? maxVal : 100;
       const range     = safeMax - safeMin || 1;
@@ -1453,7 +1570,7 @@ class SensorBarCard extends HTMLElement {
         ? Math.min(100, Math.max(0, ((rawVal - safeMin) / range) * 100))
         : 0;      
       const color   = this._getColor(pct, ecfg);
-      const display = isNaN(rawVal) ? stateObj.state : (ecfg.decimal !== null ? parseFloat(rawVal.toFixed(ecfg.decimal)).toLocaleString() : rawVal.toLocaleString());
+      const display = isNaN(rawVal) ? stateObj.state : (ecfg.formatting.decimal !== null ? parseFloat(rawVal.toFixed(ecfg.formatting.decimal)).toLocaleString() : rawVal.toLocaleString());
       const displayUnit = isNumericState ? unit : '';
 
       const row = rows[rowIdx];
@@ -1472,12 +1589,12 @@ class SensorBarCard extends HTMLElement {
         scale.style.cssText = this._getScaleStyle(color, ecfg);
       }
       if (aboveTarget) {
-        aboveTarget.style.cssText = this._getAboveTargetOverlayStyle(pct, ecfg.height, ecfg, liveTargetPct);
-        aboveTarget.className = `bar-above-target${ecfg.animated ? '' : ' no-anim'}`;
+        aboveTarget.style.cssText = this._getAboveTargetOverlayStyle(pct, ecfg.layout.height, ecfg, liveTargetPct);
+        aboveTarget.className = `bar-above-target${ecfg.bar.animated ? '' : ' no-anim'}`;
       }
       if (fill) {
-        fill.style.cssText = this._getMaskStyle(pct, ecfg.height);
-        fill.className = `bar-fill${ecfg.animated ? '' : ' no-anim'}`;
+        fill.style.cssText = this._getMaskStyle(pct, ecfg.layout.height);
+        fill.className = `bar-fill${ecfg.bar.animated ? '' : ' no-anim'}`;
       }
 
       // Update displayed value
@@ -1499,7 +1616,7 @@ class SensorBarCard extends HTMLElement {
       }
 
       // Update peak marker position
-      if (ecfg.show_peak && !isNaN(rawVal)) {
+      if (ecfg.peak_marker.show && !isNaN(rawVal)) {
         const key = entityCfg.entity;
         if (this._peaks[key] === undefined || rawVal > this._peaks[key]) {
           this._peaks[key] = rawVal;
