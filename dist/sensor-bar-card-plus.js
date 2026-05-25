@@ -690,6 +690,22 @@ class SensorBarCard extends HTMLElement {
     return `width:100%;height:100%;${this._getBarBackgroundStyle(color, ecfg)}`;
   }
 
+  _toScalePct(value, minValue, maxValue) {
+    if (!Number.isFinite(value)) return null;
+    const safeMin = Number.isFinite(minValue) ? minValue : 0;
+    const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
+    const range = safeMax - safeMin || 1;
+    return Math.min(100, Math.max(0, ((value - safeMin) / range) * 100));
+  }
+
+  _formatNumericDisplay(rawVal, decimal = null) {
+    if (!Number.isFinite(rawVal)) return String(rawVal);
+    if (decimal !== null) {
+      return parseFloat(rawVal.toFixed(decimal)).toLocaleString();
+    }
+    return rawVal.toLocaleString();
+  }
+
   _getNormalizedPercent(valuePct, baselinePct = null) {
     const clampedValue = Math.min(100, Math.max(0, valuePct));
     if (!Number.isFinite(baselinePct)) {
@@ -1738,18 +1754,18 @@ class SensorBarCard extends HTMLElement {
         const range     = safeMax - safeMin || 1;
         const isNumericState = Number.isFinite(rawVal);
         const pct = Number.isFinite(rawVal)
-          ? Math.min(100, Math.max(0, ((rawVal - safeMin) / range) * 100))
+          ? this._toScalePct(rawVal, safeMin, safeMax)
           : 0;        
         const color     = this._getColor(pct, ecfg);
-        const display   = isNaN(rawVal) ? stateObj.state : (ecfg.formatting.decimal !== null ? parseFloat(rawVal.toFixed(ecfg.formatting.decimal)).toLocaleString() : rawVal.toLocaleString());
+        const display   = isNaN(rawVal) ? stateObj.state : this._formatNumericDisplay(rawVal, ecfg.formatting.decimal);
         const displayUnit = isNumericState ? unit : '';
         let targetPct   = null;
         if (targetVal !== null) {
-          targetPct = Math.min(100, Math.max(0, ((targetVal - safeMin) / range) * 100));
+          targetPct = this._toScalePct(targetVal, safeMin, safeMax);
         }
         let baselinePct = null;
         if (baselineVal !== null) {
-          baselinePct = Math.min(100, Math.max(0, ((baselineVal - safeMin) / range) * 100));
+          baselinePct = this._toScalePct(baselineVal, safeMin, safeMax);
         }
         let targetDisplay = null;
         if (targetVal !== null) {
@@ -1797,10 +1813,10 @@ class SensorBarCard extends HTMLElement {
       const range     = safeMax - safeMin || 1;
       const isNumericState = Number.isFinite(rawVal);
       const pct = Number.isFinite(rawVal)
-        ? Math.min(100, Math.max(0, ((rawVal - safeMin) / range) * 100))
+        ? this._toScalePct(rawVal, safeMin, safeMax)
         : 0;      
       const color   = this._getColor(pct, ecfg);
-      const display = isNaN(rawVal) ? stateObj.state : (ecfg.formatting.decimal !== null ? parseFloat(rawVal.toFixed(ecfg.formatting.decimal)).toLocaleString() : rawVal.toLocaleString());
+      const display = isNaN(rawVal) ? stateObj.state : this._formatNumericDisplay(rawVal, ecfg.formatting.decimal);
       const displayUnit = isNumericState ? unit : '';
 
       const row = rows[rowIdx];
@@ -1813,10 +1829,10 @@ class SensorBarCard extends HTMLElement {
       let liveTargetPct = null;
       let liveBaselinePct = null;
       if (targetVal !== null) {
-        liveTargetPct = Math.min(100, Math.max(0, ((targetVal - safeMin) / range) * 100));
+        liveTargetPct = this._toScalePct(targetVal, safeMin, safeMax);
       }
       if (baselineVal !== null) {
-        liveBaselinePct = Math.min(100, Math.max(0, ((baselineVal - safeMin) / range) * 100));
+        liveBaselinePct = this._toScalePct(baselineVal, safeMin, safeMax);
       }
 
       if (scale) {
@@ -1862,13 +1878,13 @@ class SensorBarCard extends HTMLElement {
           this._peaks[key] = rawVal;
         }
         const peakVal = this._peaks[key];
-        const peakPct = Math.min(100, Math.max(0, ((peakVal - safeMin) / range) * 100));
+        const peakPct = this._toScalePct(peakVal, safeMin, safeMax);
         const peakEl  = row.querySelector('.peak-marker');
         if (peakEl) peakEl.style.left = `${peakPct}%`;
       }
       // Update target marker position (for dynamic target_entity)
       if (targetVal !== null) {
-        const targetPct = Math.min(100, Math.max(0, ((targetVal - safeMin) / range) * 100));
+        const targetPct = this._toScalePct(targetVal, safeMin, safeMax);
         const targetEl  = row.querySelector('.target-marker');
         if (targetEl) {
           targetEl.style.display = '';

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SBCP Visual Harness</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #101214;
+        color: #f5f7fa;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+      #mount {
+        width: 720px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="mount"></div>
+    <script>
+      window.customCards = window.customCards || [];
+      if (!customElements.get('ha-icon')) {
+        customElements.define('ha-icon', class HaIcon extends HTMLElement {});
+      }
+      window.__lastMoreInfo = null;
+      window.addEventListener('hass-more-info', (event) => {
+        window.__lastMoreInfo = event.detail;
+      });
+    </script>
+    <script src="/dist/sensor-bar-card-plus.js"></script>
+    <script src="/tests/visual/fixtures/harness.js"></script>
+  </body>
+</html>

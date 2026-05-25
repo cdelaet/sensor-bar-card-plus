@@ -88,6 +88,35 @@ The repository includes a full demo playground and a dedicated screenshot board:
 
 Use them to validate color modes, markers, dynamic scales, text states, edge cases, and responsive behavior.
 
+## Testing
+
+Install the dev dependencies and Playwright browser once:
+
+```bash
+npm install
+npx playwright install chromium
+```
+
+Run the pure logic unit tests:
+
+```bash
+npm run test:unit
+```
+
+Run the Playwright visual regression suite:
+
+```bash
+npm run test:visual
+```
+
+Update the stored visual snapshots intentionally after a reviewed visual change:
+
+```bash
+npm run test:visual:update
+```
+
+`npm test` runs the unit suite first and then the visual regression suite.
+
 ## Color Modes
 
 ### `gradient`

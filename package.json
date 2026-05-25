@@ -1,0 +1,32 @@
+{
+  "name": "sensor-bar-card",
+  "version": "1.0.0",
+  "description": "[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)  [![GitHub release](https://img.shields.io/github/release/cdelaet/sensor-bar-card-plus.svg)](https://github.com/cdelaet/sensor-bar-card-plus/releases)  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)",
+  "main": "index.js",
+  "directories": {
+    "example": "examples"
+  },
+  "scripts": {
+    "test": "npm run test:unit && npm run test:visual",
+    "test:unit": "vitest run",
+    "test:visual": "playwright test",
+    "test:visual:update": "playwright test --update-snapshots"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cdelaet/sensor-bar-card-plus.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/cdelaet/sensor-bar-card-plus/issues"
+  },
+  "homepage": "https://github.com/cdelaet/sensor-bar-card-plus#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "playwright": "^1.60.0",
+    "vitest": "^4.1.7"
+  }
+}
