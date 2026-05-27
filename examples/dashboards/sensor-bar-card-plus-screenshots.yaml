@@ -1305,6 +1305,269 @@ views:
             min: 0
             max: 40
 
+  - title: Baseline Showcase
+    path: sensor-bar-card-plus-baseline-showcase
+    icon: mdi:axis-arrow
+    badges: []
+    cards:
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: |
+              # Baseline Showcase
+              Polished, README-ready baseline examples for repository screenshots and HACS imagery.
+
+          - type: markdown
+            content: |
+              ## Baseline Fill Origin
+              Centered baseline, balanced import and export flows, and a calm semantic scale.
+
+          - type: custom:sensor-bar-card-plus
+            title: Baseline Fill Origin
+            color_mode: severity_gradient
+            label_position: left
+            label_width: 180
+            animated: true
+            height: 44
+            target: 52
+            target_color: '#dbe4ee'
+            severity:
+              - from: 0
+                to: 36
+                color: '#22c55e'
+              - from: 36
+                to: 66
+                color: '#facc15'
+              - from: 66
+                to: 100
+                color: '#f59e0b'
+            baseline:
+              at: 0
+            entities:
+              - entity: sensor.sbcp_playground_negative
+                name: Grid Export
+                icon: mdi:transmission-tower-export
+                min: -100
+                max: 100
+              - entity: sensor.sbcp_playground_sensor
+                name: Home Battery
+                icon: mdi:home-battery-outline
+                min: -100
+                max: 100
+
+          - type: markdown
+            content: |
+              ## Baseline Colors And Overrides
+              Semantic colors stay readable while directional overrides show how each side can be styled with intent.
+
+          - type: custom:sensor-bar-card-plus
+            title: Baseline Colors And Overrides
+            color_mode: severity_gradient
+            label_position: left
+            label_width: 200
+            animated: true
+            height: 40
+            severity:
+              - from: 0
+                to: 36
+                color: '#22c55e'
+              - from: 36
+                to: 66
+                color: '#facc15'
+              - from: 66
+                to: 100
+                color: '#f59e0b'
+            baseline:
+              at: 0
+            entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Inherited semantic scale
+                icon: mdi:vector-line
+                min: -100
+                max: 100
+              - entity: sensor.sbcp_playground_sensor
+                name: Override above
+                icon: mdi:arrow-top-right
+                min: -100
+                max: 100
+                baseline:
+                  at: 0
+                  above: '#34d399'
+              - entity: sensor.sbcp_playground_negative
+                name: Override below
+                icon: mdi:arrow-bottom-left
+                min: -100
+                max: 100
+                baseline:
+                  at: 0
+                  below: '#ef4444'
+              - entity: sensor.sbcp_playground_sensor
+                name: Override both sides
+                icon: mdi:compare-horizontal
+                min: -100
+                max: 100
+                baseline:
+                  at: 0
+                  above: '#34d399'
+                  below: '#ef4444'
+
+          - type: markdown
+            content: |
+              ## Target And Baseline Interaction
+              Targets below, on, and above the baseline, with threshold highlighting that stays visually clean.
+
+          - type: custom:sensor-bar-card-plus
+            title: Target And Baseline Interaction
+            color_mode: severity_gradient
+            label_position: left
+            label_width: 200
+            animated: true
+            height: 40
+            show_target_label: true
+            target_color: '#dbe4ee'
+            above_target_color: '#fb7185'
+            severity:
+              - from: 0
+                to: 36
+                color: '#22c55e'
+              - from: 36
+                to: 66
+                color: '#facc15'
+              - from: 66
+                to: 100
+                color: '#f59e0b'
+            baseline:
+              at: 0
+            entities:
+              - entity: sensor.sbcp_playground_negative
+                name: Target below baseline
+                icon: mdi:flag-variant
+                min: -100
+                max: 100
+                target: -28
+              - entity: sensor.sbcp_playground_baseline
+                name: Target on baseline
+                icon: mdi:flag-variant
+                min: -100
+                max: 100
+                target: 0
+              - entity: sensor.sbcp_playground_sensor
+                name: Target above baseline
+                icon: mdi:flag-variant
+                min: -100
+                max: 100
+                target: 28
+
+          - type: markdown
+            content: |
+              ## Animated Semantic Lab
+              A presentation-grade animated composition for baseline crossing, semantic gradients, and threshold highlighting.
+
+          - type: custom:sensor-bar-card-plus
+            title: Animated Semantic Lab
+            color_mode: severity_gradient
+            label_position: left
+            label_width: 180
+            animated: true
+            height: 44
+            target_entity: sensor.sbcp_playground_target
+            target_color: '#dbe4ee'
+            show_target_label: true
+            above_target_color: '#f97316'
+            severity:
+              - from: 0
+                to: 34
+                color: '#22c55e'
+              - from: 34
+                to: 64
+                color: '#facc15'
+              - from: 64
+                to: 100
+                color: '#f59e0b'
+            baseline:
+              at:
+                entity: sensor.sbcp_playground_baseline
+                value: 0
+            entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Battery Flow
+                icon: mdi:home-battery-outline
+                min: -100
+                max: 100
+              - entity: sensor.sbcp_playground_negative
+                name: Grid Balancing
+                icon: mdi:transmission-tower-export
+                min: -100
+                max: 100
+
+          - type: markdown
+            content: |
+              ## Compact Responsive Showcase
+              Dense, deployable dashboard compositions that still feel intentional and readable.
+
+          - type: horizontal-stack
+            cards:
+              - type: custom:sensor-bar-card-plus
+                title: Utility Rail
+                color_mode: gradient
+                label_position: "off"
+                height: 26
+                gradient_stops:
+                  - pos: 0
+                    color: '#22c55e'
+                  - pos: 56
+                    color: '#facc15'
+                  - pos: 100
+                    color: '#f59e0b'
+                baseline:
+                  at: 0
+                entities:
+                  - entity: sensor.sbcp_playground_negative
+                    icon: mdi:transmission-tower-export
+                    min: -100
+                    max: 100
+                  - entity: sensor.sbcp_playground_sensor
+                    icon: mdi:solar-power
+                    min: -100
+                    max: 100
+                  - entity: sensor.sbcp_stress_05
+                    icon: mdi:ev-station
+                    min: 0
+                    max: 100
+                  - entity: sensor.sbcp_stress_09
+                    icon: mdi:flash-outline
+                    min: 0
+                    max: 100
+              - type: custom:sensor-bar-card-plus
+                title: Compact Above Labels
+                color_mode: severity_gradient
+                label_position: above
+                animated: true
+                height: 28
+                severity:
+                  - from: 0
+                    to: 34
+                    color: '#22c55e'
+                  - from: 34
+                    to: 64
+                    color: '#facc15'
+                  - from: 64
+                    to: 100
+                    color: '#f59e0b'
+                baseline:
+                  at: 0
+                entities:
+                  - entity: sensor.sbcp_playground_sensor
+                    name: Battery Flow
+                    icon: mdi:home-battery-outline
+                    min: -100
+                    max: 100
+                  - entity: sensor.sbcp_playground_negative
+                    name: Grid Flow
+                    icon: mdi:transmission-tower
+                    min: -100
+                    max: 100
+
   - title: Hero Showcase
     path: sensor-bar-card-plus-hero-showcase
     icon: mdi:movie-open-star
