@@ -50,6 +50,159 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(cfg.entities[0].baseline.at.value).toBe(75);
   });
 
+  it('normalizes legacy severity arrays into the internal segment model', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      severity: [
+        { from: 0, color: '#4CAF50' },
+        { from: 33, color: '#FF9800' },
+        { from: 75, color: '#F44336' },
+      ],
+      entities: [{ entity: 'sensor.row' }],
+    });
+
+    expect(cfg.bar.segments).toEqual([
+      { from: 0, to: 33, color: '#4CAF50', label: null },
+      { from: 33, to: 75, color: '#FF9800', label: null },
+      { from: 75, to: 100, color: '#F44336', label: null },
+    ]);
+    expect(cfg.bar.segment_space).toBe('percent');
+    expect(cfg.bar.severity).toEqual(cfg.bar.segments);
+  });
+
+  it('keeps gradient_stops separate from segment normalization', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      color_mode: 'gradient',
+      gradient_stops: [
+        { pos: 0, color: '#4CAF50' },
+        { pos: 50, color: '#FF9800' },
+        { pos: 100, color: '#F44336' },
+      ],
+      entities: [{ entity: 'sensor.row' }],
+    });
+
+    expect(cfg.bar.gradient_stops).toEqual([
+      { pos: 0, color: '#4CAF50' },
+      { pos: 50, color: '#FF9800' },
+      { pos: 100, color: '#F44336' },
+    ]);
+    expect(cfg.bar.segments).toEqual(cfg.bar.severity);
+  });
+
+  it('accepts gauge-compatible top-level segments', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      segments: [
+        { from: 0, color: '#4CAF50' },
+        { from: 50, color: '#FF9800' },
+        { from: 80, color: '#F44336', label: 'High' },
+      ],
+      entities: [{ entity: 'sensor.row' }],
+    });
+
+    expect(cfg.bar.segments).toEqual([
+      { from: 0, to: 50, color: '#4CAF50', label: null },
+      { from: 50, to: 80, color: '#FF9800', label: null },
+      { from: 80, to: null, color: '#F44336', label: 'High' },
+    ]);
+    expect(cfg.bar.segment_space).toBe('scale');
+  });
+
+  it('accepts structured bar.segments', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      bar: {
+        segments: [
+          { from: 0, color: '#4CAF50' },
+          { from: 60, color: '#F44336' },
+        ],
+      },
+      entities: [{ entity: 'sensor.row' }],
+    });
+
+    expect(cfg.bar.segments).toEqual([
+      { from: 0, to: 60, color: '#4CAF50', label: null },
+      { from: 60, to: null, color: '#F44336', label: null },
+    ]);
+    expect(cfg.bar.segment_space).toBe('scale');
+  });
+
+  it('prefers bar.segments over top-level segments and severity', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      segments: [
+        { from: 0, color: '#2563eb' },
+        { from: 75, color: '#ef4444' },
+      ],
+      severity: [
+        { from: 0, to: 50, color: '#4CAF50' },
+        { from: 50, to: 100, color: '#F44336' },
+      ],
+      bar: {
+        segments: [
+          { from: 0, color: '#111111' },
+          { from: 20, color: '#222222' },
+        ],
+      },
+      entities: [{ entity: 'sensor.row' }],
+    });
+
+    expect(cfg.bar.segments).toEqual([
+      { from: 0, to: 20, color: '#111111', label: null },
+      { from: 20, to: null, color: '#222222', label: null },
+    ]);
+  });
+
+  it('prefers top-level segments over legacy severity at the same level', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      segments: [
+        { from: 0, color: '#2563eb' },
+        { from: 80, color: '#ef4444' },
+      ],
+      severity: [
+        { from: 0, to: 50, color: '#4CAF50' },
+        { from: 50, to: 100, color: '#F44336' },
+      ],
+      entities: [{ entity: 'sensor.row' }],
+    });
+
+    expect(cfg.bar.segments).toEqual([
+      { from: 0, to: 80, color: '#2563eb', label: null },
+      { from: 80, to: null, color: '#ef4444', label: null },
+    ]);
+    expect(cfg.bar.segment_space).toBe('scale');
+  });
+
+  it('inherits card-level segments and lets entity-level segments override them', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      bar: {
+        segments: [
+          { from: 0, color: '#4CAF50' },
+          { from: 50, color: '#F44336' },
+        ],
+      },
+      entities: [
+        { entity: 'sensor.first' },
+        {
+          entity: 'sensor.second',
+          segments: [
+            { from: 0, color: '#2563eb' },
+            { from: 80, color: '#ef4444' },
+          ],
+        },
+      ],
+    });
+
+    expect(cfg.entities[0].bar.segments).toEqual(cfg.bar.segments);
+    expect(cfg.entities[1].bar.segments).toEqual([
+      { from: 0, to: 80, color: '#2563eb', label: null },
+      { from: 80, to: null, color: '#ef4444', label: null },
+    ]);
+  });
+
   it('preserves min_entity and max_entity fallback behavior', () => {
     const card = createCard();
     card._hass.states = {
@@ -354,5 +507,39 @@ describe('Sensor Bar Card Plus logic', () => {
 
     expect(card._toScalePct(0, -2000, 5000)).toBeCloseTo(28.5714, 3);
     expect(card._toScalePct(3500, -2000, 5000)).toBeCloseTo(78.5714, 3);
+  });
+
+  it('infers missing segment end values from the next segment start', () => {
+    const card = createCard();
+
+    expect(card.inferSegmentEndValues([
+      { from: 0, to: null, color: '#4CAF50' },
+      { from: 50, to: null, color: '#FF9800' },
+      { from: 80, to: null, color: '#F44336' },
+    ])).toEqual([
+      { from: 0, to: 50, color: '#4CAF50', label: null },
+      { from: 50, to: 80, color: '#FF9800', label: null },
+      { from: 80, to: null, color: '#F44336', label: null },
+    ]);
+  });
+
+  it('uses scale max as the final inferred segment end at render time for gauge-style segments', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      min: -2000,
+      max: 5000,
+      segments: [
+        { from: -2000, color: '#2563eb' },
+        { from: 0, color: '#f59e0b' },
+        { from: 3500, color: '#ef4444' },
+      ],
+      entities: [{ entity: 'sensor.row' }],
+    });
+
+    expect(card._getSegmentsForRendering(cfg.entities[0], -2000, 5000)).toEqual([
+      { from: 0, to: 28.57142857142857, color: '#2563eb', label: null },
+      { from: 28.57142857142857, to: 78.57142857142857, color: '#f59e0b', label: null },
+      { from: 78.57142857142857, to: 100, color: '#ef4444', label: null },
+    ]);
   });
 });

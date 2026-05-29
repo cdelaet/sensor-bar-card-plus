@@ -350,6 +350,53 @@ class SensorBarCard extends HTMLElement {
     };
   }
 
+  inferSegmentEndValues(segments, fallbackEnd = null) {
+    const sorted = [...segments].sort((a, b) => a.from - b.from);
+    return sorted.map((segment, index) => {
+      let to = Number.isFinite(segment.to) ? segment.to : null;
+      if (!Number.isFinite(to) && index < sorted.length - 1) {
+        to = sorted[index + 1].from;
+      }
+      if (!Number.isFinite(to) && Number.isFinite(fallbackEnd)) {
+        to = fallbackEnd;
+      }
+      return {
+        from: segment.from,
+        to,
+        color: segment.color,
+        label: segment.label ?? null,
+      };
+    });
+  }
+
+  normalizeSeverityToSegments(input) {
+    if (!Array.isArray(input)) return null;
+    const segments = input
+      .filter((segment) => Number.isFinite(segment?.from) && segment?.color)
+      .map((segment) => ({
+        from: segment.from,
+        to: Number.isFinite(segment?.to) ? segment.to : null,
+        color: segment.color,
+        label: segment.label ?? null,
+      }));
+
+    return this.inferSegmentEndValues(segments, 100);
+  }
+
+  normalizeGaugeSegments(input) {
+    if (!Array.isArray(input)) return null;
+    const segments = input
+      .filter((segment) => Number.isFinite(segment?.from) && segment?.color)
+      .map((segment) => ({
+        from: segment.from,
+        to: Number.isFinite(segment?.to) ? segment.to : null,
+        color: segment.color,
+        label: segment.label ?? null,
+      }));
+
+    return this.inferSegmentEndValues(segments, null);
+  }
+
   normalizeScaleBound(entityConfig, cardConfig, key, defaultValue) {
     const cardScale = cardConfig?.scale;
     const entityKey = `${key}_entity`;
@@ -367,11 +414,33 @@ class SensorBarCard extends HTMLElement {
 
   normalizeBarConfig(entityConfig, cardConfig) {
     const cardBar = cardConfig?.bar;
+    const structuredSegments = entityConfig.bar?.segments ?? null;
+    const topLevelSegments = entityConfig.segments ?? null;
+    const legacySeverity = entityConfig.severity ?? null;
+    let segments = null;
+    let segment_space = cardBar?.segment_space ?? 'percent';
+
+    if (structuredSegments !== null) {
+      segments = this.normalizeGaugeSegments(structuredSegments);
+      segment_space = 'scale';
+    } else if (topLevelSegments !== null) {
+      segments = this.normalizeGaugeSegments(topLevelSegments);
+      segment_space = 'scale';
+    } else if (legacySeverity !== null) {
+      segments = this.normalizeSeverityToSegments(legacySeverity);
+      segment_space = 'percent';
+    } else if (Array.isArray(cardBar?.segments)) {
+      segments = cardBar.segments.map((segment) => ({ ...segment }));
+      segment_space = cardBar.segment_space ?? 'percent';
+    }
+
     return {
       color_mode: entityConfig.color_mode ?? cardBar?.color_mode ?? cardConfig?.color_mode ?? 'severity',
       color: entityConfig.color ?? cardBar?.color ?? cardConfig?.color ?? '#4a9eff',
       gradient_stops: entityConfig.gradient_stops ?? cardBar?.gradient_stops ?? cardConfig?.gradient_stops ?? null,
-      severity: entityConfig.severity ?? cardBar?.severity ?? cardConfig?.severity ?? null,
+      severity: segments,
+      segments,
+      segment_space,
       animated: entityConfig.animated ?? cardBar?.animated ?? cardConfig?.animated ?? true,
       above_target_color: entityConfig.above_target_color ?? cardBar?.above_target_color ?? cardConfig?.above_target_color ?? null,
     };
@@ -539,8 +608,8 @@ class SensorBarCard extends HTMLElement {
     };
   }
 
-  _getSeverityInterpolationStops(ecfg) {
-    const bands = Array.isArray(ecfg.bar?.severity) ? [...ecfg.bar.severity] : [];
+  _getSeverityInterpolationStops(ecfg, minValue = 0, maxValue = 100) {
+    const bands = this._getSegmentsForRendering(ecfg, minValue, maxValue);
     const sorted = bands
       .filter(s => Number.isFinite(s?.from) && Number.isFinite(s?.to) && s?.color)
       .sort((a, b) => a.from - b.from);
@@ -568,8 +637,8 @@ class SensorBarCard extends HTMLElement {
     return stops;
   }
 
-  _getSeverityBandGradientCss(ecfg) {
-    const bands = Array.isArray(ecfg.bar?.severity) ? [...ecfg.bar.severity] : [];
+  _getSeverityBandGradientCss(ecfg, minValue = 0, maxValue = 100) {
+    const bands = this._getSegmentsForRendering(ecfg, minValue, maxValue);
     const sorted = bands
       .filter(s => Number.isFinite(s?.from) && Number.isFinite(s?.to) && s?.color)
       .sort((a, b) => a.from - b.from);
@@ -583,13 +652,37 @@ class SensorBarCard extends HTMLElement {
     return `linear-gradient(to right, ${stops.join(', ')})`;
   }
   
-  _getColor(pct, ecfg) {
+  _getSegmentsForRendering(ecfg, minValue = 0, maxValue = 100) {
+    const safeMin = Number.isFinite(minValue) ? minValue : 0;
+    const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
+    const rawSegments = Array.isArray(ecfg.bar?.segments) ? ecfg.bar.segments : [];
+    const inferredSegments = this.inferSegmentEndValues(
+      rawSegments,
+      ecfg.bar?.segment_space === 'scale' ? safeMax : 100
+    );
+
+    return inferredSegments
+      .map((segment) => {
+        if (ecfg.bar?.segment_space === 'scale') {
+          return {
+            from: this._toScalePct(segment.from, safeMin, safeMax),
+            to: this._toScalePct(segment.to, safeMin, safeMax),
+            color: segment.color,
+            label: segment.label ?? null,
+          };
+        }
+        return { ...segment };
+      })
+      .filter((segment) => Number.isFinite(segment.from) && Number.isFinite(segment.to) && segment.color);
+  }
+
+  _getColor(pct, ecfg, minValue = 0, maxValue = 100) {
     if (ecfg.bar.color_mode === 'single') return ecfg.bar.color;
 
     if (ecfg.bar.color_mode === 'gradient' || ecfg.bar.color_mode === 'severity_gradient') {
       let stops;
       if (ecfg.bar.color_mode === 'severity_gradient') {
-        stops = this._getSeverityInterpolationStops(ecfg);
+        stops = this._getSeverityInterpolationStops(ecfg, minValue, maxValue);
       } else if (ecfg.bar.gradient_stops && ecfg.bar.gradient_stops.length >= 2) {
         stops = ecfg.bar.gradient_stops.map(s => {
           const hex = s.color.replace('#','');
@@ -618,7 +711,7 @@ class SensorBarCard extends HTMLElement {
     }
 
     // Severity mode
-    for (const s of (ecfg.bar.severity || [])) {
+    for (const s of this._getSegmentsForRendering(ecfg, minValue, maxValue)) {
       if (pct >= s.from && pct <= s.to) return s.color;
     }
     return ecfg.bar.color;
@@ -634,9 +727,9 @@ class SensorBarCard extends HTMLElement {
     return `background:linear-gradient(to right,${cssStops.join(',')});background-repeat:no-repeat;`;
   }
 
-  _getGradientInterpolationStops(ecfg) {
+  _getGradientInterpolationStops(ecfg, minValue = 0, maxValue = 100) {
     if (ecfg.bar.color_mode === 'severity_gradient') {
-      return this._getSeverityInterpolationStops(ecfg);
+      return this._getSeverityInterpolationStops(ecfg, minValue, maxValue);
     }
 
     if (ecfg.bar.gradient_stops && ecfg.bar.gradient_stops.length >= 2) {
@@ -687,13 +780,13 @@ class SensorBarCard extends HTMLElement {
     return `linear-gradient(to right,${color} 0%,${color} 100%)`;
   }
 
-  _getBasePaintGradient(color, ecfg) {
+  _getBasePaintGradient(color, ecfg, minValue = 0, maxValue = 100) {
     if (ecfg.bar.color_mode === 'severity') {
-      return this._getSeverityBandGradientCss(ecfg);
+      return this._getSeverityBandGradientCss(ecfg, minValue, maxValue);
     }
 
     if (ecfg.bar.color_mode === 'gradient' || ecfg.bar.color_mode === 'severity_gradient') {
-      const stops = this._getGradientInterpolationStops(ecfg);
+      const stops = this._getGradientInterpolationStops(ecfg, minValue, maxValue);
       return this._buildFullScaleGradientStyle(stops)?.replace(/^background:/, '').replace(/;background-repeat:no-repeat;$/, '');
     }
 
@@ -781,9 +874,9 @@ class SensorBarCard extends HTMLElement {
     return { start: clampedTarget, end: 100 };
   }
 
-  _getFullScalePaintStyle(ecfg, color, targetPct = null, baselinePct = null) {
+  _getFullScalePaintStyle(ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100) {
     const layers = [];
-    const basePaint = this._getBasePaintGradient(color, ecfg);
+    const basePaint = this._getBasePaintGradient(color, ecfg, minValue, maxValue);
     const clampedBaseline = Number.isFinite(baselinePct)
       ? Math.min(100, Math.max(0, baselinePct))
       : null;
@@ -827,11 +920,11 @@ class SensorBarCard extends HTMLElement {
     return `display:block;height:${h}px;clip-path:inset(${topInset} ${rightInset} ${bottomInset} ${leftInset} round ${radii});`;
   }
 
-  _getFillRenderState(pct, h, ecfg, color, targetPct = null, baselinePct = null) {
+  _getFillRenderState(pct, h, ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100) {
     const geometry = this._getNormalizedPercent(pct, baselinePct);
     return {
       geometry,
-      paintStyle: this._getFullScalePaintStyle(ecfg, color, targetPct, baselinePct),
+      paintStyle: this._getFullScalePaintStyle(ecfg, color, targetPct, baselinePct, minValue, maxValue),
       revealStyle: this._getRevealShapeStyle(geometry, h),
     };
   }
@@ -1742,14 +1835,12 @@ class SensorBarCard extends HTMLElement {
     return `<span class="inside-value-text ${unitModeClass}"><span class="inside-number">${display}</span><span class="inside-unit">${cleanUnit}</span></span>`;
   }
 
-  _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor) {
+  _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
     const ecfg = this._resolve(entityCfg);
     const layout = ecfg.layout;
     const bar = ecfg.bar;
     const targetMarkerCfg = ecfg.target_marker;
     const peakMarkerCfg = ecfg.peak_marker;
-    const minValue = this._getNormalizedResolvableNumericValue(ecfg.scale.min);
-    const maxValue = this._getNormalizedResolvableNumericValue(ecfg.scale.max);
     const safeMin = Number.isFinite(minValue) ? minValue : 0;
     const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
     const baselinePct = this._resolveBaselinePct(ecfg, safeMin, safeMax);
@@ -1762,7 +1853,7 @@ class SensorBarCard extends HTMLElement {
     const targetMarkerColor = targetColor || '#888';
     const peakContrastColor = this._getMarkerContrastColor(peakMarkerColor);
     const targetContrastColor = this._getMarkerContrastColor(targetMarkerColor);
-    const fillState = this._getFillRenderState(pct, h, ecfg, color, targetPct, baselinePct);
+    const fillState = this._getFillRenderState(pct, h, ecfg, color, targetPct, baselinePct, safeMin, safeMax);
 
     // Peak marker — chevron top, line full height, configurable colour
     const peakMarker = peakMarkerCfg.show && peakPct !== null ? `
@@ -1840,7 +1931,7 @@ class SensorBarCard extends HTMLElement {
     const pct = Number.isFinite(rawVal)
       ? this._toScalePct(rawVal, safeMin, safeMax)
       : 0;
-    const color = this._getColor(pct, ecfg);
+    const color = this._getColor(pct, ecfg, safeMin, safeMax);
     const display = isNaN(rawVal) ? stateObj.state : this._formatNumericDisplay(rawVal, ecfg.formatting.decimal);
     const displayUnit = isNumericState ? unit : '';
 
@@ -1850,7 +1941,7 @@ class SensorBarCard extends HTMLElement {
       liveTargetPct = this._toScalePct(targetVal, safeMin, safeMax);
     }
     const liveBaselinePct = this._resolveBaselinePct(ecfg, safeMin, safeMax);
-    const fillState = this._getFillRenderState(pct, ecfg.layout.height, ecfg, color, liveTargetPct, liveBaselinePct);
+    const fillState = this._getFillRenderState(pct, ecfg.layout.height, ecfg, color, liveTargetPct, liveBaselinePct, safeMin, safeMax);
 
     if (paintLayer) {
       paintLayer.style.cssText = `${fillState.paintStyle}${fillState.revealStyle}`;
@@ -1937,7 +2028,7 @@ class SensorBarCard extends HTMLElement {
         const pct = Number.isFinite(rawVal)
           ? this._toScalePct(rawVal, safeMin, safeMax)
           : 0;        
-        const color     = this._getColor(pct, ecfg);
+        const color     = this._getColor(pct, ecfg, safeMin, safeMax);
         const display   = isNaN(rawVal) ? stateObj.state : this._formatNumericDisplay(rawVal, ecfg.formatting.decimal);
         const displayUnit = isNumericState ? unit : '';
         let targetPct   = null;
@@ -1954,7 +2045,7 @@ class SensorBarCard extends HTMLElement {
           peakPct     = pct;
           peakDisplay = display;
         }
-        html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_marker.color, ecfg.target_marker.color);
+        html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_marker.color, ecfg.target_marker.color, safeMin, safeMax);
       }
       rowsEl.innerHTML = html;
       this._rendered = true;
