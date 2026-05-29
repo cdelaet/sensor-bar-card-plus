@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="images/branding/logo.png" alt="Sensor Bar Card Plus" width="300">
+</p>
+
 # Sensor Bar Card Plus
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
@@ -6,9 +10,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/cdelaet/sensor-bar-card-plus/blob/main/LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/cdelaet/sensor-bar-card-plus?style=social)](https://github.com/cdelaet/sensor-bar-card-plus)
 
-A modern sensor visualization card for Home Assistant dashboards, with dynamic min/max/target sources, flexible bar rendering, severity-aware coloring, target and peak markers, and compact information-dense layouts.
+Sensor Bar Card Plus is a next-generation visualization card for Home Assistant, designed for dashboards where the visual context is just as dynamic as the data itself.
 
-It is built for dashboards where the visual context should follow live Home Assistant data instead of staying hardcoded. Sensor Bar Card Plus works well for power, temperature, humidity, battery, CO2, water flow, response times, quotas, and other numeric sensors, while still fitting cleanly into modern Lovelace layouts with smooth rendering and responsive label behavior.
+Instead of relying on hardcoded scales and thresholds, the card can derive ranges, targets, baselines, and reference values directly from Home Assistant entities. The result is a dashboard that stays meaningful as conditions change.
+
+Ideal for energy monitoring, batteries, power flows, temperatures, quotas, environmental sensors, and other numeric data, Sensor Bar Card Plus combines dynamic scales, segment-based coloring, target and peak markers, and responsive layouts into a single highly configurable card.
+
 
 ![Sensor Bar Card Plus showcase](images/hero.png)
 
@@ -17,16 +24,17 @@ It is built for dashboards where the visual context should follow live Home Assi
 
 ## Highlights
 
-- 📈 **Dynamic min / max / target entities** for data-driven scales and references
-- ⚖️ **Baseline fill origin** for bidirectional flows such as charge/discharge and import/export (NEW)
-- ✏️ **Target and peak markers** with optional target value labels
-- 🌈 **Severity gradient and severity-based coloring** with `gradient`, `severity`, `single`, and `severity_gradient`
-- 🎯 **Above-target color** for visually separating the portion beyond a live or fixed threshold
-- 📍 **Inline / inside / above / left label placement** with `left`, `above`, `inside`, and `off`
-- 🏷️ **Responsive label and marker layout** for tighter dashboard spaces
-- 🔧 **Per-entity overrides** for nearly every card option
-- 🎞️ **Smooth semantic animations** for gradients, severity bands, and threshold overlays
-- 🖱️ **Native Home Assistant more-info dialog** on click
+- 📈 Dynamic scales, targets, and references driven by Home Assistant entities
+- 🧩 Structured configuration model with full backwards compatibility
+- ⚖️ Baseline fill origin for bidirectional flows such as charge/discharge and import/export
+- 🎨 Flexible segment-based coloring with scale-space and percent-space thresholds
+- ✏️ Target and peak markers with optional target value labels
+- 🎯 Above-target color for visually separating the portion beyond a live or fixed threshold
+- 📍 Flexible label placement for compact and information-dense dashboards
+- 🏷️ Responsive label and marker layout for tighter dashboard spaces
+- 🔧 Per-entity overrides for nearly every card option
+- 🎞️ Smooth semantic animations for gradients, segments, and threshold overlays
+- 🖱️ Native Home Assistant more-info dialog on click
 
 ## Installation
 
@@ -68,15 +76,140 @@ Install this card side by side, then update:
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Caravan Power
+bar:
+  color_mode: single
+  color: '#2563eb'
+scale:
+  min:
+    fixed: 0
+  max:
+    fixed: 3000
+layout:
+  label:
+    position: left
+    width: 140
 entities:
   - entity: sensor.caravan_power
     name: Caravan
     icon: mdi:caravan
-    min: 0
-    max: 3000
 ```
 
 ![Basic example](images/example-basic.png)
+
+> Existing flat YAML remains fully supported. New examples below use the structured configuration model because it is clearer, easier to extend, and recommended for new dashboards.
+
+## Migrating From Legacy Flat YAML
+
+Legacy flat YAML remains fully supported. You do not need to migrate existing dashboards immediately. For new dashboards, the structured model is recommended because related options stay grouped and the configuration scales better as cards become more advanced.
+
+| Legacy flat key | Structured equivalent |
+|---|---|
+| `label_position` | `layout.label.position` |
+| `label_width` | `layout.label.width` |
+| `height` | `layout.height` |
+| `min` | `scale.min.fixed` |
+| `min_entity` | `scale.min.entity` |
+| `max` | `scale.max.fixed` |
+| `max_entity` | `scale.max.entity` |
+| `decimal` | `formatting.decimal` |
+| `unit` | `formatting.unit` |
+| `target` | `target.at.fixed` or `target.at: 50%` |
+| `target_entity` | `target.at.entity` |
+| `target_color` | `target.color` |
+| `show_target_label` | `target.label.show` |
+| `above_target_color` | `target.when_exceeded.fill_color` |
+| `show_peak` | `peak.enabled` |
+| `peak_color` | `peak.color` |
+| `color_mode` | `bar.color_mode` |
+| `color` | `bar.color` |
+| `gradient_stops` | `bar.gradient_stops` |
+| `severity` | `bar.segments` with percentage values, for example `from: 50%` |
+| `segments` | `bar.segments` |
+| `animated` | `bar.animated` |
+| `baseline` | `baseline.at.fixed`, `baseline.at.entity`, or `baseline.at: 50%` |
+
+Legacy:
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Legacy Example
+label_position: left
+label_width: 150
+min: 0
+max: 100
+color_mode: severity
+target: 65
+show_target_label: true
+severity:
+  - from: 0
+    to: 50
+    color: '#22c55e'
+  - from: 50
+    to: 100
+    color: '#ef4444'
+entities:
+  - entity: sensor.power_usage
+    name: Power
+```
+
+Structured:
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Structured Example
+layout:
+  label:
+    position: left
+    width: 150
+scale:
+  min:
+    fixed: 0
+  max:
+    fixed: 100
+bar:
+  color_mode: severity
+  segments:
+    - from: 0%
+      to: 50%
+      color: '#22c55e'
+    - from: 50%
+      to: 100%
+      color: '#ef4444'
+target:
+  at:
+    fixed: 65
+  label:
+    show: true
+entities:
+  - entity: sensor.power_usage
+    name: Power
+```
+
+When migrating legacy `severity`, remember that legacy band numbers are percentages of the active scale. Structured `bar.segments` should therefore usually use `%` values during migration. Plain numeric segment boundaries are actual scale values.
+
+For a full visual comparison, see `examples/dashboards/sensor-bar-card-plus-heritage.yaml`.
+
+### Automatic Dashboard Migration
+
+Existing dashboards do not need to be migrated. Legacy flat YAML remains fully supported. This utility is available if you want to adopt the structured configuration model for an existing Lovelace dashboard.
+
+```bash
+python tools/convert-legacy-config.py dashboard.yaml > dashboard-structured.yaml
+```
+
+```bash
+python tools/convert-legacy-config.py dashboard.yaml dashboard-structured.yaml
+```
+
+```bash
+cat dashboard.yaml | python tools/convert-legacy-config.py > dashboard-structured.yaml
+```
+
+The converter only rewrites Sensor Bar Card Plus cards. All other Lovelace cards, custom cards, `card_mod` configuration, and unrelated YAML are left unchanged.
+
+It traverses dashboards recursively, so nested Sensor Bar Card Plus cards are converted even when they appear inside wrapper cards or more complex dashboard structures.
+
+The conversion is deterministic and follows the same migration rules used by the Heritage Dashboard examples.
 
 ## Demo Assets
 
@@ -90,7 +223,6 @@ The repository includes a full demo playground and a dedicated screenshot board:
 Use them to validate color modes, markers, dynamic scales, text states, edge cases, and responsive behavior.
 
 ## Development / Testing
-(NEW)
 
 Install the dev dependencies and Playwright browser once:
 
@@ -132,58 +264,71 @@ The visual regression suite covers baseline rendering, severity modes, target an
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Gradient
-color_mode: gradient
-gradient_stops:
-  - pos: 0
-    color: '#2563eb'
-  - pos: 50
-    color: '#06b6d4'
-  - pos: 100
-    color: '#ef4444'
+bar:
+  color_mode: gradient
+  gradient_stops:
+    - pos: 0
+      color: '#2563eb'
+    - pos: 50
+      color: '#06b6d4'
+    - pos: 100
+      color: '#ef4444'
+scale:
+  min:
+    fixed: 0
+  max:
+    fixed: 100
 entities:
   - entity: sensor.power_usage
     name: Sensor
-    min: 0
-    max: 100
 ```
 
 ### `severity`
 
-`severity` paints fixed color bands exactly as configured.
+`severity` paints hard bands from `bar.segments`.
 
 ![Severity band mode](images/example-severity-bands-75.png)
 
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Severity
-color_mode: severity
-label_position: left
-label_width: 160
-target: 65
-show_target_label: true
-severity:
-  - from: 0
-    to: 30
-    color: '#22c55e'
-  - from: 30
-    to: 60
-    color: '#facc15'
-  - from: 60
-    to: 85
-    color: '#f97316'
-  - from: 85
-    to: 100
-    color: '#ef4444'
+layout:
+  label:
+    position: left
+    width: 160
+bar:
+  color_mode: severity
+  segments:
+    - from: 0%
+      to: 30%
+      color: '#22c55e'
+    - from: 30%
+      to: 60%
+      color: '#facc15'
+    - from: 60%
+      to: 85%
+      color: '#f97316'
+    - from: 85%
+      to: 100%
+      color: '#ef4444'
+scale:
+  min:
+    fixed: 0
+  max:
+    fixed: 100
+target:
+  at:
+    fixed: 65
+  label:
+    show: true
 entities:
   - entity: sensor.power_usage
     name: Sensor
-    min: 0
-    max: 100
 ```
 
 ### `severity_gradient` 
 
-`severity_gradient` uses the same `severity:` definition, but blends smoothly between the configured colors instead of painting hard bands.
+`severity_gradient` uses the same segment definitions, but renders a continuous gradient derived from those colors instead of painting hard bands.
 
 Anchor model:
 
@@ -198,103 +343,36 @@ This makes the mode feel intuitive while still respecting the configured severit
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Severity Gradient Rainbow
-color_mode: severity_gradient
-severity:
-  - from: 0
-    to: 20
-    color: '#22c55e'
-  - from: 20
-    to: 35
-    color: '#84cc16'
-  - from: 35
-    to: 50
-    color: '#eab308'
-  - from: 50
-    to: 65
-    color: '#f59e0b'
-  - from: 65
-    to: 80
-    color: '#f97316'
-  - from: 80
-    to: 100
-    color: '#ef4444'
-entities:
-  - entity: sensor.power_usage
-    name: Sensor
-    min: 0
-    max: 100
-```
-
-### Migrating From Legacy Severity To Structured Segments
-
-Legacy `severity` uses percentage-space semantics, not absolute scale values.
-
-So this:
-
-```yaml
-severity:
-  - from: 0
-    to: 50
-    color: '#22c55e'
-  - from: 50
-    to: 100
-    color: '#ef4444'
-```
-
-should usually become:
-
-```yaml
 bar:
+  color_mode: severity_gradient
   segments:
     - from: 0%
-      to: 50%
+      to: 20%
       color: '#22c55e'
+    - from: 20%
+      to: 35%
+      color: '#84cc16'
+    - from: 35%
+      to: 50%
+      color: '#eab308'
     - from: 50%
+      to: 65%
+      color: '#f59e0b'
+    - from: 65%
+      to: 80%
+      color: '#f97316'
+    - from: 80%
       to: 100%
       color: '#ef4444'
-```
-
-not:
-
-```yaml
-bar:
-  segments:
-    - from: 0
-      to: 50
-      color: '#22c55e'
-```
-
-unless you intentionally want scale-space semantics.
-
-Structured segments support both:
-
-- numeric values such as `from: 50` for actual scale values
-- percentage strings such as `from: 50%` for percentages of the active scale
-
-Example:
-
-```yaml
-type: custom:sensor-bar-card-plus
 scale:
   min:
-    fixed: -100
+    fixed: 0
   max:
     fixed: 100
-bar:
-  color_mode: severity
-  segments:
-    - from: 0%
-      to: 50%
-      color: '#2563eb'
-    - from: 50%
-      to: 100%
-      color: '#22c55e'
 entities:
   - entity: sensor.power_usage
     name: Sensor
 ```
-
-In that example, `0%..50%` spans the lower half of the active scale regardless of the actual numeric range.
 
 ### `single`
 
@@ -305,13 +383,17 @@ In that example, `0%..50%` spans the lower half of the active scale regardless o
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Single Color
-color_mode: single
-color: '#14b8a6'
+bar:
+  color_mode: single
+  color: '#14b8a6'
+scale:
+  min:
+    fixed: 0
+  max:
+    fixed: 100
 entities:
   - entity: sensor.power_usage
     name: Sensor
-    min: 0
-    max: 100
 ```
 
 ## Label Positions
@@ -328,44 +410,61 @@ Supported values:
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Left Labels
-label_position: left
-color_mode: gradient
-target: 65
+layout:
+  label:
+    position: left
+bar:
+  color_mode: gradient
+target:
+  at:
+    fixed: 65
+scale:
+  min:
+    fixed: 0
+  max:
+    fixed: 100
 entities:
   - entity: sensor.power_usage
     name: Sensor
     icon: mdi:lightning-bolt
-    min: 0
-    max: 100
 ```
 
 The screenshot uses this same single sensor in four separate cards, changing only:
 
-- `label_position: left`
-- `label_position: above`
-- `label_position: inside`
-- `label_position: off`
+- `layout.label.position: left`
+- `layout.label.position: above`
+- `layout.label.position: inside`
+- `layout.label.position: off`
 
 ## Label Width
 
-When `label_position: left` is used, all names share a fixed label column so the bars line up cleanly. The default width is `100px`, but you can override it globally or per entity.
+When `layout.label.position: left` is used, all names share a fixed label column so the bars line up cleanly. The default width is `100px`, but you can override it globally or per entity.
 
 ![Label width](images/example-label-width.png)
 
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Label Width
-label_position: left
-color_mode: single
-color: '#4a9eff'
-max: 3000
+layout:
+  label:
+    position: left
+bar:
+  color_mode: single
+  color: '#4a9eff'
+scale:
+  max:
+    fixed: 3000
 entities:
   - entity: sensor.power_usage
     name: Label
-    label_width: 35
+    layout:
+      label:
+        width: 35
   - entity: sensor.power_usage
     name: Label
-    label_width: 75
+    layout:
+      label:
+        width: 75
   - entity: sensor.power_usage
     name: Label
 ```
@@ -383,8 +482,12 @@ Each row resolves its icon in this order:
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Icon Control
-label_position: left
-max: 3000
+layout:
+  label:
+    position: left
+scale:
+  max:
+    fixed: 3000
 entities:
   - entity: sensor.power_usage
     name: Auto (entity icon)
@@ -400,11 +503,12 @@ entities:
 
 The card supports:
 
-- fixed `target`
-- dynamic `target_entity`
-- optional `show_target_label`
-- optional `above_target_color`
-- optional `show_peak`
+- fixed `target.at.fixed`
+- dynamic `target.at.entity`
+- percentage-based `target.at: 50%`
+- optional `target.label.show`
+- optional `target.when_exceeded.fill_color`
+- optional `peak.enabled`
 
 The target marker sits on the bottom edge of the bar. The peak marker sits on the top edge. They coexist cleanly and can overlap at the same position without fighting for visibility.
 
@@ -412,27 +516,35 @@ The target marker sits on the bottom edge of the bar. The peak marker sits on th
 
 ### Above-target color 
 
-Use `above_target_color` when you want the filled section beyond the target to stand out as a different state. The marker, target label, and color split animate together so the threshold remains readable while the target changes.
+Use `target.when_exceeded.fill_color` when you want the filled section beyond the target to stand out as a different state. The marker, target label, and color split animate together so the threshold remains readable while the target changes.
 
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Above Target Color
-color_mode: gradient
-target_entity: sensor.power_target
-target_color: '#9ca3af'
-show_target_label: true
-above_target_color: '#dc2626'
+bar:
+  color_mode: gradient
+target:
+  at:
+    entity: sensor.power_target
+  color: '#9ca3af'
+  label:
+    show: true
+  when_exceeded:
+    fill_color: '#dc2626'
+scale:
+  min:
+    fixed: 0
+  max:
+    fixed: 100
 entities:
   - entity: sensor.power_usage
     name: Sensor
     icon: mdi:lightning-bolt
-    min: 0
-    max: 100
 ```
 
 ### Target value label
 
-Set `show_target_label: true` to render the numeric target below the marker. The label is clamped so it stays inside the track area near the edges and follows dynamic target changes smoothly.
+Set `target.label.show: true` to render the numeric target below the marker. The label is clamped so it stays inside the track area near the edges and follows dynamic target changes smoothly.
 
 ### Peak marker example
 
@@ -441,14 +553,20 @@ Set `show_target_label: true` to render the numeric target below the marker. The
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Peak Marker
-label_position: left
-show_peak: true
+layout:
+  label:
+    position: left
+peak:
+  enabled: true
+scale:
+  min:
+    fixed: 0
+  max:
+    fixed: 3000
 entities:
   - entity: sensor.caravan_power
     name: Caravan
     icon: mdi:caravan
-    min: 0
-    max: 3000
 ```
 
 ### Target marker example
@@ -458,15 +576,22 @@ entities:
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Target Marker
-label_position: left
-target: 2000
-target_color: '#9ca3af'
+layout:
+  label:
+    position: left
+scale:
+  min:
+    fixed: 0
+  max:
+    fixed: 3000
+target:
+  at:
+    fixed: 2000
+  color: '#9ca3af'
 entities:
   - entity: sensor.caravan_power
     name: Caravan
     icon: mdi:caravan
-    min: 0
-    max: 3000
 ```
 
 ### Marker coexistence
@@ -474,7 +599,6 @@ entities:
 Peak and target markers can occupy the same position without becoming ambiguous because they live on opposite bar edges. That makes them suitable for shared-threshold visualizations and future multi-reference extensions.
 
 ## Baseline Fill Origin 
-(NEW))
 
 Use `baseline` when the fill should start from a neutral point instead of always starting at `min`.
 
@@ -490,11 +614,7 @@ This is useful for batteries, charge and discharge, import and export, neutral o
 
 ### Structured baseline configuration
 
-These forms are equivalent:
-
-```yaml
-baseline: 0
-```
+Recommended baseline syntax uses the structured form:
 
 ```yaml
 baseline:
@@ -502,11 +622,7 @@ baseline:
     fixed: 0
 ```
 
-And these forms are equivalent:
-
-```yaml
-baseline: sensor.dynamic_baseline
-```
+Dynamic baselines use the same structure:
 
 ```yaml
 baseline:
@@ -514,17 +630,23 @@ baseline:
     entity: sensor.dynamic_baseline
 ```
 
-Advanced baseline behavior is grouped under `baseline:` so related options stay together, the config remains extensible, and the YAML does not drift into flat one-off parameters over time.
+Advanced baseline behavior is grouped under `baseline:` so related options stay together, the config remains extensible, and the YAML does not drift into flat one-off parameters over time. Legacy shorthand remains supported and is covered in the migration and legacy reference sections.
 
 ### Centered zero baseline
 
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Grid Flow
-color_mode: gradient
-min: -3000
-max: 3000
-baseline: 0
+bar:
+  color_mode: gradient
+scale:
+  min:
+    fixed: -3000
+  max:
+    fixed: 3000
+baseline:
+  at:
+    fixed: 0
 entities:
   - entity: sensor.grid_power
     name: Grid
@@ -535,14 +657,48 @@ entities:
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Off-center baseline
-color_mode: severity_gradient
-min: -2000
-max: 5000
+bar:
+  color_mode: severity_gradient
+  segments:
+    - from: 0%
+      to: 30%
+      color: '#22c55e'
+    - from: 30%
+      to: 70%
+      color: '#facc15'
+    - from: 70%
+      to: 100%
+      color: '#ef4444'
+scale:
+  min:
+    fixed: -2000
+  max:
+    fixed: 5000
 baseline:
-  at: 500
+  at:
+    fixed: 500
 entities:
   - entity: sensor.net_power
     name: Net Power
+```
+
+### Percentage baseline
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Midpoint Baseline
+bar:
+  color_mode: gradient
+scale:
+  min:
+    fixed: -100
+  max:
+    fixed: 100
+baseline:
+  at: 50%
+entities:
+  - entity: sensor.power_flow
+    name: Flow
 ```
 
 ### Baseline colors and overrides
@@ -556,12 +712,18 @@ The base semantic scale still spans the full bar. Optional above and below color
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Battery Bias
-color_mode: gradient
-min: -3200
-max: 3200
+bar:
+  color_mode: gradient
+scale:
+  min:
+    fixed: -3200
+  max:
+    fixed: 3200
 baseline:
-  at: 0
-  above: '#34d399'
+  at:
+    fixed: 0
+  above:
+    color: '#34d399'
 entities:
   - entity: sensor.home_battery_power
     name: Battery
@@ -572,13 +734,20 @@ entities:
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Bidirectional Override
-color_mode: gradient
-min: -3200
-max: 3200
+bar:
+  color_mode: gradient
+scale:
+  min:
+    fixed: -3200
+  max:
+    fixed: 3200
 baseline:
-  at: 0
-  above: '#34d399'
-  below: '#ef4444'
+  at:
+    fixed: 0
+  above:
+    color: '#34d399'
+  below:
+    color: '#ef4444'
 entities:
   - entity: sensor.home_battery_power
     name: Battery
@@ -586,24 +755,44 @@ entities:
 
 ### Target and baseline interaction
 
-Targets stay on the same global scale, so threshold markers, `above_target_color`, and baseline geometry remain easy to read together.
+Targets stay on the same global scale, so threshold markers, `target.when_exceeded.fill_color`, and baseline geometry remain easy to read together.
 
 ![Baseline target interaction](images/baseline-target-interaction.png)
 
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Target And Baseline Interaction
-color_mode: severity_gradient
-min: -100
-max: 100
-show_target_label: true
-above_target_color: '#fb7185'
+bar:
+  color_mode: severity_gradient
+  segments:
+    - from: 0%
+      to: 30%
+      color: '#22c55e'
+    - from: 30%
+      to: 70%
+      color: '#facc15'
+    - from: 70%
+      to: 100%
+      color: '#ef4444'
+scale:
+  min:
+    fixed: -100
+  max:
+    fixed: 100
+target:
+  label:
+    show: true
+  when_exceeded:
+    fill_color: '#fb7185'
 baseline:
-  at: 0
+  at:
+    fixed: 0
 entities:
   - entity: sensor.power_flow
     name: Target above baseline
-    target: 28
+    target:
+      at:
+        fixed: 28
 ```
 
 ### Animated semantic baseline
@@ -619,9 +808,13 @@ If both an `entity` and a `fixed` value are set under `baseline.at`, the entity 
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Dynamic baseline
-color_mode: gradient
-min: -3000
-max: 3000
+bar:
+  color_mode: gradient
+scale:
+  min:
+    fixed: -3000
+  max:
+    fixed: 3000
 baseline:
   at:
     entity: sensor.dynamic_baseline
@@ -637,9 +830,9 @@ Baseline also works well in denser dashboard layouts where you still want bidire
 
 ![Compact baseline showcase](images/baseline-compact-showcase.png)
 
-## Dynamic Min / Max / Target Entities
+## Dynamic Min / Max / Target
 
-You can source `min`, `max`, and `target` from other entities instead of hardcoding them in the card config.
+You can source `scale.min`, `scale.max`, and `target.at` from other entities instead of hardcoding them in the card config.
 
 This is especially useful when the scale and threshold are driven by other helpers, automations, or template sensors.
 
@@ -647,14 +840,18 @@ Why dynamic sources matter: the card can follow real Home Assistant entities for
 
 ![Dynamic min and max entities](images/example-dynamic-min-max-entity.png)
 
-### Dynamic `min_entity` and `max_entity`
+### Dynamic `scale.min` and `scale.max`
 
 ```yaml
 type: custom:sensor-bar-card-plus
-title: Dynamic min_entity and max_entity
-color_mode: gradient
-min_entity: sensor.dynamic_min
-max_entity: sensor.dynamic_max
+title: Dynamic min and max
+bar:
+  color_mode: gradient
+scale:
+  min:
+    entity: sensor.dynamic_min
+  max:
+    entity: sensor.dynamic_max
 entities:
   - entity: sensor.live_value
     name: Fully dynamic scale
@@ -664,16 +861,37 @@ This makes the full bar scale adaptive. The current value stays the same entity,
 
 ![Dynamic target entity](images/example-dynamic-target-entity.png)
 
-### Dynamic `target_entity`
+### Dynamic `target.at.entity`
 
-For a moving threshold, use `target_entity`. This is useful for projected limits, tariff boundaries, ramping goals, or automation-driven targets.
+For a moving threshold, use `target.at.entity`. This is useful for projected limits, tariff boundaries, ramping goals, or automation-driven targets.
 
 ```yaml
 type: custom:sensor-bar-card-plus
-title: Dynamic target_entity
-color_mode: gradient
-target_entity: sensor.power_target
-show_target_label: true
+title: Dynamic target
+bar:
+  color_mode: gradient
+target:
+  at:
+    entity: sensor.power_target
+  label:
+    show: true
+entities:
+  - entity: sensor.power_usage
+    name: Sensor
+```
+
+### Percentage target
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Percentage target
+scale:
+  min:
+    fixed: -100
+  max:
+    fixed: 100
+target:
+  at: 50%
 entities:
   - entity: sensor.power_usage
     name: Sensor
@@ -696,44 +914,54 @@ The card handles four related display concerns:
 
 ### Decimal Precision
 
-Use `decimal` to control how many decimal places are shown per row.
+Use `formatting.decimal` to control how many decimal places are shown per row.
 
 ![Decimal places](images/example-decimal.png)
 
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Decimal Places
-label_position: left
-min: 0
-max: 40
-label_width: 160
+layout:
+  label:
+    position: left
+    width: 160
+scale:
+  min:
+    fixed: 0
+  max:
+    fixed: 40
 entities:
   - entity: sensor.temperature
     name: No decimal (0)
-    decimal: 0
+    formatting:
+      decimal: 0
   - entity: sensor.temperature
     name: One decimal (1)
-    decimal: 1
+    formatting:
+      decimal: 1
   - entity: sensor.temperature
     name: Two decimals (2)
-    decimal: 2
+    formatting:
+      decimal: 2
   - entity: sensor.temperature
     name: Raw (no decimal set)
 ```
 
 ### Unit Override
 
-By default the card displays the entity's unit of measurement. Use `unit` to override that when you want a shorter, normalized, or more readable display unit.
+By default the card displays the entity's unit of measurement. Use `formatting.unit` to override that when you want a shorter, normalized, or more readable display unit.
 
 ```yaml
 type: custom:sensor-bar-card-plus
 entities:
   - entity: sensor.solar_power
     name: Solar
-    unit: W
+    formatting:
+      unit: W
   - entity: sensor.daily_energy
     name: Today
-    unit: kWh
+    formatting:
+      unit: kWh
 ```
 
 ### Tight Time Units
@@ -747,14 +975,19 @@ Time units `h`, `m`, and `s` render tight, for example `43s` and `4h`, instead o
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Tight Time Unit - Seconds
-color_mode: single
-color: '#2563eb'
+bar:
+  color_mode: single
+  color: '#2563eb'
+scale:
+  min:
+    fixed: 0
+  max:
+    fixed: 60
 entities:
   - entity: sensor.response_time
     name: Response time
-    unit: s
-    min: 0
-    max: 60
+    formatting:
+      unit: s
 ```
 
 ### Text States
@@ -766,8 +999,18 @@ Non-numeric current states are handled as first-class display states rather than
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Unknown And Unavailable
-color_mode: severity
-label_position: left
+bar:
+  color_mode: severity
+  segments:
+    - from: 0%
+      to: 50%
+      color: '#22c55e'
+    - from: 50%
+      to: 100%
+      color: '#ef4444'
+layout:
+  label:
+    position: left
 entities:
   - entity: sensor.status_unknown
     name: Unknown
@@ -789,31 +1032,39 @@ Other rows continue to render normally.
 
 ## Bar Height Variations
 
-Use `height` globally or per entity to make rows more compact or more prominent.
+Use `layout.height` globally or per entity to make rows more compact or more prominent.
 
 ![Bar height variations](images/example-bar-heights-4up.png)
 
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Bar Heights
-label_position: left
-max: 3000
+layout:
+  label:
+    position: left
+  height: 38
+scale:
+  max:
+    fixed: 3000
 entities:
   - entity: sensor.power_usage
     name: 24px Compact
     icon: mdi:minus
-    height: 24
+    layout:
+      height: 24
   - entity: sensor.power_usage
     name: Default (38px)
     icon: mdi:minus
   - entity: sensor.power_usage
     name: 52px Tall
     icon: mdi:minus
-    height: 52
+    layout:
+      height: 52
   - entity: sensor.power_usage
     name: 70px Taller
     icon: mdi:minus
-    height: 70
+    layout:
+      height: 70
 ```
 
 ## Per-Entity Overrides
@@ -825,85 +1076,179 @@ Every card-level option can be overridden per entity.
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Mixed Overrides
-label_position: left
-color_mode: gradient
+layout:
+  label:
+    position: left
+bar:
+  color_mode: gradient
+scale:
+  min:
+    fixed: 0
+  max:
+    fixed: 3000
 entities:
   - entity: sensor.caravan_power
     name: Caravan
     icon: mdi:caravan
-    min: 0
-    max: 3000
 
   - entity: sensor.fridge_power
     name: Fridge
     icon: mdi:fridge
-    color_mode: single
-    color: '#2563eb'
-    min: 0
-    max: 2000
-    show_peak: true
+    bar:
+      color_mode: single
+      color: '#2563eb'
+    scale:
+      max:
+        fixed: 2000
+    peak:
+      enabled: true
 
   - entity: sensor.lighting_power
     name: Lighting
     icon: mdi:lightbulb
-    color_mode: severity
-    label_position: above
-    min: 0
-    max: 1000
-    severity:
-      - from: 0
-        to: 40
-        color: '#22c55e'
-      - from: 40
-        to: 75
-        color: '#f59e0b'
-      - from: 75
-        to: 100
-        color: '#ef4444'
+    layout:
+      label:
+        position: above
+    scale:
+      max:
+        fixed: 1000
+    bar:
+      color_mode: severity
+      segments:
+        - from: 0%
+          to: 40%
+          color: '#22c55e'
+        - from: 40%
+          to: 75%
+          color: '#f59e0b'
+        - from: 75%
+          to: 100%
+          color: '#ef4444'
 ```
 
 ## Configuration Reference
 
-All options can be set globally at card level and overridden per entity.
+All structured objects can be set globally at card level and overridden per entity.
 
-### Card Options
-
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `title` | string | - | Optional title above the card |
-| `entities` | list | required | Entities to render |
-| `label_position` | string | `left` | `left`, `above`, `inside`, `off` |
-| `color_mode` | string | `severity` | `gradient`, `severity`, `severity_gradient`, `single` |
-| `color` | string | `#4a9eff` | Used by `single` mode |
-| `gradient_stops` | list | built-in default | Used by `gradient` |
-| `severity` | list | built-in default | Used by `severity` and `severity_gradient` |
-| `animated` | boolean | `true` | Animate value changes |
-| `show_peak` | boolean | `false` | Show peak marker |
-| `peak_color` | string | `#888888` | Peak marker color |
-| `target` | number | - | Fixed target value |
-| `target_entity` | string | - | Dynamic target value entity |
-| `target_color` | string | `#888888` | Target marker color |
-| `show_target_label` | boolean | `false` | Show value under target 
-| `above_target_color` | string | - | Fill color beyond the target |
-| `min` | number | `0` | Minimum scale value |
-| `min_entity` | string | - | Dynamic minimum entity |
-| `max` | number | `100` | Maximum scale value |
-| `max_entity` | string | - | Dynamic maximum entity |
-| `baseline` | number, string, object | - | Fill origin config. New in this release. Supports `baseline: 0`, `baseline: sensor.dynamic_baseline`, or a structured object with `at`, `above`, and `below`. |
-| `height` | number | `38` | Bar height in pixels |
-| `label_width` | number | `100` | Fixed label width for `left` mode |
-| `decimal` | number | auto | Decimal places |
-| `unit` | string | entity unit | Unit override |
-
-### Entity Options
-
-Each entry in `entities` accepts the card-level options above plus:
+### Top-level card options
 
 | Option | Type | Description |
 |---|---|---|
-| `entity` | string | Required Home Assistant entity ID |
-| `name` | string | Optional display name |
-| `icon` | string / `false` | MDI icon override or `false` to hide the icon |
+| `title` | string | Optional title above the card |
+| `entities` | list | Entities to render |
+| `layout` | object | Label placement, label width, and bar height defaults |
+| `scale` | object | Min/max scale configuration |
+| `bar` | object | Color mode, segments, gradients, and animation |
+| `target` | object | Optional target marker and above-target behavior |
+| `peak` | object | Optional peak marker |
+| `baseline` | object | Fill origin / neutral point |
+| `formatting` | object | Decimal and unit formatting |
+
+### Entity options
+
+Each entry in `entities` accepts:
+
+- `entity`
+- `name`
+- `icon`
+- and the same structured override objects:
+  - `layout`
+  - `scale`
+  - `bar`
+  - `target`
+  - `peak`
+  - `baseline`
+  - `formatting`
+
+### Structured object reference
+
+`layout`
+
+| Option | Type | Description |
+|---|---|---|
+| `layout.label.position` | string | `left`, `above`, `inside`, `off` |
+| `layout.label.width` | number | Fixed label column width in pixels |
+| `layout.height` | number | Bar height in pixels |
+
+`scale`
+
+| Option | Type | Description |
+|---|---|---|
+| `scale.min.fixed` | number | Fixed minimum scale value |
+| `scale.min.entity` | string | Entity providing minimum scale value |
+| `scale.max.fixed` | number | Fixed maximum scale value |
+| `scale.max.entity` | string | Entity providing maximum scale value |
+
+`bar`
+
+| Option | Type | Description |
+|---|---|---|
+| `bar.color_mode` | string | `single`, `gradient`, `severity`, `severity_gradient` |
+| `bar.color` | string | Solid color for `single` mode |
+| `bar.gradient_stops` | list | Gradient stops for `gradient` mode |
+| `bar.segments` | list | Segment definitions for `severity` and `severity_gradient` |
+| `bar.animated` | boolean | Animate value changes |
+
+`target`
+
+| Option | Type | Description |
+|---|---|---|
+| `target.at.fixed` | number | Fixed target value |
+| `target.at.entity` | string | Entity providing target value |
+| `target.at` | string | Percentage string such as `50%` |
+| `target.color` | string | Target marker color |
+| `target.label.show` | boolean | Show target value label |
+| `target.when_exceeded.fill_color` | string | Fill color beyond the target |
+
+`peak`
+
+| Option | Type | Description |
+|---|---|---|
+| `peak.enabled` | boolean | Show peak marker |
+| `peak.color` | string | Peak marker color |
+
+`baseline`
+
+| Option | Type | Description |
+|---|---|---|
+| `baseline.at.fixed` | number | Fixed baseline value |
+| `baseline.at.entity` | string | Entity providing baseline value |
+| `baseline.at` | string | Percentage string such as `50%` |
+| `baseline.above.color` | string | Optional color above baseline |
+| `baseline.below.color` | string | Optional color below baseline |
+
+`formatting`
+
+| Option | Type | Description |
+|---|---|---|
+| `formatting.decimal` | number | Decimal places |
+| `formatting.unit` | string | Unit override |
+
+## Legacy Flat Configuration Reference
+
+Legacy flat config remains fully supported. It is no longer the preferred documentation style for new dashboards, but it continues to map internally to the structured model.
+
+| Legacy option | Structured equivalent |
+|---|---|
+| `label_position` | `layout.label.position` |
+| `label_width` | `layout.label.width` |
+| `height` | `layout.height` |
+| `min` / `min_entity` | `scale.min.fixed` / `scale.min.entity` |
+| `max` / `max_entity` | `scale.max.fixed` / `scale.max.entity` |
+| `decimal` | `formatting.decimal` |
+| `unit` | `formatting.unit` |
+| `color_mode` | `bar.color_mode` |
+| `color` | `bar.color` |
+| `gradient_stops` | `bar.gradient_stops` |
+| `severity` | `bar.segments` using `%` values when migrating legacy bands |
+| `segments` | `bar.segments` |
+| `animated` | `bar.animated` |
+| `target` / `target_entity` | `target.at.fixed` / `target.at.entity` |
+| `target_color` | `target.color` |
+| `show_target_label` | `target.label.show` |
+| `above_target_color` | `target.when_exceeded.fill_color` |
+| `show_peak` / `peak_color` | `peak.enabled` / `peak.color` |
+| `baseline` | `baseline.at.fixed`, `baseline.at.entity`, or `baseline.at: 50%` |
 
 ## Behavior Notes
 
@@ -927,29 +1272,17 @@ This project uses its own resource path and card type so both cards can coexist 
 
 It is not a drop-in replacement for the original card.
 
-## What This Project Adds
-
-Compared to the original card, Sensor Bar Card Plus adds or reworks:
-
-- layout refactor for consistent bar alignment and more truthful row geometry
-- responsive label/value fallback behavior during resize, zoom, and cramped widths
-- dynamic `min_entity`, `max_entity`, and `target_entity`
-- target marker, target value label, and above-target color highlighting
-- synchronized target animation so marker, label, and above-target split move together
-- `severity_gradient` as a separate color mode, alongside proper fixed-band `severity`
-- stable animated color scales so severity bands and target thresholds do not stretch or wobble
-- improved marker rendering and marker coexistence
-- more robust handling for text states, negative values, unit display, and inside/above/left layout edge cases
-- various bug fixes and rendering improvements across responsive behavior, truncation, and value fitting
 
 ## Future Directions
 
 Likely future work includes:
 
-- a more general two-marker system instead of hardcoded target/peak semantics
-- an optional live value indicator, similar to the core Home Assistant gauge card
-- support for alternative marker roles such as valley, second target, or mixed references
+- `bar.fill_style: value_color` for the old single interpolated severity-color behavior under a clearer name
+- `display.mode: needle` as a future current-value rendering mode
+- visible `scale.ticks` support under `scale`
+- a more general marker collection once the current target and peak semantics are stable
 - additional UI/editor improvements where practical
+- verticality, baby!
 
 ## Contributing
 
