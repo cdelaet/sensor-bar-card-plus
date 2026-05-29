@@ -83,6 +83,7 @@ entities:
 The repository includes a full demo playground and a dedicated screenshot board:
 
 - playground dashboard: `examples/dashboards/sensor-bar-card-plus-playground.yaml`
+- heritage parity dashboard: `examples/dashboards/sensor-bar-card-plus-heritage.yaml`
 - screenshot dashboard: `examples/dashboards/sensor-bar-card-plus-screenshots.yaml`
 - helper/template package: `examples/packages/sensor_bar_card_plus_playground_package.yaml`
 
