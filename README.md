@@ -225,6 +225,77 @@ entities:
     max: 100
 ```
 
+### Migrating From Legacy Severity To Structured Segments
+
+Legacy `severity` uses percentage-space semantics, not absolute scale values.
+
+So this:
+
+```yaml
+severity:
+  - from: 0
+    to: 50
+    color: '#22c55e'
+  - from: 50
+    to: 100
+    color: '#ef4444'
+```
+
+should usually become:
+
+```yaml
+bar:
+  segments:
+    - from: 0%
+      to: 50%
+      color: '#22c55e'
+    - from: 50%
+      to: 100%
+      color: '#ef4444'
+```
+
+not:
+
+```yaml
+bar:
+  segments:
+    - from: 0
+      to: 50
+      color: '#22c55e'
+```
+
+unless you intentionally want scale-space semantics.
+
+Structured segments support both:
+
+- numeric values such as `from: 50` for actual scale values
+- percentage strings such as `from: 50%` for percentages of the active scale
+
+Example:
+
+```yaml
+type: custom:sensor-bar-card-plus
+scale:
+  min:
+    fixed: -100
+  max:
+    fixed: 100
+bar:
+  color_mode: severity
+  segments:
+    - from: 0%
+      to: 50%
+      color: '#2563eb'
+    - from: 50%
+      to: 100%
+      color: '#22c55e'
+entities:
+  - entity: sensor.power_usage
+    name: Sensor
+```
+
+In that example, `0%..50%` spans the lower half of the active scale regardless of the actual numeric range.
+
 ### `single`
 
 `single` uses one fixed fill color regardless of value.
@@ -411,6 +482,7 @@ Use `baseline` when the fill should start from a neutral point instead of always
 - gradients and severity modes still represent the full global scale
 - baseline changes fill geometry, not the meaning of the scale
 - `baseline.above` and `baseline.below` are optional semantic overlays when you want each side to read differently
+- `baseline.at` can use either an absolute scale value or a percentage string such as `50%`
 
 This is useful for batteries, charge and discharge, import and export, neutral operating points, and any bidirectional flow where movement on either side of a reference value should read clearly at a glance.
 
