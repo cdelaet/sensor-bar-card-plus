@@ -66,7 +66,7 @@ views:
       - entity: input_boolean.sbcp_show_peak
         name: Show peak
       - entity: input_select.sbcp_color_mode
-        name: Active color mode preview
+        name: Active fill style preview
       - entity: input_select.sbcp_label_mode
         name: Active label mode preview
   - type: entities
@@ -113,8 +113,8 @@ views:
     peak:
       enabled: true
     bar:
-      color_mode: gradient
       animated: true
+      fill_style: gradient
   - type: markdown
     content: |
       ## Target And Highlight Toggles
@@ -150,8 +150,8 @@ views:
           when_exceeded:
             fill_color: '#dc2626'
         bar:
-          color_mode: single
           color: '#2563eb'
+          fill_style: solid
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -181,8 +181,8 @@ views:
           when_exceeded:
             fill_color:
         bar:
-          color_mode: single
           color: '#2563eb'
+          fill_style: solid
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -211,8 +211,8 @@ views:
           when_exceeded:
             fill_color: '#dc2626'
         bar:
-          color_mode: single
           color: '#2563eb'
+          fill_style: solid
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -241,8 +241,8 @@ views:
           when_exceeded:
             fill_color:
         bar:
-          color_mode: single
           color: '#2563eb'
+          fill_style: solid
   - type: markdown
     content: |
       ## Interactive Playground
@@ -261,7 +261,7 @@ views:
     cards:
     - type: markdown
       content: |
-        **Live Color Mode Preview**
+        **Live Fill Style Preview**
         Switch the helper and compare the currently selected color algorithm on the same sensor and same scale.
     - type: conditional
       conditions:
@@ -269,7 +269,7 @@ views:
         state: gradient
       card:
         type: custom:sensor-bar-card-plus
-        title: "Active color mode: gradient"
+        title: "Active fill style: gradient"
         entities:
         - entity: sensor.sbcp_playground_sensor
           name: Sensor
@@ -290,7 +290,6 @@ views:
           when_exceeded:
             fill_color: '#991b1b'
         bar:
-          color_mode: gradient
           gradient_stops:
           - pos: 0
             color: '#2563eb'
@@ -300,13 +299,14 @@ views:
             color: '#f59e0b'
           - pos: 100
             color: '#dc2626'
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_select.sbcp_color_mode
         state: severity
       card:
         type: custom:sensor-bar-card-plus
-        title: "Active color mode: severity"
+        title: "Active fill style: bands"
         entities:
         - entity: sensor.sbcp_playground_sensor
           name: Sensor
@@ -325,7 +325,6 @@ views:
           label:
             show: true
         bar:
-          color_mode: severity
           segments:
           - from: 0%
             to: 35%
@@ -336,13 +335,14 @@ views:
           - from: 70%
             to: 100%
             color: '#ef4444'
+          fill_style: bands
     - type: conditional
       conditions:
       - entity: input_select.sbcp_color_mode
         state: severity_gradient
       card:
         type: custom:sensor-bar-card-plus
-        title: "Active color mode: severity_gradient"
+        title: "Active fill style: band_gradient"
         entities:
         - entity: sensor.sbcp_playground_sensor
           name: Sensor
@@ -361,7 +361,6 @@ views:
           label:
             show: true
         bar:
-          color_mode: severity_gradient
           segments:
           - from: 0%
             to: 35%
@@ -372,13 +371,14 @@ views:
           - from: 70%
             to: 100%
             color: '#ef4444'
+          fill_style: band_gradient
     - type: conditional
       conditions:
       - entity: input_select.sbcp_color_mode
         state: single
       card:
         type: custom:sensor-bar-card-plus
-        title: "Active color mode: single"
+        title: "Active fill style: solid"
         entities:
         - entity: sensor.sbcp_playground_sensor
           name: Sensor
@@ -399,8 +399,8 @@ views:
           when_exceeded:
             fill_color: '#ef4444'
         bar:
-          color_mode: single
           color: '#0f766e'
+          fill_style: solid
   - type: vertical-stack
     cards:
     - type: markdown
@@ -432,7 +432,7 @@ views:
           label:
             show: true
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_select.sbcp_label_mode
@@ -457,7 +457,7 @@ views:
           label:
             show: true
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_select.sbcp_label_mode
@@ -483,7 +483,7 @@ views:
           label:
             show: true
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_select.sbcp_label_mode
@@ -507,7 +507,7 @@ views:
           label:
             show: true
         bar:
-          color_mode: gradient
+          fill_style: gradient
   - type: grid
     columns: 2
     square: false
@@ -546,7 +546,7 @@ views:
             at:
               entity: sensor.sbcp_playground_target
           bar:
-            color_mode: gradient
+            fill_style: gradient
       - type: conditional
         conditions:
         - entity: sensor.sbcp_playground_bar_height
@@ -575,7 +575,7 @@ views:
             at:
               entity: sensor.sbcp_playground_target
           bar:
-            color_mode: gradient
+            fill_style: gradient
       - type: conditional
         conditions:
         - entity: sensor.sbcp_playground_bar_height
@@ -604,7 +604,7 @@ views:
             at:
               entity: sensor.sbcp_playground_target
           bar:
-            color_mode: gradient
+            fill_style: gradient
       - type: conditional
         conditions:
         - entity: sensor.sbcp_playground_bar_height
@@ -633,7 +633,7 @@ views:
             at:
               entity: sensor.sbcp_playground_target
           bar:
-            color_mode: gradient
+            fill_style: gradient
       - type: conditional
         conditions:
         - entity: sensor.sbcp_playground_bar_height
@@ -662,7 +662,7 @@ views:
             at:
               entity: sensor.sbcp_playground_target
           bar:
-            color_mode: gradient
+            fill_style: gradient
       - type: conditional
         conditions:
         - entity: sensor.sbcp_playground_bar_height
@@ -691,7 +691,7 @@ views:
             at:
               entity: sensor.sbcp_playground_target
           bar:
-            color_mode: gradient
+            fill_style: gradient
       - type: conditional
         conditions:
         - entity: sensor.sbcp_playground_bar_height
@@ -720,7 +720,7 @@ views:
             at:
               entity: sensor.sbcp_playground_target
           bar:
-            color_mode: gradient
+            fill_style: gradient
       - type: conditional
         conditions:
         - entity: sensor.sbcp_playground_bar_height
@@ -749,7 +749,7 @@ views:
             at:
               entity: sensor.sbcp_playground_target
           bar:
-            color_mode: gradient
+            fill_style: gradient
       - type: conditional
         conditions:
         - entity: sensor.sbcp_playground_bar_height
@@ -778,7 +778,7 @@ views:
             at:
               entity: sensor.sbcp_playground_target
           bar:
-            color_mode: gradient
+            fill_style: gradient
     - type: vertical-stack
       cards:
       - type: markdown
@@ -820,8 +820,8 @@ views:
             enabled: true
             color: '#7c3aed'
           bar:
-            color_mode: gradient
             animated: true
+            fill_style: gradient
       - type: conditional
         conditions:
         - entity: input_boolean.sbcp_animated
@@ -857,8 +857,8 @@ views:
             enabled: false
             color: '#7c3aed'
           bar:
-            color_mode: gradient
             animated: true
+            fill_style: gradient
       - type: conditional
         conditions:
         - entity: input_boolean.sbcp_animated
@@ -894,8 +894,8 @@ views:
             enabled: true
             color: '#7c3aed'
           bar:
-            color_mode: gradient
             animated: true
+            fill_style: gradient
       - type: conditional
         conditions:
         - entity: input_boolean.sbcp_animated
@@ -931,8 +931,8 @@ views:
             enabled: false
             color: '#7c3aed'
           bar:
-            color_mode: gradient
             animated: true
+            fill_style: gradient
       - type: conditional
         conditions:
         - entity: input_boolean.sbcp_animated
@@ -968,8 +968,8 @@ views:
             enabled: true
             color: '#7c3aed'
           bar:
-            color_mode: gradient
             animated: false
+            fill_style: gradient
       - type: conditional
         conditions:
         - entity: input_boolean.sbcp_animated
@@ -1005,8 +1005,8 @@ views:
             enabled: false
             color: '#7c3aed'
           bar:
-            color_mode: gradient
             animated: false
+            fill_style: gradient
       - type: conditional
         conditions:
         - entity: input_boolean.sbcp_animated
@@ -1042,8 +1042,8 @@ views:
             enabled: true
             color: '#7c3aed'
           bar:
-            color_mode: gradient
             animated: false
+            fill_style: gradient
       - type: conditional
         conditions:
         - entity: input_boolean.sbcp_animated
@@ -1079,12 +1079,12 @@ views:
             enabled: false
             color: '#7c3aed'
           bar:
-            color_mode: gradient
             animated: false
+            fill_style: gradient
   - type: markdown
     content: |
       ## Color Modes
-      Dedicated wide cards for `gradient`, `severity`, and `single` rendering.
+      Dedicated wide cards for `gradient`, `bands`, and `solid` rendering.
   - type: custom:sensor-bar-card-plus
     title: Gradient
     entities:
@@ -1107,7 +1107,6 @@ views:
       when_exceeded:
         fill_color: '#991b1b'
     bar:
-      color_mode: gradient
       gradient_stops:
       - pos: 0
         color: '#2563eb'
@@ -1117,8 +1116,9 @@ views:
         color: '#f59e0b'
       - pos: 100
         color: '#dc2626'
+      fill_style: gradient
   - type: custom:sensor-bar-card-plus
-    title: Severity
+    title: Bands
     entities:
     - entity: sensor.sbcp_playground_sensor
       name: Sensor
@@ -1137,7 +1137,6 @@ views:
       label:
         show: true
     bar:
-      color_mode: severity
       segments:
       - from: 0%
         to: 30%
@@ -1151,8 +1150,9 @@ views:
       - from: 85%
         to: 100%
         color: '#ef4444'
+      fill_style: bands
   - type: custom:sensor-bar-card-plus
-    title: Single Color
+    title: Solid Color
     entities:
     - entity: sensor.sbcp_playground_sensor
       name: Sensor
@@ -1173,8 +1173,8 @@ views:
       when_exceeded:
         fill_color: '#ef4444'
     bar:
-      color_mode: single
       color: '#0f766e'
+      fill_style: solid
   - type: markdown
     content: |
       ## Display Formatting
@@ -1204,8 +1204,8 @@ views:
         at:
           entity: sensor.sbcp_playground_target
       bar:
-        color_mode: single
         color: '#2563eb'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: Tight time unit - hours
       entities:
@@ -1226,8 +1226,8 @@ views:
         at:
           entity: sensor.sbcp_playground_target
       bar:
-        color_mode: single
         color: '#0f766e'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: Custom text state
       entities:
@@ -1238,8 +1238,8 @@ views:
           position: left
           width: 170
       bar:
-        color_mode: single
         color: '#9333ea'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: Unknown and unavailable
       entities:
@@ -1250,7 +1250,7 @@ views:
           position: left
           width: 170
       bar:
-        color_mode: severity
+        fill_style: bands
   - type: markdown
     content: |
       ## Label Modes
@@ -1275,7 +1275,7 @@ views:
         at:
           entity: sensor.sbcp_playground_target
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Above Labels
       entities:
@@ -1293,7 +1293,7 @@ views:
         at:
           entity: sensor.sbcp_playground_target
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Inside Labels
       entities:
@@ -1312,7 +1312,7 @@ views:
         at:
           entity: sensor.sbcp_playground_target
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Labels Off
       entities:
@@ -1329,7 +1329,7 @@ views:
         at:
           entity: sensor.sbcp_playground_target
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Long Labels
       entities:
@@ -1344,8 +1344,8 @@ views:
         max:
           entity: sensor.sbcp_playground_max
       bar:
-        color_mode: single
         color: '#2563eb'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: Missing Icons
       entities:
@@ -1360,8 +1360,8 @@ views:
         max:
           entity: sensor.sbcp_playground_max
       bar:
-        color_mode: single
         color: '#9333ea'
+        fill_style: solid
   - type: markdown
     content: |
       ## Long Label Mode Tests
@@ -1387,7 +1387,7 @@ views:
         at:
           entity: sensor.sbcp_playground_target
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Long label above
       entities:
@@ -1404,7 +1404,7 @@ views:
         at:
           entity: sensor.sbcp_playground_target
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Long label inside
       entities:
@@ -1422,7 +1422,7 @@ views:
         at:
           entity: sensor.sbcp_playground_target
       bar:
-        color_mode: gradient
+        fill_style: gradient
   - type: markdown
     content: |
       ## Dynamic Scaling
@@ -1444,7 +1444,7 @@ views:
         max:
           entity: sensor.sbcp_playground_max
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Dynamic min_entity and max_entity
       entities:
@@ -1460,7 +1460,6 @@ views:
         max:
           entity: sensor.sbcp_playground_max
       bar:
-        color_mode: severity
         segments:
         - from: 0%
           to: 25%
@@ -1471,6 +1470,7 @@ views:
         - from: 75%
           to: 100%
           color: '#ef4444'
+        fill_style: bands
     - type: custom:sensor-bar-card-plus
       title: Negative min scale
       entities:
@@ -1491,7 +1491,7 @@ views:
         label:
           show: true
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Extremely large max scale
       entities:
@@ -1512,7 +1512,6 @@ views:
         label:
           show: true
       bar:
-        color_mode: severity
         segments:
         - from: 0%
           to: 25%
@@ -1523,6 +1522,7 @@ views:
         - from: 75%
           to: 100%
           color: '#ef4444'
+        fill_style: bands
   - type: markdown
     content: |
       ## Baseline Test Matrix
@@ -1547,8 +1547,8 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: single
         color: '#0f766e'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: Baseline at center
       entities:
@@ -1567,8 +1567,8 @@ views:
         at:
           fixed: 50
       bar:
-        color_mode: single
         color: '#0f766e'
+        fill_style: solid
   - type: vertical-stack
     cards:
     - type: custom:sensor-bar-card-plus
@@ -1595,8 +1595,8 @@ views:
         below:
           color: '#ef4444'
       bar:
-        color_mode: single
         color: '#2563eb'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: Crossing baseline
       entities:
@@ -1615,7 +1615,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Baseline at min
       entities:
@@ -1634,7 +1634,7 @@ views:
         at:
           fixed: -100
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Baseline near max
       entities:
@@ -1653,7 +1653,7 @@ views:
         at:
           fixed: 90
       bar:
-        color_mode: gradient
+        fill_style: gradient
   - type: vertical-stack
     cards:
     - type: custom:sensor-bar-card-plus
@@ -1676,7 +1676,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: "Baseline colors: above only"
       entities:
@@ -1699,7 +1699,7 @@ views:
         above:
           color: '#34d399'
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: "Baseline colors: below only"
       entities:
@@ -1722,7 +1722,7 @@ views:
         below:
           color: '#ef4444'
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: "Baseline colors: both"
       entities:
@@ -1747,7 +1747,7 @@ views:
         below:
           color: '#ef4444'
       bar:
-        color_mode: gradient
+        fill_style: gradient
   - type: vertical-stack
     cards:
     - type: custom:sensor-bar-card-plus
@@ -1769,7 +1769,7 @@ views:
           entity: sensor.sbcp_playground_baseline
           fixed: 10
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Missing baseline fallback
       entities:
@@ -1789,7 +1789,7 @@ views:
           entity: sensor.sbcp_missing_baseline
           fixed: 15
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Baseline + target
       entities:
@@ -1815,8 +1815,8 @@ views:
           entity: sensor.sbcp_playground_baseline
           fixed: 0
       bar:
-        color_mode: single
         color: '#2563eb'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: Baseline + target_entity
       entities:
@@ -1842,7 +1842,7 @@ views:
           entity: sensor.sbcp_playground_baseline
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
   - type: vertical-stack
     cards:
     - type: custom:sensor-bar-card-plus
@@ -1866,7 +1866,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Baseline + above target color
       entities:
@@ -1892,7 +1892,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Baseline + animation off
       entities:
@@ -1911,17 +1911,17 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
         animated: false
+        fill_style: gradient
   - type: vertical-stack
     cards:
     - type: custom:sensor-bar-card-plus
-      title: Baseline + single
+      title: Baseline + solid
       entities:
       - entity: sensor.sbcp_playground_negative
-        name: Single below
+        name: Solid below
       - entity: sensor.sbcp_playground_sensor
-        name: Single above
+        name: Solid above
       layout:
         label:
           position: left
@@ -1936,8 +1936,8 @@ views:
           entity: sensor.sbcp_playground_baseline
           fixed: 0
       bar:
-        color_mode: single
         color: '#2563eb'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: Baseline + gradient
       entities:
@@ -1959,14 +1959,14 @@ views:
           entity: sensor.sbcp_playground_baseline
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
-      title: Baseline + severity
+      title: Baseline + bands
       entities:
       - entity: sensor.sbcp_playground_negative
-        name: Severity below
+        name: Bands below
       - entity: sensor.sbcp_playground_sensor
-        name: Severity above
+        name: Bands above
       layout:
         label:
           position: left
@@ -1981,7 +1981,6 @@ views:
           entity: sensor.sbcp_playground_baseline
           fixed: 0
       bar:
-        color_mode: severity
         segments:
         - from: 0%
           to: 25%
@@ -1995,13 +1994,14 @@ views:
         - from: 75%
           to: 100%
           color: '#06b6d4'
+        fill_style: bands
     - type: custom:sensor-bar-card-plus
-      title: Baseline + severity_gradient
+      title: Baseline + band_gradient
       entities:
       - entity: sensor.sbcp_playground_negative
-        name: Severity gradient below
+        name: Band gradient below
       - entity: sensor.sbcp_playground_sensor
-        name: Severity gradient above
+        name: Band gradient above
       layout:
         label:
           position: left
@@ -2016,7 +2016,6 @@ views:
           entity: sensor.sbcp_playground_baseline
           fixed: 0
       bar:
-        color_mode: severity_gradient
         segments:
         - from: 0%
           to: 25%
@@ -2030,6 +2029,7 @@ views:
         - from: 75%
           to: 100%
           color: '#06b6d4'
+        fill_style: band_gradient
   - type: vertical-stack
     cards:
     - type: custom:sensor-bar-card-plus
@@ -2052,7 +2052,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Baseline + above labels
       entities:
@@ -2070,7 +2070,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Baseline + inside labels
       entities:
@@ -2089,7 +2089,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Baseline + compact width
       entities:
@@ -2108,7 +2108,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
   - type: markdown
     content: |
       ## Target Marker Tests
@@ -2135,7 +2135,7 @@ views:
         label:
           show: true
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Peak / target overlap
       entities:
@@ -2160,7 +2160,7 @@ views:
         enabled: true
         color: '#7c3aed'
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Long target label clamp
       entities:
@@ -2184,7 +2184,7 @@ views:
         label:
           show: true
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Above target color
       entities:
@@ -2208,8 +2208,8 @@ views:
         when_exceeded:
           fill_color: '#dc2626'
       bar:
-        color_mode: single
         color: '#2563eb'
+        fill_style: solid
   - type: markdown
     content: |
       ## Peak Tracking
@@ -2237,7 +2237,7 @@ views:
         enabled: true
         color: '#7c3aed'
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Peak plus target label
       entities:
@@ -2262,7 +2262,7 @@ views:
         enabled: true
         color: '#7c3aed'
       bar:
-        color_mode: gradient
+        fill_style: gradient
 - title: Baseline Matrix
   path: sensor-bar-card-plus-baseline-matrix
   icon: mdi:vector-line
@@ -2382,7 +2382,6 @@ views:
         peak:
           enabled: true
         bar:
-          color_mode: gradient
           gradient_stops:
           - pos: 0
             color: '#2563eb'
@@ -2395,6 +2394,7 @@ views:
           - pos: 100
             color: '#dc2626'
           animated: true
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_select.sbcp_baseline_semantic_mode
@@ -2437,7 +2437,6 @@ views:
         peak:
           enabled: true
         bar:
-          color_mode: gradient
           gradient_stops:
           - pos: 0
             color: '#1d4ed8'
@@ -2452,6 +2451,7 @@ views:
           - pos: 100
             color: '#7f1d1d'
           animated: true
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_select.sbcp_baseline_semantic_mode
@@ -2494,7 +2494,6 @@ views:
         peak:
           enabled: true
         bar:
-          color_mode: gradient
           gradient_stops:
           - pos: 0
             color: '#2563eb'
@@ -2505,6 +2504,7 @@ views:
           - pos: 100
             color: '#dc2626'
           animated: true
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_select.sbcp_baseline_semantic_mode
@@ -2547,13 +2547,13 @@ views:
         peak:
           enabled: true
         bar:
-          color_mode: gradient
           gradient_stops:
           - pos: 0
             color: '#0ea5e9'
           - pos: 100
             color: '#ef4444'
           animated: true
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_select.sbcp_baseline_semantic_mode
@@ -2596,7 +2596,6 @@ views:
         peak:
           enabled: true
         bar:
-          color_mode: severity
           animated: true
           segments:
           - from: 0%
@@ -2611,6 +2610,7 @@ views:
           - from: 51%
             to: 100%
             color: '#dc2626'
+          fill_style: bands
     - type: conditional
       conditions:
       - entity: input_select.sbcp_baseline_semantic_mode
@@ -2653,7 +2653,6 @@ views:
         peak:
           enabled: true
         bar:
-          color_mode: severity
           animated: true
           segments:
           - from: 0%
@@ -2671,6 +2670,7 @@ views:
           - from: 93%
             to: 100%
             color: '#dc2626'
+          fill_style: bands
     - type: conditional
       conditions:
       - entity: input_select.sbcp_baseline_semantic_mode
@@ -2713,7 +2713,6 @@ views:
         peak:
           enabled: true
         bar:
-          color_mode: severity
           animated: true
           segments:
           - from: 0%
@@ -2728,6 +2727,7 @@ views:
           - from: 75%
             to: 100%
             color: '#dc2626'
+          fill_style: bands
     - type: conditional
       conditions:
       - entity: input_select.sbcp_baseline_semantic_mode
@@ -2770,12 +2770,12 @@ views:
         peak:
           enabled: true
         bar:
-          color_mode: severity
           animated: true
           segments:
           - from: 0%
             to: 100%
             color: '#f59e0b'
+          fill_style: bands
     - type: conditional
       conditions:
       - entity: input_select.sbcp_baseline_semantic_mode
@@ -2818,7 +2818,6 @@ views:
         peak:
           enabled: true
         bar:
-          color_mode: severity_gradient
           animated: true
           segments:
           - from: 0%
@@ -2833,6 +2832,7 @@ views:
           - from: 51%
             to: 100%
             color: '#dc2626'
+          fill_style: band_gradient
     - type: conditional
       conditions:
       - entity: input_select.sbcp_baseline_semantic_mode
@@ -2875,7 +2875,6 @@ views:
         peak:
           enabled: true
         bar:
-          color_mode: severity_gradient
           animated: true
           segments:
           - from: 0%
@@ -2893,6 +2892,7 @@ views:
           - from: 93%
             to: 100%
             color: '#dc2626'
+          fill_style: band_gradient
     - type: conditional
       conditions:
       - entity: input_select.sbcp_baseline_semantic_mode
@@ -2935,7 +2935,6 @@ views:
         peak:
           enabled: true
         bar:
-          color_mode: severity_gradient
           animated: true
           segments:
           - from: 0%
@@ -2950,6 +2949,7 @@ views:
           - from: 75%
             to: 100%
             color: '#dc2626'
+          fill_style: band_gradient
     - type: conditional
       conditions:
       - entity: input_select.sbcp_baseline_semantic_mode
@@ -2992,12 +2992,12 @@ views:
         peak:
           enabled: true
         bar:
-          color_mode: severity_gradient
           animated: true
           segments:
           - from: 0%
             to: 100%
             color: '#f59e0b'
+          fill_style: band_gradient
   - type: markdown
     content: |
       ## Off-Center Geometry
@@ -3024,7 +3024,7 @@ views:
         at:
           fixed: -90
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Baseline at center
       entities:
@@ -3045,7 +3045,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Baseline at 75% of range
       entities:
@@ -3066,7 +3066,7 @@ views:
         at:
           fixed: 70
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Dynamic baseline and fallback
       entities:
@@ -3095,7 +3095,7 @@ views:
         at:
           fixed: 15
       bar:
-        color_mode: gradient
+        fill_style: gradient
   - type: markdown
     content: |
       ## Color Modes And Baseline Overrides
@@ -3122,7 +3122,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: "Baseline colors: above only"
       entities:
@@ -3145,7 +3145,7 @@ views:
         above:
           color: '#34d399'
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: "Baseline colors: below only"
       entities:
@@ -3168,7 +3168,7 @@ views:
         below:
           color: '#ef4444'
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: "Baseline colors: both"
       entities:
@@ -3193,14 +3193,14 @@ views:
         below:
           color: '#ef4444'
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
-      title: Baseline + single
+      title: Baseline + solid
       entities:
       - entity: sensor.sbcp_playground_negative
-        name: Single below
+        name: Solid below
       - entity: sensor.sbcp_playground_sensor
-        name: Single above
+        name: Solid above
       layout:
         label:
           position: left
@@ -3214,8 +3214,8 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: single
         color: '#2563eb'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: Baseline + gradient
       entities:
@@ -3236,14 +3236,14 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
-      title: Baseline + severity
+      title: Baseline + bands
       entities:
       - entity: sensor.sbcp_playground_negative
-        name: Severity below
+        name: Bands below
       - entity: sensor.sbcp_playground_sensor
-        name: Severity above
+        name: Bands above
       layout:
         label:
           position: left
@@ -3258,7 +3258,6 @@ views:
           entity: sensor.sbcp_playground_baseline
           fixed: 0
       bar:
-        color_mode: severity
         segments:
         - from: 0%
           to: 25%
@@ -3272,13 +3271,14 @@ views:
         - from: 75%
           to: 100%
           color: '#06b6d4'
+        fill_style: bands
     - type: custom:sensor-bar-card-plus
-      title: Baseline + severity_gradient
+      title: Baseline + band_gradient
       entities:
       - entity: sensor.sbcp_playground_negative
-        name: Severity gradient below
+        name: Band gradient below
       - entity: sensor.sbcp_playground_sensor
-        name: Severity gradient above
+        name: Band gradient above
       layout:
         label:
           position: left
@@ -3293,7 +3293,6 @@ views:
           entity: sensor.sbcp_playground_baseline
           fixed: 0
       bar:
-        color_mode: severity_gradient
         segments:
         - from: 0%
           to: 25%
@@ -3307,6 +3306,7 @@ views:
         - from: 75%
           to: 100%
           color: '#06b6d4'
+        fill_style: band_gradient
   - type: markdown
     content: |
       ## Targets, Peak, And Above-Target Color
@@ -3341,7 +3341,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Target on baseline
       entities:
@@ -3370,7 +3370,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Target above baseline
       entities:
@@ -3399,7 +3399,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Dynamic target_entity on helper-driven baseline
       entities:
@@ -3427,7 +3427,7 @@ views:
           entity: sensor.sbcp_playground_baseline
           fixed: 70
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Peak and target overlap on helper-driven baseline
       entities:
@@ -3458,7 +3458,7 @@ views:
           entity: sensor.sbcp_playground_baseline
           fixed: 70
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Baseline plus peak rows
       entities:
@@ -3482,7 +3482,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
   - type: markdown
     content: |
       ## Baseline With Different Label Layouts
@@ -3509,7 +3509,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Baseline + above labels
       entities:
@@ -3529,7 +3529,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Baseline + inside labels
       entities:
@@ -3550,7 +3550,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Baseline + compact left width
       entities:
@@ -3571,7 +3571,7 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Baseline + animation off
       entities:
@@ -3597,8 +3597,8 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: gradient
         animated: false
+        fill_style: gradient
 - title: Edge Cases
   path: sensor-bar-card-plus-edge-cases
   icon: mdi:alert-outline
@@ -3622,7 +3622,7 @@ views:
           position: left
           width: 190
       bar:
-        color_mode: severity
+        fill_style: bands
     - type: custom:sensor-bar-card-plus
       title: Negative values
       entities:
@@ -3642,7 +3642,7 @@ views:
         label:
           show: true
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Custom text state passthrough
       entities:
@@ -3653,8 +3653,8 @@ views:
           position: left
           width: 190
       bar:
-        color_mode: single
         color: '#9333ea'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: target > max
       entities:
@@ -3675,8 +3675,8 @@ views:
         label:
           show: true
       bar:
-        color_mode: single
         color: '#0f766e'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: target < min
       entities:
@@ -3697,8 +3697,8 @@ views:
         label:
           show: true
       bar:
-        color_mode: single
         color: '#0f766e'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: min == max
       entities:
@@ -3721,7 +3721,7 @@ views:
         at:
           fixed: 50
       bar:
-        color_mode: severity
+        fill_style: bands
     - type: custom:sensor-bar-card-plus
       title: baseline < min
       entities:
@@ -3740,7 +3740,7 @@ views:
         at:
           fixed: -40
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: baseline > max
       entities:
@@ -3759,7 +3759,7 @@ views:
         at:
           fixed: 140
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Non-numeric with baseline
       entities:
@@ -3778,8 +3778,8 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: single
         color: '#9333ea'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: Value below min with baseline
       entities:
@@ -3798,7 +3798,7 @@ views:
         at:
           fixed: 50
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Value above max with baseline
       entities:
@@ -3817,7 +3817,7 @@ views:
         at:
           fixed: 10
       bar:
-        color_mode: gradient
+        fill_style: gradient
   - type: markdown
     content: |
       ## Responsive Layout Tests
@@ -3842,7 +3842,7 @@ views:
         label:
           show: true
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Narrow B
       entities:
@@ -3861,8 +3861,8 @@ views:
         label:
           show: true
       bar:
-        color_mode: single
         color: '#2563eb'
+        fill_style: solid
   - type: grid
     columns: 2
     square: false
@@ -3885,7 +3885,7 @@ views:
         label:
           show: true
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Grid rendering B
       entities:
@@ -3895,8 +3895,8 @@ views:
           position: inside
         height: 52
       bar:
-        color_mode: single
         color: '#0f766e'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: Grid rendering C
       entities:
@@ -3906,7 +3906,7 @@ views:
           position: left
           width: 90
       bar:
-        color_mode: severity
+        fill_style: bands
     - type: custom:sensor-bar-card-plus
       title: Grid rendering D
       entities:
@@ -3925,7 +3925,7 @@ views:
       peak:
         enabled: true
       bar:
-        color_mode: gradient
+        fill_style: gradient
 - title: Stress Tests
   path: sensor-bar-card-plus-stress-tests
   icon: mdi:view-dashboard-outline
@@ -4015,7 +4015,7 @@ views:
     peak:
       enabled: true
     bar:
-      color_mode: gradient
+      fill_style: gradient
   - type: custom:sensor-bar-card-plus
     title: Baseline stress card
     entities:
@@ -4053,7 +4053,7 @@ views:
       below:
         color: '#ef4444'
     bar:
-      color_mode: gradient
+      fill_style: gradient
   - type: grid
     columns: 2
     square: false
@@ -4069,7 +4069,7 @@ views:
           position: left
           width: 140
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Stress Grid B
       entities:
@@ -4081,7 +4081,7 @@ views:
           position: left
           width: 140
       bar:
-        color_mode: severity
+        fill_style: bands
     - type: custom:sensor-bar-card-plus
       title: Stress Grid C
       entities:
@@ -4093,8 +4093,8 @@ views:
           position: left
           width: 140
       bar:
-        color_mode: single
         color: '#2563eb'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: Stress Grid D
       entities:
@@ -4109,4 +4109,4 @@ views:
         at:
           entity: sensor.sbcp_playground_target
       bar:
-        color_mode: gradient
+        fill_style: gradient

@@ -51,7 +51,7 @@ views:
         max:
           fixed: 3000
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -88,7 +88,7 @@ views:
           at:
             entity: sensor.sbcp_playground_target
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -126,7 +126,7 @@ views:
           label:
             show: false
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -164,7 +164,7 @@ views:
           at:
             entity: sensor.sbcp_playground_target
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -203,7 +203,7 @@ views:
           label:
             show: false
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -237,7 +237,7 @@ views:
           at:
             entity: sensor.sbcp_playground_target
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -272,7 +272,7 @@ views:
           label:
             show: false
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Long Labels
       entities:
@@ -287,8 +287,8 @@ views:
         max:
           entity: sensor.sbcp_playground_max
       bar:
-        color_mode: single
         color: '#2563eb'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: Label Width
       entities:
@@ -311,8 +311,8 @@ views:
         max:
           fixed: 3000
       bar:
-        color_mode: single
         color: '#4a9eff'
+        fill_style: solid
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -338,7 +338,6 @@ views:
           label:
             show: true
         bar:
-          color_mode: gradient
           gradient_stops:
           - pos: 0
             color: '#2563eb'
@@ -348,6 +347,7 @@ views:
             color: '#f59e0b'
           - pos: 100
             color: '#dc2626'
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -372,7 +372,6 @@ views:
           label:
             show: false
         bar:
-          color_mode: gradient
           gradient_stops:
           - pos: 0
             color: '#2563eb'
@@ -382,13 +381,14 @@ views:
             color: '#f59e0b'
           - pos: 100
             color: '#dc2626'
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
         state: "on"
       card:
         type: custom:sensor-bar-card-plus
-        title: Severity
+        title: Bands
         entities:
         - entity: sensor.sbcp_playground_sensor
           name: Sensor
@@ -407,7 +407,6 @@ views:
           label:
             show: true
         bar:
-          color_mode: severity
           segments:
           - from: 0%
             to: 30%
@@ -421,13 +420,14 @@ views:
           - from: 85%
             to: 100%
             color: '#ef4444'
+          fill_style: bands
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
         state: "off"
       card:
         type: custom:sensor-bar-card-plus
-        title: Severity
+        title: Bands
         entities:
         - entity: sensor.sbcp_playground_sensor
           name: Sensor
@@ -445,7 +445,6 @@ views:
           label:
             show: false
         bar:
-          color_mode: severity
           segments:
           - from: 0%
             to: 30%
@@ -459,13 +458,14 @@ views:
           - from: 85%
             to: 100%
             color: '#ef4444'
+          fill_style: bands
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
         state: "on"
       card:
         type: custom:sensor-bar-card-plus
-        title: Severity Gradient
+        title: Band Gradient
         entities:
         - entity: sensor.sbcp_playground_sensor
           name: Sensor
@@ -484,7 +484,6 @@ views:
           label:
             show: true
         bar:
-          color_mode: severity_gradient
           segments:
           - from: 0%
             to: 30%
@@ -498,13 +497,14 @@ views:
           - from: 85%
             to: 100%
             color: '#ef4444'
+          fill_style: band_gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
         state: "off"
       card:
         type: custom:sensor-bar-card-plus
-        title: Severity Gradient
+        title: Band Gradient
         entities:
         - entity: sensor.sbcp_playground_sensor
           name: Sensor
@@ -522,7 +522,6 @@ views:
           label:
             show: false
         bar:
-          color_mode: severity_gradient
           segments:
           - from: 0%
             to: 30%
@@ -536,13 +535,14 @@ views:
           - from: 85%
             to: 100%
             color: '#ef4444'
+          fill_style: band_gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
         state: "on"
       card:
         type: custom:sensor-bar-card-plus
-        title: Severity Rainbow
+        title: Bands Rainbow
         entities:
         - entity: sensor.sbcp_playground_sensor
           name: Sensor
@@ -561,7 +561,6 @@ views:
           label:
             show: true
         bar:
-          color_mode: severity
           segments:
           - from: 0%
             to: 14%
@@ -584,13 +583,14 @@ views:
           - from: 84%
             to: 100%
             color: '#7c3aed'
+          fill_style: bands
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
         state: "off"
       card:
         type: custom:sensor-bar-card-plus
-        title: Severity Rainbow
+        title: Bands Rainbow
         entities:
         - entity: sensor.sbcp_playground_sensor
           name: Sensor
@@ -608,7 +608,6 @@ views:
           label:
             show: false
         bar:
-          color_mode: severity
           segments:
           - from: 0%
             to: 14%
@@ -631,13 +630,14 @@ views:
           - from: 84%
             to: 100%
             color: '#7c3aed'
+          fill_style: bands
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
         state: "on"
       card:
         type: custom:sensor-bar-card-plus
-        title: Severity Gradient Rainbow
+        title: Band Gradient Rainbow
         entities:
         - entity: sensor.sbcp_playground_sensor
           name: Sensor
@@ -656,7 +656,6 @@ views:
           label:
             show: true
         bar:
-          color_mode: severity_gradient
           segments:
           - from: 0%
             to: 14%
@@ -679,13 +678,14 @@ views:
           - from: 84%
             to: 100%
             color: '#7c3aed'
+          fill_style: band_gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
         state: "off"
       card:
         type: custom:sensor-bar-card-plus
-        title: Severity Gradient Rainbow
+        title: Band Gradient Rainbow
         entities:
         - entity: sensor.sbcp_playground_sensor
           name: Sensor
@@ -703,7 +703,6 @@ views:
           label:
             show: false
         bar:
-          color_mode: severity_gradient
           segments:
           - from: 0%
             to: 14%
@@ -726,13 +725,14 @@ views:
           - from: 84%
             to: 100%
             color: '#7c3aed'
+          fill_style: band_gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
         state: "on"
       card:
         type: custom:sensor-bar-card-plus
-        title: Single Color
+        title: Solid Color
         entities:
         - entity: sensor.sbcp_playground_sensor
           name: Sensor
@@ -751,15 +751,15 @@ views:
           label:
             show: true
         bar:
-          color_mode: single
           color: '#0f766e'
+          fill_style: solid
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
         state: "off"
       card:
         type: custom:sensor-bar-card-plus
-        title: Single Color
+        title: Solid Color
         entities:
         - entity: sensor.sbcp_playground_sensor
           name: Sensor
@@ -777,8 +777,8 @@ views:
           label:
             show: false
         bar:
-          color_mode: single
           color: '#0f766e'
+          fill_style: solid
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -804,7 +804,7 @@ views:
           label:
             show: true
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -829,7 +829,7 @@ views:
           label:
             show: false
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -855,7 +855,7 @@ views:
           label:
             show: true
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -880,7 +880,7 @@ views:
           label:
             show: false
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -909,7 +909,7 @@ views:
           label:
             show: true
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -937,7 +937,7 @@ views:
           label:
             show: false
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -966,8 +966,8 @@ views:
           when_exceeded:
             fill_color: '#dc2626'
         bar:
-          color_mode: single
           color: '#2563eb'
+          fill_style: solid
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -995,8 +995,8 @@ views:
           when_exceeded:
             fill_color: '#dc2626'
         bar:
-          color_mode: single
           color: '#2563eb'
+          fill_style: solid
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1028,7 +1028,7 @@ views:
           enabled: true
           color: '#7c3aed'
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1060,7 +1060,7 @@ views:
           enabled: false
           color: '#7c3aed'
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1091,7 +1091,7 @@ views:
           enabled: true
           color: '#7c3aed'
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1122,7 +1122,7 @@ views:
           enabled: false
           color: '#7c3aed'
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1154,7 +1154,7 @@ views:
           enabled: true
           color: '#7c3aed'
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1186,7 +1186,7 @@ views:
           enabled: false
           color: '#7c3aed'
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1217,7 +1217,7 @@ views:
           enabled: true
           color: '#7c3aed'
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1248,7 +1248,7 @@ views:
           enabled: false
           color: '#7c3aed'
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_show_peak
@@ -1404,8 +1404,8 @@ views:
           at:
             entity: sensor.sbcp_playground_target
         bar:
-          color_mode: single
           color: '#2563eb'
+          fill_style: solid
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1431,8 +1431,8 @@ views:
         target:
           at: {}
         bar:
-          color_mode: single
           color: '#2563eb'
+          fill_style: solid
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1458,8 +1458,8 @@ views:
           at:
             entity: sensor.sbcp_playground_target
         bar:
-          color_mode: single
           color: '#0f766e'
+          fill_style: solid
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1484,8 +1484,8 @@ views:
         target:
           at: {}
         bar:
-          color_mode: single
           color: '#0f766e'
+          fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: Custom text state
       entities:
@@ -1496,8 +1496,8 @@ views:
           position: left
           width: 170
       bar:
-        color_mode: single
         color: '#9333ea'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: Unknown and unavailable
       entities:
@@ -1508,7 +1508,7 @@ views:
           position: left
           width: 170
       bar:
-        color_mode: severity
+        fill_style: bands
     - type: custom:sensor-bar-card-plus
       title: Decimal Places
       entities:
@@ -1586,21 +1586,20 @@ views:
         name: Default (inherits globals)
         icon: mdi:caravan
       - entity: sensor.sbcp_playground_sensor
-        name: Single blue + peak on
+        name: Solid blue + peak on
         icon: mdi:fridge
         peak:
           enabled: true
         bar:
-          color_mode: single
           color: '#4a9eff'
+          fill_style: solid
       - entity: sensor.sbcp_playground_sensor
-        name: Severity + label above
+        name: Bands + label above
         icon: mdi:lightbulb
         layout:
           label:
             position: above
         bar:
-          color_mode: severity
           segments:
           - from: 0%
             to: 33%
@@ -1611,6 +1610,7 @@ views:
           - from: 75%
             to: 100%
             color: '#F44336'
+          fill_style: bands
       - entity: sensor.sbcp_playground_sensor
         name: Tall + no animation
         icon: mdi:water-percent
@@ -1627,8 +1627,8 @@ views:
       peak:
         enabled: false
       bar:
-        color_mode: gradient
         animated: true
+        fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1696,7 +1696,7 @@ views:
         peak:
           enabled: true
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1764,7 +1764,7 @@ views:
         peak:
           enabled: false
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1831,7 +1831,7 @@ views:
         peak:
           enabled: true
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1898,7 +1898,7 @@ views:
         peak:
           enabled: false
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1923,7 +1923,7 @@ views:
           label:
             show: true
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1947,7 +1947,7 @@ views:
           label:
             show: false
         bar:
-          color_mode: gradient
+          fill_style: gradient
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1973,8 +1973,8 @@ views:
           label:
             show: true
         bar:
-          color_mode: single
           color: '#0f766e'
+          fill_style: solid
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -1999,8 +1999,8 @@ views:
           label:
             show: false
         bar:
-          color_mode: single
           color: '#0f766e'
+          fill_style: solid
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -2025,7 +2025,7 @@ views:
           label:
             show: true
         bar:
-          color_mode: severity
+          fill_style: bands
     - type: conditional
       conditions:
       - entity: input_boolean.sbcp_target_enabled
@@ -2049,7 +2049,7 @@ views:
           label:
             show: false
         bar:
-          color_mode: severity
+          fill_style: bands
 - title: Showcase
   path: sensor-bar-card-plus-showcase
   icon: mdi:star-four-points-circle
@@ -2075,7 +2075,6 @@ views:
         position: above
       height: 72
     bar:
-      color_mode: gradient
       gradient_stops:
       - pos: 0
         color: '#0f172a'
@@ -2090,6 +2089,7 @@ views:
       - pos: 100
         color: '#4c1d95'
       animated: true
+      fill_style: gradient
   - type: grid
     title: Energy
     square: false
@@ -2120,7 +2120,7 @@ views:
         enabled: true
         color: '#fde68a'
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Home Battery
       entities:
@@ -2141,7 +2141,6 @@ views:
           position: left
           width: 150
       bar:
-        color_mode: severity_gradient
         segments:
         - from: 0%
           to: 18%
@@ -2155,6 +2154,7 @@ views:
         - from: 75%
           to: 100%
           color: '#06b6d4'
+        fill_style: band_gradient
     - type: custom:sensor-bar-card-plus
       title: House Consumption
       entities:
@@ -2179,7 +2179,7 @@ views:
           position: left
           width: 150
       bar:
-        color_mode: gradient
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Grid Import / Export
       entities:
@@ -2202,7 +2202,6 @@ views:
           position: left
           width: 150
       bar:
-        color_mode: severity_gradient
         segments:
         - from: 0%
           to: 25%
@@ -2216,6 +2215,7 @@ views:
         - from: 75%
           to: 100%
           color: '#ef4444'
+        fill_style: band_gradient
     - type: custom:sensor-bar-card-plus
       title: EV Charging
       entities:
@@ -2236,8 +2236,8 @@ views:
           position: left
           width: 150
       bar:
-        color_mode: single
         color: '#0ea5e9'
+        fill_style: solid
   - type: grid
     title: Environment
     square: false
@@ -2259,7 +2259,6 @@ views:
           position: left
           width: 150
       bar:
-        color_mode: severity_gradient
         segments:
         - from: 0%
           to: 25%
@@ -2273,6 +2272,7 @@ views:
         - from: 75%
           to: 100%
           color: '#ef4444'
+        fill_style: band_gradient
     - type: custom:sensor-bar-card-plus
       title: Indoor Temperature
       entities:
@@ -2289,8 +2289,8 @@ views:
           position: left
           width: 150
       bar:
-        color_mode: single
         color: '#14b8a6'
+        fill_style: solid
     - type: custom:sensor-bar-card-plus
       title: Comfort Humidity
       entities:
@@ -2307,7 +2307,6 @@ views:
           position: left
           width: 150
       bar:
-        color_mode: severity
         segments:
         - from: 0%
           to: 30%
@@ -2318,6 +2317,7 @@ views:
         - from: 60%
           to: 100%
           color: '#0ea5e9'
+        fill_style: bands
     - type: custom:sensor-bar-card-plus
       title: UV And Cloud Cover
       entities:
@@ -2330,7 +2330,6 @@ views:
           max:
             fixed: 11
         bar:
-          color_mode: severity_gradient
           segments:
           - from: 0%
             to: 25%
@@ -2344,6 +2343,7 @@ views:
           - from: 75%
             to: 100%
             color: '#ef4444'
+          fill_style: band_gradient
       - entity: sensor.sbcp_showcase_cloud_cover
         name: Cloud Cover
         icon: mdi:weather-partly-cloudy
@@ -2353,7 +2353,6 @@ views:
           max:
             fixed: 100
         bar:
-          color_mode: gradient
           gradient_stops:
           - pos: 0
             color: '#38bdf8'
@@ -2362,12 +2361,13 @@ views:
           - pos: 100
             color: '#e2e8f0'
 
+          fill_style: gradient
       layout:
         label:
           position: left
           width: 150
       bar:
-        color_mode: gradient
+        fill_style: gradient
   - type: custom:sensor-bar-card-plus
     title: Dense Telemetry
     entities:
@@ -2425,7 +2425,6 @@ views:
         width: 110
       height: 24
     bar:
-      color_mode: gradient
       gradient_stops:
       - pos: 0
         color: '#22c55e'
@@ -2433,6 +2432,7 @@ views:
         color: '#f59e0b'
       - pos: 100
         color: '#ef4444'
+      fill_style: gradient
 - title: Baseline Showcase
   path: sensor-bar-card-plus-baseline-showcase
   icon: mdi:axis-arrow
@@ -2480,7 +2480,6 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: severity_gradient
         animated: true
         segments:
         - from: 0%
@@ -2492,6 +2491,7 @@ views:
         - from: 66%
           to: 100%
           color: '#f59e0b'
+        fill_style: band_gradient
     - type: markdown
       content: |
         ## Baseline Colors And Overrides
@@ -2557,7 +2557,6 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: severity_gradient
         animated: true
         segments:
         - from: 0%
@@ -2569,6 +2568,7 @@ views:
         - from: 66%
           to: 100%
           color: '#f59e0b'
+        fill_style: band_gradient
     - type: markdown
       content: |
         ## Target And Baseline Interaction
@@ -2624,7 +2624,6 @@ views:
         at:
           fixed: 0
       bar:
-        color_mode: severity_gradient
         animated: true
         segments:
         - from: 0%
@@ -2636,6 +2635,7 @@ views:
         - from: 66%
           to: 100%
           color: '#f59e0b'
+        fill_style: band_gradient
     - type: markdown
       content: |
         ## Animated Semantic Lab
@@ -2677,7 +2677,6 @@ views:
           entity: sensor.sbcp_playground_baseline
           fixed: 0
       bar:
-        color_mode: severity_gradient
         animated: true
         segments:
         - from: 0%
@@ -2689,6 +2688,7 @@ views:
         - from: 64%
           to: 100%
           color: '#f59e0b'
+        fill_style: band_gradient
     - type: markdown
       content: |
         ## Compact Responsive Showcase
@@ -2734,7 +2734,6 @@ views:
           at:
             fixed: 0
         bar:
-          color_mode: gradient
           gradient_stops:
           - pos: 0
             color: '#22c55e'
@@ -2742,6 +2741,7 @@ views:
             color: '#facc15'
           - pos: 100
             color: '#f59e0b'
+          fill_style: gradient
       - type: custom:sensor-bar-card-plus
         title: Compact Above Labels
         entities:
@@ -2769,7 +2769,6 @@ views:
           at:
             fixed: 0
         bar:
-          color_mode: severity_gradient
           animated: true
           segments:
           - from: 0%
@@ -2781,6 +2780,7 @@ views:
           - from: 64%
             to: 100%
             color: '#f59e0b'
+          fill_style: band_gradient
 - title: Hero Showcase
   path: sensor-bar-card-plus-hero-showcase
   icon: mdi:movie-open-star
@@ -2812,7 +2812,6 @@ views:
           position: inside
         height: 56
       bar:
-        color_mode: gradient
         gradient_stops:
         - pos: 0
           color: '#091223'
@@ -2831,6 +2830,7 @@ views:
         - pos: 100
           color: '#1f2a5a'
         animated: true
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: ""
       entities:
@@ -2852,7 +2852,6 @@ views:
           enabled: true
           color: '#fde68a'
         bar:
-          color_mode: gradient
           gradient_stops:
           - pos: 0
             color: '#0f172a'
@@ -2866,6 +2865,7 @@ views:
             color: '#fb923c'
               # Battery is computed from solar minus house load, so the 0 W
               # baseline anchors the neutral point between discharge and charge.
+          fill_style: gradient
       - entity: sensor.sbcp_hero_battery
         name: Home Battery Power
         icon: mdi:home-battery-outline
@@ -2878,7 +2878,6 @@ views:
           at:
             fixed: 0
         bar:
-          color_mode: gradient
           gradient_stops:
           - pos: 0
             color: '#ef4444'
@@ -2890,6 +2889,7 @@ views:
             color: '#2563eb'
           - pos: 100
             color: '#22c55e'
+          fill_style: gradient
       - entity: sensor.sbcp_hero_consumption
         name: House Consumption
         icon: mdi:home-lightning-bolt
@@ -2907,12 +2907,12 @@ views:
           when_exceeded:
             fill_color: '#ef4444'
         bar:
-          color_mode: gradient
           gradient_stops:
           - pos: 0
             color: '#2F5BEA'
           - pos: 100
             color: '#6476F7'
+          fill_style: gradient
       - entity: sensor.sbcp_hero_grid_intensity
         name: Grid Carbon Intensity
         icon: mdi:leaf-circle-outline
@@ -2925,7 +2925,6 @@ views:
           max:
             fixed: 380
         bar:
-          color_mode: severity_gradient
           segments:
           - from: 0%
             to: 25%
@@ -2939,6 +2938,7 @@ views:
           - from: 75%
             to: 100%
             color: '#ef4444'
+          fill_style: band_gradient
       layout:
         label:
           position: above

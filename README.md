@@ -77,7 +77,7 @@ Install this card side by side, then update:
 type: custom:sensor-bar-card-plus
 title: Caravan Power
 bar:
-  color_mode: single
+  fill_style: solid
   color: '#2563eb'
 scale:
   min:
@@ -120,7 +120,8 @@ Legacy flat YAML remains fully supported. You do not need to migrate existing da
 | `above_target_color` | `target.when_exceeded.fill_color` |
 | `show_peak` | `peak.enabled` |
 | `peak_color` | `peak.color` |
-| `color_mode` | `bar.color_mode` |
+| `color_mode` | `bar.color_mode` (compatibility) |
+| `fill_style` | `bar.fill_style` (preferred structured syntax) |
 | `color` | `bar.color` |
 | `gradient_stops` | `bar.gradient_stops` |
 | `severity` | `bar.segments` with percentage values, for example `from: 50%` |
@@ -167,7 +168,7 @@ scale:
   max:
     fixed: 100
 bar:
-  color_mode: severity
+  fill_style: bands
   segments:
     - from: 0%
       to: 50%
@@ -186,6 +187,8 @@ entities:
 ```
 
 When migrating legacy `severity`, remember that legacy band numbers are percentages of the active scale. Structured `bar.segments` should therefore usually use `%` values during migration. Plain numeric segment boundaries are actual scale values.
+
+`bar.fill_style` is now the preferred structured syntax for new dashboards. Existing `bar.color_mode` remains fully supported for compatibility and renders identically.
 
 For a full visual comparison, see `examples/dashboards/sensor-bar-card-plus-heritage.yaml`.
 
@@ -220,7 +223,7 @@ The repository includes a full demo playground and a dedicated screenshot board:
 - screenshot dashboard: `examples/dashboards/sensor-bar-card-plus-screenshots.yaml`
 - helper/template package: `examples/packages/sensor_bar_card_plus_playground_package.yaml`
 
-Use them to validate color modes, markers, dynamic scales, text states, edge cases, and responsive behavior.
+Use them to validate fill styles, markers, dynamic scales, text states, edge cases, and responsive behavior.
 
 ## Development / Testing
 
@@ -251,21 +254,23 @@ npm run test:visual:update
 
 `npm test` runs the unit suite first and then the visual regression suite.
 
-The visual regression suite covers baseline rendering, severity modes, target and peak markers, compact layouts, and clipping or rounded-edge regressions.
+The visual regression suite covers baseline rendering, fill styles, target and peak markers, compact layouts, and clipping or rounded-edge regressions.
 
-## Color Modes
+## Fill Styles
+
+Current color_mode compatibility values map directly to these fill styles.
 
 ### `gradient`
 
 `gradient` paints a true full-bar gradient across the configured scale.
 
-![Gradient mode](images/gradient-small.gif)
+![Gradient fill style](images/gradient-small.gif)
 
 ```yaml
 type: custom:sensor-bar-card-plus
-title: Gradient
+title: Gradient Fill
 bar:
-  color_mode: gradient
+  fill_style: gradient
   gradient_stops:
     - pos: 0
       color: '#2563eb'
@@ -283,21 +288,23 @@ entities:
     name: Sensor
 ```
 
-### `severity`
+### `bands`
 
-`severity` paints hard bands from `bar.segments`.
+Compatibility name: `severity`
 
-![Severity band mode](images/example-severity-bands-75.png)
+`bands` paints hard bands from `bar.segments`.
+
+![Band fill style](images/example-severity-bands-75.png)
 
 ```yaml
 type: custom:sensor-bar-card-plus
-title: Severity
+title: Bands Fill
 layout:
   label:
     position: left
     width: 160
 bar:
-  color_mode: severity
+  fill_style: bands
   segments:
     - from: 0%
       to: 30%
@@ -326,9 +333,11 @@ entities:
     name: Sensor
 ```
 
-### `severity_gradient` 
+### `band_gradient` 
 
-`severity_gradient` uses the same segment definitions, but renders a continuous gradient derived from those colors instead of painting hard bands.
+Compatibility name: `severity_gradient` 
+
+`band_gradient` uses the same segment definitions, but renders a continuous gradient derived from those colors instead of painting hard bands.
 
 Anchor model:
 
@@ -338,13 +347,13 @@ Anchor model:
 
 This makes the mode feel intuitive while still respecting the configured severity ranges.
 
-![Severity vs severity gradient](images/severity-rainbow-comparison-small.gif)
+![Bands vs band gradient](images/severity-rainbow-comparison-small.gif)
 
 ```yaml
 type: custom:sensor-bar-card-plus
-title: Severity Gradient Rainbow
+title: Band Gradient Fill
 bar:
-  color_mode: severity_gradient
+  fill_style: band_gradient
   segments:
     - from: 0%
       to: 20%
@@ -374,17 +383,19 @@ entities:
     name: Sensor
 ```
 
-### `single`
+### `solid`
 
-`single` uses one fixed fill color regardless of value.
+Compatibility name: `single` 
 
-![Single color mode](images/example-single.png)
+`solid` uses one fixed fill color regardless of value.
+
+![Solid fill](images/example-single.png)
 
 ```yaml
 type: custom:sensor-bar-card-plus
-title: Single Color
+title: Solid Fill
 bar:
-  color_mode: single
+  fill_style: solid
   color: '#14b8a6'
 scale:
   min:
@@ -414,7 +425,7 @@ layout:
   label:
     position: left
 bar:
-  color_mode: gradient
+  fill_style: gradient
 target:
   at:
     fixed: 65
@@ -449,7 +460,7 @@ layout:
   label:
     position: left
 bar:
-  color_mode: single
+  fill_style: solid
   color: '#4a9eff'
 scale:
   max:
@@ -522,7 +533,7 @@ Use `target.when_exceeded.fill_color` when you want the filled section beyond th
 type: custom:sensor-bar-card-plus
 title: Above Target Color
 bar:
-  color_mode: gradient
+  fill_style: gradient
 target:
   at:
     entity: sensor.power_target
@@ -638,7 +649,7 @@ Advanced baseline behavior is grouped under `baseline:` so related options stay 
 type: custom:sensor-bar-card-plus
 title: Grid Flow
 bar:
-  color_mode: gradient
+  fill_style: gradient
 scale:
   min:
     fixed: -3000
@@ -658,7 +669,7 @@ entities:
 type: custom:sensor-bar-card-plus
 title: Off-center baseline
 bar:
-  color_mode: severity_gradient
+  fill_style: band_gradient
   segments:
     - from: 0%
       to: 30%
@@ -688,7 +699,7 @@ entities:
 type: custom:sensor-bar-card-plus
 title: Midpoint Baseline
 bar:
-  color_mode: gradient
+  fill_style: gradient
 scale:
   min:
     fixed: -100
@@ -713,7 +724,7 @@ The base semantic scale still spans the full bar. Optional above and below color
 type: custom:sensor-bar-card-plus
 title: Battery Bias
 bar:
-  color_mode: gradient
+  fill_style: gradient
 scale:
   min:
     fixed: -3200
@@ -735,7 +746,7 @@ entities:
 type: custom:sensor-bar-card-plus
 title: Bidirectional Override
 bar:
-  color_mode: gradient
+  fill_style: gradient
 scale:
   min:
     fixed: -3200
@@ -763,7 +774,7 @@ Targets stay on the same global scale, so threshold markers, `target.when_exceed
 type: custom:sensor-bar-card-plus
 title: Target And Baseline Interaction
 bar:
-  color_mode: severity_gradient
+  fill_style: band_gradient
   segments:
     - from: 0%
       to: 30%
@@ -809,7 +820,7 @@ If both an `entity` and a `fixed` value are set under `baseline.at`, the entity 
 type: custom:sensor-bar-card-plus
 title: Dynamic baseline
 bar:
-  color_mode: gradient
+  fill_style: gradient
 scale:
   min:
     fixed: -3000
@@ -846,7 +857,7 @@ Why dynamic sources matter: the card can follow real Home Assistant entities for
 type: custom:sensor-bar-card-plus
 title: Dynamic min and max
 bar:
-  color_mode: gradient
+  fill_style: gradient
 scale:
   min:
     entity: sensor.dynamic_min
@@ -869,7 +880,7 @@ For a moving threshold, use `target.at.entity`. This is useful for projected lim
 type: custom:sensor-bar-card-plus
 title: Dynamic target
 bar:
-  color_mode: gradient
+  fill_style: gradient
 target:
   at:
     entity: sensor.power_target
@@ -976,7 +987,7 @@ Time units `h`, `m`, and `s` render tight, for example `43s` and `4h`, instead o
 type: custom:sensor-bar-card-plus
 title: Tight Time Unit - Seconds
 bar:
-  color_mode: single
+  fill_style: solid
   color: '#2563eb'
 scale:
   min:
@@ -1000,7 +1011,7 @@ Non-numeric current states are handled as first-class display states rather than
 type: custom:sensor-bar-card-plus
 title: Unknown And Unavailable
 bar:
-  color_mode: severity
+  fill_style: bands
   segments:
     - from: 0%
       to: 50%
@@ -1080,7 +1091,7 @@ layout:
   label:
     position: left
 bar:
-  color_mode: gradient
+  fill_style: gradient
 scale:
   min:
     fixed: 0
@@ -1095,7 +1106,7 @@ entities:
     name: Fridge
     icon: mdi:fridge
     bar:
-      color_mode: single
+      fill_style: solid
       color: '#2563eb'
     scale:
       max:
@@ -1113,7 +1124,7 @@ entities:
       max:
         fixed: 1000
     bar:
-      color_mode: severity
+      fill_style: bands
       segments:
         - from: 0%
           to: 40%
@@ -1138,7 +1149,7 @@ All structured objects can be set globally at card level and overridden per enti
 | `entities` | list | Entities to render |
 | `layout` | object | Label placement, label width, and bar height defaults |
 | `scale` | object | Min/max scale configuration |
-| `bar` | object | Color mode, segments, gradients, and animation |
+| `bar` | object | Fill style, segments, gradients, and animation |
 | `target` | object | Optional target marker and above-target behavior |
 | `peak` | object | Optional peak marker |
 | `baseline` | object | Fill origin / neutral point |
@@ -1183,9 +1194,10 @@ Each entry in `entities` accepts:
 
 | Option | Type | Description |
 |---|---|---|
+| `bar.fill_style` | string | Preferred structured alias: `solid`, `gradient`, `bands`, `band_gradient` |
 | `bar.color_mode` | string | `single`, `gradient`, `severity`, `severity_gradient` |
 | `bar.color` | string | Solid color for `single` mode |
-| `bar.gradient_stops` | list | Gradient stops for `gradient` mode |
+| `bar.gradient_stops` | list | Gradient stops for `gradient` mode; `pos` accepts `50` and `50%` equivalently |
 | `bar.segments` | list | Segment definitions for `severity` and `severity_gradient` |
 | `bar.animated` | boolean | Animate value changes |
 
@@ -1237,6 +1249,7 @@ Legacy flat config remains fully supported. It is no longer the preferred docume
 | `max` / `max_entity` | `scale.max.fixed` / `scale.max.entity` |
 | `decimal` | `formatting.decimal` |
 | `unit` | `formatting.unit` |
+| `fill_style` | `bar.fill_style` |
 | `color_mode` | `bar.color_mode` |
 | `color` | `bar.color` |
 | `gradient_stops` | `bar.gradient_stops` |
@@ -1277,7 +1290,7 @@ It is not a drop-in replacement for the original card.
 
 Likely future work includes:
 
-- `bar.fill_style: value_color` for the old single interpolated severity-color behavior under a clearer name
+- `bar.solid_fill: true` so future fill styles can collapse to one sampled solid color
 - `display.mode: needle` as a future current-value rendering mode
 - visible `scale.ticks` support under `scale`
 - a more general marker collection once the current target and peak semantics are stable

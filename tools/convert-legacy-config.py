@@ -69,6 +69,13 @@ ENTITY_PREFIXES = (
     "input_",
 )
 
+FILL_STYLE_BY_COLOR_MODE = {
+    "single": "solid",
+    "gradient": "gradient",
+    "severity": "bands",
+    "severity_gradient": "band_gradient",
+}
+
 
 yaml = YAML()
 yaml.preserve_quotes = True
@@ -141,6 +148,10 @@ def normalize_segment_sequence(segments: Any) -> CommentedSeq:
                 normalized[key] = clone(segment[key])
         out.append(normalized)
     return out
+
+
+def color_mode_to_fill_style(color_mode: Any) -> Any:
+    return FILL_STYLE_BY_COLOR_MODE.get(color_mode, color_mode)
 
 
 def severity_to_segments(severity: Any) -> CommentedSeq:
@@ -244,7 +255,16 @@ def build_peak(config: CommentedMap) -> CommentedMap:
 
 def build_bar(config: CommentedMap) -> CommentedMap:
     structured = clone(config["bar"]) if is_mapping(config.get("bar")) else CommentedMap()
-    for key in ("color_mode", "color", "gradient_stops", "animated", "segment_space"):
+    if "fill_style" not in structured:
+        structured_color_mode = structured.pop("color_mode", None)
+        flat_color_mode = config.get("color_mode")
+        effective_color_mode = structured_color_mode if structured_color_mode is not None else flat_color_mode
+        if effective_color_mode is not None:
+            structured["fill_style"] = color_mode_to_fill_style(effective_color_mode)
+    else:
+        structured.pop("color_mode", None)
+
+    for key in ("color", "gradient_stops", "animated", "segment_space"):
         if key in config and key not in structured:
             structured[key] = clone(config[key])
     if "segments" not in structured:
@@ -252,6 +272,7 @@ def build_bar(config: CommentedMap) -> CommentedMap:
             structured["segments"] = normalize_segment_sequence(config["segments"])
         elif "severity" in config:
             structured["segments"] = severity_to_segments(config["severity"])
+            structured.setdefault("fill_style", "bands")
     elif is_sequence(structured["segments"]):
         structured["segments"] = normalize_segment_sequence(structured["segments"])
     return structured

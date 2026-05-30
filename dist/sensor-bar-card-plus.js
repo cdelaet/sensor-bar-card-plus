@@ -475,6 +475,61 @@ class SensorBarCard extends HTMLElement {
     };
   }
 
+  _fillStyleToColorMode(fillStyle) {
+    switch (fillStyle) {
+      case 'solid': return 'single';
+      case 'gradient': return 'gradient';
+      case 'bands': return 'severity';
+      case 'band_gradient': return 'severity_gradient';
+      default: return null;
+    }
+  }
+
+  _colorModeToFillStyle(colorMode) {
+    switch (colorMode) {
+      case 'single': return 'solid';
+      case 'gradient': return 'gradient';
+      case 'severity': return 'bands';
+      case 'severity_gradient': return 'band_gradient';
+      default: return null;
+    }
+  }
+
+  _normalizeBarModeConfig(barConfig = null, flatColorMode = null) {
+    const fillStyle = barConfig?.fill_style ?? null;
+    const colorMode = barConfig?.color_mode ?? flatColorMode ?? null;
+    const normalizedColorMode = this._fillStyleToColorMode(fillStyle) ?? colorMode ?? 'severity';
+    return {
+      fill_style: fillStyle ?? this._colorModeToFillStyle(normalizedColorMode) ?? 'bands',
+      color_mode: normalizedColorMode,
+    };
+  }
+
+  _resolveNormalizedBarMode(entityBar, entityConfig, cardBar, cardConfig) {
+    if (entityBar?.fill_style !== undefined || entityBar?.color_mode !== undefined || entityConfig.color_mode !== undefined) {
+      return this._normalizeBarModeConfig(entityBar, entityConfig.color_mode);
+    }
+    if (cardBar?.fill_style !== undefined || cardBar?.color_mode !== undefined || cardConfig?.color_mode !== undefined) {
+      return this._normalizeBarModeConfig(cardBar, cardConfig?.color_mode);
+    }
+    return this._normalizeBarModeConfig(null, null);
+  }
+
+  _normalizeGradientStops(input) {
+    if (!Array.isArray(input)) return input ?? null;
+    return input.map((stop) => {
+      if (!stop || typeof stop !== 'object' || Array.isArray(stop)) {
+        return stop;
+      }
+      const percentPos = this._parsePercentLiteral(stop.pos);
+      const numericPos = Number.isFinite(percentPos) ? percentPos : this._getFiniteNumber(stop.pos);
+      return {
+        ...stop,
+        pos: Number.isFinite(numericPos) ? numericPos : stop.pos,
+      };
+    });
+  }
+
   normalizeBarConfig(entityConfig, cardConfig) {
     const cardBar = cardConfig?.bar;
     const entityBar = entityConfig?.bar;
@@ -513,11 +568,15 @@ class SensorBarCard extends HTMLElement {
     const inheritedStructuredAboveTargetColor = cardConfig?.target && typeof cardConfig.target === 'object' && !Array.isArray(cardConfig.target)
       ? cardConfig.target.when_exceeded?.fill_color
       : undefined;
+    const normalizedMode = this._resolveNormalizedBarMode(entityBar, entityConfig, cardBar, cardConfig);
 
     return {
-      color_mode: entityBar?.color_mode ?? entityConfig.color_mode ?? cardBar?.color_mode ?? cardConfig?.color_mode ?? 'severity',
+      fill_style: normalizedMode.fill_style,
+      color_mode: normalizedMode.color_mode,
       color: entityBar?.color ?? entityConfig.color ?? cardBar?.color ?? cardConfig?.color ?? '#4a9eff',
-      gradient_stops: entityBar?.gradient_stops ?? entityConfig.gradient_stops ?? cardBar?.gradient_stops ?? cardConfig?.gradient_stops ?? null,
+      gradient_stops: this._normalizeGradientStops(
+        entityBar?.gradient_stops ?? entityConfig.gradient_stops ?? cardBar?.gradient_stops ?? cardConfig?.gradient_stops ?? null
+      ),
       severity: segments,
       segments,
       segment_space,

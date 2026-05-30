@@ -15,7 +15,7 @@ views:
               Legacy flat YAML examples. Each card should match the corresponding structured card in the next section.
 
           - type: custom:sensor-bar-card-plus
-            title: Legacy - Basic Single Color
+            title: Legacy - Basic Solid Color
             color_mode: single
             color: '#2563eb'
             label_position: left
@@ -27,7 +27,7 @@ views:
                 name: Sensor
 
           - type: custom:sensor-bar-card-plus
-            title: Legacy - Severity
+            title: Legacy - Bands
             color_mode: severity
             severity:
               - from: 0
@@ -44,7 +44,7 @@ views:
                 name: Sensor
 
           - type: custom:sensor-bar-card-plus
-            title: Legacy - Severity Gradient
+            title: Legacy - Band Gradient
             color_mode: severity_gradient
             severity:
               - from: 0
@@ -73,6 +73,107 @@ views:
             entities:
               - entity: sensor.sbcp_playground_sensor
                 name: Sensor
+
+          - type: markdown
+            content: |
+              ### fill_style parity
+              These cards use the existing color_mode compatibility syntax.
+
+          - type: custom:sensor-bar-card-plus
+            title: Legacy Compatibility - single
+            bar:
+              color_mode: single
+              color: '#2563eb'
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            layout:
+              label:
+                position: left
+                width: 150
+            entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Same sensor
+
+          - type: custom:sensor-bar-card-plus
+            title: Legacy Compatibility - gradient
+            bar:
+              color_mode: gradient
+              gradient_stops:
+                - pos: 0
+                  color: '#2563eb'
+                - pos: 50
+                  color: '#06b6d4'
+                - pos: 100
+                  color: '#ef4444'
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            layout:
+              label:
+                position: left
+                width: 150
+            entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Same sensor
+
+          - type: custom:sensor-bar-card-plus
+            title: Legacy Compatibility - severity
+            bar:
+              color_mode: severity
+              segments:
+                - from: 0%
+                  to: 30%
+                  color: '#22c55e'
+                - from: 30%
+                  to: 70%
+                  color: '#facc15'
+                - from: 70%
+                  to: 100%
+                  color: '#ef4444'
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            layout:
+              label:
+                position: left
+                width: 150
+            entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Same sensor
+
+          - type: custom:sensor-bar-card-plus
+            title: Legacy Compatibility - severity_gradient
+            bar:
+              color_mode: severity_gradient
+              segments:
+                - from: 0%
+                  to: 30%
+                  color: '#22c55e'
+                - from: 30%
+                  to: 70%
+                  color: '#facc15'
+                - from: 70%
+                  to: 100%
+                  color: '#ef4444'
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            layout:
+              label:
+                position: left
+                width: 150
+            entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Same sensor
 
           - type: custom:sensor-bar-card-plus
             title: Legacy - Target Marker And Label
@@ -203,9 +304,9 @@ views:
               Structured configuration examples. Each card should match the corresponding legacy card in the previous section.
 
           - type: custom:sensor-bar-card-plus
-            title: Structured - Basic Single Color
+            title: Structured - Basic Solid Color
             bar:
-              color_mode: single
+              fill_style: solid
               color: '#2563eb'
             layout:
               label:
@@ -221,9 +322,9 @@ views:
                 name: Sensor
 
           - type: custom:sensor-bar-card-plus
-            title: Structured - Severity
+            title: Structured - Bands
             bar:
-              color_mode: severity
+              fill_style: bands
               segments:
                 - from: 0
                   to: 30
@@ -239,9 +340,9 @@ views:
                 name: Sensor
 
           - type: custom:sensor-bar-card-plus
-            title: Structured - Severity Gradient
+            title: Structured - Band Gradient
             bar:
-              color_mode: severity_gradient
+              fill_style: band_gradient
               segments:
                 - from: 0
                   to: 30
@@ -259,7 +360,7 @@ views:
           - type: custom:sensor-bar-card-plus
             title: Structured - Custom Gradient
             bar:
-              color_mode: gradient
+              fill_style: gradient
               gradient_stops:
                 - pos: 0
                   color: '#2563eb'
@@ -271,10 +372,111 @@ views:
               - entity: sensor.sbcp_playground_sensor
                 name: Sensor
 
+          - type: markdown
+            content: |
+              ### fill_style parity
+              These cards use the new fill_style syntax.
+
+          - type: custom:sensor-bar-card-plus
+            title: Structured fill_style - solid
+            bar:
+              fill_style: solid
+              color: '#2563eb'
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            layout:
+              label:
+                position: left
+                width: 150
+            entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Same sensor
+
+          - type: custom:sensor-bar-card-plus
+            title: Structured fill_style - gradient
+            bar:
+              fill_style: gradient
+              gradient_stops:
+                - pos: 0
+                  color: '#2563eb'
+                - pos: 50
+                  color: '#06b6d4'
+                - pos: 100
+                  color: '#ef4444'
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            layout:
+              label:
+                position: left
+                width: 150
+            entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Same sensor
+
+          - type: custom:sensor-bar-card-plus
+            title: Structured fill_style - bands
+            bar:
+              fill_style: bands
+              segments:
+                - from: 0%
+                  to: 30%
+                  color: '#22c55e'
+                - from: 30%
+                  to: 70%
+                  color: '#facc15'
+                - from: 70%
+                  to: 100%
+                  color: '#ef4444'
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            layout:
+              label:
+                position: left
+                width: 150
+            entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Same sensor
+
+          - type: custom:sensor-bar-card-plus
+            title: Structured fill_style - band_gradient
+            bar:
+              fill_style: band_gradient
+              segments:
+                - from: 0%
+                  to: 30%
+                  color: '#22c55e'
+                - from: 30%
+                  to: 70%
+                  color: '#facc15'
+                - from: 70%
+                  to: 100%
+                  color: '#ef4444'
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            layout:
+              label:
+                position: left
+                width: 150
+            entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Same sensor
+
           - type: custom:sensor-bar-card-plus
             title: Structured - Target Marker And Label
             bar:
-              color_mode: single
+              fill_style: solid
               color: '#2563eb'
             target:
               at:
@@ -291,7 +493,7 @@ views:
           - type: custom:sensor-bar-card-plus
             title: Structured - Dynamic Min Max Target
             bar:
-              color_mode: gradient
+              fill_style: gradient
               gradient_stops:
                 - pos: 0
                   color: '#2563eb'
@@ -314,7 +516,7 @@ views:
           - type: custom:sensor-bar-card-plus
             title: Structured - Peak Marker
             bar:
-              color_mode: gradient
+              fill_style: gradient
               gradient_stops:
                 - pos: 0
                   color: '#2563eb'
@@ -332,7 +534,7 @@ views:
           - type: custom:sensor-bar-card-plus
             title: Structured - Baseline
             bar:
-              color_mode: gradient
+              fill_style: gradient
               gradient_stops:
                 - pos: 0
                   color: '#2563eb'
@@ -357,7 +559,7 @@ views:
           - type: custom:sensor-bar-card-plus
             title: Structured - Baseline Above Below Colors
             bar:
-              color_mode: gradient
+              fill_style: gradient
               gradient_stops:
                 - pos: 0
                   color: '#2563eb'
@@ -386,7 +588,7 @@ views:
           - type: custom:sensor-bar-card-plus
             title: Structured - Formatting
             bar:
-              color_mode: single
+              fill_style: solid
               color: '#2563eb'
             formatting:
               decimal: 1
@@ -398,7 +600,7 @@ views:
           - type: custom:sensor-bar-card-plus
             title: Structured - Per-Entity Overrides
             bar:
-              color_mode: severity
+              fill_style: bands
               segments:
                 - from: 0%
                   to: 30%
