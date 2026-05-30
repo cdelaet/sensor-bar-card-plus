@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { createCard } from '../support/load-card-class.cjs';
 
 describe('Sensor Bar Card Plus logic', () => {
@@ -1219,6 +1220,130 @@ describe('Sensor Bar Card Plus logic', () => {
         dataset: { leftDensity: density },
       })).toBe(38);
     }
+  });
+
+  it('inside mode hides the label before the value and can hide the icon at compressed density', () => {
+    const card = createCard();
+    const mainLine = { dataset: { rowDensity: 'compressed' } };
+    const track = { getBoundingClientRect: () => ({ width: 60 }) };
+    const innerLabel = {
+      dataset: {},
+      closest: (selector) => (
+        selector === '.bar-track' ? track
+          : selector === '.main-line' ? mainLine
+          : null
+      ),
+      querySelector: (selector) => (
+        selector === '.inside-name' ? {}
+          : selector === '.inside-value' ? { scrollWidth: 52 }
+          : null
+      ),
+    };
+    card.shadowRoot = {
+      querySelectorAll: (selector) => selector === '.bar-inner-label' ? [innerLabel] : [],
+      querySelector: () => null,
+    };
+
+    card._applyInsideLabelDensity();
+
+    expect(innerLabel.dataset.insideDensity).toBe('compressed');
+    expect(innerLabel.dataset.hideName).toBe('true');
+    expect(mainLine.dataset.hideInsideIcon).toBe('true');
+    expect(card._formatInsideValueMarkup('72', 'W')).toContain('<span class="inside-unit">W</span>');
+  });
+
+  it('inside mode hides the icon while keeping the value visible at dense density', () => {
+    const card = createCard();
+    const mainLine = { dataset: { rowDensity: 'dense' } };
+    const track = { getBoundingClientRect: () => ({ width: 100 }) };
+    const innerLabel = {
+      dataset: {},
+      closest: (selector) => (
+        selector === '.bar-track' ? track
+          : selector === '.main-line' ? mainLine
+          : null
+      ),
+      querySelector: (selector) => (
+        selector === '.inside-name' ? {}
+          : selector === '.inside-value' ? { scrollWidth: 52 }
+          : null
+      ),
+    };
+    card.shadowRoot = {
+      querySelectorAll: (selector) => selector === '.bar-inner-label' ? [innerLabel] : [],
+      querySelector: () => null,
+    };
+
+    card._applyInsideLabelDensity();
+
+    expect(innerLabel.dataset.insideDensity).toBe('dense');
+    expect(innerLabel.dataset.hideName).toBe('true');
+    expect(mainLine.dataset.hideInsideIcon).toBe('true');
+    expect(card._formatInsideValueMarkup('72', 'W')).toContain('<span class="inside-unit">W</span>');
+  });
+
+  it('inside mode can keep the icon when inside label density is dense but row density is not narrow', () => {
+    const card = createCard();
+    const mainLine = { dataset: { rowDensity: 'tight' } };
+    const track = { getBoundingClientRect: () => ({ width: 100 }) };
+    const innerLabel = {
+      dataset: {},
+      closest: (selector) => (
+        selector === '.bar-track' ? track
+          : selector === '.main-line' ? mainLine
+          : null
+      ),
+      querySelector: (selector) => (
+        selector === '.inside-name' ? {}
+          : selector === '.inside-value' ? { scrollWidth: 52 }
+          : null
+      ),
+    };
+    card.shadowRoot = {
+      querySelectorAll: (selector) => selector === '.bar-inner-label' ? [innerLabel] : [],
+      querySelector: () => null,
+    };
+
+    card._applyInsideLabelDensity();
+
+    expect(innerLabel.dataset.insideDensity).toBe('dense');
+    expect(innerLabel.dataset.hideName).toBe('true');
+    expect(mainLine.dataset.hideInsideIcon).toBe('false');
+  });
+
+  it('above mode hides the label before the value at dense and compressed densities', () => {
+    const card = createCard();
+    const denseLabel = { dataset: {}, getBoundingClientRect: () => ({ width: 130 }) };
+    const compressedLabel = { dataset: {}, getBoundingClientRect: () => ({ width: 100 }) };
+    const denseLine = {
+      dataset: {},
+      querySelector: (selector) => selector === '.above-bar-label' ? denseLabel : null,
+    };
+    const compressedLine = {
+      dataset: {},
+      querySelector: (selector) => selector === '.above-bar-label' ? compressedLabel : null,
+    };
+    card.shadowRoot = {
+      querySelectorAll: (selector) => selector === '.above-line' ? [denseLine, compressedLine] : [],
+      querySelector: () => null,
+    };
+
+    card._applyAboveLabelDensity();
+
+    expect(denseLine.dataset.aboveDensity).toBe('dense');
+    expect(denseLabel.dataset.hideName).toBe('true');
+    expect(compressedLine.dataset.aboveDensity).toBe('compressed');
+    expect(compressedLabel.dataset.hideName).toBe('true');
+    expect(card._formatAboveValueMarkup('72', 'W')).toContain('<span class="above-bar-label-unit">W</span>');
+  });
+
+  it('inside and above narrow-mode CSS preserves value priority', () => {
+    const source = readFileSync(new URL('../../src/sensor-bar-card-plus.js', import.meta.url), 'utf8');
+
+    expect(source).not.toContain('.bar-inner-label[data-inside-density="compressed"] {\n          display: none;');
+    expect(source).toContain('.main-line.inside-mode[data-hide-inside-icon="true"] .icon-wrap');
+    expect(source).toContain('margin-left: auto;');
+    expect(source).not.toContain('.above-line[data-above-density="dense"] .above-bar-label-unit');
   });
 
   it('keeps short complete left labels visible', () => {

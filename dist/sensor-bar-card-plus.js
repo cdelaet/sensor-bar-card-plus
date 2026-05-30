@@ -1415,7 +1415,9 @@ class SensorBarCard extends HTMLElement {
           justify-content: flex-end;
         }
         .bar-inner-label[data-inside-density="compressed"] {
-          display: none;
+          gap: 0;
+          padding: 0 4px;
+          justify-content: flex-end;
         }
         .bar-inner-label > span {
           background: rgba(0,0,0,0.35);
@@ -1442,7 +1444,7 @@ class SensorBarCard extends HTMLElement {
         .bar-inner-label[data-inside-density="tight"] .inside-name {
           max-width: 44%;
         }
-        .bar-inner-label[data-inside-density="dense"] .inside-name {
+        .bar-inner-label[data-hide-name="true"] .inside-name {
           display: none;
         }
         .bar-inner-label .inside-value {
@@ -1450,6 +1452,10 @@ class SensorBarCard extends HTMLElement {
           max-width: 56%;
           display: inline-flex;
           align-items: baseline;
+        }
+        .bar-inner-label[data-inside-density="dense"] .inside-value,
+        .bar-inner-label[data-inside-density="compressed"] .inside-value {
+          max-width: 100%;
         }
         .bar-inner-label .inside-value-text {
           display: inline-flex;
@@ -1515,11 +1521,7 @@ class SensorBarCard extends HTMLElement {
           min-width: 0;
           align-items: flex-end;
         }
-        .above-line[data-above-density="dense"] .above-bar-label-unit,
-        .above-line[data-above-density="compressed"] .above-bar-label-unit {
-          display: none;
-        }
-        .above-line[data-above-density="compressed"] .above-bar-label-name,
+        .above-bar-label[data-hide-name="true"] .above-bar-label-name,
         .above-line[data-above-density="compressed"] .above-icon-spacer {
           display: none;
         }
@@ -1530,6 +1532,7 @@ class SensorBarCard extends HTMLElement {
           flex: 1;
           min-width: 0;
           display: flex;
+          justify-content: flex-start;
           align-items: center;
           gap: var(--sbcp-main-gap);
           font-size: 12px;
@@ -1547,9 +1550,12 @@ class SensorBarCard extends HTMLElement {
         }
         .above-bar-label-value {
           flex: 0 0 auto;
+          margin-left: auto;
           white-space: nowrap;
           display: inline-flex;
           align-items: baseline;
+          justify-content: flex-end;
+          text-align: right;
           gap: 0;
         }
         .above-bar-label-value.has-unit {
@@ -1647,6 +1653,9 @@ class SensorBarCard extends HTMLElement {
           min-width: 0;
         }
         .value-right[data-hide-unit="true"] .unit-group {
+          display: none;
+        }
+        .main-line.inside-mode[data-hide-inside-icon="true"] .icon-wrap {
           display: none;
         }
         .value-right-text {
@@ -1856,6 +1865,7 @@ class SensorBarCard extends HTMLElement {
     if (!this.shadowRoot) return;
     this.shadowRoot.querySelectorAll('.bar-inner-label').forEach(innerLabel => {
       const track = innerLabel.closest('.bar-track');
+      const mainLine = innerLabel.closest('.main-line');
       const nameEl = innerLabel.querySelector('.inside-name');
       const valueEl = innerLabel.querySelector('.inside-value');
       if (!track || !nameEl || !valueEl) return;
@@ -1870,6 +1880,11 @@ class SensorBarCard extends HTMLElement {
       else if (trackWidth < valueWidth + 128) density = 'compact';
 
       innerLabel.dataset.insideDensity = density;
+      innerLabel.dataset.hideName = density === 'dense' || density === 'compressed' ? 'true' : 'false';
+      if (mainLine) {
+        const rowDensity = mainLine.dataset.rowDensity || 'normal';
+        mainLine.dataset.hideInsideIcon = rowDensity === 'dense' || rowDensity === 'compressed' ? 'true' : 'false';
+      }
     });
   }
 
@@ -1898,6 +1913,7 @@ class SensorBarCard extends HTMLElement {
       else if (width < 210) density = 'tight';
       else if (width < 280) density = 'compact';
       aboveLine.dataset.aboveDensity = density;
+      label.dataset.hideName = density === 'dense' || density === 'compressed' ? 'true' : 'false';
     });
   }
 
