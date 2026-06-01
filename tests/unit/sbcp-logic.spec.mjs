@@ -1346,6 +1346,355 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(source).not.toContain('.above-line[data-above-density="dense"] .above-bar-label-unit');
   });
 
+  const makeLeftModeResponsiveFixture = ({
+    text = 'Sensor',
+    visibleChars = 6,
+    clientWidth = 60,
+    scrollWidth = 60,
+    labelWidth = 20,
+    rowWidth = 140,
+    iconWidth = 28,
+    valueWidth = 58,
+    staleTopValue = false,
+    previousForceTopValue = false,
+    stalePriorityHidden = false,
+    usefulnessHidden = false,
+  } = {}) => {
+    const card = createCard();
+    card._measureVisibleLabelCharacters = () => visibleChars;
+    card._measureValueMarkupWidth = () => valueWidth;
+
+    const leftLabelText = {
+      textContent: text,
+      clientWidth,
+      scrollWidth,
+    };
+    const leftLabel = {
+      dataset: usefulnessHidden
+        ? { hidden: 'true' }
+        : stalePriorityHidden
+          ? { priorityHidden: 'true' }
+          : {},
+      getBoundingClientRect: () => ({ width: labelWidth }),
+    };
+    const valueEl = {
+      dataset: {
+        display: encodeURIComponent('72'),
+        unit: encodeURIComponent('W'),
+      },
+      style: {
+        getPropertyValue: () => '0',
+      },
+      clientWidth: valueWidth,
+    };
+    const iconWrap = {
+      getBoundingClientRect: () => ({ width: iconWidth }),
+    };
+    const rowStack = {
+      dataset: {
+        ...(staleTopValue ? { topValue: 'true' } : {}),
+        ...(previousForceTopValue ? { forceTopValue: 'true' } : {}),
+      },
+      querySelector: (selector) => selector === '.top-right-value' ? topValue : null,
+    };
+    const topValue = {
+      dataset: staleTopValue ? { active: 'true' } : {},
+      innerHTML: '',
+    };
+    const mainLine = {
+      dataset: { leftDensity: 'normal', rowDensity: 'normal' },
+      classList: {
+        contains: (name) => name === 'left-mode',
+      },
+      getBoundingClientRect: () => ({ width: rowWidth }),
+      closest: (selector) => selector === '.row-stack' ? rowStack : null,
+      querySelector: (selector) => (
+        selector === '.label-left' ? leftLabel
+          : selector === '.label-left-text' ? leftLabelText
+          : selector === '.value-right' ? valueEl
+          : selector === '.icon-wrap' ? iconWrap
+          : null
+      ),
+    };
+    const row = {
+      querySelector: (selector) => (
+        selector === '.main-line' ? mainLine
+          : selector === '.label-left' ? leftLabel
+          : selector === '.label-left-text' ? leftLabelText
+          : selector === '.value-right' ? valueEl
+          : selector === '.icon-wrap' ? iconWrap
+          : selector === '.row-stack' ? rowStack
+          : null
+      ),
+    };
+
+    return { card, row, mainLine, rowStack, leftLabel, leftLabelText, valueEl, iconWrap, topValue };
+  };
+
+  it('keeps short useful left labels visible even when the bar is below the minimum share', () => {
+    const { card, row, rowStack, leftLabel, mainLine } = makeLeftModeResponsiveFixture();
+    card._ensureMinimumBarShare([row]);
+
+    expect(leftLabel.dataset.priorityHidden).toBeUndefined();
+    expect(rowStack.dataset.forceTopValue).toBe('true');
+    expect(mainLine.dataset.hideLeftIcon).toBeUndefined();
+  });
+
+  it('keeps fully visible Active labels visible on wide rows', () => {
+    const { card, row, rowStack, leftLabel, mainLine } = makeLeftModeResponsiveFixture({
+      text: 'Active',
+      rowWidth: 264,
+    });
+    card._ensureMinimumBarShare([row]);
+
+    expect(leftLabel.dataset.priorityHidden).toBeUndefined();
+    expect(rowStack.dataset.forceTopValue).toBeUndefined();
+    expect(mainLine.dataset.hideLeftIcon).toBeUndefined();
+  });
+
+  it('keeps fully visible long left labels visible even when they are wide', () => {
+    const { card, row, rowStack, leftLabel } = makeLeftModeResponsiveFixture({
+      text: 'Long battery name label',
+      visibleChars: 18,
+      clientWidth: 120,
+      scrollWidth: 120,
+      labelWidth: 40,
+      rowWidth: 180,
+    });
+    card._ensureMinimumBarShare([row]);
+
+    expect(leftLabel.dataset.priorityHidden).toBeUndefined();
+    expect(rowStack.dataset.forceTopValue).toBe('true');
+  });
+
+  it('keeps useful truncated labels with at least five visible characters visible', () => {
+    const { card, row, rowStack, leftLabel } = makeLeftModeResponsiveFixture({
+      text: 'Watertemperatuur',
+      visibleChars: 6,
+      clientWidth: 70,
+      scrollWidth: 140,
+      labelWidth: 28,
+      rowWidth: 150,
+    });
+    card._ensureMinimumBarShare([row]);
+
+    expect(leftLabel.dataset.priorityHidden).toBeUndefined();
+    expect(rowStack.dataset.forceTopValue).toBe('true');
+  });
+
+  it('hides badly truncated labels with fewer than five visible characters only when barShare is below 0.66', () => {
+    const { card, row, leftLabel, rowStack } = makeLeftModeResponsiveFixture({
+      text: 'Move current telemetry',
+      visibleChars: 4,
+      clientWidth: 52,
+      scrollWidth: 140,
+      labelWidth: 26,
+      rowWidth: 138,
+    });
+    card._ensureMinimumBarShare([row]);
+
+    expect(leftLabel.dataset.priorityHidden).toBe('true');
+    expect(rowStack.dataset.forceTopValue).toBe('true');
+  });
+
+  it('above-mode keeps fully visible labels and continues to icon sacrifice when needed', () => {
+    const card = createCard();
+    card._measureVisibleLabelCharacters = () => 12;
+    const aboveName = {
+      textContent: 'Long battery name',
+      clientWidth: 80,
+      scrollWidth: 80,
+      getBoundingClientRect: () => ({ width: 30 }),
+    };
+    const aboveLabel = { dataset: {} };
+    const aboveLine = { dataset: {} };
+    const mainLine = {
+      dataset: {},
+      classList: {
+        contains: (name) => name === 'above-mode',
+      },
+      getBoundingClientRect: () => ({ width: 120 }),
+    };
+    const track = {
+      getBoundingClientRect: () => {
+        let width = 50;
+        if (mainLine.dataset.hideAboveIcon === 'true') width = 82;
+        return { width };
+      },
+    };
+    const row = {
+      querySelector: (selector) => (
+        selector === '.main-line' ? mainLine
+          : selector === '.bar-track' ? track
+          : selector === '.above-bar-label' ? aboveLabel
+          : selector === '.above-bar-label-name' ? aboveName
+          : selector === '.above-line' ? aboveLine
+          : null
+      ),
+    };
+
+    card._ensureMinimumBarShare([row]);
+
+    expect(aboveLabel.dataset.priorityHideName).toBeUndefined();
+    expect(mainLine.dataset.hideAboveIcon).toBe('true');
+    expect(aboveLine.dataset.hideAboveIcon).toBe('true');
+  });
+
+  it('inside-mode keeps fully visible labels and continues to icon sacrifice when needed', () => {
+    const card = createCard();
+    card._measureVisibleLabelCharacters = () => 12;
+    const insideName = {
+      textContent: 'Long battery name',
+      clientWidth: 70,
+      scrollWidth: 70,
+      getBoundingClientRect: () => ({ width: 30 }),
+    };
+    const innerLabel = { dataset: {} };
+    const mainLine = {
+      dataset: {},
+      classList: {
+        contains: (name) => name === 'inside-mode',
+      },
+      getBoundingClientRect: () => ({ width: 120 }),
+    };
+    const track = {
+      getBoundingClientRect: () => {
+        let width = 50;
+        if (mainLine.dataset.hideInsideIcon === 'true') width = 82;
+        return { width };
+      },
+    };
+    const row = {
+      querySelector: (selector) => (
+        selector === '.main-line' ? mainLine
+          : selector === '.bar-track' ? track
+          : selector === '.bar-inner-label' ? innerLabel
+          : selector === '.inside-name' ? insideName
+          : null
+      ),
+    };
+
+    card._ensureMinimumBarShare([row]);
+
+    expect(innerLabel.dataset.priorityHideName).toBeUndefined();
+    expect(mainLine.dataset.hideInsideIcon).toBe('true');
+  });
+
+  it('does nothing when the bar already meets the minimum share', () => {
+    const { card, row, leftLabel, rowStack, mainLine } = makeLeftModeResponsiveFixture({
+      rowWidth: 264,
+    });
+    card._ensureMinimumBarShare([row]);
+
+    expect(leftLabel.dataset.priorityHidden).toBeUndefined();
+    expect(rowStack.dataset.forceTopValue).toBeUndefined();
+    expect(mainLine.dataset.hideLeftIcon).toBeUndefined();
+  });
+
+  it('clears and recalculates priority-hidden flags between passes', () => {
+    const { card, row, leftLabel, leftLabelText, rowStack } = makeLeftModeResponsiveFixture({
+      text: 'Move current telemetry',
+      visibleChars: 4,
+      clientWidth: 52,
+      scrollWidth: 140,
+      labelWidth: 26,
+      rowWidth: 138,
+    });
+    card._measureVisibleLabelCharacters = (_el, text) => text === 'Sensor' ? 6 : 4;
+    card._ensureMinimumBarShare([row]);
+    expect(leftLabel.dataset.priorityHidden).toBe('true');
+
+    leftLabelText.textContent = 'Sensor';
+    leftLabelText.clientWidth = 60;
+    leftLabelText.scrollWidth = 60;
+    leftLabel.getBoundingClientRect = () => ({ width: 20 });
+    card._ensureMinimumBarShare([row]);
+
+    expect(leftLabel.dataset.priorityHidden).toBeUndefined();
+    expect(rowStack.dataset.forceTopValue).toBe('true');
+  });
+
+  it('chooses the same left-mode state for equal-width rows with the same inputs', () => {
+    const a = makeLeftModeResponsiveFixture({ rowWidth: 150, labelWidth: 28 });
+    const b = makeLeftModeResponsiveFixture({ rowWidth: 150, labelWidth: 28 });
+
+    expect(a.card._chooseLeftModeResponsiveState(a.row)).toEqual(b.card._chooseLeftModeResponsiveState(b.row));
+  });
+
+  it('ignores stale top-right DOM state when choosing the left-mode state', () => {
+    const clean = makeLeftModeResponsiveFixture({ rowWidth: 150, labelWidth: 28 });
+    const stale = makeLeftModeResponsiveFixture({ rowWidth: 150, labelWidth: 28, staleTopValue: true });
+
+    expect(clean.card._chooseLeftModeResponsiveState(clean.row)).toEqual(stale.card._chooseLeftModeResponsiveState(stale.row));
+  });
+
+  it('ignores stale priority-hidden label state when choosing the left-mode state', () => {
+    const clean = makeLeftModeResponsiveFixture({ rowWidth: 150, labelWidth: 28 });
+    const stale = makeLeftModeResponsiveFixture({ rowWidth: 150, labelWidth: 28, stalePriorityHidden: true });
+
+    expect(clean.card._chooseLeftModeResponsiveState(clean.row)).toEqual(stale.card._chooseLeftModeResponsiveState(stale.row));
+  });
+
+  it('transitions predictably through left-mode states as row width shrinks', () => {
+    const wide = makeLeftModeResponsiveFixture({ rowWidth: 264, labelWidth: 20 });
+    const medium = makeLeftModeResponsiveFixture({ rowWidth: 140, labelWidth: 20 });
+    const narrow = makeLeftModeResponsiveFixture({ rowWidth: 71, labelWidth: 20 });
+
+    expect(wide.card._chooseLeftModeResponsiveState(wide.row)).toMatchObject({ hideLabel: false, topValue: false, hideIcon: false });
+    expect(medium.card._chooseLeftModeResponsiveState(medium.row)).toMatchObject({ hideLabel: false, topValue: true, hideIcon: false });
+    expect(narrow.card._chooseLeftModeResponsiveState(narrow.row)).toMatchObject({ hideLabel: true, topValue: true, hideIcon: true });
+  });
+
+  it('reverses left-mode states predictably as row width widens', () => {
+    const narrow = makeLeftModeResponsiveFixture({ rowWidth: 71, labelWidth: 20 });
+    const medium = makeLeftModeResponsiveFixture({ rowWidth: 140, labelWidth: 20 });
+    const wide = makeLeftModeResponsiveFixture({ rowWidth: 264, labelWidth: 20 });
+
+    expect(narrow.card._chooseLeftModeResponsiveState(narrow.row)).toMatchObject({ hideLabel: true, topValue: true, hideIcon: true });
+    expect(medium.card._chooseLeftModeResponsiveState(medium.row)).toMatchObject({ hideLabel: false, topValue: true, hideIcon: false });
+    expect(wide.card._chooseLeftModeResponsiveState(wide.row)).toMatchObject({ hideLabel: false, topValue: false, hideIcon: false });
+  });
+
+  it('keeps inline when previous state was inline and predicted share is 0.49 or 0.50', () => {
+    const at049 = makeLeftModeResponsiveFixture({ rowWidth: 255, labelWidth: 20 });
+    const at050 = makeLeftModeResponsiveFixture({ rowWidth: 260, labelWidth: 20 });
+
+    expect(at049.card._chooseLeftModeResponsiveState(at049.row)).toMatchObject({ topValue: false });
+    expect(at050.card._chooseLeftModeResponsiveState(at050.row)).toMatchObject({ topValue: false });
+  });
+
+  it('switches to top-right when previous state was inline and predicted share falls below 0.48', () => {
+    const below048 = makeLeftModeResponsiveFixture({ rowWidth: 248, labelWidth: 20 });
+
+    expect(below048.card._chooseLeftModeResponsiveState(below048.row)).toMatchObject({ topValue: true });
+  });
+
+  it('keeps top-right when previous state was top-right and predicted share is 0.50 or 0.51', () => {
+    const at050 = makeLeftModeResponsiveFixture({ rowWidth: 260, labelWidth: 20, previousForceTopValue: true });
+    const at051 = makeLeftModeResponsiveFixture({ rowWidth: 266, labelWidth: 20, previousForceTopValue: true });
+
+    expect(at050.card._chooseLeftModeResponsiveState(at050.row)).toMatchObject({ topValue: true });
+    expect(at051.card._chooseLeftModeResponsiveState(at051.row)).toMatchObject({ topValue: true });
+  });
+
+  it('switches back inline when previous state was top-right and predicted share is above 0.52', () => {
+    const above052 = makeLeftModeResponsiveFixture({ rowWidth: 276, labelWidth: 20, previousForceTopValue: true });
+
+    expect(above052.card._chooseLeftModeResponsiveState(above052.row)).toMatchObject({ topValue: false });
+  });
+
+  it('does not oscillate when predicted share bounces around 0.50', () => {
+    const keepInline = makeLeftModeResponsiveFixture({ rowWidth: 255, labelWidth: 20 });
+    const switchTop = makeLeftModeResponsiveFixture({ rowWidth: 248, labelWidth: 20 });
+    const keepTop = makeLeftModeResponsiveFixture({ rowWidth: 266, labelWidth: 20, previousForceTopValue: true });
+    const switchBackInline = makeLeftModeResponsiveFixture({ rowWidth: 276, labelWidth: 20, previousForceTopValue: true });
+
+    expect(keepInline.card._chooseLeftModeResponsiveState(keepInline.row)).toMatchObject({ topValue: false });
+    expect(switchTop.card._chooseLeftModeResponsiveState(switchTop.row)).toMatchObject({ topValue: true });
+    expect(keepTop.card._chooseLeftModeResponsiveState(keepTop.row)).toMatchObject({ topValue: true });
+    expect(switchBackInline.card._chooseLeftModeResponsiveState(switchBackInline.row)).toMatchObject({ topValue: false });
+  });
+
   it('keeps short complete left labels visible', () => {
     const card = createCard();
 
@@ -1416,19 +1765,261 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(wrap.dataset.hidden).toBe('false');
   });
 
-  it('activates the top-right value row for dense and compressed left-mode rows', () => {
+  it('does not activate the top-right value row from left density alone', () => {
     const card = createCard();
 
-    expect(card._shouldUseTopValueRow({ classList: { contains: (name) => name === 'left-mode' }, dataset: { leftDensity: 'dense' } })).toBe(true);
-    expect(card._shouldUseTopValueRow({ classList: { contains: (name) => name === 'left-mode' }, dataset: { leftDensity: 'compressed' } })).toBe(true);
+    expect(card._shouldUseTopValueRow({
+      classList: { contains: (name) => name === 'left-mode' },
+      dataset: { leftDensity: 'dense' },
+      closest: () => ({ dataset: {} }),
+    })).toBe(false);
+    expect(card._shouldUseTopValueRow({
+      classList: { contains: (name) => name === 'left-mode' },
+      dataset: { leftDensity: 'compressed' },
+      closest: () => ({ dataset: {} }),
+    })).toBe(false);
   });
 
-  it('does not activate the top-right value row for normal, compact, or tight left-mode rows', () => {
+  it('activates the top-right value row only when forceTopValue is set', () => {
     const card = createCard();
 
-    expect(card._shouldUseTopValueRow({ classList: { contains: (name) => name === 'left-mode' }, dataset: { leftDensity: 'normal' } })).toBe(false);
-    expect(card._shouldUseTopValueRow({ classList: { contains: (name) => name === 'left-mode' }, dataset: { leftDensity: 'compact' } })).toBe(false);
-    expect(card._shouldUseTopValueRow({ classList: { contains: (name) => name === 'left-mode' }, dataset: { leftDensity: 'tight' } })).toBe(false);
+    expect(card._shouldUseTopValueRow({
+      classList: { contains: (name) => name === 'left-mode' },
+      dataset: { leftDensity: 'normal' },
+      closest: () => ({ dataset: { forceTopValue: 'true' } }),
+    })).toBe(true);
+    expect(card._shouldUseTopValueRow({
+      classList: { contains: (name) => name === 'left-mode' },
+      dataset: { leftDensity: 'compressed' },
+      closest: () => ({ dataset: { forceTopValue: 'true' } }),
+    })).toBe(true);
+    expect(card._shouldUseTopValueRow({
+      classList: { contains: (name) => name === 'left-mode' },
+      dataset: { leftDensity: 'tight' },
+      closest: () => ({ dataset: {} }),
+    })).toBe(false);
+  });
+
+  it('clears stale top-right presentation when forceTopValue is not set', () => {
+    const card = createCard();
+    const { mainLine, rowStack, topValue } = makeLeftModeResponsiveFixture({ staleTopValue: true });
+
+    card.shadowRoot = {
+      querySelectorAll: (selector) => selector === '.main-line.left-mode' ? [mainLine] : [],
+      querySelector: () => null,
+    };
+
+    card._applyTopRightValueLayout();
+
+    expect(rowStack.dataset.topValue).toBe('false');
+    expect(topValue.dataset.active).toBe('false');
+  });
+
+  it('applies final top-right presentation in the same post-layout pass when forceTopValue is chosen', () => {
+    const card = createCard();
+    const { row, mainLine, rowStack, topValue } = makeLeftModeResponsiveFixture({ rowWidth: 140, labelWidth: 20 });
+    const originalRaf = globalThis.requestAnimationFrame;
+
+    card._applyRowDensity = () => {};
+    card._applyLeftModeDensity = () => {};
+    card._applyAboveLabelDensity = () => {};
+    card._applyInsideLabelDensity = () => {};
+    card._applyValueWidthReservation = () => {};
+    card._applyAdaptiveRowHeight = () => {};
+    card._applyValueVisibility = () => {};
+    card._applyLeftLabelUsefulness = () => {};
+    card._positionTargetLabel = () => {};
+    card.shadowRoot = {
+      querySelectorAll: (selector) => (
+        selector === '.row[data-entity]' ? [row]
+          : selector === '.main-line.left-mode' ? [mainLine]
+          : []
+      ),
+      querySelector: () => null,
+    };
+
+    globalThis.requestAnimationFrame = (cb) => {
+      cb();
+      return 1;
+    };
+
+    try {
+      card._runPostLayoutPasses([row]);
+    } finally {
+      globalThis.requestAnimationFrame = originalRaf;
+    }
+
+    expect(rowStack.dataset.forceTopValue).toBe('true');
+    expect(rowStack.dataset.topValue).toBe('true');
+    expect(topValue.dataset.active).toBe('true');
+  });
+
+  it('hides a left label that becomes badly truncated after final responsive layout is applied', () => {
+    const card = createCard();
+    const originalRaf = globalThis.requestAnimationFrame;
+    card._measureTextWidthWithStyles = (_el, text) => (text === '...' ? 12 : text.length * 10);
+
+    const leftLabelText = {
+      textContent: 'Sensor',
+      clientWidth: 60,
+      scrollWidth: 60,
+    };
+    const leftLabel = { dataset: {} };
+    const valueEl = {
+      dataset: {
+        display: encodeURIComponent('72'),
+        unit: encodeURIComponent('W'),
+      },
+      innerHTML: '',
+      style: { setProperty() {}, getPropertyValue: () => '0' },
+      clientWidth: 58,
+    };
+    const topValue = { dataset: {}, innerHTML: '' };
+    const rowStack = {
+      dataset: {},
+      querySelector: (selector) => selector === '.top-right-value' ? topValue : null,
+    };
+    const mainLine = {
+      classList: { contains: (name) => name === 'left-mode' },
+      dataset: { leftDensity: 'normal', rowDensity: 'normal' },
+      closest: (selector) => selector === '.row-stack' ? rowStack : null,
+      querySelector: (selector) => (
+        selector === '.label-left' ? leftLabel
+          : selector === '.label-left-text' ? leftLabelText
+          : selector === '.value-right' ? valueEl
+          : null
+      ),
+    };
+    const row = {
+      querySelector: (selector) => (
+        selector === '.main-line' ? mainLine
+          : selector === '.label-left' ? leftLabel
+          : selector === '.label-left-text' ? leftLabelText
+          : selector === '.value-right' ? valueEl
+          : selector === '.row-stack' ? rowStack
+          : null
+      ),
+    };
+
+    card._applyRowDensity = () => {};
+    card._applyLeftModeDensity = () => {};
+    card._applyAboveLabelDensity = () => {};
+    card._applyInsideLabelDensity = () => {};
+    card._applyValueWidthReservation = () => {};
+    card._applyAdaptiveRowHeight = () => {};
+    card._applyValueVisibility = () => {};
+    card._positionTargetLabel = () => {};
+    card._ensureMinimumBarShare = () => {
+      leftLabelText.clientWidth = 18;
+      leftLabelText.scrollWidth = 60;
+    };
+    card.shadowRoot = {
+      querySelectorAll: (selector) => (
+        selector === '.row[data-entity]' ? [row]
+          : selector === '.main-line.left-mode' ? [mainLine]
+          : selector === '.value-right' ? [valueEl]
+          : []
+      ),
+      querySelector: () => null,
+    };
+
+    globalThis.requestAnimationFrame = (cb) => {
+      cb();
+      return 1;
+    };
+
+    try {
+      card._runPostLayoutPasses([row]);
+    } finally {
+      globalThis.requestAnimationFrame = originalRaf;
+    }
+
+    expect(leftLabel.dataset.hidden).toBe('true');
+  });
+
+  it('keeps a left label visible when final layout still shows at least five useful characters', () => {
+    const card = createCard();
+    const originalRaf = globalThis.requestAnimationFrame;
+    card._measureTextWidthWithStyles = (_el, text) => (text === '...' ? 12 : text.length * 10);
+
+    const leftLabelText = {
+      textContent: 'Watertemperatuur',
+      clientWidth: 160,
+      scrollWidth: 160,
+    };
+    const leftLabel = { dataset: {} };
+    const valueEl = {
+      dataset: {
+        display: encodeURIComponent('72'),
+        unit: encodeURIComponent('W'),
+      },
+      innerHTML: '',
+      style: { setProperty() {}, getPropertyValue: () => '0' },
+      clientWidth: 58,
+    };
+    const topValue = { dataset: {}, innerHTML: '' };
+    const rowStack = {
+      dataset: { forceTopValue: 'true' },
+      querySelector: (selector) => selector === '.top-right-value' ? topValue : null,
+    };
+    const mainLine = {
+      classList: { contains: (name) => name === 'left-mode' },
+      dataset: { leftDensity: 'normal', rowDensity: 'normal' },
+      closest: (selector) => selector === '.row-stack' ? rowStack : null,
+      querySelector: (selector) => (
+        selector === '.label-left' ? leftLabel
+          : selector === '.label-left-text' ? leftLabelText
+          : selector === '.value-right' ? valueEl
+          : null
+      ),
+    };
+    const row = {
+      querySelector: (selector) => (
+        selector === '.main-line' ? mainLine
+          : selector === '.label-left' ? leftLabel
+          : selector === '.label-left-text' ? leftLabelText
+          : selector === '.value-right' ? valueEl
+          : selector === '.row-stack' ? rowStack
+          : null
+      ),
+    };
+
+    card._applyRowDensity = () => {};
+    card._applyLeftModeDensity = () => {};
+    card._applyAboveLabelDensity = () => {};
+    card._applyInsideLabelDensity = () => {};
+    card._applyValueWidthReservation = () => {};
+    card._applyAdaptiveRowHeight = () => {};
+    card._applyValueVisibility = () => {};
+    card._positionTargetLabel = () => {};
+    card._ensureMinimumBarShare = () => {
+      leftLabelText.clientWidth = 82;
+      leftLabelText.scrollWidth = 160;
+    };
+    card.shadowRoot = {
+      querySelectorAll: (selector) => (
+        selector === '.row[data-entity]' ? [row]
+          : selector === '.main-line.left-mode' ? [mainLine]
+          : selector === '.value-right' ? [valueEl]
+          : []
+      ),
+      querySelector: () => null,
+    };
+
+    globalThis.requestAnimationFrame = (cb) => {
+      cb();
+      return 1;
+    };
+
+    try {
+      card._runPostLayoutPasses([row]);
+    } finally {
+      globalThis.requestAnimationFrame = originalRaf;
+    }
+
+    expect(leftLabel.dataset.hidden).toBe('false');
+    expect(rowStack.dataset.topValue).toBe('true');
+    expect(topValue.dataset.active).toBe('true');
   });
 
   it('keeps value and unit together in the top-right row', () => {
@@ -1463,7 +2054,58 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(html).toContain('<span class="unit">W</span>');
   });
 
-  it('applies top-right value layout regardless of icon presence once dense left-mode is active', () => {
+  it('keeps full value and unit inline instead of hiding the unit', () => {
+    const card = createCard();
+    const valueEl = {
+      dataset: {
+        display: encodeURIComponent('72'),
+        unit: encodeURIComponent('W'),
+        hideUnit: 'true',
+      },
+      innerHTML: '',
+    };
+
+    card.shadowRoot = {
+      querySelectorAll: (selector) => selector === '.value-right' ? [valueEl] : [],
+      querySelector: () => null,
+    };
+
+    card._applyValueVisibility();
+
+    expect(valueEl.dataset.hideUnit).toBe('false');
+    expect(valueEl.innerHTML).toContain('72');
+    expect(valueEl.innerHTML).toContain('<span class="unit">W</span>');
+  });
+
+  it('reserves the full inline value width instead of capping extra width', () => {
+    const card = createCard();
+    card._measureValueMarkupWidth = () => 90;
+    card._getNumericStyleValue = () => 42;
+    const valueEl = {
+      dataset: {
+        display: encodeURIComponent('72'),
+        unit: encodeURIComponent('kWh'),
+      },
+      clientWidth: 0,
+      style: {},
+    };
+
+    expect(card._getReservedInlineValueWidth(valueEl)).toBe(92);
+  });
+
+  it('chooses top-right for constrained left rows rather than hiding the unit', () => {
+    const { card, row, rowStack } = makeLeftModeResponsiveFixture({
+      rowWidth: 140,
+      labelWidth: 20,
+      valueWidth: 88,
+    });
+
+    card._ensureMinimumBarShare([row]);
+
+    expect(rowStack.dataset.forceTopValue).toBe('true');
+  });
+
+  it('applies top-right value layout regardless of icon presence once forceTopValue is active', () => {
     const card = createCard();
     const makeTopValue = () => ({ dataset: {}, innerHTML: '' });
     const makeInlineValue = () => ({
@@ -1473,7 +2115,7 @@ describe('Sensor Bar Card Plus logic', () => {
       },
     });
     const makeRowStack = (topValue) => ({
-      dataset: {},
+      dataset: { forceTopValue: 'true' },
       querySelector: (selector) => selector === '.top-right-value' ? topValue : null,
     });
     const denseWithIconTop = makeTopValue();
@@ -1517,7 +2159,7 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(denseNoIconTop.innerHTML).toContain('<span class="unit">W</span>');
   });
 
-  it('keeps top-right value layout working with adaptive height', () => {
+  it('keeps top-right value layout working with adaptive height when forceTopValue is active', () => {
     const card = createCard();
     const topValue = { dataset: {}, innerHTML: '' };
     const inlineValue = {
@@ -1531,7 +2173,7 @@ describe('Sensor Bar Card Plus logic', () => {
     const iconWrap = { style: {} };
     const track = { style: {} };
     const rowStack = {
-      dataset: {},
+      dataset: { forceTopValue: 'true' },
       style: {
         setProperty(name, value) {
           this[name] = value;

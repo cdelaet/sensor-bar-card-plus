@@ -1309,6 +1309,11 @@ class SensorBarCard extends HTMLElement {
         .main-line.above-mode[data-row-density="compressed"] .icon-wrap {
           display: none;
         }
+        .main-line.left-mode[data-hide-left-icon="true"] .icon-wrap,
+        .main-line.above-mode[data-hide-above-icon="true"] .icon-wrap,
+        .main-line.inside-mode[data-hide-inside-icon="true"] .icon-wrap {
+          display: none;
+        }
         .main-line.left-mode[data-left-density="normal"] {
           --sbcp-left-label-share: 25%;
           --sbcp-value-width: 58px;
@@ -1357,7 +1362,8 @@ class SensorBarCard extends HTMLElement {
           display: flex;
           align-items: center;
         }
-        .label-left[data-hidden="true"] {
+        .label-left[data-hidden="true"],
+        .label-left[data-priority-hidden="true"] {
           display: none;
         }
         .label-left-text {
@@ -1444,7 +1450,8 @@ class SensorBarCard extends HTMLElement {
         .bar-inner-label[data-inside-density="tight"] .inside-name {
           max-width: 44%;
         }
-        .bar-inner-label[data-hide-name="true"] .inside-name {
+        .bar-inner-label[data-hide-name="true"] .inside-name,
+        .bar-inner-label[data-priority-hide-name="true"] .inside-name {
           display: none;
         }
         .bar-inner-label .inside-value {
@@ -1522,7 +1529,11 @@ class SensorBarCard extends HTMLElement {
           align-items: flex-end;
         }
         .above-bar-label[data-hide-name="true"] .above-bar-label-name,
+        .above-bar-label[data-priority-hide-name="true"] .above-bar-label-name,
         .above-line[data-above-density="compressed"] .above-icon-spacer {
+          display: none;
+        }
+        .above-line[data-hide-above-icon="true"] .above-icon-spacer {
           display: none;
         }
         .above-icon-spacer {
@@ -1651,9 +1662,6 @@ class SensorBarCard extends HTMLElement {
           box-sizing: border-box;
           padding-right: 1px;
           min-width: 0;
-        }
-        .value-right[data-hide-unit="true"] .unit-group {
-          display: none;
         }
         .main-line.inside-mode[data-hide-inside-icon="true"] .icon-wrap {
           display: none;
@@ -1985,13 +1993,15 @@ class SensorBarCard extends HTMLElement {
         return;
       }
 
-      const style = getComputedStyle(valueEl);
+      const getStyle =
+        (typeof globalThis.getComputedStyle === 'function' && globalThis.getComputedStyle.bind(globalThis))
+        || (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function' && window.getComputedStyle.bind(window))
+        || (valueEl?.ownerDocument?.defaultView?.getComputedStyle?.bind(valueEl.ownerDocument.defaultView));
+      if (!getStyle) return;
+      const style = getStyle(valueEl);
       const baseWidth = parseFloat(style.getPropertyValue('--sbcp-value-width')) || valueEl.clientWidth || 0;
-      const reserveFullValue = unit && (this._isTightUnit(unit) || String(unit).trim().length <= 1);
-      const desiredWidth = Math.ceil(
-        this._measureValueMarkupWidth(valueEl, display, reserveFullValue ? unit : '', !reserveFullValue) + 2
-      );
-      const extraWidth = Math.max(0, Math.min(24, desiredWidth - baseWidth));
+      const desiredWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, false) + 2);
+      const extraWidth = Math.max(0, desiredWidth - baseWidth);
       valueEl.style.setProperty('--sbcp-value-extra-width', `${extraWidth}px`);
     });
   }
@@ -2002,30 +2012,398 @@ class SensorBarCard extends HTMLElement {
       const display = this._decodeDataAttr(valueEl.dataset.display || '');
       const unit = this._decodeDataAttr(valueEl.dataset.unit || '');
 
-      if (!unit) {
-        if (valueEl.dataset.hideUnit !== 'false') {
-          valueEl.dataset.hideUnit = 'false';
-          valueEl.innerHTML = this._formatRightValueMarkup(display, unit, false);
-        }
+      if (valueEl.dataset.hideUnit !== 'false') {
+        valueEl.dataset.hideUnit = 'false';
+        valueEl.innerHTML = this._formatRightValueMarkup(display, unit, false);
+      }
+    });
+  }
+
+  _getMinimumBarShare() {
+    return 0.5;
+  }
+
+  _getMinimumBarShareHysteresis() {
+    return 0.02;
+  }
+
+  _getTopValueEnableShare() {
+    return this._getMinimumBarShare() - this._getMinimumBarShareHysteresis();
+  }
+
+  _getTopValueDisableShare() {
+    return this._getMinimumBarShare() + this._getMinimumBarShareHysteresis();
+  }
+
+  _getNumericStyleValue(el, propertyName, fallback = 0) {
+    if (!el) return fallback;
+    try {
+      const value = parseFloat(getComputedStyle(el).getPropertyValue(propertyName));
+      return Number.isFinite(value) ? value : fallback;
+    } catch (_err) {
+      return fallback;
+    }
+  }
+
+  _getLeftModeGap(mainLine) {
+    const computedGap = this._getNumericStyleValue(mainLine, 'gap', NaN);
+    if (Number.isFinite(computedGap)) return computedGap;
+    const density = mainLine?.dataset?.rowDensity || 'normal';
+    if (density === 'tight') return 7;
+    if (density === 'dense' || density === 'compressed') return 6;
+    return 8;
+  }
+
+  _getLeftModeBarMinWidth(mainLine) {
+    const computedMin = this._getNumericStyleValue(mainLine, '--sbcp-bar-min-width', NaN);
+    if (Number.isFinite(computedMin)) return computedMin;
+    const density = mainLine?.dataset?.leftDensity || 'normal';
+    if (density === 'compact') return 52;
+    if (density === 'tight') return 48;
+    if (density === 'dense') return 44;
+    if (density === 'compressed') return 40;
+    return 56;
+  }
+
+  _getLeftModeIconWidth(iconWrap, mainLine) {
+    const measured = iconWrap?.getBoundingClientRect?.().width;
+    if (this._isReliableWidth(measured, 1)) return measured;
+    const computed = this._getNumericStyleValue(iconWrap || mainLine, '--sbcp-icon-width', NaN);
+    if (Number.isFinite(computed)) return computed;
+    const density = mainLine?.dataset?.leftDensity || 'normal';
+    if (density === 'compact') return 26;
+    if (density === 'tight') return 24;
+    if (density === 'dense') return 23;
+    if (density === 'compressed') return 22;
+    return 28;
+  }
+
+  _getReservedInlineValueWidth(valueEl) {
+    if (!valueEl) return 0;
+    const display = this._decodeDataAttr(valueEl.dataset.display || '');
+    const unit = this._decodeDataAttr(valueEl.dataset.unit || '');
+    const baseWidth = this._getNumericStyleValue(valueEl, '--sbcp-value-width', valueEl.clientWidth || 0);
+    const inlineExtra = parseFloat(valueEl.style?.getPropertyValue?.('--sbcp-value-extra-width') || valueEl.style?.['--sbcp-value-extra-width'] || '0');
+    const extraWidth = Number.isFinite(inlineExtra)
+      ? inlineExtra
+      : this._getNumericStyleValue(valueEl, '--sbcp-value-extra-width', 0);
+    const reservedWidth = Math.max(0, baseWidth + extraWidth);
+    if (!display) return reservedWidth;
+    const fullMarkupWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, false) + 2);
+    return Math.max(reservedWidth, fullMarkupWidth);
+  }
+
+  _estimateLeftModeWidthBudget(row) {
+    const mainLine = row?.querySelector('.main-line');
+    if (!mainLine) return null;
+    const rowWidth = mainLine.getBoundingClientRect?.().width ?? 0;
+    if (!this._isReliableWidth(rowWidth)) return null;
+
+    const labelWrap = row.querySelector('.label-left');
+    const iconWrap = row.querySelector('.icon-wrap');
+    const valueEl = row.querySelector('.value-right');
+    const labelMetrics = this._getLabelSacrificeMetrics(row, 'left', { rowWidth });
+    const labelWidth = labelWrap?.dataset?.hidden === 'true'
+      ? 0
+      : (
+        labelWrap?.getBoundingClientRect?.().width
+          ?? labelMetrics?.labelWidth
+          ?? 0
+      );
+    const iconWidth = iconWrap ? this._getLeftModeIconWidth(iconWrap, mainLine) : 0;
+    const valueWidth = this._getReservedInlineValueWidth(valueEl);
+    const gap = this._getLeftModeGap(mainLine);
+    const barMinWidth = this._getLeftModeBarMinWidth(mainLine);
+    const baseLabelVisible = !!labelWrap && labelWrap.dataset.hidden !== 'true';
+    const labelSacrificial = baseLabelVisible
+      ? this._isLabelWorthSacrificing(row, 'left', { rowWidth })
+      : true;
+    const hasIcon = !!iconWrap;
+
+    return {
+      rowWidth,
+      gap,
+      barMinWidth,
+      labelWidth: this._isReliableWidth(labelWidth, 0) ? labelWidth : 0,
+      iconWidth: this._isReliableWidth(iconWidth, 0) ? iconWidth : 0,
+      valueWidth: this._isReliableWidth(valueWidth, 0) ? valueWidth : 0,
+      baseLabelVisible,
+      labelSacrificial,
+      hasIcon,
+      mainLine,
+      labelWrap,
+      iconWrap,
+      valueEl,
+      rowStack: row.querySelector('.row-stack'),
+    };
+  }
+
+  _predictLeftModeBarShareForState(row, state, budget = null) {
+    const effectiveBudget = budget || this._estimateLeftModeWidthBudget(row);
+    if (!effectiveBudget) return null;
+
+    const showLabel = effectiveBudget.baseLabelVisible && !state.hideLabel;
+    const showIcon = effectiveBudget.hasIcon && !state.hideIcon;
+    const showInlineValue = !state.topValue;
+    const visibleItems = 1 + (showIcon ? 1 : 0) + (showLabel ? 1 : 0) + (showInlineValue ? 1 : 0);
+    const gapCount = Math.max(0, visibleItems - 1);
+    const reservedWidth =
+      (showIcon ? effectiveBudget.iconWidth : 0) +
+      (showLabel ? effectiveBudget.labelWidth : 0) +
+      (showInlineValue ? effectiveBudget.valueWidth : 0) +
+      (gapCount * effectiveBudget.gap);
+    const predictedBarWidth = Math.max(0, effectiveBudget.rowWidth - reservedWidth);
+
+    return {
+      rowWidth: effectiveBudget.rowWidth,
+      barWidth: predictedBarWidth,
+      share: predictedBarWidth / effectiveBudget.rowWidth,
+      showLabel,
+      showIcon,
+      showInlineValue,
+      reservedWidth,
+      gapCount,
+    };
+  }
+
+  _getLeftModeCandidateStates(budget) {
+    const states = [
+      { hideLabel: false, topValue: false, hideIcon: false },
+    ];
+    if (budget?.labelSacrificial) {
+      states.push({ hideLabel: true, topValue: false, hideIcon: false });
+    }
+    states.push(
+      { hideLabel: false, topValue: true, hideIcon: false },
+      { hideLabel: true, topValue: true, hideIcon: false },
+      { hideLabel: true, topValue: true, hideIcon: true },
+    );
+    return states;
+  }
+
+  _chooseFirstPredictedLeftModeState(row, states, threshold, budget) {
+    for (const state of states) {
+      const predicted = this._predictLeftModeBarShareForState(row, state, budget);
+      if (!predicted) continue;
+      if (predicted.share >= threshold) return { ...state, predicted };
+    }
+    return null;
+  }
+
+  _chooseFallbackPredictedLeftModeState(row, states, budget) {
+    let fallback = null;
+    for (const state of states) {
+      const predicted = this._predictLeftModeBarShareForState(row, state, budget);
+      if (!predicted) continue;
+      fallback = { ...state, predicted };
+    }
+    return fallback;
+  }
+
+  _chooseLeftModeResponsiveState(row) {
+    const budget = this._estimateLeftModeWidthBudget(row);
+    if (!budget) return null;
+    const minimumBarShare = this._getMinimumBarShare();
+    const states = this._getLeftModeCandidateStates(budget);
+    const previousTopValue = budget.rowStack?.dataset?.forceTopValue === 'true';
+    const inlineStates = states.filter(state => !state.topValue);
+    const topStates = states.filter(state => state.topValue);
+    const enableShare = this._getTopValueEnableShare();
+    const disableShare = this._getTopValueDisableShare();
+
+    const inlineChoice = previousTopValue
+      ? this._chooseFirstPredictedLeftModeState(row, inlineStates, disableShare, budget)
+      : this._chooseFirstPredictedLeftModeState(row, inlineStates, enableShare, budget);
+    if (inlineChoice) return inlineChoice;
+
+    const topChoice =
+      this._chooseFirstPredictedLeftModeState(row, topStates, minimumBarShare, budget)
+      || this._chooseFallbackPredictedLeftModeState(row, topStates, budget);
+    return topChoice;
+  }
+
+  _applyLeftModeResponsiveState(row, state) {
+    const mainLine = row?.querySelector('.main-line');
+    const rowStack = row?.querySelector('.row-stack');
+    const leftLabel = row?.querySelector('.label-left');
+    if (!mainLine || !rowStack) return;
+
+    delete rowStack.dataset.forceTopValue;
+    delete mainLine.dataset.hideLeftIcon;
+    if (leftLabel) delete leftLabel.dataset.priorityHidden;
+
+    if (state?.hideLabel && leftLabel) {
+      leftLabel.dataset.priorityHidden = 'true';
+    }
+    if (state?.topValue) {
+      rowStack.dataset.forceTopValue = 'true';
+    }
+    if (state?.hideIcon) {
+      mainLine.dataset.hideLeftIcon = 'true';
+    }
+  }
+
+  _getMeasuredBarShare(row) {
+    const mainLine = row?.querySelector('.main-line');
+    const track = row?.querySelector('.bar-track');
+    if (!mainLine || !track) return null;
+    const rowWidth = mainLine.getBoundingClientRect().width;
+    const barWidth = track.getBoundingClientRect().width;
+    if (!this._isReliableWidth(rowWidth) || !this._isReliableWidth(barWidth, 1)) return null;
+    return { rowWidth, barWidth, share: barWidth / rowWidth, mainLine, track };
+  }
+
+  _clearMinimumBarShareOverrides(row) {
+    const mainLine = row?.querySelector('.main-line');
+    const rowStack = row?.querySelector('.row-stack');
+    const leftLabel = row?.querySelector('.label-left');
+    const aboveLabel = row?.querySelector('.above-bar-label');
+    const innerLabel = row?.querySelector('.bar-inner-label');
+    const aboveLine = row?.querySelector('.above-line');
+    if (rowStack) delete rowStack.dataset.forceTopValue;
+    if (leftLabel) delete leftLabel.dataset.priorityHidden;
+    if (aboveLabel) delete aboveLabel.dataset.priorityHideName;
+    if (innerLabel) delete innerLabel.dataset.priorityHideName;
+    if (aboveLine) delete aboveLine.dataset.hideAboveIcon;
+    if (!mainLine) return;
+    delete mainLine.dataset.hideLeftIcon;
+    delete mainLine.dataset.hideAboveIcon;
+    delete mainLine.dataset.hideInsideIcon;
+  }
+
+  _hideMinimumBarShareLabel(row, mode) {
+    if (mode === 'left') {
+      const leftLabel = row.querySelector('.label-left');
+      if (leftLabel) leftLabel.dataset.priorityHidden = 'true';
+      return;
+    }
+    if (mode === 'above') {
+      const aboveLabel = row.querySelector('.above-bar-label');
+      if (aboveLabel) aboveLabel.dataset.priorityHideName = 'true';
+      return;
+    }
+    if (mode === 'inside') {
+      const innerLabel = row.querySelector('.bar-inner-label');
+      if (innerLabel) innerLabel.dataset.priorityHideName = 'true';
+    }
+  }
+
+  _forceMinimumBarShareTopValue(row, mode) {
+    if (mode !== 'left') return;
+    const rowStack = row.querySelector('.row-stack');
+    if (rowStack) rowStack.dataset.forceTopValue = 'true';
+  }
+
+  _hideMinimumBarShareIcon(row, mode) {
+    const mainLine = row.querySelector('.main-line');
+    if (!mainLine) return;
+    if (mode === 'left') {
+      mainLine.dataset.hideLeftIcon = 'true';
+      return;
+    }
+    if (mode === 'above') {
+      mainLine.dataset.hideAboveIcon = 'true';
+      const aboveLine = row.querySelector('.above-line');
+      if (aboveLine) aboveLine.dataset.hideAboveIcon = 'true';
+      return;
+    }
+    if (mode === 'inside') {
+      mainLine.dataset.hideInsideIcon = 'true';
+    }
+  }
+
+  _getLabelSacrificeMetrics(row, mode, measurement) {
+    const rowWidth = measurement?.rowWidth ?? row?.querySelector('.main-line')?.getBoundingClientRect?.().width ?? 0;
+    if (!this._isReliableWidth(rowWidth)) return null;
+
+    if (mode === 'left') {
+      const labelWrap = row.querySelector('.label-left');
+      const labelText = row.querySelector('.label-left-text');
+      if (!labelWrap || !labelText) return null;
+      const text = (labelText.textContent || '').trim();
+      const visibleWidth = labelText.clientWidth;
+      const fullWidth = labelText.scrollWidth;
+      const visibleChars = this._measureVisibleLabelCharacters(labelText, text, visibleWidth);
+      const labelWidth = labelWrap.getBoundingClientRect?.().width ?? visibleWidth;
+      return { text, visibleWidth, fullWidth, visibleChars, labelWidth, rowWidth };
+    }
+
+    if (mode === 'above') {
+      const labelText = row.querySelector('.above-bar-label-name');
+      if (!labelText) return null;
+      const text = (labelText.textContent || '').trim();
+      const visibleWidth = labelText.clientWidth;
+      const fullWidth = labelText.scrollWidth;
+      const visibleChars = this._measureVisibleLabelCharacters(labelText, text, visibleWidth);
+      const labelWidth = labelText.getBoundingClientRect?.().width ?? visibleWidth;
+      return { text, visibleWidth, fullWidth, visibleChars, labelWidth, rowWidth };
+    }
+
+    if (mode === 'inside') {
+      const labelText = row.querySelector('.inside-name');
+      if (!labelText) return null;
+      const text = (labelText.textContent || '').trim();
+      const visibleWidth = labelText.clientWidth;
+      const fullWidth = labelText.scrollWidth;
+      const visibleChars = this._measureVisibleLabelCharacters(labelText, text, visibleWidth);
+      const labelWidth = labelText.getBoundingClientRect?.().width ?? visibleWidth;
+      return { text, visibleWidth, fullWidth, visibleChars, labelWidth, rowWidth };
+    }
+
+    return null;
+  }
+
+  _isLabelWorthSacrificing(row, mode, measurement) {
+    const metrics = this._getLabelSacrificeMetrics(row, mode, measurement);
+    if (!metrics || !metrics.text) return false;
+    return this._shouldHideLeftLabel(metrics.text, metrics.fullWidth, metrics.visibleWidth, metrics.visibleChars);
+  }
+
+  _ensureMinimumBarShare(rows = null) {
+    if (!this.shadowRoot) return;
+    const targetRows = rows || this.shadowRoot.querySelectorAll('.row[data-entity]');
+    const minimumBarShare = this._getMinimumBarShare();
+    targetRows.forEach((row) => {
+      const mainLine = row.querySelector('.main-line');
+      if (!mainLine) return;
+      const mode = mainLine.classList.contains('left-mode')
+        ? 'left'
+        : mainLine.classList.contains('above-mode')
+          ? 'above'
+          : mainLine.classList.contains('inside-mode')
+            ? 'inside'
+            : 'other';
+      if (mode === 'other') return;
+
+      if (mode === 'left') {
+        const state = this._chooseLeftModeResponsiveState(row);
+        if (state) this._applyLeftModeResponsiveState(row, state);
         return;
       }
 
-      const availableWidth = valueEl.clientWidth;
-      const fullWidth = this._measureValueMarkupWidth(valueEl, display, unit, false);
-      const shouldHideUnit = fullWidth > availableWidth + 1;
-      const hideUnitFlag = shouldHideUnit ? 'true' : 'false';
+      this._clearMinimumBarShareOverrides(row);
 
-      if (valueEl.dataset.hideUnit !== hideUnitFlag) {
-        valueEl.dataset.hideUnit = hideUnitFlag;
-        valueEl.innerHTML = this._formatRightValueMarkup(display, unit, shouldHideUnit);
+      let measurement = this._getMeasuredBarShare(row);
+      if (!measurement || measurement.share >= minimumBarShare) return;
+
+      if (this._isLabelWorthSacrificing(row, mode, measurement)) {
+        this._hideMinimumBarShareLabel(row, mode);
+        measurement = this._getMeasuredBarShare(row);
+        if (!measurement || measurement.share >= minimumBarShare) return;
       }
+
+      this._forceMinimumBarShareTopValue(row, mode);
+      this._applyTopRightValueLayout();
+      measurement = this._getMeasuredBarShare(row);
+      if (!measurement || measurement.share >= minimumBarShare) return;
+
+      this._hideMinimumBarShareIcon(row, mode);
     });
   }
 
   _shouldUseTopValueRow(mainLine) {
     if (!mainLine?.classList?.contains('left-mode')) return false;
-    const density = mainLine.dataset.leftDensity;
-    return density === 'dense' || density === 'compressed';
+    return mainLine.closest?.('.row-stack')?.dataset.forceTopValue === 'true';
   }
 
   _getAdaptiveDensityForMainLine(mainLine) {
@@ -2126,6 +2504,9 @@ class SensorBarCard extends HTMLElement {
         this._applyValueVisibility();
         this._applyLeftLabelUsefulness();
         this._applyTopRightValueLayout();
+        this._ensureMinimumBarShare(rows);
+        this._applyTopRightValueLayout();
+        this._applyLeftLabelUsefulness();
         const targetRows = rows || this.shadowRoot?.querySelectorAll('.row[data-entity]') || [];
         targetRows.forEach(row => {
           this._positionTargetLabel(row);
