@@ -478,6 +478,21 @@ The screenshot uses this same single sensor in four separate cards, changing onl
 - `layout.label.position: inside`
 - `layout.label.position: off`
 
+### Responsive Behavior
+
+Sensor Bar Card Plus now uses a bar-first responsive layout automatically. In practice, the card protects readability in this order:
+
+- bar readability
+- value + unit readability
+- icon
+- label
+
+Value and unit are treated as one piece of text. They are never split, and the unit is not hidden while the value remains visible.
+
+In tight layouts, left labels may step aside when they no longer fit usefully, the value may move above and to the right of the bar, and the icon may hide as a last resort. Explicit `layout.height` is still respected exactly, while the default row height may shrink automatically in very dense layouts.
+
+There is no YAML option for this yet. The behavior is automatic.
+
 ## Label Width
 
 When `layout.label.position: left` is used, all names share a fixed label column so the bars line up cleanly. The default width is `100px`, but you can override it globally or per entity.
@@ -1301,7 +1316,7 @@ Legacy flat config remains fully supported. It is no longer the preferred docume
 - Peak values are stored in memory and reset when the page reloads.
 - Textual states do not show leftover units.
 - Time units `h`, `m`, and `s` render tight, for example `43s` and `4h`.
-- Responsive fallbacks preserve readability instead of letting labels and values collide.
+- Responsive fallbacks prioritize the bar and keep value + unit readable. In tight spaces, labels and icons may step aside automatically.
 
 ## Project Origin
 
