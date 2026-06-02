@@ -18,6 +18,67 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(cfg.layout.label.position).toBe('left');
   });
 
+  it('propagates card-level name when using single-entity shorthand', () => {
+    const card = createCard();
+    card._hass.states = {
+      'sensor.one': {
+        state: '42',
+        attributes: {
+          friendly_name: 'Friendly Row',
+          icon: 'mdi:flash',
+          unit_of_measurement: 'W',
+        },
+      },
+    };
+
+    const shorthandCfg = card.normalizeCardConfig({
+      entity: 'sensor.one',
+      name: 'Shorthand Label',
+    });
+    const explicitCfg = card.normalizeCardConfig({
+      entities: [{ entity: 'sensor.one', name: 'Shorthand Label' }],
+    });
+
+    expect(shorthandCfg.entities[0].name).toBe('Shorthand Label');
+    expect(explicitCfg.entities[0].name).toBe('Shorthand Label');
+
+    const shorthandHtml = card._buildRow(
+      shorthandCfg.entities[0],
+      '42',
+      'W',
+      42,
+      '#4a9eff',
+      null,
+      null,
+      null,
+      null,
+      '#888',
+      '#888',
+      0,
+      100
+    );
+    const explicitHtml = card._buildRow(
+      explicitCfg.entities[0],
+      '42',
+      'W',
+      42,
+      '#4a9eff',
+      null,
+      null,
+      null,
+      null,
+      '#888',
+      '#888',
+      0,
+      100
+    );
+
+    expect(shorthandHtml).toContain('Shorthand Label');
+    expect(explicitHtml).toContain('Shorthand Label');
+    expect(shorthandHtml).toContain('label-left-text');
+    expect(shorthandHtml).not.toContain('Friendly Row');
+  });
+
   it('preserves unknown config keys such as card_mod', () => {
     const card = createCard();
     const cfg = card.normalizeCardConfig({

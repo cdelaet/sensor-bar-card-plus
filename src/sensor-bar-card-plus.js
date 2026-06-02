@@ -190,7 +190,10 @@ class SensorBarCard extends HTMLElement {
 
     // Normalise single entity shorthand to array
     if (baseConfig.entity && !baseConfig.entities) {
-      baseConfig.entities = [{ entity: baseConfig.entity }];
+      baseConfig.entities = [{
+        entity: baseConfig.entity,
+        ...(baseConfig.name !== undefined ? { name: baseConfig.name } : {}),
+      }];
     }
     baseConfig.entities = baseConfig.entities.map(e =>
       typeof e === 'string' ? { entity: e } : e
