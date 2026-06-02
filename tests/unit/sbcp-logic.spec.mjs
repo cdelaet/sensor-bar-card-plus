@@ -750,12 +750,93 @@ describe('Sensor Bar Card Plus logic', () => {
       100
     );
 
+    expect(html).toContain('needle-layer');
     expect(html).toContain('needle-marker');
     expect(html).toContain('left:50%');
     expect(html).toContain('--needle-color:#ffffff');
     expect(html).toContain('--needle-border-color:#000000');
     expect(html).toContain('display:block');
     expect(html).toContain('data-edge="middle"');
+  });
+
+  it('marks rows with bar.animated false and disables row-scoped transitions in CSS', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      bar: { fill_style: 'solid', color: '#2563eb', animated: false, needle: true },
+      target: { at: { fixed: 65 }, label: { show: true } },
+      peak: { enabled: true },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    });
+
+    const html = card._buildRow(
+      cfg.entities[0],
+      '50',
+      'W',
+      50,
+      '#2563eb',
+      65,
+      '65',
+      80,
+      '#f59e0b',
+      '#888',
+      '#888',
+      0,
+      100
+    );
+
+    expect(html).toContain('data-bar-animated="false"');
+    expect(html).toContain('bar-paint-layer no-anim');
+
+    const source = readFileSync(new URL('../../src/sensor-bar-card-plus.js', import.meta.url), 'utf8');
+    expect(source).toContain('.row[data-bar-animated="false"] .bar-paint-layer,');
+    expect(source).toContain('.row[data-bar-animated="false"] .needle-marker,');
+    expect(source).toContain('.row[data-bar-animated="false"] .target-marker,');
+    expect(source).toContain('.row[data-bar-animated="false"] .peak-marker,');
+    expect(source).toContain('.row[data-bar-animated="false"] .target-value-label {');
+    expect(source).toContain('transition: none;');
+  });
+
+  it('keeps row animation flags in sync during patching', () => {
+    const card = createCard();
+    card._hass.states = {
+      'sensor.row': {
+        state: '42',
+        attributes: {
+          friendly_name: 'Row',
+          icon: 'mdi:flash',
+          unit_of_measurement: 'W',
+        },
+      },
+    };
+
+    const animatedCfg = card.normalizeCardConfig({
+      bar: { fill_style: 'solid', color: '#2563eb', animated: true, needle: true },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+    const staticCfg = card.normalizeCardConfig({
+      bar: { fill_style: 'solid', color: '#2563eb', animated: false, needle: true },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+
+    const row = {
+      dataset: {
+        barAnimated: 'true',
+      },
+      querySelector: () => null,
+    };
+
+    expect(row.dataset.barAnimated).toBe('true');
+
+    card._patchRow(row, staticCfg, {
+      state: '42',
+      attributes: {
+        friendly_name: 'Row',
+        icon: 'mdi:flash',
+        unit_of_measurement: 'W',
+      },
+    });
+
+    expect(row.dataset.barAnimated).toBe('false');
   });
 
   it('renders the needle marker with the configured color override', () => {
@@ -949,13 +1030,43 @@ describe('Sensor Bar Card Plus logic', () => {
 
     expect(source).toContain('.bar-inner-label {\n          position: absolute;');
     expect(source).toContain('z-index: 8;');
+    expect(source).toContain('.needle-layer {\n          position: absolute;');
+    expect(source).toContain('overflow: hidden;');
+    expect(source).toContain('border-radius: inherit;');
     expect(source).toContain('.needle-marker');
     expect(source).toContain('.target-marker {\n          z-index: 6;');
     expect(source).toContain('.peak-marker {\n          z-index: 7;');
     expect(source).toContain('.needle-marker {\n          position: absolute;');
-    expect(source).toContain('z-index: 5;');
+    expect(source).toContain('.needle-layer {\n          position: absolute;\n          inset: 0;\n          overflow: hidden;\n          border-radius: inherit;\n          pointer-events: none;\n          z-index: 5;');
     expect(source).toContain('.bar-paint-layer {\n          position: absolute;');
     expect(source).toContain('.bar-paint-layer {\n          position: absolute;\n          inset: 0;\n          transition: clip-path 0.6s cubic-bezier(0.4,0,0.2,1);\n          z-index: 1;');
+  });
+
+  it('renders the needle marker inside a clipped needle layer', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      bar: { fill_style: 'solid', color: '#2563eb', needle: true },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    });
+
+    const html = card._buildRow(
+      cfg.entities[0],
+      '50',
+      'W',
+      50,
+      '#2563eb',
+      null,
+      null,
+      null,
+      null,
+      '#888',
+      '#888',
+      0,
+      100
+    );
+
+    expect(html).toContain('<div class="needle-layer">');
+    expect(html).toContain('<div class="needle-marker"');
   });
 
   it('defaults solid_fill to false', () => {

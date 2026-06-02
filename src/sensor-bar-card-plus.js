@@ -1555,6 +1555,13 @@ class SensorBarCard extends HTMLElement {
         .bar-paint-layer.no-anim {
           transition: none;
         }
+        .row[data-bar-animated="false"] .bar-paint-layer,
+        .row[data-bar-animated="false"] .needle-marker,
+        .row[data-bar-animated="false"] .target-marker,
+        .row[data-bar-animated="false"] .peak-marker,
+        .row[data-bar-animated="false"] .target-value-label {
+          transition: none;
+        }
 
         .bar-inner-label {
           position: absolute;
@@ -2906,7 +2913,7 @@ class SensorBarCard extends HTMLElement {
       : '';
       
     return `
-      <div class="row" data-entity="${entityCfg.entity}" data-base-height="${h}" data-height-explicit="${layout.height_explicit ? 'true' : 'false'}">
+      <div class="row" data-entity="${entityCfg.entity}" data-base-height="${h}" data-height-explicit="${layout.height_explicit ? 'true' : 'false'}" data-bar-animated="${bar.animated ? 'true' : 'false'}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${topRightValue}
@@ -2971,6 +2978,7 @@ class SensorBarCard extends HTMLElement {
     }
     row.dataset.baseHeight = String(ecfg.layout.height);
     row.dataset.heightExplicit = ecfg.layout.height_explicit ? 'true' : 'false';
+    row.dataset.barAnimated = ecfg.bar.animated ? 'true' : 'false';
 
     const valueEl = row.querySelector('.value-right');
     if (valueEl) {
