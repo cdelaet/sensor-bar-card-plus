@@ -1225,132 +1225,294 @@ entities:
           color: '#ef4444'
 ```
 
-## Configuration Reference
+# Configuration Reference
 
-All structured objects can be set globally at card level and overridden per entity.
+This appendix is the quick-reference guide for the currently supported Sensor Bar Card Plus configuration model. Structured syntax is preferred for new dashboards. Legacy flat syntax remains supported for backward compatibility.
 
-### Top-level card options
+## Card-Level Options
 
-| Option | Type | Description |
-|---|---|---|
-| `title` | string | Optional title above the card |
-| `entities` | list | Entities to render |
-| `layout` | object | Label placement, label width, and bar height defaults |
-| `scale` | object | Min/max scale configuration |
-| `bar` | object | Fill style, segments, gradients, and animation |
-| `target` | object | Optional target marker and above-target behavior |
-| `peak` | object | Optional peak marker |
-| `baseline` | object | Fill origin / neutral point |
-| `formatting` | object | Decimal and unit formatting |
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `title` | string | `—` | Optional Lovelace card title |
+| `entity` | string | `—` | Single-entity shorthand, normalized into `entities` |
+| `entities` | list | required | Rows to render |
+| `layout` | object | see below | Default layout for all rows |
+| `scale` | object | `min: 0`, `max: 100` | Default scale for all rows |
+| `bar` | object | see below | Default fill, marker, and animation settings |
+| `baseline` | number/object | disabled | Default baseline / fill origin, including legacy fixed shorthand |
+| `target` | number/object | disabled | Default target marker, including legacy fixed shorthand |
+| `peak` | object | disabled | Default structured peak marker config |
+| `formatting` | object | `decimal: null`, `unit: null` | Default numeric formatting |
+| `label_position` | string | `left` | Legacy alias for `layout.label.position` |
+| `label_width` | number | `100` | Legacy alias for `layout.label.width` |
+| `height` | number | `38` | Legacy alias for `layout.height`; rendered minimum is `24` |
+| `min` | number | `0` | Legacy alias for `scale.min.fixed` |
+| `min_entity` | string | `null` | Legacy alias for `scale.min.entity` |
+| `max` | number | `100` | Legacy alias for `scale.max.fixed` |
+| `max_entity` | string | `null` | Legacy alias for `scale.max.entity` |
+| `fill_style` | string | `bands` | Legacy flat alias for `bar.fill_style` |
+| `color_mode` | string | `severity` | Legacy compatibility alias for `bar.color_mode` |
+| `color` | string | `#4a9eff` | Legacy flat alias for `bar.color` |
+| `gradient_stops` | list | `null` | Legacy flat alias for `bar.gradient_stops` |
+| `segments` | list | `null` | Top-level structured alias for `bar.segments` |
+| `severity` | list | default 3-band scale | Legacy severity array, normalized into `bar.segments` |
+| `animated` | boolean | `true` | Legacy flat alias for `bar.animated` |
+| `target_entity` | string | `null` | Legacy alias for `target.at.entity` |
+| `target_color` | string | `#888` | Legacy alias for `target.color` |
+| `show_target_label` | boolean | `false` | Legacy alias for `target.label.show` |
+| `above_target_color` | string | `null` | Legacy alias for `target.when_exceeded.fill_color` |
+| `show_peak` | boolean | `false` | Legacy alias for `peak.enabled` |
+| `peak_color` | string | `#888` | Legacy alias for `peak.color` |
+| `decimal` | number | `null` | Legacy alias for `formatting.decimal` |
+| `unit` | string | `null` | Legacy alias for `formatting.unit` |
 
-### Entity options
-
-Each entry in `entities` accepts:
-
-- `entity`
-- `name`
-- `icon`
-- and the same structured override objects:
-  - `layout`
-  - `scale`
-  - `bar`
-  - `target`
-  - `peak`
-  - `baseline`
-  - `formatting`
-
-### Structured object reference
-
-`layout`
-
-| Option | Type | Description |
-|---|---|---|
-| `layout.label.position` | string | `left`, `above`, `inside`, `off` |
-| `layout.label.width` | number | Fixed label column width in pixels |
-| `layout.height` | number | Bar height in pixels |
-
-`scale`
+## Entity-Level Options
 
 | Option | Type | Description |
 |---|---|---|
-| `scale.min.fixed` | number | Fixed minimum scale value |
-| `scale.min.entity` | string | Entity providing minimum scale value |
-| `scale.max.fixed` | number | Fixed maximum scale value |
-| `scale.max.entity` | string | Entity providing maximum scale value |
+| `entity` | string | Home Assistant entity id for the row |
+| `name` | string | Row label override |
+| `icon` | string | Row icon override |
+| `layout` | object | Per-row layout override |
+| `scale` | object | Per-row scale override |
+| `bar` | object | Per-row fill and needle override |
+| `target` | object/number | Per-row target override |
+| `peak` | object | Per-row peak override |
+| `baseline` | object/number/null | Per-row baseline override or explicit disable |
+| `formatting` | object | Per-row decimal and unit override |
+| `label_position` | string | Legacy alias for `layout.label.position` |
+| `label_width` | number | Legacy alias for `layout.label.width` |
+| `height` | number | Legacy alias for `layout.height` |
+| `min` / `min_entity` | number / string | Legacy aliases for `scale.min` |
+| `max` / `max_entity` | number / string | Legacy aliases for `scale.max` |
+| `fill_style` / `color_mode` | string | Legacy flat aliases for `bar` mode selection |
+| `color` | string | Legacy flat alias for `bar.color` |
+| `gradient_stops` | list | Legacy flat alias for `bar.gradient_stops` |
+| `segments` / `severity` | list | Per-row segment definitions |
+| `animated` | boolean | Legacy flat alias for `bar.animated` |
+| `target_entity`, `target_color`, `show_target_label`, `above_target_color` | mixed | Legacy target overrides |
+| `show_peak`, `peak_color` | mixed | Legacy peak overrides |
+| `decimal`, `unit` | mixed | Legacy formatting overrides |
 
-`bar`
+## Structured Configuration
 
-| Option | Type | Description |
-|---|---|---|
-| `bar.fill_style` | string | Preferred structured alias: `solid`, `gradient`, `bands`, `soft_bands`, `band_gradient` |
-| `bar.color_mode` | string | `single`, `gradient`, `severity`, `severity_gradient` |
-| `bar.solid_fill` | boolean | Sample the theoretical fill color at the current value and render the visible fill as one solid color |
-| `bar.color` | string | Solid color for `single` mode |
-| `bar.gradient_stops` | list | Gradient stops for `gradient` mode; `pos` accepts `50` and `50%` equivalently |
-| `bar.segments` | list | Segment definitions for `bands`, `soft_bands`, and `band_gradient` |
-| `bar.animated` | boolean | Animate value changes |
+```yaml
+layout:
+  label:
+    position: left
+    width: 160
+  height: 38
 
-`target`
+scale:
+  min:
+    fixed: 0
+  max:
+    entity: sensor.dynamic_max
 
-| Option | Type | Description |
-|---|---|---|
-| `target.at.fixed` | number | Fixed target value |
-| `target.at.entity` | string | Entity providing target value |
-| `target.at` | string | Percentage string such as `50%` |
-| `target.color` | string | Target marker color |
-| `target.label.show` | boolean | Show target value label |
-| `target.when_exceeded.fill_color` | string | Fill color beyond the target |
+bar:
+  fill_style: soft_bands
+  segment_space: percent
+  color: '#2563eb'
+  solid_fill: false
+  animated: true
+  gradient_stops:
+    - pos: 0
+      color: '#2563eb'
+    - pos: 100%
+      color: '#ef4444'
+  segments:
+    - from: 0%
+      to: 50%
+      color: '#22c55e'
+    - from: 50%
+      to: 100%
+      color: '#ef4444'
+  needle:
+    show: true
+    color: '#ffffff'
 
-`peak`
+baseline:
+  at:
+    fixed: 0
+  above:
+    color: '#34d399'
+  below:
+    color: '#ef4444'
 
-| Option | Type | Description |
-|---|---|---|
-| `peak.enabled` | boolean | Show peak marker |
-| `peak.color` | string | Peak marker color |
+target:
+  at:
+    entity: sensor.power_target
+    fixed: 2000
+  color: '#dbe4ee'
+  label:
+    show: true
+  when_exceeded:
+    fill_color: '#ef4444'
 
-`baseline`
+peak:
+  enabled: true
+  color: '#fde68a'
 
-| Option | Type | Description |
-|---|---|---|
-| `baseline.at.fixed` | number | Fixed baseline value |
-| `baseline.at.entity` | string | Entity providing baseline value |
-| `baseline.at` | string | Percentage string such as `50%` |
-| `baseline.above.color` | string | Optional color above baseline |
-| `baseline.below.color` | string | Optional color below baseline |
+formatting:
+  decimal: 1
+  unit: kW
+```
 
-`formatting`
+Notes:
 
-| Option | Type | Description |
-|---|---|---|
-| `formatting.decimal` | number | Decimal places |
-| `formatting.unit` | string | Unit override |
+- `bar.segment_space` supports `percent` and `scale`
+- `bar.gradient_stops[].pos` accepts both numeric values like `50` and percentage strings like `50%`
 
-## Legacy Flat Configuration Reference
+## Fill Styles
 
-Legacy flat config remains fully supported. It is no longer the preferred documentation style for new dashboards, but it continues to map internally to the structured model.
-
-| Legacy option | Structured equivalent |
+| `fill_style` | Description |
 |---|---|
+| `solid` | One solid fill color; best for simple status or branded accents |
+| `gradient` | Continuous gradient from `bar.gradient_stops` |
+| `bands` | Hard segment transitions using `bar.segments` |
+| `soft_bands` | Segment-based colors with short blended transitions at eligible boundaries |
+| `band_gradient` | Continuous interpolation across segment colors on the active scale |
+
+## Needle
+
+Simple form:
+
+```yaml
+bar:
+  needle: true
+```
+
+Expanded form:
+
+```yaml
+bar:
+  needle:
+    show: true
+    color: '#ffffff'
+```
+
+Notes:
+
+- the bar switches to full-scale paint mode when the needle is shown
+- the current value is represented by the needle position
+- the needle works with `solid`, `gradient`, `bands`, `soft_bands`, `band_gradient`, and `solid_fill`
+- the needle is disabled automatically when a baseline is active
+
+## Baseline
+
+Fixed baseline:
+
+```yaml
+baseline:
+  at:
+    fixed: 0
+```
+
+Entity baseline:
+
+```yaml
+baseline:
+  at:
+    entity: sensor.dynamic_baseline
+    fixed: 0
+```
+
+Percentage baseline:
+
+```yaml
+baseline:
+  at: 50%
+```
+
+Bidirectional fill starts from `baseline.at` instead of always starting at `scale.min`. Optional `baseline.above.color` and `baseline.below.color` can semantically style each side.
+
+## Target Marker
+
+Simple fixed target:
+
+```yaml
+target: 65
+```
+
+Structured fixed target:
+
+```yaml
+target:
+  at:
+    fixed: 65
+  color: '#dbe4ee'
+  label:
+    show: true
+```
+
+Structured entity target:
+
+```yaml
+target:
+  at:
+    entity: sensor.dynamic_target
+    fixed: 65
+```
+
+Percentage target:
+
+```yaml
+target:
+  at: 50%
+```
+
+Supported target features:
+
+- fixed target values
+- entity-backed target values
+- percentage targets on the active scale
+- optional marker color
+- optional target value label
+- optional `target.when_exceeded.fill_color`
+
+## Peak Marker
+
+```yaml
+peak:
+  enabled: true
+  color: '#fde68a'
+```
+
+The peak marker tracks the highest observed value for the current page session.
+
+## Formatting
+
+```yaml
+formatting:
+  decimal: 1
+  unit: kW
+```
+
+- `formatting.decimal` applies to displayed numeric values
+- `formatting.unit` overrides the entity unit
+
+## Legacy Compatibility
+
+Legacy syntax remains fully supported for backward compatibility.
+
+| Legacy | Modern Equivalent |
+|---|---|
+| `color_mode: single` | `bar.fill_style: solid` |
+| `color_mode: gradient` | `bar.fill_style: gradient` |
+| `color_mode: severity` | `bar.fill_style: bands` |
+| `color_mode: severity_gradient` | `bar.fill_style: band_gradient` |
 | `label_position` | `layout.label.position` |
 | `label_width` | `layout.label.width` |
 | `height` | `layout.height` |
 | `min` / `min_entity` | `scale.min.fixed` / `scale.min.entity` |
 | `max` / `max_entity` | `scale.max.fixed` / `scale.max.entity` |
-| `decimal` | `formatting.decimal` |
-| `unit` | `formatting.unit` |
-| `fill_style` | `bar.fill_style` |
-| `color_mode` | `bar.color_mode` |
-| `color` | `bar.color` |
-| `gradient_stops` | `bar.gradient_stops` |
-| `severity` | `bar.segments` using `%` values when migrating legacy bands |
-| `segments` | `bar.segments` |
-| `animated` | `bar.animated` |
 | `target` / `target_entity` | `target.at.fixed` / `target.at.entity` |
 | `target_color` | `target.color` |
 | `show_target_label` | `target.label.show` |
 | `above_target_color` | `target.when_exceeded.fill_color` |
 | `show_peak` / `peak_color` | `peak.enabled` / `peak.color` |
-| `baseline` | `baseline.at.fixed`, `baseline.at.entity`, or `baseline.at: 50%` |
+| `decimal` / `unit` | `formatting.decimal` / `formatting.unit` |
+| `severity` | `bar.segments` using `%` values when migrating legacy bands |
 
 ## Behavior Notes
 
