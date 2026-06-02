@@ -1753,6 +1753,14 @@ class SensorBarCard extends HTMLElement {
         .peak-marker {
           z-index: 7;
         }
+        .needle-layer {
+          position: absolute;
+          inset: 0;
+          overflow: hidden;
+          border-radius: inherit;
+          pointer-events: none;
+          z-index: 5;
+        }
         .needle-marker {
           position: absolute;
           top: 0;
@@ -1761,7 +1769,6 @@ class SensorBarCard extends HTMLElement {
           transform: translateX(-50%);
           pointer-events: none;
           transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
-          z-index: 5;
           background: linear-gradient(
             to right,
             var(--needle-border-color, #000000) 0 1px,
@@ -1773,13 +1780,8 @@ class SensorBarCard extends HTMLElement {
             drop-shadow(0 0 3px var(--needle-color, #ffffff))
             drop-shadow(0 0 6px var(--needle-color, #ffffff));
         }
-        .needle-marker[data-edge="left"] {
-          transform: none;
-          border-radius: 6px 0 0 6px;
-        }
-        .needle-marker[data-edge="right"] {
+        .needle-layer .needle-marker[data-edge="right"] {
           transform: translateX(-100%);
-          border-radius: 0 6px 6px 0;
         }
         .peak-marker .peak-inset,
         .peak-marker .peak-outset,
@@ -2870,7 +2872,9 @@ class SensorBarCard extends HTMLElement {
         ${targetDisplay !== null ? targetDisplay : ''}
       </div>` : '';
     const needleMarker = ecfg.bar?.needle?.show && !Number.isFinite(baselinePct) ? `
-      <div class="needle-marker" data-edge="${needleState.edge}" style="left:${needleState.pct ?? 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? 'block' : 'none'};"></div>` : '';
+      <div class="needle-layer">
+        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${needleState.pct ?? 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? 'block' : 'none'};"></div>
+      </div>` : '';
     const aboveLabel = lp === 'above' ? `
       <div class="above-line">
         ${ecfg.icon && ecfg.icon !== false ? `<div class="above-icon-spacer"></div>` : ''}
