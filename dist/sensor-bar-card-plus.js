@@ -1772,37 +1772,31 @@ class SensorBarCard extends HTMLElement {
           justify-content: flex-start;
           align-items: center;
           gap: var(--sbcp-main-gap);
-          font-size: 12px;
-          line-height: 1.15;
-          color: var(--secondary-text-color, #888);
-          margin-bottom: 3px;
+          margin-bottom: 2px;
           min-height: 16px;
         }
         .above-bar-label-name {
           flex: 1 1 auto;
           min-width: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--primary-text-color, #333);
+          line-height: 1.15;
         }
         .above-bar-label-value {
           flex: 0 0 auto;
           margin-left: auto;
-          white-space: nowrap;
           display: inline-flex;
           align-items: baseline;
           justify-content: flex-end;
           text-align: right;
-          gap: 0;
-        }
-        .above-bar-label-value.has-unit {
-          gap: 2px;
-        }
-        .above-bar-label-value.tight-unit {
-          gap: 0;
-        }
-        .above-bar-label-unit {
-          color: var(--secondary-text-color, #888);
+          min-width: 0;
+          max-width: 100%;
+          overflow: hidden;
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--primary-text-color, #333);
+          font-variant-numeric: tabular-nums;
         }
         /* ── Shared marker base ── */
         .peak-marker, .target-marker {
@@ -1948,7 +1942,8 @@ class SensorBarCard extends HTMLElement {
           line-height: 1.1;
         }
         .value-right .unit-group,
-        .top-right-value .unit-group {
+        .top-right-value .unit-group,
+        .above-bar-label-value .unit-group {
           flex: 0 1 auto;
           display: inline-flex;
           align-items: baseline;
@@ -1958,7 +1953,8 @@ class SensorBarCard extends HTMLElement {
           line-height: 1.1;
         }
         .value-right .unit,
-        .top-right-value .unit {
+        .top-right-value .unit,
+        .above-bar-label-value .unit {
           flex: 0 1 auto;
           min-width: 0;
           display: inline-block;
@@ -2136,20 +2132,31 @@ class SensorBarCard extends HTMLElement {
 
       const trackWidth = track.getBoundingClientRect().width;
       const valueWidth = valueEl.scrollWidth;
-      let density = 'normal';
+      let density = this._classifyInsideDensity(trackWidth, valueWidth);
+      const rowDensity = mainLine?.dataset?.rowDensity || 'normal';
+      const iconWrap = mainLine?.querySelector?.('.icon-wrap') ?? null;
+      let hideIcon = rowDensity === 'dense' || rowDensity === 'compressed';
 
-      if (trackWidth < Math.max(72, valueWidth + 12)) density = 'compressed';
-      else if (trackWidth < valueWidth + 56) density = 'dense';
-      else if (trackWidth < valueWidth + 92) density = 'tight';
-      else if (trackWidth < valueWidth + 128) density = 'compact';
+      if (iconWrap && (hideIcon || density === 'dense' || density === 'compressed')) {
+        hideIcon = true;
+        const reclaimedWidth = this._getLeftModeIconWidth(iconWrap, mainLine) + this._getLeftModeGap(mainLine);
+        density = this._classifyInsideDensity(trackWidth + reclaimedWidth, valueWidth);
+      }
 
       innerLabel.dataset.insideDensity = density;
-      innerLabel.dataset.hideName = density === 'dense' || density === 'compressed' ? 'true' : 'false';
+      innerLabel.dataset.hideName = density === 'compressed' ? 'true' : 'false';
       if (mainLine) {
-        const rowDensity = mainLine.dataset.rowDensity || 'normal';
-        mainLine.dataset.hideInsideIcon = rowDensity === 'dense' || rowDensity === 'compressed' ? 'true' : 'false';
+        mainLine.dataset.hideInsideIcon = hideIcon ? 'true' : 'false';
       }
     });
+  }
+
+  _classifyInsideDensity(trackWidth, valueWidth) {
+    if (trackWidth < Math.max(72, valueWidth + 12)) return 'compressed';
+    if (trackWidth < valueWidth + 56) return 'dense';
+    if (trackWidth < valueWidth + 92) return 'tight';
+    if (trackWidth < valueWidth + 128) return 'compact';
+    return 'normal';
   }
 
   _applyRowDensity() {
@@ -2888,10 +2895,7 @@ class SensorBarCard extends HTMLElement {
   }
 
   _formatAboveValueMarkup(display, unit) {
-    if (!unit) return `<span class="above-bar-label-value">${display}</span>`;
-    const cleanUnit = String(unit);
-    const unitModeClass = this._isTightUnit(cleanUnit) ? 'tight-unit' : 'has-unit';
-    return `<span class="above-bar-label-value ${unitModeClass}"><span class="above-bar-label-number">${display}</span><span class="above-bar-label-unit">${cleanUnit}</span></span>`;
+    return `<span class="above-bar-label-value">${this._formatRightValueMarkup(display, unit, false)}</span>`;
   }
 
   _formatInsideValueMarkup(display, unit) {
@@ -2948,7 +2952,7 @@ class SensorBarCard extends HTMLElement {
       <div class="above-line">
         ${ecfg.icon && ecfg.icon !== false ? `<div class="above-icon-spacer"></div>` : ''}
         <div class="above-bar-label">
-          <span class="above-bar-label-name">${name}</span>
+          <span class="above-bar-label-name label-left-text">${name}</span>
           ${this._formatAboveValueMarkup(stateDisplay, unit)}
         </div>
       </div>` : '';
@@ -3058,7 +3062,7 @@ class SensorBarCard extends HTMLElement {
     }
     const aboveLabel = row.querySelector('.above-bar-label');
     if (aboveLabel) {
-      aboveLabel.innerHTML = `<span class="above-bar-label-name">${ecfg.name || stateObj.attributes?.friendly_name || entityCfg.entity}</span>${this._formatAboveValueMarkup(display, displayUnit)}`;
+      aboveLabel.innerHTML = `<span class="above-bar-label-name label-left-text">${ecfg.name || stateObj.attributes?.friendly_name || entityCfg.entity}</span>${this._formatAboveValueMarkup(display, displayUnit)}`;
     }
 
     if (ecfg.peak_marker.show && !isNaN(rawVal)) {
