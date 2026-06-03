@@ -942,7 +942,7 @@ class SensorBarCard extends HTMLElement {
   }
 
   _getSoftBandBlendWidthPct() {
-    return 4;
+    return 1.5;
   }
 
   _pushGradientColorStop(stops, pos, color) {
