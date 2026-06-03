@@ -744,6 +744,63 @@ class SensorBarCard extends HTMLElement {
     }
     return false;
   }
+
+  _setStyleIfChanged(el, prop, value) {
+    if (!el?.style) return false;
+    const nextValue = value == null ? '' : String(value);
+
+    if (prop.startsWith('--')) {
+      const currentValue = typeof el.style.getPropertyValue === 'function'
+        ? el.style.getPropertyValue(prop)
+        : (el.style[prop] ?? '');
+      if (currentValue === nextValue) return false;
+      if (typeof el.style.setProperty === 'function') {
+        el.style.setProperty(prop, nextValue);
+      } else {
+        el.style[prop] = nextValue;
+      }
+      return true;
+    }
+
+    const currentValue = el.style[prop] ?? '';
+    if (currentValue === nextValue) return false;
+    el.style[prop] = nextValue;
+    return true;
+  }
+
+  _setStyleTextIfChanged(el, value) {
+    if (!el?.style) return false;
+    const nextValue = value == null ? '' : String(value);
+    const currentValue = el.style.cssText ?? '';
+    if (currentValue === nextValue) return false;
+    el.style.cssText = nextValue;
+    return true;
+  }
+
+  _setTextIfChanged(el, value) {
+    if (!el) return false;
+    const nextValue = value == null ? '' : String(value);
+    if ((el.textContent ?? '') === nextValue) return false;
+    el.textContent = nextValue;
+    return true;
+  }
+
+  _setDatasetIfChanged(el, key, value) {
+    if (!el?.dataset) return false;
+    const nextValue = value == null ? '' : String(value);
+    const currentValue = el.dataset[key] ?? '';
+    if (currentValue === nextValue) return false;
+    el.dataset[key] = nextValue;
+    return true;
+  }
+
+  _setClassNameIfChanged(el, value) {
+    if (!el) return false;
+    const nextValue = value == null ? '' : String(value);
+    if ((el.className ?? '') === nextValue) return false;
+    el.className = nextValue;
+    return true;
+  }
   
   _repositionAllTargetLabels() {
     if (!this.shadowRoot) return;
@@ -761,19 +818,19 @@ class SensorBarCard extends HTMLElement {
     if (!track || !label || !marker) return;
     
     if (marker.style.display === 'none' || !label.textContent.trim()) {
-      label.style.visibility = 'hidden';
+      this._setStyleIfChanged(label, 'visibility', 'hidden');
       return;
     }
     
     const trackRect = track.getBoundingClientRect();
     const maxLabelWidth = Math.max(0, Math.floor(trackRect.width - 4));
-    label.style.maxWidth = `${maxLabelWidth}px`;
+    this._setStyleIfChanged(label, 'maxWidth', `${maxLabelWidth}px`);
 
     const labelRect = label.getBoundingClientRect();
     
     const markerPercent = parseFloat(marker.style.left);
     if (!Number.isFinite(markerPercent) || trackRect.width <= 0 || labelRect.width <= 0 || maxLabelWidth <= 10) {
-      label.style.visibility = 'hidden';
+      this._setStyleIfChanged(label, 'visibility', 'hidden');
       return;
     }
     
@@ -782,9 +839,9 @@ class SensorBarCard extends HTMLElement {
     
     const clampedX = Math.max(halfLabel, Math.min(trackRect.width - halfLabel, markerX));
     
-    label.style.left = `${clampedX}px`;
-    label.style.transform = 'translateX(-50%)';
-    label.style.visibility = 'visible';
+    this._setStyleIfChanged(label, 'left', `${clampedX}px`);
+    this._setStyleIfChanged(label, 'transform', 'translateX(-50%)');
+    this._setStyleIfChanged(label, 'visibility', 'visible');
   }
 
   _getEntityNumericValue(entityId) {
@@ -1788,9 +1845,9 @@ class SensorBarCard extends HTMLElement {
             var(--needle-border-color, #000000) 6px 7px
           );
           border-radius: 0;
-          filter:
-            drop-shadow(0 0 3px var(--needle-color, #ffffff))
-            drop-shadow(0 0 6px var(--needle-color, #ffffff));
+          box-shadow:
+            0 0 3px var(--needle-color, #ffffff),
+            0 0 6px var(--needle-color, #ffffff);
         }
         .needle-layer .needle-marker[data-edge="right"] {
           transform: translateX(-100%);
@@ -2965,20 +3022,20 @@ class SensorBarCard extends HTMLElement {
     const fillState = this._getFillRenderState(pct, 'var(--sbcp-row-height)', ecfg, color, liveTargetPct, liveBaselinePct, safeMin, safeMax, needleState.show);
 
     if (paintLayer) {
-      paintLayer.style.cssText = `${fillState.paintStyle}${fillState.revealStyle}`;
-      paintLayer.className = `bar-paint-layer${ecfg.bar.animated ? '' : ' no-anim'}`;
+      this._setStyleTextIfChanged(paintLayer, `${fillState.paintStyle}${fillState.revealStyle}`);
+      this._setClassNameIfChanged(paintLayer, `bar-paint-layer${ecfg.bar.animated ? '' : ' no-anim'}`);
     }
     const needleEl = row.querySelector('.needle-marker');
     if (needleEl) {
-      needleEl.style.display = needleState.show ? 'block' : 'none';
-      needleEl.style.left = `${needleState.pct ?? 0}%`;
-      needleEl.style.setProperty('--needle-color', needleState.color);
-      needleEl.style.setProperty('--needle-border-color', needleState.borderColor);
-      needleEl.dataset.edge = needleState.edge;
+      this._setStyleIfChanged(needleEl, 'display', needleState.show ? 'block' : 'none');
+      this._setStyleIfChanged(needleEl, 'left', `${needleState.pct ?? 0}%`);
+      this._setStyleIfChanged(needleEl, '--needle-color', needleState.color);
+      this._setStyleIfChanged(needleEl, '--needle-border-color', needleState.borderColor);
+      this._setDatasetIfChanged(needleEl, 'edge', needleState.edge);
     }
-    row.dataset.baseHeight = String(ecfg.layout.height);
-    row.dataset.heightExplicit = ecfg.layout.height_explicit ? 'true' : 'false';
-    row.dataset.barAnimated = ecfg.bar.animated ? 'true' : 'false';
+    this._setDatasetIfChanged(row, 'baseHeight', ecfg.layout.height);
+    this._setDatasetIfChanged(row, 'heightExplicit', ecfg.layout.height_explicit ? 'true' : 'false');
+    this._setDatasetIfChanged(row, 'barAnimated', ecfg.bar.animated ? 'true' : 'false');
 
     const valueEl = row.querySelector('.value-right');
     if (valueEl) {
@@ -3012,29 +3069,31 @@ class SensorBarCard extends HTMLElement {
       const peakVal = this._peaks[key];
       const peakPct = this._toScalePct(peakVal, safeMin, safeMax);
       const peakEl = row.querySelector('.peak-marker');
-      if (peakEl) peakEl.style.left = `${peakPct}%`;
+      if (peakEl) {
+        this._setStyleIfChanged(peakEl, 'left', `${peakPct}%`);
+        this._setStyleIfChanged(peakEl, '--marker-color', ecfg.peak_marker.color);
+        this._setStyleIfChanged(peakEl, '--marker-contrast-color', this._getMarkerContrastColor(ecfg.peak_marker.color));
+      }
     }
 
+    const targetEl = row.querySelector('.target-marker');
+    const targetLabelEl = row.querySelector('.target-value-label');
     if (targetVal !== null) {
       const targetPct = this._toScalePct(targetVal, safeMin, safeMax);
-      const targetEl = row.querySelector('.target-marker');
       if (targetEl) {
-        targetEl.style.display = '';
-        targetEl.style.left = `${targetPct}%`;
+        this._setStyleIfChanged(targetEl, 'display', '');
+        this._setStyleIfChanged(targetEl, 'left', `${targetPct}%`);
+        this._setStyleIfChanged(targetEl, '--marker-color', ecfg.target_marker.color);
+        this._setStyleIfChanged(targetEl, '--marker-contrast-color', this._getMarkerContrastColor(ecfg.target_marker.color));
       }
 
-      const targetLabelEl = row.querySelector('.target-value-label');
       if (targetLabelEl) {
-        targetLabelEl.textContent = this._formatDisplayWithUnit(targetVal.toLocaleString(), unit);
-        targetLabelEl.style.left = `${targetPct}%`;
-        targetLabelEl.style.visibility = 'hidden';
+        this._setTextIfChanged(targetLabelEl, this._formatDisplayWithUnit(targetVal.toLocaleString(), unit));
       }
     } else {
-      const targetEl = row.querySelector('.target-marker');
-      if (targetEl) targetEl.style.display = 'none';
+      if (targetEl) this._setStyleIfChanged(targetEl, 'display', 'none');
 
-      const targetLabelEl = row.querySelector('.target-value-label');
-      if (targetLabelEl) targetLabelEl.style.visibility = 'hidden';
+      if (targetLabelEl) this._setStyleIfChanged(targetLabelEl, 'visibility', 'hidden');
     }
   }
 

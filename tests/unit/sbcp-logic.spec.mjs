@@ -3,6 +3,92 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createCard } from '../support/load-card-class.cjs';
 
+function createTrackedStyle(initial = {}) {
+  const state = { ...initial };
+  const writes = [];
+  return new Proxy({
+    setProperty(prop, value) {
+      const nextValue = String(value);
+      writes.push({ prop: String(prop), value: nextValue, via: 'setProperty' });
+      state[prop] = nextValue;
+    },
+    getPropertyValue(prop) {
+      return state[prop] ?? '';
+    },
+  }, {
+    get(target, prop) {
+      if (prop === '__writes') return writes;
+      if (prop in target) return target[prop];
+      return state[prop] ?? '';
+    },
+    set(target, prop, value) {
+      const nextValue = String(value);
+      writes.push({ prop: String(prop), value: nextValue, via: 'assignment' });
+      state[prop] = nextValue;
+      return true;
+    },
+  });
+}
+
+function createTrackedDataset(initial = {}) {
+  const state = { ...initial };
+  const writes = [];
+  return new Proxy(state, {
+    get(target, prop) {
+      if (prop === '__writes') return writes;
+      return target[prop];
+    },
+    set(target, prop, value) {
+      const nextValue = String(value);
+      writes.push({ key: String(prop), value: nextValue });
+      target[prop] = nextValue;
+      return true;
+    },
+  });
+}
+
+function createTrackedElement({ style = {}, dataset = {}, textContent = '', className = '', ...rest } = {}) {
+  const styleState = createTrackedStyle(style);
+  const datasetState = createTrackedDataset(dataset);
+  const writes = {
+    textContent: 0,
+    className: 0,
+  };
+
+  let textValue = String(textContent);
+  let classValue = String(className);
+
+  return {
+    style: styleState,
+    dataset: datasetState,
+    get textContent() {
+      return textValue;
+    },
+    set textContent(value) {
+      writes.textContent += 1;
+      textValue = String(value);
+    },
+    get className() {
+      return classValue;
+    },
+    set className(value) {
+      writes.className += 1;
+      classValue = String(value);
+    },
+    __writes: writes,
+    ...rest,
+  };
+}
+
+function createTrackedRow(elements, dataset = {}) {
+  return {
+    dataset: createTrackedDataset(dataset),
+    querySelector(selector) {
+      return elements[selector] ?? null;
+    },
+  };
+}
+
 describe('Sensor Bar Card Plus logic', () => {
   it('normalizes card defaults and single-entity shorthand', () => {
     const card = createCard();
@@ -839,6 +925,452 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(row.dataset.barAnimated).toBe('false');
   });
 
+  it('does not rewrite an unchanged target label during _patchRow', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      min: 0,
+      max: 100,
+      target: { at: { fixed: 65 }, label: { show: true } },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+
+    const targetMarker = createTrackedElement({
+      style: {
+        display: '',
+        left: '65%',
+        '--marker-color': '#888',
+        '--marker-contrast-color': card._getMarkerContrastColor('#888'),
+      },
+    });
+    const targetLabel = createTrackedElement({
+      style: {
+        left: '65%',
+        visibility: 'visible',
+      },
+      textContent: '65 W',
+    });
+    const row = createTrackedRow({
+      '.target-marker': targetMarker,
+      '.target-value-label': targetLabel,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+
+    card._patchRow(row, cfg, {
+      state: '42',
+      attributes: {
+        friendly_name: 'Row',
+        icon: 'mdi:flash',
+        unit_of_measurement: 'W',
+      },
+    });
+
+    expect(targetLabel.__writes.textContent).toBe(0);
+    expect(targetLabel.style.__writes).toEqual([]);
+  });
+
+  it('does not change an existing pixel-positioned target label during _patchRow', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      min: 0,
+      max: 100,
+      target: { at: { fixed: 50 }, label: { show: true } },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+
+    const targetLabel = createTrackedElement({
+      style: {
+        left: '123px',
+        visibility: 'visible',
+      },
+      textContent: '50 W',
+    });
+    const row = createTrackedRow({
+      '.target-marker': createTrackedElement({
+        style: {
+          display: '',
+          left: '50%',
+          '--marker-color': '#888',
+          '--marker-contrast-color': card._getMarkerContrastColor('#888'),
+        },
+      }),
+      '.target-value-label': targetLabel,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+
+    card._patchRow(row, cfg, {
+      state: '42',
+      attributes: {
+        friendly_name: 'Row',
+        icon: 'mdi:flash',
+        unit_of_measurement: 'W',
+      },
+    });
+
+    expect(targetLabel.style.left).toBe('123px');
+    expect(targetLabel.style.__writes).toEqual([]);
+  });
+
+  it('does not hide an unchanged target label during _patchRow', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      min: 0,
+      max: 100,
+      target: { at: { fixed: 50 }, label: { show: true } },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+
+    const targetLabel = createTrackedElement({
+      style: {
+        left: '123px',
+        visibility: 'visible',
+      },
+      textContent: '50 W',
+    });
+    const row = createTrackedRow({
+      '.target-marker': createTrackedElement({
+        style: {
+          display: '',
+          left: '50%',
+          '--marker-color': '#888',
+          '--marker-contrast-color': card._getMarkerContrastColor('#888'),
+        },
+      }),
+      '.target-value-label': targetLabel,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+
+    card._patchRow(row, cfg, {
+      state: '42',
+      attributes: {
+        friendly_name: 'Row',
+        icon: 'mdi:flash',
+        unit_of_measurement: 'W',
+      },
+    });
+
+    expect(targetLabel.style.visibility).toBe('visible');
+    expect(targetLabel.style.__writes).toEqual([]);
+  });
+
+  it('does not recreate or rewrite an unchanged target marker during _patchRow', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      min: 0,
+      max: 100,
+      target: { at: { fixed: 65 } },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+
+    const targetMarker = createTrackedElement({
+      style: {
+        display: '',
+        left: '65%',
+        '--marker-color': '#888',
+        '--marker-contrast-color': card._getMarkerContrastColor('#888'),
+      },
+    });
+    const row = createTrackedRow({
+      '.target-marker': targetMarker,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+    const before = row.querySelector('.target-marker');
+
+    card._patchRow(row, cfg, {
+      state: '42',
+      attributes: {
+        friendly_name: 'Row',
+        icon: 'mdi:flash',
+        unit_of_measurement: 'W',
+      },
+    });
+
+    expect(row.querySelector('.target-marker')).toBe(before);
+    expect(targetMarker.style.__writes).toEqual([]);
+  });
+
+  it('does not recreate or rewrite an unchanged peak marker during _patchRow', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      min: 0,
+      max: 100,
+      peak: { enabled: true, color: '#7c3aed' },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+
+    card._peaks['sensor.row'] = 42;
+    const peakMarker = createTrackedElement({
+      style: {
+        left: '42%',
+        '--marker-color': '#7c3aed',
+        '--marker-contrast-color': card._getMarkerContrastColor('#7c3aed'),
+      },
+    });
+    const row = createTrackedRow({
+      '.peak-marker': peakMarker,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+    const before = row.querySelector('.peak-marker');
+
+    card._patchRow(row, cfg, {
+      state: '42',
+      attributes: {
+        friendly_name: 'Row',
+        icon: 'mdi:flash',
+        unit_of_measurement: 'W',
+      },
+    });
+
+    expect(row.querySelector('.peak-marker')).toBe(before);
+    expect(peakMarker.style.__writes).toEqual([]);
+  });
+
+  it('does not recreate or rewrite an unchanged needle marker during _patchRow', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      min: 0,
+      max: 100,
+      bar: { fill_style: 'solid', color: '#2563eb', needle: true },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+
+    const needleColor = '#ffffff';
+    const needleBorderColor = card._getNeedleBorderColor(needleColor);
+    const needleMarker = createTrackedElement({
+      style: {
+        display: 'block',
+        left: '42%',
+        '--needle-color': needleColor,
+        '--needle-border-color': needleBorderColor,
+      },
+      dataset: {
+        edge: 'middle',
+      },
+    });
+    const row = createTrackedRow({
+      '.needle-marker': needleMarker,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+    const before = row.querySelector('.needle-marker');
+
+    card._patchRow(row, cfg, {
+      state: '42',
+      attributes: {
+        friendly_name: 'Row',
+        icon: 'mdi:flash',
+        unit_of_measurement: 'W',
+      },
+    });
+
+    expect(row.querySelector('.needle-marker')).toBe(before);
+    expect(needleMarker.style.__writes).toEqual([]);
+    expect(needleMarker.dataset.__writes).toEqual([]);
+  });
+
+  it('updates target marker position when the target changes during _patchRow', () => {
+    const card = createCard();
+    card._hass.states = {
+      'sensor.dynamic_target': {
+        state: '70',
+        attributes: {},
+      },
+    };
+    const cfg = card.normalizeCardConfig({
+      min: 0,
+      max: 100,
+      target: { at: { entity: 'sensor.dynamic_target' }, label: { show: true } },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+
+    const targetMarker = createTrackedElement({
+      style: {
+        display: '',
+        left: '65%',
+        '--marker-color': '#888',
+        '--marker-contrast-color': card._getMarkerContrastColor('#888'),
+      },
+    });
+    const targetLabel = createTrackedElement({
+      style: {
+        left: '65%',
+        visibility: 'visible',
+      },
+      textContent: '65 W',
+    });
+    const row = createTrackedRow({
+      '.target-marker': targetMarker,
+      '.target-value-label': targetLabel,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+
+    card._patchRow(row, cfg, {
+      state: '42',
+      attributes: {
+        friendly_name: 'Row',
+        icon: 'mdi:flash',
+        unit_of_measurement: 'W',
+      },
+    });
+
+    expect(targetMarker.style.left).toBe('70%');
+    expect(targetLabel.style.left).toBe('65%');
+  });
+
+  it('updates target label text when the target changes during _patchRow', () => {
+    const card = createCard();
+    card._hass.states = {
+      'sensor.dynamic_target': {
+        state: '70',
+        attributes: {},
+      },
+    };
+    const cfg = card.normalizeCardConfig({
+      min: 0,
+      max: 100,
+      target: { at: { entity: 'sensor.dynamic_target' }, label: { show: true } },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+
+    const targetLabel = createTrackedElement({
+      style: {
+        left: '65%',
+        visibility: 'visible',
+      },
+      textContent: '65 W',
+    });
+    const row = createTrackedRow({
+      '.target-marker': createTrackedElement({
+        style: {
+          display: '',
+          left: '65%',
+          '--marker-color': '#888',
+          '--marker-contrast-color': card._getMarkerContrastColor('#888'),
+        },
+      }),
+      '.target-value-label': targetLabel,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+
+    card._patchRow(row, cfg, {
+      state: '42',
+      attributes: {
+        friendly_name: 'Row',
+        icon: 'mdi:flash',
+        unit_of_measurement: 'W',
+      },
+    });
+
+    expect(targetLabel.textContent).toBe('70 W');
+    expect(targetLabel.__writes.textContent).toBe(1);
+  });
+
+  it('updates target visibility when the target disappears during _patchRow', () => {
+    const card = createCard();
+    card._hass.states = {};
+    const cfg = card.normalizeCardConfig({
+      min: 0,
+      max: 100,
+      target: { at: { entity: 'sensor.dynamic_target' }, label: { show: true } },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+
+    const targetMarker = createTrackedElement({
+      style: {
+        display: '',
+        left: '65%',
+        '--marker-color': '#888',
+        '--marker-contrast-color': card._getMarkerContrastColor('#888'),
+      },
+    });
+    const targetLabel = createTrackedElement({
+      style: {
+        left: '65%',
+        visibility: 'visible',
+      },
+      textContent: '65 W',
+    });
+    const row = createTrackedRow({
+      '.target-marker': targetMarker,
+      '.target-value-label': targetLabel,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+
+    card._patchRow(row, cfg, {
+      state: '42',
+      attributes: {
+        friendly_name: 'Row',
+        icon: 'mdi:flash',
+        unit_of_measurement: 'W',
+      },
+    });
+
+    expect(targetMarker.style.display).toBe('none');
+    expect(targetLabel.style.visibility).toBe('hidden');
+  });
+
+  it('positions the target label in _positionTargetLabel', () => {
+    const card = createCard();
+    const track = {
+      getBoundingClientRect() {
+        return { width: 200 };
+      },
+    };
+    const label = createTrackedElement({
+      style: {
+        left: '123px',
+        visibility: 'hidden',
+      },
+      textContent: '50 W',
+      getBoundingClientRect() {
+        return { width: 40 };
+      },
+    });
+    const marker = createTrackedElement({
+      style: {
+        display: '',
+        left: '50%',
+      },
+    });
+    const row = createTrackedRow({
+      '.bar-track': track,
+      '.target-value-label': label,
+      '.target-marker': marker,
+    });
+
+    card._positionTargetLabel(row);
+
+    expect(label.style.maxWidth).toBe('196px');
+    expect(label.style.left).toBe('100px');
+    expect(label.style.transform).toBe('translateX(-50%)');
+    expect(label.style.visibility).toBe('visible');
+  });
+
   it('renders the needle marker with the configured color override', () => {
     const card = createCard();
     const cfg = card.normalizeCardConfig({
@@ -1067,6 +1599,15 @@ describe('Sensor Bar Card Plus logic', () => {
 
     expect(html).toContain('<div class="needle-layer">');
     expect(html).toContain('<div class="needle-marker"');
+  });
+
+  it('keeps needle glow off CSS filters to avoid clipped animation trails', () => {
+    const source = readFileSync(new URL('../../src/sensor-bar-card-plus.js', import.meta.url), 'utf8');
+    const needleRule = source.match(/\.needle-marker \{[\s\S]*?\n        \}/)?.[0] ?? '';
+
+    expect(needleRule).toContain('box-shadow:');
+    expect(needleRule).not.toContain('filter:');
+    expect(needleRule).not.toContain('drop-shadow');
   });
 
   it('defaults solid_fill to false', () => {
