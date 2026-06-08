@@ -3707,7 +3707,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
     expect(htmlWith).toContain('class="above-target-layer"');
     expect(htmlWith).toContain('background:#ef4444');
-    expect(htmlWith).toContain('clip-path:inset(0 25% 0 50% round 0)');
+    expect(htmlWith).toContain('clip-path:inset(0 25% 0 50% round 0 6px 6px 0)');
     expect(htmlWithout).toContain('class="above-target-layer"');
     expect(htmlWithout).toContain('display:none;');
     expect(htmlNoOverlap).toContain('display:none;');
@@ -3762,7 +3762,23 @@ describe('Sensor Bar Card Plus logic', () => {
     });
 
     expect(aboveTargetLayer.style.cssText).toContain('background:#ef4444');
-    expect(aboveTargetLayer.style.cssText).toContain('clip-path:inset(0 37.5% 0 50%');
+    expect(aboveTargetLayer.style.cssText).toContain('clip-path:inset(0 37.5% 0 50% round 0 6px 6px 0)');
+  });
+
+  it('rounds the above-target overlay at the value endpoint when value is above target but below max', () => {
+    const card = createCard();
+    const ecfg = card.normalizeCardConfig({
+      min: 0,
+      max: 120,
+      above_target_color: '#ef4444',
+      target: 60,
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+    const geometry = card._getNormalizedPercent(75, null);
+    const targetPct = card._toScalePct(60, 0, 120);
+    const style = card._getAboveTargetLayerStyle(ecfg, targetPct, geometry, 38);
+
+    expect(style).toContain('clip-path:inset(0 25% 0 50% round 0 6px 6px 0)');
   });
 
   it('keeps very small reveal intervals as tiny clipped windows on full-width paint', () => {

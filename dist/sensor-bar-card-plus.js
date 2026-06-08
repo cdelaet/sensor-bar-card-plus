@@ -1271,6 +1271,17 @@ class SensorBarCard extends HTMLElement {
     return `${leftRadius} ${rightRadius} ${rightRadius} ${leftRadius}`;
   }
 
+  _getIntervalCornerRadii(interval, geometry) {
+    const endpoints = this._getEndpointSemantics(geometry);
+    const isRounded = (endpointType) => endpointType === 'value' || endpointType === 'range' || endpointType === 'scale';
+    const approximatelyEqual = (a, b) => Math.abs((a ?? 0) - (b ?? 0)) < 0.001;
+    const touchesLeftEndpoint = approximatelyEqual(interval?.start, geometry?.start);
+    const touchesRightEndpoint = approximatelyEqual(interval?.end, geometry?.end);
+    const leftRadius = touchesLeftEndpoint && isRounded(endpoints.left) ? '6px' : '0';
+    const rightRadius = touchesRightEndpoint && isRounded(endpoints.right) ? '6px' : '0';
+    return `${leftRadius} ${rightRadius} ${rightRadius} ${leftRadius}`;
+  }
+
   _getAboveTargetOverlayInterval(targetPct = null, geometry = null) {
     if (!Number.isFinite(targetPct) || geometry?.hidden) return null;
     const clampedTarget = Math.min(100, Math.max(0, targetPct));
@@ -1314,9 +1325,7 @@ class SensorBarCard extends HTMLElement {
     const heightValue = typeof h === 'number' ? `${h}px` : h;
     const leftInset = `${Math.min(100, Math.max(0, interval.start))}%`;
     const rightInset = `${Math.max(0, 100 - interval.end)}%`;
-    const radii = interval.start <= 0
-      ? (interval.end >= 100 ? '6px 6px 6px 6px' : '6px 0 0 6px')
-      : (interval.end >= 100 ? '0 6px 6px 0' : '0');
+    const radii = this._getIntervalCornerRadii(interval, geometry);
     return `display:block;height:${heightValue};background:${ecfg.bar.above_target_color};clip-path:inset(0 ${rightInset} 0 ${leftInset} round ${radii});`;
   }
 
