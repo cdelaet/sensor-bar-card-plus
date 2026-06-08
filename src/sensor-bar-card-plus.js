@@ -1251,6 +1251,9 @@ class SensorBarCard extends HTMLElement {
   }
 
   _getEndpointSemantics(geometry) {
+    if (geometry?.endpointSemantics) {
+      return geometry.endpointSemantics;
+    }
     if (!geometry?.usesBaseline) {
       return {
         left: 'scale',
@@ -1271,25 +1274,28 @@ class SensorBarCard extends HTMLElement {
     return `${leftRadius} ${rightRadius} ${rightRadius} ${leftRadius}`;
   }
 
-  _getIntervalCornerRadii(interval, geometry) {
-    const endpoints = this._getEndpointSemantics(geometry);
-    const isRounded = (endpointType) => endpointType === 'value' || endpointType === 'range' || endpointType === 'scale';
-    const approximatelyEqual = (a, b) => Math.abs((a ?? 0) - (b ?? 0)) < 0.001;
-    const touchesLeftEndpoint = approximatelyEqual(interval?.start, geometry?.start);
-    const touchesRightEndpoint = approximatelyEqual(interval?.end, geometry?.end);
-    const leftRadius = touchesLeftEndpoint && isRounded(endpoints.left) ? '6px' : '0';
-    const rightRadius = touchesRightEndpoint && isRounded(endpoints.right) ? '6px' : '0';
-    return `${leftRadius} ${rightRadius} ${rightRadius} ${leftRadius}`;
-  }
+_getAboveTargetOverlayInterval(targetPct = null) {
+  if (!Number.isFinite(targetPct)) return null;
 
-  _getAboveTargetOverlayInterval(targetPct = null, geometry = null) {
-    if (!Number.isFinite(targetPct) || geometry?.hidden) return null;
-    const clampedTarget = Math.min(100, Math.max(0, targetPct));
-    const start = Math.max(clampedTarget, Math.min(100, Math.max(0, geometry?.start ?? 0)));
-    const end = Math.min(100, Math.max(0, geometry?.end ?? 0));
-    if (!(end > clampedTarget) || !(end > start)) return null;
-    return { start, end };
-  }
+  const start = Math.min(100, Math.max(0, targetPct));
+  if (start >= 100) return null;
+
+  return {
+    start,
+    end: 100,
+  };
+}
+
+_getAboveTargetLayerGeometry(targetPct = null) {
+  const interval = this._getAboveTargetOverlayInterval(targetPct);
+  if (!interval) return null;
+
+  return {
+    start: interval.start,
+    end: interval.end,
+    hidden: false,
+  };
+}
 
   _getFullScalePaintStyle(ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100) {
     const layers = [];
@@ -1313,22 +1319,6 @@ class SensorBarCard extends HTMLElement {
     return `display:block;inset:0;background-image:${layers.join(',')};background-repeat:no-repeat;background-size:100% 100%;`;
   }
 
-  _getAboveTargetLayerStyle(ecfg, targetPct = null, geometry = null, h = 'var(--sbcp-row-height)') {
-    if (!ecfg?.bar?.above_target_color) {
-      return 'display:none;';
-    }
-    const interval = this._getAboveTargetOverlayInterval(targetPct, geometry);
-    if (!interval || interval.start >= interval.end) {
-      return 'display:none;';
-    }
-
-    const heightValue = typeof h === 'number' ? `${h}px` : h;
-    const leftInset = `${Math.min(100, Math.max(0, interval.start))}%`;
-    const rightInset = `${Math.max(0, 100 - interval.end)}%`;
-    const radii = this._getIntervalCornerRadii(interval, geometry);
-    return `display:block;height:${heightValue};background:${ecfg.bar.above_target_color};clip-path:inset(0 ${rightInset} 0 ${leftInset} round ${radii});`;
-  }
-
   _getRevealShapeStyle(geometry, h) {
     const heightValue = typeof h === 'number' ? `${h}px` : h;
     const start = Math.min(100, Math.max(0, geometry?.start ?? 0));
@@ -1346,15 +1336,51 @@ class SensorBarCard extends HTMLElement {
     return `display:block;height:${heightValue};clip-path:inset(${topInset} ${rightInset} ${bottomInset} ${leftInset} round ${radii});`;
   }
 
+  _getStaticLayerRevealStyle(geometry) {
+    if (!geometry?.hidden && Number.isFinite(geometry?.start) && Number.isFinite(geometry?.end) && geometry.end > geometry.start) {
+      const start = Math.min(100, Math.max(0, geometry.start));
+      const end = Math.min(100, Math.max(0, geometry.end));
+      return `display:block;clip-path:inset(0 ${Math.max(0, 100 - end)}% 0 ${start}% round 0);`;
+    }
+    return 'display:none;clip-path:inset(0 100% 0 0 round 0);';
+  }
+
+  _getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100) {
+    const basePaintStyle = this._getFullScalePaintStyle(ecfg, color, targetPct, baselinePct, minValue, maxValue);
+    const baseLayer = {
+      id: 'base',
+      zIndex: 1,
+      visible: true,
+      paintStyle: basePaintStyle,
+      revealStyle: 'display:block;',
+    };
+
+    const aboveTargetGeometry = this._getAboveTargetLayerGeometry(targetPct);
+    const aboveTargetLayer = {
+      id: 'above-target',
+      zIndex: 2,
+      visible: !!(ecfg?.bar?.above_target_color && aboveTargetGeometry),
+      paintStyle: ecfg?.bar?.above_target_color
+        ? `display:block;inset:0;background:${ecfg.bar.above_target_color};`
+        : 'display:none;',
+      revealStyle: aboveTargetGeometry
+        ? this._getStaticLayerRevealStyle(aboveTargetGeometry)
+        : this._getStaticLayerRevealStyle({ start: 0, end: 0, hidden: true }),
+    };
+
+    return [baseLayer, aboveTargetLayer];
+  }
+
   _getFillRenderState(pct, h, ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, needleActive = false) {
     const geometry = needleActive
       ? this._getNormalizedPercent(100, null)
       : this._getNormalizedPercent(pct, baselinePct);
+    const paintLayers = this._getFillPaintLayers(geometry, h, ecfg, color, targetPct, baselinePct, minValue, maxValue);
     return {
       geometry,
-      paintStyle: this._getFullScalePaintStyle(ecfg, color, targetPct, baselinePct, minValue, maxValue),
+      paintLayers,
+      paintStyle: paintLayers[0]?.paintStyle ?? 'display:none;',
       revealStyle: this._getRevealShapeStyle(geometry, h),
-      aboveTargetStyle: this._getAboveTargetLayerStyle(ecfg, targetPct, geometry, h),
     };
   }
 
@@ -1627,24 +1653,26 @@ class SensorBarCard extends HTMLElement {
           background: var(--secondary-background-color, #e8e8e8);
           overflow: hidden;
         }
-        .bar-paint-layer {
+        .bar-fill-reveal {
           position: absolute;
           inset: 0;
+          pointer-events: none;
           transition: clip-path 0.6s cubic-bezier(0.4,0,0.2,1);
           z-index: 1;
         }
-        .above-target-layer {
+        .bar-paint-layer {
           position: absolute;
           inset: 0;
-          transition: clip-path 0.6s cubic-bezier(0.4,0,0.2,1);
-          z-index: 2;
           pointer-events: none;
+          z-index: 1;
         }
-        .bar-paint-layer.no-anim {
+        .bar-paint-layer[data-layer="above-target"] {
+          z-index: 2;
+        }
+        .bar-fill-reveal.no-anim {
           transition: none;
         }
-        .row[data-bar-animated="false"] .bar-paint-layer,
-        .row[data-bar-animated="false"] .above-target-layer,
+        .row[data-bar-animated="false"] .bar-fill-reveal,
         .row[data-bar-animated="false"] .needle-marker,
         .row[data-bar-animated="false"] .target-marker,
         .row[data-bar-animated="false"] .peak-marker,
@@ -3034,6 +3062,8 @@ class SensorBarCard extends HTMLElement {
       <div class="needle-layer">
         <div class="needle-marker" data-edge="${needleState.edge}" style="left:${needleState.pct ?? 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? 'block' : 'none'};"></div>
       </div>` : '';
+    const paintLayers = fillState.paintLayers.map(layer => `
+                  <div class="bar-paint-layer" data-layer="${layer.id}" style="z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}"></div>`).join('');
     const aboveLabel = lp === 'above' ? `
       <div class="above-line">
         ${ecfg.icon && ecfg.icon !== false ? `<div class="above-icon-spacer"></div>` : ''}
@@ -3069,8 +3099,9 @@ class SensorBarCard extends HTMLElement {
             ${leftLabel}
             <div class="bar-wrap">
               <div class="bar-track">
-                <div class="bar-paint-layer${bar.animated ? '' : ' no-anim'}" style="${fillState.paintStyle}${fillState.revealStyle}"></div>
-                <div class="above-target-layer" style="${fillState.aboveTargetStyle}"></div>
+                <div class="bar-fill-reveal${bar.animated ? '' : ' no-anim'}" style="${fillState.revealStyle}">
+${paintLayers}
+                </div>
                 ${innerLabel}
                 ${peakMarker}
                 ${targetMarker}
@@ -3103,7 +3134,8 @@ class SensorBarCard extends HTMLElement {
     const display = isNaN(rawVal) ? stateObj.state : this._formatNumericDisplay(rawVal, ecfg.formatting.decimal);
     const displayUnit = isNumericState ? unit : '';
 
-    const paintLayer = row.querySelector('.bar-paint-layer');
+    const fillReveal = row.querySelector('.bar-fill-reveal');
+    const paintLayer = row.querySelector('.bar-paint-layer[data-layer="base"]');
     let liveTargetPct = null;
     if (targetVal !== null) {
       liveTargetPct = this._toScalePct(targetVal, safeMin, safeMax);
@@ -3112,13 +3144,22 @@ class SensorBarCard extends HTMLElement {
     const needleState = this._getNeedleRenderState(rawVal, ecfg, safeMin, safeMax, liveBaselinePct);
     const fillState = this._getFillRenderState(pct, 'var(--sbcp-row-height)', ecfg, color, liveTargetPct, liveBaselinePct, safeMin, safeMax, needleState.show);
 
-    if (paintLayer) {
-      this._setStyleTextIfChanged(paintLayer, `${fillState.paintStyle}${fillState.revealStyle}`);
-      this._setClassNameIfChanged(paintLayer, `bar-paint-layer${ecfg.bar.animated ? '' : ' no-anim'}`);
+    if (fillReveal) {
+      this._setStyleTextIfChanged(fillReveal, fillState.revealStyle);
+      this._setClassNameIfChanged(fillReveal, `bar-fill-reveal${ecfg.bar.animated ? '' : ' no-anim'}`);
     }
-    const aboveTargetLayer = row.querySelector('.above-target-layer');
+    if (paintLayer) {
+      const baseLayerState = fillState.paintLayers.find(layer => layer.id === 'base');
+      if (baseLayerState) {
+        this._setStyleTextIfChanged(paintLayer, `z-index:${baseLayerState.zIndex};${baseLayerState.paintStyle}${baseLayerState.revealStyle}`);
+      }
+    }
+    const aboveTargetLayer = row.querySelector('.bar-paint-layer[data-layer="above-target"]');
     if (aboveTargetLayer) {
-      this._setStyleTextIfChanged(aboveTargetLayer, fillState.aboveTargetStyle);
+      const aboveTargetState = fillState.paintLayers.find(layer => layer.id === 'above-target');
+      if (aboveTargetState) {
+        this._setStyleTextIfChanged(aboveTargetLayer, `z-index:${aboveTargetState.zIndex};${aboveTargetState.paintStyle}${aboveTargetState.revealStyle}`);
+      }
     }
     const needleEl = row.querySelector('.needle-marker');
     if (needleEl) {

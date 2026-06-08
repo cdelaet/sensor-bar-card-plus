@@ -249,229 +249,195 @@ input_text:
     initial: noisy-state
     max: 80
 
-sensor:
-  - platform: template
-    sensors:
+template:
+  - sensor:
       # Primary playground sensor. This is the entity most demo cards consume.
-      sbcp_playground_sensor:
-        friendly_name: Playground Sensor
+      - name: Playground Sensor
+        default_entity_id: sensor.sbcp_playground_sensor
         unit_of_measurement: W
-        icon_template: mdi:flash
-        value_template: "{{ states('input_number.sbcp_current_value') | float(0) }}"
-
+        icon: mdi:flash
+        state: "{{ states('input_number.sbcp_current_value') | float(0) }}"
       # Helper values are mirrored as ordinary sensors so the card under test
       # always consumes entity states rather than helper entities directly.
-      sbcp_playground_min:
-        friendly_name: SBCP Playground Wave Min
+      - name: SBCP Playground Wave Min
+        default_entity_id: sensor.sbcp_playground_min
         unit_of_measurement: W
-        icon_template: mdi:arrow-collapse-left
-        value_template: "{{ states('input_number.sbcp_min_value') | float(0) }}"
-
-      sbcp_playground_max:
-        friendly_name: SBCP Playground Wave Max
+        icon: mdi:arrow-collapse-left
+        state: "{{ states('input_number.sbcp_min_value') | float(0) }}"
+      - name: SBCP Playground Wave Max
+        default_entity_id: sensor.sbcp_playground_max
         unit_of_measurement: W
-        icon_template: mdi:arrow-collapse-right
-        value_template: "{{ states('input_number.sbcp_max_value') | float(0) }}"
-
-      sbcp_playground_scale_min:
-        friendly_name: SBCP Playground Scale Min
+        icon: mdi:arrow-collapse-right
+        state: "{{ states('input_number.sbcp_max_value') | float(0) }}"
+      - name: SBCP Playground Scale Min
+        default_entity_id: sensor.sbcp_playground_scale_min
         unit_of_measurement: W
-        icon_template: mdi:arrow-expand-left
-        value_template: "{{ states('input_number.sbcp_scale_min_value') | float(0) }}"
-
-      sbcp_playground_scale_max:
-        friendly_name: SBCP Playground Scale Max
+        icon: mdi:arrow-expand-left
+        state: "{{ states('input_number.sbcp_scale_min_value') | float(0) }}"
+      - name: SBCP Playground Scale Max
+        default_entity_id: sensor.sbcp_playground_scale_max
         unit_of_measurement: W
-        icon_template: mdi:arrow-expand-right
-        value_template: "{{ states('input_number.sbcp_scale_max_value') | float(0) }}"
-
-      sbcp_playground_target:
-        friendly_name: SBCP Playground Target
+        icon: mdi:arrow-expand-right
+        state: "{{ states('input_number.sbcp_scale_max_value') | float(0) }}"
+      - name: SBCP Playground Target
+        default_entity_id: sensor.sbcp_playground_target
         unit_of_measurement: W
-        icon_template: mdi:bullseye-arrow
-        value_template: "{{ states('input_number.sbcp_target_value') | float(0) }}"
-
-      sbcp_playground_bar_height:
-        friendly_name: SBCP Playground Bar Height
+        icon: mdi:bullseye-arrow
+        state: "{{ states('input_number.sbcp_target_value') | float(0) }}"
+      - name: SBCP Playground Bar Height
+        default_entity_id: sensor.sbcp_playground_bar_height
         unit_of_measurement: px
-        icon_template: mdi:arrow-expand-vertical
-        value_template: "{{ states('input_number.sbcp_bar_height') | int(38) }}"
-
-      sbcp_playground_decimal_precision:
-        friendly_name: SBCP Playground Decimal Precision
-        icon_template: mdi:decimal
-        value_template: "{{ states('input_number.sbcp_decimal_precision') | int(1) }}"
-
-      sbcp_playground_color_mode:
-        friendly_name: SBCP Playground Color Mode
-        icon_template: mdi:palette-outline
-        value_template: "{{ states('input_select.sbcp_color_mode') }}"
-
-      sbcp_playground_label_mode:
-        friendly_name: SBCP Playground Label Mode
-        icon_template: mdi:format-text
-        value_template: "{{ states('input_select.sbcp_label_mode') }}"
-
+        icon: mdi:arrow-expand-vertical
+        state: "{{ states('input_number.sbcp_bar_height') | int(38) }}"
+      - name: SBCP Playground Decimal Precision
+        default_entity_id: sensor.sbcp_playground_decimal_precision
+        icon: mdi:decimal
+        state: "{{ states('input_number.sbcp_decimal_precision') | int(1) }}"
+      - name: SBCP Playground Color Mode
+        default_entity_id: sensor.sbcp_playground_color_mode
+        icon: mdi:palette-outline
+        state: "{{ states('input_select.sbcp_color_mode') }}"
+      - name: SBCP Playground Label Mode
+        default_entity_id: sensor.sbcp_playground_label_mode
+        icon: mdi:format-text
+        state: "{{ states('input_select.sbcp_label_mode') }}"
       # Long-label entity for overflow and alignment checks.
-      sbcp_playground_long_label:
-        friendly_name: Extremely Long Friendly Sensor Label For Alignment, Overflow, And Screenshot Testing
+      - name: Extremely Long Friendly Sensor Label For Alignment, Overflow, And Screenshot Testing
+        default_entity_id: sensor.sbcp_playground_long_label
         unit_of_measurement: W
-        icon_template: mdi:transmission-tower
-        value_template: "{{ states('input_number.sbcp_current_value') | float(0) }}"
-
+        icon: mdi:transmission-tower
+        state: "{{ states('input_number.sbcp_current_value') | float(0) }}"
       # No icon attribute on purpose for missing-icon tests.
-      sbcp_playground_no_icon:
-        friendly_name: SBCP Playground No Icon
+      - name: SBCP Playground No Icon
+        default_entity_id: sensor.sbcp_playground_no_icon
         unit_of_measurement: W
-        value_template: "{{ (states('input_number.sbcp_current_value') | float(0) * 0.82 + 5) | round(1) }}"
-
-      sbcp_playground_negative:
-        friendly_name: SBCP Playground Negative
+        state: "{{ (states('input_number.sbcp_current_value') | float(0) * 0.82 + 5) | round(1) }}"
+      - name: SBCP Playground Negative
+        default_entity_id: sensor.sbcp_playground_negative
         unit_of_measurement: W
-        icon_template: mdi:minus-circle-outline
-        value_template: "{{ (states('input_number.sbcp_current_value') | float(0) | abs * -1) | round(1) }}"
-
-      sbcp_playground_unavailable:
-        friendly_name: SBCP Playground Unavailable
-        icon_template: mdi:alert-circle-outline
-        value_template: unavailable
-
-      sbcp_playground_unknown:
-        friendly_name: SBCP Playground Unknown
-        icon_template: mdi:help-circle-outline
-        value_template: unknown
-
-      sbcp_playground_text_state:
-        friendly_name: SBCP Playground Text State
-        icon_template: mdi:message-alert-outline
-        value_template: "{{ states('input_text.sbcp_custom_raw_state') }}"
-
+        icon: mdi:minus-circle-outline
+        state: "{{ (states('input_number.sbcp_current_value') | float(0) | abs * -1) | round(1) }}"
+      - name: SBCP Playground Unavailable
+        default_entity_id: sensor.sbcp_playground_unavailable
+        icon: mdi:alert-circle-outline
+        state: unavailable
+      - name: SBCP Playground Unknown
+        default_entity_id: sensor.sbcp_playground_unknown
+        icon: mdi:help-circle-outline
+        state: unknown
+      - name: SBCP Playground Text State
+        default_entity_id: sensor.sbcp_playground_text_state
+        icon: mdi:message-alert-outline
+        state: "{{ states('input_text.sbcp_custom_raw_state') }}"
       # Synthetic entities for multi-row rendering and stress tests.
-      sbcp_stress_01:
-        friendly_name: SBCP Stress 01
+      - name: SBCP Stress 01
+        default_entity_id: sensor.sbcp_stress_01
         unit_of_measurement: W
-        icon_template: mdi:flash-outline
-        value_template: "{{ (states('input_number.sbcp_current_value') | float(0) * 0.35 + 6) | round(1) }}"
-
-      sbcp_stress_02:
-        friendly_name: SBCP Stress 02
+        icon: mdi:flash-outline
+        state: "{{ (states('input_number.sbcp_current_value') | float(0) * 0.35 + 6) | round(1) }}"
+      - name: SBCP Stress 02
+        default_entity_id: sensor.sbcp_stress_02
         unit_of_measurement: W
-        icon_template: mdi:flash-outline
-        value_template: "{{ (states('input_number.sbcp_current_value') | float(0) * 0.55 + 14) | round(1) }}"
-
-      sbcp_stress_03:
-        friendly_name: SBCP Stress 03
+        icon: mdi:flash-outline
+        state: "{{ (states('input_number.sbcp_current_value') | float(0) * 0.55 + 14) | round(1) }}"
+      - name: SBCP Stress 03
+        default_entity_id: sensor.sbcp_stress_03
         unit_of_measurement: W
-        icon_template: mdi:flash-outline
-        value_template: "{{ (states('input_number.sbcp_current_value') | float(0) * 0.75 + 22) | round(1) }}"
-
-      sbcp_stress_04:
-        friendly_name: SBCP Stress 04
+        icon: mdi:flash-outline
+        state: "{{ (states('input_number.sbcp_current_value') | float(0) * 0.75 + 22) | round(1) }}"
+      - name: SBCP Stress 04
+        default_entity_id: sensor.sbcp_stress_04
         unit_of_measurement: W
-        icon_template: mdi:flash-outline
-        value_template: "{{ (states('input_number.sbcp_current_value') | float(0) * 0.95 + 30) | round(1) }}"
-
-      sbcp_stress_05:
-        friendly_name: SBCP Stress 05
+        icon: mdi:flash-outline
+        state: "{{ (states('input_number.sbcp_current_value') | float(0) * 0.95 + 30) | round(1) }}"
+      - name: SBCP Stress 05
+        default_entity_id: sensor.sbcp_stress_05
         unit_of_measurement: W
-        icon_template: mdi:flash-outline
-        value_template: "{{ (states('input_number.sbcp_current_value') | float(0) * 1.05 + 12) | round(1) }}"
-
-      sbcp_stress_06:
-        friendly_name: SBCP Stress 06
+        icon: mdi:flash-outline
+        state: "{{ (states('input_number.sbcp_current_value') | float(0) * 1.05 + 12) | round(1) }}"
+      - name: SBCP Stress 06
+        default_entity_id: sensor.sbcp_stress_06
         unit_of_measurement: W
-        icon_template: mdi:flash-outline
-        value_template: "{{ (states('input_number.sbcp_current_value') | float(0) * 1.15 + 4) | round(1) }}"
-
-      sbcp_stress_07:
-        friendly_name: SBCP Stress 07
+        icon: mdi:flash-outline
+        state: "{{ (states('input_number.sbcp_current_value') | float(0) * 1.15 + 4) | round(1) }}"
+      - name: SBCP Stress 07
+        default_entity_id: sensor.sbcp_stress_07
         unit_of_measurement: W
-        icon_template: mdi:flash-outline
-        value_template: "{{ (states('input_number.sbcp_current_value') | float(0) * 1.35 - 8) | round(1) }}"
-
-      sbcp_stress_08:
-        friendly_name: SBCP Stress 08
+        icon: mdi:flash-outline
+        state: "{{ (states('input_number.sbcp_current_value') | float(0) * 1.35 - 8) | round(1) }}"
+      - name: SBCP Stress 08
+        default_entity_id: sensor.sbcp_stress_08
         unit_of_measurement: W
-        icon_template: mdi:flash-outline
-        value_template: "{{ (states('input_number.sbcp_current_value') | float(0) * 1.55 - 18) | round(1) }}"
-
-      sbcp_stress_09:
-        friendly_name: SBCP Stress 09
+        icon: mdi:flash-outline
+        state: "{{ (states('input_number.sbcp_current_value') | float(0) * 1.55 - 18) | round(1) }}"
+      - name: SBCP Stress 09
+        default_entity_id: sensor.sbcp_stress_09
         unit_of_measurement: W
-        icon_template: mdi:flash-outline
-        value_template: "{{ (states('input_number.sbcp_current_value') | float(0) * 0.45 + 40) | round(1) }}"
-
-      sbcp_stress_10:
-        friendly_name: SBCP Stress 10
+        icon: mdi:flash-outline
+        state: "{{ (states('input_number.sbcp_current_value') | float(0) * 0.45 + 40) | round(1) }}"
+      - name: SBCP Stress 10
+        default_entity_id: sensor.sbcp_stress_10
         unit_of_measurement: W
-        icon_template: mdi:flash-outline
-        value_template: "{{ (states('input_number.sbcp_current_value') | float(0) * 0.65 + 48) | round(1) }}"
-
-      sbcp_stress_11:
-        friendly_name: SBCP Stress 11
+        icon: mdi:flash-outline
+        state: "{{ (states('input_number.sbcp_current_value') | float(0) * 0.65 + 48) | round(1) }}"
+      - name: SBCP Stress 11
+        default_entity_id: sensor.sbcp_stress_11
         unit_of_measurement: W
-        icon_template: mdi:flash-outline
-        value_template: "{{ (states('input_number.sbcp_current_value') | float(0) * 0.85 + 56) | round(1) }}"
-
-      sbcp_stress_12:
-        friendly_name: SBCP Stress 12
+        icon: mdi:flash-outline
+        state: "{{ (states('input_number.sbcp_current_value') | float(0) * 0.85 + 56) | round(1) }}"
+      - name: SBCP Stress 12
+        default_entity_id: sensor.sbcp_stress_12
         unit_of_measurement: W
-        icon_template: mdi:flash-outline
-        value_template: "{{ (states('input_number.sbcp_current_value') | float(0) * 1.25 + 24) | round(1) }}"
-
+        icon: mdi:flash-outline
+        state: "{{ (states('input_number.sbcp_current_value') | float(0) * 1.25 + 24) | round(1) }}"
       # Showcase-only synthetic telemetry. These are deterministic animated
       # entities for the promotional hero scene in the screenshots dashboard.
-      sbcp_showcase_daylight:
-        friendly_name: Daylight Progress
+      - name: Daylight Progress
+        default_entity_id: sensor.sbcp_showcase_daylight
         unit_of_measurement: '%'
-        icon_template: mdi:white-balance-sunny
-        value_template: >-
+        icon: mdi:white-balance-sunny
+        state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {{ (((sin((p - 90) * pi / 180) + 1) / 2) * 100) | round(1) }}
-
-      sbcp_showcase_solar:
-        friendly_name: Solar Production
+      - name: Solar Production
+        default_entity_id: sensor.sbcp_showcase_solar
         unit_of_measurement: W
-        icon_template: mdi:solar-power
-        value_template: >-
+        icon: mdi:solar-power
+        state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {% set base = ((sin((p - 90) * pi / 180) + 1) / 2) %}
           {% set shimmer = ((sin((p + 35) * pi / 180) + 1) / 2) %}
           {{ (base * 6200 + shimmer * 700) | round(1) }}
-
-      sbcp_showcase_battery:
-        friendly_name: Home Battery
+      - name: Home Battery
+        default_entity_id: sensor.sbcp_showcase_battery
         unit_of_measurement: '%'
-        icon_template: mdi:home-battery
-        value_template: >-
+        icon: mdi:home-battery
+        state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {{ (58 + 24 * sin((p + 110) * pi / 180)) | round(1) }}
-
-      sbcp_showcase_consumption:
-        friendly_name: House Consumption
+      - name: House Consumption
+        default_entity_id: sensor.sbcp_showcase_consumption
         unit_of_measurement: W
-        icon_template: mdi:home-lightning-bolt
-        value_template: >-
+        icon: mdi:home-lightning-bolt
+        state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {{ (1850 + 420 * sin((p + 40) * pi / 180) + 180 * sin((p * 2) * pi / 180)) | round(1) }}
-
-      sbcp_showcase_grid:
-        friendly_name: Grid Flow
+      - name: Grid Flow
+        default_entity_id: sensor.sbcp_showcase_grid
         unit_of_measurement: W
-        icon_template: mdi:transmission-tower
-        value_template: >-
+        icon: mdi:transmission-tower
+        state: >-
           {% set solar = states('sensor.sbcp_hero_solar') | float(0) %}
           {% set ev = states('sensor.sbcp_showcase_ev') | float(0) %}
           {% set hour = states('sensor.sbcp_hero_daylight') | float(0) %}
           {% set daytime = (sin(((hour - 7) / 12) * pi) + 1) / 2 %}
           {% set house = 620 + 160 * daytime + 35 * sin((hour * 55 + 20) * pi / 180) + 22 * sin((hour * 120 - 5) * pi / 180) %}
           {{ (house + ev - solar) | round(1) }}
-
-      sbcp_showcase_ev:
-        friendly_name: EV Charging
+      - name: EV Charging
+        default_entity_id: sensor.sbcp_showcase_ev
         unit_of_measurement: W
-        icon_template: mdi:car-electric
-        value_template: >-
+        icon: mdi:car-electric
+        state: >-
           {% set hour = states('sensor.sbcp_hero_daylight') | float(0) %}
           {% set start_hour = 6 %}
           {% set charge_hours = 16.4 %}
@@ -480,109 +446,96 @@ sensor:
           {% else %}
             0
           {% endif %}
-
-      sbcp_showcase_outdoor_temp:
-        friendly_name: Outdoor Temperature
+      - name: Outdoor Temperature
+        default_entity_id: sensor.sbcp_showcase_outdoor_temp
         unit_of_measurement: °C
-        icon_template: mdi:thermometer-lines
-        value_template: >-
+        icon: mdi:thermometer-lines
+        state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {{ (17 + 5.8 * sin((p - 70) * pi / 180)) | round(1) }}
-
-      sbcp_showcase_indoor_temp:
-        friendly_name: Indoor Temperature
+      - name: Indoor Temperature
+        default_entity_id: sensor.sbcp_showcase_indoor_temp
         unit_of_measurement: °C
-        icon_template: mdi:sofa-outline
-        value_template: >-
+        icon: mdi:sofa-outline
+        state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {{ (21.8 + 1.1 * sin((p + 25) * pi / 180)) | round(1) }}
-
-      sbcp_showcase_humidity:
-        friendly_name: Comfort Humidity
+      - name: Comfort Humidity
+        default_entity_id: sensor.sbcp_showcase_humidity
         unit_of_measurement: '%'
-        icon_template: mdi:water-percent
-        value_template: >-
+        icon: mdi:water-percent
+        state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {{ (49 + 8 * sin((p + 155) * pi / 180)) | round(1) }}
-
-      sbcp_showcase_uv:
-        friendly_name: UV Index
+      - name: UV Index
+        default_entity_id: sensor.sbcp_showcase_uv
         unit_of_measurement: UVI
-        icon_template: mdi:weather-sunny-alert
-        value_template: >-
+        icon: mdi:weather-sunny-alert
+        state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {{ ((((sin((p - 90) * pi / 180) + 1) / 2) * 9.5)) | round(1) }}
-
-      sbcp_showcase_cloud_cover:
-        friendly_name: Cloud Cover
+      - name: Cloud Cover
+        default_entity_id: sensor.sbcp_showcase_cloud_cover
         unit_of_measurement: '%'
-        icon_template: mdi:weather-partly-cloudy
-        value_template: >-
+        icon: mdi:weather-partly-cloudy
+        state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {{ (42 + 24 * sin((p + 210) * pi / 180) - 10 * sin((p * 2) * pi / 180)) | round(1) }}
-
-      sbcp_showcase_cpu:
-        friendly_name: CPU
+      - name: CPU
+        default_entity_id: sensor.sbcp_showcase_cpu
         unit_of_measurement: '%'
-        icon_template: mdi:chip
-        value_template: >-
+        icon: mdi:chip
+        state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {{ (36 + 11 * sin((p + 5) * pi / 180) + 4 * sin((p * 2 + 20) * pi / 180)) | round(1) }}
-
-      sbcp_showcase_network:
-        friendly_name: Network
+      - name: Network
+        default_entity_id: sensor.sbcp_showcase_network
         unit_of_measurement: '%'
-        icon_template: mdi:wifi
-        value_template: >-
+        icon: mdi:wifi
+        state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {{ (28 + 15 * sin((p + 50) * pi / 180)) | round(1) }}
-
-      sbcp_showcase_water:
-        friendly_name: Water
+      - name: Water
+        default_entity_id: sensor.sbcp_showcase_water
         unit_of_measurement: '%'
-        icon_template: mdi:water-outline
-        value_template: >-
+        icon: mdi:water-outline
+        state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {{ (61 + 8 * sin((p + 125) * pi / 180)) | round(1) }}
-
-      sbcp_showcase_air:
-        friendly_name: Air
+      - name: Air
+        default_entity_id: sensor.sbcp_showcase_air
         unit_of_measurement: '%'
-        icon_template: mdi:air-filter
-        value_template: >-
+        icon: mdi:air-filter
+        state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {{ (52 + 10 * sin((p + 185) * pi / 180)) | round(1) }}
-
-      sbcp_showcase_storage:
-        friendly_name: Storage
+      - name: Storage
+        default_entity_id: sensor.sbcp_showcase_storage
         unit_of_measurement: '%'
-        icon_template: mdi:database
-        value_template: >-
+        icon: mdi:database
+        state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {{ (73 + 5 * sin((p + 260) * pi / 180)) | round(1) }}
-
-      sbcp_showcase_latency:
-        friendly_name: Latency
+      - name: Latency
+        default_entity_id: sensor.sbcp_showcase_latency
         unit_of_measurement: ms
-        icon_template: mdi:timer-sand
-        value_template: >-
+        icon: mdi:timer-sand
+        state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {{ (18 + 8 * sin((p + 320) * pi / 180)) | round(1) }}
-
       # Hero-showcase telemetry. Slower, calmer motion for promo captures.
-      sbcp_hero_daylight:
-        friendly_name: Simulated Hour
+      - name: Simulated Hour
+        default_entity_id: sensor.sbcp_hero_daylight
         unit_of_measurement: h
-        icon_template: mdi:white-balance-sunny
-        value_template: >-
+        icon: mdi:white-balance-sunny
+        state: >-
           {% set t = states('input_number.sbcp_hero_phase') | float(0) %}
           {{ ((t % 86400) / 3600) | round(2) }}
-
-      sbcp_hero_solar:
-        friendly_name: Solar Production
+      - name: Solar Production
+        default_entity_id: sensor.sbcp_hero_solar
         unit_of_measurement: W
-        icon_template: mdi:solar-power
-        value_template: >-
+        icon: mdi:solar-power
+        state: >-
           {% set hour = states('sensor.sbcp_hero_daylight') | float(0) %}
           {% set sunrise = 5.6 %}
           {% set sunset = 20.4 %}
@@ -595,12 +548,11 @@ sensor:
             {% set skew = 0.985 + 0.03 * sin((day_t * 180 - 20) * pi / 180) %}
             {{ ([0, 5820 * envelope * skew] | max) | round(1) }}
           {% endif %}
-
-      sbcp_hero_energy_today:
-        friendly_name: Solar Energy Today
+      - name: Solar Energy Today
+        default_entity_id: sensor.sbcp_hero_energy_today
         unit_of_measurement: kWh
-        icon_template: mdi:solar-power-variant
-        value_template: >-
+        icon: mdi:solar-power-variant
+        state: >-
           {% set hour = states('sensor.sbcp_hero_daylight') | float(0) %}
           {% set sunrise = 5.6 %}
           {% set sunset = 20.4 %}
@@ -619,12 +571,11 @@ sensor:
             {% endif %}
           {% endfor %}
           {{ ns.total | round(2) }}
-
-      sbcp_hero_grid_voltage:
-        friendly_name: Grid Voltage
+      - name: Grid Voltage
+        default_entity_id: sensor.sbcp_hero_grid_voltage
         unit_of_measurement: V
-        icon_template: mdi:sine-wave
-        value_template: >-
+        icon: mdi:sine-wave
+        state: >-
           {% set hour = states('sensor.sbcp_hero_daylight') | float(0) %}
           {% set solar = states('sensor.sbcp_hero_solar') | float(0) %}
           {% set solar_frac = solar / 5820 %}
@@ -662,32 +613,29 @@ sensor:
           {% endif %}
           {% set voltage = 228.6 + 16.9 * solar_frac + morning_lift + high_voltage_bump - late_drop - deep_dip + night_recovery + ripple_a + ripple_b + ripple_c %}
           {{ voltage | round(1) }}
-
-      sbcp_hero_ev_soc:
-        friendly_name: EV State Of Charge
+      - name: EV State Of Charge
+        default_entity_id: sensor.sbcp_hero_ev_soc
         unit_of_measurement: '%'
-        icon_template: mdi:car-electric
-        value_template: >-
+        icon: mdi:car-electric
+        state: >-
           {% set hour = states('sensor.sbcp_hero_daylight') | float(0) %}
           {% set start_hour = 6 %}
           {% set charge_hours = 16.4 %}
           {% set charged_hours = [charge_hours, [0, hour - start_hour] | max] | min %}
           {{ ([100, 18 + charged_hours * 5] | min) | round(1) }}
-
-      sbcp_hero_battery:
-        friendly_name: Home Battery Power
+      - name: Home Battery Power
+        default_entity_id: sensor.sbcp_hero_battery
         unit_of_measurement: W
-        icon_template: mdi:home-battery-outline
-        value_template: >-
+        icon: mdi:home-battery-outline
+        state: >-
           {% set solar = states('sensor.sbcp_hero_solar') | float(0) %}
           {% set house = states('sensor.sbcp_hero_consumption') | float(0) %}
           {{ (solar - house) | round(1) }}
-
-      sbcp_hero_consumption:
-        friendly_name: House Consumption
+      - name: House Consumption
+        default_entity_id: sensor.sbcp_hero_consumption
         unit_of_measurement: W
-        icon_template: mdi:home-lightning-bolt
-        value_template: >-
+        icon: mdi:home-lightning-bolt
+        state: >-
           {% set p = states('input_number.sbcp_hero_phase') | float(0) %}
           {% set cycle = (p % 360) / 360 %}
           {% set day_start = 1 / 6 %}
@@ -702,12 +650,11 @@ sensor:
             {% set daylight = circadian * circadian * (3 - 2 * circadian) %}
           {% endif %}
           {{ (1650 + 520 * daylight + 250 * sin((p + 20) * pi / 180) + 120 * sin((p * 2 + 10) * pi / 180)) | round(1) }}
-
-      sbcp_hero_grid_intensity:
-        friendly_name: Grid Carbon Intensity
+      - name: Grid Carbon Intensity
+        default_entity_id: sensor.sbcp_hero_grid_intensity
         unit_of_measurement: gCO2/kWh
-        icon_template: mdi:leaf-circle-outline
-        value_template: >-
+        icon: mdi:leaf-circle-outline
+        state: >-
           {% set p = states('input_number.sbcp_hero_phase') | float(0) %}
           {% set cycle = (p % 360) / 360 %}
           {% set day_start = 1 / 6 %}
@@ -723,8 +670,6 @@ sensor:
           {% endif %}
           {% set night_bias = 1 - daylight %}
           {{ (185 + 160 * night_bias + 22 * sin((p + 35) * pi / 180) + 10 * sin((p * 2 - 15) * pi / 180)) | round(1) }}
-
-template:
   - sensor:
       - name: SBCP Playground Baseline
         default_entity_id: sensor.sbcp_playground_baseline
