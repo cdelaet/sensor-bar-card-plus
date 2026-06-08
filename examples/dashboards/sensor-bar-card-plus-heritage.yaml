@@ -197,8 +197,8 @@ views:
                 color: '#06b6d4'
               - pos: 100
                 color: '#ef4444'
-            min_entity: sensor.sbcp_playground_min
-            max_entity: sensor.sbcp_playground_max
+            min_entity: sensor.sbcp_playground_scale_min
+            max_entity: sensor.sbcp_playground_scale_max
             target_entity: sensor.sbcp_playground_target
             entities:
               - entity: sensor.sbcp_playground_sensor
@@ -503,9 +503,9 @@ views:
                   color: '#ef4444'
             scale:
               min:
-                entity: sensor.sbcp_playground_min
+                entity: sensor.sbcp_playground_scale_min
               max:
-                entity: sensor.sbcp_playground_max
+                entity: sensor.sbcp_playground_scale_max
             target:
               at:
                 entity: sensor.sbcp_playground_target

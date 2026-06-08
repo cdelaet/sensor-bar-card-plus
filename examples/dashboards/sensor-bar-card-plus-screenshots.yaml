@@ -571,9 +571,9 @@ views:
           width: 320
       scale:
         min:
-          entity: sensor.sbcp_playground_min
+          entity: sensor.sbcp_playground_scale_min
         max:
-          entity: sensor.sbcp_playground_max
+          entity: sensor.sbcp_playground_scale_max
       bar:
         color: '#2563eb'
         fill_style: solid
@@ -612,9 +612,9 @@ views:
           width: 170
       scale:
         min:
-          entity: sensor.sbcp_playground_min
+          entity: sensor.sbcp_playground_scale_min
         max:
-          entity: sensor.sbcp_playground_max
+          entity: sensor.sbcp_playground_scale_max
       bar:
         fill_style: gradient
     - type: custom:sensor-bar-card-plus
@@ -628,9 +628,9 @@ views:
           width: 170
       scale:
         min:
-          entity: sensor.sbcp_playground_min
+          entity: sensor.sbcp_playground_scale_min
         max:
-          entity: sensor.sbcp_playground_max
+          entity: sensor.sbcp_playground_scale_max
       formatting:
         decimal: 1
         unit: kilowatt-hours equivalent
@@ -653,9 +653,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -688,9 +688,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -722,9 +722,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -761,9 +761,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -799,9 +799,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -838,9 +838,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -876,9 +876,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -925,9 +925,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -973,9 +973,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -1021,9 +1021,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -1068,9 +1068,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -1117,9 +1117,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -1165,9 +1165,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -1214,9 +1214,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -1262,9 +1262,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -1310,9 +1310,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -1357,9 +1357,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -1406,9 +1406,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -1455,9 +1455,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -1503,9 +1503,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -1551,9 +1551,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -1598,9 +1598,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -1647,9 +1647,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -1761,9 +1761,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -1809,9 +1809,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -1836,9 +1836,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -1862,9 +1862,9 @@ views:
             width: 170
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -1888,9 +1888,9 @@ views:
             width: 170
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -1913,9 +1913,9 @@ views:
             width: 170
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -1939,9 +1939,9 @@ views:
             width: 170
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -1964,9 +1964,9 @@ views:
             width: 170
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         formatting:
           decimal: 1
           unit: kilowatt-hours equivalent
@@ -1993,9 +1993,9 @@ views:
             width: 170
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         formatting:
           decimal: 1
           unit: kilowatt-hours equivalent
@@ -2021,9 +2021,9 @@ views:
             width: 170
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -2051,9 +2051,9 @@ views:
             width: 170
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           color: '#111827'
@@ -2082,9 +2082,9 @@ views:
             width: 170
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -2114,9 +2114,9 @@ views:
             width: 170
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -2146,9 +2146,9 @@ views:
             width: 170
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           color: '#0f766e'
@@ -2177,9 +2177,9 @@ views:
             width: 170
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           color: '#0f766e'
@@ -2208,9 +2208,9 @@ views:
             width: 170
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -2240,9 +2240,9 @@ views:
             width: 170
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -2272,9 +2272,9 @@ views:
             width: 170
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           color: '#0f766e'
@@ -2303,9 +2303,9 @@ views:
             width: 170
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           color: '#0f766e'
@@ -2461,9 +2461,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         formatting:
           decimal: 0
           unit: s
@@ -2489,9 +2489,9 @@ views:
             width: 160
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         formatting:
           decimal: 0
           unit: s
@@ -2515,9 +2515,9 @@ views:
             position: above
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         formatting:
           decimal: 0
           unit: h
@@ -2542,9 +2542,9 @@ views:
             position: above
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         formatting:
           decimal: 0
           unit: h
@@ -2752,9 +2752,9 @@ views:
             width: 150
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -2820,9 +2820,9 @@ views:
             width: 150
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at:
             entity: sensor.sbcp_playground_target
@@ -2888,9 +2888,9 @@ views:
             width: 150
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -2955,9 +2955,9 @@ views:
             width: 150
         scale:
           min:
-            entity: sensor.sbcp_playground_min
+            entity: sensor.sbcp_playground_scale_min
           max:
-            entity: sensor.sbcp_playground_max
+            entity: sensor.sbcp_playground_scale_max
         target:
           at: {}
           label:
@@ -3554,9 +3554,9 @@ views:
           width: 160
       scale:
         min:
-          entity: sensor.sbcp_playground_min
+          entity: sensor.sbcp_playground_scale_min
         max:
-          entity: sensor.sbcp_playground_max
+          entity: sensor.sbcp_playground_scale_max
       bar:
         needle: true
         fill_style: bands
@@ -3593,9 +3593,9 @@ views:
           width: 160
       scale:
         min:
-          entity: sensor.sbcp_playground_min
+          entity: sensor.sbcp_playground_scale_min
         max:
-          entity: sensor.sbcp_playground_max
+          entity: sensor.sbcp_playground_scale_max
       bar:
         needle: true
         fill_style: soft_bands
@@ -3632,9 +3632,9 @@ views:
           width: 160
       scale:
         min:
-          entity: sensor.sbcp_playground_min
+          entity: sensor.sbcp_playground_scale_min
         max:
-          entity: sensor.sbcp_playground_max
+          entity: sensor.sbcp_playground_scale_max
       bar:
         needle: true
         fill_style: band_gradient
@@ -3671,9 +3671,9 @@ views:
           width: 160
       scale:
         min:
-          entity: sensor.sbcp_playground_min
+          entity: sensor.sbcp_playground_scale_min
         max:
-          entity: sensor.sbcp_playground_max
+          entity: sensor.sbcp_playground_scale_max
       bar:
         needle: true
         fill_style: soft_bands
@@ -3892,7 +3892,7 @@ views:
     - type: custom:sensor-bar-card-plus
       title: Needle Edge Cases
       entities:
-      - entity: sensor.sbcp_playground_min
+      - entity: sensor.sbcp_playground_scale_min
         name: Min
       - entity: sensor.sbcp_playground_negative
         name: Near Min
@@ -3915,7 +3915,7 @@ views:
             fixed: 0
           max:
             fixed: 100
-      - entity: sensor.sbcp_playground_max
+      - entity: sensor.sbcp_playground_scale_max
         name: Max
       layout:
         label:
@@ -3924,9 +3924,9 @@ views:
         height: 28
       scale:
         min:
-          entity: sensor.sbcp_playground_min
+          entity: sensor.sbcp_playground_scale_min
         max:
-          entity: sensor.sbcp_playground_max
+          entity: sensor.sbcp_playground_scale_max
       bar:
         needle: true
         fill_style: gradient
@@ -3943,9 +3943,9 @@ views:
         height: 52
       scale:
         min:
-          entity: sensor.sbcp_playground_min
+          entity: sensor.sbcp_playground_scale_min
         max:
-          entity: sensor.sbcp_playground_max
+          entity: sensor.sbcp_playground_scale_max
       target:
         at:
           entity: sensor.sbcp_playground_target

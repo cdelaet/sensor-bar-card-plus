@@ -13,7 +13,7 @@ input_number:
     unit_of_measurement: W
 
   sbcp_min_value:
-    name: SBCP Min Value
+    name: SBCP Wave Min Value
     min: -5000
     max: 10000
     step: 1
@@ -22,7 +22,25 @@ input_number:
     unit_of_measurement: W
 
   sbcp_max_value:
-    name: SBCP Max Value
+    name: SBCP Wave Max Value
+    min: -5000
+    max: 10000
+    step: 1
+    mode: box
+    initial: 100
+    unit_of_measurement: W
+
+  sbcp_scale_min_value:
+    name: SBCP Scale Min Value
+    min: -5000
+    max: 10000
+    step: 1
+    mode: box
+    initial: 0
+    unit_of_measurement: W
+
+  sbcp_scale_max_value:
+    name: SBCP Scale Max Value
     min: -5000
     max: 10000
     step: 1
@@ -244,16 +262,28 @@ sensor:
       # Helper values are mirrored as ordinary sensors so the card under test
       # always consumes entity states rather than helper entities directly.
       sbcp_playground_min:
-        friendly_name: SBCP Playground Min
+        friendly_name: SBCP Playground Wave Min
         unit_of_measurement: W
         icon_template: mdi:arrow-collapse-left
         value_template: "{{ states('input_number.sbcp_min_value') | float(0) }}"
 
       sbcp_playground_max:
-        friendly_name: SBCP Playground Max
+        friendly_name: SBCP Playground Wave Max
         unit_of_measurement: W
         icon_template: mdi:arrow-collapse-right
         value_template: "{{ states('input_number.sbcp_max_value') | float(0) }}"
+
+      sbcp_playground_scale_min:
+        friendly_name: SBCP Playground Scale Min
+        unit_of_measurement: W
+        icon_template: mdi:arrow-expand-left
+        value_template: "{{ states('input_number.sbcp_scale_min_value') | float(0) }}"
+
+      sbcp_playground_scale_max:
+        friendly_name: SBCP Playground Scale Max
+        unit_of_measurement: W
+        icon_template: mdi:arrow-expand-right
+        value_template: "{{ states('input_number.sbcp_scale_max_value') | float(0) }}"
 
       sbcp_playground_target:
         friendly_name: SBCP Playground Target
