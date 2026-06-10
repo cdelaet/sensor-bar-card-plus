@@ -1,0 +1,146 @@
+# ============================================================================
+# Sensor Bar Card Plus Recipe: Dense AV Telemetry
+# ============================================================================
+#
+# This recipe demonstrates dense telemetry layouts using baseline-centered
+# rendering for audio/video calibration and signal-processing style metrics.
+#
+# Baseline mode works especially well for values that naturally oscillate
+# around a neutral reference point.
+#
+# Replace the demo entities below with your own Home Assistant sensors.
+#
+# Demo helpers used here come from:
+# examples/packages/sensor_bar_card_plus_playground_package.yaml
+#
+# Recommended real-world entities:
+#
+# - stereo balance / pan
+# - phase correlation
+# - exposure bias
+# - white balance tint
+# - saturation offset
+# - keystone correction
+#
+# ============================================================================
+
+type: custom:sensor-bar-card-plus
+title: Dense AV Telemetry
+
+entities:
+  - entity: sensor.sbcp_showcase_balance
+    name: Stereo Balance
+    icon: mdi:surround-sound
+
+    scale:
+      min:
+        fixed: -100
+      max:
+        fixed: 100
+
+    baseline:
+      fixed: 0
+
+  - entity: sensor.sbcp_showcase_phase
+    name: Phase Correlation
+    icon: mdi:sine-wave
+
+    scale:
+      min:
+        fixed: -1
+      max:
+        fixed: 1
+
+    baseline:
+      fixed: 0
+
+  - entity: sensor.sbcp_showcase_exposure
+    name: Exposure Bias
+    icon: mdi:brightness-6
+
+    scale:
+      min:
+        fixed: -3
+      max:
+        fixed: 3
+
+    baseline:
+      fixed: 0
+
+  - entity: sensor.sbcp_showcase_tint
+    name: Tint Offset
+    icon: mdi:palette
+
+    scale:
+      min:
+        fixed: -100
+      max:
+        fixed: 100
+
+    baseline:
+      fixed: 0
+
+  - entity: sensor.sbcp_showcase_saturation
+    name: Saturation
+    icon: mdi:invert-colors
+
+    scale:
+      min:
+        fixed: -100
+      max:
+        fixed: 100
+
+    baseline:
+      fixed: 0
+
+  - entity: sensor.sbcp_showcase_keystone
+    name: Keystone
+    icon: mdi:projector
+
+    scale:
+      min:
+        fixed: -50
+      max:
+        fixed: 50
+
+    baseline:
+      fixed: 0
+
+layout:
+  height: 24
+
+  label:
+    position: left
+    width: 130
+
+bar:
+  fill_style: band_gradient
+
+  segments:
+    - from: -100
+      to: -55
+      color: '#2563eb'
+
+    - from: -55
+      to: -15
+      color: '#38bdf8'
+
+    - from: -15
+      to: 15
+      color: '#111827'
+
+    - from: 15
+      to: 55
+      color: '#f59e0b'
+
+    - from: 55
+      to: 100
+      color: '#ef4444'
+
+target:
+  show: true
+  color: '#ffffff'
+
+peak:
+  show: true
+  color: '#facc15'

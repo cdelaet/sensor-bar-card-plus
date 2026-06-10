@@ -1,0 +1,133 @@
+
+
+# ============================================================================
+# Sensor Bar Card Plus Recipe: EV Charging
+# ============================================================================
+#
+# This recipe demonstrates EV charging telemetry with practical operating
+# ranges, target markers, and peak tracking.
+#
+# EV charging is normally positive-only power consumption, so this recipe uses
+# classic reveal-fill bars instead of baseline mode.
+#
+# Replace the demo entities below with your own Home Assistant sensors.
+#
+# Demo helpers used here come from:
+# examples/packages/sensor_bar_card_plus_playground_package.yaml
+#
+# Recommended real-world entities:
+#
+# - EV charger power
+# - charging current
+# - charging voltage
+# - session energy
+# - charger temperature
+# - household peak load
+#
+# ============================================================================
+
+type: custom:sensor-bar-card-plus
+title: EV Charging
+
+entities:
+  - entity: sensor.sbcp_showcase_ev
+    name: Charger
+    icon: mdi:ev-station
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 11000
+
+    target:
+      fixed: 7000
+
+  - entity: sensor.sbcp_showcase_ev_current
+    name: Current
+    icon: mdi:current-ac
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 16
+
+    target:
+      fixed: 13
+
+  - entity: sensor.sbcp_showcase_grid_voltage
+    name: Voltage
+    icon: mdi:sine-wave
+
+    scale:
+      min:
+        fixed: 200
+      max:
+        fixed: 250
+
+    target:
+      fixed: 230
+
+  - entity: sensor.sbcp_showcase_session_energy
+    name: Session
+    icon: mdi:battery-charging-high
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 60
+
+    target:
+      fixed: 40
+
+  - entity: sensor.sbcp_showcase_home_load
+    name: Home Load
+    icon: mdi:home-lightning-bolt
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 15000
+
+    target:
+      fixed: 10000
+
+layout:
+  height: 34
+
+  label:
+    position: left
+    width: 120
+
+bar:
+  fill_style: soft_bands
+
+  segments:
+    - from: 0
+      to: 25
+      color: '#0ea5e9'
+
+    - from: 25
+      to: 60
+      color: '#22c55e'
+
+    - from: 60
+      to: 85
+      color: '#facc15'
+
+    - from: 85
+      to: 100
+      color: '#ef4444'
+
+  above_target_color: '#f97316'
+
+target:
+  show: true
+  color: '#ffffff'
+
+peak:
+  show: true
+  color: '#fb923c'

@@ -1,0 +1,123 @@
+
+
+# ============================================================================
+# Sensor Bar Card Plus Recipe: Solar Production
+# ============================================================================
+#
+# This recipe demonstrates solar production monitoring with soft semantic
+# operating ranges, target markers, and peak tracking.
+#
+# Solar production is normally a positive-only value, so this recipe uses a
+# classic reveal-fill bar instead of baseline mode.
+#
+# Replace the demo entities below with your own Home Assistant sensors.
+#
+# Demo helpers used here come from:
+# examples/packages/sensor_bar_card_plus_playground_package.yaml
+#
+# Recommended real-world entities:
+#
+# - current solar production
+# - inverter AC power
+# - expected production target
+# - daily solar peak
+# - per-string or per-inverter production
+#
+# ============================================================================
+
+type: custom:sensor-bar-card-plus
+title: Solar Production
+
+entities:
+  - entity: sensor.sbcp_showcase_solar
+    name: Solar
+    icon: mdi:solar-power
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 10000
+
+    target:
+      fixed: 7000
+
+  - entity: sensor.sbcp_showcase_solar_east
+    name: East Roof
+    icon: mdi:solar-panel
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 5000
+
+    target:
+      fixed: 3500
+
+  - entity: sensor.sbcp_showcase_solar_west
+    name: West Roof
+    icon: mdi:solar-panel
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 5000
+
+    target:
+      fixed: 3500
+
+  - entity: sensor.sbcp_showcase_solar_forecast
+    name: Forecast
+    icon: mdi:weather-sunny
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 10000
+
+    target:
+      fixed: 7000
+
+layout:
+  height: 34
+
+  label:
+    position: left
+    width: 120
+
+bar:
+  fill_style: soft_bands
+
+  segments:
+    - from: 0%
+      to: 20%
+      color: '#334155'
+
+    - from: 20%
+      to: 45%
+      color: '#22c55e'
+
+    - from: 45%
+      to: 70%
+      color: '#84cc16'
+
+    - from: 70%
+      to: 90%
+      color: '#facc15'
+
+    - from: 90%
+      to: 100%
+      color: '#f97316'
+
+  above_target_color: '#facc15'
+
+target:
+  show: true
+  color: '#ffffff'
+
+peak:
+  show: true
+  color: '#fb923c'

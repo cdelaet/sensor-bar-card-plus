@@ -1,0 +1,117 @@
+
+
+# ============================================================================
+# Sensor Bar Card Plus Recipe: Needle Gauge Basics
+# ============================================================================
+#
+# This recipe demonstrates the most basic form of needle mode.
+#
+# Unlike traditional reveal-fill bars, needle mode keeps the entire scale
+# visible while a needle indicates the current value.
+#
+# This makes it useful for instrumentation-style dashboards where the full
+# operating range itself carries meaning.
+#
+# Replace the demo entities below with your own Home Assistant sensors.
+#
+# Demo helpers used here come from:
+# examples/packages/sensor_bar_card_plus_playground_package.yaml
+#
+# Recommended real-world entities:
+#
+# - battery state of charge
+# - CPU usage
+# - signal strength
+# - inverter load
+# - water tank level
+# - temperature comfort score
+#
+# ============================================================================
+
+type: custom:sensor-bar-card-plus
+title: Needle Gauge Basics
+
+entities:
+  - entity: sensor.sbcp_showcase_cpu
+    name: CPU
+    icon: mdi:chip
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+
+    target:
+      fixed: 80
+
+  - entity: sensor.sbcp_showcase_network
+    name: Network
+    icon: mdi:wifi
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+
+    target:
+      fixed: 75
+
+  - entity: sensor.sbcp_showcase_storage
+    name: Storage
+    icon: mdi:database
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+
+    target:
+      fixed: 85
+
+  - entity: sensor.sbcp_showcase_water
+    name: Water Tank
+    icon: mdi:water
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+
+    target:
+      fixed: 65
+
+layout:
+  height: 42
+
+  label:
+    position: left
+    width: 120
+
+bar:
+  needle: true
+  fill_style: gradient
+
+  gradient_stops:
+    - pos: 0
+      color: '#22c55e'
+
+    - pos: 60
+      color: '#84cc16'
+
+    - pos: 80
+      color: '#facc15'
+
+    - pos: 100
+      color: '#ef4444'
+
+target:
+  show: true
+  color: '#ffffff'
+
+peak:
+  show: true
+  color: '#fb923c'

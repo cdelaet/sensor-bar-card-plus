@@ -1,0 +1,128 @@
+
+
+# ============================================================================
+# Sensor Bar Card Plus Recipe: Battery Flow
+# ============================================================================
+#
+# This recipe demonstrates one of the strongest use cases for
+# Sensor Bar Card Plus: bidirectional battery power flow visualization.
+#
+# Positive values = charging
+# Negative values = discharging
+#
+# Replace the demo entities below with your own Home Assistant sensors.
+#
+# Demo helpers used here come from:
+# examples/packages/sensor_bar_card_plus_playground_package.yaml
+#
+# Recommended real-world entities:
+#
+# - battery power
+# - inverter power
+# - solar production
+# - grid import/export
+# - EV charging power
+#
+# ============================================================================
+
+type: custom:sensor-bar-card-plus
+title: Home Battery Flow
+
+entities:
+  - entity: sensor.sbcp_showcase_battery_power
+    name: Battery
+    icon: mdi:battery
+
+    scale:
+      min:
+        fixed: -5000
+      max:
+        fixed: 5000
+
+    baseline:
+      fixed: 0
+
+    target:
+      fixed: 2500
+
+  - entity: sensor.sbcp_showcase_grid
+    name: Grid
+    icon: mdi:transmission-tower
+
+    scale:
+      min:
+        fixed: -5000
+      max:
+        fixed: 5000
+
+    baseline:
+      fixed: 0
+
+    target:
+      fixed: 0
+
+  - entity: sensor.sbcp_showcase_solar
+    name: Solar
+    icon: mdi:solar-power
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 10000
+
+    target:
+      fixed: 7000
+
+  - entity: sensor.sbcp_showcase_ev
+    name: EV Charger
+    icon: mdi:ev-station
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 11000
+
+    target:
+      fixed: 7000
+
+layout:
+  height: 34
+
+  label:
+    position: left
+    width: 120
+
+bar:
+  fill_style: soft_bands
+
+  segments:
+    - from: -100
+      to: -70
+      color: '#2563eb'
+
+    - from: -70
+      to: -25
+      color: '#0ea5e9'
+
+    - from: -25
+      to: 25
+      color: '#111827'
+
+    - from: 25
+      to: 70
+      color: '#22c55e'
+
+    - from: 70
+      to: 100
+      color: '#84cc16'
+
+target:
+  show: true
+  color: '#ffffff'
+
+peak:
+  show: true
+  color: '#f59e0b'
+

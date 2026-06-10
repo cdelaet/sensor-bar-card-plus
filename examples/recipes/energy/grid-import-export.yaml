@@ -1,0 +1,130 @@
+
+
+# ============================================================================
+# Sensor Bar Card Plus Recipe: Grid Import / Export
+# ============================================================================
+#
+# This recipe demonstrates baseline-centered import/export flows.
+#
+# Positive values = importing from the grid
+# Negative values = exporting to the grid
+#
+# Sensor Bar Card Plus is particularly strong at visualizing
+# bidirectional energy flows using baseline rendering.
+#
+# Replace the demo entities below with your own Home Assistant sensors.
+#
+# Demo helpers used here come from:
+# examples/packages/sensor_bar_card_plus_playground_package.yaml
+#
+# Recommended real-world entities:
+#
+# - grid import/export power
+# - per-phase grid power
+# - battery inverter power
+# - home consumption
+# - dynamic tariff power thresholds
+#
+# ============================================================================
+
+type: custom:sensor-bar-card-plus
+title: Grid Import / Export
+
+entities:
+  - entity: sensor.sbcp_showcase_grid
+    name: Grid
+    icon: mdi:transmission-tower
+
+    scale:
+      min:
+        fixed: -8000
+      max:
+        fixed: 8000
+
+    baseline:
+      at:
+        fixed: 0
+
+    target:
+      fixed: 0
+
+  - entity: sensor.sbcp_showcase_grid_l1
+    name: Grid L1
+    icon: mdi:lightning-bolt
+
+    scale:
+      min:
+        fixed: -4000
+      max:
+        fixed: 4000
+
+    baseline:
+      at:
+        fixed: 0
+
+  - entity: sensor.sbcp_showcase_grid_l2
+    name: Grid L2
+    icon: mdi:lightning-bolt
+
+    scale:
+      min:
+        fixed: -4000
+      max:
+        fixed: 4000
+
+    baseline:
+      at:
+        fixed: 0
+
+  - entity: sensor.sbcp_showcase_grid_l3
+    name: Grid L3
+    icon: mdi:lightning-bolt
+
+    scale:
+      min:
+        fixed: -4000
+      max:
+        fixed: 4000
+
+    baseline:
+      at:
+        fixed: 0
+
+layout:
+  height: 34
+
+  label:
+    position: left
+    width: 120
+
+bar:
+  fill_style: band_gradient
+
+  segments:
+    - from: 0%
+      to: 20%
+      color: '#2563eb'
+
+    - from: 20%
+      to: 42%
+      color: '#38bdf8'
+
+    - from: 42%
+      to: 58%
+      color: '#334155'
+
+    - from: 58%
+      to: 80%
+      color: '#f59e0b'
+
+    - from: 80%
+      to: 100%
+      color: '#ef4444'
+
+target:
+  show: true
+  color: '#ffffff'
+
+peak:
+  show: true
+  color: '#f59e0b'

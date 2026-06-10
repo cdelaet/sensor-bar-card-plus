@@ -523,6 +523,200 @@ template:
         state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {{ (18 + 8 * sin((p + 320) * pi / 180)) | round(1) }}
+      # Recipe demo helper sensors. These exist so every file in examples/recipes
+      # works out of the box with the playground package. Real users should
+      # replace these demo entities with their own Home Assistant sensors.
+      - name: Recipe Battery Power
+        default_entity_id: sensor.sbcp_showcase_battery_power
+        unit_of_measurement: W
+        icon: mdi:battery
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (-1800 + 4200 * sin((p + 35) * pi / 180)) | round(1) }}
+      - name: Recipe Grid L1
+        default_entity_id: sensor.sbcp_showcase_grid_l1
+        unit_of_measurement: W
+        icon: mdi:lightning-bolt
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (900 + 2100 * sin((p + 20) * pi / 180)) | round(1) }}
+      - name: Recipe Grid L2
+        default_entity_id: sensor.sbcp_showcase_grid_l2
+        unit_of_measurement: W
+        icon: mdi:lightning-bolt
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (-650 + 1700 * sin((p + 135) * pi / 180)) | round(1) }}
+      - name: Recipe Grid L3
+        default_entity_id: sensor.sbcp_showcase_grid_l3
+        unit_of_measurement: W
+        icon: mdi:lightning-bolt
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (420 + 1450 * sin((p + 255) * pi / 180)) | round(1) }}
+      - name: Recipe Solar East
+        default_entity_id: sensor.sbcp_showcase_solar_east
+        unit_of_measurement: W
+        icon: mdi:solar-panel
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {% set base = ((sin((p - 65) * pi / 180) + 1) / 2) %}
+          {{ (base * 4200) | round(1) }}
+      - name: Recipe Solar West
+        default_entity_id: sensor.sbcp_showcase_solar_west
+        unit_of_measurement: W
+        icon: mdi:solar-panel
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {% set base = ((sin((p - 120) * pi / 180) + 1) / 2) %}
+          {{ (base * 3900) | round(1) }}
+      - name: Recipe Solar Forecast
+        default_entity_id: sensor.sbcp_showcase_solar_forecast
+        unit_of_measurement: W
+        icon: mdi:weather-sunny
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {% set base = ((sin((p - 85) * pi / 180) + 1) / 2) %}
+          {{ (base * 7600 + 650) | round(1) }}
+      - name: Recipe EV Current
+        default_entity_id: sensor.sbcp_showcase_ev_current
+        unit_of_measurement: A
+        icon: mdi:current-ac
+        state: >-
+          {% set ev = states('sensor.sbcp_showcase_ev') | float(0) %}
+          {{ (ev / 375) | round(1) }}
+      - name: Recipe Grid Voltage
+        default_entity_id: sensor.sbcp_showcase_grid_voltage
+        unit_of_measurement: V
+        icon: mdi:sine-wave
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (229 + 7 * sin((p + 80) * pi / 180) + 2 * sin((p * 2) * pi / 180)) | round(1) }}
+      - name: Recipe Session Energy
+        default_entity_id: sensor.sbcp_showcase_session_energy
+        unit_of_measurement: kWh
+        icon: mdi:battery-charging-high
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (18 + 22 * ((sin((p - 45) * pi / 180) + 1) / 2)) | round(1) }}
+      - name: Recipe Home Load
+        default_entity_id: sensor.sbcp_showcase_home_load
+        unit_of_measurement: W
+        icon: mdi:home-lightning-bolt
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (3200 + 4200 * ((sin((p + 15) * pi / 180) + 1) / 2)) | round(1) }}
+      - name: Recipe Memory
+        default_entity_id: sensor.sbcp_showcase_memory
+        unit_of_measurement: '%'
+        icon: mdi:memory
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (64 + 14 * sin((p + 120) * pi / 180)) | round(1) }}
+      - name: Recipe Container Load
+        default_entity_id: sensor.sbcp_showcase_container_load
+        unit_of_measurement: '%'
+        icon: mdi:docker
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (48 + 22 * sin((p + 45) * pi / 180)) | round(1) }}
+      - name: Recipe Disk Temperature
+        default_entity_id: sensor.sbcp_showcase_disk_temp
+        unit_of_measurement: °C
+        icon: mdi:harddisk
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (42 + 9 * sin((p + 200) * pi / 180)) | round(1) }}
+      - name: Recipe Jitter
+        default_entity_id: sensor.sbcp_showcase_jitter
+        unit_of_measurement: ms
+        icon: mdi:sine-wave
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (7 + 9 * ((sin((p + 160) * pi / 180) + 1) / 2)) | round(1) }}
+      - name: Recipe Packet Loss
+        default_entity_id: sensor.sbcp_showcase_packet_loss
+        unit_of_measurement: '%'
+        icon: mdi:lan-disconnect
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (0.4 + 2.8 * ((sin((p + 280) * pi / 180) + 1) / 2)) | round(1) }}
+      - name: Recipe Download
+        default_entity_id: sensor.sbcp_showcase_download
+        unit_of_measurement: Mbit/s
+        icon: mdi:download-network
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (520 + 290 * sin((p + 45) * pi / 180)) | round(1) }}
+      - name: Recipe Upload
+        default_entity_id: sensor.sbcp_showcase_upload
+        unit_of_measurement: Mbit/s
+        icon: mdi:upload-network
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (32 + 26 * sin((p + 210) * pi / 180)) | round(1) }}
+      - name: Recipe Wi-Fi Quality
+        default_entity_id: sensor.sbcp_showcase_wifi_quality
+        unit_of_measurement: '%'
+        icon: mdi:wifi
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (78 + 14 * sin((p + 330) * pi / 180)) | round(1) }}
+      - name: Recipe Balance
+        default_entity_id: sensor.sbcp_showcase_balance
+        unit_of_measurement: '%'
+        icon: mdi:surround-sound
+        state: "-72"
+      - name: Recipe Phase Correlation
+        default_entity_id: sensor.sbcp_showcase_phase
+        icon: mdi:sine-wave
+        state: "-0.68"
+      - name: Recipe Sample Offset
+        default_entity_id: sensor.sbcp_showcase_sample_offset
+        unit_of_measurement: samples
+        icon: mdi:waveform
+        state: "46"
+      - name: Recipe Tint Offset
+        default_entity_id: sensor.sbcp_showcase_tint
+        unit_of_measurement: '%'
+        icon: mdi:palette
+        state: "58"
+      - name: Recipe Exposure Bias
+        default_entity_id: sensor.sbcp_showcase_exposure
+        unit_of_measurement: EV
+        icon: mdi:brightness-6
+        state: "-2.1"
+      - name: Recipe Saturation
+        default_entity_id: sensor.sbcp_showcase_saturation
+        unit_of_measurement: '%'
+        icon: mdi:invert-colors
+        state: "-64"
+      - name: Recipe Keystone
+        default_entity_id: sensor.sbcp_showcase_keystone
+        unit_of_measurement: °
+        icon: mdi:projector
+        state: "41"
+      - name: Recipe Inverter
+        default_entity_id: sensor.sbcp_showcase_inverter
+        unit_of_measurement: W
+        icon: mdi:flash
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (3600 * sin((p + 70) * pi / 180)) | round(1) }}
+      - name: Recipe EV Flow
+        default_entity_id: sensor.sbcp_showcase_ev_flow
+        unit_of_measurement: W
+        icon: mdi:ev-station
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (5200 * sin((p + 230) * pi / 180)) | round(1) }}
+      - name: Recipe Heat Flow
+        default_entity_id: sensor.sbcp_showcase_heat_flow
+        unit_of_measurement: W
+        icon: mdi:heat-pump
+        state: >-
+          {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
+          {{ (2100 * sin((p + 300) * pi / 180)) | round(1) }}
       # AV baseline showcase telemetry. Fixed values chosen for visually clear
       # baseline screenshots with meaningful positive/negative deviation.
       - name: AV Balance

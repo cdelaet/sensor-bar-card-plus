@@ -1,0 +1,147 @@
+
+
+# ============================================================================
+# Sensor Bar Card Plus Recipe: Network Latency
+# ============================================================================
+#
+# This recipe demonstrates compact network and infrastructure telemetry.
+#
+# Latency, jitter, packet loss, and bandwidth are excellent candidates for
+# dense telemetry dashboards because trends and operating ranges matter more
+# than isolated values.
+#
+# Replace the demo entities below with your own Home Assistant sensors.
+#
+# Demo helpers used here come from:
+# examples/packages/sensor_bar_card_plus_playground_package.yaml
+#
+# Recommended real-world entities:
+#
+# - WAN latency
+# - packet loss
+# - jitter
+# - VPN latency
+# - NAS throughput
+# - internet quality sensors
+# - switch or access-point load
+#
+# ============================================================================
+
+type: custom:sensor-bar-card-plus
+title: Network Telemetry
+
+entities:
+  - entity: sensor.sbcp_showcase_latency
+    name: WAN Latency
+    icon: mdi:web
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+
+    target:
+      fixed: 25
+
+  - entity: sensor.sbcp_showcase_jitter
+    name: Jitter
+    icon: mdi:sine-wave
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 40
+
+    target:
+      fixed: 10
+
+  - entity: sensor.sbcp_showcase_packet_loss
+    name: Packet Loss
+    icon: mdi:lan-disconnect
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 10
+
+    target:
+      fixed: 1
+
+  - entity: sensor.sbcp_showcase_download
+    name: Download
+    icon: mdi:download-network
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 1000
+
+    target:
+      fixed: 700
+
+  - entity: sensor.sbcp_showcase_upload
+    name: Upload
+    icon: mdi:upload-network
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+
+    target:
+      fixed: 40
+
+  - entity: sensor.sbcp_showcase_wifi_quality
+    name: Wi-Fi Quality
+    icon: mdi:wifi
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+
+    target:
+      fixed: 75
+
+layout:
+  height: 24
+
+  label:
+    position: left
+    width: 130
+
+bar:
+  fill_style: soft_bands
+
+  segments:
+    - from: 0
+      to: 35
+      color: '#22c55e'
+
+    - from: 35
+      to: 60
+      color: '#84cc16'
+
+    - from: 60
+      to: 80
+      color: '#facc15'
+
+    - from: 80
+      to: 100
+      color: '#ef4444'
+
+  above_target_color: '#f97316'
+
+target:
+  show: true
+  color: '#ffffff'
+
+peak:
+  show: true
+  color: '#fb923c'

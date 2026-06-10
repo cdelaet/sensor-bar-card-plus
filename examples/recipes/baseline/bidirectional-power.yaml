@@ -1,0 +1,135 @@
+
+
+# ============================================================================
+# Sensor Bar Card Plus Recipe: Bidirectional Power
+# ============================================================================
+#
+# This recipe demonstrates baseline-centered bidirectional power flows.
+#
+# Baseline rendering is one of the defining features of Sensor Bar Card Plus.
+# It is especially useful for values that naturally move above and below a
+# neutral reference point.
+#
+# Positive and negative values visually move in opposite directions away from
+# the baseline.
+#
+# Replace the demo entities below with your own Home Assistant sensors.
+#
+# Demo helpers used here come from:
+# examples/packages/sensor_bar_card_plus_playground_package.yaml
+#
+# Recommended real-world entities:
+#
+# - battery charge/discharge power
+# - grid import/export power
+# - inverter flow direction
+# - HVAC heating/cooling offset
+# - charge/discharge current
+# - audio balance / pan
+#
+# ============================================================================
+
+
+type: custom:sensor-bar-card-plus
+title: Bidirectional Power
+
+entities:
+  - entity: sensor.sbcp_showcase_battery_power
+    name: Battery Flow
+    icon: mdi:battery
+
+    scale:
+      min:
+        fixed: -5000
+      max:
+        fixed: 5000
+
+    baseline:
+      fixed: 0
+
+  - entity: sensor.sbcp_showcase_grid
+    name: Grid Flow
+    icon: mdi:transmission-tower
+
+    scale:
+      min:
+        fixed: -8000
+      max:
+        fixed: 8000
+
+    baseline:
+      fixed: 0
+
+  - entity: sensor.sbcp_showcase_inverter
+    name: Inverter
+    icon: mdi:flash
+
+    scale:
+      min:
+        fixed: -6000
+      max:
+        fixed: 6000
+
+    baseline:
+      fixed: 0
+
+  - entity: sensor.sbcp_showcase_ev_flow
+    name: EV Flow
+    icon: mdi:ev-station
+
+    scale:
+      min:
+        fixed: -11000
+      max:
+        fixed: 11000
+
+    baseline:
+      fixed: 0
+
+  - entity: sensor.sbcp_showcase_heat_flow
+    name: Heat Pump
+    icon: mdi:heat-pump
+
+    scale:
+      min:
+        fixed: -4000
+      max:
+        fixed: 4000
+
+    baseline:
+      fixed: 0
+
+layout:
+  height: 30
+
+  label:
+    position: left
+    width: 130
+
+bar:
+  fill_style: band_gradient
+
+  segments:
+    - from: -100
+      to: -60
+      color: '#2563eb'
+
+    - from: -60
+      to: -15
+      color: '#38bdf8'
+
+    - from: -15
+      to: 15
+      color: '#111827'
+
+    - from: 15
+      to: 60
+      color: '#f59e0b'
+
+    - from: 60
+      to: 100
+      color: '#ef4444'
+
+peak:
+  show: true
+  color: '#facc15'

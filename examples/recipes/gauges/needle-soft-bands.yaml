@@ -1,0 +1,119 @@
+
+
+# ============================================================================
+# Sensor Bar Card Plus Recipe: Needle Soft Bands
+# ============================================================================
+#
+# This recipe demonstrates needle mode with soft semantic bands.
+#
+# Needle mode keeps the full scale visible at all times while the needle shows
+# the current value. This works especially well when the full operating range
+# itself has meaning, such as quality, load, comfort, signal strength, or risk.
+#
+# Replace the demo entities below with your own Home Assistant sensors.
+#
+# Demo helpers used here come from:
+# examples/packages/sensor_bar_card_plus_playground_package.yaml
+#
+# Recommended real-world entities:
+#
+# - battery state of charge
+# - inverter load
+# - Wi-Fi signal quality
+# - air quality score
+# - CPU / memory / storage usage
+# - comfort or risk scores
+#
+# ============================================================================
+
+type: custom:sensor-bar-card-plus
+title: Needle Soft Bands
+
+entities:
+  - entity: sensor.sbcp_showcase_cpu
+    name: CPU
+    icon: mdi:chip
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+
+    target:
+      fixed: 80
+
+  - entity: sensor.sbcp_showcase_storage
+    name: Storage
+    icon: mdi:database
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+
+    target:
+      fixed: 85
+
+  - entity: sensor.sbcp_showcase_network
+    name: Network
+    icon: mdi:wifi
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+
+    target:
+      fixed: 75
+
+  - entity: sensor.sbcp_showcase_air
+    name: Air Quality
+    icon: mdi:air-filter
+
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+
+    target:
+      fixed: 65
+
+layout:
+  height: 42
+
+  label:
+    position: left
+    width: 120
+
+bar:
+  needle: true
+  fill_style: soft_bands
+
+  segments:
+    - from: 0
+      to: 35
+      color: '#22c55e'
+
+    - from: 35
+      to: 60
+      color: '#84cc16'
+
+    - from: 60
+      to: 80
+      color: '#facc15'
+
+    - from: 80
+      to: 100
+      color: '#ef4444'
+
+target:
+  show: true
+  color: '#ffffff'
+
+peak:
+  show: true
+  color: '#fb923c'

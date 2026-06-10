@@ -1,0 +1,69 @@
+
+
+views:
+  - title: Recipes
+    path: recipes
+    icon: mdi:book-open-page-variant
+
+    cards:
+      # ----------------------------------------------------------------------
+      # Energy
+      # ----------------------------------------------------------------------
+
+      - type: markdown
+        content: |
+          # Energy Recipes
+
+          Practical energy and power-flow dashboards.
+
+      - !include ../recipes/energy/battery-flow.yaml
+
+      - !include ../recipes/energy/grid-import-export.yaml
+
+      - !include ../recipes/energy/solar-production.yaml
+
+      - !include ../recipes/energy/ev-charging.yaml
+
+      # ----------------------------------------------------------------------
+      # Telemetry
+      # ----------------------------------------------------------------------
+
+      - type: markdown
+        content: |
+          # Telemetry Recipes
+
+          Dense telemetry dashboards for infrastructure and monitoring.
+
+      - !include ../recipes/telemetry/server-health.yaml
+
+      - !include ../recipes/telemetry/network-latency.yaml
+
+      - !include ../recipes/telemetry/dense-av-telemetry.yaml
+
+      # ----------------------------------------------------------------------
+      # Needle Gauges
+      # ----------------------------------------------------------------------
+
+      - type: markdown
+        content: |
+          # Needle Gauge Recipes
+
+          Instrumentation-style dashboards using persistent full-scale rendering.
+
+      - !include ../recipes/gauges/needle-gauge-basics.yaml
+
+      - !include ../recipes/gauges/needle-soft-bands.yaml
+
+      # ----------------------------------------------------------------------
+      # Baseline Rendering
+      # ----------------------------------------------------------------------
+
+      - type: markdown
+        content: |
+          # Baseline Rendering Recipes
+
+          Bidirectional telemetry and centered-flow visualization.
+
+      - !include ../recipes/baseline/bidirectional-power.yaml
+
+      - !include ../recipes/baseline/av-calibration.yaml
