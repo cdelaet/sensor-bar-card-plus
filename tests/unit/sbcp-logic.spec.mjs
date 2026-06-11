@@ -258,6 +258,54 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(html).not.toContain('999px');
   });
 
+  it('falls back to device_class icons when sensor attributes.icon is absent', () => {
+    const card = createCard();
+    card._hass.states = {
+      'sensor.one': {
+        state: '42',
+        attributes: {
+          friendly_name: 'First',
+          icon: 'mdi:star',
+          unit_of_measurement: 'W',
+          device_class: 'power',
+        },
+      },
+      'sensor.two': {
+        state: '84',
+        attributes: {
+          friendly_name: 'Second',
+          unit_of_measurement: 'W',
+          device_class: 'power',
+        },
+      },
+      'sensor.three': {
+        state: '126',
+        attributes: {
+          friendly_name: 'Third',
+          unit_of_measurement: 'W',
+          device_class: 'power',
+        },
+      },
+    };
+
+    const cfg = card.normalizeCardConfig({
+      layout: {
+        label: {
+          position: 'above',
+        },
+      },
+      entities: ['sensor.one', 'sensor.two', 'sensor.three'],
+    });
+
+    const firstHtml = card._buildRow(cfg.entities[0], '42', 'W', 42, '#4a9eff', null, null, null, null, '#888', '#888', 0, 100);
+    const secondHtml = card._buildRow(cfg.entities[1], '84', 'W', 84, '#4a9eff', null, null, null, null, '#888', '#888', 0, 100);
+    const thirdHtml = card._buildRow(cfg.entities[2], '126', 'W', 100, '#4a9eff', null, null, null, null, '#888', '#888', 0, 100);
+
+    expect(firstHtml).toContain('ha-icon icon="mdi:star"');
+    expect(secondHtml).toContain('ha-icon icon="mdi:flash"');
+    expect(thirdHtml).toContain('ha-icon icon="mdi:flash"');
+  });
+
   it('accepts structured layout input', () => {
     const card = createCard();
     const cfg = card.normalizeCardConfig({

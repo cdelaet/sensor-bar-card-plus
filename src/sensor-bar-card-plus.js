@@ -126,6 +126,10 @@
  */
 
 class SensorBarCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement('sensor-bar-card-plus-editor');
+  }
+
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -714,11 +718,47 @@ class SensorBarCard extends HTMLElement {
   // Merge global config with per-entity overrides
   _resolve(entityCfg) {
     const ecfg = entityCfg?._normalized ? entityCfg : this.normalizeEntityConfig(entityCfg, this._config);
+    const stateObj = this._hass?.states?.[ecfg.entity] ?? null;
     return {
       ...ecfg,
-      icon: ecfg.icon === false ? false : (ecfg.icon ?? this._hass?.states[ecfg.entity]?.attributes?.icon ?? null),
+      icon: ecfg.icon === false ? false : (ecfg.icon ?? stateObj?.attributes?.icon ?? this._getDefaultEntityIcon(stateObj, ecfg.entity)),
       name: ecfg.name ?? null,
     };
+  }
+
+  _getDefaultEntityIcon(stateObj, entityId = '') {
+    const deviceClass = String(stateObj?.attributes?.device_class ?? '').trim();
+    if (deviceClass) {
+      const deviceClassIcons = {
+        apparent_power: 'mdi:flash',
+        battery: 'mdi:battery',
+        carbon_dioxide: 'mdi:molecule-co2',
+        current: 'mdi:current-ac',
+        energy: 'mdi:lightning-bolt',
+        gas: 'mdi:meter-gas',
+        humidity: 'mdi:water-percent',
+        monetary: 'mdi:cash',
+        power: 'mdi:flash',
+        pressure: 'mdi:gauge',
+        temperature: 'mdi:thermometer',
+        voltage: 'mdi:sine-wave',
+        water: 'mdi:water',
+        weight: 'mdi:weight',
+        wind_speed: 'mdi:weather-windy',
+      };
+      if (deviceClassIcons[deviceClass]) {
+        return deviceClassIcons[deviceClass];
+      }
+    }
+
+    const domain = String(entityId || '').split('.')[0];
+    const domainIcons = {
+      sensor: 'mdi:eye',
+      binary_sensor: 'mdi:radiobox-marked',
+      switch: 'mdi:toggle-switch-variant',
+      light: 'mdi:lightbulb',
+    };
+    return domainIcons[domain] ?? null;
   }
 
   _shouldUpdate(oldHass, newHass) {
@@ -3338,7 +3378,1455 @@ ${paintLayers}
   }
 }
 
+class SensorBarCardPlusEditor extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this._config = {};
+    this._draftConfig = {};
+    this._hass = null;
+    this._isRendering = false;
+    this._renderScheduled = false;
+    this._lastRenderedConfigJson = null;
+    this._lastEmittedConfigJson = null;
+    this._shadowListenersAttached = false;
+    this._expandedEntityOverrides = new Set();
+    this._boundHandleClick = (event) => this._handleClick(event);
+    this._boundHandleChange = (event) => this._handleChange(event);
+    this._boundHandleInput = (event) => this._handleInput(event);
+    this._boundHandleValueChanged = (event) => this._handleValueChanged(event);
+  }
+
+  setConfig(config) {
+    const nextConfig = this._cloneDeep(config ?? {});
+    const nextConfigJson = this._serializeConfig(nextConfig);
+    const currentConfigJson = this._serializeConfig(this._config);
+    const currentDraftJson = this._serializeConfig(this._draftConfig);
+
+    if (nextConfigJson === currentConfigJson) {
+      return;
+    }
+
+    if (nextConfigJson === currentDraftJson) {
+      this._config = nextConfig;
+      return;
+    }
+
+    const shouldRender = !this.shadowRoot?.innerHTML || nextConfigJson !== this._lastRenderedConfigJson;
+    this._config = nextConfig;
+    this._draftConfig = this._cloneDeep(nextConfig);
+
+    if (shouldRender) {
+      this._render();
+    }
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this.shadowRoot?.innerHTML) {
+      this._render();
+      return;
+    }
+    this._syncEntityPickers();
+  }
+
+  _cloneContainer(value) {
+    return Array.isArray(value) ? [...value] : { ...(value ?? {}) };
+  }
+
+  _cloneDeep(value) {
+    if (Array.isArray(value)) {
+      return value.map((entry) => this._cloneDeep(entry));
+    }
+    if (this._isObject(value)) {
+      const clone = {};
+      for (const [key, entry] of Object.entries(value)) {
+        clone[key] = this._cloneDeep(entry);
+      }
+      return clone;
+    }
+    return value;
+  }
+
+  _serializeConfig(value) {
+    const normalize = (input) => {
+      if (Array.isArray(input)) {
+        return input.map((entry) => normalize(entry));
+      }
+      if (this._isObject(input)) {
+        return Object.keys(input).sort().reduce((acc, key) => {
+          acc[key] = normalize(input[key]);
+          return acc;
+        }, {});
+      }
+      return input;
+    };
+
+    return JSON.stringify(normalize(value ?? null));
+  }
+
+  _isObject(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  _setPathValue(target, path, value) {
+    if (!path.length) {
+      return value;
+    }
+
+    const root = this._cloneContainer(target ?? {});
+    let cursor = root;
+    let sourceCursor = target;
+
+    for (let index = 0; index < path.length - 1; index++) {
+      const key = path[index];
+      const nextSource = this._isObject(sourceCursor?.[key]) || Array.isArray(sourceCursor?.[key])
+        ? sourceCursor[key]
+        : {};
+      cursor[key] = this._cloneContainer(nextSource);
+      cursor = cursor[key];
+      sourceCursor = nextSource;
+    }
+
+    cursor[path[path.length - 1]] = value;
+    return root;
+  }
+
+  _deletePathValue(target, path) {
+    if (!path.length || !this._isObject(target)) {
+      return target;
+    }
+
+    const [key, ...rest] = path;
+    if (!(key in target)) {
+      return target;
+    }
+
+    const cloned = this._cloneContainer(target);
+    if (!rest.length) {
+      delete cloned[key];
+      return cloned;
+    }
+
+    const nextValue = this._deletePathValue(cloned[key], rest);
+    if (nextValue === cloned[key]) {
+      return target;
+    }
+
+    if (this._isObject(nextValue) && !Object.keys(nextValue).length) {
+      delete cloned[key];
+      return cloned;
+    }
+
+    cloned[key] = nextValue;
+    return cloned;
+  }
+
+  _getPathValue(target, path) {
+    let cursor = target;
+    for (const key of path) {
+      if (cursor == null) return undefined;
+      cursor = cursor[key];
+    }
+    return cursor;
+  }
+
+  _hasPath(target, path) {
+    let cursor = target;
+    for (const key of path) {
+      if (!this._isObject(cursor) && !Array.isArray(cursor)) return false;
+      if (!(key in cursor)) return false;
+      cursor = cursor[key];
+    }
+    return true;
+  }
+
+  _normalizeTextValue(value) {
+    return typeof value === 'string' ? value : value == null ? '' : String(value);
+  }
+
+  _normalizeNumberValue(value) {
+    if (value === '' || value === null || value === undefined) {
+      return null;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  _preferStructuredPath(structuredPath, legacyPath = null) {
+    if (this._hasPath(this._draftConfig, structuredPath.slice(0, -1))) {
+      return structuredPath;
+    }
+    if (this._hasPath(this._draftConfig, structuredPath)) {
+      return structuredPath;
+    }
+    if (legacyPath && this._hasPath(this._draftConfig, legacyPath)) {
+      return legacyPath;
+    }
+    return structuredPath;
+  }
+
+  _getEntitiesValue() {
+    if (Array.isArray(this._draftConfig.entities)) {
+      return this._draftConfig.entities.map((entry) => (
+        typeof entry === 'string'
+          ? { entity: entry }
+          : {
+            entity: entry?.entity ?? '',
+            name: entry?.name ?? '',
+            icon: entry?.icon ?? '',
+          }
+      ));
+    }
+    if (this._draftConfig.entity) {
+      return [{
+        entity: this._draftConfig.entity,
+        name: this._draftConfig.name ?? '',
+        icon: this._draftConfig.icon ?? '',
+      }];
+    }
+    return [];
+  }
+
+  _buildEntityConfigEntries(entities) {
+    const usesShorthand = !Array.isArray(this._draftConfig.entities) && this._draftConfig.entity !== undefined;
+    const source = Array.isArray(this._draftConfig.entities)
+      ? this._draftConfig.entities
+      : this._draftConfig.entity !== undefined
+        ? [{
+          entity: this._draftConfig.entity,
+          ...(this._draftConfig.name !== undefined ? { name: this._draftConfig.name } : {}),
+          ...(this._draftConfig.icon !== undefined ? { icon: this._draftConfig.icon } : {}),
+        }]
+        : [];
+
+    const entries = entities.map((entry, index) => {
+      const rawEntry = source[index];
+      if (this._isObject(rawEntry)) {
+        const mergedEntry = {
+          ...rawEntry,
+          entity: entry.entity,
+        };
+        if (entry.name || Object.prototype.hasOwnProperty.call(rawEntry, 'name')) {
+          mergedEntry.name = entry.name;
+        }
+        if (entry.icon || Object.prototype.hasOwnProperty.call(rawEntry, 'icon')) {
+          mergedEntry.icon = entry.icon;
+        }
+        return mergedEntry;
+      }
+      const nextEntry = {
+        entity: entry.entity,
+      };
+      if (entry.name) {
+        nextEntry.name = entry.name;
+      }
+      if (entry.icon) {
+        nextEntry.icon = entry.icon;
+      }
+      return nextEntry;
+    });
+
+    if (!usesShorthand) {
+      return entries.map((entry) => {
+        if (this._isObject(entry) && Object.keys(entry).length === 1 && entry.entity !== undefined) {
+          return entry.entity;
+        }
+        return entry;
+      });
+    }
+
+    return entries;
+  }
+
+  _updateConfig(nextConfig) {
+    this._draftConfig = this._cloneDeep(nextConfig);
+  }
+
+  _emitConfigChanged() {
+    const emittedConfig = this._cloneDeep(this._draftConfig);
+    const nextConfigJson = this._serializeConfig(emittedConfig);
+    if (nextConfigJson === this._lastEmittedConfigJson) {
+      return false;
+    }
+
+    this._lastEmittedConfigJson = nextConfigJson;
+    this.dispatchEvent(new CustomEvent('config-changed', {
+      detail: { config: emittedConfig },
+      bubbles: true,
+      composed: true,
+    }));
+    return true;
+  }
+
+  _scheduleRender() {
+    if (this._renderScheduled || this._isRendering) return;
+    this._renderScheduled = true;
+    setTimeout(() => {
+      this._renderScheduled = false;
+      this._render();
+    }, 0);
+  }
+
+  _applyUserConfig(nextConfig, options = {}) {
+    const { rerender = false } = options;
+    const nextConfigJson = this._serializeConfig(nextConfig);
+    const currentDraftJson = this._serializeConfig(this._draftConfig);
+    if (nextConfigJson === currentDraftJson) {
+      return false;
+    }
+
+    this._updateConfig(nextConfig);
+    this._emitConfigChanged();
+    if (rerender) {
+      this._scheduleRender();
+    }
+    return true;
+  }
+
+  _setValueAtPath(path, value, options = {}) {
+    const nextConfig = value === undefined
+      ? this._deletePathValue(this._draftConfig, path)
+      : this._setPathValue(this._draftConfig, path, value);
+    return this._applyUserConfig(nextConfig, options);
+  }
+
+  _setTitle(value) {
+    this._setValueAtPath(['title'], value);
+  }
+
+  _setEntityField(index, key, value) {
+    const normalizedValue = this._normalizeTextValue(value);
+    if (!Array.isArray(this._draftConfig.entities) && this._draftConfig.entity !== undefined && index === 0) {
+      if (!normalizedValue.trim()) {
+        return this._setValueAtPath([key], undefined);
+      }
+      return this._setValueAtPath([key], normalizedValue);
+    }
+    const nextEntities = this._getEntitiesValue().map((entry, entryIndex) => (
+      entryIndex === index ? { ...entry, [key]: normalizedValue } : entry
+    ));
+    const nextEntries = this._buildEntityConfigEntries(nextEntities);
+    if (Array.isArray(this._draftConfig.entities) || nextEntries.length > 1 || !this._draftConfig.entity) {
+      return this._setValueAtPath(['entities'], nextEntries);
+    }
+    return this._setValueAtPath(['entity'], nextEntities[0]?.entity ?? '');
+  }
+
+  _getScopedPath(scope, keyPath) {
+    const normalizedPath = Array.isArray(keyPath) ? keyPath : [keyPath];
+    if (!scope || scope.type === 'card') {
+      return normalizedPath;
+    }
+    if (scope.type === 'entity') {
+      return ['entities', scope.index, ...normalizedPath];
+    }
+    return normalizedPath;
+  }
+
+  _normalizePath(keyPath) {
+    return Array.isArray(keyPath) ? keyPath : [keyPath];
+  }
+
+  _getEntityRawEntries() {
+    if (Array.isArray(this._draftConfig.entities)) {
+      return this._draftConfig.entities.map((entry) => (
+        this._isObject(entry) ? this._cloneDeep(entry) : { entity: entry }
+      ));
+    }
+    if (this._draftConfig.entity !== undefined) {
+      return [{
+        entity: this._draftConfig.entity,
+        ...(this._draftConfig.name !== undefined ? { name: this._draftConfig.name } : {}),
+        ...(this._draftConfig.icon !== undefined ? { icon: this._draftConfig.icon } : {}),
+      }];
+    }
+    return [];
+  }
+
+  _withEntityScopeConfig(mutator) {
+    const rawEntries = this._getEntityRawEntries();
+    const nextEntries = mutator(rawEntries.map((entry) => this._cloneDeep(entry)));
+    let nextConfig = this._setPathValue(this._draftConfig, ['entities'], nextEntries);
+    if (!Array.isArray(this._draftConfig.entities) && this._draftConfig.entity !== undefined) {
+      nextConfig = this._deletePathValue(nextConfig, ['entity']);
+      if (this._draftConfig.name !== undefined) {
+        nextConfig = this._deletePathValue(nextConfig, ['name']);
+      }
+      if (this._draftConfig.icon !== undefined) {
+        nextConfig = this._deletePathValue(nextConfig, ['icon']);
+      }
+    }
+    return nextConfig;
+  }
+
+  _getScopedValue(scope, keyPath) {
+    if (scope?.type === 'entity') {
+      const entry = this._getEntityRawEntries()[scope.index];
+      return this._getPathValue(entry, this._normalizePath(keyPath));
+    }
+    return this._getPathValue(this._draftConfig, this._getScopedPath(scope, keyPath));
+  }
+
+  _removeScopedValue(scope, keyPath, options = {}) {
+    if (scope?.type === 'entity') {
+      const nextConfig = this._withEntityScopeConfig((entries) => {
+        const entry = this._isObject(entries[scope.index]) ? { ...entries[scope.index] } : { entity: entries[scope.index]?.entity ?? '' };
+        entries[scope.index] = this._deletePathValue(entry, this._normalizePath(keyPath));
+        return entries;
+      });
+      return this._applyUserConfig(nextConfig, options);
+    }
+    return this._setValueAtPath(this._getScopedPath(scope, keyPath), undefined, options);
+  }
+
+  _applyScopedMutation(scope, mutator, options = {}) {
+    if (scope?.type === 'entity') {
+      const nextConfig = this._withEntityScopeConfig((entries) => {
+        const rawEntry = entries[scope.index];
+        const entry = this._isObject(rawEntry) ? this._cloneDeep(rawEntry) : { entity: rawEntry?.entity ?? '' };
+        entries[scope.index] = mutator(entry);
+        return entries;
+      });
+      return this._applyUserConfig(nextConfig, options);
+    }
+    const nextConfig = mutator(this._cloneDeep(this._draftConfig));
+    return this._applyUserConfig(nextConfig, options);
+  }
+
+  _setScopedValue(scope, keyPath, value, options = {}) {
+    return this._applyScopedMutation(scope, (target) => (
+      this._setPathValue(target, this._normalizePath(keyPath), value)
+    ), options);
+  }
+
+  _removePathsFromTarget(target, keyPaths = []) {
+    return keyPaths.reduce((nextTarget, keyPath) => (
+      this._deletePathValue(nextTarget, this._normalizePath(keyPath))
+    ), target);
+  }
+
+  _pruneEmptyObjectsInTarget(target, keyPath) {
+    let nextTarget = target;
+    const normalizedPath = this._normalizePath(keyPath);
+    for (let index = normalizedPath.length; index > 0; index--) {
+      const currentPath = normalizedPath.slice(0, index);
+      const currentValue = this._getPathValue(nextTarget, currentPath);
+      if (!this._isObject(currentValue) || Object.keys(currentValue).length) {
+        break;
+      }
+      nextTarget = this._deletePathValue(nextTarget, currentPath);
+    }
+    return nextTarget;
+  }
+
+  _setCanonicalScopedValue(scope, canonicalPath, value, options = {}) {
+    const { deprecatedKeys = [], prunePaths = [] } = options;
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._setPathValue(target, this._normalizePath(canonicalPath), value);
+      nextTarget = this._removePathsFromTarget(nextTarget, deprecatedKeys);
+      const pathsToPrune = [this._normalizePath(canonicalPath).slice(0, -1), ...prunePaths.map((path) => this._normalizePath(path))];
+      pathsToPrune.forEach((path) => {
+        if (path.length) {
+          nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, path);
+        }
+      });
+      return nextTarget;
+    }, options);
+  }
+
+  _removeCanonicalScopedValue(scope, canonicalPath, options = {}) {
+    const { deprecatedKeys = [], prunePaths = [] } = options;
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._deletePathValue(target, this._normalizePath(canonicalPath));
+      nextTarget = this._removePathsFromTarget(nextTarget, deprecatedKeys);
+      const pathsToPrune = [this._normalizePath(canonicalPath).slice(0, -1), ...prunePaths.map((path) => this._normalizePath(path))];
+      pathsToPrune.forEach((path) => {
+        if (path.length) {
+          nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, path);
+        }
+      });
+      return nextTarget;
+    }, options);
+  }
+
+  _setScopedNumericOverride(scope, keyPath, rawValue, options = {}) {
+    const normalizedValue = this._normalizeNumberValue(rawValue);
+    if (rawValue === '' || rawValue === null || rawValue === undefined) {
+      return this._removeScopedValue(scope, keyPath, options);
+    }
+    if (normalizedValue === null) {
+      return false;
+    }
+    return this._setScopedValue(scope, keyPath, normalizedValue, options);
+  }
+
+  _setScopedTextOverride(scope, keyPath, rawValue, options = {}) {
+    const normalizedValue = this._normalizeTextValue(rawValue).trim();
+    if (!normalizedValue) {
+      return this._removeScopedValue(scope, keyPath, options);
+    }
+    return this._setScopedValue(scope, keyPath, normalizedValue, options);
+  }
+
+  _setCanonicalScopedNumericOverride(scope, canonicalPath, rawValue, options = {}) {
+    const normalizedValue = this._normalizeNumberValue(rawValue);
+    if (rawValue === '' || rawValue === null || rawValue === undefined || normalizedValue === null) {
+      return this._removeCanonicalScopedValue(scope, canonicalPath, options);
+    }
+    return this._setCanonicalScopedValue(scope, canonicalPath, normalizedValue, options);
+  }
+
+  _setCanonicalScopedTextOverride(scope, canonicalPath, rawValue, options = {}) {
+    const normalizedValue = this._normalizeTextValue(rawValue).trim();
+    if (!normalizedValue) {
+      return this._removeCanonicalScopedValue(scope, canonicalPath, options);
+    }
+    return this._setCanonicalScopedValue(scope, canonicalPath, normalizedValue, options);
+  }
+
+  _getResolvablePartsFromTarget(target, field) {
+    const structuredValue = this._getPathValue(target, ['scale', field]);
+    return {
+      fixed: structuredValue?.fixed ?? target?.[field] ?? '',
+      entity: structuredValue?.entity ?? target?.[`${field}_entity`] ?? '',
+    };
+  }
+
+  _getResolvableScopedValue(scope, field) {
+    const target = scope?.type === 'entity'
+      ? this._getEntityRawEntries()[scope.index]
+      : this._draftConfig;
+    return this._getResolvablePartsFromTarget(target ?? {}, field);
+  }
+
+  _setCanonicalResolvablePart(scope, field, part, rawValue, options = {}) {
+    const normalizedValue = part === 'fixed'
+      ? this._normalizeNumberValue(rawValue)
+      : this._normalizeTextValue(rawValue).trim();
+    const deprecatedKeys = [[field], [`${field}_entity`]];
+    return this._applyScopedMutation(scope, (target) => {
+      const currentParts = this._getResolvablePartsFromTarget(target ?? {}, field);
+      const nextParts = { ...currentParts };
+
+      if (part === 'fixed') {
+        if (rawValue === '' || rawValue === null || rawValue === undefined || normalizedValue === null) {
+          delete nextParts.fixed;
+        } else {
+          nextParts.fixed = normalizedValue;
+        }
+      } else if (!normalizedValue) {
+        delete nextParts.entity;
+      } else {
+        nextParts.entity = normalizedValue;
+      }
+
+      let nextTarget = this._removePathsFromTarget(target, deprecatedKeys);
+      nextTarget = this._deletePathValue(nextTarget, ['scale', field]);
+
+      const hasFixed = nextParts.fixed !== undefined && nextParts.fixed !== null && nextParts.fixed !== '';
+      const hasEntity = nextParts.entity !== undefined && nextParts.entity !== null && nextParts.entity !== '';
+      if (hasFixed || hasEntity) {
+        const nextValue = {};
+        if (hasFixed) nextValue.fixed = nextParts.fixed;
+        if (hasEntity) nextValue.entity = nextParts.entity;
+        nextTarget = this._setPathValue(nextTarget, ['scale', field], nextValue);
+      }
+
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['scale', field]);
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['scale']);
+      return nextTarget;
+    }, options);
+  }
+
+  _clearCanonicalResolvableValue(scope, field, options = {}) {
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._deletePathValue(target, ['scale', field]);
+      nextTarget = this._removePathsFromTarget(nextTarget, [[field], [`${field}_entity`]]);
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['scale', field]);
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['scale']);
+      return nextTarget;
+    }, options);
+  }
+
+  _getScopedDisplayValue(scope, canonicalPath, fallbackPaths = []) {
+    const valuesToTry = [canonicalPath, ...fallbackPaths];
+    for (const path of valuesToTry) {
+      const value = this._getScopedValue(scope, path);
+      if (value !== undefined && value !== null && value !== '') {
+        return value;
+      }
+    }
+    return '';
+  }
+
+  _setLayoutLabelPosition(value) {
+    this._setCanonicalScopedValue({ type: 'card' }, ['layout', 'label', 'position'], value, {
+      deprecatedKeys: [['label_position']],
+      prunePaths: [['layout', 'label'], ['layout']],
+    });
+  }
+
+  _setLayoutHeight(value) {
+    const numericValue = this._normalizeNumberValue(value);
+    if (value === '' || value === null || value === undefined || numericValue === null) {
+      return this._removeCanonicalScopedValue({ type: 'card' }, ['layout', 'height'], {
+        deprecatedKeys: [['height']],
+        prunePaths: [['layout']],
+      });
+    }
+    return this._setCanonicalScopedValue({ type: 'card' }, ['layout', 'height'], numericValue, {
+      deprecatedKeys: [['height']],
+      prunePaths: [['layout']],
+    });
+  }
+
+  _setScaleBound(key, value) {
+    return this._setCanonicalResolvablePart({ type: 'card' }, key, 'fixed', value);
+  }
+
+  _setBarFillStyle(value) {
+    this._setValueAtPath(['bar', 'fill_style'], value);
+  }
+
+  _setBarColor(value) {
+    return this._setCanonicalScopedValue({ type: 'card' }, ['bar', 'color'], value, {
+      deprecatedKeys: [['color']],
+      prunePaths: [['bar']],
+    });
+  }
+
+  _setGradientStops(stops, options = {}) {
+    const path = this._preferStructuredPath(['bar', 'gradient_stops'], ['gradient_stops']);
+    this._setValueAtPath(path, stops, options);
+  }
+
+  _setSegments(segments, options = {}) {
+    const path = this._preferStructuredPath(['bar', 'segments'], ['segments']);
+    this._setValueAtPath(path, segments, options);
+  }
+
+  _setNeedle(value) {
+    if (!value) {
+      return this._removeCanonicalScopedValue({ type: 'card' }, ['bar', 'needle'], {
+        prunePaths: [['bar']],
+      });
+    }
+    return this._setCanonicalScopedValue({ type: 'card' }, ['bar', 'needle'], true, {
+      prunePaths: [['bar']],
+    });
+  }
+
+  _setFixedMarkerValue(rootKey, enabled, value) {
+    const numericValue = this._normalizeNumberValue(value);
+    if (!enabled || numericValue === null) {
+      return this._removeCanonicalScopedValue({ type: 'card' }, [rootKey, 'at', 'fixed'], {
+        deprecatedKeys: rootKey === 'target' ? [['target_entity']] : [],
+        prunePaths: [[rootKey, 'at'], [rootKey]],
+      });
+    }
+
+    return this._setCanonicalScopedValue({ type: 'card' }, [rootKey, 'at', 'fixed'], numericValue, {
+      deprecatedKeys: rootKey === 'target' ? [['target_entity']] : [],
+      prunePaths: [[rootKey, 'at'], [rootKey]],
+    });
+  }
+
+  _setPeakShow(value) {
+    const defaultPeakColor = '#888';
+    const currentColor = this._getPathValue(this._draftConfig, ['peak', 'color'])
+      ?? this._getPathValue(this._draftConfig, ['peak_marker', 'color'])
+      ?? this._draftConfig.peak_color
+      ?? defaultPeakColor;
+    return this._applyScopedMutation({ type: 'card' }, (target) => {
+      let nextTarget = this._cloneDeep(target);
+      const existingPeak = this._isObject(this._getPathValue(nextTarget, ['peak']))
+        ? this._cloneDeep(this._getPathValue(nextTarget, ['peak']))
+        : {};
+
+      if (!value) {
+        delete existingPeak.enabled;
+      } else {
+        existingPeak.enabled = true;
+      }
+
+      if (currentColor && currentColor !== defaultPeakColor) {
+        existingPeak.color = currentColor;
+      } else {
+        delete existingPeak.color;
+      }
+
+      if (Object.keys(existingPeak).length) {
+        nextTarget = this._setPathValue(nextTarget, ['peak'], existingPeak);
+      } else {
+        nextTarget = this._deletePathValue(nextTarget, ['peak']);
+      }
+      nextTarget = this._removePathsFromTarget(nextTarget, [['show_peak'], ['peak_color'], ['peak_marker']]);
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['peak']);
+      return nextTarget;
+    });
+  }
+
+  _readFixedMarker(rootKey) {
+    const rawValue = this._draftConfig[rootKey];
+    if (this._isObject(rawValue)) {
+      const fixed = this._isObject(rawValue?.at) ? rawValue.at.fixed : rawValue?.at;
+      return {
+        enabled: fixed !== undefined && fixed !== null && fixed !== '',
+        value: fixed ?? '',
+      };
+    }
+    return {
+      enabled: rawValue !== undefined && rawValue !== null && rawValue !== '',
+      value: rawValue ?? '',
+    };
+  }
+
+  _getGradientStopsValue() {
+    return this._getPathValue(this._draftConfig, ['bar', 'gradient_stops'])
+      ?? this._draftConfig.gradient_stops
+      ?? [];
+  }
+
+  _getSegmentsValue() {
+    return this._getPathValue(this._draftConfig, ['bar', 'segments'])
+      ?? this._draftConfig.segments
+      ?? this._draftConfig.severity
+      ?? [];
+  }
+
+  _getFillStyleValue() {
+    const fillStyle = this._getPathValue(this._draftConfig, ['bar', 'fill_style']);
+    if (fillStyle) return fillStyle;
+
+    const colorMode = this._getPathValue(this._draftConfig, ['bar', 'color_mode']) ?? this._draftConfig.color_mode;
+    switch (colorMode) {
+      case 'single': return 'solid';
+      case 'gradient': return 'gradient';
+      case 'severity': return 'bands';
+      case 'severity_gradient': return 'band_gradient';
+      default: return 'bands';
+    }
+  }
+
+  _getNeedleValue() {
+    const needle = this._getPathValue(this._draftConfig, ['bar', 'needle']);
+    if (typeof needle === 'boolean') return needle;
+    if (this._isObject(needle)) return !!needle.show;
+    return false;
+  }
+
+  _getPeakShowValue() {
+    if (this._isObject(this._draftConfig.peak)) {
+      return !!this._draftConfig.peak.enabled;
+    }
+    if (this._isObject(this._draftConfig.peak_marker)) {
+      return !!this._draftConfig.peak_marker.show;
+    }
+    return !!this._draftConfig.show_peak;
+  }
+
+  _getScaleFixedValue(key, fallbackKey) {
+    return this._getResolvableScopedValue({ type: 'card' }, key).fixed;
+  }
+
+  _getScaleEntityValue(key) {
+    return this._getResolvableScopedValue({ type: 'card' }, key).entity;
+  }
+
+  _isEntityOverrideExpanded(index) {
+    return this._expandedEntityOverrides.has(index);
+  }
+
+  _toggleEntityOverrideExpanded(index) {
+    if (this._expandedEntityOverrides.has(index)) {
+      this._expandedEntityOverrides.delete(index);
+    } else {
+      this._expandedEntityOverrides.add(index);
+    }
+    this._render();
+  }
+
+  _syncExpandedEntityOverrides(entityCount) {
+    const nextExpanded = new Set();
+    this._expandedEntityOverrides.forEach((index) => {
+      if (index < entityCount) nextExpanded.add(index);
+    });
+    this._expandedEntityOverrides = nextExpanded;
+  }
+
+  _renderEntityInput(entry, index) {
+    if (customElements.get('ha-entity-picker')) {
+      return `<ha-entity-picker data-kind="entity-picker" data-index="${index}"></ha-entity-picker>`;
+    }
+    return `<input type="text" data-kind="entity-input" data-index="${index}" value="${this._escapeAttribute(entry.entity)}" placeholder="sensor.example">`;
+  }
+
+  _renderEntitySourceInput(kind, index, value, placeholder = 'sensor.example') {
+    if (customElements.get('ha-entity-picker')) {
+      return `<ha-entity-picker data-kind="${kind}" data-index="${index}"></ha-entity-picker>`;
+    }
+    return `<input type="text" data-kind="${kind}" data-index="${index}" value="${this._escapeAttribute(value)}" placeholder="${this._escapeAttribute(placeholder)}">`;
+  }
+
+  _escapeAttribute(value) {
+    return this._normalizeTextValue(value)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  _renderListRows(items, renderItem) {
+    return items.map((item, index) => renderItem(item, index)).join('');
+  }
+
+  _render() {
+    if (!this.shadowRoot || this._isRendering) return;
+    this._isRendering = true;
+    try {
+      const entities = this._getEntitiesValue();
+      const fillStyle = this._getFillStyleValue();
+      const layoutLabelPosition = this._getPathValue(this._draftConfig, ['layout', 'label', 'position'])
+        ?? this._draftConfig.label_position
+        ?? 'left';
+      const layoutHeight = this._getPathValue(this._draftConfig, ['layout', 'height'])
+        ?? this._draftConfig.height
+        ?? '';
+      const barColor = this._getPathValue(this._draftConfig, ['bar', 'color'])
+        ?? this._draftConfig.color
+        ?? '#4a9eff';
+      const gradientStops = this._getGradientStopsValue();
+      const segments = this._getSegmentsValue();
+      const baseline = this._readFixedMarker('baseline');
+      const target = this._readFixedMarker('target');
+      const scaleMin = this._getScaleFixedValue('min', 'min');
+      const scaleMax = this._getScaleFixedValue('max', 'max');
+      const scaleMinEntity = this._getScaleEntityValue('min');
+      const scaleMaxEntity = this._getScaleEntityValue('max');
+      this._syncExpandedEntityOverrides(entities.length);
+
+      this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: block;
+        }
+        .editor {
+          display: grid;
+          gap: 16px;
+          padding: 8px 0;
+        }
+        .section {
+          border: 1px solid var(--divider-color, #e0e0e0);
+          border-radius: 12px;
+          padding: 12px;
+        }
+        .section h3 {
+          margin: 0 0 12px;
+          font-size: 1rem;
+        }
+        .field-grid {
+          display: grid;
+          gap: 12px;
+        }
+        .field-row {
+          display: grid;
+          gap: 8px;
+        }
+        .inline-row {
+          display: grid;
+          gap: 8px;
+          grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+          align-items: end;
+        }
+        label {
+          font-size: 0.9rem;
+          font-weight: 500;
+        }
+        input,
+        select,
+        button {
+          font: inherit;
+        }
+        input[type="text"],
+        input[type="number"],
+        input[type="color"],
+        select {
+          width: 100%;
+          box-sizing: border-box;
+          padding: 8px;
+        }
+        input[type="checkbox"] {
+          width: 18px;
+          height: 18px;
+        }
+        .toggle {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+        }
+        .list {
+          display: grid;
+          gap: 8px;
+        }
+        .list-row {
+          display: grid;
+          gap: 8px;
+          grid-template-columns: minmax(0, 1fr) auto;
+          align-items: end;
+        }
+        .list-row.triple {
+          grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+        }
+        .entity-shell {
+          display: grid;
+          gap: 8px;
+          padding: 10px 0 12px;
+          border-bottom: 1px solid var(--divider-color, #e0e0e0);
+        }
+        .entity-shell:last-of-type {
+          border-bottom: 0;
+          padding-bottom: 4px;
+        }
+        .entity-fields {
+          display: grid;
+          gap: 8px;
+        }
+        .override-toggle {
+          justify-self: start;
+          border: 0;
+          background: transparent;
+          padding: 0;
+          color: var(--secondary-text-color, #666);
+        }
+        .override-panel {
+          display: grid;
+          gap: 10px;
+          padding: 10px 12px;
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--card-background-color, #ffffff) 92%, #000 8%);
+        }
+        button {
+          padding: 8px 12px;
+          cursor: pointer;
+        }
+      </style>
+      <div class="editor">
+        <div class="section">
+          <h3>General</h3>
+          <div class="field-grid">
+            <div class="field-row">
+              <label for="title">Title</label>
+              <input id="title" type="text" data-field="title" value="${this._escapeAttribute(this._draftConfig.title ?? '')}">
+            </div>
+            <div class="field-row">
+              <label>Entities</label>
+              <div class="list">
+                ${this._renderListRows(entities, (entry, index) => `
+                  <div class="entity-shell" data-entity-shell-index="${index}">
+                    <div class="entity-fields">
+                      ${this._renderEntityInput(entry, index)}
+                      <input type="text" data-kind="entity-name" data-index="${index}" value="${this._escapeAttribute(entry.name ?? '')}" placeholder="Name">
+                      <input type="text" data-kind="entity-icon" data-index="${index}" value="${this._escapeAttribute(entry.icon ?? '')}" placeholder="mdi:flash">
+                    </div>
+                    <button type="button" class="override-toggle" data-action="toggle-entity-overrides" data-index="${index}" aria-expanded="${this._isEntityOverrideExpanded(index) ? 'true' : 'false'}">
+                      ${this._isEntityOverrideExpanded(index) ? '▾' : '▸'} Overrides
+                    </button>
+                    <div class="override-panel" style="display:${this._isEntityOverrideExpanded(index) ? 'grid' : 'none'};">
+                      ${(() => {
+                        const scope = { type: 'entity', index };
+                        const minParts = this._getResolvableScopedValue(scope, 'min');
+                        const maxParts = this._getResolvableScopedValue(scope, 'max');
+                        const minInherited = !minParts.fixed && !minParts.entity;
+                        const maxInherited = !maxParts.fixed && !maxParts.entity;
+                        return `
+                      <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-min-inherit" type="checkbox" data-kind="entity-override-min-inherit" data-index="${index}"${minInherited ? ' checked' : ''}>
+                          <label for="entity-${index}-min-inherit">Min inherit card default</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-min">Min fallback value</label>
+                        <input id="entity-${index}-min" type="number" step="any" data-kind="entity-override-min" data-index="${index}" value="${this._escapeAttribute(minParts.fixed)}" placeholder="inherit card default">
+                      </div>
+                      <div class="field-row">
+                        <label>Min entity override</label>
+                        ${this._renderEntitySourceInput('entity-override-min-entity-source', index, minParts.entity, 'inherit card default')}
+                      </div>
+                      <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-max-inherit" type="checkbox" data-kind="entity-override-max-inherit" data-index="${index}"${maxInherited ? ' checked' : ''}>
+                          <label for="entity-${index}-max-inherit">Max inherit card default</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-max">Max fallback value</label>
+                        <input id="entity-${index}-max" type="number" step="any" data-kind="entity-override-max" data-index="${index}" value="${this._escapeAttribute(maxParts.fixed)}" placeholder="inherit card default">
+                      </div>
+                      <div class="field-row">
+                        <label>Max entity override</label>
+                        ${this._renderEntitySourceInput('entity-override-max-entity-source', index, maxParts.entity, 'inherit card default')}
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-height">Height</label>
+                        <input id="entity-${index}-height" type="number" step="1" data-kind="entity-override-height" data-index="${index}" value="${this._escapeAttribute(this._getScopedDisplayValue({ type: 'entity', index }, ['layout', 'height'], [['height']]))}" placeholder="inherit card default">
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-color">Color</label>
+                        <input id="entity-${index}-color" type="text" data-kind="entity-override-color" data-index="${index}" value="${this._escapeAttribute(this._getScopedDisplayValue({ type: 'entity', index }, ['bar', 'color'], [['color']]))}" placeholder="inherit card default">
+                      </div>
+                        `;
+                      })()}
+                    </div>
+                    <button type="button" data-action="remove-entity" data-index="${index}">Remove</button>
+                  </div>
+                `)}
+                <button type="button" data-action="add-entity">Add entity</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Layout</h3>
+          <div class="inline-row">
+            <div class="field-row">
+              <label for="layout-label-position">Label position</label>
+              <select id="layout-label-position" data-field="layout-label-position">
+                <option value="left"${layoutLabelPosition === 'left' ? ' selected' : ''}>left</option>
+                <option value="above"${layoutLabelPosition === 'above' ? ' selected' : ''}>above</option>
+                <option value="inside"${layoutLabelPosition === 'inside' ? ' selected' : ''}>inside</option>
+                <option value="off"${layoutLabelPosition === 'off' ? ' selected' : ''}>off</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="layout-height">Height</label>
+              <input id="layout-height" type="number" min="24" step="1" data-field="layout-height" value="${this._escapeAttribute(layoutHeight)}">
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Scale</h3>
+          <div class="inline-row">
+            <div class="field-row">
+              <label for="scale-min">Min fallback value</label>
+              <input id="scale-min" type="number" step="any" data-field="scale-min" value="${this._escapeAttribute(scaleMin)}">
+            </div>
+            <div class="field-row">
+              <label>Min entity override</label>
+              ${this._renderEntitySourceInput('scale-min-entity-source', 'card', scaleMinEntity)}
+            </div>
+            <div class="field-row">
+              <label for="scale-max">Max fallback value</label>
+              <input id="scale-max" type="number" step="any" data-field="scale-max" value="${this._escapeAttribute(scaleMax)}">
+            </div>
+            <div class="field-row">
+              <label>Max entity override</label>
+              ${this._renderEntitySourceInput('scale-max-entity-source', 'card', scaleMaxEntity)}
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Bar</h3>
+          <div class="field-grid">
+            <div class="inline-row">
+              <div class="field-row">
+                <label for="bar-fill-style">Fill style</label>
+                <select id="bar-fill-style" data-field="bar-fill-style">
+                  <option value="solid"${fillStyle === 'solid' ? ' selected' : ''}>solid</option>
+                  <option value="gradient"${fillStyle === 'gradient' ? ' selected' : ''}>gradient</option>
+                  <option value="bands"${fillStyle === 'bands' ? ' selected' : ''}>bands</option>
+                  <option value="band_gradient"${fillStyle === 'band_gradient' ? ' selected' : ''}>band_gradient</option>
+                  <option value="soft_bands"${fillStyle === 'soft_bands' ? ' selected' : ''}>soft_bands</option>
+                </select>
+              </div>
+              <div class="field-row">
+                <label for="bar-color">Solid color</label>
+                <input id="bar-color" type="color" data-field="bar-color" value="${this._escapeAttribute(barColor)}">
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="toggle">
+                <input id="bar-needle" type="checkbox" data-field="bar-needle"${this._getNeedleValue() ? ' checked' : ''}>
+                <label for="bar-needle">Needle</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label>Gradient stops</label>
+              <div class="list">
+                ${this._renderListRows(gradientStops, (stop, index) => `
+                  <div class="list-row triple">
+                    <input type="number" step="1" data-kind="gradient-pos" data-index="${index}" value="${this._escapeAttribute(stop?.pos ?? '')}" placeholder="0">
+                    <input type="color" data-kind="gradient-color" data-index="${index}" value="${this._escapeAttribute(stop?.color ?? '#4a9eff')}">
+                    <div></div>
+                    <button type="button" data-action="remove-gradient-stop" data-index="${index}">Remove</button>
+                  </div>
+                `)}
+                <button type="button" data-action="add-gradient-stop">Add stop</button>
+              </div>
+            </div>
+            <div class="field-row">
+              <label>Segments</label>
+              <div class="list">
+                ${this._renderListRows(segments, (segment, index) => `
+                  <div class="list-row triple">
+                    <input type="number" step="any" data-kind="segment-from" data-index="${index}" value="${this._escapeAttribute(segment?.from ?? '')}" placeholder="0">
+                    <input type="number" step="any" data-kind="segment-to" data-index="${index}" value="${this._escapeAttribute(segment?.to ?? '')}" placeholder="100">
+                    <input type="color" data-kind="segment-color" data-index="${index}" value="${this._escapeAttribute(segment?.color ?? '#4a9eff')}">
+                    <button type="button" data-action="remove-segment" data-index="${index}">Remove</button>
+                  </div>
+                `)}
+                <button type="button" data-action="add-segment">Add segment</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Markers</h3>
+          <div class="field-grid">
+            <div class="inline-row">
+              <div class="field-row">
+                <div class="toggle">
+                  <input id="baseline-enabled" type="checkbox" data-field="baseline-enabled"${baseline.enabled ? ' checked' : ''}>
+                  <label for="baseline-enabled">Baseline fixed</label>
+                </div>
+              </div>
+              <div class="field-row">
+                <label for="baseline-value">Baseline value</label>
+                <input id="baseline-value" type="number" step="any" data-field="baseline-value" value="${this._escapeAttribute(baseline.value)}">
+              </div>
+            </div>
+            <div class="inline-row">
+              <div class="field-row">
+                <div class="toggle">
+                  <input id="target-enabled" type="checkbox" data-field="target-enabled"${target.enabled ? ' checked' : ''}>
+                  <label for="target-enabled">Target fixed</label>
+                </div>
+              </div>
+              <div class="field-row">
+                <label for="target-value">Target value</label>
+                <input id="target-value" type="number" step="any" data-field="target-value" value="${this._escapeAttribute(target.value)}">
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="toggle">
+                <input id="peak-show" type="checkbox" data-field="peak-show"${this._getPeakShowValue() ? ' checked' : ''}>
+                <label for="peak-show">Show peak</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+      this._bindShadowListeners();
+      this._syncEntityPickers();
+      this._lastRenderedConfigJson = this._serializeConfig(this._draftConfig);
+    } finally {
+      this._isRendering = false;
+    }
+  }
+
+  _bindShadowListeners() {
+    if (!this.shadowRoot || this._shadowListenersAttached) return;
+    this.shadowRoot.addEventListener('click', this._boundHandleClick);
+    this.shadowRoot.addEventListener('change', this._boundHandleChange);
+    this.shadowRoot.addEventListener('input', this._boundHandleInput);
+    this.shadowRoot.addEventListener('value-changed', this._boundHandleValueChanged);
+    this._shadowListenersAttached = true;
+  }
+
+  _syncEntityPickers() {
+    if (!this.shadowRoot) return;
+    const entities = this._getEntitiesValue();
+    const syncPicker = (picker) => {
+      const kind = picker.dataset.kind;
+      const indexValue = picker.dataset.index;
+      const index = Number(indexValue);
+      picker.hass = this._hass;
+      picker.allowCustomEntity = true;
+
+      if (kind === 'entity-picker') {
+        const entry = entities[index];
+        picker.value = entry?.entity ?? '';
+        picker.label = `Entity ${index + 1}`;
+        return;
+      }
+
+      if (kind === 'scale-min-entity-source') {
+        picker.value = this._getScaleEntityValue('min');
+        picker.label = 'Min entity override';
+        return;
+      }
+
+      if (kind === 'scale-max-entity-source') {
+        picker.value = this._getScaleEntityValue('max');
+        picker.label = 'Max entity override';
+        return;
+      }
+
+      if (kind === 'entity-override-min-entity-source') {
+        picker.value = this._getResolvableScopedValue({ type: 'entity', index }, 'min').entity;
+        picker.label = `Entity ${index + 1} min override`;
+        return;
+      }
+
+      if (kind === 'entity-override-max-entity-source') {
+        picker.value = this._getResolvableScopedValue({ type: 'entity', index }, 'max').entity;
+        picker.label = `Entity ${index + 1} max override`;
+      }
+    };
+
+    [
+      'ha-entity-picker[data-kind="entity-picker"]',
+      'ha-entity-picker[data-kind="scale-min-entity-source"]',
+      'ha-entity-picker[data-kind="scale-max-entity-source"]',
+      'ha-entity-picker[data-kind="entity-override-min-entity-source"]',
+      'ha-entity-picker[data-kind="entity-override-max-entity-source"]',
+    ].forEach((selector) => {
+      this.shadowRoot.querySelectorAll(selector).forEach(syncPicker);
+    });
+    if (customElements.whenDefined) {
+      customElements.whenDefined('ha-entity-picker').then(() => {
+        [
+          'ha-entity-picker[data-kind="entity-picker"]',
+          'ha-entity-picker[data-kind="scale-min-entity-source"]',
+          'ha-entity-picker[data-kind="scale-max-entity-source"]',
+          'ha-entity-picker[data-kind="entity-override-min-entity-source"]',
+          'ha-entity-picker[data-kind="entity-override-max-entity-source"]',
+        ].forEach((selector) => {
+          this.shadowRoot?.querySelectorAll(selector).forEach(syncPicker);
+        });
+      }).catch(() => {});
+    }
+  }
+
+  _handleClick(event) {
+    const target = event.target;
+    const action = target?.dataset?.action;
+    if (!action) return;
+
+    if (action === 'add-entity') {
+      const nextEntities = [...this._getEntitiesValue(), { entity: '' }];
+      const nextEntries = this._buildEntityConfigEntries(nextEntities);
+      if (Array.isArray(this._draftConfig.entities) || nextEntries.length > 1 || !this._draftConfig.entity) {
+        let nextConfig = this._setPathValue(this._draftConfig, ['entities'], nextEntries);
+        if (!Array.isArray(this._draftConfig.entities) && this._draftConfig.entity !== undefined) {
+          nextConfig = this._deletePathValue(nextConfig, ['entity']);
+          if (this._draftConfig.name !== undefined) {
+            nextConfig = this._deletePathValue(nextConfig, ['name']);
+          }
+          if (this._draftConfig.icon !== undefined) {
+            nextConfig = this._deletePathValue(nextConfig, ['icon']);
+          }
+        }
+        this._applyUserConfig(nextConfig, { rerender: true });
+      } else {
+        this._setValueAtPath(['entity'], nextEntities[0]?.entity ?? '', { rerender: true });
+      }
+      return;
+    }
+
+    if (action === 'toggle-entity-overrides') {
+      this._toggleEntityOverrideExpanded(Number(target.dataset.index));
+      return;
+    }
+
+    if (action === 'remove-entity') {
+      const index = Number(target.dataset.index);
+      const nextEntities = this._getEntitiesValue().filter((_, entryIndex) => entryIndex !== index);
+      const nextEntries = this._buildEntityConfigEntries(nextEntities);
+      if (Array.isArray(this._draftConfig.entities) || nextEntries.length !== 1 || !this._draftConfig.entity) {
+        this._setValueAtPath(['entities'], nextEntries, { rerender: true });
+      } else {
+        this._setValueAtPath(['entity'], nextEntities[0]?.entity ?? '', { rerender: true });
+      }
+      return;
+    }
+
+    if (action === 'add-gradient-stop') {
+      this._setGradientStops([...this._getGradientStopsValue(), { pos: 100, color: '#4a9eff' }], { rerender: true });
+      return;
+    }
+
+    if (action === 'remove-gradient-stop') {
+      const index = Number(target.dataset.index);
+      this._setGradientStops(this._getGradientStopsValue().filter((_, stopIndex) => stopIndex !== index), { rerender: true });
+      return;
+    }
+
+    if (action === 'add-segment') {
+      this._setSegments([...this._getSegmentsValue(), { from: 0, to: 100, color: '#4a9eff' }], { rerender: true });
+      return;
+    }
+
+    if (action === 'remove-segment') {
+      const index = Number(target.dataset.index);
+      this._setSegments(this._getSegmentsValue().filter((_, segmentIndex) => segmentIndex !== index), { rerender: true });
+    }
+  }
+
+  _handleChange(event) {
+    this._handleFieldEvent(event);
+  }
+
+  _handleInput(event) {
+    const target = event.target;
+    if (!target) return;
+    if (target.tagName === 'HA-ENTITY-PICKER') return;
+    if (target.tagName === 'INPUT' && target.type === 'checkbox') return;
+    this._handleFieldEvent(event);
+  }
+
+  _handleValueChanged(event) {
+    if (event.target?.tagName === 'HA-ENTITY-PICKER') {
+      this._handleFieldEvent(event);
+    }
+  }
+
+  _handleFieldEvent(event) {
+    const target = event.target;
+    const field = target?.dataset?.field;
+    const kind = target?.dataset?.kind;
+    const detailValue = event.detail?.value;
+    const value = detailValue ?? (target?.type === 'checkbox' ? target.checked : target?.value);
+
+    if (field === 'title') return void this._setTitle(value);
+    if (field === 'layout-label-position') return void this._setLayoutLabelPosition(value);
+    if (field === 'layout-height') return void this._setLayoutHeight(value);
+    if (field === 'scale-min') return void this._setScaleBound('min', value);
+    if (field === 'scale-max') return void this._setScaleBound('max', value);
+    if (field === 'bar-fill-style') return void this._setBarFillStyle(value);
+    if (field === 'bar-color') return void this._setBarColor(value);
+    if (field === 'bar-needle') return void this._setNeedle(value);
+    if (field === 'baseline-enabled') {
+      const baselineValue = this.shadowRoot?.querySelector('[data-field="baseline-value"]')?.value ?? '';
+      return void this._setFixedMarkerValue('baseline', !!value, baselineValue);
+    }
+    if (field === 'baseline-value') {
+      const enabled = !!this.shadowRoot?.querySelector('[data-field="baseline-enabled"]')?.checked;
+      return void this._setFixedMarkerValue('baseline', enabled, value);
+    }
+    if (field === 'target-enabled') {
+      const targetValue = this.shadowRoot?.querySelector('[data-field="target-value"]')?.value ?? '';
+      return void this._setFixedMarkerValue('target', !!value, targetValue);
+    }
+    if (field === 'target-value') {
+      const enabled = !!this.shadowRoot?.querySelector('[data-field="target-enabled"]')?.checked;
+      return void this._setFixedMarkerValue('target', enabled, value);
+    }
+    if (field === 'peak-show') return void this._setPeakShow(value);
+
+    if (kind === 'entity-picker' || kind === 'entity-input') {
+      const index = Number(target.dataset.index);
+      const nextEntities = this._getEntitiesValue().map((entry, entryIndex) => (
+        entryIndex === index ? { ...entry, entity: this._normalizeTextValue(value) } : entry
+      ));
+      const nextEntries = this._buildEntityConfigEntries(nextEntities);
+      if (Array.isArray(this._draftConfig.entities) || nextEntries.length > 1 || !this._draftConfig.entity) {
+        this._setValueAtPath(['entities'], nextEntries);
+      } else {
+        this._setValueAtPath(['entity'], nextEntities[0]?.entity ?? '');
+      }
+      return;
+    }
+
+    if (kind === 'entity-name') {
+      return void this._setEntityField(Number(target.dataset.index), 'name', value);
+    }
+
+    if (kind === 'entity-icon') {
+      return void this._setEntityField(Number(target.dataset.index), 'icon', value);
+    }
+
+    if (kind === 'scale-min-entity-source') {
+      return void this._setCanonicalResolvablePart({ type: 'card' }, 'min', 'entity', value);
+    }
+
+    if (kind === 'scale-max-entity-source') {
+      return void this._setCanonicalResolvablePart({ type: 'card' }, 'max', 'entity', value);
+    }
+
+    if (kind === 'entity-override-min-inherit') {
+      if (value) {
+        return void this._clearCanonicalResolvableValue({ type: 'entity', index: Number(target.dataset.index) }, 'min');
+      }
+      return;
+    }
+
+    if (kind === 'entity-override-max-inherit') {
+      if (value) {
+        return void this._clearCanonicalResolvableValue({ type: 'entity', index: Number(target.dataset.index) }, 'max');
+      }
+      return;
+    }
+
+    if (kind === 'entity-override-min') {
+      return void this._setCanonicalResolvablePart({ type: 'entity', index: Number(target.dataset.index) }, 'min', 'fixed', value);
+    }
+
+    if (kind === 'entity-override-max') {
+      return void this._setCanonicalResolvablePart({ type: 'entity', index: Number(target.dataset.index) }, 'max', 'fixed', value);
+    }
+
+    if (kind === 'entity-override-min-entity-source') {
+      return void this._setCanonicalResolvablePart({ type: 'entity', index: Number(target.dataset.index) }, 'min', 'entity', value);
+    }
+
+    if (kind === 'entity-override-max-entity-source') {
+      return void this._setCanonicalResolvablePart({ type: 'entity', index: Number(target.dataset.index) }, 'max', 'entity', value);
+    }
+
+    if (kind === 'entity-override-height') {
+      return void this._setCanonicalScopedNumericOverride({ type: 'entity', index: Number(target.dataset.index) }, ['layout', 'height'], value, {
+        deprecatedKeys: [['height']],
+        prunePaths: [['layout']],
+      });
+    }
+
+    if (kind === 'entity-override-color') {
+      return void this._setCanonicalScopedTextOverride({ type: 'entity', index: Number(target.dataset.index) }, ['bar', 'color'], value, {
+        deprecatedKeys: [['color']],
+        prunePaths: [['bar']],
+      });
+    }
+
+    if (kind?.startsWith('gradient-')) {
+      const index = Number(target.dataset.index);
+      const nextStops = this._getGradientStopsValue().map((stop, stopIndex) => {
+        if (stopIndex !== index) return stop;
+        return {
+          ...stop,
+          pos: kind === 'gradient-pos' ? this._normalizeNumberValue(value) ?? 0 : stop?.pos ?? 0,
+          color: kind === 'gradient-color' ? value : stop?.color ?? '#4a9eff',
+        };
+      });
+      this._setGradientStops(nextStops);
+      return;
+    }
+
+    if (kind?.startsWith('segment-')) {
+      const index = Number(target.dataset.index);
+      const nextSegments = this._getSegmentsValue().map((segment, segmentIndex) => {
+        if (segmentIndex !== index) return segment;
+        return {
+          ...segment,
+          from: kind === 'segment-from' ? this._normalizeNumberValue(value) : segment?.from,
+          to: kind === 'segment-to' ? this._normalizeNumberValue(value) : segment?.to,
+          color: kind === 'segment-color' ? value : segment?.color ?? '#4a9eff',
+        };
+      });
+      this._setSegments(nextSegments);
+    }
+  }
+}
+
 customElements.define('sensor-bar-card-plus', SensorBarCard);
+customElements.define('sensor-bar-card-plus-editor', SensorBarCardPlusEditor);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
