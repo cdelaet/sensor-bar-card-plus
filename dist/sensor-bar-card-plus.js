@@ -3892,9 +3892,15 @@ class SensorBarCardPlusEditor extends HTMLElement {
     const structuredValue = this._getPathValue(target, canonicalBasePath);
     const legacyFixedValue = this._getPathValue(target, legacyFixedPath);
     const legacyEntityValue = this._getPathValue(target, legacyEntityPath);
+    const structuredFixedValue = this._isObject(structuredValue)
+      ? structuredValue?.fixed
+      : structuredValue;
+    const structuredEntityValue = this._isObject(structuredValue)
+      ? structuredValue?.entity
+      : undefined;
     return {
-      fixed: structuredValue?.fixed ?? ((!this._isObject(legacyFixedValue) && legacyFixedValue !== undefined) ? legacyFixedValue : ''),
-      entity: structuredValue?.entity ?? legacyEntityValue ?? '',
+      fixed: structuredFixedValue ?? ((!this._isObject(legacyFixedValue) && legacyFixedValue !== undefined) ? legacyFixedValue : ''),
+      entity: structuredEntityValue ?? legacyEntityValue ?? '',
     };
   }
 
@@ -4043,8 +4049,11 @@ class SensorBarCardPlusEditor extends HTMLElement {
         prunePaths: [['bar']],
       });
     }
-    return this._setCanonicalScopedValue({ type: 'card' }, ['bar', 'needle'], true, {
-      prunePaths: [['bar']],
+    return this._applyScopedMutation({ type: 'card' }, (target) => {
+      let nextTarget = this._setPathValue(target, ['bar', 'needle'], true);
+      nextTarget = this._deletePathValue(nextTarget, ['baseline']);
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar']);
+      return nextTarget;
     });
   }
 
@@ -4269,6 +4278,105 @@ class SensorBarCardPlusEditor extends HTMLElement {
       });
   }
 
+  _getBaselineResolvableValue(scope) {
+    return this._getResolvableScopedValue(scope, 'baseline', {
+      canonicalBasePath: ['baseline', 'at'],
+      legacyFixedPath: ['baseline'],
+      legacyEntityPath: ['baseline', 'at', 'entity'],
+    });
+  }
+
+  _setBaselineResolvablePart(scope, part, rawValue) {
+    const normalizedValue = part === 'fixed'
+      ? this._normalizeNumberValue(rawValue)
+      : this._normalizeTextValue(rawValue).trim();
+    return this._applyScopedMutation(scope, (target) => {
+      const currentParts = this._getResolvablePartsFromTarget(target ?? {}, 'baseline', {
+        canonicalBasePath: ['baseline', 'at'],
+        legacyFixedPath: ['baseline'],
+        legacyEntityPath: ['baseline', 'at', 'entity'],
+      });
+      const nextParts = { ...currentParts };
+
+      if (part === 'fixed') {
+        if (rawValue === '' || rawValue === null || rawValue === undefined || normalizedValue === null) {
+          delete nextParts.fixed;
+        } else {
+          nextParts.fixed = normalizedValue;
+        }
+      } else if (!normalizedValue) {
+        delete nextParts.entity;
+      } else {
+        nextParts.entity = normalizedValue;
+      }
+
+      let nextTarget = this._cloneDeep(target);
+      const baselineValue = this._getPathValue(nextTarget, ['baseline']);
+      if (this._isObject(baselineValue)) {
+        nextTarget = this._deletePathValue(nextTarget, ['baseline', 'at']);
+      } else {
+        nextTarget = this._deletePathValue(nextTarget, ['baseline']);
+      }
+
+      const hasFixed = nextParts.fixed !== undefined && nextParts.fixed !== null && nextParts.fixed !== '';
+      const hasEntity = nextParts.entity !== undefined && nextParts.entity !== null && nextParts.entity !== '';
+      if (hasFixed || hasEntity) {
+        const nextValue = {};
+        if (hasFixed) nextValue.fixed = nextParts.fixed;
+        if (hasEntity) nextValue.entity = nextParts.entity;
+        nextTarget = this._setPathValue(nextTarget, ['baseline', 'at'], nextValue);
+        nextTarget = this._deletePathValue(nextTarget, ['bar', 'needle']);
+      }
+
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['baseline', 'at']);
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['baseline']);
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar']);
+      return nextTarget;
+    });
+  }
+
+  _removeScopedNeedle(scope) {
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._deletePathValue(target, ['bar', 'needle']);
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar']);
+      return nextTarget;
+    });
+  }
+
+  _setBaselineDirectionalColor(scope, direction, rawValue) {
+    const normalizedValue = this._normalizeTextValue(rawValue).trim();
+    const path = ['baseline', direction, 'color'];
+    if (!normalizedValue) {
+      return this._removeCanonicalScopedValue(scope, path, {
+        prunePaths: [['baseline', direction], ['baseline']],
+      });
+    }
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._setPathValue(target, path, normalizedValue);
+      nextTarget = this._deletePathValue(nextTarget, ['bar', 'needle']);
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar']);
+      return nextTarget;
+    });
+  }
+
+  _getBaselineDirectionalColorValue(scope, direction) {
+    return this._getScopedValue(scope, ['baseline', direction, 'color']) ?? '';
+  }
+
+  _clearBaselineOverride(scope) {
+    return this._applyScopedMutation(scope, (target) => (
+      this._deletePathValue(target, ['baseline'])
+    ), { rerender: true });
+  }
+
+  _hasBaselineOverride(scope) {
+    const baselineValue = this._getScopedValue(scope, ['baseline']);
+    if (this._isObject(baselineValue) && Object.keys(baselineValue).length) {
+      return true;
+    }
+    return !this._isObject(baselineValue) && baselineValue !== undefined && baselineValue !== null && baselineValue !== '';
+  }
+
   _isEntityOverrideExpanded(index) {
     return this._expandedEntityOverrides.has(index);
   }
@@ -4333,7 +4441,9 @@ class SensorBarCardPlusEditor extends HTMLElement {
         ?? '#4a9eff';
       const gradientStops = this._getGradientStopsValue();
       const segments = this._getSegmentsValue();
-      const baseline = this._readFixedMarker('baseline');
+      const baseline = this._getBaselineResolvableValue({ type: 'card' });
+      const baselineAboveColor = this._getBaselineDirectionalColorValue({ type: 'card' }, 'above');
+      const baselineBelowColor = this._getBaselineDirectionalColorValue({ type: 'card' }, 'below');
       const target = this._getTargetResolvableValue({ type: 'card' });
       const targetColor = this._getTargetColorValue({ type: 'card' });
       const targetLabelShow = this._getTargetLabelShowValue({ type: 'card' });
@@ -4475,6 +4585,8 @@ class SensorBarCardPlusEditor extends HTMLElement {
                         const scope = { type: 'entity', index };
                         const minParts = this._getResolvableScopedValue(scope, 'min');
                         const maxParts = this._getResolvableScopedValue(scope, 'max');
+                        const baselineParts = this._getBaselineResolvableValue(scope);
+                        const baselineInherited = !this._hasBaselineOverride(scope);
                         const targetParts = this._getTargetResolvableValue(scope);
                         const targetInherited = !this._hasTargetOverride(scope);
                         const minInherited = !minParts.fixed && !minParts.entity;
@@ -4515,6 +4627,28 @@ class SensorBarCardPlusEditor extends HTMLElement {
                       <div class="field-row">
                         <label for="entity-${index}-color">Color</label>
                         <input id="entity-${index}-color" type="text" data-kind="entity-override-color" data-index="${index}" value="${this._escapeAttribute(this._getScopedDisplayValue({ type: 'entity', index }, ['bar', 'color'], [['color']]))}" placeholder="inherit card default">
+                      </div>
+                      <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-baseline-inherit" type="checkbox" data-kind="entity-baseline-inherit" data-index="${index}"${baselineInherited ? ' checked' : ''}>
+                          <label for="entity-${index}-baseline-inherit">Baseline inherit</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-baseline-value">Baseline fallback value</label>
+                        <input id="entity-${index}-baseline-value" type="number" step="any" data-kind="entity-baseline-value" data-index="${index}" value="${this._escapeAttribute(baselineParts.fixed)}" placeholder="inherit card default">
+                      </div>
+                      <div class="field-row">
+                        <label>Baseline entity override</label>
+                        ${this._renderEntitySourceInput('entity-baseline-entity-source', index, baselineParts.entity, 'inherit card default')}
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-baseline-above-color">Above-baseline fill color</label>
+                        <input id="entity-${index}-baseline-above-color" type="text" data-kind="entity-baseline-above-color" data-index="${index}" value="${this._escapeAttribute(this._getBaselineDirectionalColorValue(scope, 'above'))}" placeholder="inherit card default">
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-baseline-below-color">Below-baseline fill color</label>
+                        <input id="entity-${index}-baseline-below-color" type="text" data-kind="entity-baseline-below-color" data-index="${index}" value="${this._escapeAttribute(this._getBaselineDirectionalColorValue(scope, 'below'))}" placeholder="inherit card default">
                       </div>
                       <div class="field-row">
                         <div class="toggle">
@@ -4656,17 +4790,21 @@ class SensorBarCardPlusEditor extends HTMLElement {
         <div class="section">
           <h3>Markers</h3>
           <div class="field-grid">
-            <div class="inline-row">
-              <div class="field-row">
-                <div class="toggle">
-                  <input id="baseline-enabled" type="checkbox" data-field="baseline-enabled"${baseline.enabled ? ' checked' : ''}>
-                  <label for="baseline-enabled">Baseline fixed</label>
-                </div>
-              </div>
-              <div class="field-row">
-                <label for="baseline-value">Baseline value</label>
-                <input id="baseline-value" type="number" step="any" data-field="baseline-value" value="${this._escapeAttribute(baseline.value)}">
-              </div>
+            <div class="field-row">
+              <label for="baseline-value">Baseline fallback value</label>
+              <input id="baseline-value" type="number" step="any" data-field="baseline-value" value="${this._escapeAttribute(baseline.fixed)}">
+            </div>
+            <div class="field-row">
+              <label>Baseline entity override</label>
+              ${this._renderEntitySourceInput('baseline-entity-source', 'card', baseline.entity)}
+            </div>
+            <div class="field-row">
+              <label for="baseline-above-color">Above-baseline fill color</label>
+              <input id="baseline-above-color" type="text" data-field="baseline-above-color" value="${this._escapeAttribute(baselineAboveColor)}">
+            </div>
+            <div class="field-row">
+              <label for="baseline-below-color">Below-baseline fill color</label>
+              <input id="baseline-below-color" type="text" data-field="baseline-below-color" value="${this._escapeAttribute(baselineBelowColor)}">
             </div>
             <div class="field-row">
               <label for="target-value">Target fallback value</label>
@@ -4747,6 +4885,12 @@ class SensorBarCardPlusEditor extends HTMLElement {
         return;
       }
 
+      if (kind === 'baseline-entity-source') {
+        picker.value = this._getBaselineResolvableValue({ type: 'card' }).entity;
+        picker.label = 'Baseline entity override';
+        return;
+      }
+
       if (kind === 'target-entity-source') {
         picker.value = this._getTargetResolvableValue({ type: 'card' }).entity;
         picker.label = 'Target entity override';
@@ -4765,6 +4909,12 @@ class SensorBarCardPlusEditor extends HTMLElement {
         return;
       }
 
+      if (kind === 'entity-baseline-entity-source') {
+        picker.value = this._getBaselineResolvableValue({ type: 'entity', index }).entity;
+        picker.label = `Entity ${index + 1} baseline override`;
+        return;
+      }
+
       if (kind === 'entity-target-entity-source') {
         picker.value = this._getTargetResolvableValue({ type: 'entity', index }).entity;
         picker.label = `Entity ${index + 1} target override`;
@@ -4775,9 +4925,11 @@ class SensorBarCardPlusEditor extends HTMLElement {
       'ha-entity-picker[data-kind="entity-picker"]',
       'ha-entity-picker[data-kind="scale-min-entity-source"]',
       'ha-entity-picker[data-kind="scale-max-entity-source"]',
+      'ha-entity-picker[data-kind="baseline-entity-source"]',
       'ha-entity-picker[data-kind="target-entity-source"]',
       'ha-entity-picker[data-kind="entity-override-min-entity-source"]',
       'ha-entity-picker[data-kind="entity-override-max-entity-source"]',
+      'ha-entity-picker[data-kind="entity-baseline-entity-source"]',
       'ha-entity-picker[data-kind="entity-target-entity-source"]',
     ].forEach((selector) => {
       this.shadowRoot.querySelectorAll(selector).forEach(syncPicker);
@@ -4788,9 +4940,11 @@ class SensorBarCardPlusEditor extends HTMLElement {
           'ha-entity-picker[data-kind="entity-picker"]',
           'ha-entity-picker[data-kind="scale-min-entity-source"]',
           'ha-entity-picker[data-kind="scale-max-entity-source"]',
+          'ha-entity-picker[data-kind="baseline-entity-source"]',
           'ha-entity-picker[data-kind="target-entity-source"]',
           'ha-entity-picker[data-kind="entity-override-min-entity-source"]',
           'ha-entity-picker[data-kind="entity-override-max-entity-source"]',
+          'ha-entity-picker[data-kind="entity-baseline-entity-source"]',
           'ha-entity-picker[data-kind="entity-target-entity-source"]',
         ].forEach((selector) => {
           this.shadowRoot?.querySelectorAll(selector).forEach(syncPicker);
@@ -4897,14 +5051,11 @@ class SensorBarCardPlusEditor extends HTMLElement {
     if (field === 'bar-fill-style') return void this._setBarFillStyle(value);
     if (field === 'bar-color') return void this._setBarColor(value);
     if (field === 'bar-needle') return void this._setNeedle(value);
-    if (field === 'baseline-enabled') {
-      const baselineValue = this.shadowRoot?.querySelector('[data-field="baseline-value"]')?.value ?? '';
-      return void this._setFixedMarkerValue('baseline', !!value, baselineValue);
-    }
     if (field === 'baseline-value') {
-      const enabled = !!this.shadowRoot?.querySelector('[data-field="baseline-enabled"]')?.checked;
-      return void this._setFixedMarkerValue('baseline', enabled, value);
+      return void this._setBaselineResolvablePart({ type: 'card' }, 'fixed', value);
     }
+    if (field === 'baseline-above-color') return void this._setBaselineDirectionalColor({ type: 'card' }, 'above', value);
+    if (field === 'baseline-below-color') return void this._setBaselineDirectionalColor({ type: 'card' }, 'below', value);
     if (field === 'target-value') {
       return void this._setTargetResolvablePart({ type: 'card' }, 'fixed', value);
     }
@@ -4941,6 +5092,10 @@ class SensorBarCardPlusEditor extends HTMLElement {
 
     if (kind === 'scale-max-entity-source') {
       return void this._setCanonicalResolvablePart({ type: 'card' }, 'max', 'entity', value);
+    }
+
+    if (kind === 'baseline-entity-source') {
+      return void this._setBaselineResolvablePart({ type: 'card' }, 'entity', value);
     }
 
     if (kind === 'target-entity-source') {
@@ -4989,6 +5144,29 @@ class SensorBarCardPlusEditor extends HTMLElement {
         deprecatedKeys: [['color']],
         prunePaths: [['bar']],
       });
+    }
+
+    if (kind === 'entity-baseline-inherit') {
+      if (value) {
+        return void this._clearBaselineOverride({ type: 'entity', index: Number(target.dataset.index) });
+      }
+      return;
+    }
+
+    if (kind === 'entity-baseline-value') {
+      return void this._setBaselineResolvablePart({ type: 'entity', index: Number(target.dataset.index) }, 'fixed', value);
+    }
+
+    if (kind === 'entity-baseline-entity-source') {
+      return void this._setBaselineResolvablePart({ type: 'entity', index: Number(target.dataset.index) }, 'entity', value);
+    }
+
+    if (kind === 'entity-baseline-above-color') {
+      return void this._setBaselineDirectionalColor({ type: 'entity', index: Number(target.dataset.index) }, 'above', value);
+    }
+
+    if (kind === 'entity-baseline-below-color') {
+      return void this._setBaselineDirectionalColor({ type: 'entity', index: Number(target.dataset.index) }, 'below', value);
     }
 
     if (kind === 'entity-target-inherit') {

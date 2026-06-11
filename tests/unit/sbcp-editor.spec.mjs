@@ -1483,6 +1483,456 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
+  it('card-level baseline fallback only writes baseline.at.fixed', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entity: 'sensor.one' });
+    dispatchInput(editor.shadowRoot.querySelector('#baseline-value'), '0');
+
+    expect(events.at(-1).detail.config.baseline).toEqual({
+      at: { fixed: 0 },
+    });
+  });
+
+  it('card-level baseline entity only writes baseline.at.entity', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entity: 'sensor.one' });
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="baseline-entity-source"]')[0], 'sensor.dynamic_baseline');
+
+    expect(events.at(-1).detail.config.baseline).toEqual({
+      at: { entity: 'sensor.dynamic_baseline' },
+    });
+  });
+
+  it('card-level baseline fallback plus entity writes both', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entity: 'sensor.one' });
+    dispatchInput(editor.shadowRoot.querySelector('#baseline-value'), '0');
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="baseline-entity-source"]')[0], 'sensor.dynamic_baseline');
+
+    expect(events.at(-1).detail.config.baseline).toEqual({
+      at: { fixed: 0, entity: 'sensor.dynamic_baseline' },
+    });
+  });
+
+  it('clearing baseline fallback preserves entity', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      baseline: {
+        at: { fixed: 0, entity: 'sensor.dynamic_baseline' },
+      },
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#baseline-value'), '');
+
+    expect(events.at(-1).detail.config.baseline).toEqual({
+      at: { entity: 'sensor.dynamic_baseline' },
+    });
+  });
+
+  it('clearing baseline entity preserves fallback', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      baseline: {
+        at: { fixed: 0, entity: 'sensor.dynamic_baseline' },
+      },
+    });
+
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="baseline-entity-source"]')[0], '');
+
+    expect(events.at(-1).detail.config.baseline).toEqual({
+      at: { fixed: 0 },
+    });
+  });
+
+  it('clearing both removes baseline.at', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      baseline: {
+        at: { fixed: 0, entity: 'sensor.dynamic_baseline' },
+        above: { color: '#00ff00' },
+      },
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#baseline-value'), '');
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="baseline-entity-source"]')[0], '');
+
+    expect(events.at(-1).detail.config.baseline).toEqual({
+      above: { color: '#00ff00' },
+    });
+  });
+
+  it('above-baseline color writes baseline.above.color', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entity: 'sensor.one' });
+    dispatchInput(editor.shadowRoot.querySelector('#baseline-above-color'), '#00ff00');
+
+    expect(events.at(-1).detail.config.baseline).toEqual({
+      above: { color: '#00ff00' },
+    });
+  });
+
+  it('below-baseline color writes baseline.below.color', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entity: 'sensor.one' });
+    dispatchInput(editor.shadowRoot.querySelector('#baseline-below-color'), '#ff0000');
+
+    expect(events.at(-1).detail.config.baseline).toEqual({
+      below: { color: '#ff0000' },
+    });
+  });
+
+  it('clearing above-baseline color removes baseline.above', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      baseline: {
+        above: { color: '#00ff00' },
+        below: { color: '#ff0000' },
+      },
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#baseline-above-color'), '');
+
+    expect(events.at(-1).detail.config.baseline).toEqual({
+      below: { color: '#ff0000' },
+    });
+  });
+
+  it('clearing below-baseline color removes baseline.below', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      baseline: {
+        above: { color: '#00ff00' },
+        below: { color: '#ff0000' },
+      },
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#baseline-below-color'), '');
+
+    expect(events.at(-1).detail.config.baseline).toEqual({
+      above: { color: '#00ff00' },
+    });
+  });
+
+  it('empty/default baseline removes entire baseline', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      baseline: {
+        at: { fixed: 0 },
+      },
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#baseline-value'), '');
+
+    expect(events.at(-1).detail.config.baseline).toBeUndefined();
+  });
+
+  it('per-entity baseline inherit removes entire entity-level baseline', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{
+        entity: 'sensor.one',
+        name: 'One',
+        baseline: {
+          at: { fixed: 0 },
+          above: { color: '#00ff00' },
+        },
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    const inheritToggle = editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-inherit"]')[0];
+    inheritToggle.checked = true;
+    inheritToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', name: 'One' },
+    ]);
+  });
+
+  it('per-entity baseline fallback only writes entities[index].baseline.at.fixed', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entities: [{ entity: 'sensor.one', name: 'One' }] });
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-value"]')[0], '500');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', name: 'One', baseline: { at: { fixed: 500 } } },
+    ]);
+  });
+
+  it('per-entity baseline entity only writes entities[index].baseline.at.entity', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entities: [{ entity: 'sensor.one', name: 'One' }] });
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-entity-source"]')[0], 'sensor.grid_baseline');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', name: 'One', baseline: { at: { entity: 'sensor.grid_baseline' } } },
+    ]);
+  });
+
+  it('per-entity baseline fallback plus entity writes both', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entities: [{ entity: 'sensor.one', name: 'One' }] });
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-value"]')[0], '500');
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-entity-source"]')[0], 'sensor.grid_baseline');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', name: 'One', baseline: { at: { fixed: 500, entity: 'sensor.grid_baseline' } } },
+    ]);
+  });
+
+  it('per-entity baseline above color writes entities[index].baseline.above.color', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entities: [{ entity: 'sensor.one', name: 'One' }] });
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-above-color"]')[0], '#4caf50');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', name: 'One', baseline: { above: { color: '#4caf50' } } },
+    ]);
+  });
+
+  it('per-entity baseline below color writes entities[index].baseline.below.color', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entities: [{ entity: 'sensor.one', name: 'One' }] });
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-below-color"]')[0], '#f44336');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', name: 'One', baseline: { below: { color: '#f44336' } } },
+    ]);
+  });
+
+  it('empty/default per-entity baseline override removes empty entity-level baseline', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{
+        entity: 'sensor.one',
+        name: 'One',
+        baseline: {
+          above: { color: '#00ff00' },
+        },
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-above-color"]')[0], '');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', name: 'One' },
+    ]);
+  });
+
+  it('per-entity baseline preserves unrelated entity keys', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{
+        entity: 'sensor.one',
+        name: 'One',
+        custom_entity_key: 'keep',
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-value"]')[0], '500');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', name: 'One', custom_entity_key: 'keep', baseline: { at: { fixed: 500 } } },
+    ]);
+  });
+
+  it('enabling baseline removes needle in same scope', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      bar: { needle: true, fill_style: 'soft_bands' },
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#baseline-value'), '0');
+
+    expect(events.at(-1).detail.config.bar).toEqual({
+      fill_style: 'soft_bands',
+    });
+    expect(events.at(-1).detail.config.baseline).toEqual({
+      at: { fixed: 0 },
+    });
+  });
+
+  it('enabling needle removes baseline in same scope', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      baseline: { at: { fixed: 0 } },
+      bar: { fill_style: 'soft_bands' },
+    });
+
+    const needleToggle = editor.shadowRoot.querySelector('#bar-needle');
+    needleToggle.checked = true;
+    needleToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+
+    expect(events.at(-1).detail.config.bar).toEqual({
+      fill_style: 'soft_bands',
+      needle: true,
+    });
+    expect(events.at(-1).detail.config.baseline).toBeUndefined();
+  });
+
+  it('card-level baseline does not remove unrelated entity-level needle overrides', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{
+        entity: 'sensor.one',
+        bar: { needle: true },
+      }],
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#baseline-value'), '0');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', bar: { needle: true } },
+    ]);
+    expect(events.at(-1).detail.config.baseline).toEqual({
+      at: { fixed: 0 },
+    });
+  });
+
+  it('entity-level baseline only affects that entity scope', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', name: 'One', bar: { needle: true } },
+        { entity: 'sensor.two', name: 'Two', bar: { needle: true } },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-value"]')[0], '500');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', name: 'One', baseline: { at: { fixed: 500 } } },
+      { entity: 'sensor.two', name: 'Two', bar: { needle: true } },
+    ]);
+  });
+
+  it('loading flat baseline renders correctly', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      baseline: 0,
+    });
+
+    expect(editor.shadowRoot.querySelector('#baseline-value').value).toBe('0');
+  });
+
+  it('editing flat-loaded baseline converts to structured config', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      baseline: 0,
+      custom_top_level: 'keep',
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#baseline-value'), '10');
+
+    const finalConfig = events.at(-1).detail.config;
+    expect(finalConfig.baseline).toEqual({
+      at: { fixed: 10 },
+    });
+    expect(finalConfig.custom_top_level).toBe('keep');
+  });
+
+  it('fake ha-entity-picker value-changed works for card-level baseline entity', () => {
+    const editor = createEditor({ withEntityPicker: true });
+    const events = trackConfigEvents(editor);
+
+    editor.hass = { states: {} };
+    editor.setConfig({ entity: 'sensor.one' });
+
+    const picker = editor.shadowRoot.querySelectorAll('ha-entity-picker[data-kind="baseline-entity-source"]')[0];
+    expect(picker.hass).toEqual({ states: {} });
+    dispatchValueChanged(picker, 'sensor.dynamic_baseline');
+
+    expect(events.at(-1).detail.config.baseline).toEqual({
+      at: { entity: 'sensor.dynamic_baseline' },
+    });
+  });
+
+  it('fake ha-entity-picker value-changed works for per-entity baseline entity', () => {
+    const editor = createEditor({ withEntityPicker: true });
+    const events = trackConfigEvents(editor);
+
+    editor.hass = { states: {} };
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one', name: 'One' }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    const picker = editor.shadowRoot.querySelectorAll('ha-entity-picker[data-kind="entity-baseline-entity-source"]')[0];
+    expect(picker.hass).toEqual({ states: {} });
+    dispatchValueChanged(picker, 'sensor.grid_baseline');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', name: 'One', baseline: { at: { entity: 'sensor.grid_baseline' } } },
+    ]);
+  });
+
   it('default needle OFF does not emit bar.needle and preserves unrelated bar keys', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
