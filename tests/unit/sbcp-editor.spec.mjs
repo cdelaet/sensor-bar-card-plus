@@ -1816,13 +1816,13 @@ describe('Sensor Bar Card Plus editor', () => {
       bar: { fill_style: 'soft_bands' },
     });
 
-    const needleToggle = editor.shadowRoot.querySelector('#bar-needle');
-    needleToggle.checked = true;
-    needleToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), 'enabled');
 
     expect(events.at(-1).detail.config.bar).toEqual({
       fill_style: 'soft_bands',
-      needle: true,
+      needle: {
+        show: true,
+      },
     });
     expect(events.at(-1).detail.config.baseline).toBeUndefined();
   });
@@ -2242,7 +2242,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(finalConfig.color).toBeUndefined();
   });
 
-  it('default needle OFF does not emit bar.needle and preserves unrelated bar keys', () => {
+  it('disabling card-level needle removes bar.needle and preserves unrelated bar keys', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -2250,17 +2250,13 @@ describe('Sensor Bar Card Plus editor', () => {
       entity: 'sensor.one',
       bar: {
         fill_style: 'soft_bands',
-        needle: true,
+        needle: {
+          show: true,
+        },
       },
     });
 
-    const needleToggle = editor.shadowRoot.querySelector('#bar-needle');
-    needleToggle.checked = false;
-    needleToggle.dispatchEvent({
-      type: 'change',
-      bubbles: true,
-      composed: true,
-    });
+    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), 'disabled');
 
     const finalConfig = events.at(-1).detail.config;
     expect(finalConfig.bar).toEqual({
@@ -2280,19 +2276,359 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    const needleToggle = editor.shadowRoot.querySelector('#bar-needle');
-    needleToggle.checked = true;
-    needleToggle.dispatchEvent({
-      type: 'change',
-      bubbles: true,
-      composed: true,
-    });
+    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), 'enabled');
 
     const finalConfig = events.at(-1).detail.config;
     expect(finalConfig.bar).toEqual({
       fill_style: 'soft_bands',
-      needle: true,
+      needle: {
+        show: true,
+      },
     });
+  });
+
+  it('custom needle color writes bar.needle.color', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      bar: {
+        needle: {
+          show: true,
+        },
+      },
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#bar-needle-color'), '#ff9800');
+
+    expect(events.at(-1).detail.config.bar).toEqual({
+      needle: {
+        show: true,
+        color: '#ff9800',
+      },
+    });
+  });
+
+  it('default needle color #ffffff is suppressed', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      bar: {
+        needle: {
+          show: true,
+        },
+      },
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#bar-needle-color'), '#ffffff');
+
+    expect(events).toHaveLength(0);
+    expect(editor._draftConfig.bar).toEqual({
+      needle: {
+        show: true,
+      },
+    });
+  });
+
+  it('enabling needle removes card-level baseline', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      baseline: {
+        at: {
+          fixed: 0,
+        },
+      },
+      bar: {
+        fill_style: 'soft_bands',
+      },
+    });
+
+    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), 'enabled');
+
+    const finalConfig = events.at(-1).detail.config;
+    expect(finalConfig.bar).toEqual({
+      fill_style: 'soft_bands',
+      needle: {
+        show: true,
+      },
+    });
+    expect(finalConfig.baseline).toBeUndefined();
+  });
+
+  it('enabling needle preserves unrelated card-level bar keys', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      bar: {
+        fill_style: 'soft_bands',
+        color: '#ff9800',
+        solid_fill: true,
+        segments: [{ from: 0, to: 10, color: '#00ff00' }],
+        custom_bar_key: 'keep',
+      },
+    });
+
+    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), 'enabled');
+
+    expect(events.at(-1).detail.config.bar).toEqual({
+      fill_style: 'soft_bands',
+      color: '#ff9800',
+      solid_fill: true,
+      segments: [{ from: 0, to: 10, color: '#00ff00' }],
+      custom_bar_key: 'keep',
+      needle: {
+        show: true,
+      },
+    });
+  });
+
+  it('per-entity needle inherit removes only entities[index].bar.needle', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{
+        entity: 'sensor.one',
+        name: 'One',
+        bar: {
+          needle: {
+            show: true,
+            color: '#ff9800',
+          },
+          fill_style: 'gradient',
+        },
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchChange(editor.shadowRoot.querySelectorAll('select[data-kind="entity-needle-mode"]')[0], 'inherit');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      {
+        entity: 'sensor.one',
+        name: 'One',
+        bar: {
+          fill_style: 'gradient',
+        },
+      },
+    ]);
+  });
+
+  it('per-entity needle enabled writes entities[index].bar.needle.show true', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entities: [{ entity: 'sensor.one', name: 'One' }] });
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchChange(editor.shadowRoot.querySelectorAll('select[data-kind="entity-needle-mode"]')[0], 'enabled');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      {
+        entity: 'sensor.one',
+        name: 'One',
+        bar: {
+          needle: {
+            show: true,
+          },
+        },
+      },
+    ]);
+  });
+
+  it('per-entity needle disabled writes entities[index].bar.needle.show false', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      bar: {
+        needle: {
+          show: true,
+        },
+      },
+      entities: [{ entity: 'sensor.one', name: 'One' }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchChange(editor.shadowRoot.querySelectorAll('select[data-kind="entity-needle-mode"]')[0], 'disabled');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      {
+        entity: 'sensor.one',
+        name: 'One',
+        bar: {
+          needle: {
+            show: false,
+          },
+        },
+      },
+    ]);
+  });
+
+  it('per-entity custom needle color writes entities[index].bar.needle.color', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entities: [{ entity: 'sensor.one', name: 'One', bar: { needle: { show: true } } }] });
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-needle-color"]')[0], '#ff9800');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      {
+        entity: 'sensor.one',
+        name: 'One',
+        bar: {
+          needle: {
+            show: true,
+            color: '#ff9800',
+          },
+        },
+      },
+    ]);
+  });
+
+  it('per-entity default needle color is suppressed', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entities: [{ entity: 'sensor.one', name: 'One', bar: { needle: { show: true } } }] });
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-needle-color"]')[0], '#ffffff');
+
+    expect(events).toHaveLength(0);
+  });
+
+  it('enabling per-entity needle removes only that entity baseline', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      baseline: {
+        at: {
+          fixed: 0,
+        },
+      },
+      entities: [
+        { entity: 'sensor.one', name: 'One', baseline: { at: { fixed: 5 } } },
+        { entity: 'sensor.two', name: 'Two', baseline: { at: { fixed: 10 } } },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchChange(editor.shadowRoot.querySelectorAll('select[data-kind="entity-needle-mode"]')[0], 'enabled');
+
+    expect(events.at(-1).detail.config.baseline).toEqual({
+      at: {
+        fixed: 0,
+      },
+    });
+    expect(events.at(-1).detail.config.entities).toEqual([
+      {
+        entity: 'sensor.one',
+        name: 'One',
+        bar: {
+          needle: {
+            show: true,
+          },
+        },
+      },
+      {
+        entity: 'sensor.two',
+        name: 'Two',
+        baseline: {
+          at: {
+            fixed: 10,
+          },
+        },
+      },
+    ]);
+  });
+
+  it('loading legacy boolean card-level needle renders as enabled', () => {
+    const editor = createEditor();
+    editor.setConfig({
+      entity: 'sensor.one',
+      bar: {
+        needle: true,
+      },
+    });
+
+    expect(editor.shadowRoot.querySelector('#bar-needle-mode').value).toBe('enabled');
+  });
+
+  it('loading legacy boolean per-entity needle false renders as disabled override', () => {
+    const editor = createEditor();
+    editor.setConfig({
+      entities: [{
+        entity: 'sensor.one',
+        name: 'One',
+        bar: {
+          needle: false,
+        },
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    expect(editor.shadowRoot.querySelectorAll('select[data-kind="entity-needle-mode"]')[0].value).toBe('disabled');
+  });
+
+  it('editing legacy boolean card-level needle emits object form', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      bar: {
+        needle: true,
+      },
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#bar-needle-color'), '#ff9800');
+
+    expect(events.at(-1).detail.config.bar).toEqual({
+      needle: {
+        show: true,
+        color: '#ff9800',
+      },
+    });
+  });
+
+  it('editing legacy boolean per-entity needle emits object form', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{
+        entity: 'sensor.one',
+        name: 'One',
+        bar: {
+          needle: true,
+        },
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-needle-color"]')[0], '#ff9800');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      {
+        entity: 'sensor.one',
+        name: 'One',
+        bar: {
+          needle: {
+            show: true,
+            color: '#ff9800',
+          },
+        },
+      },
+    ]);
   });
 
   it('empty card-level height does not emit layout.height null', () => {

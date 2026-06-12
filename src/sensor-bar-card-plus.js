@@ -4041,17 +4041,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _setNeedle(value) {
-    if (!value) {
-      return this._removeCanonicalScopedValue({ type: 'card' }, ['bar', 'needle'], {
-        prunePaths: [['bar']],
-      });
-    }
-    return this._applyScopedMutation({ type: 'card' }, (target) => {
-      let nextTarget = this._setPathValue(target, ['bar', 'needle'], true);
-      nextTarget = this._deletePathValue(nextTarget, ['baseline']);
-      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar']);
-      return nextTarget;
-    });
+    return this._setScopedNeedleMode({ type: 'card' }, value ? 'enabled' : 'disabled');
   }
 
   _setFixedMarkerValue(rootKey, enabled, value) {
@@ -4227,11 +4217,113 @@ class SensorBarCardPlusEditor extends HTMLElement {
       || this._getScopedValue(scope, ['color']) !== undefined;
   }
 
+  _getScopedNeedleConfig(scope) {
+    const rawNeedle = this._getScopedValue(scope, ['bar', 'needle']);
+    const defaultColor = '#ffffff';
+    let mode = scope?.type === 'entity' ? 'inherit' : 'disabled';
+    let color = '';
+
+    if (typeof rawNeedle === 'boolean') {
+      mode = rawNeedle ? 'enabled' : 'disabled';
+    } else if (this._isObject(rawNeedle)) {
+      if (rawNeedle.show === true) {
+        mode = 'enabled';
+      } else if (rawNeedle.show === false) {
+        mode = 'disabled';
+      } else if (scope?.type !== 'entity') {
+        mode = 'disabled';
+      }
+      color = rawNeedle.color ?? '';
+    }
+
+    if (color === defaultColor) {
+      color = '';
+    }
+
+    return { mode, color };
+  }
+
+  _setScopedNeedleMode(scope, mode) {
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._cloneDeep(target);
+      const existingNeedle = this._getPathValue(nextTarget, ['bar', 'needle']);
+      const existingColor = this._isObject(existingNeedle) ? existingNeedle.color : undefined;
+
+      nextTarget = this._deletePathValue(nextTarget, ['bar', 'needle']);
+
+      if (scope?.type === 'entity' && mode === 'inherit') {
+        nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar']);
+        return nextTarget;
+      }
+
+      if (mode === 'disabled') {
+        if (scope?.type === 'entity') {
+          nextTarget = this._setPathValue(nextTarget, ['bar', 'needle'], { show: false });
+        }
+        nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar']);
+        return nextTarget;
+      }
+
+      const nextNeedle = { show: true };
+      if (existingColor && existingColor !== '#ffffff') {
+        nextNeedle.color = existingColor;
+      }
+      nextTarget = this._setPathValue(nextTarget, ['bar', 'needle'], nextNeedle);
+      nextTarget = this._deletePathValue(nextTarget, ['baseline']);
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar']);
+      return nextTarget;
+    });
+  }
+
+  _setScopedNeedleColor(scope, rawValue) {
+    const normalizedValue = this._normalizeTextValue(rawValue).trim();
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._cloneDeep(target);
+      const current = this._getScopedNeedleConfig(scope);
+      const hasCustomColor = normalizedValue && normalizedValue !== '#ffffff';
+
+      nextTarget = this._deletePathValue(nextTarget, ['bar', 'needle', 'color']);
+
+      if (scope?.type === 'entity' && current.mode === 'inherit') {
+        nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar', 'needle']);
+        nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar']);
+        return nextTarget;
+      }
+
+      if (scope?.type !== 'entity' && current.mode === 'disabled') {
+        nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar', 'needle']);
+        nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar']);
+        return nextTarget;
+      }
+
+      const showValue = current.mode === 'enabled'
+        ? true
+        : current.mode === 'disabled'
+          ? false
+          : undefined;
+
+      const nextNeedle = {};
+      if (showValue !== undefined) {
+        nextNeedle.show = showValue;
+      }
+      if (hasCustomColor) {
+        nextNeedle.color = normalizedValue;
+      }
+
+      if (Object.keys(nextNeedle).length) {
+        nextTarget = this._setPathValue(nextTarget, ['bar', 'needle'], nextNeedle);
+      } else {
+        nextTarget = this._deletePathValue(nextTarget, ['bar', 'needle']);
+      }
+
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar', 'needle']);
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar']);
+      return nextTarget;
+    });
+  }
+
   _getNeedleValue() {
-    const needle = this._getPathValue(this._draftConfig, ['bar', 'needle']);
-    if (typeof needle === 'boolean') return needle;
-    if (this._isObject(needle)) return !!needle.show;
-    return false;
+    return this._getScopedNeedleConfig({ type: 'card' }).mode === 'enabled';
   }
 
   _getPeakShowValue() {
@@ -4516,6 +4608,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
         ?? '';
       const barColor = this._getScopedBarColorValue({ type: 'card' });
       const barSolidFill = this._getScopedBarSolidFillValue({ type: 'card' });
+      const cardNeedle = this._getScopedNeedleConfig({ type: 'card' });
       const gradientStops = this._getGradientStopsValue();
       const segments = this._getSegmentsValue();
       const baseline = this._getBaselineResolvableValue({ type: 'card' });
@@ -4663,6 +4756,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
                         const minParts = this._getResolvableScopedValue(scope, 'min');
                         const maxParts = this._getResolvableScopedValue(scope, 'max');
                         const barAppearanceInherited = !this._hasEntityBarAppearanceOverride(scope);
+                        const entityNeedle = this._getScopedNeedleConfig(scope);
                         const baselineParts = this._getBaselineResolvableValue(scope);
                         const baselineInherited = !this._hasBaselineOverride(scope);
                         const targetParts = this._getTargetResolvableValue(scope);
@@ -4727,6 +4821,18 @@ class SensorBarCardPlusEditor extends HTMLElement {
                           <input id="entity-${index}-bar-solid-fill" type="checkbox" data-kind="entity-bar-solid-fill" data-index="${index}"${this._getScopedBarSolidFillValue(scope) ? ' checked' : ''}>
                           <label for="entity-${index}-bar-solid-fill">Solid fill</label>
                         </div>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-needle-mode">Needle mode</label>
+                        <select id="entity-${index}-needle-mode" data-kind="entity-needle-mode" data-index="${index}" value="${this._escapeAttribute(entityNeedle.mode)}">
+                          <option value="inherit"${entityNeedle.mode === 'inherit' ? ' selected' : ''}>inherit</option>
+                          <option value="enabled"${entityNeedle.mode === 'enabled' ? ' selected' : ''}>enabled</option>
+                          <option value="disabled"${entityNeedle.mode === 'disabled' ? ' selected' : ''}>disabled</option>
+                        </select>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-needle-color">Needle color</label>
+                        <input id="entity-${index}-needle-color" type="text" data-kind="entity-needle-color" data-index="${index}" value="${this._escapeAttribute(entityNeedle.color)}" placeholder="#ffffff">
                       </div>
                       <div class="field-row">
                         <div class="toggle">
@@ -4857,10 +4963,15 @@ class SensorBarCardPlusEditor extends HTMLElement {
               </div>
             </div>
             <div class="field-row">
-              <div class="toggle">
-                <input id="bar-needle" type="checkbox" data-field="bar-needle"${this._getNeedleValue() ? ' checked' : ''}>
-                <label for="bar-needle">Needle</label>
-              </div>
+              <label for="bar-needle-mode">Needle enabled</label>
+              <select id="bar-needle-mode" data-field="bar-needle-mode" value="${this._escapeAttribute(cardNeedle.mode)}">
+                <option value="disabled"${cardNeedle.mode === 'disabled' ? ' selected' : ''}>disabled</option>
+                <option value="enabled"${cardNeedle.mode === 'enabled' ? ' selected' : ''}>enabled</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="bar-needle-color">Needle color</label>
+              <input id="bar-needle-color" type="text" data-field="bar-needle-color" value="${this._escapeAttribute(cardNeedle.color)}" placeholder="#ffffff">
             </div>
             <div class="field-row">
               <label>Gradient stops</label>
@@ -5157,7 +5268,8 @@ class SensorBarCardPlusEditor extends HTMLElement {
     if (field === 'bar-fill-style') return void this._setBarFillStyle(value);
     if (field === 'bar-color') return void this._setBarColor(value);
     if (field === 'bar-solid-fill') return void this._setScopedBarSolidFill({ type: 'card' }, value);
-    if (field === 'bar-needle') return void this._setNeedle(value);
+    if (field === 'bar-needle-mode') return void this._setScopedNeedleMode({ type: 'card' }, value);
+    if (field === 'bar-needle-color') return void this._setScopedNeedleColor({ type: 'card' }, value);
     if (field === 'baseline-value') {
       return void this._setBaselineResolvablePart({ type: 'card' }, 'fixed', value);
     }
@@ -5263,6 +5375,14 @@ class SensorBarCardPlusEditor extends HTMLElement {
 
     if (kind === 'entity-bar-solid-fill') {
       return void this._setScopedBarSolidFill({ type: 'entity', index: Number(target.dataset.index) }, value);
+    }
+
+    if (kind === 'entity-needle-mode') {
+      return void this._setScopedNeedleMode({ type: 'entity', index: Number(target.dataset.index) }, value);
+    }
+
+    if (kind === 'entity-needle-color') {
+      return void this._setScopedNeedleColor({ type: 'entity', index: Number(target.dataset.index) }, value);
     }
 
     if (kind === 'entity-baseline-inherit') {
