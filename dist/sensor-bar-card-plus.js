@@ -4722,114 +4722,228 @@ class SensorBarCardPlusEditor extends HTMLElement {
       this._syncExpandedEntityOverrides(entities.length);
 
       this.shadowRoot.innerHTML = `
-      <style>
-        :host {
-          display: block;
-        }
-        .editor {
-          display: grid;
-          gap: 16px;
-          padding: 8px 0;
-        }
-        .section {
-          border: 1px solid var(--divider-color, #e0e0e0);
-          border-radius: 12px;
-          padding: 12px;
-        }
-        .section h3 {
-          margin: 0 0 12px;
-          font-size: 1rem;
-        }
-        .field-grid {
-          display: grid;
-          gap: 12px;
-        }
-        .field-row {
-          display: grid;
-          gap: 8px;
-        }
-        .inline-row {
-          display: grid;
-          gap: 8px;
-          grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-          align-items: end;
-        }
-        label {
-          font-size: 0.9rem;
-          font-weight: 500;
-        }
-        input,
-        select,
-        button {
-          font: inherit;
+	      <style>
+	        :host {
+	          display: block;
+	        }
+	        .editor {
+	          display: grid;
+	          gap: 18px;
+	          padding: 10px 0 14px;
+	        }
+	        .section {
+	          display: grid;
+	          gap: 14px;
+	          padding: 14px;
+	          background: color-mix(in srgb, var(--card-background-color, #fff) 88%, transparent);
+	          border: 1px solid color-mix(in srgb, var(--divider-color, #888) 35%, transparent);
+	          border-radius: 14px;
+	          box-shadow: 0 1px 0 color-mix(in srgb, var(--divider-color, #888) 20%, transparent);
+	        }
+	        .section-head {
+	          display: grid;
+	          gap: 4px;
+	        }
+	        .section h3 {
+	          margin: 0;
+	          font-size: 1rem;
+	          font-weight: 700;
+	          letter-spacing: 0.01em;
+	          color: var(--primary-text-color, #111);
+	        }
+	        .section-note {
+	          font-size: 0.82rem;
+	          color: var(--secondary-text-color, #666);
+	        }
+	        .field-grid {
+	          display: grid;
+	          gap: 12px;
+	        }
+	        .editor-grid,
+	        .field-row {
+	          display: grid;
+	          gap: 8px;
+	        }
+	        .inline-row {
+	          display: grid;
+	          gap: 12px;
+	          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	          align-items: end;
+	        }
+	        label {
+	          font-size: 0.9rem;
+	          font-weight: 500;
+	          color: var(--primary-text-color, #111);
+	        }
+	        input,
+	        select,
+	        button {
+	          font: inherit;
         }
         input[type="text"],
         input[type="number"],
-        input[type="color"],
-        select {
-          width: 100%;
-          box-sizing: border-box;
-          padding: 8px;
-        }
-        input[type="checkbox"] {
-          width: 18px;
-          height: 18px;
-        }
-        .toggle {
-          display: flex;
-          gap: 8px;
-          align-items: center;
-        }
-        .list {
-          display: grid;
-          gap: 8px;
-        }
-        .list-row {
-          display: grid;
-          gap: 8px;
-          grid-template-columns: minmax(0, 1fr) auto;
-          align-items: end;
-        }
-        .list-row.triple {
-          grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
-        }
-        .entity-shell {
-          display: grid;
-          gap: 8px;
-          padding: 10px 0 12px;
-          border-bottom: 1px solid var(--divider-color, #e0e0e0);
-        }
-        .entity-shell:last-of-type {
-          border-bottom: 0;
-          padding-bottom: 4px;
-        }
-        .entity-fields {
-          display: grid;
-          gap: 8px;
-        }
-        .override-toggle {
-          justify-self: start;
-          border: 0;
-          background: transparent;
-          padding: 0;
-          color: var(--secondary-text-color, #666);
-        }
-        .override-panel {
-          display: grid;
-          gap: 10px;
-          padding: 10px 12px;
-          border-radius: 10px;
-          background: color-mix(in srgb, var(--card-background-color, #ffffff) 92%, #000 8%);
-        }
-        button {
-          padding: 8px 12px;
-          cursor: pointer;
-        }
-      </style>
-      <div class="editor">
-        <div class="section">
-          <h3>General</h3>
-          <div class="field-grid">
+	        input[type="color"],
+	        select {
+	          width: 100%;
+	          box-sizing: border-box;
+	          min-height: 42px;
+	          padding: 8px 10px;
+	          color: var(--primary-text-color, #111);
+	          background: color-mix(in srgb, var(--secondary-background-color, var(--card-background-color, #fff)) 82%, transparent);
+	          border: 1px solid color-mix(in srgb, var(--divider-color, #888) 38%, transparent);
+	          border-radius: 10px;
+	        }
+	        input[type="color"] {
+	          padding: 4px;
+	          cursor: pointer;
+	        }
+	        input[type="text"]:focus,
+	        input[type="number"]:focus,
+	        input[type="color"]:focus,
+	        select:focus {
+	          outline: 2px solid color-mix(in srgb, var(--accent-color, var(--primary-color, #03a9f4)) 55%, transparent);
+	          outline-offset: 1px;
+	        }
+	        input[type="checkbox"] {
+	          width: 18px;
+	          height: 18px;
+	        }
+	        .toggle {
+	          display: flex;
+	          gap: 8px;
+	          align-items: center;
+	        }
+	        .list {
+	          display: grid;
+	          gap: 10px;
+	        }
+	        .list-row {
+	          display: grid;
+	          gap: 10px;
+	          grid-template-columns: minmax(0, 1fr) auto;
+	          align-items: end;
+	        }
+	        .list-row.triple {
+	          grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+	        }
+	        .entity-shell {
+	          display: grid;
+	          gap: 10px;
+	          padding: 12px;
+	          background: color-mix(in srgb, var(--secondary-background-color, var(--card-background-color, #fff)) 68%, transparent);
+	          border: 1px solid color-mix(in srgb, var(--divider-color, #888) 30%, transparent);
+	          border-radius: 14px;
+	        }
+	        .entity-main {
+	          display: grid;
+	          gap: 10px;
+	          padding: 10px 12px 12px;
+	          border-radius: 12px;
+	          background: color-mix(in srgb, var(--card-background-color, #fff) 90%, transparent);
+	          border: 1px solid color-mix(in srgb, var(--divider-color, #888) 22%, transparent);
+	        }
+	        .entity-header {
+	          display: flex;
+	          justify-content: space-between;
+	          gap: 12px;
+	          align-items: baseline;
+	          padding-bottom: 4px;
+	          border-bottom: 1px solid color-mix(in srgb, var(--divider-color, #888) 24%, transparent);
+	        }
+	        .entity-title {
+	          font-size: 0.95rem;
+	          font-weight: 700;
+	          color: var(--primary-text-color, #111);
+	        }
+	        .entity-subtitle {
+	          font-size: 0.8rem;
+	          color: var(--secondary-text-color, #666);
+	          overflow: hidden;
+	          text-overflow: ellipsis;
+	          white-space: nowrap;
+	        }
+	        .entity-fields {
+	          display: grid;
+	          gap: 10px;
+	        }
+	        .override-toggle {
+	          display: inline-flex;
+	          align-items: center;
+	          gap: 8px;
+	          justify-self: start;
+	          padding: 8px 10px;
+	          border-radius: 10px;
+	          border: 1px solid color-mix(in srgb, var(--divider-color, #888) 28%, transparent);
+	          background: color-mix(in srgb, var(--card-background-color, #fff) 84%, transparent);
+	          color: var(--secondary-text-color, #666);
+	          transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+	        }
+	        .override-toggle:hover,
+	        .override-toggle:focus {
+	          background: color-mix(in srgb, var(--secondary-background-color, var(--card-background-color, #fff)) 74%, transparent);
+	          border-color: color-mix(in srgb, var(--accent-color, var(--primary-color, #03a9f4)) 28%, var(--divider-color, #888));
+	          color: var(--primary-text-color, #111);
+	        }
+	        .override-toggle[aria-expanded="true"] {
+	          color: var(--primary-text-color, #111);
+	          border-color: color-mix(in srgb, var(--accent-color, var(--primary-color, #03a9f4)) 40%, transparent);
+	          box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent-color, var(--primary-color, #03a9f4)) 70%, transparent);
+	        }
+	        .override-panel {
+	          display: grid;
+	          gap: 12px;
+	          padding: 12px 14px;
+	          border-radius: 12px;
+	          border: 1px solid color-mix(in srgb, var(--divider-color, #888) 28%, transparent);
+	          border-left: 4px solid color-mix(in srgb, var(--accent-color, var(--primary-color, #03a9f4)) 65%, transparent);
+	          background: color-mix(in srgb, var(--secondary-background-color, var(--card-background-color, #ffffff)) 82%, transparent);
+	        }
+	        .override-panel::before {
+	          content: "Overrides";
+	          font-size: 0.78rem;
+	          font-weight: 700;
+	          letter-spacing: 0.04em;
+	          text-transform: uppercase;
+	          color: var(--secondary-text-color, #666);
+	        }
+	        button {
+	          min-height: 40px;
+	          padding: 8px 12px;
+	          cursor: pointer;
+	          color: var(--primary-text-color, #111);
+	          background: color-mix(in srgb, var(--secondary-background-color, var(--card-background-color, #fff)) 78%, transparent);
+	          border: 1px solid color-mix(in srgb, var(--divider-color, #888) 30%, transparent);
+	          border-radius: 10px;
+	        }
+	        button:hover,
+	        button:focus {
+	          background: color-mix(in srgb, var(--secondary-background-color, var(--card-background-color, #fff)) 60%, transparent);
+	        }
+	        .field-row .field-grid {
+	          gap: 8px;
+	        }
+	        @media (max-width: 480px) {
+	          .section {
+	            padding: 12px;
+	          }
+	          .entity-shell,
+	          .entity-main,
+	          .override-panel {
+	            padding-left: 10px;
+	            padding-right: 10px;
+	          }
+	          .entity-header {
+	            display: grid;
+	          }
+	        }
+	      </style>
+	      <div class="editor">
+	        <div class="section">
+	          <div class="section-head">
+	            <h3>General</h3>
+	            <div class="section-note">Basic card identity and entity rows.</div>
+	          </div>
+	          <div class="field-grid">
             <div class="field-row">
               <label for="title">Title</label>
               <input id="title" type="text" data-field="title" value="${this._escapeAttribute(this._draftConfig.title ?? '')}">
@@ -4837,16 +4951,22 @@ class SensorBarCardPlusEditor extends HTMLElement {
             <div class="field-row">
               <label>Entities</label>
               <div class="list">
-                ${this._renderListRows(entities, (entry, index) => `
-                  <div class="entity-shell" data-entity-shell-index="${index}">
-                    <div class="entity-fields">
-                      ${this._renderEntityInput(entry, index)}
-                      <input type="text" data-kind="entity-name" data-index="${index}" value="${this._escapeAttribute(entry.name ?? '')}" placeholder="Name">
-                      <input type="text" data-kind="entity-icon" data-index="${index}" value="${this._escapeAttribute(entry.icon ?? '')}" placeholder="mdi:flash">
-                    </div>
-                    <button type="button" class="override-toggle" data-action="toggle-entity-overrides" data-index="${index}" aria-expanded="${this._isEntityOverrideExpanded(index) ? 'true' : 'false'}">
-                      ${this._isEntityOverrideExpanded(index) ? '▾' : '▸'} Overrides
-                    </button>
+	                ${this._renderListRows(entities, (entry, index) => `
+	                  <div class="entity-shell" data-entity-shell-index="${index}">
+	                    <div class="entity-main">
+	                      <div class="entity-header">
+	                        <div class="entity-title">Entity ${index + 1}</div>
+	                        <div class="entity-subtitle">${this._escapeAttribute(entry.entity || 'Configure entity')}</div>
+	                      </div>
+	                      <div class="entity-fields">
+	                        ${this._renderEntityInput(entry, index)}
+	                        <input type="text" data-kind="entity-name" data-index="${index}" value="${this._escapeAttribute(entry.name ?? '')}" placeholder="Name">
+	                        <input type="text" data-kind="entity-icon" data-index="${index}" value="${this._escapeAttribute(entry.icon ?? '')}" placeholder="mdi:flash">
+	                      </div>
+	                    </div>
+	                    <button type="button" class="override-toggle" data-action="toggle-entity-overrides" data-index="${index}" aria-expanded="${this._isEntityOverrideExpanded(index) ? 'true' : 'false'}">
+	                      ${this._isEntityOverrideExpanded(index) ? '▾' : '▸'} Overrides
+	                    </button>
                     <div class="override-panel" style="display:${this._isEntityOverrideExpanded(index) ? 'grid' : 'none'};">
                       ${(() => {
                         const scope = { type: 'entity', index };
@@ -5033,11 +5153,13 @@ class SensorBarCardPlusEditor extends HTMLElement {
               </div>
             </div>
           </div>
-        </div>
+	        </div>
 
-        <div class="section">
-          <h3>Layout</h3>
-          <div class="inline-row">
+	        <div class="section">
+	          <div class="section-head">
+	            <h3>Layout</h3>
+	          </div>
+	          <div class="inline-row editor-grid">
             <div class="field-row">
               <label for="layout-label-position">Label position</label>
               <select id="layout-label-position" data-field="layout-label-position">
@@ -5052,11 +5174,13 @@ class SensorBarCardPlusEditor extends HTMLElement {
               <input id="layout-height" type="number" min="24" step="1" data-field="layout-height" value="${this._escapeAttribute(layoutHeight)}">
             </div>
           </div>
-        </div>
+	        </div>
 
-        <div class="section">
-          <h3>Scale</h3>
-          <div class="inline-row">
+	        <div class="section">
+	          <div class="section-head">
+	            <h3>Scale</h3>
+	          </div>
+	          <div class="inline-row editor-grid">
             <div class="field-row">
               <label for="scale-min">Min fallback value</label>
               <input id="scale-min" type="number" step="any" data-field="scale-min" value="${this._escapeAttribute(scaleMin)}">
@@ -5074,12 +5198,15 @@ class SensorBarCardPlusEditor extends HTMLElement {
               ${this._renderEntitySourceInput('scale-max-entity-source', 'card', scaleMaxEntity)}
             </div>
           </div>
-        </div>
+	        </div>
 
-        <div class="section">
-          <h3>Bar Appearance</h3>
-          <div class="field-grid">
-            <div class="inline-row">
+	        <div class="section">
+	          <div class="section-head">
+	            <h3>Bar Appearance</h3>
+	            <div class="section-note">Core fill, marker, gradient, and segment styling.</div>
+	          </div>
+	          <div class="field-grid">
+	            <div class="inline-row editor-grid">
               <div class="field-row">
                 <label for="bar-fill-style">Fill style</label>
                 <select id="bar-fill-style" data-field="bar-fill-style" value="${this._escapeAttribute(fillStyle)}">
@@ -5153,11 +5280,14 @@ class SensorBarCardPlusEditor extends HTMLElement {
               </div>
             </div>
           </div>
-        </div>
+	        </div>
 
-        <div class="section">
-          <h3>Markers</h3>
-          <div class="field-grid">
+	        <div class="section">
+	          <div class="section-head">
+	            <h3>Markers</h3>
+	            <div class="section-note">Baseline, target, and peak configuration.</div>
+	          </div>
+	          <div class="field-grid">
             <div class="field-row">
               <label for="baseline-value">Baseline fallback value</label>
               <input id="baseline-value" type="number" step="any" data-field="baseline-value" value="${this._escapeAttribute(baseline.fixed)}">
