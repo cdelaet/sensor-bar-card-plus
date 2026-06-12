@@ -4185,13 +4185,27 @@ class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _setSegments(segments, options = {}) {
-    return this._applyScopedMutation({ type: 'card' }, (target) => {
+    return this._setScopedSegments({ type: 'card' }, segments, options);
+  }
+
+  _setScopedSegments(scope, segments, options = {}) {
+    return this._applyScopedMutation(scope, (target) => {
       let nextTarget = this._setPathValue(target, ['bar', 'segments'], segments);
       nextTarget = this._deletePathValue(nextTarget, ['segments']);
       nextTarget = this._deletePathValue(nextTarget, ['severity']);
       nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar']);
       return nextTarget;
     }, options);
+  }
+
+  _clearSegmentsOverride(scope) {
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._deletePathValue(target, ['bar', 'segments']);
+      nextTarget = this._deletePathValue(nextTarget, ['segments']);
+      nextTarget = this._deletePathValue(nextTarget, ['severity']);
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar']);
+      return nextTarget;
+    }, { rerender: true });
   }
 
   _setNeedle(value) {
@@ -4397,10 +4411,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _getSegmentsValue() {
-    return this._getPathValue(this._draftConfig, ['bar', 'segments'])
-      ?? this._draftConfig.segments
-      ?? this._draftConfig.severity
-      ?? [];
+    return this._getScopedSegmentsValue({ type: 'card' });
   }
 
   _parseSegmentBoundaryInput(rawValue) {
@@ -4435,8 +4446,8 @@ class SensorBarCardPlusEditor extends HTMLElement {
     return '';
   }
 
-  _getNewSegmentDefaults() {
-    const segments = this._getSegmentsValue();
+  _getNewSegmentDefaults(scope = { type: 'card' }) {
+    const segments = this._getScopedSegmentsValue(scope);
     const previous = segments[segments.length - 1];
     const previousTo = previous?.to ?? null;
     return {
@@ -4975,6 +4986,27 @@ class SensorBarCardPlusEditor extends HTMLElement {
     return parts.length ? parts.join(', ') : 'Inherited';
   }
 
+  _getScopedSegmentsValue(scope) {
+    return this._getScopedValue(scope, ['bar', 'segments'])
+      ?? this._getScopedValue(scope, ['segments'])
+      ?? this._getScopedValue(scope, ['severity'])
+      ?? [];
+  }
+
+  _hasSegmentsOverride(scope) {
+    return this._getScopedValue(scope, ['bar', 'segments']) !== undefined
+      || this._getScopedValue(scope, ['segments']) !== undefined
+      || this._getScopedValue(scope, ['severity']) !== undefined;
+  }
+
+  _getSegmentsSummary(scope) {
+    const segments = this._getScopedSegmentsValue(scope);
+    if (!Array.isArray(segments) || segments.length === 0) {
+      return 'Inherited';
+    }
+    return `${segments.length} segments`;
+  }
+
   _getNeedleSummary(scope) {
     const needle = this._getScopedNeedleConfig(scope);
     if (needle.mode === 'enabled') return needle.color ? 'Enabled, custom color' : 'Enabled';
@@ -5348,6 +5380,9 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	        .override-group[data-group="peak"] {
 	          --override-group-accent: #f08b3e;
 	        }
+	        .override-group[data-group="segments"] {
+	          --override-group-accent: #d2a53a;
+	        }
 	        .override-group-toggle {
 	          display: flex;
 	          justify-content: space-between;
@@ -5458,9 +5493,11 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	                        const formattingInherited = !this._hasFormattingOverride(scope);
 	                        const layoutInherited = !this._hasLayoutOverride(scope);
 	                        const peakInherited = !this._hasPeakOverride(scope);
+	                        const segmentsInherited = !this._hasSegmentsOverride(scope);
 	                        const minInherited = !this._hasResolvableOverride(minParts);
 	                        const maxInherited = !this._hasResolvableOverride(maxParts);
 	                        const entityPeak = this._getScopedPeakConfig(scope);
+	                        const entitySegments = this._getScopedSegmentsValue(scope);
 	                        const scaleGroup = this._renderOverrideGroup({
 	                          index,
 	                          group: 'scale',
@@ -5650,6 +5687,34 @@ class SensorBarCardPlusEditor extends HTMLElement {
                       </div>
 	                          `,
 	                        });
+	                        const segmentsGroup = this._renderOverrideGroup({
+	                          index,
+	                          group: 'segments',
+	                          title: 'Segments',
+	                          summary: this._getSegmentsSummary(scope),
+	                          content: `
+	                      <div class="field-row">
+	                        <div class="toggle">
+	                          <input id="entity-${index}-segments-inherit" type="checkbox" data-kind="entity-segments-inherit" data-index="${index}"${segmentsInherited ? ' checked' : ''}>
+                          <label for="entity-${index}-segments-inherit">Segments inherit</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <label>Segments</label>
+                        <div class="list">
+                          ${this._renderListRows(entitySegments, (segment, segmentIndex) => `
+                            <div class="list-row triple">
+                              <input type="text" data-kind="entity-segment-from" data-index="${index}" data-segment-index="${segmentIndex}" value="${this._escapeAttribute(this._formatSegmentBoundaryValue(segment?.from))}" placeholder="0%">
+                              <input type="text" data-kind="entity-segment-to" data-index="${index}" data-segment-index="${segmentIndex}" value="${this._escapeAttribute(this._formatSegmentBoundaryValue(segment?.to))}" placeholder="100%">
+                              <input type="color" data-kind="entity-segment-color" data-index="${index}" data-segment-index="${segmentIndex}" value="${this._escapeAttribute(segment?.color ?? '#4a9eff')}">
+                              <button type="button" data-action="remove-entity-segment" data-index="${index}" data-segment-index="${segmentIndex}">Remove</button>
+                            </div>
+                          `)}
+                          <button type="button" data-action="add-entity-segment" data-index="${index}">Add segment</button>
+                        </div>
+                      </div>
+	                          `,
+	                        });
 	                        const baselineGroup = this._renderOverrideGroup({
 	                          index,
 	                          group: 'baseline',
@@ -5749,6 +5814,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	                          ${layoutGroup}
 	                          ${formattingGroup}
 	                          ${peakGroup}
+	                          ${segmentsGroup}
 	                          ${targetGroup}
 	                          ${baselineGroup}
 	                          ${barGroup}
@@ -6187,6 +6253,19 @@ class SensorBarCardPlusEditor extends HTMLElement {
     if (action === 'remove-segment') {
       const index = Number(target.dataset.index);
       this._setSegments(this._getSegmentsValue().filter((_, segmentIndex) => segmentIndex !== index), { rerender: true });
+      return;
+    }
+
+    if (action === 'add-entity-segment') {
+      const scope = { type: 'entity', index: Number(target.dataset.index) };
+      this._setScopedSegments(scope, [...this._getScopedSegmentsValue(scope), this._getNewSegmentDefaults(scope)], { rerender: true });
+      return;
+    }
+
+    if (action === 'remove-entity-segment') {
+      const scope = { type: 'entity', index: Number(target.dataset.index) };
+      const segmentIndex = Number(target.dataset.segmentIndex);
+      this._setScopedSegments(scope, this._getScopedSegmentsValue(scope).filter((_, index) => index !== segmentIndex), { rerender: true });
     }
   }
 
@@ -6361,6 +6440,13 @@ class SensorBarCardPlusEditor extends HTMLElement {
       return void this._setScopedPeakColor({ type: 'entity', index: Number(target.dataset.index) }, value);
     }
 
+    if (kind === 'entity-segments-inherit') {
+      if (value) {
+        return void this._clearSegmentsOverride({ type: 'entity', index: Number(target.dataset.index) });
+      }
+      return;
+    }
+
     if (kind === 'entity-bar-inherit') {
       if (value) {
         return void this._clearEntityBarAppearance({ type: 'entity', index: Number(target.dataset.index) });
@@ -6469,6 +6555,27 @@ class SensorBarCardPlusEditor extends HTMLElement {
         };
       });
       this._setSegments(nextSegments);
+      return;
+    }
+
+    if (kind?.startsWith('entity-segment-')) {
+      const scope = { type: 'entity', index: Number(target.dataset.index) };
+      const segmentIndex = Number(target.dataset.segmentIndex);
+      const nextSegments = this._getScopedSegmentsValue(scope).map((segment, currentSegmentIndex) => {
+        if (currentSegmentIndex !== segmentIndex) return segment;
+        const nextFrom = kind === 'entity-segment-from' ? this._parseSegmentBoundaryInput(value) : segment?.from;
+        const nextTo = kind === 'entity-segment-to' ? this._parseSegmentBoundaryInput(value) : segment?.to;
+        if ((kind === 'entity-segment-from' && nextFrom === null) || (kind === 'entity-segment-to' && nextTo === null)) {
+          return segment;
+        }
+        return {
+          ...segment,
+          from: nextFrom,
+          to: nextTo,
+          color: kind === 'entity-segment-color' ? value : segment?.color ?? '#4a9eff',
+        };
+      });
+      this._setScopedSegments(scope, nextSegments);
     }
   }
 }

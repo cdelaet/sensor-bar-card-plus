@@ -192,6 +192,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-layout')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-group-formatting')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-group-peak')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-group-segments')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-group-target')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-group-baseline')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-group-bar')).not.toBeNull();
@@ -213,6 +214,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-layout').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-formatting').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-peak').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-segments').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-target').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-baseline').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-bar').getAttribute('aria-expanded')).toBe('false');
@@ -235,6 +237,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-layout').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-formatting').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-peak').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-segments').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-target').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-baseline').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-bar').getAttribute('aria-expanded')).toBe('false');
@@ -273,6 +276,24 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-scale').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-formatting').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-peak').getAttribute('aria-expanded')).toBe('true');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-target').getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('opening segments subsection does not open other subsections', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', name: 'One' },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
+
+    expect(editor.shadowRoot.querySelector('#entity-0-group-scale').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-peak').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-segments').getAttribute('aria-expanded')).toBe('true');
     expect(editor.shadowRoot.querySelector('#entity-0-group-target').getAttribute('aria-expanded')).toBe('false');
   });
 
@@ -420,6 +441,7 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-layout'));
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-peak'));
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-target'));
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-baseline'));
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-bar'));
@@ -434,6 +456,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-formatting-decimal')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-peak-enabled')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-peak-color')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-segments-inherit')).not.toBeNull();
+    expect(editor.shadowRoot.querySelectorAll('button[data-action="add-entity-segment"]')[0]).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-target-value')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-target-color')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-baseline-value')).not.toBeNull();
@@ -4102,6 +4126,210 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(events.at(-1).detail.config.entities).toEqual([
       { entity: 'sensor.one', peak: { enabled: true, color: '#00ff00' } },
     ]);
+  });
+
+  it('per-entity segments summary renders inherited', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    expect(editor.shadowRoot.innerHTML).toContain('id="entity-0-group-segments-summary"');
+    expect(editor.shadowRoot.innerHTML).toContain('>Inherited</span>');
+  });
+
+  it('per-entity segments summary renders segment count', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one', bar: { segments: [{ from: '0%', to: '50%', color: '#4a9eff' }, { from: '50%', to: '100%', color: '#ff9800' }] } }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    expect(editor.shadowRoot.innerHTML).toContain('2 segments</span>');
+  });
+
+  it('per-entity Add segment creates a new row with smart defaults', async () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one', bar: { segments: [{ from: '0%', to: '20%', color: '#c4bc00' }] } }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-entity-segment"]')[0]);
+    await flushTimers();
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      {
+        entity: 'sensor.one',
+        bar: {
+          segments: [
+            { from: '0%', to: '20%', color: '#c4bc00' },
+            { from: '20%', to: '100%', color: '#4a9eff' },
+          ],
+        },
+      },
+    ]);
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')[1].value).toBe('20%');
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-to"]')[1].value).toBe('100%');
+  });
+
+  it('per-entity segment rows accept percent input and emit structured bar.segments', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one', bar: { segments: [{ from: 0, to: 100, color: '#4a9eff' }] } }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')[0], '0%');
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-to"]')[0], '20%');
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-color"]')[0], '#c4bc00');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      {
+        entity: 'sensor.one',
+        bar: {
+          segments: [
+            { from: '0%', to: '20%', color: '#c4bc00' },
+          ],
+        },
+      },
+    ]);
+    expect(events.at(-1).detail.config.entities[0].segments).toBeUndefined();
+    expect(events.at(-1).detail.config.entities[0].severity).toBeUndefined();
+  });
+
+  it('per-entity Remove segment removes the selected row', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one', bar: { segments: [{ from: '0%', to: '20%', color: '#c4bc00' }, { from: '20%', to: '100%', color: '#4a9eff' }] } }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="remove-entity-segment"]')[0]);
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      {
+        entity: 'sensor.one',
+        bar: {
+          segments: [
+            { from: '20%', to: '100%', color: '#4a9eff' },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('per-entity segments inherit removes only segment keys and preserves unrelated bar keys', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{
+        entity: 'sensor.one',
+        bar: {
+          segments: [{ from: '0%', to: '20%', color: '#c4bc00' }],
+          color: '#ff9800',
+          fill_style: 'solid',
+          custom_bar_key: 'keep',
+        },
+        custom_entity_key: 'keep',
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
+    const toggle = editor.shadowRoot.querySelector('#entity-0-segments-inherit');
+    toggle.checked = true;
+    toggle.dispatchEvent({
+      type: 'change',
+      bubbles: true,
+      composed: true,
+    });
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      {
+        entity: 'sensor.one',
+        bar: {
+          color: '#ff9800',
+          fill_style: 'solid',
+          custom_bar_key: 'keep',
+        },
+        custom_entity_key: 'keep',
+      },
+    ]);
+  });
+
+  it('per-entity segment overrides stay isolated per entity', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', bar: { segments: [{ from: '0%', to: '20%', color: '#c4bc00' }] } },
+        { entity: 'sensor.two', bar: { segments: [{ from: '0%', to: '50%', color: '#4a9eff' }] } },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-to"]')[0], '25%');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', bar: { segments: [{ from: '0%', to: '25%', color: '#c4bc00' }] } },
+      { entity: 'sensor.two', bar: { segments: [{ from: '0%', to: '50%', color: '#4a9eff' }] } },
+    ]);
+  });
+
+  it('per-entity legacy segments read compatibility works', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one', segments: [{ from: 0, to: 20, color: '#c4bc00' }] }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')[0].value).toBe('0');
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-to"]')[0].value).toBe('20');
+  });
+
+  it('editing flat-loaded per-entity segments converts them to structured bar.segments', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one', severity: [{ from: 0, to: 20, color: '#c4bc00' }], custom_entity_key: 'keep' }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-to"]')[0], '25%');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      {
+        entity: 'sensor.one',
+        custom_entity_key: 'keep',
+        bar: {
+          segments: [
+            { from: 0, to: '25%', color: '#c4bc00' },
+          ],
+        },
+      },
+    ]);
+    expect(events.at(-1).detail.config.entities[0].segments).toBeUndefined();
+    expect(events.at(-1).detail.config.entities[0].severity).toBeUndefined();
   });
 
   it('loading flat config still renders editable values and editing converts them to structured config', () => {
