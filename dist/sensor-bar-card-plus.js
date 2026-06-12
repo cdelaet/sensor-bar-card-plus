@@ -4062,25 +4062,109 @@ class SensorBarCardPlusEditor extends HTMLElement {
       || this._getScopedValue(scope, ['decimal']) !== undefined;
   }
 
-  _setLayoutLabelPosition(value) {
-    this._setCanonicalScopedValue({ type: 'card' }, ['layout', 'label', 'position'], value, {
+  _getScopedLayoutValue(scope, key) {
+    if (key === 'height') {
+      return this._getScopedValue(scope, ['layout', 'height'])
+        ?? this._getScopedValue(scope, ['height'])
+        ?? '';
+    }
+    if (key === 'position') {
+      return this._getScopedValue(scope, ['layout', 'label', 'position'])
+        ?? this._getScopedValue(scope, ['label_position'])
+        ?? '';
+    }
+    if (key === 'width') {
+      return this._getScopedValue(scope, ['layout', 'label', 'width'])
+        ?? this._getScopedValue(scope, ['label_width'])
+        ?? '';
+    }
+    return '';
+  }
+
+  _setScopedLayoutLabelPosition(scope, value) {
+    if (!value) {
+      return this._removeCanonicalScopedValue(scope, ['layout', 'label', 'position'], {
+        deprecatedKeys: [['label_position']],
+        prunePaths: [['layout', 'label'], ['layout']],
+      });
+    }
+    return this._setCanonicalScopedValue(scope, ['layout', 'label', 'position'], value, {
       deprecatedKeys: [['label_position']],
       prunePaths: [['layout', 'label'], ['layout']],
     });
   }
 
-  _setLayoutHeight(value) {
+  _setLayoutLabelPosition(value) {
+    return this._setScopedLayoutLabelPosition({ type: 'card' }, value);
+  }
+
+  _setScopedLayoutHeight(scope, value) {
     const numericValue = this._normalizeNumberValue(value);
-    if (value === '' || value === null || value === undefined || numericValue === null) {
-      return this._removeCanonicalScopedValue({ type: 'card' }, ['layout', 'height'], {
+    if (value === '' || value === null || value === undefined) {
+      return this._removeCanonicalScopedValue(scope, ['layout', 'height'], {
         deprecatedKeys: [['height']],
         prunePaths: [['layout']],
       });
     }
-    return this._setCanonicalScopedValue({ type: 'card' }, ['layout', 'height'], numericValue, {
+    if (numericValue === null || numericValue < 24) {
+      return false;
+    }
+    return this._setCanonicalScopedValue(scope, ['layout', 'height'], numericValue, {
       deprecatedKeys: [['height']],
       prunePaths: [['layout']],
     });
+  }
+
+  _setLayoutHeight(value) {
+    return this._setScopedLayoutHeight({ type: 'card' }, value);
+  }
+
+  _setScopedLayoutLabelWidth(scope, value) {
+    const numericValue = this._normalizeNumberValue(value);
+    if (value === '' || value === null || value === undefined) {
+      return this._removeCanonicalScopedValue(scope, ['layout', 'label', 'width'], {
+        deprecatedKeys: [['label_width']],
+        prunePaths: [['layout', 'label'], ['layout']],
+      });
+    }
+    if (numericValue === null) {
+      return false;
+    }
+    return this._setCanonicalScopedValue(scope, ['layout', 'label', 'width'], numericValue, {
+      deprecatedKeys: [['label_width']],
+      prunePaths: [['layout', 'label'], ['layout']],
+    });
+  }
+
+  _clearLayoutOverride(scope) {
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._deletePathValue(target, ['layout', 'height']);
+      nextTarget = this._deletePathValue(nextTarget, ['layout', 'label', 'position']);
+      nextTarget = this._deletePathValue(nextTarget, ['layout', 'label', 'width']);
+      nextTarget = this._deletePathValue(nextTarget, ['height']);
+      nextTarget = this._deletePathValue(nextTarget, ['label_position']);
+      nextTarget = this._deletePathValue(nextTarget, ['label_width']);
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['layout', 'label']);
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['layout']);
+      return nextTarget;
+    }, { rerender: true });
+  }
+
+  _hasLayoutOverride(scope) {
+    const layoutValue = this._getScopedValue(scope, ['layout']) ?? {};
+    const labelValue = this._isObject(layoutValue) ? (layoutValue.label ?? {}) : {};
+    if (this._isObject(layoutValue) && (
+      Object.prototype.hasOwnProperty.call(layoutValue, 'height')
+      || (this._isObject(labelValue) && (
+        Object.prototype.hasOwnProperty.call(labelValue, 'position')
+        || Object.prototype.hasOwnProperty.call(labelValue, 'width')
+      ))
+    )) {
+      return true;
+    }
+    return this._getScopedValue(scope, ['height']) !== undefined
+      || this._getScopedValue(scope, ['label_position']) !== undefined
+      || this._getScopedValue(scope, ['label_width']) !== undefined;
   }
 
   _setScaleBound(key, value) {
@@ -4721,13 +4805,22 @@ class SensorBarCardPlusEditor extends HTMLElement {
     const parts = [];
     const min = this._getResolvableScopedValue(scope, 'min');
     const max = this._getResolvableScopedValue(scope, 'max');
-    const height = this._getScopedDisplayValue(scope, ['layout', 'height'], [['height']]);
     if (min.entity) parts.push('Min dynamic');
     else if (min.fixed !== '' && min.fixed !== undefined) parts.push(`Min ${min.fixed}`);
     if (max.entity) parts.push('Max dynamic');
     else if (max.fixed !== '' && max.fixed !== undefined) parts.push(`Max ${max.fixed}`);
-    if (height !== '') parts.push(`Height ${height}`);
     return parts.length ? parts.join(', ') : 'Inherited';
+  }
+
+  _getLayoutSummary(scope) {
+    const parts = [];
+    const height = this._getScopedLayoutValue(scope, 'height');
+    const position = this._getScopedLayoutValue(scope, 'position');
+    const width = this._getScopedLayoutValue(scope, 'width');
+    if (height !== '') parts.push(`Height ${height}`);
+    if (position !== '') parts.push(`${position}`);
+    if (width !== '') parts.push(`Width ${width}`);
+    return parts.length ? parts.join(' • ') : 'Inherited';
   }
 
   _getTargetOverrideSummary(scope) {
@@ -4892,12 +4985,9 @@ class SensorBarCardPlusEditor extends HTMLElement {
     try {
       const entities = this._getEntitiesValue();
       const fillStyle = this._getFillStyleValue();
-      const layoutLabelPosition = this._getPathValue(this._draftConfig, ['layout', 'label', 'position'])
-        ?? this._draftConfig.label_position
-        ?? 'left';
-      const layoutHeight = this._getPathValue(this._draftConfig, ['layout', 'height'])
-        ?? this._draftConfig.height
-        ?? '';
+      const layoutLabelPosition = this._getScopedLayoutValue({ type: 'card' }, 'position') || 'left';
+      const layoutHeight = this._getScopedLayoutValue({ type: 'card' }, 'height');
+      const layoutLabelWidth = this._getScopedLayoutValue({ type: 'card' }, 'width');
       const barColor = this._getScopedBarColorValue({ type: 'card' });
       const barSolidFill = this._getScopedBarSolidFillValue({ type: 'card' });
       const cardNeedle = this._getScopedNeedleConfig({ type: 'card' });
@@ -5130,6 +5220,9 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	        .override-group[data-group="formatting"] {
 	          --override-group-accent: #d46be3;
 	        }
+	        .override-group[data-group="layout"] {
+	          --override-group-accent: #6e90ff;
+	        }
 	        .override-group-toggle {
 	          display: flex;
 	          justify-content: space-between;
@@ -5238,6 +5331,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	                        const targetParts = this._getTargetResolvableValue(scope);
 	                        const targetInherited = !this._hasTargetOverride(scope);
 	                        const formattingInherited = !this._hasFormattingOverride(scope);
+	                        const layoutInherited = !this._hasLayoutOverride(scope);
 	                        const minInherited = !this._hasResolvableOverride(minParts);
 	                        const maxInherited = !this._hasResolvableOverride(maxParts);
 	                        const scaleGroup = this._renderOverrideGroup({
@@ -5274,9 +5368,37 @@ class SensorBarCardPlusEditor extends HTMLElement {
                         <label>Max entity override</label>
                         ${this._renderEntitySourceInput('entity-override-max-entity-source', index, maxParts.entity, 'inherit card default')}
                       </div>
+	                          `,
+	                        });
+	                        const layoutGroup = this._renderOverrideGroup({
+	                          index,
+	                          group: 'layout',
+	                          title: 'Layout',
+	                          summary: this._getLayoutSummary(scope),
+	                          content: `
 	                      <div class="field-row">
-	                        <label for="entity-${index}-height">Height</label>
-	                        <input id="entity-${index}-height" type="number" step="1" data-kind="entity-override-height" data-index="${index}" value="${this._escapeAttribute(this._getScopedDisplayValue({ type: 'entity', index }, ['layout', 'height'], [['height']]))}" placeholder="inherit card default">
+	                        <div class="toggle">
+	                          <input id="entity-${index}-layout-inherit" type="checkbox" data-kind="entity-layout-inherit" data-index="${index}"${layoutInherited ? ' checked' : ''}>
+                          <label for="entity-${index}-layout-inherit">Layout inherit</label>
+                        </div>
+                      </div>
+	                      <div class="field-row">
+	                        <label for="entity-${index}-height">Row height</label>
+	                        <input id="entity-${index}-height" type="number" min="24" step="1" data-kind="entity-override-height" data-index="${index}" value="${this._escapeAttribute(this._getScopedLayoutValue(scope, 'height'))}" placeholder="inherit card default">
+	                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-label-position">Label position</label>
+                        <select id="entity-${index}-label-position" data-kind="entity-layout-label-position" data-index="${index}" value="${this._escapeAttribute(this._getScopedLayoutValue(scope, 'position'))}">
+                          <option value=""${this._getScopedLayoutValue(scope, 'position') === '' ? ' selected' : ''}>inherit card default</option>
+                          <option value="left"${this._getScopedLayoutValue(scope, 'position') === 'left' ? ' selected' : ''}>left</option>
+                          <option value="above"${this._getScopedLayoutValue(scope, 'position') === 'above' ? ' selected' : ''}>above</option>
+                          <option value="inside"${this._getScopedLayoutValue(scope, 'position') === 'inside' ? ' selected' : ''}>inside</option>
+                          <option value="off"${this._getScopedLayoutValue(scope, 'position') === 'off' ? ' selected' : ''}>off</option>
+                        </select>
+                      </div>
+	                      <div class="field-row">
+	                        <label for="entity-${index}-label-width">Label width</label>
+	                        <input id="entity-${index}-label-width" type="number" step="1" data-kind="entity-layout-label-width" data-index="${index}" value="${this._escapeAttribute(this._getScopedLayoutValue(scope, 'width'))}" placeholder="inherit card default">
 	                      </div>
 	                          `,
 	                        });
@@ -5466,6 +5588,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	                        });
 	                        return `
 	                          ${scaleGroup}
+	                          ${layoutGroup}
 	                          ${formattingGroup}
 	                          ${targetGroup}
 	                          ${baselineGroup}
@@ -5505,8 +5628,12 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	          </div>
 	          <div class="inline-row editor-grid">
             <div class="field-row">
+              <label for="layout-height">Row height</label>
+              <input id="layout-height" type="number" min="24" step="1" data-field="layout-height" value="${this._escapeAttribute(layoutHeight)}">
+            </div>
+            <div class="field-row">
               <label for="layout-label-position">Label position</label>
-              <select id="layout-label-position" data-field="layout-label-position">
+              <select id="layout-label-position" data-field="layout-label-position" value="${this._escapeAttribute(layoutLabelPosition)}">
                 <option value="left"${layoutLabelPosition === 'left' ? ' selected' : ''}>left</option>
                 <option value="above"${layoutLabelPosition === 'above' ? ' selected' : ''}>above</option>
                 <option value="inside"${layoutLabelPosition === 'inside' ? ' selected' : ''}>inside</option>
@@ -5514,8 +5641,8 @@ class SensorBarCardPlusEditor extends HTMLElement {
               </select>
             </div>
             <div class="field-row">
-              <label for="layout-height">Height</label>
-              <input id="layout-height" type="number" min="24" step="1" data-field="layout-height" value="${this._escapeAttribute(layoutHeight)}">
+              <label for="layout-label-width">Label width</label>
+              <input id="layout-label-width" type="number" step="1" data-field="layout-label-width" value="${this._escapeAttribute(layoutLabelWidth)}">
             </div>
           </div>
 	        </div>
@@ -5918,6 +6045,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
     if (field === 'formatting-decimal') return void this._setScopedFormattingDecimal({ type: 'card' }, value);
     if (field === 'layout-label-position') return void this._setLayoutLabelPosition(value);
     if (field === 'layout-height') return void this._setLayoutHeight(value);
+    if (field === 'layout-label-width') return void this._setScopedLayoutLabelWidth({ type: 'card' }, value);
     if (field === 'scale-min') return void this._setScaleBound('min', value);
     if (field === 'scale-max') return void this._setScaleBound('max', value);
     if (field === 'bar-fill-style') return void this._setBarFillStyle(value);
@@ -6007,10 +6135,22 @@ class SensorBarCardPlusEditor extends HTMLElement {
     }
 
     if (kind === 'entity-override-height') {
-      return void this._setCanonicalScopedNumericOverride({ type: 'entity', index: Number(target.dataset.index) }, ['layout', 'height'], value, {
-        deprecatedKeys: [['height']],
-        prunePaths: [['layout']],
-      });
+      return void this._setScopedLayoutHeight({ type: 'entity', index: Number(target.dataset.index) }, value);
+    }
+
+    if (kind === 'entity-layout-inherit') {
+      if (value) {
+        return void this._clearLayoutOverride({ type: 'entity', index: Number(target.dataset.index) });
+      }
+      return;
+    }
+
+    if (kind === 'entity-layout-label-position') {
+      return void this._setScopedLayoutLabelPosition({ type: 'entity', index: Number(target.dataset.index) }, value);
+    }
+
+    if (kind === 'entity-layout-label-width') {
+      return void this._setScopedLayoutLabelWidth({ type: 'entity', index: Number(target.dataset.index) }, value);
     }
 
     if (kind === 'entity-formatting-inherit') {
