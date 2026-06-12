@@ -189,6 +189,7 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
 
     expect(editor.shadowRoot.querySelector('#entity-0-group-scale')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-group-formatting')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-group-target')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-group-baseline')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-group-bar')).not.toBeNull();
@@ -207,6 +208,7 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
 
     expect(editor.shadowRoot.querySelector('#entity-0-group-scale').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-formatting').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-target').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-baseline').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-bar').getAttribute('aria-expanded')).toBe('false');
@@ -226,10 +228,28 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-scale'));
 
     expect(editor.shadowRoot.querySelector('#entity-0-group-scale').getAttribute('aria-expanded')).toBe('true');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-formatting').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-target').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-baseline').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-bar').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-needle').getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('opening formatting subsection does not open other subsections', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', name: 'One' },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
+
+    expect(editor.shadowRoot.querySelector('#entity-0-group-scale').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-formatting').getAttribute('aria-expanded')).toBe('true');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-target').getAttribute('aria-expanded')).toBe('false');
   });
 
   it('clicking subsection title toggles the subsection', () => {
@@ -356,6 +376,7 @@ describe('Sensor Bar Card Plus editor', () => {
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-scale'));
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-target'));
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-baseline'));
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-bar'));
@@ -364,6 +385,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-min')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-max')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-height')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-formatting-unit')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-formatting-decimal')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-target-value')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-target-color')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-baseline-value')).not.toBeNull();
@@ -424,6 +447,19 @@ describe('Sensor Bar Card Plus editor', () => {
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     expect(editor.shadowRoot.querySelector('#entity-0-max-inherit').checked).toBe(false);
+  });
+
+  it('entity formatting override renders Formatting inherit unchecked', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', formatting: { unit: 'kW' } },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    expect(editor.shadowRoot.querySelector('#entity-0-formatting-inherit').checked).toBe(false);
   });
 
   it('entity target override renders Target inherit unchecked', () => {
@@ -1219,6 +1255,254 @@ describe('Sensor Bar Card Plus editor', () => {
             entity: 'sensor.entity_max',
           },
         },
+      },
+    ]);
+  });
+
+  it('card-level formatting unit only writes formatting.unit', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entity: 'sensor.one' });
+    dispatchInput(editor.shadowRoot.querySelector('#formatting-unit'), 'W');
+
+    expect(events.at(-1).detail.config.formatting).toEqual({ unit: 'W' });
+    expect(events.at(-1).detail.config.unit).toBeUndefined();
+  });
+
+  it('card-level formatting decimal only writes formatting.decimal', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entity: 'sensor.one' });
+    dispatchInput(editor.shadowRoot.querySelector('#formatting-decimal'), '1');
+
+    expect(events.at(-1).detail.config.formatting).toEqual({ decimal: 1 });
+    expect(events.at(-1).detail.config.decimal).toBeUndefined();
+  });
+
+  it('card-level formatting unit and decimal write together', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entity: 'sensor.one' });
+    dispatchInput(editor.shadowRoot.querySelector('#formatting-unit'), 'kW');
+    dispatchInput(editor.shadowRoot.querySelector('#formatting-decimal'), '2');
+
+    expect(events.at(-1).detail.config.formatting).toEqual({ unit: 'kW', decimal: 2 });
+  });
+
+  it('clearing card-level formatting unit preserves decimal', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      formatting: { unit: 'kW', decimal: 2 },
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#formatting-unit'), '');
+
+    expect(events.at(-1).detail.config.formatting).toEqual({ decimal: 2 });
+  });
+
+  it('clearing card-level formatting decimal preserves unit', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      formatting: { unit: 'kW', decimal: 2 },
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#formatting-decimal'), '');
+
+    expect(events.at(-1).detail.config.formatting).toEqual({ unit: 'kW' });
+  });
+
+  it('card-level formatting reads legacy flat config', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      unit: 'W',
+      decimal: 1,
+    });
+
+    expect(editor.shadowRoot.querySelector('#formatting-unit').value).toBe('W');
+    expect(editor.shadowRoot.querySelector('#formatting-decimal').value).toBe('1');
+  });
+
+  it('editing legacy flat formatting converts only the edited field to structured config', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      unit: 'W',
+      decimal: 1,
+      custom_key: 'keep',
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#formatting-unit'), 'kW');
+
+    expect(events.at(-1).detail.config.formatting).toEqual({ unit: 'kW' });
+    expect(events.at(-1).detail.config.unit).toBeUndefined();
+    expect(events.at(-1).detail.config.decimal).toBe(1);
+    expect(events.at(-1).detail.config.custom_key).toBe('keep');
+  });
+
+  it('per-entity formatting group is collapsed by default', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+
+    expect(editor.shadowRoot.querySelector('#entity-0-group-formatting').getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('per-entity formatting summary renders inherited', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+
+    expect(editor.shadowRoot.innerHTML).toContain('id="entity-0-group-formatting-summary"');
+    expect(editor.shadowRoot.innerHTML).toContain('>Inherited</span>');
+  });
+
+  it('per-entity formatting summary renders unit and decimals', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one', formatting: { unit: 'kW', decimal: 2 } }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+
+    expect(editor.shadowRoot.innerHTML).toContain('unit kW • 2 decimals</span>');
+  });
+
+  it('per-entity formatting unit override writes entities[index].formatting.unit', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-formatting-unit'), 'kW');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', formatting: { unit: 'kW' } },
+    ]);
+  });
+
+  it('per-entity formatting decimal override writes entities[index].formatting.decimal', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-formatting-decimal'), '2');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', formatting: { decimal: 2 } },
+    ]);
+  });
+
+  it('per-entity formatting unit and decimal write together', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-formatting-unit'), 'kW');
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-formatting-decimal'), '2');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', formatting: { unit: 'kW', decimal: 2 } },
+    ]);
+  });
+
+  it('clearing one per-entity formatting field preserves the other', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one', formatting: { unit: 'kW', decimal: 2 } }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-formatting-unit'), '');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', formatting: { decimal: 2 } },
+    ]);
+  });
+
+  it('clearing both per-entity formatting fields removes formatting block', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one', formatting: { unit: 'kW', decimal: 2 } }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-formatting-unit'), '');
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-formatting-decimal'), '');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one' },
+    ]);
+  });
+
+  it('per-entity formatting preserve unrelated formatting keys', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{
+        entity: 'sensor.one',
+        formatting: { unit: 'kW', decimal: 2, custom_formatting_key: 'keep' },
+        other_key: 'keep',
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
+    const toggle = editor.shadowRoot.querySelector('#entity-0-formatting-inherit');
+    toggle.checked = true;
+    toggle.dispatchEvent({
+      type: 'change',
+      bubbles: true,
+      composed: true,
+    });
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      {
+        entity: 'sensor.one',
+        formatting: { custom_formatting_key: 'keep' },
+        other_key: 'keep',
       },
     ]);
   });

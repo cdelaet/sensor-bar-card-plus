@@ -3554,6 +3554,17 @@ class SensorBarCardPlusEditor extends HTMLElement {
     return Number.isFinite(parsed) ? parsed : null;
   }
 
+  _normalizeDecimalValue(value) {
+    if (value === '' || value === null || value === undefined) {
+      return null;
+    }
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
+      return null;
+    }
+    return parsed;
+  }
+
   _preferStructuredPath(structuredPath, legacyPath = null) {
     if (this._hasPath(this._draftConfig, structuredPath.slice(0, -1))) {
       return structuredPath;
@@ -3996,6 +4007,59 @@ class SensorBarCardPlusEditor extends HTMLElement {
       }
     }
     return '';
+  }
+
+  _getScopedFormattingValue(scope, key) {
+    return this._getScopedValue(scope, ['formatting', key])
+      ?? this._getScopedValue(scope, [key])
+      ?? '';
+  }
+
+  _setScopedFormattingUnit(scope, rawValue) {
+    return this._setCanonicalScopedTextOverride(scope, ['formatting', 'unit'], rawValue, {
+      deprecatedKeys: [['unit']],
+      prunePaths: [['formatting']],
+    });
+  }
+
+  _setScopedFormattingDecimal(scope, rawValue) {
+    const normalizedValue = this._normalizeDecimalValue(rawValue);
+    if (rawValue === '' || rawValue === null || rawValue === undefined) {
+      return this._removeCanonicalScopedValue(scope, ['formatting', 'decimal'], {
+        deprecatedKeys: [['decimal']],
+        prunePaths: [['formatting']],
+      });
+    }
+    if (normalizedValue === null) {
+      return false;
+    }
+    return this._setCanonicalScopedValue(scope, ['formatting', 'decimal'], normalizedValue, {
+      deprecatedKeys: [['decimal']],
+      prunePaths: [['formatting']],
+    });
+  }
+
+  _clearFormattingOverride(scope) {
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._deletePathValue(target, ['formatting', 'unit']);
+      nextTarget = this._deletePathValue(nextTarget, ['formatting', 'decimal']);
+      nextTarget = this._deletePathValue(nextTarget, ['unit']);
+      nextTarget = this._deletePathValue(nextTarget, ['decimal']);
+      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['formatting']);
+      return nextTarget;
+    }, { rerender: true });
+  }
+
+  _hasFormattingOverride(scope) {
+    const formattingValue = this._getScopedValue(scope, ['formatting']) ?? {};
+    if (this._isObject(formattingValue) && (
+      Object.prototype.hasOwnProperty.call(formattingValue, 'unit')
+      || Object.prototype.hasOwnProperty.call(formattingValue, 'decimal')
+    )) {
+      return true;
+    }
+    return this._getScopedValue(scope, ['unit']) !== undefined
+      || this._getScopedValue(scope, ['decimal']) !== undefined;
   }
 
   _setLayoutLabelPosition(value) {
@@ -4704,6 +4768,15 @@ class SensorBarCardPlusEditor extends HTMLElement {
     return 'Inherited';
   }
 
+  _getFormattingSummary(scope) {
+    const parts = [];
+    const unit = this._getScopedFormattingValue(scope, 'unit');
+    const decimal = this._getScopedFormattingValue(scope, 'decimal');
+    if (unit !== '') parts.push(`unit ${unit}`);
+    if (decimal !== '') parts.push(`${decimal} decimals`);
+    return parts.length ? parts.join(' • ') : 'Inherited';
+  }
+
   _renderOverrideGroup({ index, group, title, summary, content }) {
     const expanded = this._isOverrideGroupExpanded(index, group);
     return `
@@ -4837,6 +4910,8 @@ class SensorBarCardPlusEditor extends HTMLElement {
       const targetColor = this._getTargetColorValue({ type: 'card' });
       const targetLabelShow = this._getTargetLabelShowValue({ type: 'card' });
       const targetAboveFillColor = this._getTargetAboveFillColorValue({ type: 'card' });
+      const formattingUnit = this._getScopedFormattingValue({ type: 'card' }, 'unit');
+      const formattingDecimal = this._getScopedFormattingValue({ type: 'card' }, 'decimal');
       const scaleMin = this._getScaleFixedValue('min', 'min');
       const scaleMax = this._getScaleFixedValue('max', 'max');
       const scaleMinEntity = this._getScaleEntityValue('min');
@@ -5052,6 +5127,9 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	        .override-group[data-group="needle"] {
 	          --override-group-accent: #9b6bff;
 	        }
+	        .override-group[data-group="formatting"] {
+	          --override-group-accent: #d46be3;
+	        }
 	        .override-group-toggle {
 	          display: flex;
 	          justify-content: space-between;
@@ -5159,6 +5237,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	                        const baselineInherited = !this._hasBaselineOverride(scope);
 	                        const targetParts = this._getTargetResolvableValue(scope);
 	                        const targetInherited = !this._hasTargetOverride(scope);
+	                        const formattingInherited = !this._hasFormattingOverride(scope);
 	                        const minInherited = !this._hasResolvableOverride(minParts);
 	                        const maxInherited = !this._hasResolvableOverride(maxParts);
 	                        const scaleGroup = this._renderOverrideGroup({
@@ -5269,6 +5348,28 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	                      </div>
 	                          `,
 	                        });
+	                        const formattingGroup = this._renderOverrideGroup({
+	                          index,
+	                          group: 'formatting',
+	                          title: 'Formatting',
+	                          summary: this._getFormattingSummary(scope),
+	                          content: `
+	                      <div class="field-row">
+	                        <div class="toggle">
+	                          <input id="entity-${index}-formatting-inherit" type="checkbox" data-kind="entity-formatting-inherit" data-index="${index}"${formattingInherited ? ' checked' : ''}>
+                          <label for="entity-${index}-formatting-inherit">Formatting inherit</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-formatting-unit">Unit override</label>
+                        <input id="entity-${index}-formatting-unit" type="text" data-kind="entity-formatting-unit" data-index="${index}" value="${this._escapeAttribute(this._getScopedFormattingValue(scope, 'unit'))}" placeholder="inherit card default">
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-formatting-decimal">Decimal places</label>
+                        <input id="entity-${index}-formatting-decimal" type="number" min="0" step="1" data-kind="entity-formatting-decimal" data-index="${index}" value="${this._escapeAttribute(this._getScopedFormattingValue(scope, 'decimal'))}" placeholder="inherit card default">
+                      </div>
+	                          `,
+	                        });
 	                        const baselineGroup = this._renderOverrideGroup({
 	                          index,
 	                          group: 'baseline',
@@ -5365,6 +5466,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	                        });
 	                        return `
 	                          ${scaleGroup}
+	                          ${formattingGroup}
 	                          ${targetGroup}
 	                          ${baselineGroup}
 	                          ${barGroup}
@@ -5377,6 +5479,22 @@ class SensorBarCardPlusEditor extends HTMLElement {
                 `)}
                 <button type="button" data-action="add-entity">Add entity</button>
               </div>
+            </div>
+          </div>
+	        </div>
+
+	        <div class="section">
+	          <div class="section-head">
+	            <h3>Formatting</h3>
+	          </div>
+	          <div class="inline-row editor-grid">
+            <div class="field-row">
+              <label for="formatting-unit">Unit override</label>
+              <input id="formatting-unit" type="text" data-field="formatting-unit" value="${this._escapeAttribute(formattingUnit)}">
+            </div>
+            <div class="field-row">
+              <label for="formatting-decimal">Decimal places</label>
+              <input id="formatting-decimal" type="number" min="0" step="1" data-field="formatting-decimal" value="${this._escapeAttribute(formattingDecimal)}">
             </div>
           </div>
 	        </div>
@@ -5796,6 +5914,8 @@ class SensorBarCardPlusEditor extends HTMLElement {
     const value = detailValue ?? (target?.type === 'checkbox' ? target.checked : target?.value);
 
     if (field === 'title') return void this._setTitle(value);
+    if (field === 'formatting-unit') return void this._setScopedFormattingUnit({ type: 'card' }, value);
+    if (field === 'formatting-decimal') return void this._setScopedFormattingDecimal({ type: 'card' }, value);
     if (field === 'layout-label-position') return void this._setLayoutLabelPosition(value);
     if (field === 'layout-height') return void this._setLayoutHeight(value);
     if (field === 'scale-min') return void this._setScaleBound('min', value);
@@ -5891,6 +6011,21 @@ class SensorBarCardPlusEditor extends HTMLElement {
         deprecatedKeys: [['height']],
         prunePaths: [['layout']],
       });
+    }
+
+    if (kind === 'entity-formatting-inherit') {
+      if (value) {
+        return void this._clearFormattingOverride({ type: 'entity', index: Number(target.dataset.index) });
+      }
+      return;
+    }
+
+    if (kind === 'entity-formatting-unit') {
+      return void this._setScopedFormattingUnit({ type: 'entity', index: Number(target.dataset.index) }, value);
+    }
+
+    if (kind === 'entity-formatting-decimal') {
+      return void this._setScopedFormattingDecimal({ type: 'entity', index: Number(target.dataset.index) }, value);
     }
 
     if (kind === 'entity-bar-inherit') {
