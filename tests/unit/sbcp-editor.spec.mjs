@@ -177,6 +177,307 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(toggles[1].getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('entity Overrides panel renders grouped subsection headers', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', name: 'One' },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+
+    expect(editor.shadowRoot.querySelector('#entity-0-group-scale')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-group-target')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-group-baseline')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-group-bar')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-group-needle')).not.toBeNull();
+  });
+
+  it('subsection groups are collapsed by default inside an opened Overrides panel', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', name: 'One' },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+
+    expect(editor.shadowRoot.querySelector('#entity-0-group-scale').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-target').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-baseline').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-bar').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-needle').getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('opening one subsection does not open other subsections', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', name: 'One' },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-scale'));
+
+    expect(editor.shadowRoot.querySelector('#entity-0-group-scale').getAttribute('aria-expanded')).toBe('true');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-target').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-baseline').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-bar').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-group-needle').getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('clicking subsection title toggles the subsection', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', name: 'One' },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-scale-title'));
+
+    expect(editor.shadowRoot.querySelector('#entity-0-group-scale').getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('clicking subsection summary toggles the subsection', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', name: 'One' },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-scale-summary'));
+
+    expect(editor.shadowRoot.querySelector('#entity-0-group-scale').getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('clicking opened subsection controls does not collapse the subsection', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', name: 'One' },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-scale'));
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-min'), '12');
+
+    expect(editor.shadowRoot.querySelector('#entity-0-group-scale').getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('expanded Scale group styling uses the scale accent variable', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', name: 'One' },
+      ],
+    });
+
+    const styles = editor.shadowRoot.innerHTML;
+    expect(styles).toMatch(/\.override-group\[data-group="scale"\]\s*\{\s*--override-group-accent:\s*#4f8dff;/);
+    expect(styles).toMatch(/border-color:\s*color-mix\(in srgb,\s*var\(--override-group-accent\)\s*34%,\s*transparent\);/);
+  });
+
+  it('expanded Target group styling uses the target accent variable and not the shared accent rule', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', name: 'One' },
+      ],
+    });
+
+    const styles = editor.shadowRoot.innerHTML;
+    expect(styles).toMatch(/\.override-group\[data-group="target"\]\s*\{\s*--override-group-accent:\s*#ff9b3d;/);
+    expect(styles).not.toMatch(/\.override-group\[data-expanded="true"\]\s*\{\s*border-color:\s*color-mix\(in srgb,\s*var\(--accent-color,\s*var\(--primary-color,\s*#03a9f4\)\)\s*34%,\s*transparent\);/);
+  });
+
+  it('opening one entity subsection does not open another entity subsection', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', name: 'One' },
+        { entity: 'sensor.two', name: 'Two' },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[1]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-scale'));
+
+    expect(editor.shadowRoot.querySelector('#entity-0-group-scale').getAttribute('aria-expanded')).toBe('true');
+    expect(editor.shadowRoot.querySelector('#entity-1-group-scale').getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('subsection open state is not written into emitted config', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', name: 'One' },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-scale'));
+
+    expect(events).toHaveLength(0);
+    expect(editor._draftConfig).toEqual({
+      entities: [
+        { entity: 'sensor.one', name: 'One' },
+      ],
+    });
+  });
+
+  it('subsection groups contain the existing override fields', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', name: 'One' },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-scale'));
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-target'));
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-baseline'));
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-bar'));
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-needle'));
+
+    expect(editor.shadowRoot.querySelector('#entity-0-min')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-max')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-height')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-target-value')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-target-color')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-baseline-value')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-baseline-above-color')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-bar-fill-style')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-bar-color')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-needle-mode')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-needle-color')).not.toBeNull();
+  });
+
+  it('entity scale min fixed override renders Min inherit unchecked', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', scale: { min: { fixed: 0 } } },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    expect(editor.shadowRoot.querySelector('#entity-0-min-inherit').checked).toBe(false);
+  });
+
+  it('entity scale min entity override renders Min inherit unchecked', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', scale: { min: { entity: 'sensor.dynamic_min' } } },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    expect(editor.shadowRoot.querySelector('#entity-0-min-inherit').checked).toBe(false);
+  });
+
+  it('entity scale max fixed override renders Max inherit unchecked', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', scale: { max: { fixed: 5000 } } },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    expect(editor.shadowRoot.querySelector('#entity-0-max-inherit').checked).toBe(false);
+  });
+
+  it('entity scale max entity override renders Max inherit unchecked', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', scale: { max: { entity: 'sensor.dynamic_max' } } },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    expect(editor.shadowRoot.querySelector('#entity-0-max-inherit').checked).toBe(false);
+  });
+
+  it('entity target override renders Target inherit unchecked', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', target: { at: { fixed: 2500 } } },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    expect(editor.shadowRoot.querySelector('#entity-0-target-inherit').checked).toBe(false);
+  });
+
+  it('entity baseline override renders Baseline inherit unchecked', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', baseline: { at: { fixed: 0 } } },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    expect(editor.shadowRoot.querySelector('#entity-0-baseline-inherit').checked).toBe(false);
+  });
+
+  it('entity bar appearance override renders Bar Appearance inherit unchecked', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', bar: { color: '#ff9800' } },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    expect(editor.shadowRoot.querySelector('#entity-0-bar-inherit').checked).toBe(false);
+  });
+
+  it('entity needle override renders Needle mode as enabled, not inherit', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', bar: { needle: { show: true } } },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    expect(editor.shadowRoot.querySelector('#entity-0-needle-mode').value).toBe('enabled');
+  });
+
   it('fake ha-entity-picker value-changed updates entities[index].entity', () => {
     const editor = createEditor({ withEntityPicker: true });
     const events = trackConfigEvents(editor);

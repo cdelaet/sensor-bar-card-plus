@@ -3391,6 +3391,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
     this._lastEmittedConfigJson = null;
     this._shadowListenersAttached = false;
     this._expandedEntityOverrides = new Set();
+    this._expandedOverrideGroups = new Set();
     this._boundHandleClick = (event) => this._handleClick(event);
     this._boundHandleChange = (event) => this._handleChange(event);
     this._boundHandleInput = (event) => this._handleInput(event);
@@ -4615,6 +4616,127 @@ class SensorBarCardPlusEditor extends HTMLElement {
       if (index < entityCount) nextExpanded.add(index);
     });
     this._expandedEntityOverrides = nextExpanded;
+    const nextGroups = new Set();
+    this._expandedOverrideGroups.forEach((key) => {
+      const [indexText, group] = String(key).split(':');
+      const index = Number(indexText);
+      if (Number.isInteger(index) && index < entityCount && group) {
+        nextGroups.add(`${index}:${group}`);
+      }
+    });
+    this._expandedOverrideGroups = nextGroups;
+  }
+
+  _getOverrideGroupKey(index, group) {
+    return `${index}:${group}`;
+  }
+
+  _isOverrideGroupExpanded(index, group) {
+    return this._expandedOverrideGroups.has(this._getOverrideGroupKey(index, group));
+  }
+
+  _toggleOverrideGroupExpanded(index, group) {
+    const key = this._getOverrideGroupKey(index, group);
+    if (this._expandedOverrideGroups.has(key)) {
+      this._expandedOverrideGroups.delete(key);
+    } else {
+      this._expandedOverrideGroups.add(key);
+    }
+    this._render();
+  }
+
+  _hasExplicitOverrideValue(value) {
+    return value !== '' && value !== undefined && value !== null;
+  }
+
+  _hasResolvableOverride(parts) {
+    return this._hasExplicitOverrideValue(parts?.fixed) || this._hasExplicitOverrideValue(parts?.entity);
+  }
+
+  _getScaleOverrideSummary(scope) {
+    const parts = [];
+    const min = this._getResolvableScopedValue(scope, 'min');
+    const max = this._getResolvableScopedValue(scope, 'max');
+    const height = this._getScopedDisplayValue(scope, ['layout', 'height'], [['height']]);
+    if (min.entity) parts.push('Min dynamic');
+    else if (min.fixed !== '' && min.fixed !== undefined) parts.push(`Min ${min.fixed}`);
+    if (max.entity) parts.push('Max dynamic');
+    else if (max.fixed !== '' && max.fixed !== undefined) parts.push(`Max ${max.fixed}`);
+    if (height !== '') parts.push(`Height ${height}`);
+    return parts.length ? parts.join(', ') : 'Inherited';
+  }
+
+  _getTargetOverrideSummary(scope) {
+    const parts = [];
+    const target = this._getTargetResolvableValue(scope);
+    if (target.fixed !== '' && target.fixed !== undefined) parts.push(`Fixed ${target.fixed}`);
+    if (target.entity) parts.push(target.fixed !== '' && target.fixed !== undefined ? 'entity' : 'Dynamic');
+    if (this._getTargetColorValue(scope)) parts.push('Custom color');
+    if (this._getTargetLabelShowValue(scope)) parts.push('Label');
+    if (this._getTargetAboveFillColorValue(scope)) parts.push('Above fill');
+    return parts.length ? parts.join(', ') : 'Inherited';
+  }
+
+  _getBaselineOverrideSummary(scope) {
+    const parts = [];
+    const baseline = this._getBaselineResolvableValue(scope);
+    if (baseline.fixed !== '' && baseline.fixed !== undefined) parts.push(`Fixed ${baseline.fixed}`);
+    if (baseline.entity) parts.push(baseline.fixed !== '' && baseline.fixed !== undefined ? 'entity' : 'Dynamic');
+    if (this._getBaselineDirectionalColorValue(scope, 'above')) parts.push('Above color');
+    if (this._getBaselineDirectionalColorValue(scope, 'below')) parts.push('Below color');
+    return parts.length ? parts.join(', ') : 'Inherited';
+  }
+
+  _getBarAppearanceSummary(scope) {
+    const parts = [];
+    const fillStyle = this._getScopedFillStyleValue(scope);
+    const color = this._getScopedValue(scope, ['bar', 'color']) ?? this._getScopedValue(scope, ['color']);
+    if (fillStyle && fillStyle !== 'bands') parts.push(fillStyle.replace(/_/g, ' '));
+    if (color) parts.push('Custom color');
+    if (this._getScopedBarSolidFillValue(scope)) parts.push('Solid fill');
+    return parts.length ? parts.join(', ') : 'Inherited';
+  }
+
+  _getNeedleSummary(scope) {
+    const needle = this._getScopedNeedleConfig(scope);
+    if (needle.mode === 'enabled') return needle.color ? 'Enabled, custom color' : 'Enabled';
+    if (needle.mode === 'disabled') return 'Disabled override';
+    return 'Inherited';
+  }
+
+  _renderOverrideGroup({ index, group, title, summary, content }) {
+    const expanded = this._isOverrideGroupExpanded(index, group);
+    return `
+      <div class="override-group" data-group="${group}" data-expanded="${expanded ? 'true' : 'false'}">
+        <button
+          type="button"
+          id="entity-${index}-group-${group}"
+          class="override-group-toggle"
+          data-action="toggle-override-group"
+          data-index="${index}"
+          data-group="${group}"
+          aria-expanded="${expanded ? 'true' : 'false'}"
+        >
+          <span
+            id="entity-${index}-group-${group}-title"
+            class="override-group-title"
+            data-action="toggle-override-group"
+            data-index="${index}"
+            data-group="${group}"
+          >${expanded ? '▾' : '▸'} ${title}</span>
+          <span
+            id="entity-${index}-group-${group}-summary"
+            class="override-group-summary"
+            data-action="toggle-override-group"
+            data-index="${index}"
+            data-group="${group}"
+          >${this._escapeAttribute(summary)}</span>
+        </button>
+        <div class="override-group-body" style="display:${expanded ? 'grid' : 'none'};">
+          ${content}
+        </div>
+      </div>
+    `;
   }
 
   _renderEntityInput(entry, index) {
@@ -4906,6 +5028,65 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	          text-transform: uppercase;
 	          color: var(--secondary-text-color, #666);
 	        }
+	        .override-group {
+	          display: grid;
+	          gap: 10px;
+	          --override-group-accent: var(--accent-color, var(--primary-color, #03a9f4));
+	          border-radius: 12px;
+	          border: 1px solid color-mix(in srgb, var(--divider-color, #888) 24%, transparent);
+	          background: color-mix(in srgb, var(--card-background-color, #fff) 78%, transparent);
+	          overflow: hidden;
+	        }
+	        .override-group[data-group="scale"] {
+	          --override-group-accent: #4f8dff;
+	        }
+	        .override-group[data-group="target"] {
+	          --override-group-accent: #ff9b3d;
+	        }
+	        .override-group[data-group="baseline"] {
+	          --override-group-accent: #5bbd6d;
+	        }
+	        .override-group[data-group="bar"] {
+	          --override-group-accent: #34c6d3;
+	        }
+	        .override-group[data-group="needle"] {
+	          --override-group-accent: #9b6bff;
+	        }
+	        .override-group-toggle {
+	          display: flex;
+	          justify-content: space-between;
+	          align-items: center;
+	          gap: 12px;
+	          width: 100%;
+	          text-align: left;
+	          border: 0;
+	          border-radius: 0;
+	          background: transparent;
+	          padding: 10px 12px;
+	        }
+	        .override-group-toggle:hover,
+	        .override-group-toggle:focus {
+	          background: color-mix(in srgb, var(--secondary-background-color, var(--card-background-color, #fff)) 72%, transparent);
+	        }
+	        .override-group[data-expanded="true"] {
+	          border-color: color-mix(in srgb, var(--override-group-accent) 34%, transparent);
+	          box-shadow: inset 3px 0 0 color-mix(in srgb, var(--override-group-accent) 70%, transparent);
+	        }
+	        .override-group-title {
+	          font-weight: 700;
+	          color: var(--primary-text-color, #111);
+	        }
+	        .override-group-summary {
+	          font-size: 0.82rem;
+	          color: var(--secondary-text-color, #666);
+	          text-align: right;
+	        }
+	        .override-group-body {
+	          display: grid;
+	          gap: 12px;
+	          padding: 0 12px 12px;
+	          background: color-mix(in srgb, var(--secondary-background-color, var(--card-background-color, #fff)) 78%, transparent);
+	        }
 	        button {
 	          min-height: 40px;
 	          padding: 8px 12px;
@@ -4972,19 +5153,24 @@ class SensorBarCardPlusEditor extends HTMLElement {
                         const scope = { type: 'entity', index };
                         const minParts = this._getResolvableScopedValue(scope, 'min');
                         const maxParts = this._getResolvableScopedValue(scope, 'max');
-                        const barAppearanceInherited = !this._hasEntityBarAppearanceOverride(scope);
-                        const entityNeedle = this._getScopedNeedleConfig(scope);
-                        const baselineParts = this._getBaselineResolvableValue(scope);
-                        const baselineInherited = !this._hasBaselineOverride(scope);
-                        const targetParts = this._getTargetResolvableValue(scope);
-                        const targetInherited = !this._hasTargetOverride(scope);
-                        const minInherited = !minParts.fixed && !minParts.entity;
-                        const maxInherited = !maxParts.fixed && !maxParts.entity;
-                        return `
-                      <div class="field-row">
-                        <div class="toggle">
-                          <input id="entity-${index}-min-inherit" type="checkbox" data-kind="entity-override-min-inherit" data-index="${index}"${minInherited ? ' checked' : ''}>
-                          <label for="entity-${index}-min-inherit">Min inherit card default</label>
+	                        const barAppearanceInherited = !this._hasEntityBarAppearanceOverride(scope);
+	                        const entityNeedle = this._getScopedNeedleConfig(scope);
+	                        const baselineParts = this._getBaselineResolvableValue(scope);
+	                        const baselineInherited = !this._hasBaselineOverride(scope);
+	                        const targetParts = this._getTargetResolvableValue(scope);
+	                        const targetInherited = !this._hasTargetOverride(scope);
+	                        const minInherited = !this._hasResolvableOverride(minParts);
+	                        const maxInherited = !this._hasResolvableOverride(maxParts);
+	                        const scaleGroup = this._renderOverrideGroup({
+	                          index,
+	                          group: 'scale',
+	                          title: 'Scale',
+	                          summary: this._getScaleOverrideSummary(scope),
+	                          content: `
+	                      <div class="field-row">
+	                        <div class="toggle">
+	                          <input id="entity-${index}-min-inherit" type="checkbox" data-kind="entity-override-min-inherit" data-index="${index}"${minInherited ? ' checked' : ''}>
+	                          <label for="entity-${index}-min-inherit">Min inherit card default</label>
                         </div>
                       </div>
                       <div class="field-row">
@@ -5009,13 +5195,21 @@ class SensorBarCardPlusEditor extends HTMLElement {
                         <label>Max entity override</label>
                         ${this._renderEntitySourceInput('entity-override-max-entity-source', index, maxParts.entity, 'inherit card default')}
                       </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-height">Height</label>
-                        <input id="entity-${index}-height" type="number" step="1" data-kind="entity-override-height" data-index="${index}" value="${this._escapeAttribute(this._getScopedDisplayValue({ type: 'entity', index }, ['layout', 'height'], [['height']]))}" placeholder="inherit card default">
-                      </div>
-                      <div class="field-row">
-                        <div class="toggle">
-                          <input id="entity-${index}-bar-inherit" type="checkbox" data-kind="entity-bar-inherit" data-index="${index}"${barAppearanceInherited ? ' checked' : ''}>
+	                      <div class="field-row">
+	                        <label for="entity-${index}-height">Height</label>
+	                        <input id="entity-${index}-height" type="number" step="1" data-kind="entity-override-height" data-index="${index}" value="${this._escapeAttribute(this._getScopedDisplayValue({ type: 'entity', index }, ['layout', 'height'], [['height']]))}" placeholder="inherit card default">
+	                      </div>
+	                          `,
+	                        });
+	                        const barGroup = this._renderOverrideGroup({
+	                          index,
+	                          group: 'bar',
+	                          title: 'Bar Appearance',
+	                          summary: this._getBarAppearanceSummary(scope),
+	                          content: `
+	                      <div class="field-row">
+	                        <div class="toggle">
+	                          <input id="entity-${index}-bar-inherit" type="checkbox" data-kind="entity-bar-inherit" data-index="${index}"${barAppearanceInherited ? ' checked' : ''}>
                           <label for="entity-${index}-bar-inherit">Bar appearance inherit</label>
                         </div>
                       </div>
@@ -5040,34 +5234,50 @@ class SensorBarCardPlusEditor extends HTMLElement {
                           placeholder: 'inherit card default',
                         })}
                       </div>
-                      <div class="field-row">
-                        <div class="toggle">
-                          <input id="entity-${index}-bar-solid-fill" type="checkbox" data-kind="entity-bar-solid-fill" data-index="${index}"${this._getScopedBarSolidFillValue(scope) ? ' checked' : ''}>
-                          <label for="entity-${index}-bar-solid-fill">Solid fill</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-needle-mode">Needle mode</label>
-                        <select id="entity-${index}-needle-mode" data-kind="entity-needle-mode" data-index="${index}" value="${this._escapeAttribute(entityNeedle.mode)}">
+	                      <div class="field-row">
+	                        <div class="toggle">
+	                          <input id="entity-${index}-bar-solid-fill" type="checkbox" data-kind="entity-bar-solid-fill" data-index="${index}"${this._getScopedBarSolidFillValue(scope) ? ' checked' : ''}>
+	                          <label for="entity-${index}-bar-solid-fill">Solid fill</label>
+	                        </div>
+	                      </div>
+	                          `,
+	                        });
+	                        const needleGroup = this._renderOverrideGroup({
+	                          index,
+	                          group: 'needle',
+	                          title: 'Needle',
+	                          summary: this._getNeedleSummary(scope),
+	                          content: `
+	                      <div class="field-row">
+	                        <label for="entity-${index}-needle-mode">Needle mode</label>
+	                        <select id="entity-${index}-needle-mode" data-kind="entity-needle-mode" data-index="${index}" value="${this._escapeAttribute(entityNeedle.mode)}">
                           <option value="inherit"${entityNeedle.mode === 'inherit' ? ' selected' : ''}>inherit</option>
                           <option value="enabled"${entityNeedle.mode === 'enabled' ? ' selected' : ''}>enabled</option>
                           <option value="disabled"${entityNeedle.mode === 'disabled' ? ' selected' : ''}>disabled</option>
                         </select>
                       </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-needle-color">Needle color</label>
-                        ${this._renderColorInput({
+	                      <div class="field-row">
+	                        <label for="entity-${index}-needle-color">Needle color</label>
+	                        ${this._renderColorInput({
                           id: `entity-${index}-needle-color`,
                           kind: 'entity-needle-color',
                           index,
                           value: entityNeedle.color,
                           fallbackHex: '#ffffff',
-                          placeholder: '#ffffff',
-                        })}
-                      </div>
-                      <div class="field-row">
-                        <div class="toggle">
-                          <input id="entity-${index}-baseline-inherit" type="checkbox" data-kind="entity-baseline-inherit" data-index="${index}"${baselineInherited ? ' checked' : ''}>
+	                          placeholder: '#ffffff',
+	                        })}
+	                      </div>
+	                          `,
+	                        });
+	                        const baselineGroup = this._renderOverrideGroup({
+	                          index,
+	                          group: 'baseline',
+	                          title: 'Baseline',
+	                          summary: this._getBaselineOverrideSummary(scope),
+	                          content: `
+	                      <div class="field-row">
+	                        <div class="toggle">
+	                          <input id="entity-${index}-baseline-inherit" type="checkbox" data-kind="entity-baseline-inherit" data-index="${index}"${baselineInherited ? ' checked' : ''}>
                           <label for="entity-${index}-baseline-inherit">Baseline inherit</label>
                         </div>
                       </div>
@@ -5090,20 +5300,28 @@ class SensorBarCardPlusEditor extends HTMLElement {
                           placeholder: 'inherit card default',
                         })}
                       </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-baseline-below-color">Below-baseline fill color</label>
-                        ${this._renderColorInput({
+	                      <div class="field-row">
+	                        <label for="entity-${index}-baseline-below-color">Below-baseline fill color</label>
+	                        ${this._renderColorInput({
                           id: `entity-${index}-baseline-below-color`,
                           kind: 'entity-baseline-below-color',
                           index,
                           value: this._getBaselineDirectionalColorValue(scope, 'below'),
                           fallbackHex: '#000000',
-                          placeholder: 'inherit card default',
-                        })}
-                      </div>
-                      <div class="field-row">
-                        <div class="toggle">
-                          <input id="entity-${index}-target-inherit" type="checkbox" data-kind="entity-target-inherit" data-index="${index}"${targetInherited ? ' checked' : ''}>
+	                          placeholder: 'inherit card default',
+	                        })}
+	                      </div>
+	                          `,
+	                        });
+	                        const targetGroup = this._renderOverrideGroup({
+	                          index,
+	                          group: 'target',
+	                          title: 'Target',
+	                          summary: this._getTargetOverrideSummary(scope),
+	                          content: `
+	                      <div class="field-row">
+	                        <div class="toggle">
+	                          <input id="entity-${index}-target-inherit" type="checkbox" data-kind="entity-target-inherit" data-index="${index}"${targetInherited ? ' checked' : ''}>
                           <label for="entity-${index}-target-inherit">Target inherit</label>
                         </div>
                       </div>
@@ -5132,20 +5350,28 @@ class SensorBarCardPlusEditor extends HTMLElement {
                           <label for="entity-${index}-target-label-show">Show target label</label>
                         </div>
                       </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-target-above-fill">Above-target fill color</label>
-                        ${this._renderColorInput({
+	                      <div class="field-row">
+	                        <label for="entity-${index}-target-above-fill">Above-target fill color</label>
+	                        ${this._renderColorInput({
                           id: `entity-${index}-target-above-fill`,
                           kind: 'entity-target-above-fill-color',
                           index,
                           value: this._getTargetAboveFillColorValue(scope),
                           fallbackHex: '#000000',
-                          placeholder: 'inherit card default',
-                        })}
-                      </div>
-                        `;
-                      })()}
-                    </div>
+	                          placeholder: 'inherit card default',
+	                        })}
+	                      </div>
+	                          `,
+	                        });
+	                        return `
+	                          ${scaleGroup}
+	                          ${targetGroup}
+	                          ${baselineGroup}
+	                          ${barGroup}
+	                          ${needleGroup}
+	                        `;
+	                      })()}
+	                    </div>
                     <button type="button" data-action="remove-entity" data-index="${index}">Remove</button>
                   </div>
                 `)}
@@ -5473,7 +5699,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _handleClick(event) {
-    const target = event.target;
+    const target = event.target?.closest?.('[data-action]') ?? event.target;
     const action = target?.dataset?.action;
     if (!action) return;
 
@@ -5500,6 +5726,11 @@ class SensorBarCardPlusEditor extends HTMLElement {
 
     if (action === 'toggle-entity-overrides') {
       this._toggleEntityOverrideExpanded(Number(target.dataset.index));
+      return;
+    }
+
+    if (action === 'toggle-override-group') {
+      this._toggleOverrideGroupExpanded(Number(target.dataset.index), target.dataset.group);
       return;
     }
 
