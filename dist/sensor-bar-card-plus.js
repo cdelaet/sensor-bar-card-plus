@@ -3631,6 +3631,24 @@ class SensorBarCardPlusEditor extends HTMLElement {
     return [];
   }
 
+  _getRawEntityRows() {
+    if (Array.isArray(this._draftConfig.entities)) {
+      return this._cloneDeep(this._draftConfig.entities);
+    }
+    if (this._draftConfig.entity !== undefined) {
+      const hasTopLevelIdentity = this._draftConfig.name !== undefined || this._draftConfig.icon !== undefined;
+      if (!hasTopLevelIdentity) {
+        return [this._draftConfig.entity];
+      }
+      return [{
+        entity: this._draftConfig.entity,
+        ...(this._draftConfig.name !== undefined ? { name: this._draftConfig.name } : {}),
+        ...(this._draftConfig.icon !== undefined ? { icon: this._draftConfig.icon } : {}),
+      }];
+    }
+    return [];
+  }
+
   _buildEntityConfigEntries(entities) {
     const usesShorthand = !Array.isArray(this._draftConfig.entities) && this._draftConfig.entity !== undefined;
     const source = Array.isArray(this._draftConfig.entities)
@@ -3915,6 +3933,77 @@ class SensorBarCardPlusEditor extends HTMLElement {
       }
     }
     return nextConfig;
+  }
+
+  _setEntityRowsRaw(nextRows, options = {}) {
+    const normalizedRows = this._cloneDeep(nextRows);
+    if (Array.isArray(this._draftConfig.entities) || this._draftConfig.entity === undefined || normalizedRows.length !== 1) {
+      let nextConfig = this._setPathValue(this._draftConfig, ['entities'], normalizedRows);
+      if (!Array.isArray(this._draftConfig.entities) && this._draftConfig.entity !== undefined) {
+        nextConfig = this._deletePathValue(nextConfig, ['entity']);
+        nextConfig = this._deletePathValue(nextConfig, ['name']);
+        nextConfig = this._deletePathValue(nextConfig, ['icon']);
+      }
+      return this._applyUserConfig(nextConfig, options);
+    }
+
+    const [row] = normalizedRows;
+    if (typeof row === 'string') {
+      let nextConfig = this._setPathValue(this._draftConfig, ['entity'], row);
+      nextConfig = this._deletePathValue(nextConfig, ['name']);
+      nextConfig = this._deletePathValue(nextConfig, ['icon']);
+      return this._applyUserConfig(nextConfig, options);
+    }
+
+    let nextConfig = this._setPathValue(this._draftConfig, ['entity'], row?.entity ?? '');
+    if (row && Object.prototype.hasOwnProperty.call(row, 'name')) {
+      nextConfig = this._setPathValue(nextConfig, ['name'], row.name);
+    } else {
+      nextConfig = this._deletePathValue(nextConfig, ['name']);
+    }
+    if (row && Object.prototype.hasOwnProperty.call(row, 'icon')) {
+      nextConfig = this._setPathValue(nextConfig, ['icon'], row.icon);
+    } else {
+      nextConfig = this._deletePathValue(nextConfig, ['icon']);
+    }
+    return this._applyUserConfig(nextConfig, options);
+  }
+
+  _moveEntityRow(index, direction) {
+    const rows = this._getRawEntityRows();
+    const nextIndex = index + direction;
+    if (index < 0 || index >= rows.length || nextIndex < 0 || nextIndex >= rows.length) {
+      return false;
+    }
+    const nextRows = this._cloneDeep(rows);
+    [nextRows[index], nextRows[nextIndex]] = [nextRows[nextIndex], nextRows[index]];
+    return this._setEntityRowsRaw(nextRows, { rerender: true });
+  }
+
+  _duplicateEntityRow(index) {
+    const rows = this._getRawEntityRows();
+    if (index < 0 || index >= rows.length) {
+      return false;
+    }
+    const sourceRow = this._cloneDeep(rows[index]);
+    const duplicateRow = typeof sourceRow === 'string'
+      ? { entity: sourceRow }
+      : this._cloneDeep(sourceRow);
+    if (this._isObject(duplicateRow) && typeof duplicateRow.name === 'string' && duplicateRow.name.trim()) {
+      duplicateRow.name = `${duplicateRow.name.trim()} copy`;
+    }
+    const nextRows = this._cloneDeep(rows);
+    nextRows.splice(index + 1, 0, duplicateRow);
+    return this._setEntityRowsRaw(nextRows, { rerender: true });
+  }
+
+  _removeEntityRow(index) {
+    const rows = this._getRawEntityRows();
+    if (rows.length <= 1 || index < 0 || index >= rows.length) {
+      return false;
+    }
+    const nextRows = rows.filter((_, rowIndex) => rowIndex !== index);
+    return this._setEntityRowsRaw(nextRows, { rerender: true });
   }
 
   _getScopedValue(scope, keyPath) {
@@ -6200,6 +6289,12 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	          padding-bottom: 4px;
 	          border-bottom: 1px solid color-mix(in srgb, var(--divider-color, #888) 24%, transparent);
 	        }
+	        .entity-header-main {
+	          display: grid;
+	          gap: 4px;
+	          min-width: 0;
+	          flex: 1 1 auto;
+	        }
 	        .entity-title {
 	          font-size: 0.95rem;
 	          font-weight: 700;
@@ -6211,6 +6306,17 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	          overflow: hidden;
 	          text-overflow: ellipsis;
 	          white-space: nowrap;
+	        }
+	        .entity-actions {
+	          display: flex;
+	          flex-wrap: wrap;
+	          justify-content: flex-end;
+	          gap: 8px;
+	          flex: 0 0 auto;
+	        }
+	        .entity-actions button {
+	          min-height: 34px;
+	          padding: 6px 10px;
 	        }
 	        .entity-fields {
 	          display: grid;
@@ -6389,8 +6495,16 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	                  <div class="entity-shell" data-entity-shell-index="${index}">
 	                    <div class="entity-main">
 	                      <div class="entity-header">
-	                        <div class="entity-title">Entity ${index + 1}</div>
-	                        <div class="entity-subtitle">${this._escapeAttribute(entry.entity || 'Configure entity')}</div>
+	                        <div class="entity-header-main">
+	                          <div class="entity-title">Entity ${index + 1}</div>
+	                          <div class="entity-subtitle">${this._escapeAttribute(entry.entity || 'Configure entity')}</div>
+	                        </div>
+	                        <div class="entity-actions">
+	                          <button type="button" data-action="move-entity-up" data-index="${index}"${index === 0 ? ' disabled' : ''} aria-label="Move entity ${index + 1} up">↑</button>
+	                          <button type="button" data-action="move-entity-down" data-index="${index}"${index === entities.length - 1 ? ' disabled' : ''} aria-label="Move entity ${index + 1} down">↓</button>
+	                          <button type="button" data-action="duplicate-entity" data-index="${index}">Duplicate</button>
+	                          <button type="button" data-action="remove-entity" data-index="${index}"${entities.length <= 1 ? ' disabled' : ''}>Remove</button>
+	                        </div>
 	                      </div>
 	                      <div class="entity-fields">
 	                        ${this._renderEntityInput(entry, index)}
@@ -6813,7 +6927,6 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	                        `;
 	                      })()}
 	                    </div>
-                    <button type="button" data-action="remove-entity" data-index="${index}">Remove</button>
                   </div>
                 `)}
                 <button type="button" data-action="add-entity">Add entity</button>
@@ -7263,6 +7376,21 @@ class SensorBarCardPlusEditor extends HTMLElement {
       return;
     }
 
+    if (action === 'move-entity-up') {
+      this._moveEntityRow(Number(target.dataset.index), -1);
+      return;
+    }
+
+    if (action === 'move-entity-down') {
+      this._moveEntityRow(Number(target.dataset.index), 1);
+      return;
+    }
+
+    if (action === 'duplicate-entity') {
+      this._duplicateEntityRow(Number(target.dataset.index));
+      return;
+    }
+
     if (action === 'toggle-entity-overrides') {
       this._toggleEntityOverrideExpanded(Number(target.dataset.index));
       return;
@@ -7279,14 +7407,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
     }
 
     if (action === 'remove-entity') {
-      const index = Number(target.dataset.index);
-      const nextEntities = this._getEntitiesValue().filter((_, entryIndex) => entryIndex !== index);
-      const nextEntries = this._buildEntityConfigEntries(nextEntities);
-      if (Array.isArray(this._draftConfig.entities) || nextEntries.length !== 1 || !this._draftConfig.entity) {
-        this._setValueAtPath(['entities'], nextEntries, { rerender: true });
-      } else {
-        this._setValueAtPath(['entity'], nextEntities[0]?.entity ?? '', { rerender: true });
-      }
+      this._removeEntityRow(Number(target.dataset.index));
       return;
     }
 

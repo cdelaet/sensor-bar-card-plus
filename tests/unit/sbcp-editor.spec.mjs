@@ -1152,6 +1152,261 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.innerHTML).toContain('data-index="1"');
   });
 
+  it('move first entity up is disabled and does not emit changes', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one' },
+        { entity: 'sensor.two' },
+      ],
+    });
+
+    const moveUpButton = editor.shadowRoot.querySelectorAll('button[data-action="move-entity-up"]')[0];
+    expect(moveUpButton.getAttribute('disabled')).toBe('');
+
+    dispatchClick(moveUpButton);
+
+    expect(events).toHaveLength(0);
+  });
+
+  it('move last entity down is disabled and does not emit changes', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one' },
+        { entity: 'sensor.two' },
+      ],
+    });
+
+    const moveDownButtons = editor.shadowRoot.querySelectorAll('button[data-action="move-entity-down"]');
+    expect(moveDownButtons[1].getAttribute('disabled')).toBe('');
+
+    dispatchClick(moveDownButtons[1]);
+
+    expect(events).toHaveLength(0);
+  });
+
+  it('move middle entity up preserves exact entity config and unknown keys', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', rank: 1 },
+        {
+          entity: 'sensor.two',
+          name: 'Two',
+          custom_key: 'keep',
+          layout: { height: 44, extra_layout: true },
+          bar: { color: '#ff9800', extra_bar: 'keep' },
+        },
+        { entity: 'sensor.three', rank: 3 },
+      ],
+      card_mod: { style: 'ha-card { color: white; }' },
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="move-entity-up"]')[1]);
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      {
+        entity: 'sensor.two',
+        name: 'Two',
+        custom_key: 'keep',
+        layout: { height: 44, extra_layout: true },
+        bar: { color: '#ff9800', extra_bar: 'keep' },
+      },
+      { entity: 'sensor.one', rank: 1 },
+      { entity: 'sensor.three', rank: 3 },
+    ]);
+    expect(events.at(-1).detail.config.card_mod).toEqual({
+      style: 'ha-card { color: white; }',
+    });
+  });
+
+  it('move middle entity down preserves exact entity config and unknown keys', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', rank: 1 },
+        {
+          entity: 'sensor.two',
+          name: 'Two',
+          custom_key: 'keep',
+          peak: { enabled: true, color: '#ff9800' },
+        },
+        { entity: 'sensor.three', rank: 3 },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="move-entity-down"]')[1]);
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', rank: 1 },
+      { entity: 'sensor.three', rank: 3 },
+      {
+        entity: 'sensor.two',
+        name: 'Two',
+        custom_key: 'keep',
+        peak: { enabled: true, color: '#ff9800' },
+      },
+    ]);
+  });
+
+  it('duplicate inserts a deep-cloned row after the original and appends copy to name', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [
+        {
+          entity: 'sensor.one',
+          name: 'Kitchen',
+          bar: { color: '#ff9800' },
+          target: { at: { fixed: 42 } },
+          custom_key: 'keep',
+        },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="duplicate-entity"]')[0]);
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      {
+        entity: 'sensor.one',
+        name: 'Kitchen',
+        bar: { color: '#ff9800' },
+        target: { at: { fixed: 42 } },
+        custom_key: 'keep',
+      },
+      {
+        entity: 'sensor.one',
+        name: 'Kitchen copy',
+        bar: { color: '#ff9800' },
+        target: { at: { fixed: 42 } },
+        custom_key: 'keep',
+      },
+    ]);
+  });
+
+  it('duplicated rows deep-clone nested config instead of sharing references', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [
+        {
+          entity: 'sensor.one',
+          name: 'Kitchen',
+          bar: { color: '#ff9800' },
+        },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="duplicate-entity"]')[0]);
+    const duplicatedConfig = events.at(-1).detail.config;
+    duplicatedConfig.entities[1].bar.color = '#4a9eff';
+
+    expect(duplicatedConfig.entities).toEqual([
+      {
+        entity: 'sensor.one',
+        name: 'Kitchen',
+        bar: { color: '#ff9800' },
+      },
+      {
+        entity: 'sensor.one',
+        name: 'Kitchen copy',
+        bar: { color: '#4a9eff' },
+      },
+    ]);
+  });
+
+  it('duplicate without name leaves name absent and preserves unknown keys', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [
+        {
+          entity: 'sensor.one',
+          custom_key: 'keep',
+        },
+      ],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="duplicate-entity"]')[0]);
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', custom_key: 'keep' },
+      { entity: 'sensor.one', custom_key: 'keep' },
+    ]);
+  });
+
+  it('duplicate of shorthand entity preserves original string row and converts duplicate to object form', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      custom_top_level: true,
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="duplicate-entity"]')[0]);
+
+    expect(events.at(-1).detail.config).toEqual({
+      entities: [
+        'sensor.one',
+        { entity: 'sensor.one' },
+      ],
+      custom_top_level: true,
+    });
+  });
+
+  it('remove deletes the selected entity and preserves remaining entities exactly', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [
+        { entity: 'sensor.one', rank: 1 },
+        { entity: 'sensor.two', name: 'Two', custom_key: 'keep' },
+        { entity: 'sensor.three', rank: 3 },
+      ],
+      custom_top_level: true,
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="remove-entity"]')[1]);
+
+    expect(events.at(-1).detail.config).toEqual({
+      entities: [
+        { entity: 'sensor.one', rank: 1 },
+        { entity: 'sensor.three', rank: 3 },
+      ],
+      custom_top_level: true,
+    });
+  });
+
+  it('remove last remaining entity is disabled and does not emit changes', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    const removeButton = editor.shadowRoot.querySelectorAll('button[data-action="remove-entity"]')[0];
+    expect(removeButton.getAttribute('disabled')).toBe('');
+
+    dispatchClick(removeButton);
+
+    expect(events).toHaveLength(0);
+  });
+
   it('repeated equivalent setConfig does not wipe a draft edit', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
