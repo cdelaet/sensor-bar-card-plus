@@ -105,6 +105,47 @@ scale:
 
 > Legacy flat YAML remains supported. See Legacy Compatibility near the end of this README if you want to migrate older dashboards.
 
+## Visual Editor
+
+Sensor Bar Card Plus now includes an advanced Visual Editor for Home Assistant Lovelace. The editor is designed to generate normal SBCP YAML while keeping advanced manual configuration fully viable.
+
+What the Visual Editor supports:
+
+- structured YAML output for edited fields
+- card-level defaults with per-entity overrides
+- dynamic `scale`, `target`, and `baseline` values driven by Home Assistant entities
+- controls for target, baseline, peak, and needle behavior
+- segment and gradient stop editing with live previews
+- entity management actions for move, duplicate, and remove
+- inheritance behavior where entity settings follow card settings until you change them
+- visible default bands and default gradients that stay out of emitted YAML until customized
+
+Example structured config:
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Power
+scale:
+  min:
+    fixed: 0
+  max:
+    fixed: 5000
+target:
+  at:
+    fixed: 2500
+peak:
+  enabled: true
+bar:
+  fill_style: band_gradient
+entities:
+  - entity: sensor.grid_power
+    name: Grid
+  - entity: sensor.solar_power
+    name: Solar
+```
+
+The Visual Editor is feature-rich and extensively tested, but this is its first major release. If you find editor edge cases, please open a GitHub issue with reproduction steps.
+
 
 ## Rendering Modes
 
@@ -1776,6 +1817,21 @@ npm run test:visual:update
 `npm test` runs the unit suite first and then the visual regression suite.
 
 The visual regression suite covers baseline rendering, fill styles, target and peak markers, compact layouts, and clipping or rounded-edge regressions.
+
+## Home Assistant Tile Bar Gauge vs Sensor Bar Card Plus
+
+Home Assistant Tile Bar Gauge is a great fit for simple native Tile dashboards where you want a compact built-in bar without much configuration overhead.
+
+Sensor Bar Card Plus focuses on advanced standalone and multi-entity visualization. It is the better fit when you want:
+
+- multi-entity bar layouts in one card
+- structured per-entity overrides
+- dynamic scale, target, and baseline entities
+- advanced marker behavior such as peak and needle modes
+- segment-based and gradient-based color systems with previews
+- finer control over formatting, layout, and semantic color behavior
+
+If Home Assistant’s native Tile ecosystem continues to evolve, a Tile-oriented SBCP variant may be considered later. For now, SBCP is intentionally optimized as a dedicated advanced visualization card.
 
 
 ## Project Origin
