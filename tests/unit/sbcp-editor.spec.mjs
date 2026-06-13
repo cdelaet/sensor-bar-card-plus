@@ -40,6 +40,16 @@ function dispatchClick(el) {
   });
 }
 
+function dispatchKeydown(el, key) {
+  el.dispatchEvent({
+    type: 'keydown',
+    key,
+    bubbles: true,
+    composed: true,
+    preventDefault() {},
+  });
+}
+
 function dispatchValueChanged(el, value) {
   el.value = value;
   el.dispatchEvent({
@@ -141,6 +151,81 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(events).toHaveLength(1);
     expect(events[0].detail.config.entities).toEqual([
       { entity: 'sensor.one', icon: 'mdi:thermometer', custom_key: 'keep' },
+    ]);
+  });
+
+  it('empty entity name is suppressed from emitted config', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one', name: 'Kitchen', custom_key: 'keep' }],
+    });
+
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-name"]')[0], '');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', custom_key: 'keep' },
+    ]);
+  });
+
+  it('whitespace-only entity name is suppressed from emitted config', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one', name: 'Kitchen', custom_key: 'keep' }],
+    });
+
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-name"]')[0], '   ');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', custom_key: 'keep' },
+    ]);
+  });
+
+  it('empty entity icon is suppressed from emitted config', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one', icon: 'mdi:flash', custom_key: 'keep' }],
+    });
+
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-icon"]')[0], '');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', custom_key: 'keep' },
+    ]);
+  });
+
+  it('whitespace-only entity icon is suppressed from emitted config', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one', icon: 'mdi:flash', custom_key: 'keep' }],
+    });
+
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-icon"]')[0], '   ');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', custom_key: 'keep' },
+    ]);
+  });
+
+  it('preserves icon false during unrelated editor serialization', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one', icon: false, custom_key: 'keep' }],
+    });
+
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-name"]')[0], 'Kitchen');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', name: 'Kitchen', icon: false, custom_key: 'keep' },
     ]);
   });
 
@@ -2696,7 +2781,9 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchChange(editor.shadowRoot.querySelector('#baseline-mode'), 'disabled');
 
     expect(events.at(-1).detail.config.bar).toEqual({
-      needle: true,
+      needle: {
+        show: true,
+      },
       fill_style: 'soft_bands',
     });
     expect(events.at(-1).detail.config.baseline).toEqual({
@@ -2740,7 +2827,7 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchInput(editor.shadowRoot.querySelector('#baseline-value'), '0');
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', bar: { needle: true } },
+      { entity: 'sensor.one', bar: { needle: { show: true } } },
     ]);
     expect(events.at(-1).detail.config.baseline).toEqual({
       at: { fixed: 0 },
@@ -2763,7 +2850,7 @@ describe('Sensor Bar Card Plus editor', () => {
 
     expect(events.at(-1).detail.config.entities).toEqual([
       { entity: 'sensor.one', name: 'One', baseline: { at: { fixed: 500 } } },
-      { entity: 'sensor.two', name: 'Two', bar: { needle: true } },
+      { entity: 'sensor.two', name: 'Two', bar: { needle: { show: true } } },
     ]);
   });
 
@@ -3044,7 +3131,7 @@ describe('Sensor Bar Card Plus editor', () => {
     inheritToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', bar: { needle: true } },
+      { entity: 'sensor.one', name: 'One', bar: { needle: { show: true } } },
     ]);
   });
 
@@ -3640,6 +3727,27 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#bar-needle-mode').value).toBe('enabled');
   });
 
+  it('editing unrelated fields still canonicalizes legacy boolean card-level needle to object form', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      title: 'Power',
+      bar: {
+        needle: true,
+      },
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#title'), 'Updated Power');
+
+    expect(events.at(-1).detail.config.bar).toEqual({
+      needle: {
+        show: true,
+      },
+    });
+  });
+
   it('loading legacy boolean per-entity needle false renders as disabled override', () => {
     const editor = createEditor();
     editor.setConfig({
@@ -3702,6 +3810,35 @@ describe('Sensor Bar Card Plus editor', () => {
           needle: {
             show: true,
             color: '#ff9800',
+          },
+        },
+      },
+    ]);
+  });
+
+  it('editing unrelated fields still canonicalizes legacy boolean per-entity needle to object form', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{
+        entity: 'sensor.one',
+        name: 'One',
+        bar: {
+          needle: true,
+        },
+      }],
+    });
+
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-name"]')[0], 'Updated One');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      {
+        entity: 'sensor.one',
+        name: 'Updated One',
+        bar: {
+          needle: {
+            show: true,
           },
         },
       },
@@ -4350,6 +4487,42 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#card-group-gradient-stops').getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('card-level empty gradient config prefills the draft row at 0 without emitting config', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      bar: {
+        fill_style: 'gradient',
+      },
+    });
+
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
+    expect(editor.shadowRoot.querySelector('#gradient-draft-pos').value).toBe('0');
+    expect(events).toHaveLength(0);
+  });
+
+  it('card-level draft Add button commits the first valid stop into the local committed list', async () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      bar: {
+        fill_style: 'gradient',
+      },
+    });
+
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
+    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-pos'), '0');
+    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-color'), '#4CAF50');
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-gradient-stop"]')[0]);
+    await flushTimers();
+
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')).toHaveLength(1);
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[0].value).toBe('0');
+    expect(events).toHaveLength(0);
+  });
+
   it('card-level gradient stops subgroup toggles open and shows inactive note when fill style is not gradient', () => {
     const editor = createEditor();
 
@@ -4370,7 +4543,29 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.innerHTML).toContain('Only used with Gradient fill style');
   });
 
-  it('card-level gradient stop edits write canonical structured bar.gradient_stops', () => {
+  it('card-level gradient draft row is local only and not emitted while typing', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      bar: {
+        fill_style: 'gradient',
+        gradient_stops: [
+          { pos: 0, color: '#4CAF50' },
+          { pos: 100, color: '#F44336' },
+        ],
+      },
+    });
+
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
+    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-pos'), '50');
+    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-color'), '#ff9800');
+
+    expect(events).toHaveLength(0);
+    expect(editor.shadowRoot.querySelector('#gradient-draft-pos').value).toBe('50');
+  });
+
+  it('card-level Add stop commits the draft row, sorts it, and preserves canonical bar.gradient_stops', async () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4386,46 +4581,22 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[1], '50');
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-color"]')[1], '#ff9800');
-
-    expect(events.at(-1).detail.config.bar.gradient_stops).toEqual([
-      { pos: 0, color: '#4CAF50' },
-      { pos: 50, color: '#ff9800' },
-    ]);
-    expect(events.at(-1).detail.config.gradient_stops).toBeUndefined();
-    expect(events.at(-1).detail.config.custom_top_level).toBe('keep');
-  });
-
-  it('card-level Add stop uses midpoint defaults and Remove stop updates the structured output', async () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({
-      bar: {
-        fill_style: 'gradient',
-        gradient_stops: [
-          { pos: 0, color: '#4CAF50' },
-          { pos: 100, color: '#F44336' },
-        ],
-      },
-    });
-
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
+    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-pos'), '50');
+    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-color'), '#00ff00');
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-gradient-stop"]')[0]);
     await flushTimers();
 
-    expect(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[2].value).toBe('50');
-
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="remove-gradient-stop"]')[2]);
-
     expect(events.at(-1).detail.config.bar.gradient_stops).toEqual([
       { pos: 0, color: '#4CAF50' },
+      { pos: 50, color: '#00ff00' },
       { pos: 100, color: '#F44336' },
     ]);
+    expect(events.at(-1).detail.config.gradient_stops).toBeUndefined();
+    expect(events.at(-1).detail.config.custom_top_level).toBe('keep');
+    expect(editor.shadowRoot.querySelector('#gradient-draft-pos').value).toBe('');
   });
 
-  it('card-level gradient stop serialization sorts ascending by pos', () => {
+  it('card-level gradient stop edits write canonical structured bar.gradient_stops and auto-sort by pos', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4440,7 +4611,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[0], '60');
+    dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[0], '60');
 
     expect(events.at(-1).detail.config.bar.gradient_stops).toEqual([
       { pos: 20, color: '#4CAF50' },
@@ -4448,7 +4619,183 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('card-level default gradient is suppressed from emitted config', async () => {
+  it('card-level draft Add is disabled for duplicate positions and 100 clamp saturation', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      bar: {
+        fill_style: 'gradient',
+        gradient_stops: [
+          { pos: 0, color: '#4CAF50' },
+          { pos: 100, color: '#F44336' },
+        ],
+      },
+    });
+
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
+    expect(editor.shadowRoot.querySelector('#gradient-draft-pos').value).toBe('');
+    expect(editor.shadowRoot.querySelectorAll('button[data-action="add-gradient-stop"]')[0].getAttribute('disabled')).not.toBeNull();
+    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-pos'), '100');
+    expect(editor.shadowRoot.querySelectorAll('button[data-action="add-gradient-stop"]')[0].getAttribute('disabled')).not.toBeNull();
+    expect(editor.shadowRoot.innerHTML).toContain('A stop at this position already exists.');
+  });
+
+  it('card-level committed gradient pos input preserves intermediate typing state until blur commit', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      bar: {
+        fill_style: 'gradient',
+        gradient_stops: [
+          { pos: 0, color: '#4CAF50' },
+          { pos: 100, color: '#F44336' },
+        ],
+      },
+    });
+
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
+    const posInput = editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[1];
+
+    dispatchInput(posInput, '5');
+    expect(posInput.value).toBe('5');
+    expect(events).toHaveLength(0);
+
+    dispatchInput(posInput, '50');
+    expect(posInput.value).toBe('50');
+    expect(events).toHaveLength(0);
+
+    dispatchChange(posInput, '50');
+    expect(events.at(-1).detail.config.bar.gradient_stops).toEqual([
+      { pos: 0, color: '#4CAF50' },
+      { pos: 50, color: '#F44336' },
+    ]);
+  });
+
+  it('card-level committed gradient pos input commits on Enter and sorts after commit', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      bar: {
+        fill_style: 'gradient',
+        gradient_stops: [
+          { pos: 80, color: '#F44336' },
+          { pos: 20, color: '#4CAF50' },
+        ],
+      },
+    });
+
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
+    const posInput = editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[0];
+    dispatchInput(posInput, '60');
+
+    expect(events).toHaveLength(0);
+    dispatchKeydown(posInput, 'Enter');
+
+    expect(events.at(-1).detail.config.bar.gradient_stops).toEqual([
+      { pos: 20, color: '#4CAF50' },
+      { pos: 60, color: '#F44336' },
+    ]);
+  });
+
+  it('card-level duplicate committed gradient pos validation happens only on commit', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      bar: {
+        fill_style: 'gradient',
+        gradient_stops: [
+          { pos: 0, color: '#4CAF50' },
+          { pos: 100, color: '#F44336' },
+        ],
+      },
+    });
+
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
+    const posInput = editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[1];
+    dispatchInput(posInput, '0');
+
+    expect(posInput.value).toBe('0');
+    expect(events).toHaveLength(0);
+
+    dispatchChange(posInput, '0');
+    expect(events).toHaveLength(0);
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[1].value).toBe('0');
+  });
+
+  it('card-level draft Add uses the latest typed pos value without requiring blur', async () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      bar: {
+        fill_style: 'gradient',
+        gradient_stops: [
+          { pos: 0, color: '#4CAF50' },
+          { pos: 100, color: '#F44336' },
+        ],
+      },
+    });
+
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
+    const draftInput = editor.shadowRoot.querySelector('#gradient-draft-pos');
+    dispatchInput(draftInput, '5');
+    dispatchInput(draftInput, '50');
+    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-color'), '#00ff00');
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-gradient-stop"]')[0]);
+    await flushTimers();
+
+    expect(events.at(-1).detail.config.bar.gradient_stops).toEqual([
+      { pos: 0, color: '#4CAF50' },
+      { pos: 50, color: '#00ff00' },
+      { pos: 100, color: '#F44336' },
+    ]);
+  });
+
+  it('card-level draft prefills from the committed interval and clamps to 100', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      bar: {
+        fill_style: 'gradient',
+        gradient_stops: [
+          { pos: 40, color: '#4CAF50' },
+          { pos: 90, color: '#F44336' },
+        ],
+      },
+    });
+
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
+    expect(editor.shadowRoot.querySelector('#gradient-draft-pos').value).toBe('100');
+  });
+
+  it('card-level Remove stop updates the structured output and re-sorts remaining rows', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      bar: {
+        fill_style: 'gradient',
+        gradient_stops: [
+          { pos: 0, color: '#4CAF50' },
+          { pos: 50, color: '#FF9800' },
+          { pos: 100, color: '#F44336' },
+        ],
+      },
+    });
+
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="remove-gradient-stop"]')[1]);
+
+    expect(events.at(-1).detail.config.bar.gradient_stops).toEqual([
+      { pos: 0, color: '#4CAF50' },
+      { pos: 100, color: '#F44336' },
+    ]);
+  });
+
+  it('card-level default gradient is suppressed from emitted config', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4464,12 +4811,11 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[1], '50');
+    dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[1], '50');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-color"]')[1], '#FF9800');
+    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-pos'), '100');
+    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-color'), '#F44336');
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-gradient-stop"]')[0]);
-    await flushTimers();
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[2], '100');
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-color"]')[2], '#F44336');
 
     expect(events.at(-1).detail.config.bar?.gradient_stops).toBeUndefined();
     expect(events.at(-1).detail.config.gradient_stops).toBeUndefined();
@@ -4501,7 +4847,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(events.at(-1).detail.config.custom_key).toBe('keep');
   });
 
-  it('invalid gradient rows are pruned from emitted config', () => {
+  it('card-level invalid draft handling keeps Add disabled and updates preview only for valid draft input', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4510,15 +4856,24 @@ describe('Sensor Bar Card Plus editor', () => {
         fill_style: 'gradient',
         gradient_stops: [
           { pos: 0, color: '#4CAF50' },
-          { pos: 'bad', color: '#F44336' },
+          { pos: 100, color: '#F44336' },
         ],
       },
     });
 
     dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-color"]')[0], '#00ff00');
+    const originalStyle = editor.shadowRoot.querySelector('#card-gradient-preview-track').getAttribute('style');
+    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-pos'), 'bad');
+    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-color'), '#00ff00');
 
-    expect(events.at(-1).detail.config.bar?.gradient_stops).toBeUndefined();
+    expect(events).toHaveLength(0);
+    expect(editor.shadowRoot.querySelectorAll('button[data-action="add-gradient-stop"]')[0].getAttribute('disabled')).not.toBeNull();
+    expect(editor.shadowRoot.innerHTML).toContain('Position must be a number between 0 and 100.');
+    expect(editor.shadowRoot.querySelector('#card-gradient-preview-track').getAttribute('style')).toBe(originalStyle);
+
+    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-pos'), '50');
+    expect(editor.shadowRoot.querySelectorAll('button[data-action="add-gradient-stop"]')[0].getAttribute('disabled')).toBeNull();
+    expect(editor.shadowRoot.querySelector('#card-gradient-preview-track').getAttribute('style')).not.toBe(originalStyle);
   });
 
   it('per-entity gradient stops subsection is collapsed by default and keeps independent state', () => {
@@ -4543,6 +4898,26 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-1-group-gradient-stops').getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('per-entity draft Add button commits the first valid stop into the local committed list', async () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{ entity: 'sensor.one', bar: { fill_style: 'gradient' } }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-gradient-draft-pos'), '0');
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-gradient-draft-color'), '#4CAF50');
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-entity-gradient-stop"]')[0]);
+    await flushTimers();
+
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-pos"]')).toHaveLength(1);
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-pos"]')[0].value).toBe('0');
+    expect(events).toHaveLength(0);
+  });
+
   it('per-entity gradient stop edits write canonical structured entities[index].bar.gradient_stops', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
@@ -4563,7 +4938,7 @@ describe('Sensor Bar Card Plus editor', () => {
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-pos"]')[1], '25');
+    dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-pos"]')[1], '25');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-color"]')[1], '#ff9800');
 
     expect(events.at(-1).detail.config.entities).toEqual([
@@ -4581,7 +4956,7 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('per-entity Add stop and Remove stop reuse gradient row defaults cleanly', async () => {
+  it('per-entity draft row is local only until Add is clicked', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4599,12 +4974,142 @@ describe('Sensor Bar Card Plus editor', () => {
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-gradient-draft-pos'), '50');
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-gradient-draft-color'), '#ff9800');
+
+    expect(events).toHaveLength(0);
+    expect(editor.shadowRoot.querySelector('#entity-0-gradient-draft-pos').value).toBe('50');
+  });
+
+  it('per-entity committed gradient pos input preserves intermediate typing state until blur commit', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{
+        entity: 'sensor.one',
+        bar: {
+          gradient_stops: [
+            { pos: 0, color: '#4CAF50' },
+            { pos: 100, color: '#F44336' },
+          ],
+        },
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
+    const posInput = editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-pos"]')[1];
+
+    dispatchInput(posInput, '2');
+    expect(posInput.value).toBe('2');
+    expect(events).toHaveLength(0);
+
+    dispatchInput(posInput, '25');
+    expect(posInput.value).toBe('25');
+    expect(events).toHaveLength(0);
+
+    dispatchChange(posInput, '25');
+    expect(events.at(-1).detail.config.entities[0].bar.gradient_stops).toEqual([
+      { pos: 0, color: '#4CAF50' },
+      { pos: 25, color: '#F44336' },
+    ]);
+  });
+
+  it('per-entity draft Add uses the latest typed pos value without requiring blur', async () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{
+        entity: 'sensor.one',
+        bar: {
+          gradient_stops: [
+            { pos: 0, color: '#4CAF50' },
+            { pos: 100, color: '#F44336' },
+          ],
+        },
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
+    const draftInput = editor.shadowRoot.querySelector('#entity-0-gradient-draft-pos');
+    dispatchInput(draftInput, '5');
+    dispatchInput(draftInput, '50');
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-gradient-draft-color'), '#00ff00');
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-entity-gradient-stop"]')[0]);
     await flushTimers();
 
-    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-pos"]')[2].value).toBe('50');
+    expect(events.at(-1).detail.config.entities[0].bar.gradient_stops).toEqual([
+      { pos: 0, color: '#4CAF50' },
+      { pos: 50, color: '#00ff00' },
+      { pos: 100, color: '#F44336' },
+    ]);
+  });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="remove-entity-gradient-stop"]')[2]);
+  it('per-entity Add stop commits the draft row, sorts it, and keeps unrelated keys', async () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{
+        entity: 'sensor.one',
+        bar: {
+          gradient_stops: [
+            { pos: 0, color: '#4CAF50' },
+            { pos: 100, color: '#F44336' },
+          ],
+          color: '#123456',
+        },
+        custom_entity_key: 'keep',
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-gradient-draft-pos'), '50');
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-gradient-draft-color'), '#00ff00');
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-entity-gradient-stop"]')[0]);
+    await flushTimers();
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      {
+        entity: 'sensor.one',
+        bar: {
+          gradient_stops: [
+            { pos: 0, color: '#4CAF50' },
+            { pos: 50, color: '#00ff00' },
+            { pos: 100, color: '#F44336' },
+          ],
+          color: '#123456',
+        },
+        custom_entity_key: 'keep',
+      },
+    ]);
+    expect(editor.shadowRoot.querySelector('#entity-0-gradient-draft-pos').value).toBe('');
+  });
+
+  it('per-entity Remove stop updates structured output and re-sorts remaining rows', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entities: [{
+        entity: 'sensor.one',
+        bar: {
+          gradient_stops: [
+            { pos: 0, color: '#4CAF50' },
+            { pos: 50, color: '#FF9800' },
+            { pos: 100, color: '#F44336' },
+          ],
+        },
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="remove-entity-gradient-stop"]')[1]);
 
     expect(events.at(-1).detail.config.entities).toEqual([
       {
@@ -4688,6 +5193,35 @@ describe('Sensor Bar Card Plus editor', () => {
         },
       },
     ]);
+  });
+
+  it('per-entity duplicate draft positions are blocked and preview updates only for valid drafts', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entities: [{
+        entity: 'sensor.one',
+        bar: {
+          gradient_stops: [
+            { pos: 0, color: '#4CAF50' },
+            { pos: 100, color: '#F44336' },
+          ],
+        },
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
+    const originalStyle = editor.shadowRoot.querySelector('#entity-0-gradient-preview-track').getAttribute('style');
+
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-gradient-draft-pos'), '100');
+    expect(editor.shadowRoot.querySelectorAll('button[data-action="add-entity-gradient-stop"]')[0].getAttribute('disabled')).not.toBeNull();
+    expect(editor.shadowRoot.innerHTML).toContain('A stop at this position already exists.');
+    expect(editor.shadowRoot.querySelector('#entity-0-gradient-preview-track').getAttribute('style')).toBe(originalStyle);
+
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-gradient-draft-pos'), '50');
+    expect(editor.shadowRoot.querySelectorAll('button[data-action="add-entity-gradient-stop"]')[0].getAttribute('disabled')).toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-gradient-preview-track').getAttribute('style')).not.toBe(originalStyle);
   });
 
   it('per-entity segments summary renders inherited', () => {

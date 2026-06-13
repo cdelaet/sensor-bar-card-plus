@@ -3411,10 +3411,14 @@ class SensorBarCardPlusEditor extends HTMLElement {
     this._expandedOverrideGroups = new Set();
     this._expandedCardGroups = new Set();
     this._gradientStopsDrafts = new Map();
+    this._gradientStopsUiRows = new Map();
+    this._gradientStopPosTexts = new Map();
+    this._gradientStopValidationMessages = new Map();
     this._boundHandleClick = (event) => this._handleClick(event);
     this._boundHandleChange = (event) => this._handleChange(event);
     this._boundHandleInput = (event) => this._handleInput(event);
     this._boundHandleValueChanged = (event) => this._handleValueChanged(event);
+    this._boundHandleKeydown = (event) => this._handleKeydown(event);
   }
 
   setConfig(config) {
@@ -3436,6 +3440,9 @@ class SensorBarCardPlusEditor extends HTMLElement {
     this._config = nextConfig;
     this._draftConfig = this._cloneDeep(nextConfig);
     this._gradientStopsDrafts = new Map();
+    this._gradientStopsUiRows = new Map();
+    this._gradientStopPosTexts = new Map();
+    this._gradientStopValidationMessages = new Map();
 
     if (shouldRender) {
       this._render();
@@ -3643,22 +3650,41 @@ class SensorBarCardPlusEditor extends HTMLElement {
           ...rawEntry,
           entity: entry.entity,
         };
-        if (entry.name || Object.prototype.hasOwnProperty.call(rawEntry, 'name')) {
-          mergedEntry.name = entry.name;
+        const normalizedName = this._normalizeTextValue(entry.name).trim();
+        if (normalizedName) {
+          mergedEntry.name = normalizedName;
+        } else {
+          delete mergedEntry.name;
         }
-        if (entry.icon || Object.prototype.hasOwnProperty.call(rawEntry, 'icon')) {
-          mergedEntry.icon = entry.icon;
+        const rawIconValue = entry?.icon;
+        const normalizedIcon = typeof rawIconValue === 'string'
+          ? rawIconValue.trim()
+          : rawIconValue;
+        if (normalizedIcon === false) {
+          mergedEntry.icon = false;
+        } else if (typeof normalizedIcon === 'string' && normalizedIcon) {
+          mergedEntry.icon = normalizedIcon;
+        } else if (rawEntry.icon === false) {
+          mergedEntry.icon = false;
+        } else {
+          delete mergedEntry.icon;
         }
         return mergedEntry;
       }
       const nextEntry = {
         entity: entry.entity,
       };
-      if (entry.name) {
-        nextEntry.name = entry.name;
+      const normalizedName = this._normalizeTextValue(entry.name).trim();
+      if (normalizedName) {
+        nextEntry.name = normalizedName;
       }
-      if (entry.icon) {
-        nextEntry.icon = entry.icon;
+      const normalizedIcon = typeof entry?.icon === 'string'
+        ? entry.icon.trim()
+        : entry?.icon;
+      if (normalizedIcon === false) {
+        nextEntry.icon = false;
+      } else if (typeof normalizedIcon === 'string' && normalizedIcon) {
+        nextEntry.icon = normalizedIcon;
       }
       return nextEntry;
     });
@@ -3680,7 +3706,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _emitConfigChanged() {
-    const emittedConfig = this._cloneDeep(this._draftConfig);
+    const emittedConfig = this._cleanupEditorEmittedConfig(this._cloneDeep(this._draftConfig));
     const nextConfigJson = this._serializeConfig(emittedConfig);
     if (nextConfigJson === this._lastEmittedConfigJson) {
       return false;
@@ -3737,16 +3763,111 @@ class SensorBarCardPlusEditor extends HTMLElement {
       if (!normalizedValue.trim()) {
         return this._setValueAtPath([key], undefined);
       }
-      return this._setValueAtPath([key], normalizedValue);
+      return this._setValueAtPath([key], normalizedValue.trim());
     }
-    const nextEntities = this._getEntitiesValue().map((entry, entryIndex) => (
-      entryIndex === index ? { ...entry, [key]: normalizedValue } : entry
-    ));
-    const nextEntries = this._buildEntityConfigEntries(nextEntities);
-    if (Array.isArray(this._draftConfig.entities) || nextEntries.length > 1 || !this._draftConfig.entity) {
-      return this._setValueAtPath(['entities'], nextEntries);
+    const nextConfig = this._withEntityScopeConfig((entries) => {
+      const rawEntry = entries[index];
+      const nextEntry = this._isObject(rawEntry)
+        ? this._cloneDeep(rawEntry)
+        : { entity: rawEntry?.entity ?? '' };
+      if (!normalizedValue.trim()) {
+        delete nextEntry[key];
+      } else {
+        nextEntry[key] = normalizedValue.trim();
+      }
+      entries[index] = nextEntry;
+      return entries;
+    });
+    return this._applyUserConfig(nextConfig);
+  }
+
+  _cleanupEntityIdentityForEmit(target) {
+    if (!this._isObject(target)) {
+      return target;
     }
-    return this._setValueAtPath(['entity'], nextEntities[0]?.entity ?? '');
+    const nextTarget = this._cloneDeep(target);
+    const normalizedName = this._normalizeTextValue(nextTarget.name).trim();
+    if (!normalizedName) {
+      delete nextTarget.name;
+    } else {
+      nextTarget.name = normalizedName;
+    }
+
+    if (nextTarget.icon === false) {
+      return nextTarget;
+    }
+    const normalizedIcon = this._normalizeTextValue(nextTarget.icon).trim();
+    if (!normalizedIcon) {
+      delete nextTarget.icon;
+    } else {
+      nextTarget.icon = normalizedIcon;
+    }
+    return nextTarget;
+  }
+
+  _cleanupNeedleForEmit(target, scope = { type: 'card' }) {
+    if (!this._isObject(target) || !this._isObject(target.bar)) {
+      return target;
+    }
+    const nextTarget = this._cloneDeep(target);
+    const rawNeedle = nextTarget.bar?.needle;
+    if (rawNeedle === undefined) {
+      return nextTarget;
+    }
+
+    const defaultColor = this._normalizeColorComparisonValue('#ffffff');
+    let nextNeedle = null;
+
+    if (rawNeedle === true) {
+      nextNeedle = { show: true };
+    } else if (rawNeedle === false) {
+      nextNeedle = scope?.type === 'entity' ? { show: false } : null;
+    } else if (this._isObject(rawNeedle)) {
+      const color = this._normalizeTextValue(rawNeedle.color).trim();
+      if (rawNeedle.show === true) {
+        nextNeedle = { show: true };
+      } else if (rawNeedle.show === false) {
+        nextNeedle = scope?.type === 'entity' ? { show: false } : null;
+      }
+      if (nextNeedle && color && this._normalizeColorComparisonValue(color) !== defaultColor) {
+        nextNeedle.color = color;
+      }
+    } else {
+      nextNeedle = null;
+    }
+
+    if (nextNeedle) {
+      nextTarget.bar.needle = nextNeedle;
+    } else {
+      delete nextTarget.bar.needle;
+      if (!Object.keys(nextTarget.bar).length) {
+        delete nextTarget.bar;
+      }
+    }
+    return nextTarget;
+  }
+
+  _cleanupEditorEmittedConfig(config) {
+    if (!this._isObject(config)) {
+      return config;
+    }
+    let nextConfig = this._cleanupEntityIdentityForEmit(config);
+    nextConfig = this._cleanupNeedleForEmit(nextConfig, { type: 'card' });
+
+    if (Array.isArray(nextConfig.entities)) {
+      nextConfig.entities = nextConfig.entities.map((entry) => {
+        if (!this._isObject(entry)) {
+          return entry;
+        }
+        const cleanedEntry = this._cleanupNeedleForEmit(
+          this._cleanupEntityIdentityForEmit(entry),
+          { type: 'entity' },
+        );
+        return cleanedEntry;
+      });
+    }
+
+    return nextConfig;
   }
 
   _getScopedPath(scope, keyPath) {
@@ -4255,6 +4376,178 @@ class SensorBarCardPlusEditor extends HTMLElement {
       .sort((left, right) => left.pos - right.pos);
   }
 
+  _getGradientStopDraftColorDefault(scope = { type: 'card' }) {
+    const committedStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
+    if (committedStops.length) {
+      return committedStops[committedStops.length - 1].color ?? '#4CAF50';
+    }
+    return this._getDefaultGradientStops()[0].color;
+  }
+
+  _getNextSuggestedGradientStopPos(scope = { type: 'card' }) {
+    const committedStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
+    if (!committedStops.length) {
+      return 0;
+    }
+
+    const highest = committedStops[committedStops.length - 1];
+    if (highest.pos >= 100) {
+      return '';
+    }
+
+    let suggestedPos;
+    if (committedStops.length === 1) {
+      suggestedPos = highest.pos + 25;
+    } else {
+      const previous = committedStops[committedStops.length - 2];
+      suggestedPos = highest.pos + (highest.pos - previous.pos);
+    }
+
+    const clampedPos = Math.min(100, Math.max(0, suggestedPos));
+    if (committedStops.some((stop) => stop.pos === clampedPos)) {
+      return '';
+    }
+    return clampedPos;
+  }
+
+  _getGradientStopsDraftKey(scope) {
+    return scope?.type === 'entity' ? `entity:${scope.index}` : 'card';
+  }
+
+  _getGradientStopPosTextKey(scope, stopIndex) {
+    return `${this._getGradientStopsDraftKey(scope)}:pos:${stopIndex}`;
+  }
+
+  _getGradientStopPosText(scope = { type: 'card' }, stopIndex, fallbackValue = '') {
+    const key = this._getGradientStopPosTextKey(scope, stopIndex);
+    if (this._gradientStopPosTexts.has(key)) {
+      return this._gradientStopPosTexts.get(key);
+    }
+    if (fallbackValue === '' || fallbackValue === null || fallbackValue === undefined) {
+      return '';
+    }
+    return String(fallbackValue);
+  }
+
+  _setGradientStopPosText(scope, stopIndex, rawValue) {
+    this._gradientStopPosTexts.set(
+      this._getGradientStopPosTextKey(scope, stopIndex),
+      this._normalizeTextValue(rawValue),
+    );
+  }
+
+  _clearGradientStopPosText(scope, stopIndex) {
+    this._gradientStopPosTexts.delete(this._getGradientStopPosTextKey(scope, stopIndex));
+  }
+
+  _clearGradientStopScopeTextState(scope) {
+    const prefix = `${this._getGradientStopsDraftKey(scope)}:pos:`;
+    for (const key of this._gradientStopPosTexts.keys()) {
+      if (key.startsWith(prefix)) {
+        this._gradientStopPosTexts.delete(key);
+      }
+    }
+    for (const key of this._gradientStopValidationMessages.keys()) {
+      if (key.startsWith(prefix)) {
+        this._gradientStopValidationMessages.delete(key);
+      }
+    }
+  }
+
+  _getGradientStopsUiRows(scope = { type: 'card' }) {
+    const key = this._getGradientStopsDraftKey(scope);
+    if (this._gradientStopsUiRows.has(key)) {
+      return this._cloneDeep(this._gradientStopsUiRows.get(key));
+    }
+    return null;
+  }
+
+  _setGradientStopsUiRows(scope, stops) {
+    this._gradientStopsUiRows.set(this._getGradientStopsDraftKey(scope), this._cloneDeep(stops));
+  }
+
+  _createGradientStopDraftState(scope = { type: 'card' }) {
+    const suggestedPos = this._getNextSuggestedGradientStopPos(scope);
+    return {
+      pos: suggestedPos === '' ? '' : String(suggestedPos),
+      color: this._getGradientStopDraftColorDefault(scope),
+    };
+  }
+
+  _getGradientStopsDraftState(scope = { type: 'card' }) {
+    const key = this._getGradientStopsDraftKey(scope);
+    if (!this._gradientStopsDrafts.has(key)) {
+      this._gradientStopsDrafts.set(key, this._createGradientStopDraftState(scope));
+    }
+    return this._cloneDeep(this._gradientStopsDrafts.get(key));
+  }
+
+  _setGradientStopsDraftState(scope, nextDraft, options = {}) {
+    this._gradientStopsDrafts.set(this._getGradientStopsDraftKey(scope), {
+      pos: nextDraft?.pos ?? '',
+      color: nextDraft?.color ?? this._getGradientStopDraftColorDefault(scope),
+    });
+    if (options?.refreshOnly) {
+      this._refreshGradientDraftUi(scope);
+      return;
+    }
+    this._render();
+  }
+
+  _setGradientStopsDraftField(scope, field, rawValue) {
+    const currentDraft = this._getGradientStopsDraftState(scope);
+    const nextValue = field === 'color'
+      ? this._normalizeTextValue(rawValue).trim()
+      : this._normalizeTextValue(rawValue);
+    this._setGradientStopsDraftState(scope, {
+      ...currentDraft,
+      [field]: nextValue,
+    }, { refreshOnly: field === 'pos' });
+  }
+
+  _getValidGradientDraftStop(scope = { type: 'card' }) {
+    const draft = this._getGradientStopsDraftState(scope);
+    const pos = this._normalizeGradientStopPosValue(draft.pos);
+    const color = this._normalizeTextValue(draft.color).trim();
+    if (pos === null || !color) {
+      return null;
+    }
+    return { pos, color };
+  }
+
+  _hasGradientStopDuplicate(scope = { type: 'card' }, candidatePos, excludeIndex = null) {
+    return this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope)).some((stop, index) => (
+      index !== excludeIndex && stop.pos === candidatePos
+    ));
+  }
+
+  _canAddGradientStop(scope = { type: 'card' }) {
+    const draftStop = this._getValidGradientDraftStop(scope);
+    if (!draftStop) {
+      return false;
+    }
+    return !this._hasGradientStopDuplicate(scope, draftStop.pos);
+  }
+
+  _getGradientDraftValidationMessage(scope = { type: 'card' }) {
+    const draft = this._getGradientStopsDraftState(scope);
+    const normalizedPosText = this._normalizeTextValue(draft.pos).trim();
+    const normalizedColor = this._normalizeTextValue(draft.color).trim();
+    if (!normalizedPosText) {
+      return 'Enter a position to add a stop.';
+    }
+    if (this._normalizeGradientStopPosValue(draft.pos) === null) {
+      return 'Position must be a number between 0 and 100.';
+    }
+    if (!normalizedColor) {
+      return 'Choose a color to add a stop.';
+    }
+    if (this._hasGradientStopDuplicate(scope, this._normalizeGradientStopPosValue(draft.pos))) {
+      return 'A stop at this position already exists.';
+    }
+    return '';
+  }
+
   _isDefaultGradientStops(stops) {
     const sanitizedStops = this._sanitizeGradientStopsForEmit(stops);
     const defaultStops = this._getDefaultGradientStops();
@@ -4270,8 +4563,10 @@ class SensorBarCardPlusEditor extends HTMLElement {
   _setScopedGradientStops(scope, stops, options = {}) {
     const sanitizedStops = this._sanitizeGradientStopsForEmit(stops);
     const shouldRemove = sanitizedStops.length < 2 || this._isDefaultGradientStops(sanitizedStops);
-    this._gradientStopsDrafts.set(this._getGradientStopsDraftKey(scope), this._cloneDeep(Array.isArray(stops) ? stops : []));
-    return this._applyScopedMutation(scope, (target) => {
+    const previousUiRowsJson = this._serializeConfig(this._getGradientStopsUiRows(scope) ?? []);
+    this._clearGradientStopScopeTextState(scope);
+    this._setGradientStopsUiRows(scope, sanitizedStops);
+    const applied = this._applyScopedMutation(scope, (target) => {
       let nextTarget = this._deletePathValue(target, ['gradient_stops']);
       nextTarget = this._deletePathValue(nextTarget, ['bar', 'gradient_stops']);
       if (!shouldRemove) {
@@ -4280,16 +4575,27 @@ class SensorBarCardPlusEditor extends HTMLElement {
       nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar']);
       return nextTarget;
     }, options);
+    if (applied === false && options?.rerender && this._serializeConfig(sanitizedStops) !== previousUiRowsJson) {
+      this._render();
+    }
+    return applied;
   }
 
   _clearGradientStopsOverride(scope) {
+    const previousUiRowsJson = this._serializeConfig(this._getGradientStopsUiRows(scope) ?? []);
     this._gradientStopsDrafts.delete(this._getGradientStopsDraftKey(scope));
-    return this._applyScopedMutation(scope, (target) => {
+    this._gradientStopsUiRows.delete(this._getGradientStopsDraftKey(scope));
+    this._clearGradientStopScopeTextState(scope);
+    const applied = this._applyScopedMutation(scope, (target) => {
       let nextTarget = this._deletePathValue(target, ['bar', 'gradient_stops']);
       nextTarget = this._deletePathValue(nextTarget, ['gradient_stops']);
       nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar']);
       return nextTarget;
     }, { rerender: true });
+    if (applied === false && previousUiRowsJson !== this._serializeConfig([])) {
+      this._render();
+    }
+    return applied;
   }
 
   _setScopedSegments(scope, segments, options = {}) {
@@ -4559,33 +4865,124 @@ class SensorBarCardPlusEditor extends HTMLElement {
     };
   }
 
-  _getNewGradientStopDefaults(scope = { type: 'card' }) {
-    const stops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
-    if (!stops.length) {
-      return { ...this._getDefaultGradientStops()[0] };
+  _commitGradientStopDraft(scope = { type: 'card' }) {
+    const draftStop = this._getValidGradientDraftStop(scope);
+    if (!draftStop || this._hasGradientStopDuplicate(scope, draftStop.pos)) {
+      this._refreshGradientDraftUi(scope);
+      return false;
     }
-    if (stops.length >= 2) {
-      let largestGap = null;
-      for (let index = 0; index < stops.length - 1; index += 1) {
-        const current = stops[index];
-        const next = stops[index + 1];
-        const gap = next.pos - current.pos;
-        if (gap > 0 && (!largestGap || gap > largestGap.gap)) {
-          largestGap = { gap, left: current, right: next };
+    const committedStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
+    const nextStops = [...committedStops, draftStop].sort((left, right) => left.pos - right.pos);
+    const applied = this._setScopedGradientStops(scope, nextStops, { rerender: true });
+    if (applied !== false) {
+      this._gradientStopsDrafts.set(this._getGradientStopsDraftKey(scope), {
+        pos: (() => {
+          const suggestion = this._getNextSuggestedGradientStopPos(scope);
+          return suggestion === '' ? '' : String(suggestion);
+        })(),
+        color: draftStop.color,
+      });
+    }
+    return applied;
+  }
+
+  _getGradientPreviewDomIds(scope = { type: 'card' }) {
+    if (scope?.type === 'entity') {
+      return {
+        previewId: `entity-${scope.index}-gradient-preview`,
+        trackId: `entity-${scope.index}-gradient-preview-track`,
+        hintId: `entity-${scope.index}-gradient-draft-hint`,
+        addSelector: `button[data-action="add-entity-gradient-stop"][data-index="${scope.index}"]`,
+        draftInputId: `entity-${scope.index}-gradient-draft-pos`,
+      };
+    }
+    return {
+      previewId: 'card-gradient-preview',
+      trackId: 'card-gradient-preview-track',
+      hintId: 'gradient-draft-hint',
+      addSelector: 'button[data-action="add-gradient-stop"]',
+      draftInputId: 'gradient-draft-pos',
+    };
+  }
+
+  _refreshGradientDraftUi(scope = { type: 'card' }) {
+    if (!this.shadowRoot) {
+      return;
+    }
+    const getById = this.shadowRoot.getElementById?.bind(this.shadowRoot)
+      ?? ((id) => this.shadowRoot.querySelector?.(`#${id}`) ?? null);
+    const { previewId, trackId, hintId, addSelector, draftInputId } = this._getGradientPreviewDomIds(scope);
+    const addButton = this.shadowRoot.querySelector(addSelector);
+    if (addButton) {
+      addButton.disabled = !this._canAddGradientStop(scope);
+    }
+
+    const draftInput = getById(draftInputId);
+    if (draftInput && typeof draftInput.closest !== 'function') {
+      this._render();
+      return;
+    }
+    const draftContainer = draftInput?.closest('.gradient-stop-draft');
+    const nextMessage = this._getGradientDraftValidationMessage(scope);
+    const existingHint = getById(hintId);
+    if (nextMessage) {
+      if (existingHint) {
+        existingHint.textContent = nextMessage;
+      } else if (draftContainer) {
+        const hint = document.createElement('div');
+        hint.id = hintId;
+        hint.className = 'section-note';
+        hint.textContent = nextMessage;
+        draftContainer.appendChild(hint);
+      }
+    } else if (existingHint) {
+      existingHint.remove();
+    }
+
+    const preview = getById(previewId);
+    const track = getById(trackId);
+    if (!preview || !track) {
+      return;
+    }
+    track.setAttribute('style', this._getGradientPreviewStyle(scope) ?? '');
+    const markerStops = this._buildGradientPreviewEffectiveStops(scope);
+    const renderedStops = markerStops.length ? markerStops : this._getDefaultGradientStops();
+    track.innerHTML = renderedStops.map((stop, index) => `
+      <span
+        id="${previewId}-stop-${index}"
+        class="gradient-preview-stop"
+        style="left:${this._escapeAttribute(String(stop.pos))}%"
+        title="${this._escapeAttribute(`${stop.pos}%`)}"
+      ></span>
+    `).join('');
+  }
+
+  _commitGradientStopPosEdit(scope = { type: 'card' }, stopIndex, rawValue, inputEl = null) {
+    const nextPos = this._normalizeGradientStopPosValue(rawValue);
+    if (nextPos === null || this._hasGradientStopDuplicate(scope, nextPos, stopIndex)) {
+      if (inputEl?.setCustomValidity) {
+        inputEl.setCustomValidity(nextPos === null
+          ? 'Position must be a number between 0 and 100.'
+          : 'A stop at this position already exists.');
+        if (inputEl.reportValidity) {
+          inputEl.reportValidity();
         }
       }
-      if (largestGap) {
-        return {
-          pos: largestGap.left.pos + (largestGap.gap / 2),
-          color: largestGap.left.color ?? '#4a9eff',
-        };
-      }
+      return false;
     }
-    const previous = stops[stops.length - 1];
-    return {
-      pos: Math.min(previous.pos + 25, 100),
-      color: previous?.color ?? '#4a9eff',
-    };
+
+    if (inputEl?.setCustomValidity) {
+      inputEl.setCustomValidity('');
+    }
+
+    const currentStops = this._getScopedGradientStopsValue(scope);
+    const nextStops = currentStops.map((stop, currentStopIndex) => (
+      currentStopIndex === stopIndex
+        ? { ...stop, pos: nextPos }
+        : stop
+    ));
+    this._clearGradientStopPosText(scope, stopIndex);
+    return this._setScopedGradientStops(scope, nextStops, { rerender: true });
   }
 
   _getFillStyleValue() {
@@ -5254,20 +5651,20 @@ class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _getScopedGradientStopsValue(scope) {
-    const draftKey = this._getGradientStopsDraftKey(scope);
-    if (this._gradientStopsDrafts.has(draftKey)) {
-      return this._cloneDeep(this._gradientStopsDrafts.get(draftKey));
+    const localRows = this._getGradientStopsUiRows(scope);
+    if (Array.isArray(localRows)) {
+      return localRows;
     }
     return this._getScopedValue(scope, ['bar', 'gradient_stops'])
       ?? this._getScopedValue(scope, ['gradient_stops'])
       ?? [];
   }
 
-  _getGradientStopsDraftKey(scope) {
-    return scope?.type === 'entity' ? `entity:${scope.index}` : 'card';
-  }
-
   _hasGradientStopsOverride(scope) {
+    const localRows = this._getGradientStopsUiRows(scope);
+    if (Array.isArray(localRows) && localRows.length > 0) {
+      return true;
+    }
     return this._getScopedValue(scope, ['bar', 'gradient_stops']) !== undefined
       || this._getScopedValue(scope, ['gradient_stops']) !== undefined;
   }
@@ -5287,6 +5684,65 @@ class SensorBarCardPlusEditor extends HTMLElement {
       return 'Default gradient';
     }
     return `${gradientStops.length} stops`;
+  }
+
+  _buildGradientPreviewEffectiveStops(scope = { type: 'card' }) {
+    const committedStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
+    const draftStop = this._getValidGradientDraftStop(scope);
+    const previewStops = [...committedStops];
+    if (draftStop && !this._hasGradientStopDuplicate(scope, draftStop.pos)) {
+      previewStops.push(draftStop);
+    }
+    return previewStops.sort((left, right) => left.pos - right.pos);
+  }
+
+  _buildEditorGradientPreviewStyle(stops) {
+    if (!Array.isArray(stops) || !stops.length) {
+      return '';
+    }
+    const cssStops = stops
+      .map((stop) => {
+        const color = this._normalizeTextValue(stop.color).trim();
+        const pos = this._normalizeGradientStopPosValue(stop.p ?? stop.pos);
+        if (!color || pos === null) {
+          return null;
+        }
+        return `${color} ${pos}%`;
+      })
+      .filter(Boolean);
+    if (!cssStops.length) {
+      return '';
+    }
+    return `background:linear-gradient(to right,${cssStops.join(',')});background-repeat:no-repeat;`;
+  }
+
+  _getGradientPreviewStyle(scope = { type: 'card' }) {
+    const previewStops = this._buildGradientPreviewEffectiveStops(scope);
+    const resolvedStops = previewStops.length >= 2
+      ? previewStops.map((stop) => ({ p: stop.pos, color: stop.color }))
+      : this._getDefaultGradientStops().map((stop) => ({ p: stop.pos, color: stop.color }));
+    return this._buildEditorGradientPreviewStyle(resolvedStops);
+  }
+
+  _renderGradientPreview(scope = { type: 'card' }, options = {}) {
+    const previewId = options.previewId ?? 'gradient-preview';
+    const trackId = options.trackId ?? `${previewId}-track`;
+    const effectiveStops = this._buildGradientPreviewEffectiveStops(scope);
+    const markerStops = effectiveStops.length ? effectiveStops : this._getDefaultGradientStops();
+    return `
+      <div id="${previewId}" class="gradient-preview">
+        <div id="${trackId}" class="gradient-preview-track" style="${this._escapeAttribute(this._getGradientPreviewStyle(scope) ?? '')}">
+          ${markerStops.map((stop, index) => `
+            <span
+              id="${previewId}-stop-${index}"
+              class="gradient-preview-stop"
+              style="left:${this._escapeAttribute(String(stop.pos))}%"
+              title="${this._escapeAttribute(`${stop.pos}%`)}"
+            ></span>
+          `).join('')}
+        </div>
+      </div>
+    `;
   }
 
   _getNeedleSummary(scope) {
@@ -5452,6 +5908,8 @@ class SensorBarCardPlusEditor extends HTMLElement {
       const barSolidFill = this._getScopedBarSolidFillValue({ type: 'card' });
       const cardNeedle = this._getScopedNeedleConfig({ type: 'card' });
       const gradientStops = this._getGradientStopsValue();
+      const gradientDraft = this._getGradientStopsDraftState({ type: 'card' });
+      const gradientDraftMessage = this._getGradientDraftValidationMessage({ type: 'card' });
       const segments = this._getSegmentsValue();
       const baseline = this._getBaselineResolvableValue({ type: 'card' });
       const baselineMode = this._getBaselineMode({ type: 'card' });
@@ -5580,6 +6038,37 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	        }
 	        .list-row.gradient-stop-row {
 	          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+	        }
+	        .gradient-stop-list {
+	          display: grid;
+	          gap: 10px;
+	        }
+	        .gradient-stop-draft {
+	          padding-top: 10px;
+	          border-top: 1px dashed color-mix(in srgb, var(--divider-color, #888) 34%, transparent);
+	        }
+	        .gradient-preview {
+	          display: grid;
+	          gap: 8px;
+	        }
+	        .gradient-preview-track {
+	          position: relative;
+	          min-height: 28px;
+	          border-radius: 999px;
+	          border: 1px solid color-mix(in srgb, var(--divider-color, #888) 28%, transparent);
+	          background: linear-gradient(to right, #4CAF50 0%, #FF9800 50%, #F44336 100%);
+	          box-shadow: inset 0 1px 0 color-mix(in srgb, var(--card-background-color, #fff) 35%, transparent);
+	          overflow: hidden;
+	        }
+	        .gradient-preview-stop {
+	          position: absolute;
+	          top: 3px;
+	          bottom: 3px;
+	          width: 2px;
+	          margin-left: -1px;
+	          border-radius: 999px;
+	          background: color-mix(in srgb, var(--primary-text-color, #111) 72%, transparent);
+	          box-shadow: 0 0 0 1px color-mix(in srgb, var(--card-background-color, #fff) 52%, transparent);
 	        }
 	        .entity-shell {
 	          display: grid;
@@ -5826,6 +6315,8 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	                        const maxInherited = !this._hasResolvableOverride(maxParts);
 	                        const entityPeak = this._getScopedPeakConfig(scope);
 	                        const entityGradientStops = this._getScopedGradientStopsValue(scope);
+	                        const entityGradientDraft = this._getGradientStopsDraftState(scope);
+	                        const entityGradientDraftMessage = this._getGradientDraftValidationMessage(scope);
 	                        const entitySegments = this._getScopedSegmentsValue(scope);
 	                        const scaleGroup = this._renderOverrideGroup({
 	                          index,
@@ -6060,12 +6551,16 @@ class SensorBarCardPlusEditor extends HTMLElement {
                         ? '<div class="section-note">Only used with Gradient fill style</div>'
                         : ''
                       }
+                      ${this._renderGradientPreview(scope, {
+                        previewId: `entity-${index}-gradient-preview`,
+                        trackId: `entity-${index}-gradient-preview-track`,
+                      })}
                       <div class="field-row">
                         <label>Gradient stops</label>
-                        <div class="list">
+                        <div class="list gradient-stop-list">
                           ${this._renderListRows(entityGradientStops, (stop, stopIndex) => `
                             <div class="list-row gradient-stop-row">
-                              <input type="number" min="0" max="100" step="any" data-kind="entity-gradient-pos" data-index="${index}" data-stop-index="${stopIndex}" value="${this._escapeAttribute(stop?.pos ?? '')}" placeholder="0">
+                              <input type="number" min="0" max="100" step="any" data-kind="entity-gradient-pos" data-index="${index}" data-stop-index="${stopIndex}" value="${this._escapeAttribute(this._getGradientStopPosText(scope, stopIndex, stop?.pos ?? ''))}" placeholder="0">
                               ${this._renderColorInput({
                                 id: `entity-${index}-gradient-color-${stopIndex}`,
                                 kind: 'entity-gradient-color',
@@ -6078,7 +6573,24 @@ class SensorBarCardPlusEditor extends HTMLElement {
                               <button type="button" data-action="remove-entity-gradient-stop" data-index="${index}" data-stop-index="${stopIndex}">Remove</button>
                             </div>
                           `)}
-                          <button type="button" data-action="add-entity-gradient-stop" data-index="${index}">Add stop</button>
+                          <div class="gradient-stop-draft">
+                            <div class="list-row gradient-stop-row">
+                              <input id="entity-${index}-gradient-draft-pos" type="number" min="0" max="100" step="any" data-kind="entity-gradient-draft-pos" data-index="${index}" value="${this._escapeAttribute(entityGradientDraft.pos)}" placeholder="0">
+                              ${this._renderColorInput({
+                                id: `entity-${index}-gradient-draft-color`,
+                                kind: 'entity-gradient-draft-color',
+                                index,
+                                value: entityGradientDraft.color,
+                                fallbackHex: '#4CAF50',
+                                placeholder: 'CSS color value',
+                              })}
+                              <button type="button" data-action="add-entity-gradient-stop" data-index="${index}"${this._canAddGradientStop(scope) ? '' : ' disabled'}>Add</button>
+                            </div>
+                            ${entityGradientDraftMessage
+                              ? `<div id="entity-${index}-gradient-draft-hint" class="section-note">${this._escapeAttribute(entityGradientDraftMessage)}</div>`
+                              : ''
+                            }
+                          </div>
                         </div>
                       </div>
 	                          `,
@@ -6330,12 +6842,16 @@ class SensorBarCardPlusEditor extends HTMLElement {
                   ? '<div class="section-note">Only used with Gradient fill style</div>'
                   : ''
                 }
+                ${this._renderGradientPreview({ type: 'card' }, {
+                  previewId: 'card-gradient-preview',
+                  trackId: 'card-gradient-preview-track',
+                })}
                 <div class="field-row">
                   <label>Gradient stops</label>
-                  <div class="list">
+                  <div class="list gradient-stop-list">
                     ${this._renderListRows(gradientStops, (stop, index) => `
                       <div class="list-row gradient-stop-row">
-                        <input type="number" min="0" max="100" step="any" data-kind="gradient-pos" data-index="${index}" value="${this._escapeAttribute(stop?.pos ?? '')}" placeholder="0">
+                        <input type="number" min="0" max="100" step="any" data-kind="gradient-pos" data-index="${index}" value="${this._escapeAttribute(this._getGradientStopPosText({ type: 'card' }, index, stop?.pos ?? ''))}" placeholder="0">
                         ${this._renderColorInput({
                           id: `gradient-color-${index}`,
                           kind: 'gradient-color',
@@ -6347,7 +6863,24 @@ class SensorBarCardPlusEditor extends HTMLElement {
                         <button type="button" data-action="remove-gradient-stop" data-index="${index}">Remove</button>
                       </div>
                     `)}
-                    <button type="button" data-action="add-gradient-stop">Add stop</button>
+                    <div class="gradient-stop-draft">
+                      <div class="list-row gradient-stop-row">
+                        <input id="gradient-draft-pos" type="number" min="0" max="100" step="any" data-kind="gradient-draft-pos" value="${this._escapeAttribute(gradientDraft.pos)}" placeholder="0">
+                        ${this._renderColorInput({
+                          id: 'gradient-draft-color',
+                          kind: 'gradient-draft-color',
+                          index: 'card',
+                          value: gradientDraft.color,
+                          fallbackHex: '#4CAF50',
+                          placeholder: 'CSS color value',
+                        })}
+                        <button type="button" data-action="add-gradient-stop"${this._canAddGradientStop({ type: 'card' }) ? '' : ' disabled'}>Add</button>
+                      </div>
+                      ${gradientDraftMessage
+                        ? `<div id="gradient-draft-hint" class="section-note">${this._escapeAttribute(gradientDraftMessage)}</div>`
+                        : ''
+                      }
+                    </div>
                   </div>
                 </div>
               `,
@@ -6493,6 +7026,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
     this.shadowRoot.addEventListener('change', this._boundHandleChange);
     this.shadowRoot.addEventListener('input', this._boundHandleInput);
     this.shadowRoot.addEventListener('value-changed', this._boundHandleValueChanged);
+    this.shadowRoot.addEventListener('keydown', this._boundHandleKeydown);
     this._shadowListenersAttached = true;
   }
 
@@ -6647,7 +7181,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
     }
 
     if (action === 'add-gradient-stop') {
-      this._setGradientStops([...this._getGradientStopsValue(), this._getNewGradientStopDefaults()], { rerender: true });
+      this._commitGradientStopDraft({ type: 'card' });
       return;
     }
 
@@ -6658,8 +7192,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
     }
 
     if (action === 'add-entity-gradient-stop') {
-      const scope = { type: 'entity', index: Number(target.dataset.index) };
-      this._setScopedGradientStops(scope, [...this._getScopedGradientStopsValue(scope), this._getNewGradientStopDefaults(scope)], { rerender: true });
+      this._commitGradientStopDraft({ type: 'entity', index: Number(target.dataset.index) });
       return;
     }
 
@@ -6696,6 +7229,18 @@ class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _handleChange(event) {
+    const kind = event.target?.dataset?.kind;
+    if (kind === 'gradient-pos') {
+      const stopIndex = Number(event.target.dataset.index);
+      this._commitGradientStopPosEdit({ type: 'card' }, stopIndex, event.target.value, event.target);
+      return;
+    }
+    if (kind === 'entity-gradient-pos') {
+      const scope = { type: 'entity', index: Number(event.target.dataset.index) };
+      const stopIndex = Number(event.target.dataset.stopIndex);
+      this._commitGradientStopPosEdit(scope, stopIndex, event.target.value, event.target);
+      return;
+    }
     this._handleFieldEvent(event);
   }
 
@@ -6704,12 +7249,50 @@ class SensorBarCardPlusEditor extends HTMLElement {
     if (!target) return;
     if (target.tagName === 'HA-ENTITY-PICKER') return;
     if (target.tagName === 'INPUT' && target.type === 'checkbox') return;
+    const kind = target.dataset?.kind;
+    if (kind === 'gradient-pos') {
+      this._setGradientStopPosText({ type: 'card' }, Number(target.dataset.index), target.value);
+      return;
+    }
+    if (kind === 'entity-gradient-pos') {
+      this._setGradientStopPosText({ type: 'entity', index: Number(target.dataset.index) }, Number(target.dataset.stopIndex), target.value);
+      return;
+    }
     this._handleFieldEvent(event);
   }
 
   _handleValueChanged(event) {
     if (event.target?.tagName === 'HA-ENTITY-PICKER') {
       this._handleFieldEvent(event);
+    }
+  }
+
+  _handleKeydown(event) {
+    if (event.key !== 'Enter') {
+      return;
+    }
+    const kind = event.target?.dataset?.kind;
+    if (kind === 'gradient-pos') {
+      event.preventDefault?.();
+      const stopIndex = Number(event.target.dataset.index);
+      this._commitGradientStopPosEdit({ type: 'card' }, stopIndex, event.target.value, event.target);
+      return;
+    }
+    if (kind === 'entity-gradient-pos') {
+      event.preventDefault?.();
+      const scope = { type: 'entity', index: Number(event.target.dataset.index) };
+      const stopIndex = Number(event.target.dataset.stopIndex);
+      this._commitGradientStopPosEdit(scope, stopIndex, event.target.value, event.target);
+      return;
+    }
+    if (kind === 'gradient-draft-pos') {
+      event.preventDefault?.();
+      this._commitGradientStopDraft({ type: 'card' });
+      return;
+    }
+    if (kind === 'entity-gradient-draft-pos') {
+      event.preventDefault?.();
+      this._commitGradientStopDraft({ type: 'entity', index: Number(event.target.dataset.index) });
     }
   }
 
@@ -6953,44 +7536,60 @@ class SensorBarCardPlusEditor extends HTMLElement {
       return void this._setTargetAboveFillColor({ type: 'entity', index: Number(target.dataset.index) }, value);
     }
 
+    if (kind === 'gradient-draft-pos') {
+      this._setGradientStopsDraftField({ type: 'card' }, 'pos', value);
+      return;
+    }
+
+    if (kind === 'gradient-draft-color') {
+      this._setGradientStopsDraftField({ type: 'card' }, 'color', value);
+      return;
+    }
+
+    if (kind === 'entity-gradient-draft-pos') {
+      this._setGradientStopsDraftField({ type: 'entity', index: Number(target.dataset.index) }, 'pos', value);
+      return;
+    }
+
+    if (kind === 'entity-gradient-draft-color') {
+      this._setGradientStopsDraftField({ type: 'entity', index: Number(target.dataset.index) }, 'color', value);
+      return;
+    }
+
     if (kind?.startsWith('gradient-')) {
       const index = Number(target.dataset.index);
+      const currentStops = this._sanitizeGradientStopsForEmit(this._getGradientStopsValue());
       const nextStops = this._getGradientStopsValue().map((stop, stopIndex) => {
         if (stopIndex !== index) return stop;
-        const nextPos = kind === 'gradient-pos'
-          ? this._normalizeGradientStopPosValue(value)
-          : this._normalizeGradientStopPosValue(stop?.pos);
-        if (kind === 'gradient-pos' && nextPos === null) {
-          return stop;
-        }
+        const nextPos = this._normalizeGradientStopPosValue(stop?.pos);
         return {
           ...stop,
           pos: nextPos ?? 0,
           color: kind === 'gradient-color' ? value : stop?.color ?? '#4a9eff',
         };
       });
-      this._setGradientStops(nextStops);
+      if (this._serializeConfig(nextStops) !== this._serializeConfig(currentStops)) {
+        this._setGradientStops(nextStops);
+      }
       return;
     }
 
     if (kind?.startsWith('entity-gradient-')) {
       const scope = { type: 'entity', index: Number(target.dataset.index) };
       const stopIndex = Number(target.dataset.stopIndex);
+      const currentStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
       const nextStops = this._getScopedGradientStopsValue(scope).map((stop, currentStopIndex) => {
         if (currentStopIndex !== stopIndex) return stop;
-        const nextPos = kind === 'entity-gradient-pos'
-          ? this._normalizeGradientStopPosValue(value)
-          : this._normalizeGradientStopPosValue(stop?.pos);
-        if (kind === 'entity-gradient-pos' && nextPos === null) {
-          return stop;
-        }
+        const nextPos = this._normalizeGradientStopPosValue(stop?.pos);
         return {
           ...stop,
           pos: nextPos ?? 0,
           color: kind === 'entity-gradient-color' ? value : stop?.color ?? '#4a9eff',
         };
       });
-      this._setScopedGradientStops(scope, nextStops);
+      if (this._serializeConfig(nextStops) !== this._serializeConfig(currentStops)) {
+        this._setScopedGradientStops(scope, nextStops);
+      }
       return;
     }
 
