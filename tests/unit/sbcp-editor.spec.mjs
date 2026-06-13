@@ -65,8 +65,17 @@ function expectNoDeprecatedEditedKeys(target) {
   expect(target.max).toBeUndefined();
   expect(target.min_entity).toBeUndefined();
   expect(target.max_entity).toBeUndefined();
+  expect(target.target_entity).toBeUndefined();
+  expect(target.target_color).toBeUndefined();
+  expect(target.show_target_label).toBeUndefined();
+  expect(target.above_target_color).toBeUndefined();
   expect(target.height).toBeUndefined();
+  expect(target.label_position).toBeUndefined();
+  expect(target.label_width).toBeUndefined();
+  expect(target.unit).toBeUndefined();
+  expect(target.decimal).toBeUndefined();
   expect(target.color).toBeUndefined();
+  expect(target.color_mode).toBeUndefined();
   expect(target.show_peak).toBeUndefined();
   expect(target.peak_color).toBeUndefined();
 }
@@ -1444,6 +1453,130 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(reopenedEditor._config.title).toBe('Persisted Title');
     expect(reopenedEditor._draftConfig.title).toBe('Persisted Title');
     expect(reopenedEditor.shadowRoot.innerHTML).toContain('Persisted Title');
+  });
+
+  it('editor output keeps untouched legacy fields while cleaning edited families', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      severity: [{ value: 0, color: 'green' }],
+      target: 5,
+      title: 'Power',
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#title'), 'Updated Power');
+
+    expect(events.at(-1).detail.config.severity).toEqual([{ value: 0, color: 'green' }]);
+    expect(events.at(-1).detail.config.target).toBe(5);
+    expect(events.at(-1).detail.config.title).toBe('Updated Power');
+  });
+
+  it('editor-generated config keeps stable top-level and entity key ordering', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      type: 'custom:sensor-bar-card-plus',
+      entities: [{
+        bar: { color: '#ff9800', needle: true },
+        formatting: { decimal: 2, unit: 'W' },
+        layout: { label: { width: 120, position: 'above' }, height: 38 },
+        peak: { enabled: true, color: '#ff9800' },
+        baseline: { at: { entity: 'sensor.baseline', fixed: 0 }, enabled: false },
+        target: { when_exceeded: { fill_color: '#111111' }, label: { show: true }, color: '#ff9800', at: { entity: 'sensor.target', fixed: 100 }, enabled: false },
+        scale: { max: { entity: 'sensor.max', fixed: 100 }, min: { entity: 'sensor.min', fixed: 0 } },
+        icon: 'mdi:flash',
+        name: 'Grid',
+        entity: 'sensor.grid_power',
+      }],
+      bar: { solid_fill: true, gradient_stops: [{ pos: 0, color: '#111111' }, { pos: 100, color: '#ff9800' }], segments: [{ from: '0%', to: '20%', color: '#c4bc00' }], color: '#ff9800', needle: true, fill_style: 'gradient' },
+      formatting: { decimal: 1, unit: 'kW' },
+      layout: { label: { width: 140, position: 'inside' }, height: 40 },
+      peak: { enabled: true, color: '#ff9800' },
+      baseline: { below: { color: '#333333' }, above: { color: '#222222' }, at: { entity: 'sensor.baseline', fixed: 0 }, enabled: false },
+      target: { when_exceeded: { fill_color: '#111111' }, label: { show: true }, color: '#ff9800', at: { entity: 'sensor.target', fixed: 100 }, enabled: false },
+      scale: { max: { entity: 'sensor.max', fixed: 100 }, min: { entity: 'sensor.min', fixed: 0 } },
+      title: 'Power',
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#title'), 'Ordered Power');
+
+    const finalConfig = events.at(-1).detail.config;
+    expect(Object.keys(finalConfig)).toEqual([
+      'type',
+      'title',
+      'entities',
+      'scale',
+      'target',
+      'baseline',
+      'peak',
+      'layout',
+      'formatting',
+      'bar',
+    ]);
+    expect(Object.keys(finalConfig.entities[0])).toEqual([
+      'entity',
+      'name',
+      'icon',
+      'scale',
+      'target',
+      'baseline',
+      'peak',
+      'layout',
+      'formatting',
+      'bar',
+    ]);
+  });
+
+  it('edited config does not emit deprecated flat keys for owned fields', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      min: 0,
+      min_entity: 'sensor.min',
+      target: 50,
+      target_entity: 'sensor.target',
+      target_color: '#888',
+      show_target_label: true,
+      above_target_color: '#ffffff',
+      height: 38,
+      label_position: 'above',
+      label_width: 120,
+      unit: 'W',
+      decimal: 1,
+      color: '#4a9eff',
+      color_mode: 'severity',
+      show_peak: true,
+      peak_color: '#888',
+      segments: [{ from: '0%', to: '33%', color: '#4CAF50' }, { from: '33%', to: '75%', color: '#FF9800' }, { from: '75%', to: '100%', color: '#F44336' }],
+      gradient_stops: [{ pos: 0, color: '#4CAF50' }, { pos: 50, color: '#FF9800' }, { pos: 100, color: '#F44336' }],
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#scale-min'), '10');
+    dispatchInput(editor.shadowRoot.querySelector('#target-value'), '75');
+    dispatchInput(editor.shadowRoot.querySelector('#target-color'), '#ff9800');
+    const targetLabelToggle = editor.shadowRoot.querySelector('#target-label-show');
+    targetLabelToggle.checked = false;
+    targetLabelToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+    dispatchInput(editor.shadowRoot.querySelector('#target-above-fill-color'), '#222222');
+    dispatchInput(editor.shadowRoot.querySelector('#layout-height'), '40');
+    dispatchChange(editor.shadowRoot.querySelector('#layout-label-position'), 'inside');
+    dispatchInput(editor.shadowRoot.querySelector('#layout-label-width'), '140');
+    dispatchInput(editor.shadowRoot.querySelector('#formatting-unit'), 'kW');
+    dispatchInput(editor.shadowRoot.querySelector('#formatting-decimal'), '2');
+    const peakToggle = editor.shadowRoot.querySelector('#peak-show');
+    peakToggle.checked = false;
+    peakToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+    dispatchInput(editor.shadowRoot.querySelector('#peak-color'), '#ff9800');
+    dispatchChange(editor.shadowRoot.querySelector('#bar-fill-style'), 'soft_bands');
+    dispatchInput(editor.shadowRoot.querySelector('#bar-color'), '#ff9800');
+
+    const finalConfig = events.at(-1).detail.config;
+    expectNoDeprecatedEditedKeys(finalConfig);
   });
 
   it('setConfig with equivalent config does not force a redundant render', () => {
@@ -3667,7 +3800,7 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="segment-color"]')[1], '#ffff00');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="segment-color"]')[1], '#ff9800');
 
-    expect(events.at(-1).detail.config.bar.segments).toBeUndefined();
+    expect(events.at(-1).detail.config.bar?.segments).toBeUndefined();
     expect(editor.shadowRoot.innerHTML).toContain('Default bands');
   });
 
@@ -3689,7 +3822,7 @@ describe('Sensor Bar Card Plus editor', () => {
 
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="segment-color"]')[1], '#ff9800');
 
-    expect(events.at(-1).detail.config.bar.segments).toBeUndefined();
+    expect(events.at(-1).detail.config.bar?.segments).toBeUndefined();
   });
 
   it('editing flat-loaded segments converts them to structured bar.segments', () => {
@@ -5873,7 +6006,6 @@ describe('Sensor Bar Card Plus editor', () => {
       {
         entity: 'sensor.one',
         bar: {
-          fill_style: 'bands',
           color: '#ff9800',
           segments: [
             { from: '0%', to: '33%', color: '#4CAF50' },
@@ -6019,12 +6151,7 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-color"]')[1], '#ff9800');
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      {
-        entity: 'sensor.one',
-        bar: {
-          fill_style: 'bands',
-        },
-      },
+      { entity: 'sensor.one' },
     ]);
     expect(editor.shadowRoot.innerHTML).toContain('>Inherited</span>');
   });

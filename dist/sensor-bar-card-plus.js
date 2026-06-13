@@ -3865,27 +3865,421 @@ class SensorBarCardPlusEditor extends HTMLElement {
     return nextTarget;
   }
 
+  _cleanupResolvableValueForEmit(value) {
+    const nextValue = {};
+    if (this._isObject(value)) {
+      const fixed = this._normalizeNumberValue(value.fixed);
+      const entity = this._normalizeTextValue(value.entity).trim();
+      if (fixed !== null) {
+        nextValue.fixed = fixed;
+      }
+      if (entity) {
+        nextValue.entity = entity;
+      }
+    } else {
+      const fixed = this._normalizeNumberValue(value);
+      if (fixed !== null) {
+        nextValue.fixed = fixed;
+      }
+    }
+    return Object.keys(nextValue).length ? nextValue : null;
+  }
+
+  _cleanupScaleForEmit(target) {
+    if (!this._isObject(target) || !this._isObject(target.scale)) {
+      return target;
+    }
+    const nextTarget = this._cloneDeep(target);
+    const nextScale = this._cloneDeep(nextTarget.scale);
+
+    ['min', 'max'].forEach((key) => {
+      if (!Object.prototype.hasOwnProperty.call(nextScale, key)) {
+        return;
+      }
+      const cleanedValue = this._cleanupResolvableValueForEmit(nextScale[key]);
+      if (cleanedValue) {
+        nextScale[key] = cleanedValue;
+        delete nextTarget[key];
+        delete nextTarget[`${key}_entity`];
+      } else {
+        delete nextScale[key];
+      }
+    });
+
+    if (Object.keys(nextScale).length) {
+      nextTarget.scale = nextScale;
+    } else {
+      delete nextTarget.scale;
+    }
+
+    return nextTarget;
+  }
+
+  _cleanupFormattingForEmit(target) {
+    if (!this._isObject(target) || !this._isObject(target.formatting)) {
+      return target;
+    }
+    const nextTarget = this._cloneDeep(target);
+    const nextFormatting = this._cloneDeep(nextTarget.formatting);
+    const unit = this._normalizeTextValue(nextFormatting.unit).trim();
+    const decimal = this._normalizeDecimalValue(nextFormatting.decimal);
+
+    if (unit) {
+      nextFormatting.unit = unit;
+      delete nextTarget.unit;
+    } else {
+      delete nextFormatting.unit;
+    }
+
+    if (decimal !== null) {
+      nextFormatting.decimal = decimal;
+      delete nextTarget.decimal;
+    } else {
+      delete nextFormatting.decimal;
+    }
+
+    if (Object.keys(nextFormatting).length) {
+      nextTarget.formatting = nextFormatting;
+    } else {
+      delete nextTarget.formatting;
+    }
+
+    return nextTarget;
+  }
+
+  _cleanupLayoutForEmit(target) {
+    if (!this._isObject(target) || !this._isObject(target.layout)) {
+      return target;
+    }
+    const nextTarget = this._cloneDeep(target);
+    const nextLayout = this._cloneDeep(nextTarget.layout);
+    const nextLabel = this._isObject(nextLayout.label) ? this._cloneDeep(nextLayout.label) : null;
+    const height = this._normalizeNumberValue(nextLayout.height);
+    const width = this._normalizeNumberValue(nextLabel?.width);
+    const position = this._normalizeTextValue(nextLabel?.position).trim();
+
+    if (height !== null && height >= 24) {
+      nextLayout.height = height;
+      delete nextTarget.height;
+    } else {
+      delete nextLayout.height;
+    }
+
+    if (nextLabel) {
+      if (position) {
+        nextLabel.position = position;
+        delete nextTarget.label_position;
+      } else {
+        delete nextLabel.position;
+      }
+
+      if (width !== null) {
+        nextLabel.width = width;
+        delete nextTarget.label_width;
+      } else {
+        delete nextLabel.width;
+      }
+
+      if (Object.keys(nextLabel).length) {
+        nextLayout.label = nextLabel;
+      } else {
+        delete nextLayout.label;
+      }
+    }
+
+    if (Object.keys(nextLayout).length) {
+      nextTarget.layout = nextLayout;
+    } else {
+      delete nextTarget.layout;
+    }
+
+    return nextTarget;
+  }
+
+  _cleanupTargetForEmit(target) {
+    if (!this._isObject(target) || !this._isObject(target.target)) {
+      return target;
+    }
+    const nextTarget = this._cloneDeep(target);
+    const nextMarker = this._cloneDeep(nextTarget.target);
+    const cleanedAt = this._cleanupResolvableValueForEmit(nextMarker.at);
+    const color = this._normalizeTextValue(nextMarker.color).trim();
+    const labelShow = nextMarker.label?.show === true;
+    const fillColor = this._normalizeTextValue(nextMarker.when_exceeded?.fill_color).trim();
+
+    if (typeof nextMarker.enabled !== 'boolean') {
+      delete nextMarker.enabled;
+    }
+
+    if (cleanedAt) {
+      nextMarker.at = cleanedAt;
+      delete nextTarget.target_entity;
+    } else {
+      delete nextMarker.at;
+    }
+
+    if (color && this._normalizeColorComparisonValue(color) !== this._normalizeColorComparisonValue('#888')) {
+      nextMarker.color = color;
+      delete nextTarget.target_color;
+    } else {
+      delete nextMarker.color;
+    }
+
+    if (labelShow) {
+      nextMarker.label = { ...(this._isObject(nextMarker.label) ? nextMarker.label : {}), show: true };
+      delete nextTarget.show_target_label;
+    } else {
+      delete nextMarker.label;
+    }
+
+    if (fillColor) {
+      nextMarker.when_exceeded = {
+        ...(this._isObject(nextMarker.when_exceeded) ? nextMarker.when_exceeded : {}),
+        fill_color: fillColor,
+      };
+      delete nextTarget.above_target_color;
+    } else {
+      delete nextMarker.when_exceeded;
+    }
+
+    if (Object.keys(nextMarker).length) {
+      nextTarget.target = nextMarker;
+    } else {
+      delete nextTarget.target;
+    }
+
+    return nextTarget;
+  }
+
+  _cleanupBaselineForEmit(target) {
+    if (!this._isObject(target) || !this._isObject(target.baseline)) {
+      return target;
+    }
+    const nextTarget = this._cloneDeep(target);
+    const nextBaseline = this._cloneDeep(nextTarget.baseline);
+    const cleanedAt = this._cleanupResolvableValueForEmit(nextBaseline.at);
+
+    if (typeof nextBaseline.enabled !== 'boolean') {
+      delete nextBaseline.enabled;
+    }
+
+    if (cleanedAt) {
+      nextBaseline.at = cleanedAt;
+    } else {
+      delete nextBaseline.at;
+    }
+
+    ['above', 'below'].forEach((direction) => {
+      if (!this._isObject(nextBaseline[direction])) {
+        delete nextBaseline[direction];
+        return;
+      }
+      const color = this._normalizeTextValue(nextBaseline[direction].color).trim();
+      if (color) {
+        nextBaseline[direction] = { ...nextBaseline[direction], color };
+      } else {
+        delete nextBaseline[direction];
+      }
+    });
+
+    if (Object.keys(nextBaseline).length) {
+      nextTarget.baseline = nextBaseline;
+    } else {
+      delete nextTarget.baseline;
+    }
+
+    return nextTarget;
+  }
+
+  _cleanupPeakForEmit(target) {
+    if (!this._isObject(target) || !this._isObject(target.peak)) {
+      return target;
+    }
+    const nextTarget = this._cloneDeep(target);
+    const nextPeak = this._cloneDeep(nextTarget.peak);
+    const color = this._normalizeTextValue(nextPeak.color).trim();
+
+    if (typeof nextPeak.enabled !== 'boolean') {
+      delete nextPeak.enabled;
+    }
+
+    if (color && this._normalizeColorComparisonValue(color) !== this._normalizeColorComparisonValue('#888')) {
+      nextPeak.color = color;
+      delete nextTarget.peak_color;
+    } else {
+      delete nextPeak.color;
+    }
+
+    if (Object.keys(nextPeak).length) {
+      nextTarget.peak = nextPeak;
+    } else {
+      delete nextTarget.peak;
+    }
+
+    return nextTarget;
+  }
+
+  _cleanupBarForEmit(target) {
+    if (!this._isObject(target) || !this._isObject(target.bar)) {
+      return target;
+    }
+    const nextTarget = this._cloneDeep(target);
+    const nextBar = this._cloneDeep(nextTarget.bar);
+    const fillStyle = this._normalizeTextValue(nextBar.fill_style).trim();
+    const color = this._normalizeTextValue(nextBar.color).trim();
+    const segments = Array.isArray(nextBar.segments) ? nextBar.segments : null;
+    const gradientStops = Array.isArray(nextBar.gradient_stops) ? nextBar.gradient_stops : null;
+
+    if (fillStyle && fillStyle !== 'bands') {
+      nextBar.fill_style = fillStyle;
+      delete nextTarget.color_mode;
+    } else {
+      delete nextBar.fill_style;
+    }
+
+    if (color && this._normalizeColorComparisonValue(color) !== this._normalizeColorComparisonValue('#4a9eff')) {
+      nextBar.color = color;
+      delete nextTarget.color;
+    } else {
+      delete nextBar.color;
+    }
+
+    if (nextBar.solid_fill === true) {
+      nextBar.solid_fill = true;
+    } else {
+      delete nextBar.solid_fill;
+    }
+
+    if (segments && segments.length && !this._segmentsEqualForEditor(segments, this._getDefaultSegments())) {
+      nextBar.segments = segments;
+      delete nextTarget.segments;
+      delete nextTarget.severity;
+    } else {
+      delete nextBar.segments;
+    }
+
+    if (gradientStops && gradientStops.length >= 2 && !this._isDefaultGradientStops(gradientStops)) {
+      nextBar.gradient_stops = this._sanitizeGradientStopsForEmit(gradientStops);
+      delete nextTarget.gradient_stops;
+    } else {
+      delete nextBar.gradient_stops;
+    }
+
+    if (Object.keys(nextBar).length) {
+      nextTarget.bar = nextBar;
+    } else {
+      delete nextTarget.bar;
+    }
+
+    return nextTarget;
+  }
+
+  _getEditorKnownKeyOrder(path = []) {
+    const pathKey = path.join('.');
+    switch (pathKey) {
+      case '':
+        return ['type', 'title', 'entities', 'scale', 'target', 'baseline', 'peak', 'layout', 'formatting', 'bar'];
+      case 'entities.*':
+        return ['entity', 'name', 'icon', 'scale', 'target', 'baseline', 'peak', 'layout', 'formatting', 'bar'];
+      case 'scale':
+        return ['min', 'max'];
+      case 'scale.min':
+      case 'scale.max':
+      case 'target.at':
+      case 'baseline.at':
+        return ['fixed', 'entity'];
+      case 'target':
+        return ['enabled', 'at', 'color', 'label', 'when_exceeded'];
+      case 'target.label':
+        return ['show'];
+      case 'target.when_exceeded':
+        return ['fill_color'];
+      case 'baseline':
+        return ['enabled', 'at', 'above', 'below'];
+      case 'baseline.above':
+      case 'baseline.below':
+        return ['color'];
+      case 'peak':
+        return ['enabled', 'color'];
+      case 'layout':
+        return ['height', 'label'];
+      case 'layout.label':
+        return ['position', 'width'];
+      case 'formatting':
+        return ['unit', 'decimal'];
+      case 'bar':
+        return ['fill_style', 'color', 'solid_fill', 'needle', 'segments', 'gradient_stops'];
+      case 'bar.needle':
+        return ['show', 'color'];
+      default:
+        return null;
+    }
+  }
+
+  _orderEditorConfigKeys(value, path = []) {
+    if (Array.isArray(value)) {
+      const nextPath = path[0] === 'entities' ? ['entities', '*'] : path;
+      return value.map((entry) => this._orderEditorConfigKeys(entry, nextPath));
+    }
+    if (!this._isObject(value)) {
+      return value;
+    }
+
+    const orderedValue = {};
+    const knownOrder = this._getEditorKnownKeyOrder(path) ?? [];
+    const seenKeys = new Set();
+
+    knownOrder.forEach((key) => {
+      if (!Object.prototype.hasOwnProperty.call(value, key)) {
+        return;
+      }
+      orderedValue[key] = this._orderEditorConfigKeys(value[key], [...path, key]);
+      seenKeys.add(key);
+    });
+
+    Object.keys(value).forEach((key) => {
+      if (seenKeys.has(key)) {
+        return;
+      }
+      orderedValue[key] = this._orderEditorConfigKeys(value[key], [...path, key]);
+    });
+
+    return orderedValue;
+  }
+
   _cleanupEditorEmittedConfig(config) {
     if (!this._isObject(config)) {
       return config;
     }
     let nextConfig = this._cleanupEntityIdentityForEmit(config);
+    nextConfig = this._cleanupScaleForEmit(nextConfig);
+    nextConfig = this._cleanupTargetForEmit(nextConfig);
+    nextConfig = this._cleanupBaselineForEmit(nextConfig);
+    nextConfig = this._cleanupPeakForEmit(nextConfig);
+    nextConfig = this._cleanupLayoutForEmit(nextConfig);
+    nextConfig = this._cleanupFormattingForEmit(nextConfig);
     nextConfig = this._cleanupNeedleForEmit(nextConfig, { type: 'card' });
+    nextConfig = this._cleanupBarForEmit(nextConfig);
 
     if (Array.isArray(nextConfig.entities)) {
       nextConfig.entities = nextConfig.entities.map((entry) => {
         if (!this._isObject(entry)) {
           return entry;
         }
-        const cleanedEntry = this._cleanupNeedleForEmit(
-          this._cleanupEntityIdentityForEmit(entry),
-          { type: 'entity' },
-        );
+        let cleanedEntry = this._cleanupEntityIdentityForEmit(entry);
+        cleanedEntry = this._cleanupScaleForEmit(cleanedEntry);
+        cleanedEntry = this._cleanupTargetForEmit(cleanedEntry);
+        cleanedEntry = this._cleanupBaselineForEmit(cleanedEntry);
+        cleanedEntry = this._cleanupPeakForEmit(cleanedEntry);
+        cleanedEntry = this._cleanupLayoutForEmit(cleanedEntry);
+        cleanedEntry = this._cleanupFormattingForEmit(cleanedEntry);
+        cleanedEntry = this._cleanupNeedleForEmit(cleanedEntry, { type: 'entity' });
+        cleanedEntry = this._cleanupBarForEmit(cleanedEntry);
         return cleanedEntry;
       });
     }
 
-    return nextConfig;
+    return this._orderEditorConfigKeys(nextConfig);
   }
 
   _getScopedPath(scope, keyPath) {
