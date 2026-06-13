@@ -5788,7 +5788,7 @@ describe('Sensor Bar Card Plus editor', () => {
       { pos: 0, color: '#4CAF50' },
       { pos: 100, color: '#F44336' },
     ]);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 10));
     expect(editor.shadowRoot.innerHTML).not.toContain('id="card-gradient-preview-stop-2"');
   });
 
