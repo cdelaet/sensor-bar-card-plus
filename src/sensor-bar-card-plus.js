@@ -3414,6 +3414,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
     this._gradientStopsUiRows = new Map();
     this._gradientStopPosTexts = new Map();
     this._gradientStopValidationMessages = new Map();
+    this._pendingFocusSelector = null;
     this._boundHandleClick = (event) => this._handleClick(event);
     this._boundHandleChange = (event) => this._handleChange(event);
     this._boundHandleInput = (event) => this._handleInput(event);
@@ -3762,6 +3763,29 @@ class SensorBarCardPlusEditor extends HTMLElement {
       this._scheduleRender();
     }
     return true;
+  }
+
+  _queuePostRenderFocus(selector) {
+    this._pendingFocusSelector = selector || null;
+  }
+
+  _applyPendingFocus() {
+    if (!this._pendingFocusSelector || !this.shadowRoot) {
+      return;
+    }
+    const selector = this._pendingFocusSelector;
+    this._pendingFocusSelector = null;
+    setTimeout(() => {
+      const element = this.shadowRoot?.querySelector?.(selector);
+      if (!element || typeof element.focus !== 'function') {
+        return;
+      }
+      try {
+        element.focus({ preventScroll: true });
+      } catch (_error) {
+        element.focus();
+      }
+    }, 0);
   }
 
   _setValueAtPath(path, value, options = {}) {
@@ -5103,13 +5127,13 @@ class SensorBarCardPlusEditor extends HTMLElement {
       return 'Enter a position to add a stop.';
     }
     if (this._normalizeGradientStopPosValue(draft.pos) === null) {
-      return 'Position must be a number between 0 and 100.';
+      return 'Enter a value from 0 to 100.';
     }
     if (!normalizedColor) {
       return 'Choose a color to add a stop.';
     }
     if (this._hasGradientStopDuplicate(scope, this._normalizeGradientStopPosValue(draft.pos))) {
-      return 'A stop at this position already exists.';
+      return 'Position already exists.';
     }
     return '';
   }
@@ -5626,8 +5650,8 @@ class SensorBarCardPlusEditor extends HTMLElement {
     if (nextPos === null || this._hasGradientStopDuplicate(scope, nextPos, stopIndex)) {
       if (inputEl?.setCustomValidity) {
         inputEl.setCustomValidity(nextPos === null
-          ? 'Position must be a number between 0 and 100.'
-          : 'A stop at this position already exists.');
+          ? 'Enter a value from 0 to 100.'
+          : 'Position already exists.');
         if (inputEl.reportValidity) {
           inputEl.reportValidity();
         }
@@ -7109,6 +7133,18 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	        button:focus {
 	          background: color-mix(in srgb, var(--secondary-background-color, var(--card-background-color, #fff)) 60%, transparent);
 	        }
+	        button:disabled {
+	          cursor: not-allowed;
+	          opacity: 0.58;
+	          color: var(--secondary-text-color, #666);
+	          background: color-mix(in srgb, var(--secondary-background-color, var(--card-background-color, #fff)) 86%, transparent);
+	          border-color: color-mix(in srgb, var(--divider-color, #888) 22%, transparent);
+	          box-shadow: none;
+	        }
+	        button:disabled:hover,
+	        button:disabled:focus {
+	          background: color-mix(in srgb, var(--secondary-background-color, var(--card-background-color, #fff)) 86%, transparent);
+	        }
 	        .field-row .field-grid {
 	          gap: 8px;
 	          grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -7987,6 +8023,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
       this._bindShadowListeners();
       this._syncEntityPickers();
       this._lastRenderedConfigJson = this._serializeConfig(this._draftConfig);
+      this._applyPendingFocus();
     } finally {
       this._isRendering = false;
     }
@@ -8103,10 +8140,12 @@ class SensorBarCardPlusEditor extends HTMLElement {
     const target = event.target?.closest?.('[data-action]') ?? event.target;
     const action = target?.dataset?.action;
     if (!action) return;
+    if (target?.disabled) return;
 
     if (action === 'add-entity') {
       const nextEntities = [...this._getEntitiesValue(), { entity: '' }];
       const nextEntries = this._buildEntityConfigEntries(nextEntities);
+      this._queuePostRenderFocus(`[data-kind="entity-picker"][data-index="${nextEntities.length - 1}"], [data-kind="entity-input"][data-index="${nextEntities.length - 1}"]`);
       if (Array.isArray(this._draftConfig.entities) || nextEntries.length > 1 || !this._draftConfig.entity) {
         let nextConfig = this._setPathValue(this._draftConfig, ['entities'], nextEntries);
         if (!Array.isArray(this._draftConfig.entities) && this._draftConfig.entity !== undefined) {
@@ -8136,7 +8175,9 @@ class SensorBarCardPlusEditor extends HTMLElement {
     }
 
     if (action === 'duplicate-entity') {
-      this._duplicateEntityRow(Number(target.dataset.index));
+      const sourceIndex = Number(target.dataset.index);
+      this._queuePostRenderFocus(`[data-kind="entity-name"][data-index="${sourceIndex + 1}"], [data-kind="entity-picker"][data-index="${sourceIndex + 1}"], [data-kind="entity-input"][data-index="${sourceIndex + 1}"]`);
+      this._duplicateEntityRow(sourceIndex);
       return;
     }
 
@@ -8161,6 +8202,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
     }
 
     if (action === 'add-gradient-stop') {
+      this._queuePostRenderFocus('#gradient-draft-pos');
       this._commitGradientStopDraft({ type: 'card' });
       return;
     }
@@ -8172,7 +8214,9 @@ class SensorBarCardPlusEditor extends HTMLElement {
     }
 
     if (action === 'add-entity-gradient-stop') {
-      this._commitGradientStopDraft({ type: 'entity', index: Number(target.dataset.index) });
+      const entityIndex = Number(target.dataset.index);
+      this._queuePostRenderFocus(`#entity-${entityIndex}-gradient-draft-pos`);
+      this._commitGradientStopDraft({ type: 'entity', index: entityIndex });
       return;
     }
 
@@ -8184,6 +8228,8 @@ class SensorBarCardPlusEditor extends HTMLElement {
     }
 
     if (action === 'add-segment') {
+      const nextIndex = this._getSegmentsValue().length;
+      this._queuePostRenderFocus(`[data-kind="segment-from"][data-index="${nextIndex}"]`);
       this._setSegments([...this._getSegmentsValue(), this._getNewSegmentDefaults()], { rerender: true });
       return;
     }
@@ -8195,7 +8241,10 @@ class SensorBarCardPlusEditor extends HTMLElement {
     }
 
     if (action === 'add-entity-segment') {
-      const scope = { type: 'entity', index: Number(target.dataset.index) };
+      const entityIndex = Number(target.dataset.index);
+      const scope = { type: 'entity', index: entityIndex };
+      const nextIndex = this._getScopedSegmentsValue(scope).length;
+      this._queuePostRenderFocus(`[data-kind="entity-segment-from"][data-index="${entityIndex}"][data-segment-index="${nextIndex}"]`);
       this._setScopedSegments(scope, [...this._getScopedSegmentsValue(scope), this._getNewSegmentDefaults(scope)], { rerender: true });
       return;
     }
@@ -8248,10 +8297,25 @@ class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _handleKeydown(event) {
+    const kind = event.target?.dataset?.kind;
+    if (event.key === 'Escape') {
+      if (kind === 'gradient-draft-pos' || kind === 'gradient-draft-color') {
+        event.preventDefault?.();
+        this._gradientStopsDrafts.set(this._getGradientStopsDraftKey({ type: 'card' }), this._createGradientStopDraftState({ type: 'card' }));
+        this._render();
+        return;
+      }
+      if (kind === 'entity-gradient-draft-pos' || kind === 'entity-gradient-draft-color') {
+        event.preventDefault?.();
+        const scope = { type: 'entity', index: Number(event.target.dataset.index) };
+        this._gradientStopsDrafts.set(this._getGradientStopsDraftKey(scope), this._createGradientStopDraftState(scope));
+        this._render();
+      }
+      return;
+    }
     if (event.key !== 'Enter') {
       return;
     }
-    const kind = event.target?.dataset?.kind;
     if (kind === 'gradient-pos') {
       event.preventDefault?.();
       const stopIndex = Number(event.target.dataset.index);
@@ -8270,7 +8334,17 @@ class SensorBarCardPlusEditor extends HTMLElement {
       this._commitGradientStopDraft({ type: 'card' });
       return;
     }
+    if (kind === 'gradient-draft-color') {
+      event.preventDefault?.();
+      this._commitGradientStopDraft({ type: 'card' });
+      return;
+    }
     if (kind === 'entity-gradient-draft-pos') {
+      event.preventDefault?.();
+      this._commitGradientStopDraft({ type: 'entity', index: Number(event.target.dataset.index) });
+      return;
+    }
+    if (kind === 'entity-gradient-draft-color') {
       event.preventDefault?.();
       this._commitGradientStopDraft({ type: 'entity', index: Number(event.target.dataset.index) });
     }
