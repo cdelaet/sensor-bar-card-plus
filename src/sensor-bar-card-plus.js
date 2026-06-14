@@ -3417,7 +3417,11 @@ class SensorBarCardPlusEditor extends HTMLElement {
     this._gradientStopsUiRows = new Map();
     this._gradientStopPosTexts = new Map();
     this._gradientStopValidationMessages = new Map();
+    this._segmentDrafts = new Map();
+    this._segmentUiRows = new Map();
+    this._segmentBoundaryTexts = new Map();
     this._targetAboveFillDrafts = new Map();
+    this._baselineColorDrafts = new Map();
     this._pendingFocusSelector = null;
     this._boundHandleClick = (event) => this._handleClick(event);
     this._boundHandleChange = (event) => this._handleChange(event);
@@ -3448,7 +3452,11 @@ class SensorBarCardPlusEditor extends HTMLElement {
     this._gradientStopsUiRows = new Map();
     this._gradientStopPosTexts = new Map();
     this._gradientStopValidationMessages = new Map();
+    this._segmentDrafts = new Map();
+    this._segmentUiRows = new Map();
+    this._segmentBoundaryTexts = new Map();
     this._targetAboveFillDrafts = new Map();
+    this._baselineColorDrafts = new Map();
 
     if (shouldRender) {
       this._render();
@@ -3808,7 +3816,9 @@ class SensorBarCardPlusEditor extends HTMLElement {
     this._setElementText('card-group-segments-summary', this._getSegmentsSummary({ type: 'card' }));
     this._setElementText('card-group-gradient-stops-summary', this._getGradientStopsSummary({ type: 'card' }));
     this._setElementChecked('target-above-fill-enabled', this._isTargetAboveFillEnabled({ type: 'card' }));
-    this._refreshSegmentPreview({ type: 'card' });
+    this._setElementChecked('baseline-above-color-enabled', this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'above'));
+    this._setElementChecked('baseline-below-color-enabled', this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'below'));
+    this._refreshSegmentUi({ type: 'card' });
   }
 
   _refreshEntityDerivedUi() {
@@ -3827,6 +3837,8 @@ class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementChecked(`entity-${index}-layout-inherit`, !this._hasLayoutOverride(scope));
       this._setElementChecked(`entity-${index}-formatting-inherit`, !this._hasFormattingOverride(scope));
       this._setElementChecked(`entity-${index}-target-above-fill-enabled`, this._isTargetAboveFillEnabled(scope));
+      this._setElementChecked(`entity-${index}-baseline-above-color-enabled`, this._isBaselineDirectionalColorEnabled(scope, 'above'));
+      this._setElementChecked(`entity-${index}-baseline-below-color-enabled`, this._isBaselineDirectionalColorEnabled(scope, 'below'));
 
       this._setElementText(`entity-${index}-group-scale-summary`, this._getScaleOverrideSummary(scope));
       this._setElementText(`entity-${index}-group-target-summary`, this._getTargetOverrideSummary(scope));
@@ -3839,7 +3851,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementText(`entity-${index}-group-layout-summary`, this._getLayoutSummary(scope));
       this._setElementText(`entity-${index}-group-formatting-summary`, this._getFormattingSummary(scope));
 
-      this._refreshSegmentPreview(scope);
+      this._refreshSegmentUi(scope);
     }
   }
 
@@ -5275,6 +5287,7 @@ class SensorBarCardPlusEditor extends HTMLElement {
     const shouldRemove = !Array.isArray(nextSegments)
       || !nextSegments.length
       || (fallbackSegments.length > 0 && this._segmentsEqualForEditor(nextSegments, fallbackSegments));
+    this._setSegmentsUiRows(scope, nextSegments);
     const applied = this._applyScopedMutation(scope, (target) => {
       let nextTarget = this._deletePathValue(target, ['bar', 'segments']);
       nextTarget = this._deletePathValue(nextTarget, ['segments']);
@@ -5286,12 +5299,15 @@ class SensorBarCardPlusEditor extends HTMLElement {
       return nextTarget;
     }, options);
     if (applied !== false) {
-      this._refreshSegmentPreview(scope);
+      this._refreshSegmentUi(scope);
     }
     return applied;
   }
 
   _clearSegmentsOverride(scope) {
+    this._segmentDrafts.delete(this._getSegmentsScopeKey(scope));
+    this._segmentUiRows.delete(this._getSegmentsScopeKey(scope));
+    this._clearSegmentScopeTextState(scope);
     return this._applyScopedMutation(scope, (target) => {
       let nextTarget = this._deletePathValue(target, ['bar', 'segments']);
       nextTarget = this._deletePathValue(nextTarget, ['segments']);
@@ -5522,6 +5538,86 @@ class SensorBarCardPlusEditor extends HTMLElement {
     return this._getScopedSegmentsValue({ type: 'card' });
   }
 
+  _getSegmentsScopeKey(scope = { type: 'card' }) {
+    return scope?.type === 'entity' ? `entity:${scope.index}` : 'card';
+  }
+
+  _getSegmentBoundaryTextKey(scope, segmentIndex, field) {
+    return `${this._getSegmentsScopeKey(scope)}:${segmentIndex}:${field}`;
+  }
+
+  _getSegmentBoundaryText(scope = { type: 'card' }, segmentIndex, field, fallbackValue = '') {
+    const key = this._getSegmentBoundaryTextKey(scope, segmentIndex, field);
+    if (this._segmentBoundaryTexts.has(key)) {
+      return this._segmentBoundaryTexts.get(key);
+    }
+    return this._formatSegmentBoundaryValue(fallbackValue);
+  }
+
+  _setSegmentBoundaryText(scope, segmentIndex, field, rawValue) {
+    this._segmentBoundaryTexts.set(
+      this._getSegmentBoundaryTextKey(scope, segmentIndex, field),
+      this._normalizeTextValue(rawValue),
+    );
+  }
+
+  _clearSegmentBoundaryText(scope, segmentIndex, field) {
+    this._segmentBoundaryTexts.delete(this._getSegmentBoundaryTextKey(scope, segmentIndex, field));
+  }
+
+  _clearSegmentScopeTextState(scope) {
+    const prefix = `${this._getSegmentsScopeKey(scope)}:`;
+    for (const key of this._segmentBoundaryTexts.keys()) {
+      if (key.startsWith(prefix)) {
+        this._segmentBoundaryTexts.delete(key);
+      }
+    }
+  }
+
+  _getSegmentsUiRows(scope = { type: 'card' }) {
+    const key = this._getSegmentsScopeKey(scope);
+    if (this._segmentUiRows.has(key)) {
+      return this._cloneDeep(this._segmentUiRows.get(key));
+    }
+    return null;
+  }
+
+  _setSegmentsUiRows(scope, rows) {
+    this._segmentUiRows.set(this._getSegmentsScopeKey(scope), this._cloneDeep(rows));
+  }
+
+  _getSegmentDraftState(scope = { type: 'card' }) {
+    const key = this._getSegmentsScopeKey(scope);
+    if (!this._segmentDrafts.has(key)) {
+      this._segmentDrafts.set(key, this._createSegmentDraftState(scope));
+    }
+    return this._cloneDeep(this._segmentDrafts.get(key));
+  }
+
+  _setSegmentDraftState(scope, nextDraft, options = {}) {
+    this._segmentDrafts.set(this._getSegmentsScopeKey(scope), {
+      from: nextDraft?.from ?? '',
+      to: nextDraft?.to ?? '',
+      color: nextDraft?.color ?? this._getSegmentDraftColorDefault(scope),
+    });
+    if (options?.refreshOnly) {
+      this._refreshSegmentUi(scope);
+      return;
+    }
+    this._render();
+  }
+
+  _setSegmentDraftField(scope, field, rawValue) {
+    const currentDraft = this._getSegmentDraftState(scope);
+    const nextValue = field === 'color'
+      ? this._normalizeTextValue(rawValue).trim()
+      : this._normalizeTextValue(rawValue);
+    this._setSegmentDraftState(scope, {
+      ...currentDraft,
+      [field]: nextValue,
+    }, { refreshOnly: true });
+  }
+
   _isSegmentFillStyle(fillStyle) {
     return ['bands', 'soft_bands', 'band_gradient'].includes(fillStyle);
   }
@@ -5582,6 +5678,14 @@ class SensorBarCardPlusEditor extends HTMLElement {
     return '';
   }
 
+  _getSegmentDraftColorDefault(scope = { type: 'card' }) {
+    const segments = this._getScopedSegmentsValue(scope);
+    if (segments.length) {
+      return this._normalizeTextValue(segments[segments.length - 1]?.color).trim() || '#4a9eff';
+    }
+    return '#4CAF50';
+  }
+
   _getNewSegmentDefaults(scope = { type: 'card' }) {
     const segments = this._getScopedSegmentsValue(scope);
     const previous = segments[segments.length - 1];
@@ -5590,6 +5694,19 @@ class SensorBarCardPlusEditor extends HTMLElement {
       from: previousTo ?? '0%',
       to: '100%',
       color: '#4a9eff',
+    };
+  }
+
+  _createSegmentDraftState(scope = { type: 'card' }) {
+    const defaults = this._getNewSegmentDefaults(scope);
+    const formattedFrom = this._formatSegmentBoundaryValue(defaults.from);
+    const formattedTo = this._formatSegmentBoundaryValue(defaults.to);
+    const draftFrom = formattedFrom === '100%' || formattedFrom === '100' ? '' : formattedFrom;
+    const draftTo = draftFrom ? formattedTo : '';
+    return {
+      from: draftFrom,
+      to: draftTo,
+      color: defaults.color ?? this._getSegmentDraftColorDefault(scope),
     };
   }
 
@@ -5636,6 +5753,142 @@ class SensorBarCardPlusEditor extends HTMLElement {
     return this._cloneDeep(this._getDefaultSegments());
   }
 
+  _parseSegmentBoundaryText(rawValue) {
+    const normalizedValue = this._normalizeTextValue(rawValue).trim();
+    if (!normalizedValue) {
+      return { state: 'empty', value: null };
+    }
+    const parsed = this._parseSegmentBoundaryInput(normalizedValue);
+    if (parsed === null) {
+      return { state: 'invalid', value: null };
+    }
+    return { state: 'valid', value: parsed };
+  }
+
+  _compareSegmentBoundaries(left, right) {
+    const leftValue = this._getSegmentPreviewBoundaryValue(left);
+    const rightValue = this._getSegmentPreviewBoundaryValue(right);
+    if (leftValue === null || rightValue === null) {
+      return null;
+    }
+    if (leftValue < rightValue) return -1;
+    if (leftValue > rightValue) return 1;
+    return 0;
+  }
+
+  _buildSegmentValidationRows(scope = { type: 'card' }) {
+    const rows = this._getSegmentsUiRows(scope) ?? this._getScopedSegmentsValue(scope);
+    return rows.map((segment, index) => {
+      const rawFrom = this._getSegmentBoundaryText(scope, index, 'from', segment?.from);
+      const rawTo = this._getSegmentBoundaryText(scope, index, 'to', segment?.to);
+      const parsedFrom = this._parseSegmentBoundaryText(rawFrom);
+      const parsedTo = this._parseSegmentBoundaryText(rawTo);
+      return {
+        index,
+        rawFrom,
+        rawTo,
+        parsedFrom,
+        parsedTo,
+      };
+    });
+  }
+
+  _getSegmentRowValidationMessage(scope = { type: 'card' }, segmentIndex) {
+    const rows = this._buildSegmentValidationRows(scope);
+    const row = rows[segmentIndex];
+    if (!row) {
+      return '';
+    }
+    if (row.parsedFrom.state === 'invalid' || row.parsedTo.state === 'invalid' || row.parsedFrom.state === 'empty' || row.parsedTo.state === 'empty') {
+      return 'Enter valid from/to values.';
+    }
+    if (this._compareSegmentBoundaries(row.parsedFrom.value, row.parsedTo.value) !== -1) {
+      return 'From must be below To.';
+    }
+    const candidateFrom = this._getSegmentPreviewBoundaryValue(row.parsedFrom.value);
+    const candidateTo = this._getSegmentPreviewBoundaryValue(row.parsedTo.value);
+    for (const other of rows) {
+      if (other.index === segmentIndex) continue;
+      if (other.parsedFrom.state !== 'valid' || other.parsedTo.state !== 'valid') continue;
+      const otherFrom = this._getSegmentPreviewBoundaryValue(other.parsedFrom.value);
+      const otherTo = this._getSegmentPreviewBoundaryValue(other.parsedTo.value);
+      if (candidateFrom === otherFrom) {
+        return 'Duplicate segment start.';
+      }
+      if (candidateFrom < otherTo && candidateTo > otherFrom) {
+        return 'Segments overlap.';
+      }
+    }
+    return '';
+  }
+
+  _getValidSegmentDraft(scope = { type: 'card' }) {
+    const draft = this._getSegmentDraftState(scope);
+    const parsedFrom = this._parseSegmentBoundaryText(draft.from);
+    const parsedTo = this._parseSegmentBoundaryText(draft.to);
+    const color = this._normalizeTextValue(draft.color).trim();
+    if (parsedFrom.state !== 'valid' || parsedTo.state !== 'valid' || !color) {
+      return null;
+    }
+    if (this._compareSegmentBoundaries(parsedFrom.value, parsedTo.value) !== -1) {
+      return null;
+    }
+    const candidateFrom = this._getSegmentPreviewBoundaryValue(parsedFrom.value);
+    const candidateTo = this._getSegmentPreviewBoundaryValue(parsedTo.value);
+    const rows = this._buildSegmentValidationRows(scope);
+    for (const row of rows) {
+      if (row.parsedFrom.state !== 'valid' || row.parsedTo.state !== 'valid') continue;
+      const otherFrom = this._getSegmentPreviewBoundaryValue(row.parsedFrom.value);
+      const otherTo = this._getSegmentPreviewBoundaryValue(row.parsedTo.value);
+      if (candidateFrom === otherFrom || (candidateFrom < otherTo && candidateTo > otherFrom)) {
+        return null;
+      }
+    }
+    return {
+      from: parsedFrom.value,
+      to: parsedTo.value,
+      color,
+    };
+  }
+
+  _canAddSegment(scope = { type: 'card' }) {
+    return !!this._getValidSegmentDraft(scope);
+  }
+
+  _getSegmentDraftValidationMessage(scope = { type: 'card' }) {
+    const draft = this._getSegmentDraftState(scope);
+    const parsedFrom = this._parseSegmentBoundaryText(draft.from);
+    const parsedTo = this._parseSegmentBoundaryText(draft.to);
+    const color = this._normalizeTextValue(draft.color).trim();
+    if (!this._normalizeTextValue(draft.from).trim() && !this._normalizeTextValue(draft.to).trim()) {
+      return '';
+    }
+    if (parsedFrom.state !== 'valid' || parsedTo.state !== 'valid') {
+      return 'Enter valid from/to values.';
+    }
+    if (this._compareSegmentBoundaries(parsedFrom.value, parsedTo.value) !== -1) {
+      return 'From must be below To.';
+    }
+    if (!color) {
+      return 'Choose a color to add a segment.';
+    }
+    const candidateFrom = this._getSegmentPreviewBoundaryValue(parsedFrom.value);
+    const candidateTo = this._getSegmentPreviewBoundaryValue(parsedTo.value);
+    const rows = this._buildSegmentValidationRows(scope);
+    for (const row of rows) {
+      if (row.parsedFrom.state !== 'valid' || row.parsedTo.state !== 'valid') continue;
+      const otherFrom = this._getSegmentPreviewBoundaryValue(row.parsedFrom.value);
+      const otherTo = this._getSegmentPreviewBoundaryValue(row.parsedTo.value);
+      if (candidateFrom === otherFrom) {
+        return 'Duplicate segment start.';
+      }
+      if (candidateFrom < otherTo && candidateTo > otherFrom) {
+        return 'Segments overlap.';
+      }
+    }
+    return '';
+  }
+
   _getSegmentPreviewBoundaryValue(value) {
     if (typeof value === 'string') {
       const match = value.trim().match(/^([+-]?(?:\d+(?:\.\d+)?|\.\d+))%$/);
@@ -5674,7 +5927,13 @@ class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _getSegmentPreviewRows(scope = { type: 'card' }) {
-    return this._sortSegmentsForEditor(this._getScopedSegmentsValue(scope)).filter((segment) => {
+    const baseSegments = this._getSegmentsUiRows(scope) ?? this._getScopedSegmentsValue(scope);
+    const previewSegments = this._sortSegmentsForEditor(baseSegments);
+    const validDraft = this._getValidSegmentDraft(scope);
+    if (validDraft) {
+      previewSegments.push(validDraft);
+    }
+    return this._sortSegmentsForEditor(previewSegments).filter((segment) => {
       const from = this._getSegmentPreviewBoundaryValue(segment?.from);
       const to = this._getSegmentPreviewBoundaryValue(segment?.to);
       return from !== null && to !== null && typeof segment?.color === 'string' && segment.color.trim();
@@ -5763,6 +6022,86 @@ class SensorBarCardPlusEditor extends HTMLElement {
         title="${this._escapeAttribute(`${marker}%`)}"
       ></span>
     `).join('');
+  }
+
+  _getSegmentDomIds(scope = { type: 'card' }) {
+    if (scope?.type === 'entity') {
+      return {
+        hintPrefix: `entity-${scope.index}-segment-row-hint-`,
+        draftHintId: `entity-${scope.index}-segment-draft-hint`,
+        addSelector: `button[data-action="add-entity-segment"][data-index="${scope.index}"]`,
+      };
+    }
+    return {
+      hintPrefix: 'segment-row-hint-',
+      draftHintId: 'segment-draft-hint',
+      addSelector: 'button[data-action="add-segment"]',
+    };
+  }
+
+  _refreshSegmentUi(scope = { type: 'card' }) {
+    this._refreshSegmentPreview(scope);
+    if (!this.shadowRoot) {
+      return;
+    }
+    const { hintPrefix, draftHintId, addSelector } = this._getSegmentDomIds(scope);
+    const addButton = this.shadowRoot.querySelector(addSelector);
+    if (addButton) {
+      addButton.disabled = !this._canAddSegment(scope);
+    }
+    const rows = this._getSegmentsUiRows(scope) ?? this._getScopedSegmentsValue(scope);
+    rows.forEach((_, index) => {
+      const hint = this._getShadowElementById(`${hintPrefix}${index}`);
+      const message = this._getSegmentRowValidationMessage(scope, index);
+      if (hint) {
+        hint.textContent = message;
+        hint.setAttribute?.('style', message ? '' : 'display:none');
+      }
+    });
+    const draftHint = this._getShadowElementById(draftHintId);
+    if (draftHint) {
+      const message = this._getSegmentDraftValidationMessage(scope);
+      draftHint.textContent = message;
+      draftHint.setAttribute?.('style', message ? '' : 'display:none');
+    }
+  }
+
+  _commitSegmentDraft(scope = { type: 'card' }) {
+    const draftSegment = this._getValidSegmentDraft(scope);
+    if (!draftSegment) {
+      this._refreshSegmentUi(scope);
+      return false;
+    }
+    const committedSegments = this._getSegmentsUiRows(scope) ?? this._getScopedSegmentsValue(scope);
+    const nextSegments = this._sortSegmentsForEditor([...committedSegments, draftSegment]);
+    const applied = this._setScopedSegments(scope, nextSegments, { rerender: true });
+    if (applied !== false) {
+      this._segmentDrafts.set(this._getSegmentsScopeKey(scope), this._createSegmentDraftState(scope));
+    }
+    return applied;
+  }
+
+  _commitSegmentBoundaryEdit(scope = { type: 'card' }, segmentIndex, field, rawValue, inputEl = null) {
+    this._setSegmentBoundaryText(scope, segmentIndex, field, rawValue);
+    const normalizedText = this._normalizeTextValue(rawValue).trim();
+    const parsedValue = this._parseSegmentBoundaryInput(rawValue);
+    const nextValue = parsedValue === null ? normalizedText : parsedValue;
+    const currentSegments = this._getSegmentsUiRows(scope) ?? this._getScopedSegmentsValue(scope);
+    const nextSegments = currentSegments.map((segment, currentIndex) => (
+      currentIndex === segmentIndex
+        ? { ...segment, [field]: nextValue }
+        : segment
+    ));
+    this._clearSegmentBoundaryText(scope, segmentIndex, field);
+    const applied = this._setScopedSegments(scope, nextSegments, { rerender: true });
+    const message = this._getSegmentRowValidationMessage(scope, segmentIndex);
+    if (inputEl?.setCustomValidity) {
+      inputEl.setCustomValidity(message || '');
+      if (message) {
+        inputEl.reportValidity?.();
+      }
+    }
+    return applied;
   }
 
   _commitGradientStopDraft(scope = { type: 'card' }) {
@@ -6328,6 +6667,25 @@ class SensorBarCardPlusEditor extends HTMLElement {
     return this._targetAboveFillDrafts.get(this._getTargetAboveFillDraftKey(scope)) ?? '';
   }
 
+  _getBaselineColorDraftKey(scope = { type: 'card' }, direction = 'above') {
+    const scopeKey = scope?.type === 'entity' ? `entity:${scope.index}` : 'card';
+    return `${scopeKey}:${direction}`;
+  }
+
+  _setBaselineColorDraft(scope, direction, rawValue) {
+    const normalizedValue = this._normalizeTextValue(rawValue).trim();
+    const key = this._getBaselineColorDraftKey(scope, direction);
+    if (normalizedValue) {
+      this._baselineColorDrafts.set(key, normalizedValue);
+    } else {
+      this._baselineColorDrafts.delete(key);
+    }
+  }
+
+  _getBaselineColorDraft(scope, direction) {
+    return this._baselineColorDrafts.get(this._getBaselineColorDraftKey(scope, direction)) ?? '';
+  }
+
   _getEffectiveTargetAboveFillColorValue(scope) {
     return this._getEffectiveScopedDisplayValue(scope, ['target', 'when_exceeded', 'fill_color'], [['above_target_color']]);
   }
@@ -6372,6 +6730,29 @@ class SensorBarCardPlusEditor extends HTMLElement {
     return this._setCanonicalScopedTextOverride(scope, ['target', 'when_exceeded', 'fill_color'], nextValue, {
       deprecatedKeys: [['above_target_color']],
       prunePaths: [['target', 'when_exceeded'], ['target']],
+    });
+  }
+
+  _isBaselineDirectionalColorEnabled(scope, direction) {
+    return !!this._normalizeTextValue(this._getBaselineDirectionalColorValue(scope, direction)).trim();
+  }
+
+  _setBaselineDirectionalColorEnabled(scope, direction, value) {
+    const currentValue = this._normalizeTextValue(this._getBaselineDirectionalColorValue(scope, direction)).trim();
+    if (!value) {
+      if (currentValue) {
+        this._setBaselineColorDraft(scope, direction, currentValue);
+      }
+      return this._removeCanonicalScopedValue(scope, ['baseline', direction, 'color'], {
+        prunePaths: [['baseline', direction], ['baseline']],
+      });
+    }
+    const nextValue = this._getBaselineColorDraft(scope, direction)
+      || this._normalizeTextValue(this._getEffectiveBaselineDirectionalColorValue(scope, direction)).trim()
+      || currentValue
+      || '#000000';
+    return this._setCanonicalScopedTextOverride(scope, ['baseline', direction, 'color'], nextValue, {
+      prunePaths: [['baseline', direction], ['baseline']],
     });
   }
 
@@ -6503,11 +6884,15 @@ class SensorBarCardPlusEditor extends HTMLElement {
 
   _setBaselineDirectionalColor(scope, direction, rawValue) {
     const normalizedValue = this._normalizeTextValue(rawValue).trim();
+    this._setBaselineColorDraft(scope, direction, normalizedValue);
     const path = ['baseline', direction, 'color'];
     if (!normalizedValue) {
       return this._removeCanonicalScopedValue(scope, path, {
         prunePaths: [['baseline', direction], ['baseline']],
       });
+    }
+    if (!this._isBaselineDirectionalColorEnabled(scope, direction)) {
+      return this._setBaselineDirectionalColorEnabled(scope, direction, true);
     }
     return this._applyScopedMutation(scope, (target) => {
       return this._setPathValue(target, path, normalizedValue);
@@ -6677,6 +7062,10 @@ class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _getScopedSegmentsValue(scope) {
+    const uiRows = this._getSegmentsUiRows(scope);
+    if (uiRows !== null) {
+      return this._cloneDeep(uiRows);
+    }
     const storedSegments = this._getStoredScopedSegments(scope);
     if (storedSegments !== null) {
       return this._sortSegmentsForEditor(storedSegments);
@@ -7134,6 +7523,17 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	          min-width: 0;
 	        }
 	        .gradient-stop-draft {
+	          padding-top: 10px;
+	          border-top: 1px dashed color-mix(in srgb, var(--divider-color, #888) 34%, transparent);
+	        }
+	        .segment-editor-row {
+	          display: grid;
+	          gap: 6px;
+	          min-width: 0;
+	        }
+	        .segment-draft {
+	          display: grid;
+	          gap: 6px;
 	          padding-top: 10px;
 	          border-top: 1px dashed color-mix(in srgb, var(--divider-color, #888) 34%, transparent);
 	        }
@@ -7635,6 +8035,12 @@ class SensorBarCardPlusEditor extends HTMLElement {
                         </select>
                       </div>
                       <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-bar-solid-fill" type="checkbox" data-kind="entity-bar-solid-fill" data-index="${index}"${this._getEffectiveScopedBarSolidFillValue(scope) ? ' checked' : ''}>
+                          <label for="entity-${index}-bar-solid-fill">Solid fill</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
                         <label for="entity-${index}-bar-color">Bar color</label>
                         ${this._renderColorInput({
                           id: `entity-${index}-bar-color`,
@@ -7750,23 +8156,28 @@ class SensorBarCardPlusEditor extends HTMLElement {
                       }
                       ${this._renderSegmentPreview(scope)}
                       <div class="field-row">
-                        <div class="toggle">
-                          <input id="entity-${index}-bar-solid-fill" type="checkbox" data-kind="entity-bar-solid-fill" data-index="${index}"${this._getEffectiveScopedBarSolidFillValue(scope) ? ' checked' : ''}>
-                          <label for="entity-${index}-bar-solid-fill">Solid fill</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
                         <label>Segments</label>
                         <div class="list">
                           ${this._renderListRows(entitySegments, (segment, segmentIndex) => `
+                            <div class="segment-editor-row">
                             <div class="list-row triple segment-row">
-                              <input type="text" data-kind="entity-segment-from" data-index="${index}" data-segment-index="${segmentIndex}" value="${this._escapeAttribute(this._formatSegmentBoundaryValue(segment?.from))}" placeholder="0%">
-                              <input type="text" data-kind="entity-segment-to" data-index="${index}" data-segment-index="${segmentIndex}" value="${this._escapeAttribute(this._formatSegmentBoundaryValue(segment?.to))}" placeholder="100%">
+                              <input type="text" data-kind="entity-segment-from" data-index="${index}" data-segment-index="${segmentIndex}" value="${this._escapeAttribute(this._getSegmentBoundaryText(scope, segmentIndex, 'from', segment?.from))}" placeholder="0%">
+                              <input type="text" data-kind="entity-segment-to" data-index="${index}" data-segment-index="${segmentIndex}" value="${this._escapeAttribute(this._getSegmentBoundaryText(scope, segmentIndex, 'to', segment?.to))}" placeholder="100%">
                               <input type="color" data-kind="entity-segment-color" data-index="${index}" data-segment-index="${segmentIndex}" value="${this._escapeAttribute(segment?.color ?? '#4a9eff')}">
                               <button type="button" data-action="remove-entity-segment" data-index="${index}" data-segment-index="${segmentIndex}" aria-label="Remove" title="Remove">🗑</button>
                             </div>
+                            <div id="entity-${index}-segment-row-hint-${segmentIndex}" class="section-note"${this._getSegmentRowValidationMessage(scope, segmentIndex) ? '' : ' style="display:none"'}>${this._escapeAttribute(this._getSegmentRowValidationMessage(scope, segmentIndex))}</div>
+                            </div>
                           `)}
-                          <button type="button" data-action="add-entity-segment" data-index="${index}">Add segment</button>
+                          <div class="segment-draft">
+                            <div class="list-row triple segment-row">
+                              <input id="entity-${index}-segment-draft-from" type="text" data-kind="entity-segment-draft-from" data-index="${index}" value="${this._escapeAttribute(this._getSegmentDraftState(scope).from)}" placeholder="0%">
+                              <input id="entity-${index}-segment-draft-to" type="text" data-kind="entity-segment-draft-to" data-index="${index}" value="${this._escapeAttribute(this._getSegmentDraftState(scope).to)}" placeholder="100%">
+                              <input type="color" data-kind="entity-segment-draft-color" data-index="${index}" value="${this._escapeAttribute(this._getSegmentDraftState(scope).color || '#4a9eff')}">
+                              <button type="button" data-action="add-entity-segment" data-index="${index}"${this._canAddSegment(scope) ? '' : ' disabled'}>Add</button>
+                            </div>
+                            <div id="entity-${index}-segment-draft-hint" class="section-note"${this._getSegmentDraftValidationMessage(scope) ? '' : ' style="display:none"'}>${this._escapeAttribute(this._getSegmentDraftValidationMessage(scope))}</div>
+                          </div>
                         </div>
                       </div>
 	                          `,
@@ -7843,9 +8254,9 @@ class SensorBarCardPlusEditor extends HTMLElement {
                           <label for="entity-${index}-baseline-inherit">Inherit card settings</label>
                         </div>
                       </div>
-	                      <div class="field-row">
-	                        <label for="entity-${index}-baseline-mode">Baseline mode</label>
-	                        <select id="entity-${index}-baseline-mode" data-kind="entity-baseline-mode" data-index="${index}" value="${this._escapeAttribute(baselineMode)}">
+                      <div class="field-row">
+                        <label for="entity-${index}-baseline-mode">Baseline mode</label>
+                        <select id="entity-${index}-baseline-mode" data-kind="entity-baseline-mode" data-index="${index}" value="${this._escapeAttribute(baselineMode)}">
                           <option value="enabled"${baselineMode === 'enabled' ? ' selected' : ''}>enabled</option>
                           <option value="disabled"${baselineMode === 'disabled' ? ' selected' : ''}>disabled</option>
                         </select>
@@ -7859,6 +8270,12 @@ class SensorBarCardPlusEditor extends HTMLElement {
                         ${this._renderEntitySourceInput('entity-baseline-entity-source', index, baselineParts.entity, 'inherit card default')}
                       </div>
                       <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-baseline-above-color-enabled" type="checkbox" data-kind="entity-baseline-above-color-enabled" data-index="${index}"${this._isBaselineDirectionalColorEnabled(scope, 'above') ? ' checked' : ''}>
+                          <label for="entity-${index}-baseline-above-color-enabled">Above-baseline color enabled</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
                         <label for="entity-${index}-baseline-above-color">Above-baseline color</label>
                         ${this._renderColorInput({
                           id: `entity-${index}-baseline-above-color`,
@@ -7869,6 +8286,12 @@ class SensorBarCardPlusEditor extends HTMLElement {
                           placeholder: 'inherit card default',
                         })}
                       </div>
+	                      <div class="field-row">
+                          <div class="toggle">
+                            <input id="entity-${index}-baseline-below-color-enabled" type="checkbox" data-kind="entity-baseline-below-color-enabled" data-index="${index}"${this._isBaselineDirectionalColorEnabled(scope, 'below') ? ' checked' : ''}>
+                            <label for="entity-${index}-baseline-below-color-enabled">Below-baseline color enabled</label>
+                          </div>
+                        </div>
 	                      <div class="field-row">
 	                        <label for="entity-${index}-baseline-below-color">Below-baseline color</label>
 	                        ${this._renderColorInput({
@@ -8053,12 +8476,21 @@ class SensorBarCardPlusEditor extends HTMLElement {
               </select>
             </div>
             <div class="field-row">
+              <div class="section-note">Auto shows the baseline when a baseline value is configured.</div>
+            </div>
+            <div class="field-row">
               <label for="baseline-value">Baseline fallback</label>
               <input id="baseline-value" type="number" step="any" data-field="baseline-value" value="${this._escapeAttribute(baseline.fixed)}">
             </div>
             <div class="field-row">
               <label>Baseline entity</label>
               ${this._renderEntitySourceInput('baseline-entity-source', 'card', baseline.entity)}
+            </div>
+            <div class="field-row">
+              <div class="toggle">
+                <input id="baseline-above-color-enabled" type="checkbox" data-field="baseline-above-color-enabled"${this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'above') ? ' checked' : ''}>
+                <label for="baseline-above-color-enabled">Above-baseline color enabled</label>
+              </div>
             </div>
             <div class="field-row">
               <label for="baseline-above-color">Above-baseline color</label>
@@ -8068,6 +8500,12 @@ class SensorBarCardPlusEditor extends HTMLElement {
                 value: baselineAboveColor,
                 fallbackHex: '#000000',
               })}
+            </div>
+            <div class="field-row">
+              <div class="toggle">
+                <input id="baseline-below-color-enabled" type="checkbox" data-field="baseline-below-color-enabled"${this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'below') ? ' checked' : ''}>
+                <label for="baseline-below-color-enabled">Below-baseline color enabled</label>
+              </div>
             </div>
             <div class="field-row">
               <label for="baseline-below-color">Below-baseline color</label>
@@ -8112,6 +8550,12 @@ class SensorBarCardPlusEditor extends HTMLElement {
                 <option value="band_gradient"${fillStyle === 'band_gradient' ? ' selected' : ''}>band_gradient</option>
                 <option value="soft_bands"${fillStyle === 'soft_bands' ? ' selected' : ''}>soft_bands</option>
               </select>
+            </div>
+            <div class="field-row">
+              <div class="toggle">
+                <input id="bar-solid-fill" type="checkbox" data-field="bar-solid-fill"${barSolidFill ? ' checked' : ''}>
+                <label for="bar-solid-fill">Solid fill</label>
+              </div>
             </div>
             <div class="field-row">
               <label for="bar-color">Bar color</label>
@@ -8160,12 +8604,6 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	              }
                 ${this._renderSegmentPreview({ type: 'card' })}
 	              <div class="field-row">
-	                <div class="toggle">
-	                  <input id="bar-solid-fill" type="checkbox" data-field="bar-solid-fill"${barSolidFill ? ' checked' : ''}>
-	                  <label for="bar-solid-fill">Solid fill</label>
-	                </div>
-	              </div>
-	              <div class="field-row">
 	                <label>Segments</label>
 	                <div class="list">
 	                  ${defaultSegmentsVisible
@@ -8173,14 +8611,25 @@ class SensorBarCardPlusEditor extends HTMLElement {
 	                    : ''
 	                  }
 	                  ${this._renderListRows(segments, (segment, index) => `
+	                    <div class="segment-editor-row">
 	                    <div class="list-row triple segment-row">
-	                      <input type="text" data-kind="segment-from" data-index="${index}" value="${this._escapeAttribute(this._formatSegmentBoundaryValue(segment?.from))}" placeholder="0%">
-	                      <input type="text" data-kind="segment-to" data-index="${index}" value="${this._escapeAttribute(this._formatSegmentBoundaryValue(segment?.to))}" placeholder="100%">
+	                      <input type="text" data-kind="segment-from" data-index="${index}" value="${this._escapeAttribute(this._getSegmentBoundaryText({ type: 'card' }, index, 'from', segment?.from))}" placeholder="0%">
+	                      <input type="text" data-kind="segment-to" data-index="${index}" value="${this._escapeAttribute(this._getSegmentBoundaryText({ type: 'card' }, index, 'to', segment?.to))}" placeholder="100%">
 	                      <input type="color" data-kind="segment-color" data-index="${index}" value="${this._escapeAttribute(segment?.color ?? '#4a9eff')}">
 	                      <button type="button" data-action="remove-segment" data-index="${index}" aria-label="Remove" title="Remove">🗑</button>
 	                    </div>
+                      <div id="segment-row-hint-${index}" class="section-note"${this._getSegmentRowValidationMessage({ type: 'card' }, index) ? '' : ' style="display:none"'}>${this._escapeAttribute(this._getSegmentRowValidationMessage({ type: 'card' }, index))}</div>
+                      </div>
 	                  `)}
-	                  <button type="button" data-action="add-segment">Add segment</button>
+                    <div class="segment-draft">
+                      <div class="list-row triple segment-row">
+                        <input id="segment-draft-from" type="text" data-kind="segment-draft-from" value="${this._escapeAttribute(this._getSegmentDraftState({ type: 'card' }).from)}" placeholder="0%">
+                        <input id="segment-draft-to" type="text" data-kind="segment-draft-to" value="${this._escapeAttribute(this._getSegmentDraftState({ type: 'card' }).to)}" placeholder="100%">
+                        <input type="color" data-kind="segment-draft-color" value="${this._escapeAttribute(this._getSegmentDraftState({ type: 'card' }).color || '#4a9eff')}">
+                        <button type="button" data-action="add-segment"${this._canAddSegment({ type: 'card' }) ? '' : ' disabled'}>Add</button>
+                      </div>
+                      <div id="segment-draft-hint" class="section-note"${this._getSegmentDraftValidationMessage({ type: 'card' }) ? '' : ' style="display:none"'}>${this._escapeAttribute(this._getSegmentDraftValidationMessage({ type: 'card' }))}</div>
+                    </div>
 	                </div>
 	              </div>
 	            `,
@@ -8498,9 +8947,8 @@ class SensorBarCardPlusEditor extends HTMLElement {
     }
 
     if (action === 'add-segment') {
-      const nextIndex = this._getSegmentsValue().length;
-      this._queuePostRenderFocus(`[data-kind="segment-from"][data-index="${nextIndex}"]`);
-      this._setSegments([...this._getSegmentsValue(), this._getNewSegmentDefaults()], { rerender: true, sort: true });
+      this._queuePostRenderFocus('#segment-draft-from');
+      this._commitSegmentDraft({ type: 'card' });
       return;
     }
 
@@ -8512,10 +8960,8 @@ class SensorBarCardPlusEditor extends HTMLElement {
 
     if (action === 'add-entity-segment') {
       const entityIndex = Number(target.dataset.index);
-      const scope = { type: 'entity', index: entityIndex };
-      const nextIndex = this._getScopedSegmentsValue(scope).length;
-      this._queuePostRenderFocus(`[data-kind="entity-segment-from"][data-index="${entityIndex}"][data-segment-index="${nextIndex}"]`);
-      this._setScopedSegments(scope, [...this._getScopedSegmentsValue(scope), this._getNewSegmentDefaults(scope)], { rerender: true, sort: true });
+      this._queuePostRenderFocus(`#entity-${entityIndex}-segment-draft-from`);
+      this._commitSegmentDraft({ type: 'entity', index: entityIndex });
       return;
     }
 
@@ -8540,6 +8986,14 @@ class SensorBarCardPlusEditor extends HTMLElement {
       this._commitGradientStopPosEdit(scope, stopIndex, event.target.value, event.target);
       return;
     }
+    if (kind === 'segment-from' || kind === 'segment-to') {
+      this._commitSegmentBoundaryEdit({ type: 'card' }, Number(event.target.dataset.index), kind === 'segment-from' ? 'from' : 'to', event.target.value, event.target);
+      return;
+    }
+    if (kind === 'entity-segment-from' || kind === 'entity-segment-to') {
+      this._commitSegmentBoundaryEdit({ type: 'entity', index: Number(event.target.dataset.index) }, Number(event.target.dataset.segmentIndex), kind === 'entity-segment-from' ? 'from' : 'to', event.target.value, event.target);
+      return;
+    }
     this._handleFieldEvent(event);
   }
 
@@ -8555,6 +9009,17 @@ class SensorBarCardPlusEditor extends HTMLElement {
     }
     if (kind === 'entity-gradient-pos') {
       this._setGradientStopPosText({ type: 'entity', index: Number(target.dataset.index) }, Number(target.dataset.stopIndex), target.value);
+      return;
+    }
+    if (kind === 'segment-from' || kind === 'segment-to') {
+      this._setSegmentBoundaryText({ type: 'card' }, Number(target.dataset.index), kind === 'segment-from' ? 'from' : 'to', target.value);
+      this._refreshSegmentUi({ type: 'card' });
+      return;
+    }
+    if (kind === 'entity-segment-from' || kind === 'entity-segment-to') {
+      const scope = { type: 'entity', index: Number(target.dataset.index) };
+      this._setSegmentBoundaryText(scope, Number(target.dataset.segmentIndex), kind === 'entity-segment-from' ? 'from' : 'to', target.value);
+      this._refreshSegmentUi(scope);
       return;
     }
     this._handleFieldEvent(event);
@@ -8580,6 +9045,19 @@ class SensorBarCardPlusEditor extends HTMLElement {
         const scope = { type: 'entity', index: Number(event.target.dataset.index) };
         this._gradientStopsDrafts.set(this._getGradientStopsDraftKey(scope), this._createGradientStopDraftState(scope));
         this._render();
+      }
+      if (kind === 'segment-draft-from' || kind === 'segment-draft-to' || kind === 'segment-draft-color') {
+        event.preventDefault?.();
+        this._segmentDrafts.set(this._getSegmentsScopeKey({ type: 'card' }), this._createSegmentDraftState({ type: 'card' }));
+        this._render();
+        return;
+      }
+      if (kind === 'entity-segment-draft-from' || kind === 'entity-segment-draft-to' || kind === 'entity-segment-draft-color') {
+        event.preventDefault?.();
+        const scope = { type: 'entity', index: Number(event.target.dataset.index) };
+        this._segmentDrafts.set(this._getSegmentsScopeKey(scope), this._createSegmentDraftState(scope));
+        this._render();
+        return;
       }
       return;
     }
@@ -8617,6 +9095,26 @@ class SensorBarCardPlusEditor extends HTMLElement {
     if (kind === 'entity-gradient-draft-color') {
       event.preventDefault?.();
       this._commitGradientStopDraft({ type: 'entity', index: Number(event.target.dataset.index) });
+      return;
+    }
+    if (kind === 'segment-from' || kind === 'segment-to') {
+      event.preventDefault?.();
+      this._commitSegmentBoundaryEdit({ type: 'card' }, Number(event.target.dataset.index), kind === 'segment-from' ? 'from' : 'to', event.target.value, event.target);
+      return;
+    }
+    if (kind === 'entity-segment-from' || kind === 'entity-segment-to') {
+      event.preventDefault?.();
+      this._commitSegmentBoundaryEdit({ type: 'entity', index: Number(event.target.dataset.index) }, Number(event.target.dataset.segmentIndex), kind === 'entity-segment-from' ? 'from' : 'to', event.target.value, event.target);
+      return;
+    }
+    if (kind === 'segment-draft-from' || kind === 'segment-draft-to' || kind === 'segment-draft-color') {
+      event.preventDefault?.();
+      this._commitSegmentDraft({ type: 'card' });
+      return;
+    }
+    if (kind === 'entity-segment-draft-from' || kind === 'entity-segment-draft-to' || kind === 'entity-segment-draft-color') {
+      event.preventDefault?.();
+      this._commitSegmentDraft({ type: 'entity', index: Number(event.target.dataset.index) });
     }
   }
 
@@ -8648,6 +9146,8 @@ class SensorBarCardPlusEditor extends HTMLElement {
     }
     if (field === 'baseline-above-color') return void this._setBaselineDirectionalColor({ type: 'card' }, 'above', value);
     if (field === 'baseline-below-color') return void this._setBaselineDirectionalColor({ type: 'card' }, 'below', value);
+    if (field === 'baseline-above-color-enabled') return void this._setBaselineDirectionalColorEnabled({ type: 'card' }, 'above', value);
+    if (field === 'baseline-below-color-enabled') return void this._setBaselineDirectionalColorEnabled({ type: 'card' }, 'below', value);
     if (field === 'target-mode') return void this._setTargetMode({ type: 'card' }, value);
     if (field === 'target-value') {
       return void this._setTargetResolvablePart({ type: 'card' }, 'fixed', value);
@@ -8844,6 +9344,14 @@ class SensorBarCardPlusEditor extends HTMLElement {
       return void this._setBaselineDirectionalColor({ type: 'entity', index: Number(target.dataset.index) }, 'below', value);
     }
 
+    if (kind === 'entity-baseline-above-color-enabled') {
+      return void this._setBaselineDirectionalColorEnabled({ type: 'entity', index: Number(target.dataset.index) }, 'above', value);
+    }
+
+    if (kind === 'entity-baseline-below-color-enabled') {
+      return void this._setBaselineDirectionalColorEnabled({ type: 'entity', index: Number(target.dataset.index) }, 'below', value);
+    }
+
     if (kind === 'entity-target-mode') {
       return void this._setTargetMode({ type: 'entity', index: Number(target.dataset.index) }, value);
     }
@@ -8899,6 +9407,36 @@ class SensorBarCardPlusEditor extends HTMLElement {
       return;
     }
 
+    if (kind === 'segment-draft-from') {
+      this._setSegmentDraftField({ type: 'card' }, 'from', value);
+      return;
+    }
+
+    if (kind === 'segment-draft-to') {
+      this._setSegmentDraftField({ type: 'card' }, 'to', value);
+      return;
+    }
+
+    if (kind === 'segment-draft-color') {
+      this._setSegmentDraftField({ type: 'card' }, 'color', value);
+      return;
+    }
+
+    if (kind === 'entity-segment-draft-from') {
+      this._setSegmentDraftField({ type: 'entity', index: Number(target.dataset.index) }, 'from', value);
+      return;
+    }
+
+    if (kind === 'entity-segment-draft-to') {
+      this._setSegmentDraftField({ type: 'entity', index: Number(target.dataset.index) }, 'to', value);
+      return;
+    }
+
+    if (kind === 'entity-segment-draft-color') {
+      this._setSegmentDraftField({ type: 'entity', index: Number(target.dataset.index) }, 'color', value);
+      return;
+    }
+
     if (kind?.startsWith('gradient-')) {
       const index = Number(target.dataset.index);
       const currentStops = this._sanitizeGradientStopsForEmit(this._getGradientStopsValue());
@@ -8936,44 +9474,30 @@ class SensorBarCardPlusEditor extends HTMLElement {
       return;
     }
 
-    if (kind?.startsWith('segment-')) {
+    if (kind === 'segment-color') {
       const index = Number(target.dataset.index);
-      const nextSegments = this._getSegmentsValue().map((segment, segmentIndex) => {
+      const nextSegments = (this._getSegmentsUiRows({ type: 'card' }) ?? this._getSegmentsValue()).map((segment, segmentIndex) => {
         if (segmentIndex !== index) return segment;
-        const nextFrom = kind === 'segment-from' ? this._parseSegmentBoundaryInput(value) : segment?.from;
-        const nextTo = kind === 'segment-to' ? this._parseSegmentBoundaryInput(value) : segment?.to;
-        if ((kind === 'segment-from' && nextFrom === null) || (kind === 'segment-to' && nextTo === null)) {
-          return segment;
-        }
         return {
           ...segment,
-          from: nextFrom,
-          to: nextTo,
-          color: kind === 'segment-color' ? value : segment?.color ?? '#4a9eff',
+          color: value,
         };
       });
-      this._setSegments(nextSegments, event.type === 'change' ? { rerender: true, sort: true } : { sort: false });
+      this._setSegments(nextSegments, { sort: false });
       return;
     }
 
-    if (kind?.startsWith('entity-segment-')) {
+    if (kind === 'entity-segment-color') {
       const scope = { type: 'entity', index: Number(target.dataset.index) };
       const segmentIndex = Number(target.dataset.segmentIndex);
-      const nextSegments = this._getScopedSegmentsValue(scope).map((segment, currentSegmentIndex) => {
+      const nextSegments = (this._getSegmentsUiRows(scope) ?? this._getScopedSegmentsValue(scope)).map((segment, currentSegmentIndex) => {
         if (currentSegmentIndex !== segmentIndex) return segment;
-        const nextFrom = kind === 'entity-segment-from' ? this._parseSegmentBoundaryInput(value) : segment?.from;
-        const nextTo = kind === 'entity-segment-to' ? this._parseSegmentBoundaryInput(value) : segment?.to;
-        if ((kind === 'entity-segment-from' && nextFrom === null) || (kind === 'entity-segment-to' && nextTo === null)) {
-          return segment;
-        }
         return {
           ...segment,
-          from: nextFrom,
-          to: nextTo,
-          color: kind === 'entity-segment-color' ? value : segment?.color ?? '#4a9eff',
+          color: value,
         };
       });
-      this._setScopedSegments(scope, nextSegments, event.type === 'change' ? { rerender: true, sort: true } : { sort: false });
+      this._setScopedSegments(scope, nextSegments, { sort: false });
       return;
     }
   }
