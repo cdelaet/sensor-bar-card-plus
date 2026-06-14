@@ -1,6 +1,6 @@
 {
-  "name": "sensor-bar-card",
-  "version": "1.0.0",
+  "name": "sensor-bar-card-plus",
+  "version": "1.5.0",
   "description": "[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)  [![GitHub release](https://img.shields.io/github/release/cdelaet/sensor-bar-card-plus.svg)](https://github.com/cdelaet/sensor-bar-card-plus/releases)  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)",
   "main": "index.js",
   "directories": {
