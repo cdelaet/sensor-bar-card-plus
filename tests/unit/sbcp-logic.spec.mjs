@@ -947,7 +947,7 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(html).toContain('data-bar-animated="false"');
     expect(html).toContain('bar-fill-reveal no-anim');
 
-    const source = readFileSync(new URL('../../src/sensor-bar-card-plus.js', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
     expect(source).toContain('.row[data-bar-animated="false"] .bar-fill-reveal,');
     expect(source).toContain('.row[data-bar-animated="false"] .needle-marker,');
     expect(source).toContain('.row[data-bar-animated="false"] .target-marker,');
@@ -1935,7 +1935,7 @@ describe('Sensor Bar Card Plus logic', () => {
   });
 
   it('renders inside labels above peak/target/needle and marker layering in CSS', () => {
-    const source = readFileSync(new URL('../../src/sensor-bar-card-plus.js', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
 
     expect(source).toContain('.bar-inner-label {\n          position: absolute;');
     expect(source).toContain('z-index: 8;');
@@ -1981,7 +1981,7 @@ describe('Sensor Bar Card Plus logic', () => {
   });
 
   it('keeps needle glow off CSS filters to avoid clipped animation trails', () => {
-    const source = readFileSync(new URL('../../src/sensor-bar-card-plus.js', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
     const needleRule = source.match(/\.needle-marker \{[\s\S]*?\n        \}/)?.[0] ?? '';
 
     expect(needleRule).toContain('box-shadow:');
@@ -3069,7 +3069,7 @@ describe('Sensor Bar Card Plus logic', () => {
   });
 
   it('inside and above narrow-mode CSS preserves value priority', () => {
-    const source = readFileSync(new URL('../../src/sensor-bar-card-plus.js', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
 
     expect(source).not.toContain('.bar-inner-label[data-inside-density="compressed"] {\n          display: none;');
     expect(source).toContain('.main-line.inside-mode[data-hide-inside-icon="true"] .icon-wrap');
@@ -3124,7 +3124,7 @@ describe('Sensor Bar Card Plus logic', () => {
   });
 
   it('inside label pill shrink-wraps short labels while clamping long ones', () => {
-    const source = readFileSync(new URL('../../src/sensor-bar-card-plus.js', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
 
     expect(source).toContain('.bar-inner-label .inside-name {\n          flex: 0 1 auto;');
     expect(source).toContain('width: fit-content;');
