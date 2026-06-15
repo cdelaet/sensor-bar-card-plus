@@ -923,6 +923,16 @@
     }
   });
 
+  // src/utils/dom.js
+  function escapeHtml(value) {
+    if (value == null) return "";
+    return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  var init_dom = __esm({
+    "src/utils/dom.js"() {
+    }
+  });
+
   // src/card/SensorBarCard.js
   var SensorBarCard;
   var init_SensorBarCard = __esm({
@@ -931,6 +941,7 @@
       init_resolve();
       init_validate();
       init_row_view_model();
+      init_dom();
       SensorBarCard = class extends HTMLElement {
         static getConfigElement() {
           return document.createElement("sensor-bar-card-plus-editor");
@@ -3154,22 +3165,26 @@
           return `${display}${this._isTightUnit(cleanUnit) ? "" : " "}${cleanUnit}`;
         }
         _formatRightValueMarkup(display, unit, hideUnit = false) {
+          const escapedDisplay = escapeHtml(display);
           if (!unit || hideUnit) {
-            return `<span class="value-right-text"><span class="value-right-number">${display}</span></span>`;
+            return `<span class="value-right-text"><span class="value-right-number">${escapedDisplay}</span></span>`;
           }
           const cleanUnit = String(unit);
+          const escapedUnit = escapeHtml(cleanUnit);
           const tightUnit = this._isTightUnit(cleanUnit);
           const textClass = tightUnit ? "value-right-text tight-unit" : "value-right-text has-unit";
-          return `<span class="${textClass}"><span class="value-right-number">${display}</span><span class="unit-group"><span class="unit">${cleanUnit}</span></span></span>`;
+          return `<span class="${textClass}"><span class="value-right-number">${escapedDisplay}</span><span class="unit-group"><span class="unit">${escapedUnit}</span></span></span>`;
         }
         _formatAboveValueMarkup(display, unit) {
           return `<span class="above-bar-label-value">${this._formatRightValueMarkup(display, unit, false)}</span>`;
         }
         _formatInsideValueMarkup(display, unit) {
-          if (!unit) return `<span class="inside-value-text"><span class="inside-number">${display}</span></span>`;
+          const escapedDisplay = escapeHtml(display);
+          if (!unit) return `<span class="inside-value-text"><span class="inside-number">${escapedDisplay}</span></span>`;
           const cleanUnit = String(unit);
+          const escapedUnit = escapeHtml(cleanUnit);
           const unitModeClass = this._isTightUnit(cleanUnit) ? "tight-unit" : "has-unit";
-          return `<span class="inside-value-text ${unitModeClass}"><span class="inside-number">${display}</span><span class="inside-unit">${cleanUnit}</span></span>`;
+          return `<span class="inside-value-text ${unitModeClass}"><span class="inside-number">${escapedDisplay}</span><span class="inside-unit">${escapedUnit}</span></span>`;
         }
         _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
           var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t;
@@ -3192,6 +3207,7 @@
           const lp = layout.label.position;
           const h = (_f = (_e = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _e.baseHeight) != null ? _f : layout.height;
           const name = (_j = (_i = (_g = rowViewModel == null ? void 0 : rowViewModel.name) != null ? _g : ecfg.name) != null ? _i : (_h = stateObj == null ? void 0 : stateObj.attributes) == null ? void 0 : _h.friendly_name) != null ? _j : entityCfg.entity;
+          const escapedName = escapeHtml(name);
           const targetEnabled = (targetMarkerCfg == null ? void 0 : targetMarkerCfg.enabled) !== false;
           const peakMarkerColor = peakColor || "#888";
           const targetMarkerColor = targetColor || "#888";
@@ -3212,7 +3228,7 @@
       </div>`;
           const targetValueLabel = targetEnabled && targetMarkerCfg.show_label ? `
       <div class="target-value-label" style="left:${targetPct !== null ? targetPct : 0}%;">
-        ${targetDisplay !== null ? targetDisplay : ""}
+        ${targetDisplay !== null ? escapeHtml(targetDisplay) : ""}
       </div>` : "";
           const needleMarker = ((_n = (_m = ecfg.bar) == null ? void 0 : _m.needle) == null ? void 0 : _n.show) && !Number.isFinite(baselinePct) ? `
       <div class="needle-layer">
@@ -3224,16 +3240,16 @@
       <div class="above-line">
         ${ecfg.icon && ecfg.icon !== false ? `<div class="above-icon-spacer"></div>` : ""}
         <div class="above-bar-label">
-          <span class="above-bar-label-name label-left-text">${name}</span>
+          <span class="above-bar-label-name label-left-text">${escapedName}</span>
           ${this._formatAboveValueMarkup(stateDisplay, unit)}
         </div>
       </div>` : "";
           const innerLabel = lp === "inside" ? `
       <div class="bar-inner-label">
-        <span class="inside-name">${name}</span>
+        <span class="inside-name">${escapedName}</span>
         <span class="inside-value" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}">${this._formatInsideValueMarkup(stateDisplay, unit)}</span>
       </div>` : "";
-          const leftLabel = lp === "left" ? `<div class="label-left" style="flex:0 1 min(${layout.label.width}px, var(--sbcp-left-label-share));max-width:min(${layout.label.width}px, var(--sbcp-left-label-share));"><span class="label-left-text">${name}</span></div>` : "";
+          const leftLabel = lp === "left" ? `<div class="label-left" style="flex:0 1 min(${layout.label.width}px, var(--sbcp-left-label-share));max-width:min(${layout.label.width}px, var(--sbcp-left-label-share));"><span class="label-left-text">${escapedName}</span></div>` : "";
           const rightValue = lp !== "inside" && lp !== "above" ? `<div class="value-right" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}" data-hide-unit="false">${this._formatRightValueMarkup(stateDisplay, unit, false)}</div>` : "";
           const topRightValue = lp === "left" ? `<div class="top-right-value" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}" data-hide-unit="false" data-active="false">${this._formatRightValueMarkup(stateDisplay, unit, false)}</div>` : "";
           return `
@@ -3339,7 +3355,7 @@ ${paintLayers}
           }
           const aboveLabel = row.querySelector(".above-bar-label");
           if (aboveLabel) {
-            aboveLabel.innerHTML = `<span class="above-bar-label-name label-left-text">${rowViewModel.name}</span>${this._formatAboveValueMarkup(display, displayUnit)}`;
+            aboveLabel.innerHTML = `<span class="above-bar-label-name label-left-text">${escapeHtml(rowViewModel.name)}</span>${this._formatAboveValueMarkup(display, displayUnit)}`;
           }
           if (ecfg.peak_marker.show && Number.isFinite(rawVal)) {
             const key = entityCfg.entity;
@@ -3384,7 +3400,7 @@ ${paintLayers}
               const entityCfg = entities[entityIndex];
               const stateObj = this._hass.states[entityCfg.entity];
               if (!stateObj) {
-                html += `<div class="row"><span style="color:var(--error-color,red);font-size:12px;">Entity not found: ${entityCfg.entity}</span></div>`;
+                html += `<div class="row"><span style="color:var(--error-color,red);font-size:12px;">Entity not found: ${escapeHtml(entityCfg.entity)}</span></div>`;
                 continue;
               }
               const ecfg = this._resolve(entityCfg);

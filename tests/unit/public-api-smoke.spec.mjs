@@ -130,6 +130,44 @@ describe('Sensor Bar Card Plus public API smoke', () => {
     expect(html).toContain('target-value-label');
   });
 
+  it('escapes dynamic text interpolated into row HTML', () => {
+    const card = createCard();
+    card._hass.states['sensor.one'] = sensor(42, {
+      friendly_name: '<b>AT&T "Home"</b>',
+      unit_of_measurement: 'W&h',
+    });
+    const rowCfg = card.normalizeCardConfig({
+      target: { at: { fixed: 50 }, label: { show: true } },
+      entities: [{ entity: 'sensor.one' }],
+    }).entities[0];
+
+    const html = card._buildRow(
+      rowCfg,
+      '5 < 7 & "ok"',
+      'W&h',
+      42,
+      '#4a9eff',
+      null,
+      null,
+      50,
+      '50 < 60 & "goal"',
+      '#999',
+      '#fff',
+      0,
+      100,
+    );
+
+    expect(html).toContain('&lt;b&gt;AT&amp;T &quot;Home&quot;&lt;/b&gt;');
+    expect(html).toContain('5 &lt; 7 &amp; &quot;ok&quot;');
+    expect(html).toContain('50 &lt; 60 &amp; &quot;goal&quot;');
+    expect(html).toContain('W&amp;h');
+    expect(html).not.toContain('<b>AT&T "Home"</b>');
+    expect(html).not.toContain('5 < 7 & "ok"');
+    expect(html).not.toContain('50 < 60 & "goal"');
+    expect(html).toContain('AT&amp;T');
+    expect(html).not.toContain('AT&amp;amp;T');
+  });
+
   it('resolves dynamic min/max/target/baseline entity references', () => {
     const card = createCard();
     card._hass.states = {
