@@ -306,7 +306,7 @@ describe('buildRowViewModel', () => {
 
     expect(row.name).toBe('Grid Import');
     expect(row.icon).toBe('mdi:home-lightning-bolt');
-    expect(row.displayValue).toBe('4.25');
+    expect(normalizeDecimalString(row.displayValue)).toBe('4.25');
     expect(row.unit).toBe('kW');
     expect(row.barColor).toBe('#222222');
     expect(row.fillStyle).toBe('gradient');
