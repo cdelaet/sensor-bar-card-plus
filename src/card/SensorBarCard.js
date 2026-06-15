@@ -32,6 +32,7 @@ import {
   getNumericValue,
   resolvePercentValue,
 } from '../config/resolve.js';
+import { validateNormalizedConfig } from '../config/validate.js';
 
 /**
  * sensor-bar-card-plus - A polished, configurable sensor bar card for Home Assistant
@@ -170,6 +171,8 @@ export class SensorBarCard extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     this._baseDomReady = false;
     this._config = {};
+    this._diagnostics = { warnings: [], errors: [] };
+    this._lastDiagnosticsSignature = null;
     this._hass = null;
     this._peaks = {};
     this._rendered = false;
@@ -190,7 +193,23 @@ export class SensorBarCard extends HTMLElement {
     }
     this._rendered = false; // force full rebuild on config change
     this._config = this.normalizeCardConfig(config);
+    this._diagnostics = validateNormalizedConfig(this._config);
+    this._logDiagnostics();
     this._render();
+  }
+
+  _logDiagnostics() {
+    const diagnostics = this._diagnostics ?? { warnings: [], errors: [] };
+    const signature = JSON.stringify(diagnostics);
+    if (signature === this._lastDiagnosticsSignature) return;
+    this._lastDiagnosticsSignature = signature;
+
+    diagnostics.warnings.forEach((diagnostic) => {
+      console.warn(`[sensor-bar-card-plus] ${diagnostic.message}`, diagnostic);
+    });
+    diagnostics.errors.forEach((diagnostic) => {
+      console.warn(`[sensor-bar-card-plus] ${diagnostic.message}`, diagnostic);
+    });
   }
 
   // The normalized model is internal only. It preserves today's flat YAML
