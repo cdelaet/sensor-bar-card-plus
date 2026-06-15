@@ -1253,6 +1253,53 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(peakMarker.style.left).toBe('80%');
   });
 
+  it('does not write an invalid peak marker left position during _patchRow', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      min: 0,
+      max: 100,
+      peak: { enabled: true, color: '#7c3aed' },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+
+    card._peaks['sensor.row'] = 80;
+    const peakMarker = createTrackedElement({
+      style: {
+        left: '80%',
+        '--marker-color': '#7c3aed',
+        '--marker-contrast-color': card._getMarkerContrastColor('#7c3aed'),
+      },
+    });
+    const row = createTrackedRow({
+      '.peak-marker': peakMarker,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+
+    const originalToScalePct = card._toScalePct;
+    card._toScalePct = () => NaN;
+
+    try {
+      card._patchRow(row, cfg, {
+        state: '20',
+        attributes: {
+          friendly_name: 'Row',
+          icon: 'mdi:flash',
+          unit_of_measurement: 'W',
+        },
+      });
+    } finally {
+      card._toScalePct = originalToScalePct;
+    }
+
+    expect(peakMarker.style.left).toBe('80%');
+    expect(peakMarker.style.__writes.some((write) => (
+      write.prop === 'left' && String(write.value).includes('NaN%')
+    ))).toBe(false);
+  });
+
   it('preserves a higher stored peak during a full _update rebuild', () => {
     const card = createCard();
     card._config = card.normalizeCardConfig({

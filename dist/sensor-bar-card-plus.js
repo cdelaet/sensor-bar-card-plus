@@ -3366,7 +3366,9 @@ ${paintLayers}
             const peakPct = this._toScalePct(peakVal, safeMin, safeMax);
             const peakEl = row.querySelector(".peak-marker");
             if (peakEl) {
-              this._setStyleIfChanged(peakEl, "left", `${peakPct}%`);
+              if (Number.isFinite(peakPct)) {
+                this._setStyleIfChanged(peakEl, "left", `${peakPct}%`);
+              }
               this._setStyleIfChanged(peakEl, "--marker-color", ecfg.peak_marker.color);
               this._setStyleIfChanged(peakEl, "--marker-contrast-color", this._getMarkerContrastColor(ecfg.peak_marker.color));
             }
