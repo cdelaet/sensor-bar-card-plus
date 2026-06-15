@@ -3283,8 +3283,7 @@ ${paintLayers}
       }
 
       if (targetLabelEl) {
-        // Round the Target Value displayed to correct decimal format
-        this._setTextIfChanged(targetLabelEl, this._formatDisplayWithUnit(this._formatNumericDisplay(targetVal, ecfg.formatting.decimal), unit));		  
+        this._setTextIfChanged(targetLabelEl, this._formatDisplayWithUnit(this._formatNumericDisplay(targetVal, ecfg.formatting.decimal), unit));
       }
     } else {
       if (targetEl) this._setStyleIfChanged(targetEl, 'display', 'none');
@@ -3333,8 +3332,7 @@ ${paintLayers}
         }
         let targetDisplay = null;
         if (targetVal !== null) {
-          // Round the Target Value displayed to correct decimal format                   
-          targetDisplay = this._formatDisplayWithUnit(this._formatNumericDisplay(targetVal, ecfg.formatting.decimal), unit);			
+          targetDisplay = this._formatDisplayWithUnit(this._formatNumericDisplay(targetVal, ecfg.formatting.decimal), unit);
         }
         let peakPct = null, peakDisplay = null;
         if (ecfg.peak_marker.show && !isNaN(rawVal)) {

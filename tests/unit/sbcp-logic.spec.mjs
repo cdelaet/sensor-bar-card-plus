@@ -1449,6 +1449,184 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(targetLabel.__writes.textContent).toBe(1);
   });
 
+  it('formats a fixed target label with card-level decimals during initial render', () => {
+    const card = createCard();
+    card._hass.states = {
+      'sensor.row': {
+        state: '42.4',
+        attributes: {
+          friendly_name: 'Row',
+          icon: 'mdi:flash',
+          unit_of_measurement: 'W',
+        },
+      },
+    };
+    const cfg = card.normalizeCardConfig({
+      formatting: { decimal: 1 },
+      target: { at: { fixed: 65.25 }, label: { show: true } },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    });
+    const rowsEl = {
+      innerHTML: '',
+      querySelectorAll: () => [],
+    };
+    card.shadowRoot = {
+      querySelector: (selector) => (selector === '.rows' ? rowsEl : null),
+      querySelectorAll: () => [],
+    };
+    card._config = cfg;
+
+    card._update();
+
+    expect(rowsEl.innerHTML).toMatch(/65[.,]3 W/);
+    expect(rowsEl.innerHTML).toMatch(/42[.,]4/);
+  });
+
+  it('formats a fixed target label with decimal 0 during _patchRow', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      formatting: { decimal: 0 },
+      target: { at: { fixed: 65.25 }, label: { show: true } },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+
+    const targetLabel = createTrackedElement({
+      style: {
+        left: '65%',
+        visibility: 'visible',
+      },
+      textContent: '65.25 W',
+    });
+    const row = createTrackedRow({
+      '.target-marker': createTrackedElement({
+        style: {
+          display: '',
+          left: '65%',
+          '--marker-color': '#888',
+          '--marker-contrast-color': card._getMarkerContrastColor('#888'),
+        },
+      }),
+      '.target-value-label': targetLabel,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+
+    card._patchRow(row, cfg, {
+      state: '42.4',
+      attributes: {
+        friendly_name: 'Row',
+        icon: 'mdi:flash',
+        unit_of_measurement: 'W',
+      },
+    });
+
+    expect(targetLabel.textContent).toBe('65 W');
+  });
+
+  it('formats a target entity label with card-level decimals during _patchRow', () => {
+    const card = createCard();
+    card._hass.states = {
+      'sensor.dynamic_target': {
+        state: '70.25',
+        attributes: {},
+      },
+    };
+    const cfg = card.normalizeCardConfig({
+      formatting: { decimal: 1 },
+      target: { at: { entity: 'sensor.dynamic_target' }, label: { show: true } },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+
+    const targetLabel = createTrackedElement({
+      style: {
+        left: '65%',
+        visibility: 'visible',
+      },
+      textContent: '65 W',
+    });
+    const row = createTrackedRow({
+      '.target-marker': createTrackedElement({
+        style: {
+          display: '',
+          left: '65%',
+          '--marker-color': '#888',
+          '--marker-contrast-color': card._getMarkerContrastColor('#888'),
+        },
+      }),
+      '.target-value-label': targetLabel,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+
+    card._patchRow(row, cfg, {
+      state: '42.4',
+      attributes: {
+        friendly_name: 'Row',
+        icon: 'mdi:flash',
+        unit_of_measurement: 'W',
+      },
+    });
+
+    expect(targetLabel.textContent).toMatch(/^70[.,]3 W$/);
+  });
+
+  it('formats a target label with a per-entity decimal override during _patchRow', () => {
+    const card = createCard();
+    card._hass.states = {
+      'sensor.dynamic_target': {
+        state: '70.25',
+        attributes: {},
+      },
+    };
+    const cfg = card.normalizeCardConfig({
+      formatting: { decimal: 1 },
+      target: { at: { entity: 'sensor.dynamic_target' }, label: { show: true } },
+      entities: [{
+        entity: 'sensor.row',
+        name: 'Sensor',
+        formatting: { decimal: 2 },
+      }],
+    }).entities[0];
+
+    const targetLabel = createTrackedElement({
+      style: {
+        left: '65%',
+        visibility: 'visible',
+      },
+      textContent: '65 W',
+    });
+    const row = createTrackedRow({
+      '.target-marker': createTrackedElement({
+        style: {
+          display: '',
+          left: '65%',
+          '--marker-color': '#888',
+          '--marker-contrast-color': card._getMarkerContrastColor('#888'),
+        },
+      }),
+      '.target-value-label': targetLabel,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+
+    card._patchRow(row, cfg, {
+      state: '42.4',
+      attributes: {
+        friendly_name: 'Row',
+        icon: 'mdi:flash',
+        unit_of_measurement: 'W',
+      },
+    });
+
+    expect(targetLabel.textContent).toMatch(/^70[.,]25 W$/);
+  });
+
   it('updates target visibility when the target disappears during _patchRow', () => {
     const card = createCard();
     card._hass.states = {};
