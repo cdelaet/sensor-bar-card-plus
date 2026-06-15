@@ -26,6 +26,12 @@ import {
   resolveNormalizedBarMode,
   fillStyleToColorMode,
 } from '../config/normalize.js';
+import {
+  getEntityNumericValue,
+  getNormalizedResolvableNumericValue,
+  getNumericValue,
+  resolvePercentValue,
+} from '../config/resolve.js';
 
 /**
  * sensor-bar-card-plus - A polished, configurable sensor bar card for Home Assistant
@@ -505,42 +511,19 @@ export class SensorBarCard extends HTMLElement {
   }
 
   _getEntityNumericValue(entityId) {
-    if (!entityId || !this._hass?.states?.[entityId]) return null;
-    const raw = this._hass.states[entityId].state;
-    const num = parseFloat(raw);
-    return Number.isFinite(num) ? num : null;
+    return getEntityNumericValue(this._hass, entityId);
   }
   
   _getNumericValue(value, entityId = null) {
-    const entityValue = this._getEntityNumericValue(entityId);
-    if (entityValue !== null) return entityValue;
-    
-    if (value === null || value === undefined || value === '') return null;
-    
-    const num = parseFloat(value);
-    return Number.isFinite(num) ? num : null;
+    return getNumericValue(this._hass, value, entityId);
   }
 
   _resolvePercentValue(percent, minValue, maxValue) {
-    if (!Number.isFinite(percent)) return null;
-    const safeMin = Number.isFinite(minValue) ? minValue : 0;
-    const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
-    return safeMin + ((percent / 100) * (safeMax - safeMin));
+    return resolvePercentValue(percent, minValue, maxValue);
   }
 
   _getNormalizedResolvableNumericValue(resolvable, minValue = null, maxValue = null) {
-    if (!resolvable) return null;
-    const entityValue = this._getEntityNumericValue(resolvable.entity);
-    if (entityValue !== null) return entityValue;
-
-    const fixedValue = this._getNumericValue(resolvable.fixed ?? resolvable.value, null);
-    if (fixedValue !== null) return fixedValue;
-
-    if (Number.isFinite(resolvable.percent)) {
-      return this._resolvePercentValue(resolvable.percent, minValue, maxValue);
-    }
-
-    return null;
+    return getNormalizedResolvableNumericValue(this._hass, resolvable, minValue, maxValue);
   }
 
   _hexToRgb(color) {

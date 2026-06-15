@@ -524,11 +524,51 @@
     }
   });
 
+  // src/config/resolve.js
+  function getEntityNumericValue(hass, entityId) {
+    var _a;
+    if (!entityId || !((_a = hass == null ? void 0 : hass.states) == null ? void 0 : _a[entityId])) return null;
+    const raw = hass.states[entityId].state;
+    const num = parseFloat(raw);
+    return Number.isFinite(num) ? num : null;
+  }
+  function getNumericValue(hass, value, entityId = null) {
+    const entityValue = getEntityNumericValue(hass, entityId);
+    if (entityValue !== null) return entityValue;
+    if (value === null || value === void 0 || value === "") return null;
+    const num = parseFloat(value);
+    return Number.isFinite(num) ? num : null;
+  }
+  function resolvePercentValue(percent, minValue, maxValue) {
+    if (!Number.isFinite(percent)) return null;
+    const safeMin = Number.isFinite(minValue) ? minValue : 0;
+    const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
+    return safeMin + percent / 100 * (safeMax - safeMin);
+  }
+  function getNormalizedResolvableNumericValue(hass, resolvable, minValue = null, maxValue = null) {
+    var _a;
+    if (!resolvable) return null;
+    const entityValue = getEntityNumericValue(hass, resolvable.entity);
+    if (entityValue !== null) return entityValue;
+    const fixedValue = getNumericValue(hass, (_a = resolvable.fixed) != null ? _a : resolvable.value, null);
+    if (fixedValue !== null) return fixedValue;
+    if (Number.isFinite(resolvable.percent)) {
+      return resolvePercentValue(resolvable.percent, minValue, maxValue);
+    }
+    return null;
+  }
+  var init_resolve = __esm({
+    "src/config/resolve.js"() {
+      init_normalize();
+    }
+  });
+
   // src/card/SensorBarCard.js
   var SensorBarCard;
   var init_SensorBarCard = __esm({
     "src/card/SensorBarCard.js"() {
       init_normalize();
+      init_resolve();
       SensorBarCard = class extends HTMLElement {
         static getConfigElement() {
           return document.createElement("sensor-bar-card-plus-editor");
@@ -825,36 +865,16 @@
           this._setStyleIfChanged(label, "visibility", "visible");
         }
         _getEntityNumericValue(entityId) {
-          var _a, _b;
-          if (!entityId || !((_b = (_a = this._hass) == null ? void 0 : _a.states) == null ? void 0 : _b[entityId])) return null;
-          const raw = this._hass.states[entityId].state;
-          const num = parseFloat(raw);
-          return Number.isFinite(num) ? num : null;
+          return getEntityNumericValue(this._hass, entityId);
         }
         _getNumericValue(value, entityId = null) {
-          const entityValue = this._getEntityNumericValue(entityId);
-          if (entityValue !== null) return entityValue;
-          if (value === null || value === void 0 || value === "") return null;
-          const num = parseFloat(value);
-          return Number.isFinite(num) ? num : null;
+          return getNumericValue(this._hass, value, entityId);
         }
         _resolvePercentValue(percent, minValue, maxValue) {
-          if (!Number.isFinite(percent)) return null;
-          const safeMin = Number.isFinite(minValue) ? minValue : 0;
-          const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
-          return safeMin + percent / 100 * (safeMax - safeMin);
+          return resolvePercentValue(percent, minValue, maxValue);
         }
         _getNormalizedResolvableNumericValue(resolvable, minValue = null, maxValue = null) {
-          var _a;
-          if (!resolvable) return null;
-          const entityValue = this._getEntityNumericValue(resolvable.entity);
-          if (entityValue !== null) return entityValue;
-          const fixedValue = this._getNumericValue((_a = resolvable.fixed) != null ? _a : resolvable.value, null);
-          if (fixedValue !== null) return fixedValue;
-          if (Number.isFinite(resolvable.percent)) {
-            return this._resolvePercentValue(resolvable.percent, minValue, maxValue);
-          }
-          return null;
+          return getNormalizedResolvableNumericValue(this._hass, resolvable, minValue, maxValue);
         }
         _hexToRgb(color) {
           if (!color || typeof color !== "string") return null;
