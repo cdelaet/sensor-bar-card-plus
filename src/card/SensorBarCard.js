@@ -2726,6 +2726,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       ?? ecfg.name
       ?? stateObj?.attributes?.friendly_name
       ?? entityCfg.entity;
+    const escapedEntityId = escapeHtml(rowViewModel?.entityId ?? entityCfg.entity);
     const escapedName = escapeHtml(name);
     const targetEnabled = targetMarkerCfg?.enabled !== false;
     const peakMarkerColor = peakColor || '#888';
@@ -2785,7 +2786,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       : '';
       
     return `
-      <div class="row" data-entity="${rowViewModel?.entityId ?? entityCfg.entity}" data-base-height="${h}" data-height-explicit="${(rowViewModel?.attributes?.heightExplicit ?? layout.height_explicit) ? 'true' : 'false'}" data-bar-animated="${(rowViewModel?.attributes?.barAnimated ?? bar.animated) ? 'true' : 'false'}">
+      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${(rowViewModel?.attributes?.heightExplicit ?? layout.height_explicit) ? 'true' : 'false'}" data-bar-animated="${(rowViewModel?.attributes?.barAnimated ?? bar.animated) ? 'true' : 'false'}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${topRightValue}

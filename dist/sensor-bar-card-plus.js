@@ -3207,14 +3207,15 @@
           const lp = layout.label.position;
           const h = (_f = (_e = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _e.baseHeight) != null ? _f : layout.height;
           const name = (_j = (_i = (_g = rowViewModel == null ? void 0 : rowViewModel.name) != null ? _g : ecfg.name) != null ? _i : (_h = stateObj == null ? void 0 : stateObj.attributes) == null ? void 0 : _h.friendly_name) != null ? _j : entityCfg.entity;
+          const escapedEntityId = escapeHtml((_k = rowViewModel == null ? void 0 : rowViewModel.entityId) != null ? _k : entityCfg.entity);
           const escapedName = escapeHtml(name);
           const targetEnabled = (targetMarkerCfg == null ? void 0 : targetMarkerCfg.enabled) !== false;
           const peakMarkerColor = peakColor || "#888";
           const targetMarkerColor = targetColor || "#888";
           const peakContrastColor = this._getMarkerContrastColor(peakMarkerColor);
           const targetContrastColor = this._getMarkerContrastColor(targetMarkerColor);
-          const rawValue = (_k = rowViewModel == null ? void 0 : rowViewModel.numericValue) != null ? _k : this._getFiniteNumber(stateDisplay);
-          const needleState = (_l = rowViewModel == null ? void 0 : rowViewModel.needle) != null ? _l : this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
+          const rawValue = (_l = rowViewModel == null ? void 0 : rowViewModel.numericValue) != null ? _l : this._getFiniteNumber(stateDisplay);
+          const needleState = (_m = rowViewModel == null ? void 0 : rowViewModel.needle) != null ? _m : this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
           const fillState = this._getFillRenderState(pct, "var(--sbcp-row-height)", ecfg, color, targetPct, baselinePct, safeMin, safeMax, needleState.show);
           const peakMarker = peakMarkerCfg.show && peakPct !== null ? `
       <div class="peak-marker" style="left:${peakPct}%;--marker-color:${peakMarkerColor};--marker-contrast-color:${peakContrastColor};">
@@ -3230,9 +3231,9 @@
       <div class="target-value-label" style="left:${targetPct !== null ? targetPct : 0}%;">
         ${targetDisplay !== null ? escapeHtml(targetDisplay) : ""}
       </div>` : "";
-          const needleMarker = ((_n = (_m = ecfg.bar) == null ? void 0 : _m.needle) == null ? void 0 : _n.show) && !Number.isFinite(baselinePct) ? `
+          const needleMarker = ((_o = (_n = ecfg.bar) == null ? void 0 : _n.needle) == null ? void 0 : _o.show) && !Number.isFinite(baselinePct) ? `
       <div class="needle-layer">
-        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_o = needleState.pct) != null ? _o : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
+        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_p = needleState.pct) != null ? _p : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
       </div>` : "";
           const paintLayers = fillState.paintLayers.map((layer) => `
                   <div class="bar-paint-layer" data-layer="${layer.id}" style="z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}"></div>`).join("");
@@ -3253,7 +3254,7 @@
           const rightValue = lp !== "inside" && lp !== "above" ? `<div class="value-right" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}" data-hide-unit="false">${this._formatRightValueMarkup(stateDisplay, unit, false)}</div>` : "";
           const topRightValue = lp === "left" ? `<div class="top-right-value" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}" data-hide-unit="false" data-active="false">${this._formatRightValueMarkup(stateDisplay, unit, false)}</div>` : "";
           return `
-      <div class="row" data-entity="${(_p = rowViewModel == null ? void 0 : rowViewModel.entityId) != null ? _p : entityCfg.entity}" data-base-height="${h}" data-height-explicit="${((_r = (_q = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _q.heightExplicit) != null ? _r : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_t = (_s = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _s.barAnimated) != null ? _t : bar.animated) ? "true" : "false"}">
+      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${((_r = (_q = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _q.heightExplicit) != null ? _r : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_t = (_s = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _s.barAnimated) != null ? _t : bar.animated) ? "true" : "false"}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${topRightValue}

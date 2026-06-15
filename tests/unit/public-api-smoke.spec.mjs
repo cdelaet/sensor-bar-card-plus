@@ -168,6 +168,33 @@ describe('Sensor Bar Card Plus public API smoke', () => {
     expect(html).not.toContain('AT&amp;amp;T');
   });
 
+  it('escapes dynamic entity ids interpolated into row HTML attributes', () => {
+    const card = createCard();
+    const rowCfg = card.normalizeCardConfig({
+      entities: [{ entity: 'sensor.one' }],
+    }).entities[0];
+    rowCfg.entity = 'sensor.bad"&<>\'';
+
+    const html = card._buildRow(
+      rowCfg,
+      '42',
+      'W',
+      42,
+      '#4a9eff',
+      null,
+      null,
+      null,
+      null,
+      '#888',
+      '#888',
+      0,
+      100,
+    );
+
+    expect(html).toContain('data-entity="sensor.bad&quot;&amp;&lt;&gt;&#39;"');
+    expect(html).not.toContain('data-entity="sensor.bad"&<>\'"');
+  });
+
   it('resolves dynamic min/max/target/baseline entity references', () => {
     const card = createCard();
     card._hass.states = {
