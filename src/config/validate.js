@@ -88,16 +88,31 @@ function validateSegments(diagnostics, segments, scaleBounds, path, entity = nul
 
 function validateGradientStops(diagnostics, stops, path, entity = null) {
   if (!Array.isArray(stops)) return;
+  const seenPositions = new Set();
   for (let index = 0; index < stops.length; index += 1) {
     const pos = getFiniteNumber(stops[index]?.pos);
+    const stopPath = `${path}.gradient_stops[${index}]`;
     if (Number.isFinite(pos) && (pos < 0 || pos > 100)) {
       addWarning(
         diagnostics,
         'gradient_stops.outside_range',
         'Gradient stop position is outside 0..100.',
-        `${path}.gradient_stops[${index}]`,
+        stopPath,
         entity
       );
+    }
+    if (Number.isFinite(pos)) {
+      if (seenPositions.has(pos)) {
+        addWarning(
+          diagnostics,
+          'duplicate-gradient-stop-position',
+          'Multiple gradient stops use the same position value.',
+          stopPath,
+          entity
+        );
+      } else {
+        seenPositions.add(pos);
+      }
     }
   }
 }

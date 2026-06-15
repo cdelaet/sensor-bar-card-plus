@@ -135,6 +135,42 @@ describe('validateNormalizedConfig', () => {
     }));
   });
 
+  it('warns when multiple gradient stops share the same position', () => {
+    const diagnostics = validateNormalizedConfig(normalize({
+      entities: [{ entity: 'sensor.one' }],
+      bar: {
+        gradient_stops: [
+          { pos: 0, color: '#00ff00' },
+          { pos: 50, color: '#ffaa00' },
+          { pos: 50, color: '#ff0000' },
+        ],
+      },
+    }));
+
+    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
+      code: 'duplicate-gradient-stop-position',
+      path: 'card.bar.gradient_stops[2]',
+      entity: null,
+    }));
+  });
+
+  it('does not warn on distinct gradient stop positions', () => {
+    const diagnostics = validateNormalizedConfig(normalize({
+      entities: [{ entity: 'sensor.one' }],
+      bar: {
+        gradient_stops: [
+          { pos: 0, color: '#00ff00' },
+          { pos: 50, color: '#ffaa00' },
+          { pos: 100, color: '#ff0000' },
+        ],
+      },
+    }));
+
+    expect(diagnostics.warnings.some((warning) => (
+      warning.code === 'duplicate-gradient-stop-position'
+    ))).toBe(false);
+  });
+
   it('does not warn on fixed-range checks when values are entity-backed', () => {
     const diagnostics = validateNormalizedConfig(normalize({
       min_entity: 'sensor.min',

@@ -644,16 +644,31 @@
   function validateGradientStops(diagnostics, stops, path, entity = null) {
     var _a;
     if (!Array.isArray(stops)) return;
+    const seenPositions = /* @__PURE__ */ new Set();
     for (let index = 0; index < stops.length; index += 1) {
       const pos = getFiniteNumber((_a = stops[index]) == null ? void 0 : _a.pos);
+      const stopPath = `${path}.gradient_stops[${index}]`;
       if (Number.isFinite(pos) && (pos < 0 || pos > 100)) {
         addWarning(
           diagnostics,
           "gradient_stops.outside_range",
           "Gradient stop position is outside 0..100.",
-          `${path}.gradient_stops[${index}]`,
+          stopPath,
           entity
         );
+      }
+      if (Number.isFinite(pos)) {
+        if (seenPositions.has(pos)) {
+          addWarning(
+            diagnostics,
+            "duplicate-gradient-stop-position",
+            "Multiple gradient stops use the same position value.",
+            stopPath,
+            entity
+          );
+        } else {
+          seenPositions.add(pos);
+        }
       }
     }
   }
