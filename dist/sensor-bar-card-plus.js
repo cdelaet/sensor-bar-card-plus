@@ -603,6 +603,24 @@
       addWarning(diagnostics, "baseline.outside_scale", "Fixed baseline value is outside the fixed scale range.", path, entity);
     }
   }
+  function hasConfiguredResolvableValue(resolvable) {
+    var _a;
+    return !!resolvable && (Number.isFinite(getFiniteNumber((_a = resolvable.fixed) != null ? _a : resolvable.value)) || Number.isFinite(resolvable.percent) || !!resolvable.entity);
+  }
+  function validateBaselineSuppressesNeedle(diagnostics, config, path, entity = null) {
+    var _a, _b, _c, _d;
+    const needleEnabled = ((_b = (_a = config == null ? void 0 : config.bar) == null ? void 0 : _a.needle) == null ? void 0 : _b.show) === true;
+    const baselineConfigured = ((_c = config == null ? void 0 : config.baseline) == null ? void 0 : _c.enabled) !== false && hasConfiguredResolvableValue((_d = config == null ? void 0 : config.baseline) == null ? void 0 : _d.at);
+    if (needleEnabled && baselineConfigured) {
+      addWarning(
+        diagnostics,
+        "baseline-suppresses-needle",
+        "Baseline rendering suppresses the needle marker.",
+        path,
+        entity
+      );
+    }
+  }
   function getStaticSegmentBound(boundary) {
     var _a;
     if (!boundary || boundary.entity || Number.isFinite(boundary.percent)) return null;
@@ -677,6 +695,7 @@
     const scaleBounds = validateScaleBounds(diagnostics, config == null ? void 0 : config.scale, path, entity);
     validateTargetRange(diagnostics, config, scaleBounds, path, entity);
     validateBaselineRange(diagnostics, config, scaleBounds, path, entity);
+    validateBaselineSuppressesNeedle(diagnostics, config, path, entity);
     validateSegments(diagnostics, (_a = config == null ? void 0 : config.bar) == null ? void 0 : _a.segments, scaleBounds, `${path}.bar`, entity);
     validateGradientStops(diagnostics, (_b = config == null ? void 0 : config.bar) == null ? void 0 : _b.gradient_stops, `${path}.bar`, entity);
   }

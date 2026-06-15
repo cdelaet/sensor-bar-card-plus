@@ -171,6 +171,50 @@ describe('validateNormalizedConfig', () => {
     ))).toBe(false);
   });
 
+  it('warns when baseline configuration suppresses the needle', () => {
+    const diagnostics = validateNormalizedConfig(normalize({
+      baseline: 0,
+      bar: { needle: true },
+      entities: [{ entity: 'sensor.one' }],
+    }));
+
+    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
+      code: 'baseline-suppresses-needle',
+      path: 'card',
+      entity: null,
+    }));
+  });
+
+  it('does not warn when only baseline or needle is enabled', () => {
+    const baselineOnly = validateNormalizedConfig(normalize({
+      baseline: 0,
+      entities: [{ entity: 'sensor.one' }],
+    }));
+    const needleOnly = validateNormalizedConfig(normalize({
+      bar: { needle: true },
+      entities: [{ entity: 'sensor.one' }],
+    }));
+
+    expect(baselineOnly.warnings.some((warning) => (
+      warning.code === 'baseline-suppresses-needle'
+    ))).toBe(false);
+    expect(needleOnly.warnings.some((warning) => (
+      warning.code === 'baseline-suppresses-needle'
+    ))).toBe(false);
+  });
+
+  it('does not warn when needle is explicitly disabled', () => {
+    const diagnostics = validateNormalizedConfig(normalize({
+      baseline: 0,
+      bar: { needle: false },
+      entities: [{ entity: 'sensor.one' }],
+    }));
+
+    expect(diagnostics.warnings.some((warning) => (
+      warning.code === 'baseline-suppresses-needle'
+    ))).toBe(false);
+  });
+
   it('does not warn on fixed-range checks when values are entity-backed', () => {
     const diagnostics = validateNormalizedConfig(normalize({
       min_entity: 'sensor.min',
