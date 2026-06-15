@@ -20,6 +20,10 @@ function createNormalizedEntity(rawConfig, index = 0) {
   return config.entities[index];
 }
 
+function normalizeDecimalString(value) {
+  return String(value).replace(',', '.');
+}
+
 describe('buildRowViewModel', () => {
   it('builds basic runtime row state from a normalized entity config', () => {
     const hass = {
@@ -53,7 +57,7 @@ describe('buildRowViewModel', () => {
     expect(row.min).toBe(0);
     expect(row.max).toBe(100);
     expect(row.percent).toBe(42.5);
-    expect(row.displayValue).toBe('42.5');
+    expect(normalizeDecimalString(row.displayValue)).toBe('42.5');
     expect(row.rawUnit).toBe('W');
     expect(row.displayUnit).toBe('W');
     expect(row.unit).toBe('W');
@@ -162,7 +166,7 @@ describe('buildRowViewModel', () => {
     expect(row.target).toBe(55.25);
     expect(row.targetPercent).toBe(55.25);
     expect(row.targetVisible).toBe(true);
-    expect(row.targetDisplay).toBe('55.3 kW');
+    expect(normalizeDecimalString(row.targetDisplay)).toBe('55.3 kW');
   });
 
   it('resolves dynamic target entities', () => {
