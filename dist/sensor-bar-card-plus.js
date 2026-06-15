@@ -3160,25 +3160,33 @@
           return `<span class="inside-value-text ${unitModeClass}"><span class="inside-number">${display}</span><span class="inside-unit">${cleanUnit}</span></span>`;
         }
         _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
-          var _a, _b, _c, _d, _e, _f;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t;
           const ecfg = this._resolve(entityCfg);
+          const stateObj = (_c = (_b = (_a = this._hass) == null ? void 0 : _a.states) == null ? void 0 : _b[entityCfg.entity]) != null ? _c : null;
+          const rowViewModel = stateObj ? buildRowViewModel({
+            hass: this._hass,
+            cardConfig: this._config,
+            entityConfig: ecfg,
+            entityState: stateObj,
+            peaks: this._peaks
+          }) : null;
           const layout = ecfg.layout;
           const bar = ecfg.bar;
           const targetMarkerCfg = ecfg.target_marker;
           const peakMarkerCfg = ecfg.peak_marker;
           const safeMin = Number.isFinite(minValue) ? minValue : 0;
           const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
-          const baselinePct = this._resolveBaselinePct(ecfg, safeMin, safeMax);
+          const baselinePct = (_d = rowViewModel == null ? void 0 : rowViewModel.baselinePercent) != null ? _d : this._resolveBaselinePct(ecfg, safeMin, safeMax);
           const lp = layout.label.position;
-          const h = layout.height;
-          const name = ecfg.name || ((_c = (_b = (_a = this._hass) == null ? void 0 : _a.states[entityCfg.entity]) == null ? void 0 : _b.attributes) == null ? void 0 : _c.friendly_name) || entityCfg.entity;
+          const h = (_f = (_e = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _e.baseHeight) != null ? _f : layout.height;
+          const name = (_j = (_i = (_g = rowViewModel == null ? void 0 : rowViewModel.name) != null ? _g : ecfg.name) != null ? _i : (_h = stateObj == null ? void 0 : stateObj.attributes) == null ? void 0 : _h.friendly_name) != null ? _j : entityCfg.entity;
           const targetEnabled = (targetMarkerCfg == null ? void 0 : targetMarkerCfg.enabled) !== false;
           const peakMarkerColor = peakColor || "#888";
           const targetMarkerColor = targetColor || "#888";
           const peakContrastColor = this._getMarkerContrastColor(peakMarkerColor);
           const targetContrastColor = this._getMarkerContrastColor(targetMarkerColor);
-          const rawValue = this._getFiniteNumber(stateDisplay);
-          const needleState = this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
+          const rawValue = (_k = rowViewModel == null ? void 0 : rowViewModel.numericValue) != null ? _k : this._getFiniteNumber(stateDisplay);
+          const needleState = (_l = rowViewModel == null ? void 0 : rowViewModel.needle) != null ? _l : this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
           const fillState = this._getFillRenderState(pct, "var(--sbcp-row-height)", ecfg, color, targetPct, baselinePct, safeMin, safeMax, needleState.show);
           const peakMarker = peakMarkerCfg.show && peakPct !== null ? `
       <div class="peak-marker" style="left:${peakPct}%;--marker-color:${peakMarkerColor};--marker-contrast-color:${peakContrastColor};">
@@ -3194,9 +3202,9 @@
       <div class="target-value-label" style="left:${targetPct !== null ? targetPct : 0}%;">
         ${targetDisplay !== null ? targetDisplay : ""}
       </div>` : "";
-          const needleMarker = ((_e = (_d = ecfg.bar) == null ? void 0 : _d.needle) == null ? void 0 : _e.show) && !Number.isFinite(baselinePct) ? `
+          const needleMarker = ((_n = (_m = ecfg.bar) == null ? void 0 : _m.needle) == null ? void 0 : _n.show) && !Number.isFinite(baselinePct) ? `
       <div class="needle-layer">
-        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_f = needleState.pct) != null ? _f : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
+        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_o = needleState.pct) != null ? _o : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
       </div>` : "";
           const paintLayers = fillState.paintLayers.map((layer) => `
                   <div class="bar-paint-layer" data-layer="${layer.id}" style="z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}"></div>`).join("");
@@ -3217,7 +3225,7 @@
           const rightValue = lp !== "inside" && lp !== "above" ? `<div class="value-right" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}" data-hide-unit="false">${this._formatRightValueMarkup(stateDisplay, unit, false)}</div>` : "";
           const topRightValue = lp === "left" ? `<div class="top-right-value" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}" data-hide-unit="false" data-active="false">${this._formatRightValueMarkup(stateDisplay, unit, false)}</div>` : "";
           return `
-      <div class="row" data-entity="${entityCfg.entity}" data-base-height="${h}" data-height-explicit="${layout.height_explicit ? "true" : "false"}" data-bar-animated="${bar.animated ? "true" : "false"}">
+      <div class="row" data-entity="${(_p = rowViewModel == null ? void 0 : rowViewModel.entityId) != null ? _p : entityCfg.entity}" data-base-height="${h}" data-height-explicit="${((_r = (_q = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _q.heightExplicit) != null ? _r : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_t = (_s = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _s.barAnimated) != null ? _t : bar.animated) ? "true" : "false"}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${topRightValue}

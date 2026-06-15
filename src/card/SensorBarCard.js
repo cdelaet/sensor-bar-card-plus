@@ -2685,25 +2685,36 @@ _getAboveTargetLayerGeometry(targetPct = null) {
 
   _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
     const ecfg = this._resolve(entityCfg);
+    const stateObj = this._hass?.states?.[entityCfg.entity] ?? null;
+    const rowViewModel = stateObj
+      ? buildRowViewModel({
+        hass: this._hass,
+        cardConfig: this._config,
+        entityConfig: ecfg,
+        entityState: stateObj,
+        peaks: this._peaks,
+      })
+      : null;
     const layout = ecfg.layout;
     const bar = ecfg.bar;
     const targetMarkerCfg = ecfg.target_marker;
     const peakMarkerCfg = ecfg.peak_marker;
     const safeMin = Number.isFinite(minValue) ? minValue : 0;
     const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
-    const baselinePct = this._resolveBaselinePct(ecfg, safeMin, safeMax);
+    const baselinePct = rowViewModel?.baselinePercent ?? this._resolveBaselinePct(ecfg, safeMin, safeMax);
     const lp   = layout.label.position;
-    const h    = layout.height;
-    const name = ecfg.name
-      || this._hass?.states[entityCfg.entity]?.attributes?.friendly_name
-      || entityCfg.entity;
+    const h    = rowViewModel?.attributes?.baseHeight ?? layout.height;
+    const name = rowViewModel?.name
+      ?? ecfg.name
+      ?? stateObj?.attributes?.friendly_name
+      ?? entityCfg.entity;
     const targetEnabled = targetMarkerCfg?.enabled !== false;
     const peakMarkerColor = peakColor || '#888';
     const targetMarkerColor = targetColor || '#888';
     const peakContrastColor = this._getMarkerContrastColor(peakMarkerColor);
     const targetContrastColor = this._getMarkerContrastColor(targetMarkerColor);
-    const rawValue = this._getFiniteNumber(stateDisplay);
-    const needleState = this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
+    const rawValue = rowViewModel?.numericValue ?? this._getFiniteNumber(stateDisplay);
+    const needleState = rowViewModel?.needle ?? this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
     const fillState = this._getFillRenderState(pct, 'var(--sbcp-row-height)', ecfg, color, targetPct, baselinePct, safeMin, safeMax, needleState.show);
 
     // Peak marker — chevron top, line full height, configurable colour
@@ -2755,7 +2766,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       : '';
       
     return `
-      <div class="row" data-entity="${entityCfg.entity}" data-base-height="${h}" data-height-explicit="${layout.height_explicit ? 'true' : 'false'}" data-bar-animated="${bar.animated ? 'true' : 'false'}">
+      <div class="row" data-entity="${rowViewModel?.entityId ?? entityCfg.entity}" data-base-height="${h}" data-height-explicit="${(rowViewModel?.attributes?.heightExplicit ?? layout.height_explicit) ? 'true' : 'false'}" data-bar-animated="${(rowViewModel?.attributes?.barAnimated ?? bar.animated) ? 'true' : 'false'}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${topRightValue}
