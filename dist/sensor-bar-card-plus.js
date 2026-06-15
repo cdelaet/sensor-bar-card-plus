@@ -3362,7 +3362,6 @@ ${paintLayers}
           }
         }
         _update() {
-          var _a, _b, _c, _d;
           if (!this._hass || !this._config) return;
           const rowsEl = this.shadowRoot.querySelector(".rows");
           if (!rowsEl) return;
@@ -3377,28 +3376,25 @@ ${paintLayers}
                 continue;
               }
               const ecfg = this._resolve(entityCfg);
-              const rawVal = parseFloat(stateObj.state);
-              const unit = (_c = (_b = ecfg.formatting.unit) != null ? _b : (_a = stateObj.attributes) == null ? void 0 : _a.unit_of_measurement) != null ? _c : "";
-              const minVal = this._getNormalizedResolvableNumericValue(ecfg.scale.min);
-              const maxVal = this._getNormalizedResolvableNumericValue(ecfg.scale.max);
-              const safeMin = Number.isFinite(minVal) ? minVal : 0;
-              const safeMax = Number.isFinite(maxVal) ? maxVal : 100;
-              const targetVal = ((_d = ecfg.target_marker) == null ? void 0 : _d.enabled) === false ? null : this._getNormalizedResolvableNumericValue(ecfg.target_marker.source, safeMin, safeMax);
-              const isNumericState = Number.isFinite(rawVal);
-              const pct = Number.isFinite(rawVal) ? this._toScalePct(rawVal, safeMin, safeMax) : 0;
+              const rowViewModel = buildRowViewModel({
+                hass: this._hass,
+                cardConfig: this._config,
+                entityConfig: ecfg,
+                entityState: stateObj,
+                peaks: this._peaks
+              });
+              const rawVal = rowViewModel.numericValue;
+              const safeMin = rowViewModel.min;
+              const safeMax = rowViewModel.max;
+              const targetVal = rowViewModel.target;
+              const pct = rowViewModel.percent;
               const color = this._getColor(pct, ecfg, safeMin, safeMax);
-              const display = isNaN(rawVal) ? stateObj.state : this._formatNumericDisplay(rawVal, ecfg.formatting.decimal);
-              const displayUnit = isNumericState ? unit : "";
-              let targetPct = null;
-              if (targetVal !== null) {
-                targetPct = this._toScalePct(targetVal, safeMin, safeMax);
-              }
-              let targetDisplay = null;
-              if (targetVal !== null) {
-                targetDisplay = this._formatDisplayWithUnit(this._formatNumericDisplay(targetVal, ecfg.formatting.decimal), unit);
-              }
+              const display = rowViewModel.displayValue;
+              const displayUnit = rowViewModel.displayUnit;
+              const targetPct = rowViewModel.targetPercent;
+              const targetDisplay = rowViewModel.targetDisplay;
               let peakPct = null, peakDisplay = null;
-              if (ecfg.peak_marker.show && !isNaN(rawVal)) {
+              if (ecfg.peak_marker.show && Number.isFinite(rawVal)) {
                 if (this._peaks[entityCfg.entity] === void 0 || rawVal > this._peaks[entityCfg.entity]) {
                   this._peaks[entityCfg.entity] = rawVal;
                 }
