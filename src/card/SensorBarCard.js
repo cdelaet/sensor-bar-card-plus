@@ -1730,12 +1730,11 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       }
     }
 
-    if (!this._resizeObserver) {
-      this._resizeObserver = new ResizeObserver(() => {
-        this._applyCompactTier();
-        this._runPostLayoutPasses();
-      });
-    }
+    this._disconnectResizeObserver();
+    this._resizeObserver = new ResizeObserver(() => {
+      this._applyCompactTier();
+      this._runPostLayoutPasses();
+    });
 
     const surface = this.shadowRoot.querySelector('ha-card');
     const card = this.shadowRoot.querySelector('.card');
@@ -1745,6 +1744,12 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     }
     this._update();
     this._schedulePostLayoutDensityPass();
+  }
+
+  _disconnectResizeObserver() {
+    if (!this._resizeObserver) return;
+    this._resizeObserver.disconnect();
+    this._resizeObserver = null;
   }
 
   _isReliableWidth(width, minWidth = 16) {
@@ -3003,9 +3008,6 @@ ${paintLayers}
     }
     this._densityPassScheduled = false;
     this._densityPassRetries = 0;
-    if (this._resizeObserver) {
-      this._resizeObserver.disconnect();
-      this._resizeObserver = null;
-    }
+    this._disconnectResizeObserver();
   }
 }

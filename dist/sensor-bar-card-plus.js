@@ -2340,12 +2340,11 @@
               titleEl.style.display = "none";
             }
           }
-          if (!this._resizeObserver) {
-            this._resizeObserver = new ResizeObserver(() => {
-              this._applyCompactTier();
-              this._runPostLayoutPasses();
-            });
-          }
+          this._disconnectResizeObserver();
+          this._resizeObserver = new ResizeObserver(() => {
+            this._applyCompactTier();
+            this._runPostLayoutPasses();
+          });
           const surface = this.shadowRoot.querySelector("ha-card");
           const card = this.shadowRoot.querySelector(".card");
           if (surface && card) {
@@ -2354,6 +2353,11 @@
           }
           this._update();
           this._schedulePostLayoutDensityPass();
+        }
+        _disconnectResizeObserver() {
+          if (!this._resizeObserver) return;
+          this._resizeObserver.disconnect();
+          this._resizeObserver = null;
         }
         _isReliableWidth(width, minWidth = 16) {
           return Number.isFinite(width) && width >= minWidth;
@@ -3449,10 +3453,7 @@ ${paintLayers}
           }
           this._densityPassScheduled = false;
           this._densityPassRetries = 0;
-          if (this._resizeObserver) {
-            this._resizeObserver.disconnect();
-            this._resizeObserver = null;
-          }
+          this._disconnectResizeObserver();
         }
       };
     }
