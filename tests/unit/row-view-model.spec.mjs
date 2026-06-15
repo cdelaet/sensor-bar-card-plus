@@ -54,6 +54,8 @@ describe('buildRowViewModel', () => {
     expect(row.max).toBe(100);
     expect(row.percent).toBe(42.5);
     expect(row.displayValue).toBe('42.5');
+    expect(row.rawUnit).toBe('W');
+    expect(row.displayUnit).toBe('W');
     expect(row.unit).toBe('W');
     expect(row.attributes.entity).toBe('sensor.power');
   });
@@ -82,10 +84,57 @@ describe('buildRowViewModel', () => {
     expect(row.numericValue).toBeNull();
     expect(row.percent).toBe(0);
     expect(row.displayValue).toBe('unavailable');
+    expect(row.rawUnit).toBe('W');
+    expect(row.displayUnit).toBe('');
     expect(row.unit).toBe('');
     expect(row.targetVisible).toBe(false);
     expect(row.baselineVisible).toBe(false);
     expect(row.needle.show).toBe(false);
+  });
+
+  it('preserves rawUnit while displayUnit follows rendered numeric unit behavior', () => {
+    const hass = {
+      states: {
+        'sensor.duration': sensor(15, {
+          friendly_name: 'Duration',
+          unit_of_measurement: 'min',
+        }),
+        'sensor.textual': sensor('idle', {
+          friendly_name: 'Textual',
+          unit_of_measurement: 'kWh',
+        }),
+      },
+    };
+    const numericEntityConfig = createNormalizedEntity({
+      formatting: { unit: 'h' },
+      entities: [{ entity: 'sensor.duration' }],
+    });
+    const textualEntityConfig = createNormalizedEntity({
+      formatting: { unit: 'MWh' },
+      entities: [{ entity: 'sensor.textual' }],
+    });
+
+    const numericRow = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig: numericEntityConfig,
+      entityState: hass.states['sensor.duration'],
+      peaks: {},
+    });
+    const textualRow = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig: textualEntityConfig,
+      entityState: hass.states['sensor.textual'],
+      peaks: {},
+    });
+
+    expect(numericRow.rawUnit).toBe('min');
+    expect(numericRow.displayUnit).toBe('h');
+    expect(numericRow.unit).toBe('h');
+    expect(textualRow.rawUnit).toBe('kWh');
+    expect(textualRow.displayUnit).toBe('');
+    expect(textualRow.unit).toBe('');
   });
 
   it('resolves fixed target values and formats target display with decimals and unit', () => {
@@ -292,6 +341,161 @@ describe('buildRowViewModel', () => {
 
     expect(row.fillStyle).toBe('bands');
     expect(row.segments).toEqual(entityConfig.bar.segments);
+  });
+
+  it('computes enabled needle patch fields from the resolved scale position', () => {
+    const card = createCard();
+    const hass = {
+      states: {
+        'sensor.power': sensor(25),
+      },
+    };
+    const entityConfig = createNormalizedEntity({
+      min: 0,
+      max: 100,
+      entities: [{
+        entity: 'sensor.power',
+        bar: {
+          needle: {
+            show: true,
+            color: '#ffffff',
+          },
+        },
+      }],
+    });
+
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      peaks: {},
+    });
+
+    expect(row.needle.show).toBe(true);
+    expect(row.needle.percent).toBe(25);
+    expect(row.needle.pct).toBe(25);
+    expect(row.needle.borderColor).toBe(card._getNeedleBorderColor('#ffffff'));
+    expect(row.needle.edge).toBe('middle');
+  });
+
+  it('computes needle edge states at the left and right bounds', () => {
+    const leftHass = {
+      states: {
+        'sensor.left': sensor(0),
+      },
+    };
+    const rightHass = {
+      states: {
+        'sensor.right': sensor(100),
+      },
+    };
+    const leftEntityConfig = createNormalizedEntity({
+      min: 0,
+      max: 100,
+      entities: [{
+        entity: 'sensor.left',
+        bar: {
+          needle: {
+            show: true,
+            color: '#ff9800',
+          },
+        },
+      }],
+    });
+    const rightEntityConfig = createNormalizedEntity({
+      min: 0,
+      max: 100,
+      entities: [{
+        entity: 'sensor.right',
+        bar: {
+          needle: {
+            show: true,
+            color: '#111111',
+          },
+        },
+      }],
+    });
+
+    const leftRow = buildRowViewModel({
+      hass: leftHass,
+      cardConfig: null,
+      entityConfig: leftEntityConfig,
+      entityState: leftHass.states['sensor.left'],
+      peaks: {},
+    });
+    const rightRow = buildRowViewModel({
+      hass: rightHass,
+      cardConfig: null,
+      entityConfig: rightEntityConfig,
+      entityState: rightHass.states['sensor.right'],
+      peaks: {},
+    });
+
+    expect(leftRow.needle.show).toBe(true);
+    expect(leftRow.needle.pct).toBe(0);
+    expect(leftRow.needle.edge).toBe('left');
+    expect(rightRow.needle.show).toBe(true);
+    expect(rightRow.needle.pct).toBe(100);
+    expect(rightRow.needle.edge).toBe('right');
+  });
+
+  it('keeps needle patch fields stable when needle rendering is disabled', () => {
+    const card = createCard();
+    const hass = {
+      states: {
+        'sensor.power': sensor(40),
+      },
+    };
+    const baselineEntityConfig = createNormalizedEntity({
+      min: 0,
+      max: 100,
+      baseline: 20,
+      entities: [{
+        entity: 'sensor.power',
+        bar: {
+          needle: {
+            show: true,
+            color: '#000000',
+          },
+        },
+      }],
+    });
+    const hiddenEntityConfig = createNormalizedEntity({
+      entities: [{
+        entity: 'sensor.power',
+        bar: {
+          needle: {
+            show: false,
+            color: '#ffffff',
+          },
+        },
+      }],
+    });
+
+    const baselineRow = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig: baselineEntityConfig,
+      entityState: hass.states['sensor.power'],
+      peaks: {},
+    });
+    const hiddenRow = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig: hiddenEntityConfig,
+      entityState: hass.states['sensor.power'],
+      peaks: {},
+    });
+
+    expect(baselineRow.needle.show).toBe(false);
+    expect(baselineRow.needle.pct).toBeNull();
+    expect(baselineRow.needle.edge).toBe('middle');
+    expect(baselineRow.needle.borderColor).toBe(card._getNeedleBorderColor('#000000'));
+    expect(hiddenRow.needle.show).toBe(false);
+    expect(hiddenRow.needle.pct).toBeNull();
+    expect(hiddenRow.needle.edge).toBe('middle');
+    expect(hiddenRow.needle.borderColor).toBe(card._getNeedleBorderColor('#ffffff'));
   });
 
   it('does not mutate the provided inputs', () => {
