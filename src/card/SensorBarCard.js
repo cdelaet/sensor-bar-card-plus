@@ -33,6 +33,7 @@ import {
   resolvePercentValue,
 } from '../config/resolve.js';
 import { validateNormalizedConfig } from '../config/validate.js';
+import { buildRowViewModel } from '../view-model/row-view-model.js';
 
 /**
  * sensor-bar-card-plus - A polished, configurable sensor bar card for Home Assistant
@@ -2783,31 +2784,27 @@ ${paintLayers}
     if (!row || !stateObj) return;
 
     const ecfg = this._resolve(entityCfg);
-    const rawVal = parseFloat(stateObj.state);
-    const unit = ecfg.formatting.unit ?? stateObj.attributes?.unit_of_measurement ?? '';
-    const minVal = this._getNormalizedResolvableNumericValue(ecfg.scale.min);
-    const maxVal = this._getNormalizedResolvableNumericValue(ecfg.scale.max);
-    const safeMin = Number.isFinite(minVal) ? minVal : 0;
-    const safeMax = Number.isFinite(maxVal) ? maxVal : 100;
-    const targetVal = ecfg.target_marker?.enabled === false
-      ? null
-      : this._getNormalizedResolvableNumericValue(ecfg.target_marker.source, safeMin, safeMax);
-    const isNumericState = Number.isFinite(rawVal);
-    const pct = Number.isFinite(rawVal)
-      ? this._toScalePct(rawVal, safeMin, safeMax)
-      : 0;
+    const rowViewModel = buildRowViewModel({
+      hass: this._hass,
+      cardConfig: this._config,
+      entityConfig: ecfg,
+      entityState: stateObj,
+      peaks: this._peaks,
+    });
+    const rawVal = rowViewModel.numericValue;
+    const safeMin = rowViewModel.min;
+    const safeMax = rowViewModel.max;
+    const targetVal = rowViewModel.target;
+    const pct = rowViewModel.percent;
     const color = this._getColor(pct, ecfg, safeMin, safeMax);
-    const display = isNaN(rawVal) ? stateObj.state : this._formatNumericDisplay(rawVal, ecfg.formatting.decimal);
-    const displayUnit = isNumericState ? unit : '';
+    const display = rowViewModel.displayValue;
+    const displayUnit = rowViewModel.displayUnit;
 
     const fillReveal = row.querySelector('.bar-fill-reveal');
     const paintLayer = row.querySelector('.bar-paint-layer[data-layer="base"]');
-    let liveTargetPct = null;
-    if (targetVal !== null) {
-      liveTargetPct = this._toScalePct(targetVal, safeMin, safeMax);
-    }
-    const liveBaselinePct = this._resolveBaselinePct(ecfg, safeMin, safeMax);
-    const needleState = this._getNeedleRenderState(rawVal, ecfg, safeMin, safeMax, liveBaselinePct);
+    const liveTargetPct = rowViewModel.targetPercent;
+    const liveBaselinePct = rowViewModel.baselinePercent;
+    const needleState = rowViewModel.needle;
     const fillState = this._getFillRenderState(pct, 'var(--sbcp-row-height)', ecfg, color, liveTargetPct, liveBaselinePct, safeMin, safeMax, needleState.show);
 
     if (fillReveal) {
@@ -2835,9 +2832,9 @@ ${paintLayers}
       this._setStyleIfChanged(needleEl, '--needle-border-color', needleState.borderColor);
       this._setDatasetIfChanged(needleEl, 'edge', needleState.edge);
     }
-    this._setDatasetIfChanged(row, 'baseHeight', ecfg.layout.height);
-    this._setDatasetIfChanged(row, 'heightExplicit', ecfg.layout.height_explicit ? 'true' : 'false');
-    this._setDatasetIfChanged(row, 'barAnimated', ecfg.bar.animated ? 'true' : 'false');
+    this._setDatasetIfChanged(row, 'baseHeight', rowViewModel.attributes.baseHeight);
+    this._setDatasetIfChanged(row, 'heightExplicit', rowViewModel.attributes.heightExplicit ? 'true' : 'false');
+    this._setDatasetIfChanged(row, 'barAnimated', rowViewModel.attributes.barAnimated ? 'true' : 'false');
 
     const valueEl = row.querySelector('.value-right');
     if (valueEl) {
@@ -2864,10 +2861,10 @@ ${paintLayers}
     }
     const aboveLabel = row.querySelector('.above-bar-label');
     if (aboveLabel) {
-      aboveLabel.innerHTML = `<span class="above-bar-label-name label-left-text">${ecfg.name || stateObj.attributes?.friendly_name || entityCfg.entity}</span>${this._formatAboveValueMarkup(display, displayUnit)}`;
+      aboveLabel.innerHTML = `<span class="above-bar-label-name label-left-text">${rowViewModel.name}</span>${this._formatAboveValueMarkup(display, displayUnit)}`;
     }
 
-    if (ecfg.peak_marker.show && !isNaN(rawVal)) {
+    if (ecfg.peak_marker.show && Number.isFinite(rawVal)) {
       const key = entityCfg.entity;
       if (this._peaks[key] === undefined || rawVal > this._peaks[key]) {
         this._peaks[key] = rawVal;
@@ -2885,7 +2882,7 @@ ${paintLayers}
     const targetEl = row.querySelector('.target-marker');
     const targetLabelEl = row.querySelector('.target-value-label');
     if (targetVal !== null) {
-      const targetPct = this._toScalePct(targetVal, safeMin, safeMax);
+      const targetPct = rowViewModel.targetPercent;
       if (targetEl) {
         this._setStyleIfChanged(targetEl, 'display', '');
         this._setStyleIfChanged(targetEl, 'left', `${targetPct}%`);
@@ -2894,7 +2891,7 @@ ${paintLayers}
       }
 
       if (targetLabelEl) {
-        this._setTextIfChanged(targetLabelEl, this._formatDisplayWithUnit(this._formatNumericDisplay(targetVal, ecfg.formatting.decimal), unit));
+        this._setTextIfChanged(targetLabelEl, rowViewModel.targetDisplay);
       }
     } else {
       if (targetEl) this._setStyleIfChanged(targetEl, 'display', 'none');

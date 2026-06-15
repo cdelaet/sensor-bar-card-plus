@@ -700,6 +700,229 @@
     }
   });
 
+  // src/view-model/row-view-model.js
+  function getDefaultEntityIcon(stateObj, entityId = "") {
+    var _a, _b, _c;
+    const deviceClass = String((_b = (_a = stateObj == null ? void 0 : stateObj.attributes) == null ? void 0 : _a.device_class) != null ? _b : "").trim();
+    if (deviceClass) {
+      const deviceClassIcons = {
+        apparent_power: "mdi:flash",
+        battery: "mdi:battery",
+        carbon_dioxide: "mdi:molecule-co2",
+        current: "mdi:current-ac",
+        energy: "mdi:lightning-bolt",
+        gas: "mdi:meter-gas",
+        humidity: "mdi:water-percent",
+        monetary: "mdi:cash",
+        power: "mdi:flash",
+        pressure: "mdi:gauge",
+        temperature: "mdi:thermometer",
+        voltage: "mdi:sine-wave",
+        water: "mdi:water",
+        weight: "mdi:weight",
+        wind_speed: "mdi:weather-windy"
+      };
+      if (deviceClassIcons[deviceClass]) {
+        return deviceClassIcons[deviceClass];
+      }
+    }
+    const domain = String(entityId || "").split(".")[0];
+    const domainIcons = {
+      sensor: "mdi:eye",
+      binary_sensor: "mdi:radiobox-marked",
+      switch: "mdi:toggle-switch-variant",
+      light: "mdi:lightbulb"
+    };
+    return (_c = domainIcons[domain]) != null ? _c : null;
+  }
+  function toScalePct(value, minValue, maxValue) {
+    if (!Number.isFinite(value)) return null;
+    const safeMin = Number.isFinite(minValue) ? minValue : 0;
+    const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
+    const range = safeMax - safeMin || 1;
+    return Math.min(100, Math.max(0, (value - safeMin) / range * 100));
+  }
+  function formatNumericDisplay(rawVal, decimal = null) {
+    if (!Number.isFinite(rawVal)) return String(rawVal);
+    if (decimal !== null) {
+      return parseFloat(rawVal.toFixed(decimal)).toLocaleString();
+    }
+    return rawVal.toLocaleString();
+  }
+  function isTightUnit(unit) {
+    return ["h", "m", "s"].includes(String(unit || "").trim());
+  }
+  function formatDisplayWithUnit(display, unit) {
+    if (!unit) return String(display);
+    const cleanUnit = String(unit);
+    return `${display}${isTightUnit(cleanUnit) ? "" : " "}${cleanUnit}`;
+  }
+  function parseColorToRgb(color) {
+    const value = String(color || "").trim();
+    if (!value) return null;
+    const hexMatch = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hexMatch) {
+      const hex = hexMatch[1];
+      const full = hex.length === 3 ? hex.split("").map((char) => char + char).join("") : hex;
+      return {
+        r: parseInt(full.slice(0, 2), 16),
+        g: parseInt(full.slice(2, 4), 16),
+        b: parseInt(full.slice(4, 6), 16)
+      };
+    }
+    const rgbMatch = value.match(/^rgba?\(([^)]+)\)$/i);
+    if (rgbMatch) {
+      const parts = rgbMatch[1].split(",").map((part) => part.trim());
+      if (parts.length >= 3) {
+        return {
+          r: Math.max(0, Math.min(255, parseFloat(parts[0]))),
+          g: Math.max(0, Math.min(255, parseFloat(parts[1]))),
+          b: Math.max(0, Math.min(255, parseFloat(parts[2])))
+        };
+      }
+    }
+    return null;
+  }
+  function getNeedleBorderColor(color) {
+    const rgb = parseColorToRgb(color);
+    if (!rgb) return "#000000";
+    const toLinear = (channel) => {
+      const srgb = channel / 255;
+      return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+    };
+    const luminance = 0.2126 * toLinear(rgb.r) + 0.7152 * toLinear(rgb.g) + 0.0722 * toLinear(rgb.b);
+    return luminance < 0.22 ? "#ffffff" : "#000000";
+  }
+  function getNeedleState(entityConfig, numericValue, minValue, maxValue, baselinePercent) {
+    var _a, _b, _c;
+    const needle = (_a = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _a.needle;
+    if (!(needle == null ? void 0 : needle.show) || Number.isFinite(baselinePercent) || !Number.isFinite(numericValue)) {
+      const color2 = (_b = needle == null ? void 0 : needle.color) != null ? _b : "#ffffff";
+      return {
+        show: false,
+        percent: null,
+        pct: null,
+        color: color2,
+        borderColor: getNeedleBorderColor(color2),
+        edge: "middle"
+      };
+    }
+    const color = (_c = needle.color) != null ? _c : "#ffffff";
+    const percent = Math.min(100, Math.max(0, toScalePct(numericValue, minValue, maxValue)));
+    return {
+      show: true,
+      percent,
+      pct: percent,
+      color,
+      borderColor: getNeedleBorderColor(color),
+      edge: percent <= 0 ? "left" : percent >= 100 ? "right" : "middle"
+    };
+  }
+  function getPeakState(entityId, numericValue, minValue, maxValue, peaks, peakEnabled) {
+    if (!peakEnabled || !Number.isFinite(numericValue)) {
+      return {
+        value: null,
+        percent: null,
+        display: null,
+        visible: false
+      };
+    }
+    const existingPeak = getFiniteNumber(peaks == null ? void 0 : peaks[entityId]);
+    const peakValue = Number.isFinite(existingPeak) ? Math.max(existingPeak, numericValue) : numericValue;
+    return {
+      value: peakValue,
+      percent: toScalePct(peakValue, minValue, maxValue),
+      visible: true
+    };
+  }
+  function buildRowViewModel(options) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S;
+    const {
+      hass,
+      cardConfig,
+      entityConfig,
+      entityState,
+      peaks
+    } = options;
+    void cardConfig;
+    const entityId = (_a = entityConfig == null ? void 0 : entityConfig.entity) != null ? _a : null;
+    const rawState = (_b = entityState == null ? void 0 : entityState.state) != null ? _b : "";
+    const numericValue = getFiniteNumber(rawState);
+    const rawUnit = (_d = (_c = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _c.unit_of_measurement) != null ? _d : "";
+    const displayUnit = numericValue !== null ? (_g = (_f = (_e = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _e.unit) != null ? _f : rawUnit) != null ? _g : "" : "";
+    const min = getNormalizedResolvableNumericValue(hass, (_h = entityConfig == null ? void 0 : entityConfig.scale) == null ? void 0 : _h.min);
+    const max = getNormalizedResolvableNumericValue(hass, (_i = entityConfig == null ? void 0 : entityConfig.scale) == null ? void 0 : _i.max);
+    const safeMin = Number.isFinite(min) ? min : 0;
+    const safeMax = Number.isFinite(max) ? max : 100;
+    const percent = numericValue !== null ? toScalePct(numericValue, safeMin, safeMax) : 0;
+    const displayValue = numericValue === null ? rawState : formatNumericDisplay(numericValue, (_k = (_j = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _j.decimal) != null ? _k : null);
+    const targetValue = ((_l = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _l.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_m = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _m.source, safeMin, safeMax);
+    const targetPercent = targetValue !== null ? toScalePct(targetValue, safeMin, safeMax) : null;
+    const targetVisible = targetValue !== null;
+    const targetDisplay = targetValue !== null ? formatDisplayWithUnit(
+      formatNumericDisplay(targetValue, (_o = (_n = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _n.decimal) != null ? _o : null),
+      (_r = (_q = (_p = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _p.unit) != null ? _q : rawUnit) != null ? _r : ""
+    ) : null;
+    const baselineValue = ((_s = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _s.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_t = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _t.at, safeMin, safeMax);
+    const baselinePercent = Number.isFinite(baselineValue) ? toScalePct(baselineValue, safeMin, safeMax) : null;
+    const baselineVisible = Number.isFinite(baselineValue);
+    const peakState = getPeakState(
+      entityId,
+      numericValue,
+      safeMin,
+      safeMax,
+      peaks,
+      ((_u = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _u.show) === true
+    );
+    const peakDisplay = peakState.visible ? formatNumericDisplay(peakState.value, (_w = (_v = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _v.decimal) != null ? _w : null) : null;
+    return {
+      entityId,
+      name: (_z = (_y = entityConfig == null ? void 0 : entityConfig.name) != null ? _y : (_x = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _x.friendly_name) != null ? _z : entityId,
+      icon: (entityConfig == null ? void 0 : entityConfig.icon) === false ? false : (_C = (_B = entityConfig == null ? void 0 : entityConfig.icon) != null ? _B : (_A = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _A.icon) != null ? _C : getDefaultEntityIcon(entityState, entityId),
+      state: rawState,
+      numericValue,
+      rawUnit,
+      displayUnit,
+      min: safeMin,
+      max: safeMax,
+      percent,
+      displayValue,
+      unit: displayUnit,
+      barColor: (_E = (_D = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _D.color) != null ? _E : null,
+      fillStyle: (_G = (_F = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _F.fill_style) != null ? _G : null,
+      target: targetValue,
+      targetPercent,
+      targetDisplay,
+      targetVisible,
+      baseline: baselineValue,
+      baselinePercent,
+      baselineVisible,
+      peak: peakState.value,
+      peakPercent: peakState.percent,
+      peakDisplay,
+      peakVisible: peakState.visible,
+      segments: (_I = (_H = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _H.segments) != null ? _I : null,
+      gradientStops: (_K = (_J = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _J.gradient_stops) != null ? _K : null,
+      needle: getNeedleState(entityConfig, numericValue, safeMin, safeMax, baselinePercent),
+      classes: {
+        labelPosition: (_N = (_M = (_L = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _L.label) == null ? void 0 : _M.position) != null ? _N : "left",
+        animated: ((_O = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _O.animated) !== false
+      },
+      attributes: {
+        entity: entityId,
+        baseHeight: (_Q = (_P = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _P.height) != null ? _Q : 38,
+        heightExplicit: ((_R = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _R.height_explicit) === true,
+        barAnimated: ((_S = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _S.animated) !== false
+      }
+    };
+  }
+  var init_row_view_model = __esm({
+    "src/view-model/row-view-model.js"() {
+      init_resolve();
+      init_normalize();
+    }
+  });
+
   // src/card/SensorBarCard.js
   var SensorBarCard;
   var init_SensorBarCard = __esm({
@@ -707,6 +930,7 @@
       init_normalize();
       init_resolve();
       init_validate();
+      init_row_view_model();
       SensorBarCard = class extends HTMLElement {
         static getConfigElement() {
           return document.createElement("sensor-bar-card-plus-editor");
@@ -3018,29 +3242,29 @@ ${paintLayers}
       </div>`;
         }
         _patchRow(row, entityCfg, stateObj) {
-          var _a, _b, _c, _d, _e, _f;
+          var _a;
           if (!row || !stateObj) return;
           const ecfg = this._resolve(entityCfg);
-          const rawVal = parseFloat(stateObj.state);
-          const unit = (_c = (_b = ecfg.formatting.unit) != null ? _b : (_a = stateObj.attributes) == null ? void 0 : _a.unit_of_measurement) != null ? _c : "";
-          const minVal = this._getNormalizedResolvableNumericValue(ecfg.scale.min);
-          const maxVal = this._getNormalizedResolvableNumericValue(ecfg.scale.max);
-          const safeMin = Number.isFinite(minVal) ? minVal : 0;
-          const safeMax = Number.isFinite(maxVal) ? maxVal : 100;
-          const targetVal = ((_d = ecfg.target_marker) == null ? void 0 : _d.enabled) === false ? null : this._getNormalizedResolvableNumericValue(ecfg.target_marker.source, safeMin, safeMax);
-          const isNumericState = Number.isFinite(rawVal);
-          const pct = Number.isFinite(rawVal) ? this._toScalePct(rawVal, safeMin, safeMax) : 0;
+          const rowViewModel = buildRowViewModel({
+            hass: this._hass,
+            cardConfig: this._config,
+            entityConfig: ecfg,
+            entityState: stateObj,
+            peaks: this._peaks
+          });
+          const rawVal = rowViewModel.numericValue;
+          const safeMin = rowViewModel.min;
+          const safeMax = rowViewModel.max;
+          const targetVal = rowViewModel.target;
+          const pct = rowViewModel.percent;
           const color = this._getColor(pct, ecfg, safeMin, safeMax);
-          const display = isNaN(rawVal) ? stateObj.state : this._formatNumericDisplay(rawVal, ecfg.formatting.decimal);
-          const displayUnit = isNumericState ? unit : "";
+          const display = rowViewModel.displayValue;
+          const displayUnit = rowViewModel.displayUnit;
           const fillReveal = row.querySelector(".bar-fill-reveal");
           const paintLayer = row.querySelector('.bar-paint-layer[data-layer="base"]');
-          let liveTargetPct = null;
-          if (targetVal !== null) {
-            liveTargetPct = this._toScalePct(targetVal, safeMin, safeMax);
-          }
-          const liveBaselinePct = this._resolveBaselinePct(ecfg, safeMin, safeMax);
-          const needleState = this._getNeedleRenderState(rawVal, ecfg, safeMin, safeMax, liveBaselinePct);
+          const liveTargetPct = rowViewModel.targetPercent;
+          const liveBaselinePct = rowViewModel.baselinePercent;
+          const needleState = rowViewModel.needle;
           const fillState = this._getFillRenderState(pct, "var(--sbcp-row-height)", ecfg, color, liveTargetPct, liveBaselinePct, safeMin, safeMax, needleState.show);
           if (fillReveal) {
             this._setStyleTextIfChanged(fillReveal, fillState.revealStyle);
@@ -3062,14 +3286,14 @@ ${paintLayers}
           const needleEl = row.querySelector(".needle-marker");
           if (needleEl) {
             this._setStyleIfChanged(needleEl, "display", needleState.show ? "block" : "none");
-            this._setStyleIfChanged(needleEl, "left", `${(_e = needleState.pct) != null ? _e : 0}%`);
+            this._setStyleIfChanged(needleEl, "left", `${(_a = needleState.pct) != null ? _a : 0}%`);
             this._setStyleIfChanged(needleEl, "--needle-color", needleState.color);
             this._setStyleIfChanged(needleEl, "--needle-border-color", needleState.borderColor);
             this._setDatasetIfChanged(needleEl, "edge", needleState.edge);
           }
-          this._setDatasetIfChanged(row, "baseHeight", ecfg.layout.height);
-          this._setDatasetIfChanged(row, "heightExplicit", ecfg.layout.height_explicit ? "true" : "false");
-          this._setDatasetIfChanged(row, "barAnimated", ecfg.bar.animated ? "true" : "false");
+          this._setDatasetIfChanged(row, "baseHeight", rowViewModel.attributes.baseHeight);
+          this._setDatasetIfChanged(row, "heightExplicit", rowViewModel.attributes.heightExplicit ? "true" : "false");
+          this._setDatasetIfChanged(row, "barAnimated", rowViewModel.attributes.barAnimated ? "true" : "false");
           const valueEl = row.querySelector(".value-right");
           if (valueEl) {
             valueEl.dataset.display = this._encodeDataAttr(display);
@@ -3095,9 +3319,9 @@ ${paintLayers}
           }
           const aboveLabel = row.querySelector(".above-bar-label");
           if (aboveLabel) {
-            aboveLabel.innerHTML = `<span class="above-bar-label-name label-left-text">${ecfg.name || ((_f = stateObj.attributes) == null ? void 0 : _f.friendly_name) || entityCfg.entity}</span>${this._formatAboveValueMarkup(display, displayUnit)}`;
+            aboveLabel.innerHTML = `<span class="above-bar-label-name label-left-text">${rowViewModel.name}</span>${this._formatAboveValueMarkup(display, displayUnit)}`;
           }
-          if (ecfg.peak_marker.show && !isNaN(rawVal)) {
+          if (ecfg.peak_marker.show && Number.isFinite(rawVal)) {
             const key = entityCfg.entity;
             if (this._peaks[key] === void 0 || rawVal > this._peaks[key]) {
               this._peaks[key] = rawVal;
@@ -3114,7 +3338,7 @@ ${paintLayers}
           const targetEl = row.querySelector(".target-marker");
           const targetLabelEl = row.querySelector(".target-value-label");
           if (targetVal !== null) {
-            const targetPct = this._toScalePct(targetVal, safeMin, safeMax);
+            const targetPct = rowViewModel.targetPercent;
             if (targetEl) {
               this._setStyleIfChanged(targetEl, "display", "");
               this._setStyleIfChanged(targetEl, "left", `${targetPct}%`);
@@ -3122,7 +3346,7 @@ ${paintLayers}
               this._setStyleIfChanged(targetEl, "--marker-contrast-color", this._getMarkerContrastColor(ecfg.target_marker.color));
             }
             if (targetLabelEl) {
-              this._setTextIfChanged(targetLabelEl, this._formatDisplayWithUnit(this._formatNumericDisplay(targetVal, ecfg.formatting.decimal), unit));
+              this._setTextIfChanged(targetLabelEl, rowViewModel.targetDisplay);
             }
           } else {
             if (targetEl) this._setStyleIfChanged(targetEl, "display", "none");

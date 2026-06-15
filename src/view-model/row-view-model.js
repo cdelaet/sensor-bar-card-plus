@@ -62,20 +62,76 @@ function formatDisplayWithUnit(display, unit) {
   return `${display}${isTightUnit(cleanUnit) ? '' : ' '}${cleanUnit}`;
 }
 
-function getNeedleState(entityConfig, numericValue, minValue, maxValue, baselinePercent) {
-  const needle = entityConfig?.bar?.needle;
-  if (!needle?.show || Number.isFinite(baselinePercent) || !Number.isFinite(numericValue)) {
+function parseColorToRgb(color) {
+  const value = String(color || '').trim();
+  if (!value) return null;
+
+  const hexMatch = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hexMatch) {
+    const hex = hexMatch[1];
+    const full = hex.length === 3
+      ? hex.split('').map((char) => char + char).join('')
+      : hex;
     return {
-      show: false,
-      percent: null,
-      color: needle?.color ?? '#ffffff',
+      r: parseInt(full.slice(0, 2), 16),
+      g: parseInt(full.slice(2, 4), 16),
+      b: parseInt(full.slice(4, 6), 16),
     };
   }
 
+  const rgbMatch = value.match(/^rgba?\(([^)]+)\)$/i);
+  if (rgbMatch) {
+    const parts = rgbMatch[1].split(',').map((part) => part.trim());
+    if (parts.length >= 3) {
+      return {
+        r: Math.max(0, Math.min(255, parseFloat(parts[0]))),
+        g: Math.max(0, Math.min(255, parseFloat(parts[1]))),
+        b: Math.max(0, Math.min(255, parseFloat(parts[2]))),
+      };
+    }
+  }
+
+  return null;
+}
+
+function getNeedleBorderColor(color) {
+  const rgb = parseColorToRgb(color);
+  if (!rgb) return '#000000';
+  const toLinear = (channel) => {
+    const srgb = channel / 255;
+    return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = (
+    0.2126 * toLinear(rgb.r)
+    + 0.7152 * toLinear(rgb.g)
+    + 0.0722 * toLinear(rgb.b)
+  );
+  return luminance < 0.22 ? '#ffffff' : '#000000';
+}
+
+function getNeedleState(entityConfig, numericValue, minValue, maxValue, baselinePercent) {
+  const needle = entityConfig?.bar?.needle;
+  if (!needle?.show || Number.isFinite(baselinePercent) || !Number.isFinite(numericValue)) {
+    const color = needle?.color ?? '#ffffff';
+    return {
+      show: false,
+      percent: null,
+      pct: null,
+      color,
+      borderColor: getNeedleBorderColor(color),
+      edge: 'middle',
+    };
+  }
+
+  const color = needle.color ?? '#ffffff';
+  const percent = Math.min(100, Math.max(0, toScalePct(numericValue, minValue, maxValue)));
   return {
     show: true,
-    percent: Math.min(100, Math.max(0, toScalePct(numericValue, minValue, maxValue))),
-    color: needle.color ?? '#ffffff',
+    percent,
+    pct: percent,
+    color,
+    borderColor: getNeedleBorderColor(color),
+    edge: percent <= 0 ? 'left' : (percent >= 100 ? 'right' : 'middle'),
   };
 }
 
@@ -116,7 +172,7 @@ export function buildRowViewModel(options) {
   const rawState = entityState?.state ?? '';
   const numericValue = getFiniteNumber(rawState);
   const rawUnit = entityState?.attributes?.unit_of_measurement ?? '';
-  const unit = numericValue !== null
+  const displayUnit = numericValue !== null
     ? (entityConfig?.formatting?.unit ?? rawUnit ?? '')
     : '';
   const min = getNormalizedResolvableNumericValue(hass, entityConfig?.scale?.min);
@@ -136,7 +192,7 @@ export function buildRowViewModel(options) {
   const targetDisplay = targetValue !== null
     ? formatDisplayWithUnit(
       formatNumericDisplay(targetValue, entityConfig?.formatting?.decimal ?? null),
-      unit
+      entityConfig?.formatting?.unit ?? rawUnit ?? ''
     )
     : null;
 
@@ -166,11 +222,13 @@ export function buildRowViewModel(options) {
       : (entityConfig?.icon ?? entityState?.attributes?.icon ?? getDefaultEntityIcon(entityState, entityId)),
     state: rawState,
     numericValue,
+    rawUnit,
+    displayUnit,
     min: safeMin,
     max: safeMax,
     percent,
     displayValue,
-    unit,
+    unit: displayUnit,
     barColor: entityConfig?.bar?.color ?? null,
     fillStyle: entityConfig?.bar?.fill_style ?? null,
     target: targetValue,
