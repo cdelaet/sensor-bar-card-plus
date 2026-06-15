@@ -960,6 +960,14 @@
           }
           this._rendered = false;
           this._config = this.normalizeCardConfig(config);
+          const activeEntityIds = new Set(
+            (this._config.entities || []).map((entityConfig) => entityConfig.entity)
+          );
+          for (const entityId of Object.keys(this._peaks)) {
+            if (!activeEntityIds.has(entityId)) {
+              delete this._peaks[entityId];
+            }
+          }
           this._diagnostics = validateNormalizedConfig(this._config);
           this._logDiagnostics();
           this._render();

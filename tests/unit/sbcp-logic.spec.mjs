@@ -1301,6 +1301,26 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(capturedPeakDisplay).toBe('80');
   });
 
+  it('prunes stale peak entries when config entities change and preserves active peaks', () => {
+    const card = createCard();
+    card._render = () => {};
+    card._peaks = {
+      'sensor.keep': 75,
+      'sensor.remove': 42,
+    };
+
+    card.setConfig({
+      entities: [
+        { entity: 'sensor.keep' },
+        { entity: 'sensor.new' },
+      ],
+    });
+
+    expect(card._peaks).toEqual({
+      'sensor.keep': 75,
+    });
+  });
+
   it('does not recreate or rewrite an unchanged needle marker during _patchRow', () => {
     const card = createCard();
     const cfg = card.normalizeCardConfig({
