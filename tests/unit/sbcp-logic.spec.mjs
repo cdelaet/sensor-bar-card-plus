@@ -3213,7 +3213,8 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(source).toContain('--sbcp-hero-min-value-size: 13px;');
     expect(source).toContain('grid-template-columns: minmax(0, 1fr) auto;');
     expect(source).toContain('justify-self: end;');
-    expect(source).toContain('margin-bottom: clamp(3px, calc(var(--sbcp-row-height) * 0.18), 8px);');
+    expect(source).toContain('margin-bottom: clamp(2px, calc(var(--sbcp-row-height) * 0.08), 4px);');
+    expect(source).not.toContain('min-height: min(64px, calc(var(--sbcp-row-height) * 2));');
     expect(source).toContain('.hero-line[data-hero-density="dense"] .hero-value {');
     expect(source).toContain('.hero-line[data-hero-density="compressed"] .hero-value {');
     expect(source).toContain('.hero-value {\n          min-width: max-content;');

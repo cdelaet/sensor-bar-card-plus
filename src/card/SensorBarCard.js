@@ -1555,8 +1555,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           align-items: baseline;
           column-gap: var(--sbcp-main-gap);
           min-width: 0;
-          min-height: min(64px, calc(var(--sbcp-row-height) * 2));
-          margin-bottom: clamp(3px, calc(var(--sbcp-row-height) * 0.18), 8px);
+          margin-bottom: clamp(2px, calc(var(--sbcp-row-height) * 0.08), 4px);
         }
         .hero-header[data-hide-name="true"] .hero-label,
         .hero-header[data-priority-hide-name="true"] .hero-label {

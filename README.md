@@ -1,10 +1,9 @@
-<p align="center">
-  <img src="images/branding/logo.png" alt="Sensor Bar Card Plus" width="300">
-</p>
+
+![Sensor Bar Card Plus](images/branding/logo-300.png)
 
 # Sensor Bar Card Plus
 
-[![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+[![HACS Default](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/cdelaet/sensor-bar-card-plus)](https://github.com/cdelaet/sensor-bar-card-plus/releases)
 [![Validate](https://github.com/cdelaet/sensor-bar-card-plus/actions/workflows/validate.yml/badge.svg)](https://github.com/cdelaet/sensor-bar-card-plus/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/cdelaet/sensor-bar-card-plus/blob/main/LICENSE)
@@ -42,31 +41,31 @@ Now you have no excuse anymore to build that pretty dashboard. Go forth and look
 
 ## Installation
 
-### HACS
+### HACS (Recommended)
 
-[![Open your Home Assistant instance and open this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=cdelaet&repository=sensor-bar-card-plus&category=plugin)
-
-Sensor Bar Card Plus is available through HACS and this is the recommended installation method.
+Sensor Bar Card Plus is available directly through HACS.
 
 1. Open **HACS** in Home Assistant.
 2. Search for **Sensor Bar Card Plus**.
-3. Open the card page and choose **Download**.
-4. Hard refresh the browser.
+3. Select **Download**.
+4. Refresh your browser.
+
+![Installing Sensor Bar Card Plus from HACS](images/hacs-installation.png)
 
 ### Manual
 
-If you prefer not to use HACS, manual installation is still supported:
+If you prefer not to use HACS, manual installation is also supported.
 
-1. Download `sensor-bar-card-plus.js` from the [latest release](https://github.com/cdelaet/sensor-bar-card-plus/releases/latest).
+1. Download `sensor-bar-card-plus.js` from the latest release.
 2. Copy it to `/config/www/`.
-3. Add this resource in **Settings -> Dashboards -> Resources**:
+3. Add the following resource under **Settings → Dashboards → Resources**:
 
 ```text
 URL: /local/sensor-bar-card-plus.js
 Type: JavaScript Module
 ```
 
-4. Hard refresh the browser.
+4. Refresh your browser.
 
 
 ## Quick Start
@@ -102,6 +101,8 @@ scale:
 
 ![Basic needle example](images/needle-basic.png)
 
+
+You can also add the card through the Home Assistant card picker and configure it visually with the built-in Visual Editor.
 
 > Legacy flat YAML remains supported. See Legacy Compatibility near the end of this README if you want to migrate older dashboards.
 
@@ -250,44 +251,7 @@ entities:
     name: Sensor
 ```
 
-The rendering mode determines how the current value is visualized. Fill styles, semantic overlays, markers, targets, peaks, gradients, and responsive behavior work consistently across both rendering models.
-
-
-
-## Needle Mode
-
-Needle mode keeps the full theoretical bar paint visible and shows the current value with a moving needle. This makes the card behave more like a gauge while still preserving all of the existing fill logic.
-
-It works with:
-
-- `solid`
-- `gradient`
-- `bands`
-- `soft_bands`
-- `band_gradient`
-- `solid_fill`
-
-It is especially useful for gauge-style dashboards, dynamic scales, energy flows, and cards where the color context across the whole scale matters as much as the current value itself.
-
-![Needle mode basic sky](images/needle-sky-basic.png)
-
-```yaml
-type: custom:sensor-bar-card-plus
-title: Needle Gauge
-bar:
-  fill_style: soft_bands
-  needle: true
-scale:
-  min:
-    fixed: 0
-  max:
-    fixed: 100
-entities:
-  - entity: sensor.power_usage
-    name: Sensor
-```
-
-Expanded form:
+Expanded needle configuration:
 
 ```yaml
 bar:
@@ -298,10 +262,16 @@ bar:
 
 ![Needle yellow with black needle](images/needle-yellow-fill-black-needle.png)
 
+Notes:
+
+- `bar.needle: true` is the preferred simple syntax for new dashboards
 - needle mode and baseline mode are mutually exclusive because baseline visualizes directional fill geometry while needle mode visualizes absolute position on a persistent full-scale track
 - target and peak markers render on top of the needle
 - inside labels and values render on top of markers and needle
-- `bar.needle: true` is the preferred simple syntax for new dashboards
+- fill styles, semantic overlays, markers, targets, peaks, gradients, and responsive behavior work consistently across both rendering models
+
+
+
 
 ## Fill Styles
 
@@ -594,6 +564,7 @@ Supported values:
 - `above`
 - `inside`
 - `off`
+- `hero`
 
 ![Label modes](images/example-label-positions.png)
 
@@ -1914,10 +1885,23 @@ Issues and pull requests are welcome.
 
 Recommended workflow:
 
-1. Make changes in `src/sensor-bar-card-plus.js`
-2. Verify behavior in the demo playground and screenshot board
-3. Update screenshots or README examples if the user-facing behavior changed
-4. Open a pull request with a concise explanation of the change
+1. Make changes in the `src/` source tree.
+2. Build the distributable:
+
+   ```bash
+   npm run build
+   ```
+
+3. Run the full test suite:
+
+   ```bash
+   npm test
+   ```
+
+4. If your change affects logic, layout, rendering, or screenshots, update or add the relevant tests.
+5. Verify behavior in the demo playground and screenshot board.
+6. Update screenshots or README examples if the user-facing behavior changed.
+7. Open a pull request with a concise explanation of the change.
 
 ## Support Me
 
