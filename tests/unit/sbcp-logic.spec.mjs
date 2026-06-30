@@ -218,6 +218,30 @@ describe('Sensor Bar Card Plus logic', () => {
     });
   });
 
+  it('accepts hero label positioning and falls back invalid positions to left', () => {
+    const card = createCard();
+    const heroCfg = card.normalizeCardConfig({
+      layout: {
+        label: {
+          position: 'hero',
+        },
+      },
+      entities: [{ entity: 'sensor.row' }],
+    });
+    const invalidCfg = card.normalizeCardConfig({
+      layout: {
+        label: {
+          position: 'not-a-mode',
+        },
+      },
+      entities: [{ entity: 'sensor.row' }],
+    });
+
+    expect(heroCfg.layout.label.position).toBe('hero');
+    expect(heroCfg.entities[0].layout.label.position).toBe('hero');
+    expect(invalidCfg.layout.label.position).toBe('left');
+  });
+
   it('rendering reads the nested layout shape', () => {
     const card = createCard();
     card._hass.states = {
@@ -947,7 +971,7 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(html).toContain('data-bar-animated="false"');
     expect(html).toContain('bar-fill-reveal no-anim');
 
-    const source = readFileSync(new URL('../../src/sensor-bar-card-plus.js', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
     expect(source).toContain('.row[data-bar-animated="false"] .bar-fill-reveal,');
     expect(source).toContain('.row[data-bar-animated="false"] .needle-marker,');
     expect(source).toContain('.row[data-bar-animated="false"] .target-marker,');
@@ -1253,6 +1277,53 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(peakMarker.style.left).toBe('80%');
   });
 
+  it('does not write an invalid peak marker left position during _patchRow', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      min: 0,
+      max: 100,
+      peak: { enabled: true, color: '#7c3aed' },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+
+    card._peaks['sensor.row'] = 80;
+    const peakMarker = createTrackedElement({
+      style: {
+        left: '80%',
+        '--marker-color': '#7c3aed',
+        '--marker-contrast-color': card._getMarkerContrastColor('#7c3aed'),
+      },
+    });
+    const row = createTrackedRow({
+      '.peak-marker': peakMarker,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+
+    const originalToScalePct = card._toScalePct;
+    card._toScalePct = () => NaN;
+
+    try {
+      card._patchRow(row, cfg, {
+        state: '20',
+        attributes: {
+          friendly_name: 'Row',
+          icon: 'mdi:flash',
+          unit_of_measurement: 'W',
+        },
+      });
+    } finally {
+      card._toScalePct = originalToScalePct;
+    }
+
+    expect(peakMarker.style.left).toBe('80%');
+    expect(peakMarker.style.__writes.some((write) => (
+      write.prop === 'left' && String(write.value).includes('NaN%')
+    ))).toBe(false);
+  });
+
   it('preserves a higher stored peak during a full _update rebuild', () => {
     const card = createCard();
     card._config = card.normalizeCardConfig({
@@ -1299,6 +1370,26 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(card._peaks['sensor.row']).toBe(80);
     expect(capturedPeakPct).toBe(80);
     expect(capturedPeakDisplay).toBe('80');
+  });
+
+  it('prunes stale peak entries when config entities change and preserves active peaks', () => {
+    const card = createCard();
+    card._render = () => {};
+    card._peaks = {
+      'sensor.keep': 75,
+      'sensor.remove': 42,
+    };
+
+    card.setConfig({
+      entities: [
+        { entity: 'sensor.keep' },
+        { entity: 'sensor.new' },
+      ],
+    });
+
+    expect(card._peaks).toEqual({
+      'sensor.keep': 75,
+    });
   });
 
   it('does not recreate or rewrite an unchanged needle marker during _patchRow', () => {
@@ -1447,6 +1538,184 @@ describe('Sensor Bar Card Plus logic', () => {
 
     expect(targetLabel.textContent).toBe('70 W');
     expect(targetLabel.__writes.textContent).toBe(1);
+  });
+
+  it('formats a fixed target label with card-level decimals during initial render', () => {
+    const card = createCard();
+    card._hass.states = {
+      'sensor.row': {
+        state: '42.4',
+        attributes: {
+          friendly_name: 'Row',
+          icon: 'mdi:flash',
+          unit_of_measurement: 'W',
+        },
+      },
+    };
+    const cfg = card.normalizeCardConfig({
+      formatting: { decimal: 1 },
+      target: { at: { fixed: 65.25 }, label: { show: true } },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    });
+    const rowsEl = {
+      innerHTML: '',
+      querySelectorAll: () => [],
+    };
+    card.shadowRoot = {
+      querySelector: (selector) => (selector === '.rows' ? rowsEl : null),
+      querySelectorAll: () => [],
+    };
+    card._config = cfg;
+
+    card._update();
+
+    expect(rowsEl.innerHTML).toMatch(/65[.,]3 W/);
+    expect(rowsEl.innerHTML).toMatch(/42[.,]4/);
+  });
+
+  it('formats a fixed target label with decimal 0 during _patchRow', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      formatting: { decimal: 0 },
+      target: { at: { fixed: 65.25 }, label: { show: true } },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+
+    const targetLabel = createTrackedElement({
+      style: {
+        left: '65%',
+        visibility: 'visible',
+      },
+      textContent: '65.25 W',
+    });
+    const row = createTrackedRow({
+      '.target-marker': createTrackedElement({
+        style: {
+          display: '',
+          left: '65%',
+          '--marker-color': '#888',
+          '--marker-contrast-color': card._getMarkerContrastColor('#888'),
+        },
+      }),
+      '.target-value-label': targetLabel,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+
+    card._patchRow(row, cfg, {
+      state: '42.4',
+      attributes: {
+        friendly_name: 'Row',
+        icon: 'mdi:flash',
+        unit_of_measurement: 'W',
+      },
+    });
+
+    expect(targetLabel.textContent).toBe('65 W');
+  });
+
+  it('formats a target entity label with card-level decimals during _patchRow', () => {
+    const card = createCard();
+    card._hass.states = {
+      'sensor.dynamic_target': {
+        state: '70.25',
+        attributes: {},
+      },
+    };
+    const cfg = card.normalizeCardConfig({
+      formatting: { decimal: 1 },
+      target: { at: { entity: 'sensor.dynamic_target' }, label: { show: true } },
+      entities: [{ entity: 'sensor.row', name: 'Sensor' }],
+    }).entities[0];
+
+    const targetLabel = createTrackedElement({
+      style: {
+        left: '65%',
+        visibility: 'visible',
+      },
+      textContent: '65 W',
+    });
+    const row = createTrackedRow({
+      '.target-marker': createTrackedElement({
+        style: {
+          display: '',
+          left: '65%',
+          '--marker-color': '#888',
+          '--marker-contrast-color': card._getMarkerContrastColor('#888'),
+        },
+      }),
+      '.target-value-label': targetLabel,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+
+    card._patchRow(row, cfg, {
+      state: '42.4',
+      attributes: {
+        friendly_name: 'Row',
+        icon: 'mdi:flash',
+        unit_of_measurement: 'W',
+      },
+    });
+
+    expect(targetLabel.textContent).toMatch(/^70[.,]3 W$/);
+  });
+
+  it('formats a target label with a per-entity decimal override during _patchRow', () => {
+    const card = createCard();
+    card._hass.states = {
+      'sensor.dynamic_target': {
+        state: '70.25',
+        attributes: {},
+      },
+    };
+    const cfg = card.normalizeCardConfig({
+      formatting: { decimal: 1 },
+      target: { at: { entity: 'sensor.dynamic_target' }, label: { show: true } },
+      entities: [{
+        entity: 'sensor.row',
+        name: 'Sensor',
+        formatting: { decimal: 2 },
+      }],
+    }).entities[0];
+
+    const targetLabel = createTrackedElement({
+      style: {
+        left: '65%',
+        visibility: 'visible',
+      },
+      textContent: '65 W',
+    });
+    const row = createTrackedRow({
+      '.target-marker': createTrackedElement({
+        style: {
+          display: '',
+          left: '65%',
+          '--marker-color': '#888',
+          '--marker-contrast-color': card._getMarkerContrastColor('#888'),
+        },
+      }),
+      '.target-value-label': targetLabel,
+    }, {
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+
+    card._patchRow(row, cfg, {
+      state: '42.4',
+      attributes: {
+        friendly_name: 'Row',
+        icon: 'mdi:flash',
+        unit_of_measurement: 'W',
+      },
+    });
+
+    expect(targetLabel.textContent).toMatch(/^70[.,]25 W$/);
   });
 
   it('updates target visibility when the target disappears during _patchRow', () => {
@@ -1757,7 +2026,7 @@ describe('Sensor Bar Card Plus logic', () => {
   });
 
   it('renders inside labels above peak/target/needle and marker layering in CSS', () => {
-    const source = readFileSync(new URL('../../src/sensor-bar-card-plus.js', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
 
     expect(source).toContain('.bar-inner-label {\n          position: absolute;');
     expect(source).toContain('z-index: 8;');
@@ -1803,7 +2072,7 @@ describe('Sensor Bar Card Plus logic', () => {
   });
 
   it('keeps needle glow off CSS filters to avoid clipped animation trails', () => {
-    const source = readFileSync(new URL('../../src/sensor-bar-card-plus.js', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
     const needleRule = source.match(/\.needle-marker \{[\s\S]*?\n        \}/)?.[0] ?? '';
 
     expect(needleRule).toContain('box-shadow:');
@@ -2867,15 +3136,17 @@ describe('Sensor Bar Card Plus logic', () => {
     const denseLabel = { dataset: {}, getBoundingClientRect: () => ({ width: 130 }) };
     const compressedLabel = { dataset: {}, getBoundingClientRect: () => ({ width: 100 }) };
     const denseLine = {
+      classList: { contains: () => false },
       dataset: {},
-      querySelector: (selector) => selector === '.above-bar-label' ? denseLabel : null,
+      querySelector: (selector) => selector === '.above-bar-label, .hero-header' ? denseLabel : null,
     };
     const compressedLine = {
+      classList: { contains: () => false },
       dataset: {},
-      querySelector: (selector) => selector === '.above-bar-label' ? compressedLabel : null,
+      querySelector: (selector) => selector === '.above-bar-label, .hero-header' ? compressedLabel : null,
     };
     card.shadowRoot = {
-      querySelectorAll: (selector) => selector === '.above-line' ? [denseLine, compressedLine] : [],
+      querySelectorAll: (selector) => selector === '.above-line, .hero-line' ? [denseLine, compressedLine] : [],
       querySelector: () => null,
     };
 
@@ -2890,8 +3161,43 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(card._formatAboveValueMarkup('72', 'W')).toContain('<span class="unit">W</span>');
   });
 
+  it('hero mode hides the label on narrow densities before sacrificing the value group', () => {
+    const card = createCard();
+    const tightLabel = { dataset: {}, getBoundingClientRect: () => ({ width: 185 }) };
+    const denseLabel = { dataset: {}, getBoundingClientRect: () => ({ width: 130 }) };
+    const compressedLabel = { dataset: {}, getBoundingClientRect: () => ({ width: 100 }) };
+    const tightLine = {
+      classList: { contains: (name) => name === 'hero-line' },
+      dataset: {},
+      querySelector: (selector) => selector === '.above-bar-label, .hero-header' ? tightLabel : null,
+    };
+    const denseLine = {
+      classList: { contains: (name) => name === 'hero-line' },
+      dataset: {},
+      querySelector: (selector) => selector === '.above-bar-label, .hero-header' ? denseLabel : null,
+    };
+    const compressedLine = {
+      classList: { contains: (name) => name === 'hero-line' },
+      dataset: {},
+      querySelector: (selector) => selector === '.above-bar-label, .hero-header' ? compressedLabel : null,
+    };
+    card.shadowRoot = {
+      querySelectorAll: (selector) => selector === '.above-line, .hero-line' ? [tightLine, denseLine, compressedLine] : [],
+      querySelector: () => null,
+    };
+
+    card._applyAboveLabelDensity();
+
+    expect(tightLine.dataset.heroDensity).toBe('tight');
+    expect(tightLabel.dataset.hideName).toBe('false');
+    expect(denseLine.dataset.heroDensity).toBe('dense');
+    expect(denseLabel.dataset.hideName).toBe('true');
+    expect(compressedLine.dataset.heroDensity).toBe('compressed');
+    expect(compressedLabel.dataset.hideName).toBe('true');
+  });
+
   it('inside and above narrow-mode CSS preserves value priority', () => {
-    const source = readFileSync(new URL('../../src/sensor-bar-card-plus.js', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
 
     expect(source).not.toContain('.bar-inner-label[data-inside-density="compressed"] {\n          display: none;');
     expect(source).toContain('.main-line.inside-mode[data-hide-inside-icon="true"] .icon-wrap');
@@ -2899,6 +3205,23 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(source).toContain('.bar-inner-label[data-hide-name="true"] .inside-value,');
     expect(source).toContain('margin-left: auto;');
     expect(source).not.toContain('.above-line[data-above-density="dense"] .above-bar-label-value .unit');
+  });
+
+  it('hero mode CSS keeps the value visible without ellipsis and allows responsive shrinking', () => {
+    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
+
+    expect(source).toContain('--sbcp-hero-min-value-size: 13px;');
+    expect(source).toContain('grid-template-columns: minmax(0, 1fr) auto;');
+    expect(source).toContain('justify-self: end;');
+    expect(source).toContain('margin-bottom: clamp(3px, calc(var(--sbcp-row-height) * 0.18), 8px);');
+    expect(source).toContain('.hero-line[data-hero-density="dense"] .hero-value {');
+    expect(source).toContain('.hero-line[data-hero-density="compressed"] .hero-value {');
+    expect(source).toContain('.hero-value {\n          min-width: max-content;');
+    expect(source).toContain('.hero-value .value-right-text {\n          display: inline-flex;\n          flex: 0 0 auto;');
+    expect(source).toContain('.hero-value .value-right-text {\n          display: inline-flex;\n          flex: 0 0 auto;\n          justify-content: flex-end;\n          gap: 4px;\n          align-items: baseline;\n          width: auto;\n          max-width: 100%;\n          overflow: visible;\n          text-overflow: clip;\n          white-space: nowrap;');
+    expect(source).toContain('.hero-value .value-right-number {\n          flex: 0 0 auto;\n          overflow: visible;\n          text-overflow: clip;\n          white-space: nowrap;');
+    expect(source).toContain('.hero-value .unit {\n          font-size: max(16px, 0.5em);');
+    expect(source).toContain('.hero-header[data-hide-name=\"true\"] .hero-value,');
   });
 
   it('above mode keeps name truncation and standard value-unit markup', () => {
@@ -2946,7 +3269,7 @@ describe('Sensor Bar Card Plus logic', () => {
   });
 
   it('inside label pill shrink-wraps short labels while clamping long ones', () => {
-    const source = readFileSync(new URL('../../src/sensor-bar-card-plus.js', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
 
     expect(source).toContain('.bar-inner-label .inside-name {\n          flex: 0 1 auto;');
     expect(source).toContain('width: fit-content;');
@@ -3148,6 +3471,107 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(aboveLabel.dataset.priorityHideName).toBeUndefined();
     expect(mainLine.dataset.hideAboveIcon).toBe('true');
     expect(aboveLine.dataset.hideAboveIcon).toBe('true');
+  });
+
+  it('renders hero mode with a separate header and full-width bar line', () => {
+    const card = createCard();
+    card._hass.states = {
+      'sensor.hero': {
+        state: '7.2',
+        attributes: {
+          friendly_name: 'Solar Production',
+          icon: 'mdi:solar-power',
+          unit_of_measurement: 'kW',
+        },
+      },
+    };
+
+    const cfg = card.normalizeCardConfig({
+      layout: {
+        label: {
+          position: 'hero',
+        },
+      },
+      entities: [{ entity: 'sensor.hero' }],
+    });
+
+    const html = card._buildRow(
+      cfg.entities[0],
+      '7.2',
+      'kW',
+      72,
+      '#4a9eff',
+      null,
+      null,
+      null,
+      null,
+      '#888',
+      '#888',
+      0,
+      10,
+    );
+
+    expect(html).toContain('class="hero-line"');
+    expect(html).toContain('class="hero-header"');
+    expect(html).toContain('class="hero-label label-left-text"');
+    expect(html).toContain('class="hero-value"');
+    expect(html).toContain('class="main-line hero-mode"');
+    expect(html).not.toContain('class="value-right"');
+    expect(html).not.toContain('class="label-left"');
+  });
+
+  it('patches hero rows without rebuilding above-mode markup', () => {
+    const card = createCard();
+    card._config = card.normalizeCardConfig({
+      layout: {
+        label: {
+          position: 'hero',
+        },
+      },
+      entities: [{ entity: 'sensor.hero', name: 'Grid import' }],
+    });
+    card._hass = {
+      states: {
+        'sensor.hero': {
+          state: '3.4',
+          attributes: {
+            friendly_name: 'Grid import',
+            icon: 'mdi:transmission-tower-import',
+            unit_of_measurement: 'kW',
+          },
+        },
+      },
+    };
+
+    const heroHeader = {
+      innerHTML: '',
+    };
+    const row = createTrackedRow({
+      '.hero-header': heroHeader,
+    }, {
+      entity: 'sensor.hero',
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+
+    card._hass.states['sensor.hero'] = {
+      state: '4.8',
+      attributes: {
+        friendly_name: 'Grid export',
+        icon: 'mdi:transmission-tower-export',
+        unit_of_measurement: 'kW',
+      },
+    };
+
+    card._patchRow(row, card._config.entities[0], card._hass.states['sensor.hero']);
+
+    expect(row.querySelector('.hero-header')?.innerHTML).toContain('class="hero-label label-left-text"');
+    expect(row.querySelector('.hero-header')?.innerHTML).toContain('Grid import');
+    expect(row.querySelector('.hero-header')?.innerHTML).toContain('class="hero-value"');
+    expect(row.querySelector('.hero-header')?.innerHTML).toContain('class="value-right-number"');
+    expect(row.querySelector('.hero-header')?.innerHTML).toMatch(/4[,.]8/);
+    expect(row.querySelector('.above-bar-label')).toBeNull();
   });
 
   it('inside-mode keeps fully visible labels and continues to icon sacrifice when needed', () => {

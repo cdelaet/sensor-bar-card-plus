@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { buildSync } = require('esbuild');
+
+const bundledSourceCache = new Map();
 
 function parseAttributes(rawAttrs = '') {
   const attrs = {};
@@ -126,8 +129,25 @@ function createShadowRoot() {
 }
 
 function loadCardClass(options = {}) {
-  const filePath = path.resolve(__dirname, '../../src/sensor-bar-card-plus.js');
-  const source = fs.readFileSync(filePath, 'utf8');
+  const sourcePath = path.resolve(__dirname, '../../src/sensor-bar-card-plus.js');
+  const distPath = path.resolve(__dirname, '../../dist/sensor-bar-card-plus.js');
+  const filePath = options.source === 'dist' ? distPath : sourcePath;
+  const cacheKey = options.source === 'dist' ? 'dist' : 'src';
+  let source = bundledSourceCache.get(cacheKey);
+  if (!source) {
+    source = options.source === 'dist'
+      ? fs.readFileSync(distPath, 'utf8')
+      : buildSync({
+        entryPoints: [sourcePath],
+        bundle: true,
+        format: 'iife',
+        platform: 'browser',
+        target: ['es2018'],
+        write: false,
+        logLevel: 'silent',
+      }).outputFiles[0].text;
+    bundledSourceCache.set(cacheKey, source);
+  }
 
   const registry = new Map();
   const sandbox = {

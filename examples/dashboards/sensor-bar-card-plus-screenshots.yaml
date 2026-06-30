@@ -4691,4 +4691,688 @@ views:
         perform_action: script.turn_on
         target:
           entity_id: script.sbcp_hero_phase_forward_1h
+- title: SBCP Hero
+  path: sbcp-hero
+  icon: mdi:star-four-points-circle
+  badges: []
+  cards:
+  - type: custom:sensor-bar-card-plus
+    title: ENERGY FLOW
+    layout:
+      label:
+        position: above
+        width: 196
+      height: 46
+    formatting:
+      decimal: 1
+    bar:
+      fill_style: solid
+      color: '#4a9eff'
+    entities:
+    - entity: sensor.sbcp_hero_shot_solar
+      name: Solar Production
+      icon: mdi:solar-power
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      target:
+        at:
+          fixed: 8
+        color: '#ffffff'
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#071b14'
+        - pos: 26
+          color: '#14532d'
+        - pos: 62
+          color: '#22c55e'
+        - pos: 84
+          color: '#a3e635'
+        - pos: 100
+          color: '#fde047'
+    - entity: sensor.sbcp_hero_shot_grid
+      name: Grid Import / Export
+      icon: mdi:transmission-tower-export
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      layout:
+        height: 46
+      baseline:
+        at:
+          fixed: 0
+      bar:
+        fill_style: gradient
+        needle:
+          show: true
+          color: '#ffffff'
+        gradient_stops:
+        - pos: 0
+          color: '#0b1f36'
+        - pos: 28
+          color: '#0891b2'
+        - pos: 50
+          color: '#e2e8f0'
+        - pos: 72
+          color: '#f97316'
+        - pos: 100
+          color: '#dc2626'
+    - entity: sensor.sbcp_hero_shot_battery
+      name: Battery Charge
+      icon: mdi:home-battery
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      layout:
+        height: 44
+      formatting:
+        decimal: 0
+      peak:
+        enabled: true
+        color: '#f8fafc'
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#991b1b'
+        - pos: 24
+          color: '#ea580c'
+        - pos: 52
+          color: '#facc15'
+        - pos: 78
+          color: '#84cc16'
+        - pos: 100
+          color: '#16a34a'
+    - entity: sensor.sbcp_hero_shot_ev
+      name: EV Charging
+      icon: mdi:car-electric
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 11
+      layout:
+        height: 44
+      target:
+        at:
+          fixed: 7.4
+        color: '#f8fafc'
+      bar:
+        fill_style: soft_bands
+        segments:
+        - from: 0%
+          to: 16%
+          color: '#1d4ed8'
+        - from: 16%
+          to: 36%
+          color: '#0ea5e9'
+        - from: 36%
+          to: 64%
+          color: '#22c55e'
+        - from: 64%
+          to: 84%
+          color: '#f59e0b'
+        - from: 84%
+          to: 100%
+          color: '#ef4444'
+    - entity: sensor.sbcp_hero_shot_home
+      name: Home Consumption
+      icon: mdi:home-lightning-bolt
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 8
+      layout:
+        height: 30
+      formatting:
+        decimal: 1
+      baseline:
+        at:
+          fixed: 3.2
+      bar:
+        fill_style: band_gradient
+        segments:
+        - from: 0%
+          to: 24%
+          color: '#7c2d12'
+        - from: 24%
+          to: 52%
+          color: '#c2410c'
+        - from: 52%
+          to: 78%
+          color: '#f59e0b'
+        - from: 78%
+          to: 100%
+          color: '#facc15'
+- title: SBCP Editor
+  path: sbcp-editor
+  icon: mdi:tune-variant
+  badges: []
+  cards:
+  - type: markdown
+    content: |
+      # SBCP Editor
+      Visual editor showcase
+  - type: custom:sensor-bar-card-plus
+    title: Gradient Studio
+    layout:
+      label:
+        position: above
+      height: 42
+    scale:
+      min:
+        fixed: -2500
+      max:
+        fixed: 8200
+    target:
+      at:
+        fixed: 3400
+      color: '#fb923c'
+      when_exceeded:
+        fill_color: '#fb7185'
+    peak:
+      enabled: true
+      color: '#f8fafc'
+    bar:
+      fill_style: gradient
+      gradient_stops:
+      - pos: 0
+        color: '#081120'
+      - pos: 18
+        color: '#0ea5e9'
+      - pos: 52
+        color: '#7c3aed'
+      - pos: 78
+        color: '#ec4899'
+      - pos: 100
+        color: '#fde047'
+    entities:
+    - entity: sensor.sbcp_showcase_grid
+      name: Grid balance
+      icon: mdi:transmission-tower
+      scale:
+        min:
+          fixed: -3500
+        max:
+          fixed: 4500
+      baseline:
+        at:
+          fixed: 0
+      bar:
+        gradient_stops:
+        - pos: 0
+          color: '#1d4ed8'
+        - pos: 45
+          color: '#818cf8'
+        - pos: 100
+          color: '#f59e0b'
+    - entity: sensor.sbcp_showcase_solar
+      name: Solar array
+      icon: mdi:solar-panel-large
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 7800
+      layout:
+        height: 48
+      bar:
+        gradient_stops:
+        - pos: 0
+          color: '#082032'
+        - pos: 28
+          color: '#0ea5e9'
+        - pos: 64
+          color: '#22c55e'
+        - pos: 100
+          color: '#fde047'
+    - entity: sensor.sbcp_showcase_battery_power
+      name: Battery power
+      icon: mdi:battery-arrow-up-outline
+      scale:
+        min:
+          fixed: -4000
+        max:
+          fixed: 4000
+      layout:
+        label:
+          position: inside
+      target:
+        at:
+          fixed: 0
+      bar:
+        fill_style: gradient
+        needle:
+          show: true
+          color: '#ffffff'
+        gradient_stops:
+        - pos: 0
+          color: '#2563eb'
+        - pos: 50
+          color: '#f8fafc'
+        - pos: 100
+          color: '#22c55e'
+  - type: custom:sensor-bar-card-plus
+    title: Editor Accent
+    layout:
+      label:
+        position: above
+      height: 38
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+    peak:
+      enabled: true
+    bar:
+      fill_style: gradient
+      gradient_stops:
+      - pos: 0
+        color: '#0f172a'
+      - pos: 40
+        color: '#2563eb'
+      - pos: 72
+        color: '#8b5cf6'
+      - pos: 100
+        color: '#f472b6'
+    entities:
+    - entity: sensor.sbcp_showcase_battery
+      name: Battery reserve
+      icon: mdi:home-battery
+    - entity: sensor.sbcp_showcase_network
+      name: Signal quality
+      icon: mdi:wifi
+- title: SBCP Features
+  path: sbcp-features
+  icon: mdi:apps
+  badges: []
+  cards:
+  - type: markdown
+    content: |
+      # SBCP Features
+      Premium monitoring compositions
+  - type: custom:sensor-bar-card-plus
+    title: Precision Monitoring
+    layout:
+      label:
+        position: above
+        width: 172
+      height: 38
+    scale:
+      min:
+        fixed: -3500
+      max:
+        fixed: 9000
+    target:
+      at:
+        fixed: 5200
+      color: '#f59e0b'
+      when_exceeded:
+        fill_color: '#ef4444'
+    baseline:
+      at:
+        fixed: 0
+      above:
+        color: '#34d399'
+      below:
+        color: '#60a5fa'
+    peak:
+      enabled: true
+      color: '#f8fafc'
+    bar:
+      fill_style: gradient
+      gradient_stops:
+      - pos: 0
+        color: '#081120'
+      - pos: 24
+        color: '#1d4ed8'
+      - pos: 62
+        color: '#8b5cf6'
+      - pos: 100
+        color: '#f59e0b'
+    entities:
+    - entity: sensor.sbcp_showcase_home_load
+      name: Home load
+      icon: mdi:home-lightning-bolt
+    - entity: sensor.sbcp_showcase_grid
+      name: Grid balance
+      icon: mdi:transmission-tower
+      target:
+        at:
+          fixed: 0
+    - entity: sensor.sbcp_showcase_cpu
+      name: System load
+      icon: mdi:chip
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      bar:
+        needle:
+          show: true
+          color: '#ffffff'
+    - entity: sensor.sbcp_showcase_latency
+      name: Latency
+      icon: mdi:timer-sand
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 40
+      formatting:
+        unit: ms
+        decimal: 0
+  - type: custom:sensor-bar-card-plus
+    title: Advanced Fill Styles
+    layout:
+      label:
+        position: above
+        width: 172
+      height: 38
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 1200
+    bar:
+      fill_style: band_gradient
+      segments:
+      - from: 0%
+        to: 20%
+        color: '#0f172a'
+      - from: 20%
+        to: 52%
+        color: '#2563eb'
+      - from: 52%
+        to: 78%
+        color: '#7c3aed'
+      - from: 78%
+        to: 100%
+        color: '#ec4899'
+    entities:
+    - entity: sensor.sbcp_showcase_download
+      name: Download stream
+      icon: mdi:download-network
+      formatting:
+        unit: Mbps
+        decimal: 0
+      bar:
+        fill_style: band_gradient
+    - entity: sensor.sbcp_showcase_outdoor_temp
+      name: Outdoor climate
+      icon: mdi:thermometer
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 35
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#1d4ed8'
+        - pos: 45
+          color: '#f8fafc'
+        - pos: 100
+          color: '#f97316'
+    - entity: sensor.sbcp_showcase_ev_current
+      name: Charge current
+      icon: mdi:current-ac
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 32
+      bar:
+        fill_style: soft_bands
+        segments:
+        - from: 0%
+          to: 18%
+          color: '#1d4ed8'
+        - from: 18%
+          to: 60%
+          color: '#22c55e'
+        - from: 60%
+          to: 84%
+          color: '#f59e0b'
+        - from: 84%
+          to: 100%
+          color: '#ef4444'
+  - type: custom:sensor-bar-card-plus
+    title: Multi-Entity Layouts
+    layout:
+      label:
+        position: above
+        width: 152
+      height: 32
+    scale:
+      min:
+        fixed: -2000
+      max:
+        fixed: 4200
+    baseline:
+      at:
+        fixed: 0
+    bar:
+      fill_style: solid
+      color: '#4f46e5'
+    entities:
+    - entity: sensor.sbcp_showcase_grid_l1
+      name: Grid L1
+      icon: mdi:alpha-l-circle-outline
+      layout:
+        height: 28
+    - entity: sensor.sbcp_showcase_grid_l2
+      name: Grid L2
+      icon: mdi:alpha-l-circle-outline
+      layout:
+        label:
+          position: inside
+        height: 28
+    - entity: sensor.sbcp_showcase_grid_l3
+      name: Grid L3
+      icon: mdi:alpha-l-circle-outline
+      layout:
+        height: 36
+    - entity: sensor.sbcp_showcase_battery_power
+      name: Battery power
+      icon: mdi:battery-arrow-up-outline
+      bar:
+        color: '#8b5cf6'
+- title: SBCP Energy
+  path: sbcp-energy
+  icon: mdi:home-lightning-bolt-outline
+  badges: []
+  cards:
+  - type: markdown
+    content: |
+      # SBCP Energy
+      Home energy dashboard
+  - type: custom:sensor-bar-card-plus
+    title: Home Energy Overview
+    layout:
+      label:
+        position: above
+        width: 180
+      height: 40
+    scale:
+      min:
+        fixed: -4000
+      max:
+        fixed: 12000
+    target:
+      at:
+        fixed: 4800
+      color: '#f59e0b'
+    baseline:
+      at:
+        fixed: 0
+      above:
+        color: '#22c55e'
+      below:
+        color: '#60a5fa'
+    peak:
+      enabled: true
+      color: '#f8fafc'
+    bar:
+      fill_style: band_gradient
+      segments:
+      - from: 0%
+        to: 16%
+        color: '#0f172a'
+      - from: 16%
+        to: 54%
+        color: '#22c55e'
+      - from: 54%
+        to: 82%
+        color: '#f59e0b'
+      - from: 82%
+        to: 100%
+        color: '#ef4444'
+    entities:
+    - entity: sensor.sbcp_showcase_solar
+      name: Solar production
+      icon: mdi:solar-power-variant
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 8200
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#0d2819'
+        - pos: 52
+          color: '#22c55e'
+        - pos: 100
+          color: '#fde047'
+    - entity: sensor.sbcp_showcase_grid
+      name: Grid import / export
+      icon: mdi:transmission-tower
+      scale:
+        min:
+          fixed: -5000
+        max:
+          fixed: 5000
+      target:
+        at:
+          fixed: 0
+    - entity: sensor.sbcp_showcase_home_load
+      name: Home consumption
+      icon: mdi:home-lightning-bolt
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 9500
+      bar:
+        fill_style: solid
+        color: '#f97316'
+    - entity: sensor.sbcp_showcase_ev
+      name: EV charger
+      icon: mdi:car-electric
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 11000
+      target:
+        at:
+          fixed: 7200
+      bar:
+        needle:
+          show: true
+          color: '#ffffff'
+    - entity: sensor.sbcp_showcase_battery
+      name: Battery SOC
+      icon: mdi:battery-high
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      bar:
+        fill_style: soft_bands
+        color: '#22c55e'
+      layout:
+        height: 36
+    - entity: sensor.sbcp_showcase_battery_power
+      name: Battery power
+      icon: mdi:battery-arrow-up-outline
+      scale:
+        min:
+          fixed: -4000
+        max:
+          fixed: 4000
+      baseline:
+        at:
+          fixed: 0
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#2563eb'
+        - pos: 50
+          color: '#f8fafc'
+        - pos: 100
+          color: '#22c55e'
+  - type: custom:sensor-bar-card-plus
+    title: Solar Split
+    layout:
+      label:
+        position: above
+      height: 38
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 4500
+    peak:
+      enabled: true
+    bar:
+      fill_style: gradient
+      gradient_stops:
+      - pos: 0
+        color: '#0d2819'
+      - pos: 56
+        color: '#22c55e'
+      - pos: 100
+        color: '#fde047'
+    entities:
+    - entity: sensor.sbcp_showcase_solar_east
+      name: East array
+      icon: mdi:solar-panel
+    - entity: sensor.sbcp_showcase_solar_west
+      name: West array
+      icon: mdi:solar-panel
+    - entity: sensor.sbcp_showcase_session_energy
+      name: Charging session
+      icon: mdi:battery-charging-high
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 40
+      formatting:
+        unit: kWh
+        decimal: 1
+      target:
+        at:
+          fixed: 30
+        color: '#a78bfa'
+      bar:
+        fill_style: soft_bands
+        color: '#22c55e'
       

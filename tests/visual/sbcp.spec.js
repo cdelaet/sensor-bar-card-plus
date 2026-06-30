@@ -486,6 +486,87 @@ const scenarios = [
     },
   },
   {
+    name: 'hero-labels',
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      title: 'Hero labels',
+      bar: {
+        fill_style: 'gradient',
+        gradient_stops: gradientStops,
+      },
+      layout: {
+        label: {
+          position: 'hero',
+        },
+      },
+      animated: false,
+      scale: {
+        min: { fixed: -120 },
+        max: { fixed: 120 },
+      },
+      baseline: { at: { fixed: 0 } },
+      entities: [
+        { entity: 'sensor.main_positive', name: 'Solar production', icon: 'mdi:solar-power' },
+        { entity: 'sensor.main_negative', name: 'Grid export', icon: 'mdi:transmission-tower-export', bar: { fill_style: 'band_gradient' } },
+      ],
+    },
+  },
+  {
+    name: 'hero-labels-narrow',
+    width: 320,
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      title: 'Hero labels narrow',
+      bar: {
+        fill_style: 'gradient',
+        gradient_stops: gradientStops,
+      },
+      layout: {
+        height: 38,
+        label: {
+          position: 'hero',
+        },
+      },
+      animated: false,
+      scale: {
+        min: { fixed: -120 },
+        max: { fixed: 120 },
+      },
+      baseline: { at: { fixed: 0 } },
+      entities: [
+        { entity: 'sensor.main_positive', name: 'Extremely long solar production label', icon: 'mdi:solar-power' },
+        { entity: 'sensor.main_negative', name: 'Very long grid export corridor label', icon: 'mdi:transmission-tower-export' },
+      ],
+    },
+  },
+  {
+    name: 'hero-labels-small-height',
+    width: 320,
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      title: 'Hero labels small height',
+      bar: {
+        fill_style: 'gradient',
+        gradient_stops: gradientStops,
+      },
+      layout: {
+        height: 24,
+        label: {
+          position: 'hero',
+        },
+      },
+      animated: false,
+      scale: {
+        min: { fixed: -120 },
+        max: { fixed: 120 },
+      },
+      entities: [
+        { entity: 'sensor.main_positive', name: 'Compact solar production label', icon: 'mdi:solar-power' },
+        { entity: 'sensor.main_negative', name: 'Compact grid export label', icon: 'mdi:transmission-tower-export' },
+      ],
+    },
+  },
+  {
     name: 'compact-narrow',
     width: 320,
     config: {

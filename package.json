@@ -7,7 +7,8 @@
     "example": "examples"
   },
   "scripts": {
-    "test": "npm run test:unit && npm run test:visual",
+    "build": "node tools/build-dist.cjs",
+    "test": "npm run build && npm run test:unit && npm run test:visual",
     "test:unit": "vitest run",
     "test:visual": "playwright test",
     "test:visual:update": "playwright test --update-snapshots"
@@ -26,6 +27,7 @@
   "homepage": "https://github.com/cdelaet/sensor-bar-card-plus#readme",
   "devDependencies": {
     "@playwright/test": "^1.60.0",
+    "esbuild": "^0.28.1",
     "playwright": "^1.60.0",
     "vitest": "^4.1.7"
   }
