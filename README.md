@@ -619,12 +619,48 @@ entities:
     icon: mdi:lightning-bolt
 ```
 
-The screenshot uses this same single sensor in four separate cards, changing only:
+The screenshot uses this same single sensor in five separate cards, changing only:
 
 - `layout.label.position: left`
 - `layout.label.position: above`
 - `layout.label.position: inside`
 - `layout.label.position: off`
+- `layout.label.position: hero`
+
+## Hero Label Position
+
+`layout.label.position: hero` gives each row a premium two-lane header: a small label above the bar, a large right-aligned value and unit, and the full-width bar underneath.
+
+This mode is intentionally opinionated:
+
+- the value gets priority
+- the label may hide before the value becomes cramped
+- the icon stays on the left when space allows
+- per-entity `layout.label.position: hero` overrides work the same way as the other label modes
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Energy Flow
+layout:
+  label:
+    position: hero
+bar:
+  fill_style: gradient
+  gradient_stops:
+    - pos: 0
+      color: '#2563eb'
+    - pos: 100
+      color: '#22c55e'
+scale:
+  min:
+    fixed: 0
+  max:
+    fixed: 10
+entities:
+  - entity: sensor.solar_power
+    name: Solar Production
+    icon: mdi:solar-power
+```
 
 ### Responsive Behavior
 

@@ -130,6 +130,43 @@ describe('Sensor Bar Card Plus public API smoke', () => {
     expect(html).toContain('target-value-label');
   });
 
+  it('renders hero label rows without changing canonical layout config support', () => {
+    const card = createCard();
+    card._hass.states['sensor.hero'] = sensor(72, {
+      friendly_name: 'Solar production',
+      icon: 'mdi:solar-power',
+      unit_of_measurement: 'kW',
+    });
+    const rowCfg = card.normalizeCardConfig({
+      layout: {
+        label: {
+          position: 'hero',
+        },
+      },
+      entities: [{ entity: 'sensor.hero' }],
+    }).entities[0];
+
+    const html = card._buildRow(
+      rowCfg,
+      '7.2',
+      'kW',
+      72,
+      '#4a9eff',
+      null,
+      null,
+      null,
+      null,
+      '#888',
+      '#888',
+      0,
+      10,
+    );
+
+    expect(rowCfg.layout.label.position).toBe('hero');
+    expect(html).toContain('class="hero-line"');
+    expect(html).toContain('class="main-line hero-mode"');
+  });
+
   it('escapes dynamic text interpolated into row HTML', () => {
     const card = createCard();
     card._hass.states['sensor.one'] = sensor(42, {

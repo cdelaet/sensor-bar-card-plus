@@ -5181,6 +5181,940 @@ views:
       bar:
         animated: false
         fill_style: gradient
+- title: Hero
+  path: hero
+  icon: mdi:star-four-points
+  badges: []
+  cards:
+  - type: markdown
+    content: |
+      ## Hero
+      Manual test coverage for `layout.label.position: hero`.
+  - type: markdown
+    content: |
+      ### Hero Basics
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Single row baseline hero
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Solar production
+      layout:
+        height: 42
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: gradient
+    - type: custom:sensor-bar-card-plus
+      title: Multi-row hero stack
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Solar production
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Grid import/export
+      - entity: sensor.sbcp_hero_shot_battery
+        name: Battery charge
+      layout:
+        height: 38
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: soft_bands
+    - type: custom:sensor-bar-card-plus
+      title: Negative, zero, and small values
+      entities:
+      - entity: sensor.sbcp_playground_negative
+        name: Negative flow
+      - entity: sensor.sbcp_showcase_phase
+        name: No unit small value
+      - entity: sensor.sbcp_showcase_latency
+        name: Low latency
+      layout:
+        height: 34
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: -150
+        max:
+          fixed: 150
+      formatting:
+        decimal: 1
+      baseline:
+        at:
+          fixed: 0
+      bar:
+        fill_style: solid
+        color: '#4a9eff'
+    - type: custom:sensor-bar-card-plus
+      title: Larger hero values
+      entities:
+      - entity: sensor.sbcp_hero_shot_ev
+        name: EV charging
+      - entity: sensor.sbcp_hero_shot_home
+        name: Home consumption
+      layout:
+        height: 46
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 12
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: band_gradient
+        segments:
+        - from: 0%
+          to: 35%
+          color: '#3b82f6'
+        - from: 35%
+          to: 70%
+          color: '#10b981'
+        - from: 70%
+          to: 100%
+          color: '#f59e0b'
+  - type: markdown
+    content: |
+      ### Hero Heights
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Compact 24
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Height 24
+      layout:
+        height: 24
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: gradient
+    - type: custom:sensor-bar-card-plus
+      title: Default-ish 38
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Height 38
+      layout:
+        height: 38
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: gradient
+    - type: custom:sensor-bar-card-plus
+      title: Large 52
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Height 52
+      layout:
+        height: 52
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: gradient
+    - type: custom:sensor-bar-card-plus
+      title: Oversized 70
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Height 70
+      layout:
+        height: 70
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: gradient
+  - type: markdown
+    content: |
+      ### Hero Fill Styles
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Solid
+      entities:
+      - entity: sensor.sbcp_hero_shot_home
+        name: Solid hero
+      layout:
+        height: 40
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 8
+      bar:
+        fill_style: solid
+        color: '#4a9eff'
+    - type: custom:sensor-bar-card-plus
+      title: Gradient
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Gradient hero
+      layout:
+        height: 40
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#14532d'
+        - pos: 45
+          color: '#22c55e'
+        - pos: 100
+          color: '#fde047'
+    - type: custom:sensor-bar-card-plus
+      title: Bands with solid fill
+      entities:
+      - entity: sensor.sbcp_hero_shot_ev
+        name: Bands hero
+      layout:
+        height: 40
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 11
+      bar:
+        fill_style: bands
+        solid_fill: true
+        segments:
+        - from: 0%
+          to: 35%
+          color: '#2563eb'
+        - from: 35%
+          to: 70%
+          color: '#14b8a6'
+        - from: 70%
+          to: 100%
+          color: '#f97316'
+    - type: custom:sensor-bar-card-plus
+      title: Soft bands and band gradient
+      entities:
+      - entity: sensor.sbcp_hero_shot_ev
+        name: Soft bands
+      - entity: sensor.sbcp_hero_shot_home
+        name: Band gradient
+        bar:
+          fill_style: band_gradient
+      layout:
+        height: 36
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 11
+      bar:
+        fill_style: soft_bands
+        segments:
+        - from: 0%
+          to: 35%
+          color: '#3b82f6'
+        - from: 35%
+          to: 68%
+          color: '#10b981'
+        - from: 68%
+          to: 100%
+          color: '#ef4444'
+  - type: markdown
+    content: |
+      ### Hero Target And Peak
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Target marker and label
+      entities:
+      - entity: sensor.sbcp_hero_shot_ev
+        name: EV charging
+      layout:
+        height: 40
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 11
+      target:
+        at:
+          fixed: 7.4
+        label:
+          show: true
+        color: '#ffffff'
+        when_exceeded:
+          fill_color: '#f97316'
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: soft_bands
+    - type: custom:sensor-bar-card-plus
+      title: Peak marker
+      entities:
+      - entity: sensor.sbcp_hero_shot_battery
+        name: Battery charge
+      layout:
+        height: 40
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      peak:
+        enabled: true
+        color: '#e5e7eb'
+      bar:
+        fill_style: gradient
+    - type: custom:sensor-bar-card-plus
+      title: Target and peak together
+      entities:
+      - entity: sensor.sbcp_hero_shot_home
+        name: Home consumption
+      layout:
+        height: 38
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 8
+      target:
+        at:
+          fixed: 5.5
+        label:
+          show: true
+      peak:
+        enabled: true
+      bar:
+        fill_style: band_gradient
+        segments:
+        - from: 0%
+          to: 45%
+          color: '#fde68a'
+        - from: 45%
+          to: 75%
+          color: '#f59e0b'
+        - from: 75%
+          to: 100%
+          color: '#dc2626'
+    - type: custom:sensor-bar-card-plus
+      title: Above-target fill stress
+      entities:
+      - entity: sensor.sbcp_playground_sensor
+        name: Above target fill
+      layout:
+        height: 38
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      target:
+        at:
+          fixed: 40
+        label:
+          show: true
+        when_exceeded:
+          fill_color: '#dc2626'
+      peak:
+        enabled: true
+      bar:
+        fill_style: gradient
+  - type: markdown
+    content: |
+      ### Hero Baseline
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Baseline centered
+      entities:
+      - entity: sensor.sbcp_playground_negative
+        name: Bidirectional power
+      layout:
+        height: 40
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: -3000
+        max:
+          fixed: 3000
+      baseline:
+        at:
+          fixed: 0
+        above:
+          color: '#22c55e'
+        below:
+          color: '#38bdf8'
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#38bdf8'
+        - pos: 50
+          color: '#e5e7eb'
+        - pos: 100
+          color: '#22c55e'
+    - type: custom:sensor-bar-card-plus
+      title: Baseline with target
+      entities:
+      - entity: sensor.sbcp_playground_negative
+        name: Baseline + target
+      layout:
+        height: 40
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: -3000
+        max:
+          fixed: 3000
+      baseline:
+        at:
+          fixed: 0
+        above:
+          color: '#16a34a'
+        below:
+          color: '#2563eb'
+      target:
+        at:
+          fixed: 1200
+        label:
+          show: true
+      bar:
+        fill_style: solid
+        color: '#94a3b8'
+    - type: custom:sensor-bar-card-plus
+      title: Positive baseline zone
+      entities:
+      - entity: sensor.sbcp_hero_shot_home
+        name: Positive baseline
+      layout:
+        height: 36
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 8
+      baseline:
+        at:
+          fixed: 2.5
+        above:
+          color: '#f59e0b'
+        below:
+          color: '#60a5fa'
+      bar:
+        fill_style: gradient
+    - type: custom:sensor-bar-card-plus
+      title: Negative baseline stress
+      entities:
+      - entity: sensor.sbcp_playground_negative
+        name: Negative baseline
+      layout:
+        height: 36
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: -3000
+        max:
+          fixed: 3000
+      baseline:
+        at:
+          fixed: -1200
+        above:
+          color: '#f59e0b'
+        below:
+          color: '#0ea5e9'
+      bar:
+        fill_style: soft_bands
+  - type: markdown
+    content: |
+      ### Hero Needle
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Needle with solid fill
+      entities:
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Grid power
+      layout:
+        height: 42
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      bar:
+        fill_style: solid
+        color: '#64748b'
+        needle:
+          show: true
+          color: '#ffffff'
+    - type: custom:sensor-bar-card-plus
+      title: Needle with gradient
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Solar needle
+      layout:
+        height: 42
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      bar:
+        fill_style: gradient
+        needle:
+          show: true
+          color: '#ffffff'
+        gradient_stops:
+        - pos: 0
+          color: '#14532d'
+        - pos: 45
+          color: '#22c55e'
+        - pos: 100
+          color: '#fde047'
+    - type: custom:sensor-bar-card-plus
+      title: Needle with soft bands, target, and peak
+      entities:
+      - entity: sensor.sbcp_hero_shot_ev
+        name: EV needle
+      layout:
+        height: 38
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 11
+      target:
+        at:
+          fixed: 7.4
+        label:
+          show: true
+      peak:
+        enabled: true
+      bar:
+        fill_style: soft_bands
+        needle:
+          show: true
+        segments:
+        - from: 0%
+          to: 35%
+          color: '#3b82f6'
+        - from: 35%
+          to: 68%
+          color: '#10b981'
+        - from: 68%
+          to: 100%
+          color: '#ef4444'
+    - type: custom:sensor-bar-card-plus
+      title: Baseline suppresses needle check
+      entities:
+      - entity: sensor.sbcp_playground_negative
+        name: Baseline vs needle
+      layout:
+        height: 38
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: -3000
+        max:
+          fixed: 3000
+      baseline:
+        at:
+          fixed: 0
+      bar:
+        fill_style: gradient
+        needle:
+          show: true
+  - type: markdown
+    content: |
+      ### Hero Overrides
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Hero default with per-entity label overrides
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Hero default
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Above override
+        layout:
+          label:
+            position: above
+      - entity: sensor.sbcp_hero_shot_battery
+        name: Left override
+        layout:
+          label:
+            position: left
+            width: 120
+      layout:
+        height: 38
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      bar:
+        fill_style: gradient
+    - type: custom:sensor-bar-card-plus
+      title: Non-hero default with entity hero override
+      entities:
+      - entity: sensor.sbcp_hero_shot_home
+        name: Left default
+      - entity: sensor.sbcp_hero_shot_ev
+        name: Hero override
+        layout:
+          label:
+            position: hero
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Above default
+        layout:
+          label:
+            position: above
+      layout:
+        height: 36
+        label:
+          position: left
+          width: 150
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 12
+      bar:
+        fill_style: band_gradient
+        segments:
+        - from: 0%
+          to: 40%
+          color: '#2563eb'
+        - from: 40%
+          to: 75%
+          color: '#10b981'
+        - from: 75%
+          to: 100%
+          color: '#f59e0b'
+  - type: markdown
+    content: |
+      ### Hero Icons
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Automatic and explicit icons
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Automatic icon
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Explicit icon
+        icon: mdi:transmission-tower-export
+      layout:
+        height: 38
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      bar:
+        fill_style: gradient
+    - type: custom:sensor-bar-card-plus
+      title: Hidden icon
+      entities:
+      - entity: sensor.sbcp_playground_no_icon
+        name: Automatic no icon
+      - entity: sensor.sbcp_hero_shot_home
+        name: Icon disabled
+        icon: false
+      layout:
+        height: 38
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 8
+      bar:
+        fill_style: soft_bands
+  - type: markdown
+    content: |
+      ### Hero Formatting
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Units and decimals
+      entities:
+      - entity: sensor.sbcp_hero_shot_grid
+        name: kW with 1 decimal
+      - entity: sensor.sbcp_hero_shot_battery
+        name: Percent with 0 decimals
+        formatting:
+          decimal: 0
+      - entity: sensor.sbcp_hero_daylight
+        name: Time-ish unit
+        formatting:
+          decimal: 2
+      layout:
+        height: 38
+        label:
+          position: hero
+      formatting:
+        decimal: 1
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      bar:
+        fill_style: gradient
+    - type: custom:sensor-bar-card-plus
+      title: No unit and negative formatting
+      entities:
+      - entity: sensor.sbcp_showcase_phase
+        name: No unit
+      - entity: sensor.sbcp_playground_negative
+        name: Negative W
+        formatting:
+          decimal: 2
+      - entity: sensor.sbcp_showcase_latency
+        name: Milliseconds
+        formatting:
+          decimal: 0
+      layout:
+        height: 36
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: -150
+        max:
+          fixed: 150
+      bar:
+        fill_style: solid
+        color: '#60a5fa'
+  - type: markdown
+    content: |
+      ### Hero Responsive Stress
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Long labels and tight stack
+      entities:
+      - entity: sensor.sbcp_playground_long_label
+        name: Extremely long hero label that should stress truncation and wrapping behavior
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Grid import export corridor
+      - entity: sensor.sbcp_hero_shot_battery
+        name: Battery charge reserve window
+      - entity: sensor.sbcp_hero_shot_ev
+        name: EV charging session demand
+      layout:
+        height: 30
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: soft_bands
+    - type: grid
+      columns: 3
+      square: false
+      cards:
+      - type: custom:sensor-bar-card-plus
+        title: Tight A
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar
+        layout:
+          height: 28
+          label:
+            position: hero
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 10
+        formatting:
+          decimal: 1
+        bar:
+          fill_style: gradient
+      - type: custom:sensor-bar-card-plus
+        title: Tight B
+        entities:
+        - entity: sensor.sbcp_hero_shot_home
+          name: Home
+        layout:
+          height: 28
+          label:
+            position: hero
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 8
+        formatting:
+          decimal: 1
+        bar:
+          fill_style: band_gradient
+          segments:
+          - from: 0%
+            to: 45%
+            color: '#fde68a'
+          - from: 45%
+            to: 75%
+            color: '#f59e0b'
+          - from: 75%
+            to: 100%
+            color: '#dc2626'
+      - type: custom:sensor-bar-card-plus
+        title: Tight C
+        entities:
+        - entity: sensor.sbcp_hero_shot_ev
+          name: EV
+        layout:
+          height: 28
+          label:
+            position: hero
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 11
+        formatting:
+          decimal: 1
+        bar:
+          fill_style: soft_bands
+  - type: markdown
+    content: |
+      ### Hero Text States
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Unknown and unavailable
+      entities:
+      - entity: sensor.sbcp_playground_unknown
+        name: Unknown hero
+      - entity: sensor.sbcp_playground_unavailable
+        name: Unavailable hero
+      layout:
+        height: 36
+        label:
+          position: hero
+      bar:
+        fill_style: solid
+        color: '#64748b'
+    - type: custom:sensor-bar-card-plus
+      title: Non-numeric text state
+      entities:
+      - entity: sensor.sbcp_playground_text_state
+        name: Text hero state
+      - entity: sensor.sbcp_showcase_phase
+        name: Raw text-adjacent no unit
+      layout:
+        height: 36
+        label:
+          position: hero
+      bar:
+        fill_style: solid
+        color: '#64748b'
 - title: Edge Cases
   path: sensor-bar-card-plus-edge-cases
   icon: mdi:alert-outline

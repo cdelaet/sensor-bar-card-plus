@@ -356,8 +356,12 @@
   function clampSupportedRowHeight(height) {
     return Math.max(24, height);
   }
+  function normalizeLabelPosition(position, fallback = "left") {
+    const normalized = typeof position === "string" ? position.trim().toLowerCase() : "";
+    return ["left", "above", "inside", "off", "hero"].includes(normalized) ? normalized : fallback;
+  }
   function normalizeLayoutConfig(entityConfig, cardConfig) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
     const cardLayout = cardConfig == null ? void 0 : cardConfig.layout;
     const entityLayout = entityConfig == null ? void 0 : entityConfig.layout;
     const entityLabel = entityLayout == null ? void 0 : entityLayout.label;
@@ -367,8 +371,11 @@
     const heightExplicit = (entityLayout == null ? void 0 : entityLayout.height) !== void 0 || entityConfig._height_explicit === true || !isCardLevelNormalization && entityConfig.height !== void 0 || (cardLayout == null ? void 0 : cardLayout.height_explicit) === true || (cardConfig == null ? void 0 : cardConfig._height_explicit) === true;
     return {
       label: {
-        position: (_i = (_h = (_g = (_f = (_e = entityLabel == null ? void 0 : entityLabel.position) != null ? _e : entityConfig.label_position) != null ? _f : cardLabel == null ? void 0 : cardLabel.position) != null ? _g : cardLayout == null ? void 0 : cardLayout.label_position) != null ? _h : cardConfig == null ? void 0 : cardConfig.label_position) != null ? _i : "left",
-        width: (_n = (_m = (_l = (_k = (_j = entityLabel == null ? void 0 : entityLabel.width) != null ? _j : entityConfig.label_width) != null ? _k : cardLabel == null ? void 0 : cardLabel.width) != null ? _l : cardLayout == null ? void 0 : cardLayout.label_width) != null ? _m : cardConfig == null ? void 0 : cardConfig.label_width) != null ? _n : 100
+        position: normalizeLabelPosition(
+          (_h = (_g = (_f = (_e = entityLabel == null ? void 0 : entityLabel.position) != null ? _e : entityConfig.label_position) != null ? _f : cardLabel == null ? void 0 : cardLabel.position) != null ? _g : cardLayout == null ? void 0 : cardLayout.label_position) != null ? _h : cardConfig == null ? void 0 : cardConfig.label_position,
+          "left"
+        ),
+        width: (_m = (_l = (_k = (_j = (_i = entityLabel == null ? void 0 : entityLabel.width) != null ? _i : entityConfig.label_width) != null ? _j : cardLabel == null ? void 0 : cardLabel.width) != null ? _k : cardLayout == null ? void 0 : cardLayout.label_width) != null ? _l : cardConfig == null ? void 0 : cardConfig.label_width) != null ? _m : 100
       },
       height: clampSupportedRowHeight(rawHeight),
       height_explicit: heightExplicit
@@ -1763,7 +1770,13 @@
           }
           this.shadowRoot.innerHTML = `
       <style>
-        :host { display: block; font-family: 'Segoe UI', system-ui, sans-serif; }
+        :host { 
+          display: block; 
+          font-family: 'Segoe UI', system-ui, sans-serif; 
+          position: relative;
+          z-index: 0;
+          isolation: isolate;
+        }
 
         ha-card {
           display: block;
@@ -2195,6 +2208,100 @@
           color: var(--primary-text-color, #333);
           font-variant-numeric: tabular-nums;
         }
+        .hero-line {
+          --sbcp-hero-min-value-size: 13px;
+          min-width: 0;
+          margin-bottom: 0;
+        }
+        .hero-header {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          align-items: baseline;
+          column-gap: var(--sbcp-main-gap);
+          min-width: 0;
+          min-height: min(64px, calc(var(--sbcp-row-height) * 2));
+          margin-bottom: clamp(3px, calc(var(--sbcp-row-height) * 0.18), 8px);
+        }
+        .hero-header[data-hide-name="true"] .hero-label,
+        .hero-header[data-priority-hide-name="true"] .hero-label {
+          display: none;
+        }
+        .hero-label {
+          min-width: 0;
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--primary-text-color, #333);
+          line-height: 1.15;
+        }
+        .hero-value {
+          min-width: max-content;
+          max-width: 100%;
+          display: inline-flex;
+          align-items: baseline;
+          justify-content: flex-end;
+          justify-self: end;
+          overflow: visible;
+          font-size: 56px;
+          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 18px), 56px);
+          font-weight: 700;
+          color: var(--primary-text-color, #333);
+          font-variant-numeric: tabular-nums;
+          line-height: 0.95;
+          text-align: right;
+        }
+        .hero-line[data-hero-density="compact"] .hero-value {
+          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 12px), 48px);
+        }
+        .hero-line[data-hero-density="tight"] .hero-value {
+          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 8px), 40px);
+        }
+        .hero-line[data-hero-density="dense"] .hero-value {
+          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 4px), 32px);
+        }
+        .hero-line[data-hero-density="compressed"] .hero-value {
+          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 2px), 24px);
+        }
+        .hero-value .value-right-text {
+          display: inline-flex;
+          flex: 0 0 auto;
+          justify-content: flex-end;
+          gap: 4px;
+          align-items: baseline;
+          width: auto;
+          max-width: 100%;
+          overflow: visible;
+          text-overflow: clip;
+          white-space: nowrap;
+        }
+        .hero-value .value-right-text.tight-unit {
+          gap: 2px;
+        }
+        .hero-value .value-right-number {
+          flex: 0 0 auto;
+          overflow: visible;
+          text-overflow: clip;
+          white-space: nowrap;
+          line-height: 0.95;
+        }
+        .hero-value .unit-group {
+          flex: 0 0 auto;
+          align-self: baseline;
+          line-height: 1;
+          overflow: visible;
+          text-overflow: clip;
+        }
+        .hero-value .unit {
+          font-size: max(16px, 0.5em);
+          font-weight: 500;
+          color: var(--secondary-text-color, #888);
+          line-height: 1;
+          overflow: visible;
+          text-overflow: clip;
+        }
+        .hero-header[data-hide-name="true"] .hero-value,
+        .hero-header[data-priority-hide-name="true"] .hero-value {
+          max-width: 100%;
+        }
         /* \u2500\u2500 Shared marker base \u2500\u2500 */
         .peak-marker, .target-marker {
           position: absolute;
@@ -2337,7 +2444,8 @@
         }
         .value-right .unit-group,
         .top-right-value .unit-group,
-        .above-bar-label-value .unit-group {
+        .above-bar-label-value .unit-group,
+        .hero-value .unit-group {
           flex: 0 1 auto;
           display: inline-flex;
           align-items: baseline;
@@ -2348,7 +2456,8 @@
         }
         .value-right .unit,
         .top-right-value .unit,
-        .above-bar-label-value .unit {
+        .above-bar-label-value .unit,
+        .hero-value .unit {
           flex: 0 1 auto;
           min-width: 0;
           display: inline-block;
@@ -2574,8 +2683,8 @@
         }
         _applyAboveLabelDensity() {
           if (!this.shadowRoot) return;
-          this.shadowRoot.querySelectorAll(".above-line").forEach((aboveLine) => {
-            const label = aboveLine.querySelector(".above-bar-label");
+          this.shadowRoot.querySelectorAll(".above-line, .hero-line").forEach((aboveLine) => {
+            const label = aboveLine.querySelector(".above-bar-label, .hero-header");
             if (!label) return;
             const width = label.getBoundingClientRect().width;
             let density = "normal";
@@ -2583,6 +2692,12 @@
             else if (width < 150) density = "dense";
             else if (width < 210) density = "tight";
             else if (width < 280) density = "compact";
+            if (aboveLine.classList.contains("hero-line")) {
+              aboveLine.dataset.heroDensity = density;
+              label.dataset.hideName = density === "dense" || density === "compressed" ? "true" : "false";
+              aboveLine.dataset.hideHeroIcon = density === "compressed" ? "true" : "false";
+              return;
+            }
             aboveLine.dataset.aboveDensity = density;
             label.dataset.hideName = density === "dense" || density === "compressed" ? "true" : "false";
           });
@@ -3279,21 +3394,30 @@
           ${this._formatAboveValueMarkup(stateDisplay, unit)}
         </div>
       </div>` : "";
+          const heroHeader = lp === "hero" ? `
+      <div class="hero-line">
+        <div class="hero-header">
+          <span class="hero-label label-left-text">${escapedName}</span>
+          <span class="hero-value" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}">${this._formatRightValueMarkup(stateDisplay, unit, false)}</span>
+        </div>
+      </div>` : "";
           const innerLabel = lp === "inside" ? `
       <div class="bar-inner-label">
         <span class="inside-name">${escapedName}</span>
         <span class="inside-value" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}">${this._formatInsideValueMarkup(stateDisplay, unit)}</span>
       </div>` : "";
           const leftLabel = lp === "left" ? `<div class="label-left" style="flex:0 1 min(${layout.label.width}px, var(--sbcp-left-label-share));max-width:min(${layout.label.width}px, var(--sbcp-left-label-share));"><span class="label-left-text">${escapedName}</span></div>` : "";
-          const rightValue = lp !== "inside" && lp !== "above" ? `<div class="value-right" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}" data-hide-unit="false">${this._formatRightValueMarkup(stateDisplay, unit, false)}</div>` : "";
+          const rightValue = lp !== "inside" && lp !== "above" && lp !== "hero" ? `<div class="value-right" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}" data-hide-unit="false">${this._formatRightValueMarkup(stateDisplay, unit, false)}</div>` : "";
           const topRightValue = lp === "left" ? `<div class="top-right-value" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}" data-hide-unit="false" data-active="false">${this._formatRightValueMarkup(stateDisplay, unit, false)}</div>` : "";
+          const mainIcon = ecfg.icon && ecfg.icon !== false && lp !== "hero" ? `<div class="icon-wrap"><ha-icon icon="${ecfg.icon}"></ha-icon></div>` : "";
           return `
       <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${((_r = (_q = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _q.heightExplicit) != null ? _r : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_t = (_s = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _s.barAnimated) != null ? _t : bar.animated) ? "true" : "false"}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
+          ${heroHeader}
           ${topRightValue}
           <div class="main-line ${lp}-mode" style="height:${h}px;">
-            ${ecfg.icon && ecfg.icon !== false ? `<div class="icon-wrap"><ha-icon icon="${ecfg.icon}"></ha-icon></div>` : ""}
+            ${mainIcon}
             ${leftLabel}
             <div class="bar-wrap">
               <div class="bar-track">
@@ -3388,7 +3512,11 @@ ${paintLayers}
               valueSpan.innerHTML = this._formatInsideValueMarkup(display, displayUnit);
             }
           }
-          const aboveLabel = row.querySelector(".above-bar-label");
+          const heroHeader = row.querySelector(".hero-header");
+          if (heroHeader) {
+            heroHeader.innerHTML = `<span class="hero-label label-left-text">${escapeHtml(rowViewModel.name)}</span><span class="hero-value" data-display="${this._encodeDataAttr(display)}" data-unit="${this._encodeDataAttr(displayUnit)}">${this._formatRightValueMarkup(display, displayUnit, false)}</span>`;
+          }
+          const aboveLabel = heroHeader ? null : row.querySelector(".above-bar-label");
           if (aboveLabel) {
             aboveLabel.innerHTML = `<span class="above-bar-label-name label-left-text">${escapeHtml(rowViewModel.name)}</span>${this._formatAboveValueMarkup(display, displayUnit)}`;
           }

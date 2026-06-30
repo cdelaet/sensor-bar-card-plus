@@ -218,6 +218,30 @@ describe('Sensor Bar Card Plus logic', () => {
     });
   });
 
+  it('accepts hero label positioning and falls back invalid positions to left', () => {
+    const card = createCard();
+    const heroCfg = card.normalizeCardConfig({
+      layout: {
+        label: {
+          position: 'hero',
+        },
+      },
+      entities: [{ entity: 'sensor.row' }],
+    });
+    const invalidCfg = card.normalizeCardConfig({
+      layout: {
+        label: {
+          position: 'not-a-mode',
+        },
+      },
+      entities: [{ entity: 'sensor.row' }],
+    });
+
+    expect(heroCfg.layout.label.position).toBe('hero');
+    expect(heroCfg.entities[0].layout.label.position).toBe('hero');
+    expect(invalidCfg.layout.label.position).toBe('left');
+  });
+
   it('rendering reads the nested layout shape', () => {
     const card = createCard();
     card._hass.states = {
@@ -3112,15 +3136,17 @@ describe('Sensor Bar Card Plus logic', () => {
     const denseLabel = { dataset: {}, getBoundingClientRect: () => ({ width: 130 }) };
     const compressedLabel = { dataset: {}, getBoundingClientRect: () => ({ width: 100 }) };
     const denseLine = {
+      classList: { contains: () => false },
       dataset: {},
-      querySelector: (selector) => selector === '.above-bar-label' ? denseLabel : null,
+      querySelector: (selector) => selector === '.above-bar-label, .hero-header' ? denseLabel : null,
     };
     const compressedLine = {
+      classList: { contains: () => false },
       dataset: {},
-      querySelector: (selector) => selector === '.above-bar-label' ? compressedLabel : null,
+      querySelector: (selector) => selector === '.above-bar-label, .hero-header' ? compressedLabel : null,
     };
     card.shadowRoot = {
-      querySelectorAll: (selector) => selector === '.above-line' ? [denseLine, compressedLine] : [],
+      querySelectorAll: (selector) => selector === '.above-line, .hero-line' ? [denseLine, compressedLine] : [],
       querySelector: () => null,
     };
 
@@ -3135,6 +3161,41 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(card._formatAboveValueMarkup('72', 'W')).toContain('<span class="unit">W</span>');
   });
 
+  it('hero mode hides the label on narrow densities before sacrificing the value group', () => {
+    const card = createCard();
+    const tightLabel = { dataset: {}, getBoundingClientRect: () => ({ width: 185 }) };
+    const denseLabel = { dataset: {}, getBoundingClientRect: () => ({ width: 130 }) };
+    const compressedLabel = { dataset: {}, getBoundingClientRect: () => ({ width: 100 }) };
+    const tightLine = {
+      classList: { contains: (name) => name === 'hero-line' },
+      dataset: {},
+      querySelector: (selector) => selector === '.above-bar-label, .hero-header' ? tightLabel : null,
+    };
+    const denseLine = {
+      classList: { contains: (name) => name === 'hero-line' },
+      dataset: {},
+      querySelector: (selector) => selector === '.above-bar-label, .hero-header' ? denseLabel : null,
+    };
+    const compressedLine = {
+      classList: { contains: (name) => name === 'hero-line' },
+      dataset: {},
+      querySelector: (selector) => selector === '.above-bar-label, .hero-header' ? compressedLabel : null,
+    };
+    card.shadowRoot = {
+      querySelectorAll: (selector) => selector === '.above-line, .hero-line' ? [tightLine, denseLine, compressedLine] : [],
+      querySelector: () => null,
+    };
+
+    card._applyAboveLabelDensity();
+
+    expect(tightLine.dataset.heroDensity).toBe('tight');
+    expect(tightLabel.dataset.hideName).toBe('false');
+    expect(denseLine.dataset.heroDensity).toBe('dense');
+    expect(denseLabel.dataset.hideName).toBe('true');
+    expect(compressedLine.dataset.heroDensity).toBe('compressed');
+    expect(compressedLabel.dataset.hideName).toBe('true');
+  });
+
   it('inside and above narrow-mode CSS preserves value priority', () => {
     const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
 
@@ -3144,6 +3205,23 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(source).toContain('.bar-inner-label[data-hide-name="true"] .inside-value,');
     expect(source).toContain('margin-left: auto;');
     expect(source).not.toContain('.above-line[data-above-density="dense"] .above-bar-label-value .unit');
+  });
+
+  it('hero mode CSS keeps the value visible without ellipsis and allows responsive shrinking', () => {
+    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
+
+    expect(source).toContain('--sbcp-hero-min-value-size: 13px;');
+    expect(source).toContain('grid-template-columns: minmax(0, 1fr) auto;');
+    expect(source).toContain('justify-self: end;');
+    expect(source).toContain('margin-bottom: clamp(3px, calc(var(--sbcp-row-height) * 0.18), 8px);');
+    expect(source).toContain('.hero-line[data-hero-density="dense"] .hero-value {');
+    expect(source).toContain('.hero-line[data-hero-density="compressed"] .hero-value {');
+    expect(source).toContain('.hero-value {\n          min-width: max-content;');
+    expect(source).toContain('.hero-value .value-right-text {\n          display: inline-flex;\n          flex: 0 0 auto;');
+    expect(source).toContain('.hero-value .value-right-text {\n          display: inline-flex;\n          flex: 0 0 auto;\n          justify-content: flex-end;\n          gap: 4px;\n          align-items: baseline;\n          width: auto;\n          max-width: 100%;\n          overflow: visible;\n          text-overflow: clip;\n          white-space: nowrap;');
+    expect(source).toContain('.hero-value .value-right-number {\n          flex: 0 0 auto;\n          overflow: visible;\n          text-overflow: clip;\n          white-space: nowrap;');
+    expect(source).toContain('.hero-value .unit {\n          font-size: max(16px, 0.5em);');
+    expect(source).toContain('.hero-header[data-hide-name=\"true\"] .hero-value,');
   });
 
   it('above mode keeps name truncation and standard value-unit markup', () => {
@@ -3393,6 +3471,107 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(aboveLabel.dataset.priorityHideName).toBeUndefined();
     expect(mainLine.dataset.hideAboveIcon).toBe('true');
     expect(aboveLine.dataset.hideAboveIcon).toBe('true');
+  });
+
+  it('renders hero mode with a separate header and full-width bar line', () => {
+    const card = createCard();
+    card._hass.states = {
+      'sensor.hero': {
+        state: '7.2',
+        attributes: {
+          friendly_name: 'Solar Production',
+          icon: 'mdi:solar-power',
+          unit_of_measurement: 'kW',
+        },
+      },
+    };
+
+    const cfg = card.normalizeCardConfig({
+      layout: {
+        label: {
+          position: 'hero',
+        },
+      },
+      entities: [{ entity: 'sensor.hero' }],
+    });
+
+    const html = card._buildRow(
+      cfg.entities[0],
+      '7.2',
+      'kW',
+      72,
+      '#4a9eff',
+      null,
+      null,
+      null,
+      null,
+      '#888',
+      '#888',
+      0,
+      10,
+    );
+
+    expect(html).toContain('class="hero-line"');
+    expect(html).toContain('class="hero-header"');
+    expect(html).toContain('class="hero-label label-left-text"');
+    expect(html).toContain('class="hero-value"');
+    expect(html).toContain('class="main-line hero-mode"');
+    expect(html).not.toContain('class="value-right"');
+    expect(html).not.toContain('class="label-left"');
+  });
+
+  it('patches hero rows without rebuilding above-mode markup', () => {
+    const card = createCard();
+    card._config = card.normalizeCardConfig({
+      layout: {
+        label: {
+          position: 'hero',
+        },
+      },
+      entities: [{ entity: 'sensor.hero', name: 'Grid import' }],
+    });
+    card._hass = {
+      states: {
+        'sensor.hero': {
+          state: '3.4',
+          attributes: {
+            friendly_name: 'Grid import',
+            icon: 'mdi:transmission-tower-import',
+            unit_of_measurement: 'kW',
+          },
+        },
+      },
+    };
+
+    const heroHeader = {
+      innerHTML: '',
+    };
+    const row = createTrackedRow({
+      '.hero-header': heroHeader,
+    }, {
+      entity: 'sensor.hero',
+      baseHeight: '38',
+      heightExplicit: 'false',
+      barAnimated: 'true',
+    });
+
+    card._hass.states['sensor.hero'] = {
+      state: '4.8',
+      attributes: {
+        friendly_name: 'Grid export',
+        icon: 'mdi:transmission-tower-export',
+        unit_of_measurement: 'kW',
+      },
+    };
+
+    card._patchRow(row, card._config.entities[0], card._hass.states['sensor.hero']);
+
+    expect(row.querySelector('.hero-header')?.innerHTML).toContain('class="hero-label label-left-text"');
+    expect(row.querySelector('.hero-header')?.innerHTML).toContain('Grid import');
+    expect(row.querySelector('.hero-header')?.innerHTML).toContain('class="hero-value"');
+    expect(row.querySelector('.hero-header')?.innerHTML).toContain('class="value-right-number"');
+    expect(row.querySelector('.hero-header')?.innerHTML).toMatch(/4[,.]8/);
+    expect(row.querySelector('.above-bar-label')).toBeNull();
   });
 
   it('inside-mode keeps fully visible labels and continues to icon sacrifice when needed', () => {

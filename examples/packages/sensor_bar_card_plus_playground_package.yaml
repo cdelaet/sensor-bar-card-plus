@@ -748,6 +748,33 @@ template:
         unit_of_measurement: °
         icon: mdi:projector
         state: "41"
+      # Fixed screenshot sensors for the flagship Hero dashboard view.
+      # These stay static so README/HACS/social screenshots remain deterministic.
+      - name: Hero Screenshot Solar
+        default_entity_id: sensor.sbcp_hero_shot_solar
+        unit_of_measurement: kW
+        icon: mdi:solar-power
+        state: "7.2"
+      - name: Hero Screenshot Grid
+        default_entity_id: sensor.sbcp_hero_shot_grid
+        unit_of_measurement: kW
+        icon: mdi:transmission-tower-export
+        state: "-3.4"
+      - name: Hero Screenshot Battery
+        default_entity_id: sensor.sbcp_hero_shot_battery
+        unit_of_measurement: '%'
+        icon: mdi:home-battery
+        state: "83"
+      - name: Hero Screenshot EV
+        default_entity_id: sensor.sbcp_hero_shot_ev
+        unit_of_measurement: kW
+        icon: mdi:car-electric
+        state: "8.1"
+      - name: Hero Screenshot Home
+        default_entity_id: sensor.sbcp_hero_shot_home
+        unit_of_measurement: kW
+        icon: mdi:home-lightning-bolt
+        state: "4.8"
       # Hero-showcase telemetry. Slower, calmer motion for promo captures.
       - name: Simulated Hour
         default_entity_id: sensor.sbcp_hero_daylight

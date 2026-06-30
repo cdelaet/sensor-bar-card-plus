@@ -365,6 +365,13 @@ export function clampSupportedRowHeight(height) {
   return Math.max(24, height);
 }
 
+export function normalizeLabelPosition(position, fallback = 'left') {
+  const normalized = typeof position === 'string' ? position.trim().toLowerCase() : '';
+  return ['left', 'above', 'inside', 'off', 'hero'].includes(normalized)
+    ? normalized
+    : fallback;
+}
+
 export function normalizeLayoutConfig(entityConfig, cardConfig) {
   const cardLayout = cardConfig?.layout;
   const entityLayout = entityConfig?.layout;
@@ -380,7 +387,10 @@ export function normalizeLayoutConfig(entityConfig, cardConfig) {
     || cardConfig?._height_explicit === true;
   return {
     label: {
-      position: entityLabel?.position ?? entityConfig.label_position ?? cardLabel?.position ?? cardLayout?.label_position ?? cardConfig?.label_position ?? 'left',
+      position: normalizeLabelPosition(
+        entityLabel?.position ?? entityConfig.label_position ?? cardLabel?.position ?? cardLayout?.label_position ?? cardConfig?.label_position,
+        'left'
+      ),
       width: entityLabel?.width ?? entityConfig.label_width ?? cardLabel?.width ?? cardLayout?.label_width ?? cardConfig?.label_width ?? 100,
     },
     height: clampSupportedRowHeight(rawHeight),
