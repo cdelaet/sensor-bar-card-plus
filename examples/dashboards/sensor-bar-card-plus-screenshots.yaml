@@ -13,6 +13,362 @@ views:
         Clean, single-column capture surface for repository screenshots.
 
         Uses the same helpers and template sensors as the playground package.
+    - type: markdown
+      content: |
+        ## Hero README Screenshots
+        Capture-ready Hero cards for README images, size comparisons, and responsive behavior.
+    - type: custom:sensor-bar-card-plus
+      title: Hero Sizes
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Solar Production
+        icon: mdi:solar-power
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 10
+        layout:
+          label:
+            hero_size: small
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Grid Flow
+        icon: mdi:transmission-tower-export
+        scale:
+          min:
+            fixed: -10
+          max:
+            fixed: 10
+        layout:
+          label:
+            hero_size: medium
+      - entity: sensor.sbcp_hero_shot_battery
+        name: Battery State
+        icon: mdi:home-battery
+        formatting:
+          decimal: 0
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 100
+        layout:
+          label:
+            hero_size: large
+      layout:
+        height: 40
+        label:
+          position: hero
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: band_gradient
+        segments:
+        - from: 0%
+          to: 24%
+          color: '#0f172a'
+        - from: 24%
+          to: 52%
+          color: '#0369a1'
+        - from: 52%
+          to: 78%
+          color: '#22c55e'
+        - from: 78%
+          to: 100%
+          color: '#fde047'
+    - type: custom:sensor-bar-card-plus
+      title: Hero Sizes Needle
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Solar Production
+        icon: mdi:solar-power
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 10
+        layout:
+          label:
+            hero_size: small
+      - entity: sensor.sbcp_hero_shot_home
+        name: Home Load
+        icon: mdi:home-lightning-bolt
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 8
+        layout:
+          label:
+            hero_size: medium
+      - entity: sensor.sbcp_hero_shot_ev
+        name: EV Charging
+        icon: mdi:car-electric
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 11
+        target:
+          at:
+            fixed: 7.4
+        layout:
+          label:
+            hero_size: large
+      layout:
+        height: 40
+        label:
+          position: hero
+      formatting:
+        decimal: 1
+      bar:
+        needle: true
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#082f49'
+        - pos: 34
+          color: '#0ea5e9'
+        - pos: 68
+          color: '#22c55e'
+        - pos: 100
+          color: '#facc15'
+    - type: custom:sensor-bar-card-plus
+      title: Hero Sizes Baseline
+      entities:
+      - entity: sensor.sbcp_playground_negative
+        name: Grid Export
+        icon: mdi:transmission-tower-export
+        formatting:
+          decimal: 2
+        scale:
+          min:
+            fixed: -3000
+          max:
+            fixed: 3000
+        layout:
+          label:
+            hero_size: small
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Grid Flow
+        icon: mdi:transmission-tower-import
+        scale:
+          min:
+            fixed: -10
+          max:
+            fixed: 10
+        layout:
+          label:
+            hero_size: medium
+      - entity: sensor.sbcp_showcase_grid
+        name: Utility Balance
+        icon: mdi:transmission-tower
+        scale:
+          min:
+            fixed: -6
+          max:
+            fixed: 6
+        layout:
+          label:
+            hero_size: large
+      layout:
+        height: 40
+        label:
+          position: hero
+      formatting:
+        decimal: 1
+      baseline:
+        at:
+          fixed: 0
+      bar:
+        fill_style: band_gradient
+        segments:
+        - from: 0%
+          to: 32%
+          color: '#0f766e'
+        - from: 32%
+          to: 50%
+          color: '#67e8f9'
+        - from: 50%
+          to: 68%
+          color: '#fde68a'
+        - from: 68%
+          to: 100%
+          color: '#f97316'
+    - type: custom:sensor-bar-card-plus
+      title: Hero Responsive Behavior
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Solar Production Corridor With Very Long Hero Label
+        icon: mdi:solar-power
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 10
+      - entity: sensor.sbcp_playground_negative
+        name: Grid Import Export Corridor With Very Long Responsive Label
+        icon: mdi:transmission-tower-export
+        formatting:
+          decimal: 2
+        scale:
+          min:
+            fixed: -3000
+          max:
+            fixed: 3000
+      - entity: sensor.sbcp_showcase_latency
+        name: Response Time Window With Long Technical Label
+        icon: mdi:timer-sand
+        formatting:
+          decimal: 0
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 150
+      layout:
+        height: 30
+        label:
+          position: hero
+      formatting:
+        decimal: 1
+      baseline:
+        at:
+          fixed: 0
+      bar:
+        fill_style: soft_bands
+        segments:
+        - from: 0%
+          to: 26%
+          color: '#1d4ed8'
+        - from: 26%
+          to: 58%
+          color: '#0ea5e9'
+        - from: 58%
+          to: 82%
+          color: '#22c55e'
+        - from: 82%
+          to: 100%
+          color: '#f59e0b'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        title: Hero Narrow
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production Corridor With Very Long Hero Label
+        layout:
+          height: 28
+          label:
+            position: hero
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 10
+        formatting:
+          decimal: 1
+        bar:
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0b1f36'
+          - pos: 48
+            color: '#22c55e'
+          - pos: 100
+            color: '#fde047'
+      - type: custom:sensor-bar-card-plus
+        title: Hero Narrow Signed
+        entities:
+        - entity: sensor.sbcp_playground_negative
+          name: Grid Import Export Corridor With Very Long Responsive Label
+          formatting:
+            decimal: 2
+        layout:
+          height: 28
+          label:
+            position: hero
+        scale:
+          min:
+            fixed: -3000
+          max:
+            fixed: 3000
+        baseline:
+          at:
+            fixed: 0
+        formatting:
+          decimal: 1
+        bar:
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#38bdf8'
+          - pos: 50
+            color: '#e5e7eb'
+          - pos: 100
+            color: '#22c55e'
+    - type: custom:sensor-bar-card-plus
+      title: Target Value Label
+      entities:
+      - entity: sensor.sbcp_hero_shot_ev
+        name: Normal Target
+        icon: mdi:car-electric
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 11
+        target:
+          at:
+            fixed: 7.4
+          label:
+            show: true
+        bar:
+          fill_style: soft_bands
+          segments:
+          - from: 0%
+            to: 18%
+            color: '#1d4ed8'
+          - from: 18%
+            to: 46%
+            color: '#0ea5e9'
+          - from: 46%
+            to: 74%
+            color: '#22c55e'
+          - from: 74%
+            to: 100%
+            color: '#f59e0b'
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Near-Edge Target
+        icon: mdi:solar-power
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 10
+        target:
+          at:
+            fixed: 9.4
+          label:
+            show: true
+        bar:
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#052e16'
+          - pos: 52
+            color: '#22c55e'
+          - pos: 100
+            color: '#fde047'
+      layout:
+        height: 36
+        label:
+          position: hero
+      formatting:
+        decimal: 1
+    - type: markdown
+      content: |
+        ## Existing Screenshot Matrix
     - type: custom:sensor-bar-card-plus
       title: Caravan Power
       entities:
@@ -5131,6 +5487,764 @@ views:
           fixed: 0
         max:
           fixed: 11
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: soft_bands
+- title: Hero Labels
+  path: sensor-bar-card-plus-hero-labels
+  icon: mdi:star-four-points-circle
+  badges: []
+  cards:
+  - type: markdown
+    content: |
+      # Hero Labels
+      This view is for Hero size presets, responsive behavior, and screenshot capture.
+  - type: markdown
+    content: |
+      ## Hero Size Comparison
+  - type: custom:sensor-bar-card-plus
+    title: Hero Size Comparison
+    entities:
+    - entity: sensor.sbcp_hero_shot_solar
+      name: Solar Production
+      icon: mdi:solar-power
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      layout:
+        label:
+          hero_size: small
+    - entity: sensor.sbcp_hero_shot_grid
+      name: Grid Flow
+      icon: mdi:transmission-tower-export
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      layout:
+        label:
+          hero_size: medium
+    - entity: sensor.sbcp_hero_shot_battery
+      name: Battery State
+      icon: mdi:home-battery
+      formatting:
+        decimal: 0
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      layout:
+        label:
+          hero_size: large
+    layout:
+      height: 40
+      label:
+        position: hero
+    formatting:
+      decimal: 1
+    bar:
+      fill_style: band_gradient
+      segments:
+      - from: 0%
+        to: 24%
+        color: '#0f172a'
+      - from: 24%
+        to: 52%
+        color: '#0369a1'
+      - from: 52%
+        to: 78%
+        color: '#22c55e'
+      - from: 78%
+        to: 100%
+        color: '#fde047'
+  - type: custom:sensor-bar-card-plus
+    title: Hero Size Comparison With Needle
+    entities:
+    - entity: sensor.sbcp_hero_shot_solar
+      name: Solar Production
+      icon: mdi:solar-power
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      layout:
+        label:
+          hero_size: small
+    - entity: sensor.sbcp_hero_shot_home
+      name: Home Load
+      icon: mdi:home-lightning-bolt
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 8
+      layout:
+        label:
+          hero_size: medium
+    - entity: sensor.sbcp_hero_shot_ev
+      name: EV Charging
+      icon: mdi:car-electric
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 11
+      layout:
+        label:
+          hero_size: large
+    layout:
+      height: 40
+      label:
+        position: hero
+    formatting:
+      decimal: 1
+    bar:
+      needle: true
+      fill_style: gradient
+      gradient_stops:
+      - pos: 0
+        color: '#082f49'
+      - pos: 34
+        color: '#0ea5e9'
+      - pos: 68
+        color: '#22c55e'
+      - pos: 100
+        color: '#facc15'
+  - type: custom:sensor-bar-card-plus
+    title: Hero Size Comparison With Baseline
+    entities:
+    - entity: sensor.sbcp_playground_negative
+      name: Export Flow
+      icon: mdi:transmission-tower-export
+      formatting:
+        decimal: 2
+      scale:
+        min:
+          fixed: -3000
+        max:
+          fixed: 3000
+      layout:
+        label:
+          hero_size: small
+    - entity: sensor.sbcp_hero_shot_grid
+      name: Grid Flow
+      icon: mdi:transmission-tower-import
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      layout:
+        label:
+          hero_size: medium
+    - entity: sensor.sbcp_showcase_grid
+      name: Utility Balance
+      icon: mdi:transmission-tower
+      scale:
+        min:
+          fixed: -6
+        max:
+          fixed: 6
+      layout:
+        label:
+          hero_size: large
+    layout:
+      height: 40
+      label:
+        position: hero
+    formatting:
+      decimal: 1
+    baseline:
+      at:
+        fixed: 0
+    bar:
+      fill_style: band_gradient
+      segments:
+      - from: 0%
+        to: 32%
+        color: '#0f766e'
+      - from: 32%
+        to: 50%
+        color: '#67e8f9'
+      - from: 50%
+        to: 68%
+        color: '#fde68a'
+      - from: 68%
+        to: 100%
+        color: '#f97316'
+  - type: custom:sensor-bar-card-plus
+    title: Hero Large KPI
+    entities:
+    - entity: sensor.sbcp_hero_shot_ev
+      name: EV Charging
+      icon: mdi:car-electric
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 11
+      target:
+        at:
+          fixed: 7.4
+        label:
+          show: true
+    - entity: sensor.sbcp_hero_shot_battery
+      name: Battery State
+      icon: mdi:home-battery
+      formatting:
+        decimal: 0
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+    layout:
+      height: 46
+      label:
+        position: hero
+        hero_size: large
+    formatting:
+      decimal: 1
+    bar:
+      fill_style: soft_bands
+      segments:
+      - from: 0%
+        to: 16%
+        color: '#1d4ed8'
+      - from: 16%
+        to: 36%
+        color: '#0ea5e9'
+      - from: 36%
+        to: 64%
+        color: '#22c55e'
+      - from: 64%
+        to: 84%
+        color: '#f59e0b'
+      - from: 84%
+        to: 100%
+        color: '#ef4444'
+  - type: custom:sensor-bar-card-plus
+    title: Hero Medium Default
+    entities:
+    - entity: sensor.sbcp_hero_shot_solar
+      name: Solar Production
+      icon: mdi:solar-power
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+    - entity: sensor.sbcp_hero_shot_grid
+      name: Grid Flow
+      icon: mdi:transmission-tower-export
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      baseline:
+        at:
+          fixed: 0
+    - entity: sensor.sbcp_hero_shot_battery
+      name: Battery State
+      icon: mdi:home-battery
+      formatting:
+        decimal: 0
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+    layout:
+      height: 38
+      label:
+        position: hero
+    formatting:
+      decimal: 1
+    bar:
+      fill_style: gradient
+      gradient_stops:
+      - pos: 0
+        color: '#071b14'
+      - pos: 26
+        color: '#14532d'
+      - pos: 62
+        color: '#22c55e'
+      - pos: 84
+        color: '#a3e635'
+      - pos: 100
+        color: '#fde047'
+  - type: custom:sensor-bar-card-plus
+    title: Hero Small Compact
+    entities:
+    - entity: sensor.sbcp_hero_shot_solar
+      name: Solar Production
+      icon: mdi:solar-power
+    - entity: sensor.sbcp_hero_shot_home
+      name: Home Load
+      icon: mdi:home-lightning-bolt
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 8
+    - entity: sensor.sbcp_showcase_latency
+      name: Response Time
+      icon: mdi:timer-sand
+      formatting:
+        decimal: 0
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 150
+    layout:
+      height: 28
+      label:
+        position: hero
+        hero_size: small
+    formatting:
+      decimal: 1
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 10
+    bar:
+      fill_style: gradient
+      gradient_stops:
+      - pos: 0
+        color: '#0b1f36'
+      - pos: 48
+        color: '#22c55e'
+      - pos: 100
+        color: '#fde047'
+  - type: custom:sensor-bar-card-plus
+    title: Hero Responsive Long Labels
+    entities:
+    - entity: sensor.sbcp_hero_shot_solar
+      name: Solar Production Corridor With Very Long Hero Label
+      icon: mdi:solar-power
+    - entity: sensor.sbcp_hero_shot_home
+      name: Home Consumption Corridor With Very Long Hero Label
+      icon: mdi:home-lightning-bolt
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 8
+    layout:
+      height: 28
+      label:
+        position: hero
+    formatting:
+      decimal: 1
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 10
+    bar:
+      fill_style: band_gradient
+      segments:
+      - from: 0%
+        to: 24%
+        color: '#7c2d12'
+      - from: 24%
+        to: 52%
+        color: '#c2410c'
+      - from: 52%
+        to: 78%
+        color: '#f59e0b'
+      - from: 78%
+        to: 100%
+        color: '#facc15'
+  - type: horizontal-stack
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Narrow Long Label
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Extremely Long Solar Production Label For Compact Hero Testing
+      layout:
+        height: 28
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: gradient
+    - type: custom:sensor-bar-card-plus
+      title: Narrow Mixed Values
+      entities:
+      - entity: sensor.sbcp_hero_shot_home
+        name: Home Load
+      - entity: sensor.sbcp_showcase_latency
+        name: Response ms
+        formatting:
+          decimal: 0
+      layout:
+        height: 28
+        label:
+          position: hero
+          hero_size: large
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 150
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: soft_bands
+  - type: custom:sensor-bar-card-plus
+    title: Hero Responsive Negative Values
+    entities:
+    - entity: sensor.sbcp_playground_negative
+      name: Grid Import Export Corridor With Long Label
+      icon: mdi:transmission-tower-export
+      formatting:
+        decimal: 2
+    - entity: sensor.sbcp_hero_shot_grid
+      name: Grid Flow
+      icon: mdi:transmission-tower-import
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      baseline:
+        at:
+          fixed: 0
+    layout:
+      height: 28
+      label:
+        position: hero
+        hero_size: medium
+    formatting:
+      decimal: 1
+    scale:
+      min:
+        fixed: -3000
+      max:
+        fixed: 3000
+    baseline:
+      at:
+        fixed: 0
+    bar:
+      fill_style: gradient
+      gradient_stops:
+      - pos: 0
+        color: '#38bdf8'
+      - pos: 50
+        color: '#e5e7eb'
+      - pos: 100
+        color: '#22c55e'
+  - type: custom:sensor-bar-card-plus
+    title: Hero Unit Stress
+    entities:
+    - entity: sensor.sbcp_hero_shot_solar
+      name: Solar kW
+      icon: mdi:solar-power
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+    - entity: sensor.sbcp_showcase_latency
+      name: Response ms
+      icon: mdi:timer-sand
+      formatting:
+        decimal: 0
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 150
+    - entity: sensor.sbcp_hero_shot_battery
+      name: Battery %
+      icon: mdi:home-battery
+      formatting:
+        decimal: 0
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+    - entity: sensor.sbcp_showcase_phase
+      name: No Unit
+      icon: mdi:counter
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+    layout:
+      height: 28
+      label:
+        position: hero
+        hero_size: large
+    formatting:
+      decimal: 1
+    bar:
+      fill_style: soft_bands
+  - type: custom:sensor-bar-card-plus
+    title: Hero Per-Entity Size Override
+    entities:
+    - entity: sensor.sbcp_hero_shot_solar
+      name: Medium Default
+      icon: mdi:solar-power
+    - entity: sensor.sbcp_hero_shot_grid
+      name: Small Override
+      icon: mdi:transmission-tower-export
+      layout:
+        label:
+          hero_size: small
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      baseline:
+        at:
+          fixed: 0
+    - entity: sensor.sbcp_hero_shot_battery
+      name: Large Override
+      icon: mdi:home-battery
+      formatting:
+        decimal: 0
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      layout:
+        label:
+          hero_size: large
+    layout:
+      height: 38
+      label:
+        position: hero
+        hero_size: medium
+    formatting:
+      decimal: 1
+    bar:
+      fill_style: gradient
+  - type: custom:sensor-bar-card-plus
+    title: Hero With Target
+    entities:
+    - entity: sensor.sbcp_hero_shot_ev
+      name: Charge Rate
+      icon: mdi:car-electric
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 11
+      target:
+        at:
+          fixed: 7.4
+        label:
+          show: true
+      bar:
+        fill_style: soft_bands
+    layout:
+      height: 36
+      label:
+        position: hero
+    formatting:
+      decimal: 1
+  - type: custom:sensor-bar-card-plus
+    title: Hero With Baseline
+    entities:
+    - entity: sensor.sbcp_hero_shot_grid
+      name: Import / Export
+      icon: mdi:transmission-tower-import
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+    layout:
+      height: 36
+      label:
+        position: hero
+    formatting:
+      decimal: 1
+    baseline:
+      at:
+        fixed: 0
+    bar:
+      fill_style: gradient
+      gradient_stops:
+      - pos: 0
+        color: '#0b1f36'
+      - pos: 28
+        color: '#0891b2'
+      - pos: 50
+        color: '#e2e8f0'
+      - pos: 72
+        color: '#f97316'
+      - pos: 100
+        color: '#dc2626'
+  - type: custom:sensor-bar-card-plus
+    title: Hero With Peak
+    entities:
+    - entity: sensor.sbcp_hero_shot_battery
+      name: Battery State
+      icon: mdi:home-battery
+      formatting:
+        decimal: 0
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      peak:
+        enabled: true
+        color: '#f8fafc'
+    layout:
+      height: 36
+      label:
+        position: hero
+    formatting:
+      decimal: 1
+    bar:
+      fill_style: gradient
+  - type: custom:sensor-bar-card-plus
+    title: Hero With Needle
+    entities:
+    - entity: sensor.sbcp_hero_shot_home
+      name: Home Load
+      icon: mdi:home-lightning-bolt
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 8
+    layout:
+      height: 36
+      label:
+        position: hero
+    formatting:
+      decimal: 1
+    bar:
+      needle: true
+      fill_style: gradient
+      gradient_stops:
+      - pos: 0
+        color: '#1f2937'
+      - pos: 50
+        color: '#22c55e'
+      - pos: 100
+        color: '#f59e0b'
+  - type: markdown
+    content: |
+      ## Narrow Hero Stress Tests
+      These intentionally narrow cards force responsive Hero behavior and label prioritization.
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Tight Hero Solar
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Solar Production Corridor With Very Long Hero Label
+      layout:
+        height: 26
+        label:
+          position: hero
+          hero_size: medium
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: gradient
+    - type: custom:sensor-bar-card-plus
+      title: Tight Hero Signed
+      entities:
+      - entity: sensor.sbcp_playground_negative
+        name: Import Export Corridor
+        formatting:
+          decimal: 2
+      layout:
+        height: 26
+        label:
+          position: hero
+          hero_size: medium
+      scale:
+        min:
+          fixed: -3000
+        max:
+          fixed: 3000
+      baseline:
+        at:
+          fixed: 0
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#38bdf8'
+        - pos: 50
+          color: '#e5e7eb'
+        - pos: 100
+          color: '#22c55e'
+    - type: custom:sensor-bar-card-plus
+      title: Tight Hero Battery
+      entities:
+      - entity: sensor.sbcp_hero_shot_battery
+        name: Battery %
+        formatting:
+          decimal: 0
+      layout:
+        height: 26
+        label:
+          position: hero
+          hero_size: large
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: soft_bands
+    - type: custom:sensor-bar-card-plus
+      title: Tight Hero ms
+      entities:
+      - entity: sensor.sbcp_showcase_latency
+        name: Response ms
+        formatting:
+          decimal: 0
+      layout:
+        height: 26
+        label:
+          position: hero
+          hero_size: large
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 150
       formatting:
         decimal: 1
       bar:
