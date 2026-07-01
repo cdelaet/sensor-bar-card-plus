@@ -5190,12 +5190,12 @@ views:
     content: |
       ## Hero
       Manual test coverage for `layout.label.position: hero`.
+
+      This view is arranged as a showcase first. Narrow and cramped hero layouts are kept in a dedicated stress section near the end.
   - type: markdown
     content: |
       ### Hero Basics
-  - type: grid
-    columns: 2
-    square: false
+  - type: vertical-stack
     cards:
     - type: custom:sensor-bar-card-plus
       title: Single row baseline hero
@@ -5237,6 +5237,163 @@ views:
         decimal: 1
       bar:
         fill_style: soft_bands
+  - type: grid
+    columns: 3
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Tight A
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Solar corridor
+      layout:
+        height: 28
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: gradient
+    - type: custom:sensor-bar-card-plus
+      title: Tight B
+      entities:
+      - entity: sensor.sbcp_hero_shot_home
+        name: Home corridor
+      layout:
+        height: 28
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 8
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: band_gradient
+        segments:
+        - from: 0%
+          to: 45%
+          color: '#fde68a'
+        - from: 45%
+          to: 75%
+          color: '#f59e0b'
+        - from: 75%
+          to: 100%
+          color: '#dc2626'
+    - type: custom:sensor-bar-card-plus
+      title: Tight C
+      entities:
+      - entity: sensor.sbcp_hero_shot_ev
+        name: EV corridor
+      layout:
+        height: 28
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 11
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: soft_bands
+  - type: grid
+    columns: 4
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: XS A
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Solar
+      layout:
+        height: 28
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: gradient
+    - type: custom:sensor-bar-card-plus
+      title: XS B
+      entities:
+      - entity: sensor.sbcp_hero_shot_home
+        name: Home
+      layout:
+        height: 28
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 8
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: band_gradient
+        segments:
+        - from: 0%
+          to: 45%
+          color: '#fde68a'
+        - from: 45%
+          to: 75%
+          color: '#f59e0b'
+        - from: 75%
+          to: 100%
+          color: '#dc2626'
+    - type: custom:sensor-bar-card-plus
+      title: XS C
+      entities:
+      - entity: sensor.sbcp_hero_shot_ev
+        name: EV
+      layout:
+        height: 28
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 11
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: soft_bands
+    - type: custom:sensor-bar-card-plus
+      title: XS D
+      entities:
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Grid
+      layout:
+        height: 28
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      baseline:
+        at:
+          fixed: 0
+      bar:
+        fill_style: gradient
     - type: custom:sensor-bar-card-plus
       title: Negative, zero, and small values
       entities:
@@ -5296,9 +5453,7 @@ views:
   - type: markdown
     content: |
       ### Hero Heights
-  - type: grid
-    columns: 2
-    square: false
+  - type: vertical-stack
     cards:
     - type: custom:sensor-bar-card-plus
       title: Compact 24
@@ -5375,9 +5530,7 @@ views:
   - type: markdown
     content: |
       ### Hero Fill Styles
-  - type: grid
-    columns: 2
-    square: false
+  - type: vertical-stack
     cards:
     - type: custom:sensor-bar-card-plus
       title: Solid
@@ -5479,9 +5632,7 @@ views:
   - type: markdown
     content: |
       ### Hero Target And Peak
-  - type: grid
-    columns: 2
-    square: false
+  - type: vertical-stack
     cards:
     - type: custom:sensor-bar-card-plus
       title: Target marker and label
@@ -5589,9 +5740,7 @@ views:
   - type: markdown
     content: |
       ### Hero Baseline
-  - type: grid
-    columns: 2
-    square: false
+  - type: vertical-stack
     cards:
     - type: custom:sensor-bar-card-plus
       title: Baseline centered
@@ -5701,9 +5850,7 @@ views:
   - type: markdown
     content: |
       ### Hero Needle
-  - type: grid
-    columns: 2
-    square: false
+  - type: vertical-stack
     cards:
     - type: custom:sensor-bar-card-plus
       title: Needle with solid fill
@@ -5810,9 +5957,7 @@ views:
   - type: markdown
     content: |
       ### Hero Overrides
-  - type: grid
-    columns: 2
-    square: false
+  - type: vertical-stack
     cards:
     - type: custom:sensor-bar-card-plus
       title: Hero default with per-entity label overrides
@@ -5881,9 +6026,7 @@ views:
   - type: markdown
     content: |
       ### Hero Icons
-  - type: grid
-    columns: 2
-    square: false
+  - type: vertical-stack
     cards:
     - type: custom:sensor-bar-card-plus
       title: Automatic and explicit icons
@@ -5926,9 +6069,7 @@ views:
   - type: markdown
     content: |
       ### Hero Formatting
-  - type: grid
-    columns: 2
-    square: false
+  - type: vertical-stack
     cards:
     - type: custom:sensor-bar-card-plus
       title: Units and decimals
@@ -5983,109 +6124,77 @@ views:
         color: '#60a5fa'
   - type: markdown
     content: |
-      ### Hero Responsive Stress
+      ### Hero Compact / Stress Tests
+  - type: custom:sensor-bar-card-plus
+    title: Long labels and tight stack
+    entities:
+    - entity: sensor.sbcp_playground_long_label
+      name: Extremely long hero label that should stress truncation and wrapping behavior
+    - entity: sensor.sbcp_hero_shot_grid
+      name: Grid import export corridor
+    - entity: sensor.sbcp_hero_shot_battery
+      name: Battery charge reserve window
+    - entity: sensor.sbcp_hero_shot_ev
+      name: EV charging session demand
+    layout:
+      height: 30
+      label:
+        position: hero
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+    formatting:
+      decimal: 1
+    bar:
+      fill_style: soft_bands
   - type: grid
     columns: 2
     square: false
     cards:
     - type: custom:sensor-bar-card-plus
-      title: Long labels and tight stack
+      title: Narrow card A
       entities:
-      - entity: sensor.sbcp_playground_long_label
-        name: Extremely long hero label that should stress truncation and wrapping behavior
-      - entity: sensor.sbcp_hero_shot_grid
-        name: Grid import export corridor
-      - entity: sensor.sbcp_hero_shot_battery
-        name: Battery charge reserve window
-      - entity: sensor.sbcp_hero_shot_ev
-        name: EV charging session demand
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Solar
       layout:
-        height: 30
+        height: 28
         label:
           position: hero
       scale:
         min:
           fixed: 0
         max:
-          fixed: 100
+          fixed: 10
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: gradient
+    - type: custom:sensor-bar-card-plus
+      title: Narrow card B
+      entities:
+      - entity: sensor.sbcp_hero_shot_home
+        name: Home
+      - entity: sensor.sbcp_hero_shot_ev
+        name: EV
+      layout:
+        height: 28
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 11
       formatting:
         decimal: 1
       bar:
         fill_style: soft_bands
-    - type: grid
-      columns: 3
-      square: false
-      cards:
-      - type: custom:sensor-bar-card-plus
-        title: Tight A
-        entities:
-        - entity: sensor.sbcp_hero_shot_solar
-          name: Solar
-        layout:
-          height: 28
-          label:
-            position: hero
-        scale:
-          min:
-            fixed: 0
-          max:
-            fixed: 10
-        formatting:
-          decimal: 1
-        bar:
-          fill_style: gradient
-      - type: custom:sensor-bar-card-plus
-        title: Tight B
-        entities:
-        - entity: sensor.sbcp_hero_shot_home
-          name: Home
-        layout:
-          height: 28
-          label:
-            position: hero
-        scale:
-          min:
-            fixed: 0
-          max:
-            fixed: 8
-        formatting:
-          decimal: 1
-        bar:
-          fill_style: band_gradient
-          segments:
-          - from: 0%
-            to: 45%
-            color: '#fde68a'
-          - from: 45%
-            to: 75%
-            color: '#f59e0b'
-          - from: 75%
-            to: 100%
-            color: '#dc2626'
-      - type: custom:sensor-bar-card-plus
-        title: Tight C
-        entities:
-        - entity: sensor.sbcp_hero_shot_ev
-          name: EV
-        layout:
-          height: 28
-          label:
-            position: hero
-        scale:
-          min:
-            fixed: 0
-          max:
-            fixed: 11
-        formatting:
-          decimal: 1
-        bar:
-          fill_style: soft_bands
   - type: markdown
     content: |
       ### Hero Text States
-  - type: grid
-    columns: 2
-    square: false
+  - type: vertical-stack
     cards:
     - type: custom:sensor-bar-card-plus
       title: Unknown and unavailable

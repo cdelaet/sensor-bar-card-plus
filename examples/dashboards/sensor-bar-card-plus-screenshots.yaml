@@ -4696,18 +4696,22 @@ views:
   icon: mdi:star-four-points-circle
   badges: []
   cards:
+  - type: markdown
+    content: |
+      # SBCP Hero
+      Full-width hero showcase cards for manual QA and clean screenshot capture.
+
+      Compact and narrow hero layouts are grouped into a dedicated stress section at the end.
   - type: custom:sensor-bar-card-plus
-    title: ENERGY FLOW
+    title: Hero Basics
     layout:
       label:
-        position: above
-        width: 196
-      height: 46
+        position: hero
+      height: 42
     formatting:
       decimal: 1
     bar:
-      fill_style: solid
-      color: '#4a9eff'
+      fill_style: gradient
     entities:
     - entity: sensor.sbcp_hero_shot_solar
       name: Solar Production
@@ -4742,8 +4746,6 @@ views:
           fixed: -10
         max:
           fixed: 10
-      layout:
-        height: 46
       baseline:
         at:
           fixed: 0
@@ -4791,6 +4793,15 @@ views:
           color: '#84cc16'
         - pos: 100
           color: '#16a34a'
+  - type: custom:sensor-bar-card-plus
+    title: Hero Large Values
+    layout:
+      label:
+        position: hero
+      height: 46
+    formatting:
+      decimal: 1
+    entities:
     - entity: sensor.sbcp_hero_shot_ev
       name: EV Charging
       icon: mdi:car-electric
@@ -4853,6 +4864,277 @@ views:
         - from: 78%
           to: 100%
           color: '#facc15'
+  - type: custom:sensor-bar-card-plus
+    title: Hero Heights
+    layout:
+      label:
+        position: hero
+    formatting:
+      decimal: 1
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 12
+    bar:
+      fill_style: gradient
+    entities:
+    - entity: sensor.sbcp_hero_shot_solar
+      name: Height 24
+      layout:
+        height: 24
+    - entity: sensor.sbcp_hero_shot_grid
+      name: Height 38
+      layout:
+        height: 38
+    - entity: sensor.sbcp_hero_shot_ev
+      name: Height 52
+      layout:
+        height: 52
+    - entity: sensor.sbcp_hero_shot_home
+      name: Height 70
+      layout:
+        height: 70
+  - type: custom:sensor-bar-card-plus
+    title: Hero Fill Styles
+    layout:
+      label:
+        position: hero
+      height: 38
+    formatting:
+      decimal: 1
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 12
+    bar:
+      fill_style: solid
+      color: '#4a9eff'
+    entities:
+    - entity: sensor.sbcp_hero_shot_home
+      name: Solid fill
+    - entity: sensor.sbcp_hero_shot_solar
+      name: Gradient fill
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#071b14'
+        - pos: 38
+          color: '#14532d'
+        - pos: 72
+          color: '#22c55e'
+        - pos: 100
+          color: '#fde047'
+    - entity: sensor.sbcp_hero_shot_ev
+      name: Soft bands
+      bar:
+        fill_style: soft_bands
+        segments:
+        - from: 0%
+          to: 30%
+          color: '#0ea5e9'
+        - from: 30%
+          to: 68%
+          color: '#22c55e'
+        - from: 68%
+          to: 100%
+          color: '#ef4444'
+    - entity: sensor.sbcp_hero_shot_battery
+      name: Band gradient
+      formatting:
+        decimal: 0
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      bar:
+        fill_style: band_gradient
+        segments:
+        - from: 0%
+          to: 18%
+          color: '#991b1b'
+        - from: 18%
+          to: 42%
+          color: '#ea580c'
+        - from: 42%
+          to: 68%
+          color: '#facc15'
+        - from: 68%
+          to: 100%
+          color: '#16a34a'
+  - type: custom:sensor-bar-card-plus
+    title: Hero Baseline, Target, Peak, And Needle
+    layout:
+      label:
+        position: hero
+      height: 40
+    formatting:
+      decimal: 1
+    entities:
+    - entity: sensor.sbcp_hero_shot_grid
+      name: Baseline + needle
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      baseline:
+        at:
+          fixed: 0
+      bar:
+        fill_style: gradient
+        needle:
+          show: true
+          color: '#ffffff'
+        gradient_stops:
+        - pos: 0
+          color: '#0b1f36'
+        - pos: 28
+          color: '#0891b2'
+        - pos: 50
+          color: '#e2e8f0'
+        - pos: 72
+          color: '#f97316'
+        - pos: 100
+          color: '#dc2626'
+    - entity: sensor.sbcp_hero_shot_ev
+      name: Target + label
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 11
+      target:
+        at:
+          fixed: 7.4
+        label:
+          show: true
+        color: '#f8fafc'
+      bar:
+        fill_style: soft_bands
+        needle:
+          show: true
+    - entity: sensor.sbcp_hero_shot_battery
+      name: Peak marker
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      formatting:
+        decimal: 0
+      peak:
+        enabled: true
+        color: '#f8fafc'
+      bar:
+        fill_style: gradient
+    - entity: sensor.sbcp_playground_negative
+      name: Signed baseline zone
+      scale:
+        min:
+          fixed: -3000
+        max:
+          fixed: 3000
+      baseline:
+        at:
+          fixed: 0
+        above:
+          color: '#22c55e'
+        below:
+          color: '#38bdf8'
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#38bdf8'
+        - pos: 50
+          color: '#e5e7eb'
+        - pos: 100
+          color: '#22c55e'
+  - type: custom:sensor-bar-card-plus
+    title: Hero Overrides, Icons, And Formatting
+    layout:
+      label:
+        position: hero
+      height: 38
+    formatting:
+      decimal: 1
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+    bar:
+      fill_style: gradient
+    entities:
+    - entity: sensor.sbcp_hero_shot_solar
+      name: Hero default
+    - entity: sensor.sbcp_hero_shot_grid
+      name: Above override
+      icon: mdi:transmission-tower-export
+      layout:
+        label:
+          position: above
+    - entity: sensor.sbcp_hero_shot_battery
+      name: Left override
+      formatting:
+        decimal: 0
+      layout:
+        label:
+          position: left
+          width: 120
+    - entity: sensor.sbcp_showcase_phase
+      name: No unit
+      icon: false
+  - type: markdown
+    content: |
+      ## Hero Compact / Stress Tests
+      These cards are intentionally narrow to exercise truncation, density, and cramped-width behavior.
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Narrow single-row
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Extremely long solar production label for compact hero testing
+      layout:
+        height: 28
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: gradient
+    - type: custom:sensor-bar-card-plus
+      title: Narrow multi-row
+      entities:
+      - entity: sensor.sbcp_hero_shot_home
+        name: Home corridor
+      - entity: sensor.sbcp_hero_shot_ev
+        name: EV session demand
+      layout:
+        height: 28
+        label:
+          position: hero
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 11
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: soft_bands
 - title: SBCP Editor
   path: sbcp-editor
   icon: mdi:tune-variant
