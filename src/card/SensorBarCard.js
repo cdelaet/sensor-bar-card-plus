@@ -183,11 +183,24 @@ export class SensorBarCard extends HTMLElement {
     this._densityPassDirty = false;
     this._densityPassFrame = null;
     this._densityPassRetries = 0;
+    this._boundWindowResize = () => this._schedulePostLayoutDensityPass();
     this._ensureBaseDom();
   }
 
   connectedCallback() {
+    window.addEventListener('resize', this._boundWindowResize, { passive: true });
     this._schedulePostLayoutDensityPass();
+  }
+
+  disconnectedCallback() {
+    window.removeEventListener('resize', this._boundWindowResize);
+    this._disconnectResizeObserver();
+    if (this._densityPassFrame) {
+      cancelAnimationFrame(this._densityPassFrame);
+      this._densityPassFrame = null;
+    }
+    this._densityPassScheduled = false;
+    this._densityPassDirty = false;
   }
 
   setConfig(config) {
@@ -1612,10 +1625,10 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           font-size: 20px;
         }
         .hero-line[data-hero-value-fit="tight"] .hero-value {
-          font-size: 16px;
+          font-size: 20px;
         }
         .hero-line[data-hero-value-fit="minimum"] .hero-value {
-          font-size: 11px;
+          font-size: 12px;
         }
         .hero-line[data-hero-value-fit="hidden"] .hero-value {
           display: none;
@@ -2159,21 +2172,53 @@ _getAboveTargetLayerGeometry(targetPct = null) {
 
     const measureValue = document.createElement('span');
     measureValue.className = 'hero-value';
+    measureValue.dataset.display = valueEl.dataset.display || '';
+    measureValue.dataset.unit = valueEl.dataset.unit || '';
     measureValue.innerHTML = this._formatRightValueMarkup(display, unit, hideUnit);
     measureValue.style.display = 'inline-flex';
     measureValue.style.flex = '0 0 auto';
     measureValue.style.width = 'auto';
+    measureValue.style.minWidth = '0';
     measureValue.style.maxWidth = 'none';
+    measureValue.style.justifyContent = 'flex-start';
+    measureValue.style.justifySelf = 'start';
     measureValue.style.overflow = 'visible';
+
+    const text = measureValue.querySelector('.value-right-text');
+    if (text) {
+      text.style.display = 'inline-flex';
+      text.style.flex = '0 0 auto';
+      text.style.width = 'auto';
+      text.style.minWidth = '0';
+      text.style.maxWidth = 'none';
+      text.style.justifyContent = 'flex-start';
+      text.style.overflow = 'visible';
+    }
+
+    const number = measureValue.querySelector('.value-right-number');
+    if (number) {
+      number.style.flex = '0 0 auto';
+      number.style.minWidth = '0';
+      number.style.overflow = 'visible';
+      number.style.textOverflow = 'clip';
+    }
+
+    const unitGroup = measureValue.querySelector('.unit-group');
+    if (unitGroup) {
+      unitGroup.style.flex = '0 0 auto';
+      unitGroup.style.minWidth = '0';
+      unitGroup.style.overflow = 'visible';
+    }
 
     wrapper.appendChild(measureValue);
     layer.replaceChildren(wrapper);
 
-    const text = measureValue.querySelector('.value-right-text');
     return Math.max(
       Math.ceil(measureValue.getBoundingClientRect?.().width ?? 0),
       Math.ceil(measureValue.scrollWidth || 0),
       Math.ceil(text?.getBoundingClientRect?.().width ?? text?.scrollWidth ?? 0),
+      Math.ceil(number?.getBoundingClientRect?.().width ?? number?.scrollWidth ?? 0),
+      Math.ceil(unitGroup?.getBoundingClientRect?.().width ?? unitGroup?.scrollWidth ?? 0),
     );
   }
 
@@ -3295,15 +3340,5 @@ ${paintLayers}
       rowIdx++;
     }
     this._runPostLayoutPasses(rows);
-  }
-  
-  disconnectedCallback() {
-    if (this._densityPassFrame !== null) {
-      cancelAnimationFrame(this._densityPassFrame);
-      this._densityPassFrame = null;
-    }
-    this._densityPassScheduled = false;
-    this._densityPassRetries = 0;
-    this._disconnectResizeObserver();
   }
 }

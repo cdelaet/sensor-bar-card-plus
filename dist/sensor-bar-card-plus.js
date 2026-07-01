@@ -1002,10 +1002,22 @@
           this._densityPassDirty = false;
           this._densityPassFrame = null;
           this._densityPassRetries = 0;
+          this._boundWindowResize = () => this._schedulePostLayoutDensityPass();
           this._ensureBaseDom();
         }
         connectedCallback() {
+          window.addEventListener("resize", this._boundWindowResize, { passive: true });
           this._schedulePostLayoutDensityPass();
+        }
+        disconnectedCallback() {
+          window.removeEventListener("resize", this._boundWindowResize);
+          this._disconnectResizeObserver();
+          if (this._densityPassFrame) {
+            cancelAnimationFrame(this._densityPassFrame);
+            this._densityPassFrame = null;
+          }
+          this._densityPassScheduled = false;
+          this._densityPassDirty = false;
         }
         setConfig(config) {
           if (!config.entities && !config.entity) {
@@ -2276,10 +2288,10 @@
           font-size: 20px;
         }
         .hero-line[data-hero-value-fit="tight"] .hero-value {
-          font-size: 16px;
+          font-size: 20px;
         }
         .hero-line[data-hero-value-fit="minimum"] .hero-value {
-          font-size: 11px;
+          font-size: 12px;
         }
         .hero-line[data-hero-value-fit="hidden"] .hero-value {
           display: none;
@@ -2765,7 +2777,7 @@
           return 0;
         }
         _measureHeroValueWidth(heroLine, valueEl, valueFit = "normal", hideUnit = false) {
-          var _a, _b, _c, _d, _e, _f;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
           const layer = (_a = this.shadowRoot) == null ? void 0 : _a.querySelector(".measure-layer");
           if (!layer || !heroLine || !valueEl) return 0;
           const display = this._decodeDataAttr(valueEl.dataset.display || valueEl.textContent || "");
@@ -2779,19 +2791,48 @@
           wrapper.style.display = "inline-block";
           const measureValue = document.createElement("span");
           measureValue.className = "hero-value";
+          measureValue.dataset.display = valueEl.dataset.display || "";
+          measureValue.dataset.unit = valueEl.dataset.unit || "";
           measureValue.innerHTML = this._formatRightValueMarkup(display, unit, hideUnit);
           measureValue.style.display = "inline-flex";
           measureValue.style.flex = "0 0 auto";
           measureValue.style.width = "auto";
+          measureValue.style.minWidth = "0";
           measureValue.style.maxWidth = "none";
+          measureValue.style.justifyContent = "flex-start";
+          measureValue.style.justifySelf = "start";
           measureValue.style.overflow = "visible";
+          const text = measureValue.querySelector(".value-right-text");
+          if (text) {
+            text.style.display = "inline-flex";
+            text.style.flex = "0 0 auto";
+            text.style.width = "auto";
+            text.style.minWidth = "0";
+            text.style.maxWidth = "none";
+            text.style.justifyContent = "flex-start";
+            text.style.overflow = "visible";
+          }
+          const number = measureValue.querySelector(".value-right-number");
+          if (number) {
+            number.style.flex = "0 0 auto";
+            number.style.minWidth = "0";
+            number.style.overflow = "visible";
+            number.style.textOverflow = "clip";
+          }
+          const unitGroup = measureValue.querySelector(".unit-group");
+          if (unitGroup) {
+            unitGroup.style.flex = "0 0 auto";
+            unitGroup.style.minWidth = "0";
+            unitGroup.style.overflow = "visible";
+          }
           wrapper.appendChild(measureValue);
           layer.replaceChildren(wrapper);
-          const text = measureValue.querySelector(".value-right-text");
           return Math.max(
             Math.ceil((_c = (_b = measureValue.getBoundingClientRect) == null ? void 0 : _b.call(measureValue).width) != null ? _c : 0),
             Math.ceil(measureValue.scrollWidth || 0),
-            Math.ceil((_f = (_e = (_d = text == null ? void 0 : text.getBoundingClientRect) == null ? void 0 : _d.call(text).width) != null ? _e : text == null ? void 0 : text.scrollWidth) != null ? _f : 0)
+            Math.ceil((_f = (_e = (_d = text == null ? void 0 : text.getBoundingClientRect) == null ? void 0 : _d.call(text).width) != null ? _e : text == null ? void 0 : text.scrollWidth) != null ? _f : 0),
+            Math.ceil((_i = (_h = (_g = number == null ? void 0 : number.getBoundingClientRect) == null ? void 0 : _g.call(number).width) != null ? _h : number == null ? void 0 : number.scrollWidth) != null ? _i : 0),
+            Math.ceil((_l = (_k = (_j = unitGroup == null ? void 0 : unitGroup.getBoundingClientRect) == null ? void 0 : _j.call(unitGroup).width) != null ? _k : unitGroup == null ? void 0 : unitGroup.scrollWidth) != null ? _l : 0)
           );
         }
         _applyHeroValueFit() {
@@ -3768,15 +3809,6 @@ ${paintLayers}
             rowIdx++;
           }
           this._runPostLayoutPasses(rows);
-        }
-        disconnectedCallback() {
-          if (this._densityPassFrame !== null) {
-            cancelAnimationFrame(this._densityPassFrame);
-            this._densityPassFrame = null;
-          }
-          this._densityPassScheduled = false;
-          this._densityPassRetries = 0;
-          this._disconnectResizeObserver();
         }
       };
     }
