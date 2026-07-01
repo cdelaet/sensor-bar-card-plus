@@ -607,6 +607,11 @@ const scenarios = [
 
 for (const scenario of scenarios) {
   test(`visual regression: ${scenario.name}`, async ({ page }) => {
+    page.on('console', async (msg) => {
+      const values = await Promise.all(msg.args().map((a) => a.jsonValue()));
+      console.log(...values);
+    });
+
     const mount = await render(page, scenario);
     await expect(mount).toHaveScreenshot(`${scenario.name}.png`);
   });

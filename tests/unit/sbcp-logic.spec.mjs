@@ -210,7 +210,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
     expect(cfg.layout).toEqual({
       label: {
-        hero_size: 'small',
+        hero_size: 'medium',
         position: 'left',
         width: 160,
       },
@@ -245,7 +245,7 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(heroCfg.entities[0].layout.label.position).toBe('hero');
     expect(heroCfg.entities[0].layout.label.hero_size).toBe('large');
     expect(invalidCfg.layout.label.position).toBe('left');
-    expect(invalidCfg.layout.label.hero_size).toBe('small');
+    expect(invalidCfg.layout.label.hero_size).toBe('medium');
   });
 
   it('rendering reads the nested layout shape', () => {
@@ -351,7 +351,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
     expect(cfg.layout).toEqual({
       label: {
-        hero_size: 'small',
+        hero_size: 'medium',
         position: 'above',
         width: 180,
       },
@@ -2271,7 +2271,7 @@ describe('Sensor Bar Card Plus logic', () => {
     const row = cfg.entities[0];
     expect(row.layout).toEqual({
       label: {
-        hero_size: 'small',
+        hero_size: 'medium',
         position: 'above',
         width: 180,
       },
@@ -2350,7 +2350,7 @@ describe('Sensor Bar Card Plus logic', () => {
     const row = cfg.entities[0];
     expect(row.layout).toEqual({
       label: {
-        hero_size: 'small',
+        hero_size: 'medium',
         position: 'left',
         width: 140,
       },
@@ -2429,7 +2429,7 @@ describe('Sensor Bar Card Plus logic', () => {
     const row = cfg.entities[0];
     expect(row.layout).toEqual({
       label: {
-        hero_size: 'small',
+        hero_size: 'medium',
         position: 'inside',
         width: 200,
       },
@@ -3240,7 +3240,7 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(source).toContain('--sbcp-hero-xs-size');
     expect(source).toContain('--sbcp-hero-fit-tight-size');
     expect(source).toContain('--sbcp-hero-fit-minimum-size');
-    expect(source).toContain('.hero-line[data-hero-size="medium"]');
+    expect(source).toContain('.hero-line[data-hero-size="small"]');
     expect(source).toContain('.hero-line[data-hero-size="large"]');
     expect(source).toContain('font-size: var(--sbcp-hero-base-size);');
     expect(source).toContain('grid-template-columns: minmax(0, 1fr) minmax(0, auto);');
@@ -3547,7 +3547,7 @@ describe('Sensor Bar Card Plus logic', () => {
     );
 
     expect(html).toContain('class="hero-line"');
-    expect(html).toContain('data-hero-size="small"');
+    expect(html).toContain('data-hero-size="medium"');
     expect(html).toContain('class="hero-header"');
     expect(html).toContain('class="hero-label label-left-text"');
     expect(html).toContain('class="hero-value"');

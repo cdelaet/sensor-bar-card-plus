@@ -360,7 +360,7 @@
     const normalized = typeof position === "string" ? position.trim().toLowerCase() : "";
     return ["left", "above", "inside", "off", "hero"].includes(normalized) ? normalized : fallback;
   }
-  function normalizeHeroSize(size, fallback = "small") {
+  function normalizeHeroSize(size, fallback = "medium") {
     const normalized = typeof size === "string" ? size.trim().toLowerCase() : "";
     return ["small", "medium", "large"].includes(normalized) ? normalized : fallback;
   }
@@ -382,7 +382,7 @@
         width: (_m = (_l = (_k = (_j = (_i = entityLabel == null ? void 0 : entityLabel.width) != null ? _i : entityConfig.label_width) != null ? _j : cardLabel == null ? void 0 : cardLabel.width) != null ? _k : cardLayout == null ? void 0 : cardLayout.label_width) != null ? _l : cardConfig == null ? void 0 : cardConfig.label_width) != null ? _m : 100,
         hero_size: normalizeHeroSize(
           (_v = (_u = (_t = (_s = (_r = (_q = (_p = (_o = (_n = entityLabel == null ? void 0 : entityLabel.hero_size) != null ? _n : entityLabel == null ? void 0 : entityLabel.heroSize) != null ? _o : entityConfig.hero_size) != null ? _p : entityConfig.heroSize) != null ? _q : cardLabel == null ? void 0 : cardLabel.hero_size) != null ? _r : cardLabel == null ? void 0 : cardLabel.heroSize) != null ? _s : cardLayout == null ? void 0 : cardLayout.hero_size) != null ? _t : cardLayout == null ? void 0 : cardLayout.heroSize) != null ? _u : cardConfig == null ? void 0 : cardConfig.hero_size) != null ? _v : cardConfig == null ? void 0 : cardConfig.heroSize,
-          "small"
+          "medium"
         )
       },
       height: clampSupportedRowHeight(rawHeight),
@@ -2231,36 +2231,24 @@
         }
         .hero-line {
           --sbcp-hero-min-value-size: 10px;
-          --sbcp-hero-base-size: 56px;
-          --sbcp-hero-compact-size: 50px;
-          --sbcp-hero-tight-size: 44px;
-          --sbcp-hero-dense-size: 36px;
-          --sbcp-hero-compressed-size: 28px;
-          --sbcp-hero-xs-size: 20px;
-          --sbcp-hero-fit-tight-size: 20px;
+          --sbcp-hero-base-size: 84px;
+          --sbcp-hero-compact-size: clamp(50px, calc(var(--sbcp-hero-base-size) * 0.89), 100px);
+          --sbcp-hero-tight-size: clamp(42px, calc(var(--sbcp-hero-base-size) * 0.75), 84px);
+          --sbcp-hero-dense-size: clamp(29px, calc(var(--sbcp-hero-base-size) * 0.52), 58px);
+          --sbcp-hero-compressed-size: clamp(21px, calc(var(--sbcp-hero-base-size) * 0.38), 43px);
+          --sbcp-hero-xs-size: clamp(15px, calc(var(--sbcp-hero-base-size) * 0.26), 29px);
+          --sbcp-hero-fit-tight-size: clamp(15px, calc(var(--sbcp-hero-base-size) * 0.26), 29px);
           --sbcp-hero-fit-minimum-size: 12px;
           min-width: 0;
           margin-bottom: 0;
         }
-        .hero-line[data-hero-size="medium"] {
-          --sbcp-hero-base-size: 84px;
-          --sbcp-hero-compact-size: 72px;
-          --sbcp-hero-tight-size: 60px;
-          --sbcp-hero-dense-size: 44px;
-          --sbcp-hero-compressed-size: 32px;
-          --sbcp-hero-xs-size: 22px;
-          --sbcp-hero-fit-tight-size: 22px;
-          --sbcp-hero-fit-minimum-size: 12px;
+
+        .hero-line[data-hero-size="small"] {
+          --sbcp-hero-base-size: 56px;
         }
+
         .hero-line[data-hero-size="large"] {
           --sbcp-hero-base-size: 112px;
-          --sbcp-hero-compact-size: 88px;
-          --sbcp-hero-tight-size: 64px;
-          --sbcp-hero-dense-size: 44px;
-          --sbcp-hero-compressed-size: 32px;
-          --sbcp-hero-xs-size: 22px;
-          --sbcp-hero-fit-tight-size: 22px;
-          --sbcp-hero-fit-minimum-size: 12px;
         }
         .hero-header {
           display: grid;
@@ -2821,6 +2809,7 @@
           if (!display) return 0;
           const wrapper = document.createElement("div");
           wrapper.className = "hero-line";
+          wrapper.dataset.heroSize = heroLine.dataset.heroSize || "medium";
           wrapper.dataset.heroDensity = heroLine.dataset.heroDensity || "normal";
           wrapper.dataset.heroValueFit = valueFit;
           wrapper.dataset.hideHeroUnit = hideUnit ? "true" : "false";
@@ -2882,33 +2871,37 @@
             if (!headerEl || !valueEl) return;
             heroLine.dataset.hideHeroUnit = "false";
             heroLine.dataset.heroValueFit = "normal";
+            delete headerEl.dataset.priorityHideName;
             const headerWidth = Math.floor((_b = (_a = headerEl.getBoundingClientRect) == null ? void 0 : _a.call(headerEl).width) != null ? _b : 0);
             if (!this._isReliableWidth(headerWidth, 8)) {
               this._schedulePostLayoutDensityPass();
               return;
             }
-            const labelHidden = headerEl.dataset.hideName === "true" || headerEl.dataset.priorityHideName === "true";
-            const labelWidth = this._getHeroLabelReservedWidth(headerEl, labelEl, labelHidden);
-            const gap = !labelHidden && labelEl ? this._getNumericStyleValue(headerEl, "column-gap", 0) : 0;
-            const availableWidth = Math.max(0, headerWidth - labelWidth - gap - 4);
             const hasUnit = !!unitGroup && unitGroup.textContent.trim().length > 0;
-            if (!this._isReliableWidth(availableWidth, 8)) {
+            const labelHiddenByDensity = headerEl.dataset.hideName === "true";
+            const visibleLabelGap = !labelHiddenByDensity && labelEl ? this._getNumericStyleValue(headerEl, "column-gap", 0) : 0;
+            const valueWidth = (valueFit = "normal", hideUnit = false) => this._measureHeroValueWidth(heroLine, valueEl, valueFit, hideUnit);
+            const availableWithLabel = Math.max(0, headerWidth - visibleLabelGap - 4);
+            const availableWithoutLabel = Math.max(0, headerWidth - 4);
+            if (!this._isReliableWidth(availableWithoutLabel, 8)) {
               heroLine.dataset.hideHeroUnit = hasUnit ? "true" : "false";
               heroLine.dataset.heroValueFit = "minimum";
               this._schedulePostLayoutDensityPass();
               return;
             }
-            if (this._measureHeroValueWidth(heroLine, valueEl, "normal", false) <= availableWidth) return;
-            heroLine.dataset.heroValueFit = "tight";
-            if (this._measureHeroValueWidth(heroLine, valueEl, "tight", false) <= availableWidth) return;
-            heroLine.dataset.heroValueFit = "minimum";
-            if (this._measureHeroValueWidth(heroLine, valueEl, "minimum", false) <= availableWidth) return;
+            if (valueWidth("normal", false) <= availableWithLabel) return;
+            if (!labelHiddenByDensity && labelEl) {
+              headerEl.dataset.priorityHideName = "true";
+              if (valueWidth("normal", false) <= availableWithoutLabel) return;
+            }
             if (hasUnit) {
               heroLine.dataset.hideHeroUnit = "true";
-              heroLine.dataset.heroValueFit = "minimum";
-              if (this._measureHeroValueWidth(heroLine, valueEl, "minimum", true) <= availableWidth) return;
+              if (valueWidth("normal", true) <= availableWithoutLabel) return;
             }
-            heroLine.dataset.hideHeroUnit = hasUnit ? "true" : "false";
+            heroLine.dataset.heroValueFit = "tight";
+            if (valueWidth("tight", hasUnit) <= availableWithoutLabel) return;
+            heroLine.dataset.heroValueFit = "minimum";
+            if (valueWidth("minimum", hasUnit) <= availableWithoutLabel) return;
             heroLine.dataset.heroValueFit = "hidden";
           });
         }

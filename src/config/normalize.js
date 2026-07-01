@@ -372,7 +372,7 @@ export function normalizeLabelPosition(position, fallback = 'left') {
     : fallback;
 }
 
-export function normalizeHeroSize(size, fallback = 'small') {
+export function normalizeHeroSize(size, fallback = 'medium') {
   const normalized = typeof size === 'string' ? size.trim().toLowerCase() : '';
   return ['small', 'medium', 'large'].includes(normalized)
     ? normalized
@@ -401,7 +401,7 @@ export function normalizeLayoutConfig(entityConfig, cardConfig) {
       width: entityLabel?.width ?? entityConfig.label_width ?? cardLabel?.width ?? cardLayout?.label_width ?? cardConfig?.label_width ?? 100,
       hero_size: normalizeHeroSize(
         entityLabel?.hero_size ?? entityLabel?.heroSize ?? entityConfig.hero_size ?? entityConfig.heroSize ?? cardLabel?.hero_size ?? cardLabel?.heroSize ?? cardLayout?.hero_size ?? cardLayout?.heroSize ?? cardConfig?.hero_size ?? cardConfig?.heroSize,
-        'small'
+        'medium'
       ),
     },
     height: clampSupportedRowHeight(rawHeight),
