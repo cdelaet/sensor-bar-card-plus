@@ -1560,8 +1560,36 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         }
         .hero-line {
           --sbcp-hero-min-value-size: 10px;
+          --sbcp-hero-base-size: 56px;
+          --sbcp-hero-compact-size: 50px;
+          --sbcp-hero-tight-size: 44px;
+          --sbcp-hero-dense-size: 36px;
+          --sbcp-hero-compressed-size: 28px;
+          --sbcp-hero-xs-size: 20px;
+          --sbcp-hero-fit-tight-size: 20px;
+          --sbcp-hero-fit-minimum-size: 12px;
           min-width: 0;
           margin-bottom: 0;
+        }
+        .hero-line[data-hero-size="medium"] {
+          --sbcp-hero-base-size: 84px;
+          --sbcp-hero-compact-size: 72px;
+          --sbcp-hero-tight-size: 60px;
+          --sbcp-hero-dense-size: 44px;
+          --sbcp-hero-compressed-size: 32px;
+          --sbcp-hero-xs-size: 22px;
+          --sbcp-hero-fit-tight-size: 22px;
+          --sbcp-hero-fit-minimum-size: 12px;
+        }
+        .hero-line[data-hero-size="large"] {
+          --sbcp-hero-base-size: 112px;
+          --sbcp-hero-compact-size: 88px;
+          --sbcp-hero-tight-size: 64px;
+          --sbcp-hero-dense-size: 44px;
+          --sbcp-hero-compressed-size: 32px;
+          --sbcp-hero-xs-size: 22px;
+          --sbcp-hero-fit-tight-size: 22px;
+          --sbcp-hero-fit-minimum-size: 12px;
         }
         .hero-header {
           display: grid;
@@ -1601,7 +1629,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           justify-content: flex-end;
           justify-self: end;
           overflow: hidden;
-          font-size: 56px;
+          font-size: var(--sbcp-hero-base-size);
           font-weight: 700;
           color: var(--primary-text-color, #333);
           font-variant-numeric: tabular-nums;
@@ -1610,25 +1638,25 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         }
 
         .hero-line[data-hero-density="compact"] .hero-value {
-          font-size: 50px;
+          font-size: var(--sbcp-hero-compact-size);
         }
         .hero-line[data-hero-density="tight"] .hero-value {
-          font-size: 44px;
+          font-size: var(--sbcp-hero-tight-size);
         }
         .hero-line[data-hero-density="dense"] .hero-value {
-          font-size: 36px;
+          font-size: var(--sbcp-hero-dense-size);
         }
         .hero-line[data-hero-density="compressed"] .hero-value {
-          font-size: 28px;
+          font-size: var(--sbcp-hero-compressed-size);
         }
         .hero-line[data-hero-density="xs"] .hero-value {
-          font-size: 20px;
+          font-size: var(--sbcp-hero-xs-size);
         }
         .hero-line[data-hero-value-fit="tight"] .hero-value {
-          font-size: 20px;
+          font-size: var(--sbcp-hero-fit-tight-size);
         }
         .hero-line[data-hero-value-fit="minimum"] .hero-value {
-          font-size: 12px;
+          font-size: var(--sbcp-hero-fit-minimum-size);
         }
         .hero-line[data-hero-value-fit="hidden"] .hero-value {
           display: none;
@@ -3078,8 +3106,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           ${this._formatAboveValueMarkup(stateDisplay, unit)}
         </div>
       </div>` : '';
+    const heroSize = layout.label.hero_size ?? 'small';
     const heroHeader = lp === 'hero' ? `
-      <div class="hero-line">
+      <div class="hero-line" data-hero-size="${heroSize}">
         <div class="hero-header">
           <span class="hero-label label-left-text">${escapedName}</span>
           <span class="hero-value" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}">${this._formatRightValueMarkup(stateDisplay, unit, false)}</span>

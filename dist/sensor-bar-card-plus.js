@@ -360,8 +360,12 @@
     const normalized = typeof position === "string" ? position.trim().toLowerCase() : "";
     return ["left", "above", "inside", "off", "hero"].includes(normalized) ? normalized : fallback;
   }
+  function normalizeHeroSize(size, fallback = "small") {
+    const normalized = typeof size === "string" ? size.trim().toLowerCase() : "";
+    return ["small", "medium", "large"].includes(normalized) ? normalized : fallback;
+  }
   function normalizeLayoutConfig(entityConfig, cardConfig) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v;
     const cardLayout = cardConfig == null ? void 0 : cardConfig.layout;
     const entityLayout = entityConfig == null ? void 0 : entityConfig.layout;
     const entityLabel = entityLayout == null ? void 0 : entityLayout.label;
@@ -375,7 +379,11 @@
           (_h = (_g = (_f = (_e = entityLabel == null ? void 0 : entityLabel.position) != null ? _e : entityConfig.label_position) != null ? _f : cardLabel == null ? void 0 : cardLabel.position) != null ? _g : cardLayout == null ? void 0 : cardLayout.label_position) != null ? _h : cardConfig == null ? void 0 : cardConfig.label_position,
           "left"
         ),
-        width: (_m = (_l = (_k = (_j = (_i = entityLabel == null ? void 0 : entityLabel.width) != null ? _i : entityConfig.label_width) != null ? _j : cardLabel == null ? void 0 : cardLabel.width) != null ? _k : cardLayout == null ? void 0 : cardLayout.label_width) != null ? _l : cardConfig == null ? void 0 : cardConfig.label_width) != null ? _m : 100
+        width: (_m = (_l = (_k = (_j = (_i = entityLabel == null ? void 0 : entityLabel.width) != null ? _i : entityConfig.label_width) != null ? _j : cardLabel == null ? void 0 : cardLabel.width) != null ? _k : cardLayout == null ? void 0 : cardLayout.label_width) != null ? _l : cardConfig == null ? void 0 : cardConfig.label_width) != null ? _m : 100,
+        hero_size: normalizeHeroSize(
+          (_v = (_u = (_t = (_s = (_r = (_q = (_p = (_o = (_n = entityLabel == null ? void 0 : entityLabel.hero_size) != null ? _n : entityLabel == null ? void 0 : entityLabel.heroSize) != null ? _o : entityConfig.hero_size) != null ? _p : entityConfig.heroSize) != null ? _q : cardLabel == null ? void 0 : cardLabel.hero_size) != null ? _r : cardLabel == null ? void 0 : cardLabel.heroSize) != null ? _s : cardLayout == null ? void 0 : cardLayout.hero_size) != null ? _t : cardLayout == null ? void 0 : cardLayout.heroSize) != null ? _u : cardConfig == null ? void 0 : cardConfig.hero_size) != null ? _v : cardConfig == null ? void 0 : cardConfig.heroSize,
+          "small"
+        )
       },
       height: clampSupportedRowHeight(rawHeight),
       height_explicit: heightExplicit
@@ -2223,8 +2231,36 @@
         }
         .hero-line {
           --sbcp-hero-min-value-size: 10px;
+          --sbcp-hero-base-size: 56px;
+          --sbcp-hero-compact-size: 50px;
+          --sbcp-hero-tight-size: 44px;
+          --sbcp-hero-dense-size: 36px;
+          --sbcp-hero-compressed-size: 28px;
+          --sbcp-hero-xs-size: 20px;
+          --sbcp-hero-fit-tight-size: 20px;
+          --sbcp-hero-fit-minimum-size: 12px;
           min-width: 0;
           margin-bottom: 0;
+        }
+        .hero-line[data-hero-size="medium"] {
+          --sbcp-hero-base-size: 84px;
+          --sbcp-hero-compact-size: 72px;
+          --sbcp-hero-tight-size: 60px;
+          --sbcp-hero-dense-size: 44px;
+          --sbcp-hero-compressed-size: 32px;
+          --sbcp-hero-xs-size: 22px;
+          --sbcp-hero-fit-tight-size: 22px;
+          --sbcp-hero-fit-minimum-size: 12px;
+        }
+        .hero-line[data-hero-size="large"] {
+          --sbcp-hero-base-size: 112px;
+          --sbcp-hero-compact-size: 88px;
+          --sbcp-hero-tight-size: 64px;
+          --sbcp-hero-dense-size: 44px;
+          --sbcp-hero-compressed-size: 32px;
+          --sbcp-hero-xs-size: 22px;
+          --sbcp-hero-fit-tight-size: 22px;
+          --sbcp-hero-fit-minimum-size: 12px;
         }
         .hero-header {
           display: grid;
@@ -2264,7 +2300,7 @@
           justify-content: flex-end;
           justify-self: end;
           overflow: hidden;
-          font-size: 56px;
+          font-size: var(--sbcp-hero-base-size);
           font-weight: 700;
           color: var(--primary-text-color, #333);
           font-variant-numeric: tabular-nums;
@@ -2273,25 +2309,25 @@
         }
 
         .hero-line[data-hero-density="compact"] .hero-value {
-          font-size: 50px;
+          font-size: var(--sbcp-hero-compact-size);
         }
         .hero-line[data-hero-density="tight"] .hero-value {
-          font-size: 44px;
+          font-size: var(--sbcp-hero-tight-size);
         }
         .hero-line[data-hero-density="dense"] .hero-value {
-          font-size: 36px;
+          font-size: var(--sbcp-hero-dense-size);
         }
         .hero-line[data-hero-density="compressed"] .hero-value {
-          font-size: 28px;
+          font-size: var(--sbcp-hero-compressed-size);
         }
         .hero-line[data-hero-density="xs"] .hero-value {
-          font-size: 20px;
+          font-size: var(--sbcp-hero-xs-size);
         }
         .hero-line[data-hero-value-fit="tight"] .hero-value {
-          font-size: 20px;
+          font-size: var(--sbcp-hero-fit-tight-size);
         }
         .hero-line[data-hero-value-fit="minimum"] .hero-value {
-          font-size: 12px;
+          font-size: var(--sbcp-hero-fit-minimum-size);
         }
         .hero-line[data-hero-value-fit="hidden"] .hero-value {
           display: none;
@@ -3511,7 +3547,7 @@
           return `<span class="inside-value-text ${unitModeClass}"><span class="inside-number">${escapedDisplay}</span><span class="inside-unit">${escapedUnit}</span></span>`;
         }
         _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
-          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u;
           const ecfg = this._resolve(entityCfg);
           const stateObj = (_c = (_b = (_a = this._hass) == null ? void 0 : _a.states) == null ? void 0 : _b[entityCfg.entity]) != null ? _c : null;
           const rowViewModel = stateObj ? buildRowViewModel({
@@ -3569,8 +3605,9 @@
           ${this._formatAboveValueMarkup(stateDisplay, unit)}
         </div>
       </div>` : "";
+          const heroSize = (_q = layout.label.hero_size) != null ? _q : "small";
           const heroHeader = lp === "hero" ? `
-      <div class="hero-line">
+      <div class="hero-line" data-hero-size="${heroSize}">
         <div class="hero-header">
           <span class="hero-label label-left-text">${escapedName}</span>
           <span class="hero-value" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}">${this._formatRightValueMarkup(stateDisplay, unit, false)}</span>
@@ -3586,7 +3623,7 @@
           const topRightValue = lp === "left" ? `<div class="top-right-value" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}" data-hide-unit="false" data-active="false">${this._formatRightValueMarkup(stateDisplay, unit, false)}</div>` : "";
           const mainIcon = ecfg.icon && ecfg.icon !== false && lp !== "hero" ? `<div class="icon-wrap"><ha-icon icon="${ecfg.icon}"></ha-icon></div>` : "";
           return `
-      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${((_r = (_q = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _q.heightExplicit) != null ? _r : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_t = (_s = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _s.barAnimated) != null ? _t : bar.animated) ? "true" : "false"}">
+      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${((_s = (_r = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _r.heightExplicit) != null ? _s : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_u = (_t = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _t.barAnimated) != null ? _u : bar.animated) ? "true" : "false"}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${heroHeader}

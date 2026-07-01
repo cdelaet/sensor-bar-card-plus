@@ -210,6 +210,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
     expect(cfg.layout).toEqual({
       label: {
+        hero_size: 'small',
         position: 'left',
         width: 160,
       },
@@ -224,6 +225,7 @@ describe('Sensor Bar Card Plus logic', () => {
       layout: {
         label: {
           position: 'hero',
+          hero_size: 'large',
         },
       },
       entities: [{ entity: 'sensor.row' }],
@@ -232,14 +234,18 @@ describe('Sensor Bar Card Plus logic', () => {
       layout: {
         label: {
           position: 'not-a-mode',
+          hero_size: 'not-a-size',
         },
       },
       entities: [{ entity: 'sensor.row' }],
     });
 
     expect(heroCfg.layout.label.position).toBe('hero');
+    expect(heroCfg.layout.label.hero_size).toBe('large');
     expect(heroCfg.entities[0].layout.label.position).toBe('hero');
+    expect(heroCfg.entities[0].layout.label.hero_size).toBe('large');
     expect(invalidCfg.layout.label.position).toBe('left');
+    expect(invalidCfg.layout.label.hero_size).toBe('small');
   });
 
   it('rendering reads the nested layout shape', () => {
@@ -345,6 +351,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
     expect(cfg.layout).toEqual({
       label: {
+        hero_size: 'small',
         position: 'above',
         width: 180,
       },
@@ -2264,6 +2271,7 @@ describe('Sensor Bar Card Plus logic', () => {
     const row = cfg.entities[0];
     expect(row.layout).toEqual({
       label: {
+        hero_size: 'small',
         position: 'above',
         width: 180,
       },
@@ -2342,6 +2350,7 @@ describe('Sensor Bar Card Plus logic', () => {
     const row = cfg.entities[0];
     expect(row.layout).toEqual({
       label: {
+        hero_size: 'small',
         position: 'left',
         width: 140,
       },
@@ -2420,6 +2429,7 @@ describe('Sensor Bar Card Plus logic', () => {
     const row = cfg.entities[0];
     expect(row.layout).toEqual({
       label: {
+        hero_size: 'small',
         position: 'inside',
         width: 200,
       },
@@ -3222,7 +3232,17 @@ describe('Sensor Bar Card Plus logic', () => {
   it('hero mode CSS keeps the value visible without ellipsis and allows responsive shrinking', () => {
     const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
 
-    expect(source).toContain('--sbcp-hero-min-value-size: 10px;');
+    expect(source).toContain('--sbcp-hero-base-size');
+    expect(source).toContain('--sbcp-hero-compact-size');
+    expect(source).toContain('--sbcp-hero-tight-size');
+    expect(source).toContain('--sbcp-hero-dense-size');
+    expect(source).toContain('--sbcp-hero-compressed-size');
+    expect(source).toContain('--sbcp-hero-xs-size');
+    expect(source).toContain('--sbcp-hero-fit-tight-size');
+    expect(source).toContain('--sbcp-hero-fit-minimum-size');
+    expect(source).toContain('.hero-line[data-hero-size="medium"]');
+    expect(source).toContain('.hero-line[data-hero-size="large"]');
+    expect(source).toContain('font-size: var(--sbcp-hero-base-size);');
     expect(source).toContain('grid-template-columns: minmax(0, 1fr) minmax(0, auto);');
     expect(source).toContain('justify-self: end;');
     expect(source).toContain('.hero-value {\n          min-width: 0;');
@@ -3527,12 +3547,55 @@ describe('Sensor Bar Card Plus logic', () => {
     );
 
     expect(html).toContain('class="hero-line"');
+    expect(html).toContain('data-hero-size="small"');
     expect(html).toContain('class="hero-header"');
     expect(html).toContain('class="hero-label label-left-text"');
     expect(html).toContain('class="hero-value"');
     expect(html).toContain('class="main-line hero-mode"');
     expect(html).not.toContain('class="value-right"');
     expect(html).not.toContain('class="label-left"');
+  });
+
+  it('renders configured hero size presets in hero markup', () => {
+    const card = createCard();
+    card._hass.states = {
+      'sensor.hero': {
+        state: '7.2',
+        attributes: {
+          friendly_name: 'Solar Production',
+          icon: 'mdi:solar-power',
+          unit_of_measurement: 'kW',
+        },
+      },
+    };
+
+    const cfg = card.normalizeCardConfig({
+      layout: {
+        label: {
+          position: 'hero',
+          hero_size: 'medium',
+        },
+      },
+      entities: [{ entity: 'sensor.hero' }],
+    });
+
+    const html = card._buildRow(
+      cfg.entities[0],
+      '7.2',
+      'kW',
+      72,
+      '#4a9eff',
+      null,
+      null,
+      null,
+      null,
+      '#888',
+      '#888',
+      0,
+      10,
+    );
+
+    expect(html).toContain('data-hero-size="medium"');
   });
 
   it('patches hero rows without rebuilding above-mode markup', () => {

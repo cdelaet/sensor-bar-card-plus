@@ -164,6 +164,7 @@ describe('Sensor Bar Card Plus public API smoke', () => {
 
     expect(rowCfg.layout.label.position).toBe('hero');
     expect(html).toContain('class="hero-line"');
+    expect(html).toContain('data-hero-size="small"');
     expect(html).toContain('class="main-line hero-mode"');
   });
 

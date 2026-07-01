@@ -6124,6 +6124,182 @@ views:
         color: '#60a5fa'
   - type: markdown
     content: |
+      ### Hero Size Presets
+  - type: vertical-stack
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Small hero size
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Solar production
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Grid import/export
+      - entity: sensor.sbcp_hero_shot_battery
+        name: Battery charge
+      layout:
+        height: 38
+        label:
+          position: hero
+          hero_size: small
+      formatting:
+        decimal: 1
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      bar:
+        fill_style: soft_bands
+    - type: custom:sensor-bar-card-plus
+      title: Medium hero size
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Solar production
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Grid import/export
+      - entity: sensor.sbcp_hero_shot_battery
+        name: Battery charge
+      layout:
+        height: 38
+        label:
+          position: hero
+          hero_size: medium
+      formatting:
+        decimal: 1
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      bar:
+        fill_style: soft_bands
+    - type: custom:sensor-bar-card-plus
+      title: Large hero size
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Solar production
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Grid import/export
+      - entity: sensor.sbcp_hero_shot_battery
+        name: Battery charge
+      layout:
+        height: 38
+        label:
+          position: hero
+          hero_size: large
+      formatting:
+        decimal: 1
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      bar:
+        fill_style: soft_bands
+  - type: markdown
+    content: |
+      ### Hero Size Compact Tests
+  - type: vertical-stack
+    cards:
+    - type: grid
+      columns: 3
+      square: false
+      cards:
+      - type: custom:sensor-bar-card-plus
+        title: Medium compact mixed units
+        entities:
+        - entity: sensor.sbcp_hero_shot_grid
+          name: Grid import/export
+        - entity: sensor.sbcp_hero_shot_battery
+          name: Battery reserve
+          formatting:
+            decimal: 0
+        - entity: sensor.sbcp_showcase_latency
+          name: Response latency
+          formatting:
+            decimal: 0
+        layout:
+          height: 28
+          label:
+            position: hero
+            hero_size: medium
+        formatting:
+          decimal: 1
+        scale:
+          min:
+            fixed: -10
+          max:
+            fixed: 100
+        baseline:
+          at:
+            fixed: 0
+        bar:
+          fill_style: gradient
+      - type: custom:sensor-bar-card-plus
+        title: Large compact power mix
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar production corridor
+        - entity: sensor.sbcp_hero_shot_home
+          name: Home demand
+        - entity: sensor.sbcp_hero_shot_ev
+          name: EV charging
+        layout:
+          height: 28
+          label:
+            position: hero
+            hero_size: large
+        formatting:
+          decimal: 1
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 12
+        bar:
+          fill_style: soft_bands
+      - type: custom:sensor-bar-card-plus
+        title: Large compact signed values
+        entities:
+        - entity: sensor.sbcp_playground_negative
+          name: Bidirectional W
+          formatting:
+            decimal: 2
+        - entity: sensor.sbcp_showcase_latency
+          name: Render ms
+          formatting:
+            decimal: 0
+        - entity: sensor.sbcp_showcase_phase
+          name: No unit state
+        layout:
+          height: 24
+          label:
+            position: hero
+            hero_size: large
+        formatting:
+          decimal: 1
+        scale:
+          min:
+            fixed: -150
+          max:
+            fixed: 150
+        baseline:
+          at:
+            fixed: 0
+        bar:
+          fill_style: band_gradient
+          segments:
+          - from: 0%
+            to: 45%
+            color: '#3b82f6'
+          - from: 45%
+            to: 75%
+            color: '#10b981'
+          - from: 75%
+            to: 100%
+            color: '#f59e0b'
+  - type: markdown
+    content: |
       ### Hero Compact / Stress Tests
   - type: custom:sensor-bar-card-plus
     title: Long labels and tight stack
