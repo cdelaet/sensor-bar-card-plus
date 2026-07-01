@@ -3210,18 +3210,20 @@ describe('Sensor Bar Card Plus logic', () => {
   it('hero mode CSS keeps the value visible without ellipsis and allows responsive shrinking', () => {
     const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
 
-    expect(source).toContain('--sbcp-hero-min-value-size: 13px;');
-    expect(source).toContain('grid-template-columns: minmax(0, 1fr) auto;');
+    expect(source).toContain('--sbcp-hero-min-value-size: 10px;');
+    expect(source).toContain('grid-template-columns: minmax(0, 1fr) minmax(0, auto);');
     expect(source).toContain('justify-self: end;');
+    expect(source).toContain('.hero-value {\n          min-width: 0;');
+    expect(source).toContain('overflow: hidden;');
     expect(source).toContain('margin-bottom: clamp(2px, calc(var(--sbcp-row-height) * 0.08), 4px);');
     expect(source).not.toContain('min-height: min(64px, calc(var(--sbcp-row-height) * 2));');
     expect(source).toContain('.hero-line[data-hero-density="dense"] .hero-value {');
     expect(source).toContain('.hero-line[data-hero-density="compressed"] .hero-value {');
-    expect(source).toContain('.hero-value {\n          min-width: max-content;');
-    expect(source).toContain('.hero-value .value-right-text {\n          display: inline-flex;\n          flex: 0 0 auto;');
-    expect(source).toContain('.hero-value .value-right-text {\n          display: inline-flex;\n          flex: 0 0 auto;\n          justify-content: flex-end;\n          gap: 4px;\n          align-items: baseline;\n          width: auto;\n          max-width: 100%;\n          overflow: visible;\n          text-overflow: clip;\n          white-space: nowrap;');
-    expect(source).toContain('.hero-value .value-right-number {\n          flex: 0 0 auto;\n          overflow: visible;\n          text-overflow: clip;\n          white-space: nowrap;');
-    expect(source).toContain('.hero-value .unit {\n          font-size: max(16px, 0.5em);');
+    expect(source).toContain('.hero-value .value-right-text {\n          display: inline-flex;\n          flex: 1 1 auto;');
+    expect(source).toContain('width: 100%;');
+    expect(source).toContain('.hero-value .value-right-number {\n          flex: 0 1 auto;\n          min-width: 0;');
+    expect(source).toContain('text-overflow: clip;');
+    expect(source).toContain('.hero-value .unit {\n          font-size: clamp(10px, 0.42em, 16px);');
     expect(source).toContain('.hero-header[data-hide-name=\"true\"] .hero-value,');
   });
 

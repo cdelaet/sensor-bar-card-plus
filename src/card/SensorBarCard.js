@@ -1545,21 +1545,32 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           font-variant-numeric: tabular-nums;
         }
         .hero-line {
-          --sbcp-hero-min-value-size: 13px;
+          --sbcp-hero-min-value-size: 10px;
           min-width: 0;
           margin-bottom: 0;
         }
         .hero-header {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
+          grid-template-columns: minmax(0, 1fr) minmax(0, auto);
           align-items: baseline;
           column-gap: var(--sbcp-main-gap);
           min-width: 0;
+          overflow: hidden;
           margin-bottom: clamp(2px, calc(var(--sbcp-row-height) * 0.08), 4px);
         }
         .hero-header[data-hide-name="true"] .hero-label,
         .hero-header[data-priority-hide-name="true"] .hero-label {
           display: none;
+        }
+        .hero-header[data-hide-name="true"],
+        .hero-header[data-priority-hide-name="true"] {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .hero-header[data-hide-name="true"] .hero-value,
+        .hero-header[data-priority-hide-name="true"] .hero-value {
+          grid-column: 1 / -1;
+          justify-self: stretch;
+          width: 100%;
         }
         .hero-label {
           min-width: 0;
@@ -1569,13 +1580,13 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           line-height: 1.15;
         }
         .hero-value {
-          min-width: max-content;
+          min-width: 0;
           max-width: 100%;
           display: inline-flex;
           align-items: baseline;
           justify-content: flex-end;
           justify-self: end;
-          overflow: visible;
+          overflow: hidden;
           font-size: 56px;
           font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 18px), 56px);
           font-weight: 700;
@@ -1596,15 +1607,31 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         .hero-line[data-hero-density="compressed"] .hero-value {
           font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 2px), 24px);
         }
+        .hero-line[data-hero-density="xs"] .hero-value {
+          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) - 10px), 16px);
+        }
+        .hero-line[data-hero-value-fit="tight"] .hero-value {
+          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) - 4px), 22px);
+        }
+        .hero-line[data-hero-value-fit="minimum"] .hero-value {
+          font-size: clamp(9px, calc(var(--sbcp-row-height) - 14px), 15px);
+        }
+        .hero-line[data-hero-value-fit="hidden"] .hero-value {
+          display: none;
+        }
+        .hero-line[data-hide-hero-unit="true"] .hero-value .unit-group {
+          display: none;
+        }
         .hero-value .value-right-text {
           display: inline-flex;
-          flex: 0 0 auto;
+          flex: 1 1 auto;
           justify-content: flex-end;
           gap: 4px;
           align-items: baseline;
-          width: auto;
+          width: 100%;
+          min-width: 0;
           max-width: 100%;
-          overflow: visible;
+          overflow: hidden;
           text-overflow: clip;
           white-space: nowrap;
         }
@@ -1612,8 +1639,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           gap: 2px;
         }
         .hero-value .value-right-number {
-          flex: 0 0 auto;
-          overflow: visible;
+          flex: 0 1 auto;
+          min-width: 0;
+          overflow: hidden;
           text-overflow: clip;
           white-space: nowrap;
           line-height: 0.95;
@@ -1626,16 +1654,12 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           text-overflow: clip;
         }
         .hero-value .unit {
-          font-size: max(16px, 0.5em);
+          font-size: clamp(10px, 0.42em, 16px);
           font-weight: 500;
           color: var(--secondary-text-color, #888);
           line-height: 1;
           overflow: visible;
           text-overflow: clip;
-        }
-        .hero-header[data-hide-name="true"] .hero-value,
-        .hero-header[data-priority-hide-name="true"] .hero-value {
-          max-width: 100%;
         }
         /* ── Shared marker base ── */
         .peak-marker, .target-marker {
@@ -1779,8 +1803,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         }
         .value-right .unit-group,
         .top-right-value .unit-group,
-        .above-bar-label-value .unit-group,
-        .hero-value .unit-group {
+        .above-bar-label-value .unit-group {
           flex: 0 1 auto;
           display: inline-flex;
           align-items: baseline;
@@ -1791,8 +1814,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         }
         .value-right .unit,
         .top-right-value .unit,
-        .above-bar-label-value .unit,
-        .hero-value .unit {
+        .above-bar-label-value .unit {
           flex: 0 1 auto;
           min-width: 0;
           display: inline-block;
@@ -1843,7 +1865,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     this._disconnectResizeObserver();
     this._resizeObserver = new ResizeObserver(() => {
       this._applyCompactTier();
-      this._runPostLayoutPasses();
+      this._schedulePostLayoutDensityPass();
     });
 
     const surface = this.shadowRoot.querySelector('ha-card');
@@ -1851,6 +1873,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     if (surface && card) {
       this._applyCompactTier();
       this._resizeObserver.observe(surface);
+      this._resizeObserver.observe(this);
     }
     this._update();
     this._schedulePostLayoutDensityPass();
@@ -2056,18 +2079,107 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       if (!label) return;
       const width = label.getBoundingClientRect().width;
       let density = 'normal';
-      if (width < 110) density = 'compressed';
+      if (width < 90) density = 'xs';
+      else if (width < 110) density = 'compressed';
       else if (width < 150) density = 'dense';
       else if (width < 210) density = 'tight';
       else if (width < 280) density = 'compact';
       if (aboveLine.classList.contains('hero-line')) {
         aboveLine.dataset.heroDensity = density;
-        label.dataset.hideName = density === 'dense' || density === 'compressed' ? 'true' : 'false';
-        aboveLine.dataset.hideHeroIcon = density === 'compressed' ? 'true' : 'false';
+        label.dataset.hideName = density === 'dense' || density === 'compressed' || density === 'xs' ? 'true' : 'false';
+        aboveLine.dataset.hideHeroIcon = density === 'compressed' || density === 'xs' ? 'true' : 'false';
         return;
       }
       aboveLine.dataset.aboveDensity = density;
       label.dataset.hideName = density === 'dense' || density === 'compressed' ? 'true' : 'false';
+    });
+  }
+
+  _measureHeroValueWidth(heroLine, valueEl, valueFit = 'normal', hideUnit = false) {
+    const layer = this.shadowRoot?.querySelector('.measure-layer');
+    if (!layer || !heroLine || !valueEl) return 0;
+
+    const display = this._decodeDataAttr(valueEl.dataset.display || valueEl.textContent || '');
+    const unit = this._decodeDataAttr(valueEl.dataset.unit || '');
+    if (!display) return 0;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'hero-line';
+    wrapper.dataset.heroDensity = heroLine.dataset.heroDensity || 'normal';
+    wrapper.dataset.heroValueFit = valueFit;
+    wrapper.dataset.hideHeroUnit = hideUnit ? 'true' : 'false';
+    wrapper.style.display = 'inline-block';
+
+    const measureValue = document.createElement('span');
+    measureValue.className = 'hero-value';
+    measureValue.innerHTML = this._formatRightValueMarkup(display, unit, hideUnit);
+    measureValue.style.display = 'inline-flex';
+    measureValue.style.flex = '0 0 auto';
+    measureValue.style.width = 'auto';
+    measureValue.style.maxWidth = 'none';
+    measureValue.style.overflow = 'visible';
+
+    wrapper.appendChild(measureValue);
+    layer.replaceChildren(wrapper);
+
+    const text = measureValue.querySelector('.value-right-text');
+    return Math.max(
+      Math.ceil(measureValue.getBoundingClientRect?.().width ?? 0),
+      Math.ceil(measureValue.scrollWidth || 0),
+      Math.ceil(text?.getBoundingClientRect?.().width ?? text?.scrollWidth ?? 0),
+    );
+  }
+
+  _applyHeroValueFit() {
+    if (!this.shadowRoot) return;
+    this.shadowRoot.querySelectorAll('.hero-line').forEach(heroLine => {
+      const headerEl = heroLine.querySelector('.hero-header');
+      const labelEl = heroLine.querySelector('.hero-label');
+      const valueEl = heroLine.querySelector('.hero-value');
+      const unitGroup = heroLine.querySelector('.unit-group');
+      if (!headerEl || !valueEl) return;
+
+      heroLine.dataset.hideHeroUnit = 'false';
+      heroLine.dataset.heroValueFit = 'normal';
+
+      const headerWidth = Math.floor(headerEl.getBoundingClientRect?.().width ?? 0);
+      if (!this._isReliableWidth(headerWidth, 8)) {
+        this._schedulePostLayoutDensityPass();
+        return;
+      }
+
+      const labelHidden = headerEl.dataset.hideName === 'true' || headerEl.dataset.priorityHideName === 'true';
+      const labelWidth = !labelHidden && labelEl
+        ? Math.ceil(labelEl.getBoundingClientRect?.().width ?? 0)
+        : 0;
+      const gap = !labelHidden && labelEl ? this._getNumericStyleValue(headerEl, 'column-gap', 0) : 0;
+      const availableWidth = Math.max(0, headerWidth - labelWidth - gap - 4);
+
+      const hasUnit = !!unitGroup && unitGroup.textContent.trim().length > 0;
+
+      if (!this._isReliableWidth(availableWidth, 8)) {
+        heroLine.dataset.hideHeroUnit = hasUnit ? 'true' : 'false';
+        heroLine.dataset.heroValueFit = 'minimum';
+        this._schedulePostLayoutDensityPass();
+        return;
+      }
+
+      if (this._measureHeroValueWidth(heroLine, valueEl, 'normal', false) <= availableWidth) return;
+
+      heroLine.dataset.heroValueFit = 'tight';
+      if (this._measureHeroValueWidth(heroLine, valueEl, 'tight', false) <= availableWidth) return;
+
+      heroLine.dataset.heroValueFit = 'minimum';
+      if (this._measureHeroValueWidth(heroLine, valueEl, 'minimum', false) <= availableWidth) return;
+
+      if (hasUnit) {
+        heroLine.dataset.hideHeroUnit = 'true';
+        heroLine.dataset.heroValueFit = 'minimum';
+        if (this._measureHeroValueWidth(heroLine, valueEl, 'minimum', true) <= availableWidth) return;
+      }
+
+      heroLine.dataset.hideHeroUnit = hasUnit ? 'true' : 'false';
+      heroLine.dataset.heroValueFit = 'hidden';
     });
   }
 
@@ -2658,6 +2770,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       this._applyRowDensity();
       this._applyLeftModeDensity();
       this._applyAboveLabelDensity();
+      this._applyHeroValueFit();
       this._applyInsideLabelDensity();
       this._applyValueWidthReservation();
 
