@@ -609,6 +609,27 @@ This mode is intentionally opinionated:
 - the icon stays on the left when space allows
 - per-entity `layout.label.position: hero` overrides work the same way as the other label modes
 
+### Hero Size
+
+Hero labels support three built-in size presets:
+
+- `small`
+- `medium` (default)
+- `large`
+
+The selected size defines the base Hero typography. All responsive Hero typography is derived automatically from that base size, so the card continues to adapt cleanly as available space changes.
+
+```yaml
+layout:
+  label:
+    position: hero
+    hero_size: large
+```
+
+If omitted, `hero_size` defaults to `medium`.
+
+![Hero size comparison](images/example-hero-sizes.png)
+
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Energy Flow
@@ -633,20 +654,26 @@ entities:
     icon: mdi:solar-power
 ```
 
-### Responsive Behavior
+### Hero Responsive Behavior
 
-Sensor Bar Card Plus now uses a bar-first responsive layout automatically. In practice, the card protects readability in this order:
+Hero label mode uses a dedicated responsive layout strategy that prioritizes the value over supporting elements. When horizontal space becomes limited, Hero rows adapt in the following order:
 
-- bar readability
-- value + unit readability
-- icon
-- label
+When horizontal space becomes limited, Hero rows adapt automatically in the following order:
 
-Value and unit are treated as one piece of text. They are never split, and the unit is not hidden while the value remains visible.
+1. Keep the value at its preferred size.
+2. Truncate the label if necessary.
+3. Hide the label when truncation is no longer sufficient.
+4. Hide the unit if additional space is required.
+5. Reduce the value size only when the preferred Hero size no longer fits.
+6. Hide the value only as an absolute last resort.
+
+This prioritization keeps the most important information visible while preserving a stable, premium Hero appearance across a wide range of dashboard widths.
+
+![Hero responsive behavior](images/example-hero-responsive.png)
 
 In tight layouts, left labels may step aside when they no longer fit usefully, the value may move above and to the right of the bar, and the icon may hide as a last resort. Explicit `layout.height` is still respected exactly, while the default row height may shrink automatically in very dense layouts.
 
-There is no YAML option for this yet. The behavior is automatic.
+The responsive behavior described above is specific to Hero label mode. The other label positions (`left`, `above`, `inside`, and `off`) continue to use the card's standard responsive layout, which preserves bar readability while adapting labels, icons, and overall row layout as available space changes.
 
 The screenshots dashboard includes dedicated `Responsive Behavior` and `Value + Unit` cards for capture-ready examples.
 
