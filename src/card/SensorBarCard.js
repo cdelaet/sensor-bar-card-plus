@@ -180,6 +180,7 @@ export class SensorBarCard extends HTMLElement {
     this._rendered = false;
     this._resizeObserver = null;
     this._densityPassScheduled = false;
+    this._densityPassDirty = false;
     this._densityPassFrame = null;
     this._densityPassRetries = 0;
     this._ensureBaseDom();
@@ -1588,33 +1589,33 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           justify-self: end;
           overflow: hidden;
           font-size: 56px;
-          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 18px), 56px);
           font-weight: 700;
           color: var(--primary-text-color, #333);
           font-variant-numeric: tabular-nums;
           line-height: 0.95;
           text-align: right;
         }
+
         .hero-line[data-hero-density="compact"] .hero-value {
-          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 12px), 48px);
+          font-size: 50px;
         }
         .hero-line[data-hero-density="tight"] .hero-value {
-          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 8px), 40px);
+          font-size: 44px;
         }
         .hero-line[data-hero-density="dense"] .hero-value {
-          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 4px), 32px);
+          font-size: 36px;
         }
         .hero-line[data-hero-density="compressed"] .hero-value {
-          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 2px), 24px);
+          font-size: 28px;
         }
         .hero-line[data-hero-density="xs"] .hero-value {
-          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) - 10px), 16px);
+          font-size: 20px;
         }
         .hero-line[data-hero-value-fit="tight"] .hero-value {
-          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) - 4px), 22px);
+          font-size: 16px;
         }
         .hero-line[data-hero-value-fit="minimum"] .hero-value {
-          font-size: clamp(9px, calc(var(--sbcp-row-height) - 14px), 15px);
+          font-size: 11px;
         }
         .hero-line[data-hero-value-fit="hidden"] .hero-value {
           display: none;
@@ -1889,6 +1890,18 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     return Number.isFinite(width) && width >= minWidth;
   }
 
+  _getHeroLabelReservedWidth(headerEl, labelEl, labelHidden) {
+    if (labelHidden || !headerEl || !labelEl) return 0;
+
+    const headerWidth = Math.floor(headerEl.getBoundingClientRect?.().width ?? 0);
+    const naturalLabelWidth = Math.ceil(labelEl.scrollWidth || labelEl.getBoundingClientRect?.().width || 0);
+    if (!this._isReliableWidth(headerWidth, 8) || !Number.isFinite(naturalLabelWidth) || naturalLabelWidth <= 0) {
+      return 0;
+    }
+
+    return Math.min(naturalLabelWidth, headerWidth * 0.45);
+  }
+
   _classifyCompactTier(width, currentTier = 'normal') {
     if (!this._isReliableWidth(width)) return currentTier || 'normal';
     if (width < 180) return 'compressed';
@@ -1917,11 +1930,17 @@ _getAboveTargetLayerGeometry(targetPct = null) {
   }
 
   _schedulePostLayoutDensityPass() {
-    if (this._densityPassScheduled || !this.isConnected) return;
+    if (!this.isConnected) return;
+    if (this._densityPassScheduled) {
+      this._densityPassDirty = true;
+      return;
+    }
     this._densityPassScheduled = true;
     this._densityPassFrame = requestAnimationFrame(() => {
       this._densityPassScheduled = false;
       this._densityPassFrame = null;
+      const runAgain = this._densityPassDirty;
+      this._densityPassDirty = false;
       if (!this.isConnected) return;
 
       const surface = this.shadowRoot?.querySelector('ha-card');
@@ -1937,6 +1956,10 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       this._densityPassRetries = 0;
       this._applyCompactTier();
       this._runPostLayoutPasses();
+
+      if (runAgain) {
+        this._schedulePostLayoutDensityPass();
+      }
     });
   }
 
@@ -2077,14 +2100,17 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     this.shadowRoot.querySelectorAll('.above-line, .hero-line').forEach(aboveLine => {
       const label = aboveLine.querySelector('.above-bar-label, .hero-header');
       if (!label) return;
-      const width = label.getBoundingClientRect().width;
+      const isHeroLine = aboveLine.classList.contains('hero-line');
+      const width = isHeroLine
+        ? this._getHeroDensityWidth(aboveLine)
+        : label.getBoundingClientRect().width;
       let density = 'normal';
       if (width < 90) density = 'xs';
       else if (width < 110) density = 'compressed';
       else if (width < 150) density = 'dense';
       else if (width < 210) density = 'tight';
       else if (width < 280) density = 'compact';
-      if (aboveLine.classList.contains('hero-line')) {
+      if (isHeroLine) {
         aboveLine.dataset.heroDensity = density;
         label.dataset.hideName = density === 'dense' || density === 'compressed' || density === 'xs' ? 'true' : 'false';
         aboveLine.dataset.hideHeroIcon = density === 'compressed' || density === 'xs' ? 'true' : 'false';
@@ -2093,6 +2119,27 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       aboveLine.dataset.aboveDensity = density;
       label.dataset.hideName = density === 'dense' || density === 'compressed' ? 'true' : 'false';
     });
+  }
+
+  _getHeroDensityWidth(heroLine) {
+    const row = heroLine?.closest?.('.row');
+    const rowStack = heroLine?.closest?.('.row-stack');
+    const mainLine = rowStack?.querySelector?.('.main-line.hero-mode');
+    const barWrap = mainLine?.querySelector?.('.bar-wrap');
+
+    const candidates = [
+      row?.getBoundingClientRect?.().width,
+      rowStack?.getBoundingClientRect?.().width,
+      mainLine?.getBoundingClientRect?.().width,
+      barWrap?.getBoundingClientRect?.().width,
+      heroLine?.getBoundingClientRect?.().width,
+    ];
+
+    for (const width of candidates) {
+      if (this._isReliableWidth(width, 8)) return width;
+    }
+
+    return 0;
   }
 
   _measureHeroValueWidth(heroLine, valueEl, valueFit = 'normal', hideUnit = false) {
@@ -2149,9 +2196,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       }
 
       const labelHidden = headerEl.dataset.hideName === 'true' || headerEl.dataset.priorityHideName === 'true';
-      const labelWidth = !labelHidden && labelEl
-        ? Math.ceil(labelEl.getBoundingClientRect?.().width ?? 0)
-        : 0;
+      const labelWidth = this._getHeroLabelReservedWidth(headerEl, labelEl, labelHidden);
       const gap = !labelHidden && labelEl ? this._getNumericStyleValue(headerEl, 'column-gap', 0) : 0;
       const availableWidth = Math.max(0, headerWidth - labelWidth - gap - 4);
 

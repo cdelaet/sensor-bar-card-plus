@@ -999,6 +999,7 @@
           this._rendered = false;
           this._resizeObserver = null;
           this._densityPassScheduled = false;
+          this._densityPassDirty = false;
           this._densityPassFrame = null;
           this._densityPassRetries = 0;
           this._ensureBaseDom();
@@ -2252,33 +2253,33 @@
           justify-self: end;
           overflow: hidden;
           font-size: 56px;
-          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 18px), 56px);
           font-weight: 700;
           color: var(--primary-text-color, #333);
           font-variant-numeric: tabular-nums;
           line-height: 0.95;
           text-align: right;
         }
+
         .hero-line[data-hero-density="compact"] .hero-value {
-          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 12px), 48px);
+          font-size: 50px;
         }
         .hero-line[data-hero-density="tight"] .hero-value {
-          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 8px), 40px);
+          font-size: 44px;
         }
         .hero-line[data-hero-density="dense"] .hero-value {
-          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 4px), 32px);
+          font-size: 36px;
         }
         .hero-line[data-hero-density="compressed"] .hero-value {
-          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) + 2px), 24px);
+          font-size: 28px;
         }
         .hero-line[data-hero-density="xs"] .hero-value {
-          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) - 10px), 16px);
+          font-size: 20px;
         }
         .hero-line[data-hero-value-fit="tight"] .hero-value {
-          font-size: clamp(var(--sbcp-hero-min-value-size), calc(var(--sbcp-row-height) - 4px), 22px);
+          font-size: 16px;
         }
         .hero-line[data-hero-value-fit="minimum"] .hero-value {
-          font-size: clamp(9px, calc(var(--sbcp-row-height) - 14px), 15px);
+          font-size: 11px;
         }
         .hero-line[data-hero-value-fit="hidden"] .hero-value {
           display: none;
@@ -2546,6 +2547,16 @@
         _isReliableWidth(width, minWidth = 16) {
           return Number.isFinite(width) && width >= minWidth;
         }
+        _getHeroLabelReservedWidth(headerEl, labelEl, labelHidden) {
+          var _a, _b, _c;
+          if (labelHidden || !headerEl || !labelEl) return 0;
+          const headerWidth = Math.floor((_b = (_a = headerEl.getBoundingClientRect) == null ? void 0 : _a.call(headerEl).width) != null ? _b : 0);
+          const naturalLabelWidth = Math.ceil(labelEl.scrollWidth || ((_c = labelEl.getBoundingClientRect) == null ? void 0 : _c.call(labelEl).width) || 0);
+          if (!this._isReliableWidth(headerWidth, 8) || !Number.isFinite(naturalLabelWidth) || naturalLabelWidth <= 0) {
+            return 0;
+          }
+          return Math.min(naturalLabelWidth, headerWidth * 0.45);
+        }
         _classifyCompactTier(width, currentTier = "normal") {
           if (!this._isReliableWidth(width)) return currentTier || "normal";
           if (width < 180) return "compressed";
@@ -2571,12 +2582,18 @@
           return "normal";
         }
         _schedulePostLayoutDensityPass() {
-          if (this._densityPassScheduled || !this.isConnected) return;
+          if (!this.isConnected) return;
+          if (this._densityPassScheduled) {
+            this._densityPassDirty = true;
+            return;
+          }
           this._densityPassScheduled = true;
           this._densityPassFrame = requestAnimationFrame(() => {
             var _a, _b;
             this._densityPassScheduled = false;
             this._densityPassFrame = null;
+            const runAgain = this._densityPassDirty;
+            this._densityPassDirty = false;
             if (!this.isConnected) return;
             const surface = (_a = this.shadowRoot) == null ? void 0 : _a.querySelector("ha-card");
             const width = (_b = surface == null ? void 0 : surface.getBoundingClientRect().width) != null ? _b : 0;
@@ -2590,6 +2607,9 @@
             this._densityPassRetries = 0;
             this._applyCompactTier();
             this._runPostLayoutPasses();
+            if (runAgain) {
+              this._schedulePostLayoutDensityPass();
+            }
           });
         }
         _applyCompactTier() {
@@ -2708,14 +2728,15 @@
           this.shadowRoot.querySelectorAll(".above-line, .hero-line").forEach((aboveLine) => {
             const label = aboveLine.querySelector(".above-bar-label, .hero-header");
             if (!label) return;
-            const width = label.getBoundingClientRect().width;
+            const isHeroLine = aboveLine.classList.contains("hero-line");
+            const width = isHeroLine ? this._getHeroDensityWidth(aboveLine) : label.getBoundingClientRect().width;
             let density = "normal";
             if (width < 90) density = "xs";
             else if (width < 110) density = "compressed";
             else if (width < 150) density = "dense";
             else if (width < 210) density = "tight";
             else if (width < 280) density = "compact";
-            if (aboveLine.classList.contains("hero-line")) {
+            if (isHeroLine) {
               aboveLine.dataset.heroDensity = density;
               label.dataset.hideName = density === "dense" || density === "compressed" || density === "xs" ? "true" : "false";
               aboveLine.dataset.hideHeroIcon = density === "compressed" || density === "xs" ? "true" : "false";
@@ -2724,6 +2745,24 @@
             aboveLine.dataset.aboveDensity = density;
             label.dataset.hideName = density === "dense" || density === "compressed" ? "true" : "false";
           });
+        }
+        _getHeroDensityWidth(heroLine) {
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+          const row = (_a = heroLine == null ? void 0 : heroLine.closest) == null ? void 0 : _a.call(heroLine, ".row");
+          const rowStack = (_b = heroLine == null ? void 0 : heroLine.closest) == null ? void 0 : _b.call(heroLine, ".row-stack");
+          const mainLine = (_c = rowStack == null ? void 0 : rowStack.querySelector) == null ? void 0 : _c.call(rowStack, ".main-line.hero-mode");
+          const barWrap = (_d = mainLine == null ? void 0 : mainLine.querySelector) == null ? void 0 : _d.call(mainLine, ".bar-wrap");
+          const candidates = [
+            (_e = row == null ? void 0 : row.getBoundingClientRect) == null ? void 0 : _e.call(row).width,
+            (_f = rowStack == null ? void 0 : rowStack.getBoundingClientRect) == null ? void 0 : _f.call(rowStack).width,
+            (_g = mainLine == null ? void 0 : mainLine.getBoundingClientRect) == null ? void 0 : _g.call(mainLine).width,
+            (_h = barWrap == null ? void 0 : barWrap.getBoundingClientRect) == null ? void 0 : _h.call(barWrap).width,
+            (_i = heroLine == null ? void 0 : heroLine.getBoundingClientRect) == null ? void 0 : _i.call(heroLine).width
+          ];
+          for (const width of candidates) {
+            if (this._isReliableWidth(width, 8)) return width;
+          }
+          return 0;
         }
         _measureHeroValueWidth(heroLine, valueEl, valueFit = "normal", hideUnit = false) {
           var _a, _b, _c, _d, _e, _f;
@@ -2758,7 +2797,7 @@
         _applyHeroValueFit() {
           if (!this.shadowRoot) return;
           this.shadowRoot.querySelectorAll(".hero-line").forEach((heroLine) => {
-            var _a, _b, _c, _d;
+            var _a, _b;
             const headerEl = heroLine.querySelector(".hero-header");
             const labelEl = heroLine.querySelector(".hero-label");
             const valueEl = heroLine.querySelector(".hero-value");
@@ -2772,7 +2811,7 @@
               return;
             }
             const labelHidden = headerEl.dataset.hideName === "true" || headerEl.dataset.priorityHideName === "true";
-            const labelWidth = !labelHidden && labelEl ? Math.ceil((_d = (_c = labelEl.getBoundingClientRect) == null ? void 0 : _c.call(labelEl).width) != null ? _d : 0) : 0;
+            const labelWidth = this._getHeroLabelReservedWidth(headerEl, labelEl, labelHidden);
             const gap = !labelHidden && labelEl ? this._getNumericStyleValue(headerEl, "column-gap", 0) : 0;
             const availableWidth = Math.max(0, headerWidth - labelWidth - gap - 4);
             const hasUnit = !!unitGroup && unitGroup.textContent.trim().length > 0;

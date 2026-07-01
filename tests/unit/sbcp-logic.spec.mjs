@@ -3166,23 +3166,33 @@ describe('Sensor Bar Card Plus logic', () => {
     const tightLabel = { dataset: {}, getBoundingClientRect: () => ({ width: 185 }) };
     const denseLabel = { dataset: {}, getBoundingClientRect: () => ({ width: 130 }) };
     const compressedLabel = { dataset: {}, getBoundingClientRect: () => ({ width: 100 }) };
+    const xsLabel = { dataset: {}, getBoundingClientRect: () => ({ width: 80 }) };
     const tightLine = {
       classList: { contains: (name) => name === 'hero-line' },
       dataset: {},
       querySelector: (selector) => selector === '.above-bar-label, .hero-header' ? tightLabel : null,
+      closest: () => ({ getBoundingClientRect: () => ({ width: 185 }) }),
     };
     const denseLine = {
       classList: { contains: (name) => name === 'hero-line' },
       dataset: {},
       querySelector: (selector) => selector === '.above-bar-label, .hero-header' ? denseLabel : null,
+      closest: () => ({ getBoundingClientRect: () => ({ width: 130 }) }),
     };
     const compressedLine = {
       classList: { contains: (name) => name === 'hero-line' },
       dataset: {},
       querySelector: (selector) => selector === '.above-bar-label, .hero-header' ? compressedLabel : null,
+      closest: () => ({ getBoundingClientRect: () => ({ width: 100 }) }),
+    };
+    const xsLine = {
+      classList: { contains: (name) => name === 'hero-line' },
+      dataset: {},
+      querySelector: (selector) => selector === '.above-bar-label, .hero-header' ? xsLabel : null,
+      closest: () => ({ getBoundingClientRect: () => ({ width: 80 }) }),
     };
     card.shadowRoot = {
-      querySelectorAll: (selector) => selector === '.above-line, .hero-line' ? [tightLine, denseLine, compressedLine] : [],
+      querySelectorAll: (selector) => selector === '.above-line, .hero-line' ? [tightLine, denseLine, compressedLine, xsLine] : [],
       querySelector: () => null,
     };
 
@@ -3194,6 +3204,8 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(denseLabel.dataset.hideName).toBe('true');
     expect(compressedLine.dataset.heroDensity).toBe('compressed');
     expect(compressedLabel.dataset.hideName).toBe('true');
+    expect(xsLine.dataset.heroDensity).toBe('xs');
+    expect(xsLabel.dataset.hideName).toBe('true');
   });
 
   it('inside and above narrow-mode CSS preserves value priority', () => {
