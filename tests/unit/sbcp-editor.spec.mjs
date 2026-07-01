@@ -5507,6 +5507,96 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(events.at(-1).detail.config.label_width).toBeUndefined();
   });
 
+  it('hero size control appears when label position is hero', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      layout: {
+        label: {
+          position: 'hero',
+        },
+      },
+    });
+
+    const heroSize = editor.shadowRoot.querySelector('#layout-label-hero-size');
+    expect(heroSize).not.toBeNull();
+    expect(heroSize.value).toBe('medium');
+  });
+
+  it('hero size control does not appear for non-hero label positions', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      layout: {
+        label: {
+          position: 'above',
+        },
+      },
+    });
+
+    expect(editor.shadowRoot.querySelector('#layout-label-hero-size')).toBeNull();
+  });
+
+  it('selecting small hero size emits layout.label.hero_size', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      layout: {
+        label: {
+          position: 'hero',
+        },
+      },
+    });
+
+    dispatchChange(editor.shadowRoot.querySelector('#layout-label-hero-size'), 'small');
+
+    expect(events.at(-1).detail.config.layout.label.position).toBe('hero');
+    expect(events.at(-1).detail.config.layout.label.hero_size).toBe('small');
+  });
+
+  it('selecting large hero size emits layout.label.hero_size', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      layout: {
+        label: {
+          position: 'hero',
+        },
+      },
+    });
+
+    dispatchChange(editor.shadowRoot.querySelector('#layout-label-hero-size'), 'large');
+
+    expect(events.at(-1).detail.config.layout.label.position).toBe('hero');
+    expect(events.at(-1).detail.config.layout.label.hero_size).toBe('large');
+  });
+
+  it('selecting medium hero size omits layout.label.hero_size as default', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      layout: {
+        label: {
+          position: 'hero',
+          hero_size: 'small',
+        },
+      },
+    });
+
+    dispatchChange(editor.shadowRoot.querySelector('#layout-label-hero-size'), 'medium');
+
+    expect(events.at(-1).detail.config.layout.label.position).toBe('hero');
+    expect(events.at(-1).detail.config.layout.label.hero_size).toBeUndefined();
+  });
+
   it('card-level layout reads legacy flat config', () => {
     const editor = createEditor();
 
