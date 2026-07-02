@@ -1633,6 +1633,24 @@ views:
       bar:
         fill_style: gradient
     - type: custom:sensor-bar-card-plus
+      title: Hero Labels
+      entities:
+      - entity: sensor.sbcp_playground_sensor
+        name: Sensor
+      layout:
+        label:
+          position: hero
+      scale:
+        min:
+          entity: sensor.sbcp_playground_scale_min
+        max:
+          entity: sensor.sbcp_playground_scale_max
+      target:
+        at:
+          entity: sensor.sbcp_playground_target
+      bar:
+        fill_style: gradient
+    - type: custom:sensor-bar-card-plus
       title: Long Labels
       entities:
       - entity: sensor.sbcp_playground_long_label

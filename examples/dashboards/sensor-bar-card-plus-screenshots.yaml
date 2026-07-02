@@ -195,6 +195,8 @@ views:
         - from: 68%
           to: 100%
           color: '#f97316'
+  
+  
     - type: custom:sensor-bar-card-plus
       title: Hero Responsive Behavior
       entities:
@@ -4813,8 +4815,10 @@ views:
         icon: mdi:transmission-tower
         layout:
           label:
-            position: above
+            position: hero
           height: 42
+        formatting:
+          decimal: 0
         scale:
           min:
             fixed: -6000
@@ -6772,3 +6776,2419 @@ views:
         fill_style: soft_bands
         color: '#22c55e'
       
+- title: Responsive
+  path: sensor-bar-card-plus-responsive
+  icon: mdi:image-multiple
+  badges: []
+  cards:
+  - type: vertical-stack
+    cards:
+    - type: horizontal-stack
+      title: Hero Responsive Behaviour
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production South Roof
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: hero
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+            
+    
+    - type: horizontal-stack
+      title: Left Label Responsive Behaviour
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production South Roof
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: left
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+            
+    - type: horizontal-stack
+      title: Above Label Responsive Behaviour
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production South Roof
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: above
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+
+    - type: horizontal-stack
+      title: Inside Label Responsive Behaviour
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production South Roof
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+    - type: horizontal-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+      - type: custom:sensor-bar-card-plus
+        entities:
+        - entity: sensor.sbcp_hero_shot_solar
+          name: Solar Production
+          icon: mdi:solar-power
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 10
+        layout:
+          height: 40
+          label:
+            position: inside
+        formatting:
+          decimal: 1
+        bar:
+          needle: true
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0c4a6e'
+          - pos: 34
+            color: '#0ea5e9'
+          - pos: 68
+            color: '#22c55e'
+          - pos: 100
+            color: '#facc15'
+        

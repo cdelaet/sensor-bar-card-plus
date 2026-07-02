@@ -25,6 +25,7 @@ Now you have no excuse anymore to build that pretty dashboard. Go forth and look
 ## Highlights
 
 - 📍 Needle gauge mode for full-scale, gauge-style bars with a moving value indicator
+- ⭐ Hero layout with configurable `small`, `medium`, and `large` typography for glanceable dashboards
 - 🌈 Soft bands for segment-aware fills with short blended transitions
 - 🎯 Semantic threshold fills for visually separating regions beyond dynamic targets and references (such as an above-target color)
 - 📈 Dynamic scales, targets, and references driven by Home Assistant entities
@@ -115,11 +116,14 @@ What the Visual Editor supports:
 - structured YAML output for edited fields
 - card-level defaults with per-entity overrides
 - dynamic `scale`, `target`, and `baseline` values driven by Home Assistant entities
+- Hero label layout and Hero size selection directly from the editor
 - controls for target, baseline, peak, and needle behavior
 - segment and gradient stop editing with live previews
 - entity management actions for move, duplicate, and remove
 - inheritance behavior where entity settings follow card settings until you change them
 - visible default bands and default gradients that stay out of emitted YAML until customized
+
+The editor can configure the same structured layout options used in YAML, including Hero label mode and the Hero size presets. That means a new dashboard can start from the Home Assistant card picker, switch to Hero layout, choose a size, and still produce clean YAML behind the scenes.
 
 Example structured config:
 
@@ -602,6 +606,8 @@ The screenshot uses this same single sensor in five separate cards, changing onl
 
 `layout.label.position: hero` gives each row a premium two-lane header: a small label above the bar, a large right-aligned value and unit, and the full-width bar underneath.
 
+Hero mode is designed for values that should be readable at a glance, such as solar production, grid import/export, battery state, temperature, or any dashboard metric that should feel like a primary gauge. It works especially well as a glanceable core gauge replacement when you want richer SBCP features such as dynamic scales, baselines, targets, semantic fills, per-entity overrides, and multi-entity cards.
+
 This mode is intentionally opinionated:
 
 - the value gets priority
@@ -658,8 +664,6 @@ entities:
 
 Hero label mode uses a dedicated responsive layout strategy that prioritizes the value over supporting elements. When horizontal space becomes limited, Hero rows adapt in the following order:
 
-When horizontal space becomes limited, Hero rows adapt automatically in the following order:
-
 1. Keep the value at its preferred size.
 2. Truncate the label if necessary.
 3. Hide the label when truncation is no longer sufficient.
@@ -671,9 +675,17 @@ This prioritization keeps the most important information visible while preservin
 
 ![Hero responsive behavior](images/example-hero-responsive.png)
 
-In tight layouts, left labels may step aside when they no longer fit usefully, the value may move above and to the right of the bar, and the icon may hide as a last resort. Explicit `layout.height` is still respected exactly, while the default row height may shrink automatically in very dense layouts.
+The responsive behavior described above is specific to Hero label mode. The other label positions (`left`, `above`, `inside`, and `off`) continue to use the card's standard responsive layout.
 
-The responsive behavior described above is specific to Hero label mode. The other label positions (`left`, `above`, `inside`, and `off`) continue to use the card's standard responsive layout, which preserves bar readability while adapting labels, icons, and overall row layout as available space changes.
+| Behavior | Hero label mode | Standard label modes |
+|---|---|---|
+| Main priority | Keep the large value readable | Keep the bar readable and aligned |
+| Label behavior | Truncate, then hide when the value needs space | Adapt with the row layout and may step aside in tight spaces |
+| Unit behavior | Hide only when the value still needs more space | Stays grouped with the value |
+| Icon behavior | Hides in the narrowest Hero layouts | May hide in tight layouts to preserve useful content |
+| Best use | Glanceable gauge-style dashboard values | Dense multi-row dashboards and detailed telemetry |
+
+Explicit `layout.height` is still respected exactly. The default row height may shrink automatically in very dense layouts.
 
 The screenshots dashboard includes dedicated `Responsive Behavior` and `Value + Unit` cards for capture-ready examples.
 
@@ -800,6 +812,8 @@ target:
 ### Target value label
 
 Set `target.label.show: true` to render the numeric target below the marker. The label is clamped so it stays inside the track area near the edges and follows dynamic target changes smoothly.
+
+![Target value label](images/example-target-value-label.png)
 
 ### Peak marker example
 
@@ -1387,6 +1401,100 @@ entities:
 
 This appendix is the quick-reference guide for the currently supported Sensor Bar Card Plus configuration model. Structured syntax is preferred for new dashboards. Legacy flat syntax remains supported for backward compatibility.
 
+## Configuration Tree
+
+The modern configuration model is structured by feature area. Card-level settings define defaults, and entity-level settings can override most of them per row.
+
+```text
+layout
+├── height
+└── label
+    ├── position
+    ├── hero_size
+    └── width
+
+scale
+├── min
+│   ├── fixed
+│   └── entity
+└── max
+    ├── fixed
+    └── entity
+
+bar
+├── fill_style
+├── color
+├── solid_fill
+├── needle
+├── segments
+└── gradient_stops
+
+target
+├── enabled
+├── at
+│   ├── fixed
+│   └── entity
+├── color
+├── label
+│   └── show
+└── when_exceeded
+    └── fill_color
+
+baseline
+├── enabled
+├── at
+│   ├── fixed
+│   └── entity
+├── above
+│   └── color
+└── below
+    └── color
+
+peak
+├── enabled
+└── color
+
+formatting
+├── decimal
+└── unit
+```
+
+## Modern Configuration Overview
+
+| Path | Default | Values | Description |
+|---|---:|---|---|
+| `layout.height` | `38` | number | Row/bar height. Explicit values are respected; very small values normalize to a usable minimum. |
+| `layout.label.position` | `left` | `left`, `above`, `inside`, `off`, `hero` | Label placement mode. |
+| `layout.label.hero_size` | `medium` | `small`, `medium`, `large` | Base Hero typography size. Applies only when `position: hero`. |
+| `layout.label.width` | `100` | number | Shared label column width for `left` label mode. |
+| `scale.min.fixed` | `0` | number | Fixed lower bound of the active scale. |
+| `scale.min.entity` | `null` | entity id | Dynamic lower bound entity. |
+| `scale.max.fixed` | `100` | number | Fixed upper bound of the active scale. |
+| `scale.max.entity` | `null` | entity id | Dynamic upper bound entity. |
+| `bar.fill_style` | `bands` | `solid`, `gradient`, `bands`, `soft_bands`, `band_gradient` | Fill rendering style. |
+| `bar.color` | `#4a9eff` | CSS color | Solid or fallback fill color. |
+| `bar.solid_fill` | `false` | boolean | Samples the active color and renders the revealed fill as one solid color. |
+| `bar.needle` | `false` | boolean or object | Enables needle mode using `true` or `{ show, color }`. |
+| `bar.segments` | default bands | list | Segment definitions for `bands`, `soft_bands`, and `band_gradient`. |
+| `bar.gradient_stops` | `null` | list | Gradient stop definitions for `gradient`. |
+| `target.enabled` | auto | `true`, `false`, omitted | Controls target marker behavior. Omitted means automatic based on configured target source. |
+| `target.at.fixed` | `null` | number | Fixed target value. |
+| `target.at.entity` | `null` | entity id | Dynamic target entity. |
+| `target.color` | `#888888` | CSS color | Target marker color. |
+| `target.label.show` | `false` | boolean | Shows a numeric target value label. |
+| `target.when_exceeded.fill_color` | `null` | CSS color | Semantic fill color for the part of the fill beyond the target. |
+| `baseline.enabled` | auto | `true`, `false`, omitted | Controls baseline behavior. Omitted means automatic based on configured baseline source. |
+| `baseline.at.fixed` | `null` | number | Fixed baseline value. |
+| `baseline.at.entity` | `null` | entity id | Dynamic baseline entity. |
+| `baseline.above.color` | `null` | CSS color | Optional semantic color above the baseline. |
+| `baseline.below.color` | `null` | CSS color | Optional semantic color below the baseline. |
+| `peak.enabled` | `false` | boolean | Shows a session peak marker. |
+| `peak.color` | `#888888` | CSS color | Peak marker color. |
+| `formatting.decimal` | `null` | number | Decimal places for displayed numeric values. |
+| `formatting.unit` | entity unit | string | Display unit override. |
+
+Legacy flat options are listed separately in the Legacy Compatibility / Migration section. They remain supported, but new dashboards should prefer the structured paths above.
+
 ## Card-Level Options
 
 | Option | Type | Default | Description |
@@ -1416,15 +1524,17 @@ This appendix is the quick-reference guide for the currently supported Sensor Ba
 | `severity` | list | default 3-band scale | Legacy severity array, normalized into `bar.segments` |
 | `animated` | boolean | `true` | Legacy flat alias for `bar.animated` |
 | `target_entity` | string | `null` | Legacy alias for `target.at.entity` |
-| `target_color` | string | `#888` | Legacy alias for `target.color` |
+| `target_color` | string | `#888888` | Legacy alias for `target.color` |
 | `show_target_label` | boolean | `false` | Legacy alias for `target.label.show` |
 | `above_target_color` | string | `null` | Legacy alias for `target.when_exceeded.fill_color` |
 | `show_peak` | boolean | `false` | Legacy alias for `peak.enabled` |
-| `peak_color` | string | `#888` | Legacy alias for `peak.color` |
+| `peak_color` | string | `#888888` | Legacy alias for `peak.color` |
 | `decimal` | number | `null` | Legacy alias for `formatting.decimal` |
 | `unit` | string | `null` | Legacy alias for `formatting.unit` |
 
 ## Entity-Level Options
+
+Entity-level configuration uses the same structured option groups as card-level configuration. Values set on an entity override the card-level defaults for that row only.
 
 | Option | Type | Description |
 |---|---|---|
@@ -1458,6 +1568,8 @@ This appendix is the quick-reference guide for the currently supported Sensor Ba
 layout:
   label:
     position: left
+    # Used when position is hero: small, medium, or large
+    hero_size: medium
     width: 160
   height: 38
 
@@ -1526,10 +1638,10 @@ Notes:
 | `fill_style` | Description |
 |---|---|
 | `solid` | One solid fill color; best for simple status or branded accents |
-| `gradient` | Continuous gradient from `bar.gradient_stops` |
+| `gradient` | Continuous gradient from `bar.gradient_stops`. ⚠️ Note: Gradient stops are always set on scale from 0 to 100 where 0 represents the start the bar end 100 the end of the bar. To keep gradients working consistently, they cannot be set by absolute values. If you want to use absolute values, use a `band_gradient` instead. |
 | `bands` | Hard segment transitions using `bar.segments` |
 | `soft_bands` | Segment-based colors with short blended transitions at eligible boundaries |
-| `band_gradient` | Continuous interpolation across segment colors on the active scale |
+| `band_gradient` | Continuous interpolation segment colors on the active scale |
 
 For backwards compatibility with the original Sensor Bar Card, `bands` remains the implicit default fill style when no explicit style is configured. It is what it is.
 
@@ -1860,6 +1972,7 @@ Home Assistant’s native Tile Bar Gauge is excellent for simple, compact Tile d
 |---|---:|---:|
 | Native Tile card feature | ✅ | Planned |
 | Standalone card | ❌ | ✅ |
+| Glanceable Hero / KPI layout | ❌ | ✅ |
 | Multi-entity support | ❌ | ✅ |
 | Visual editor | Basic/native | Advanced |
 | Structured YAML output | N/A | ✅ |
