@@ -1,5 +1,9 @@
 import { getNormalizedResolvableNumericValue } from '../config/resolve.js';
 import { getFiniteNumber } from '../config/normalize.js';
+import {
+  createNumericPresentation,
+  createTextPresentation,
+} from '../utils/format.js';
 
 function getDefaultEntityIcon(stateObj, entityId = '') {
   const deviceClass = String(stateObj?.attributes?.device_class ?? '').trim();
@@ -42,24 +46,6 @@ function toScalePct(value, minValue, maxValue) {
   const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
   const range = safeMax - safeMin || 1;
   return Math.min(100, Math.max(0, ((value - safeMin) / range) * 100));
-}
-
-function formatNumericDisplay(rawVal, decimal = null) {
-  if (!Number.isFinite(rawVal)) return String(rawVal);
-  if (decimal !== null) {
-    return parseFloat(rawVal.toFixed(decimal)).toLocaleString();
-  }
-  return rawVal.toLocaleString();
-}
-
-function isTightUnit(unit) {
-  return ['h', 'm', 's'].includes(String(unit || '').trim());
-}
-
-function formatDisplayWithUnit(display, unit) {
-  if (!unit) return String(display);
-  const cleanUnit = String(unit);
-  return `${display}${isTightUnit(cleanUnit) ? '' : ' '}${cleanUnit}`;
 }
 
 function parseColorToRgb(color) {
@@ -172,28 +158,28 @@ export function buildRowViewModel(options) {
   const rawState = entityState?.state ?? '';
   const numericValue = getFiniteNumber(rawState);
   const rawUnit = entityState?.attributes?.unit_of_measurement ?? '';
+  const configuredUnit = entityConfig?.formatting?.unit;
+  const targetUnit = configuredUnit ?? rawUnit ?? '';
   const displayUnit = numericValue !== null
-    ? (entityConfig?.formatting?.unit ?? rawUnit ?? '')
+    ? targetUnit
     : '';
   const min = getNormalizedResolvableNumericValue(hass, entityConfig?.scale?.min);
   const max = getNormalizedResolvableNumericValue(hass, entityConfig?.scale?.max);
   const safeMin = Number.isFinite(min) ? min : 0;
   const safeMax = Number.isFinite(max) ? max : 100;
   const percent = numericValue !== null ? toScalePct(numericValue, safeMin, safeMax) : 0;
-  const displayValue = numericValue === null
-    ? rawState
-    : formatNumericDisplay(numericValue, entityConfig?.formatting?.decimal ?? null);
+  const decimal = entityConfig?.formatting?.decimal ?? null;
+  const primaryPresentation = numericValue === null
+    ? createTextPresentation(rawState)
+    : createNumericPresentation(numericValue, displayUnit, decimal);
 
   const targetValue = entityConfig?.target_marker?.enabled === false
     ? null
     : getNormalizedResolvableNumericValue(hass, entityConfig?.target_marker?.source, safeMin, safeMax);
   const targetPercent = targetValue !== null ? toScalePct(targetValue, safeMin, safeMax) : null;
   const targetVisible = targetValue !== null;
-  const targetDisplay = targetValue !== null
-    ? formatDisplayWithUnit(
-      formatNumericDisplay(targetValue, entityConfig?.formatting?.decimal ?? null),
-      entityConfig?.formatting?.unit ?? rawUnit ?? ''
-    )
+  const targetPresentation = targetValue !== null
+    ? createNumericPresentation(targetValue, targetUnit, decimal)
     : null;
 
   const baselineValue = entityConfig?.baseline?.enabled === false
@@ -210,8 +196,8 @@ export function buildRowViewModel(options) {
     peaks,
     entityConfig?.peak_marker?.show === true
   );
-  const peakDisplay = peakState.visible
-    ? formatNumericDisplay(peakState.value, entityConfig?.formatting?.decimal ?? null)
+  const peakPresentation = peakState.visible
+    ? createNumericPresentation(peakState.value, displayUnit, decimal)
     : null;
 
   return {
@@ -223,24 +209,27 @@ export function buildRowViewModel(options) {
     state: rawState,
     numericValue,
     rawUnit,
-    displayUnit,
     min: safeMin,
     max: safeMax,
     percent,
-    displayValue,
-    unit: displayUnit,
+    displayValue: primaryPresentation.number,
+    displayUnit: primaryPresentation.unit,
+    primaryPresentation,
+    unit: primaryPresentation.unit,
     barColor: entityConfig?.bar?.color ?? null,
     fillStyle: entityConfig?.bar?.fill_style ?? null,
     target: targetValue,
     targetPercent,
-    targetDisplay,
+    targetDisplay: targetPresentation?.text ?? null,
+    targetPresentation,
     targetVisible,
     baseline: baselineValue,
     baselinePercent,
     baselineVisible,
     peak: peakState.value,
     peakPercent: peakState.percent,
-    peakDisplay,
+    peakDisplay: peakPresentation?.number ?? null,
+    peakPresentation,
     peakVisible: peakState.visible,
     segments: entityConfig?.bar?.segments ?? null,
     gradientStops: entityConfig?.bar?.gradient_stops ?? null,

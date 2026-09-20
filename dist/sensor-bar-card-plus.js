@@ -770,6 +770,46 @@
     }
   });
 
+  // src/utils/format.js
+  function formatNumericDisplay(rawVal, decimal = null) {
+    if (!Number.isFinite(rawVal)) return String(rawVal);
+    if (decimal !== null) {
+      return parseFloat(rawVal.toFixed(decimal)).toLocaleString();
+    }
+    return rawVal.toLocaleString();
+  }
+  function isTightUnit(unit) {
+    return ["h", "m", "s"].includes(String(unit || "").trim());
+  }
+  function formatDisplayWithUnit(display, unit) {
+    if (!unit) return String(display);
+    const cleanUnit = String(unit);
+    return `${display}${isTightUnit(cleanUnit) ? "" : " "}${cleanUnit}`;
+  }
+  function createNumericPresentation(value, unit, decimal = null) {
+    const number = formatNumericDisplay(value, decimal);
+    const cleanUnit = unit ? String(unit) : "";
+    return {
+      value,
+      number,
+      unit: cleanUnit,
+      text: formatDisplayWithUnit(number, cleanUnit)
+    };
+  }
+  function createTextPresentation(text) {
+    const value = String(text);
+    return {
+      value: null,
+      number: value,
+      unit: "",
+      text: value
+    };
+  }
+  var init_format = __esm({
+    "src/utils/format.js"() {
+    }
+  });
+
   // src/view-model/row-view-model.js
   function getDefaultEntityIcon(stateObj, entityId = "") {
     var _a, _b, _c;
@@ -811,21 +851,6 @@
     const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
     const range = safeMax - safeMin || 1;
     return Math.min(100, Math.max(0, (value - safeMin) / range * 100));
-  }
-  function formatNumericDisplay(rawVal, decimal = null) {
-    if (!Number.isFinite(rawVal)) return String(rawVal);
-    if (decimal !== null) {
-      return parseFloat(rawVal.toFixed(decimal)).toLocaleString();
-    }
-    return rawVal.toLocaleString();
-  }
-  function isTightUnit(unit) {
-    return ["h", "m", "s"].includes(String(unit || "").trim());
-  }
-  function formatDisplayWithUnit(display, unit) {
-    if (!unit) return String(display);
-    const cleanUnit = String(unit);
-    return `${display}${isTightUnit(cleanUnit) ? "" : " "}${cleanUnit}`;
   }
   function parseColorToRgb(color) {
     const value = String(color || "").trim();
@@ -906,7 +931,7 @@
     };
   }
   function buildRowViewModel(options) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M;
     const {
       hass,
       cardConfig,
@@ -919,21 +944,21 @@
     const rawState = (_b = entityState == null ? void 0 : entityState.state) != null ? _b : "";
     const numericValue = getFiniteNumber(rawState);
     const rawUnit = (_d = (_c = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _c.unit_of_measurement) != null ? _d : "";
-    const displayUnit = numericValue !== null ? (_g = (_f = (_e = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _e.unit) != null ? _f : rawUnit) != null ? _g : "" : "";
-    const min = getNormalizedResolvableNumericValue(hass, (_h = entityConfig == null ? void 0 : entityConfig.scale) == null ? void 0 : _h.min);
-    const max = getNormalizedResolvableNumericValue(hass, (_i = entityConfig == null ? void 0 : entityConfig.scale) == null ? void 0 : _i.max);
+    const configuredUnit = (_e = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _e.unit;
+    const targetUnit = (_f = configuredUnit != null ? configuredUnit : rawUnit) != null ? _f : "";
+    const displayUnit = numericValue !== null ? targetUnit : "";
+    const min = getNormalizedResolvableNumericValue(hass, (_g = entityConfig == null ? void 0 : entityConfig.scale) == null ? void 0 : _g.min);
+    const max = getNormalizedResolvableNumericValue(hass, (_h = entityConfig == null ? void 0 : entityConfig.scale) == null ? void 0 : _h.max);
     const safeMin = Number.isFinite(min) ? min : 0;
     const safeMax = Number.isFinite(max) ? max : 100;
     const percent = numericValue !== null ? toScalePct(numericValue, safeMin, safeMax) : 0;
-    const displayValue = numericValue === null ? rawState : formatNumericDisplay(numericValue, (_k = (_j = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _j.decimal) != null ? _k : null);
-    const targetValue = ((_l = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _l.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_m = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _m.source, safeMin, safeMax);
+    const decimal = (_j = (_i = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _i.decimal) != null ? _j : null;
+    const primaryPresentation = numericValue === null ? createTextPresentation(rawState) : createNumericPresentation(numericValue, displayUnit, decimal);
+    const targetValue = ((_k = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _k.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_l = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _l.source, safeMin, safeMax);
     const targetPercent = targetValue !== null ? toScalePct(targetValue, safeMin, safeMax) : null;
     const targetVisible = targetValue !== null;
-    const targetDisplay = targetValue !== null ? formatDisplayWithUnit(
-      formatNumericDisplay(targetValue, (_o = (_n = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _n.decimal) != null ? _o : null),
-      (_r = (_q = (_p = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _p.unit) != null ? _q : rawUnit) != null ? _r : ""
-    ) : null;
-    const baselineValue = ((_s = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _s.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_t = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _t.at, safeMin, safeMax);
+    const targetPresentation = targetValue !== null ? createNumericPresentation(targetValue, targetUnit, decimal) : null;
+    const baselineValue = ((_m = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _m.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_n = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _n.at, safeMin, safeMax);
     const baselinePercent = Number.isFinite(baselineValue) ? toScalePct(baselineValue, safeMin, safeMax) : null;
     const baselineVisible = Number.isFinite(baselineValue);
     const peakState = getPeakState(
@@ -942,47 +967,50 @@
       safeMin,
       safeMax,
       peaks,
-      ((_u = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _u.show) === true
+      ((_o = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _o.show) === true
     );
-    const peakDisplay = peakState.visible ? formatNumericDisplay(peakState.value, (_w = (_v = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _v.decimal) != null ? _w : null) : null;
+    const peakPresentation = peakState.visible ? createNumericPresentation(peakState.value, displayUnit, decimal) : null;
     return {
       entityId,
-      name: (_z = (_y = entityConfig == null ? void 0 : entityConfig.name) != null ? _y : (_x = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _x.friendly_name) != null ? _z : entityId,
-      icon: (entityConfig == null ? void 0 : entityConfig.icon) === false ? false : (_C = (_B = entityConfig == null ? void 0 : entityConfig.icon) != null ? _B : (_A = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _A.icon) != null ? _C : getDefaultEntityIcon(entityState, entityId),
+      name: (_r = (_q = entityConfig == null ? void 0 : entityConfig.name) != null ? _q : (_p = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _p.friendly_name) != null ? _r : entityId,
+      icon: (entityConfig == null ? void 0 : entityConfig.icon) === false ? false : (_u = (_t = entityConfig == null ? void 0 : entityConfig.icon) != null ? _t : (_s = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _s.icon) != null ? _u : getDefaultEntityIcon(entityState, entityId),
       state: rawState,
       numericValue,
       rawUnit,
-      displayUnit,
       min: safeMin,
       max: safeMax,
       percent,
-      displayValue,
-      unit: displayUnit,
-      barColor: (_E = (_D = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _D.color) != null ? _E : null,
-      fillStyle: (_G = (_F = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _F.fill_style) != null ? _G : null,
+      displayValue: primaryPresentation.number,
+      displayUnit: primaryPresentation.unit,
+      primaryPresentation,
+      unit: primaryPresentation.unit,
+      barColor: (_w = (_v = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _v.color) != null ? _w : null,
+      fillStyle: (_y = (_x = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _x.fill_style) != null ? _y : null,
       target: targetValue,
       targetPercent,
-      targetDisplay,
+      targetDisplay: (_z = targetPresentation == null ? void 0 : targetPresentation.text) != null ? _z : null,
+      targetPresentation,
       targetVisible,
       baseline: baselineValue,
       baselinePercent,
       baselineVisible,
       peak: peakState.value,
       peakPercent: peakState.percent,
-      peakDisplay,
+      peakDisplay: (_A = peakPresentation == null ? void 0 : peakPresentation.number) != null ? _A : null,
+      peakPresentation,
       peakVisible: peakState.visible,
-      segments: (_I = (_H = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _H.segments) != null ? _I : null,
-      gradientStops: (_K = (_J = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _J.gradient_stops) != null ? _K : null,
+      segments: (_C = (_B = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _B.segments) != null ? _C : null,
+      gradientStops: (_E = (_D = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _D.gradient_stops) != null ? _E : null,
       needle: getNeedleState(entityConfig, numericValue, safeMin, safeMax, baselinePercent),
       classes: {
-        labelPosition: (_N = (_M = (_L = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _L.label) == null ? void 0 : _M.position) != null ? _N : "left",
-        animated: ((_O = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _O.animated) !== false
+        labelPosition: (_H = (_G = (_F = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _F.label) == null ? void 0 : _G.position) != null ? _H : "left",
+        animated: ((_I = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _I.animated) !== false
       },
       attributes: {
         entity: entityId,
-        baseHeight: (_Q = (_P = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _P.height) != null ? _Q : 38,
-        heightExplicit: ((_R = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _R.height_explicit) === true,
-        barAnimated: ((_S = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _S.animated) !== false
+        baseHeight: (_K = (_J = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _J.height) != null ? _K : 38,
+        heightExplicit: ((_L = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _L.height_explicit) === true,
+        barAnimated: ((_M = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _M.animated) !== false
       }
     };
   }
@@ -990,6 +1018,7 @@
     "src/view-model/row-view-model.js"() {
       init_resolve();
       init_normalize();
+      init_format();
     }
   });
 
@@ -1012,6 +1041,7 @@
       init_validate();
       init_row_view_model();
       init_dom();
+      init_format();
       SensorBarCard = class extends HTMLElement {
         static getConfigElement() {
           return document.createElement("sensor-bar-card-plus-editor");
@@ -1610,11 +1640,7 @@
           return this._toScalePct(baselineValue, safeMin, safeMax);
         }
         _formatNumericDisplay(rawVal, decimal = null) {
-          if (!Number.isFinite(rawVal)) return String(rawVal);
-          if (decimal !== null) {
-            return parseFloat(rawVal.toFixed(decimal)).toLocaleString();
-          }
-          return rawVal.toLocaleString();
+          return formatNumericDisplay(rawVal, decimal);
         }
         _getNormalizedPercent(valuePct, baselinePct = null) {
           const clampedValue = Math.min(100, Math.max(0, valuePct));
@@ -3562,7 +3588,7 @@
           });
         }
         _isTightUnit(unit) {
-          return ["h", "m", "s"].includes(String(unit || "").trim());
+          return isTightUnit(unit);
         }
         _encodeDataAttr(value) {
           return encodeURIComponent(String(value != null ? value : ""));
@@ -3646,9 +3672,7 @@
           return luminance < 0.22 ? "#ffffff" : "#000000";
         }
         _formatDisplayWithUnit(display, unit) {
-          if (!unit) return String(display);
-          const cleanUnit = String(unit);
-          return `${display}${this._isTightUnit(cleanUnit) ? "" : " "}${cleanUnit}`;
+          return formatDisplayWithUnit(display, unit);
         }
         _formatRightValueMarkup(display, unit, hideUnit = false) {
           const escapedDisplay = escapeHtml(display);
@@ -3777,7 +3801,7 @@ ${paintLayers}
       </div>`;
         }
         _patchRow(row, entityCfg, stateObj) {
-          var _a;
+          var _a, _b, _c;
           if (!row || !stateObj) return;
           const ecfg = this._resolve(entityCfg);
           const rowViewModel = buildRowViewModel({
@@ -3793,8 +3817,8 @@ ${paintLayers}
           const targetVal = rowViewModel.target;
           const pct = rowViewModel.percent;
           const color = this._getColor(pct, ecfg, safeMin, safeMax);
-          const display = rowViewModel.displayValue;
-          const displayUnit = rowViewModel.displayUnit;
+          const display = rowViewModel.primaryPresentation.number;
+          const displayUnit = rowViewModel.primaryPresentation.unit;
           const fillReveal = row.querySelector(".bar-fill-reveal");
           const paintLayer = row.querySelector('.bar-paint-layer[data-layer="base"]');
           const liveTargetPct = rowViewModel.targetPercent;
@@ -3895,7 +3919,7 @@ ${paintLayers}
               this._setStyleIfChanged(targetEl, "--marker-contrast-color", this._getMarkerContrastColor(ecfg.target_marker.color));
             }
             if (targetLabelEl) {
-              this._setTextIfChanged(targetLabelEl, rowViewModel.targetDisplay);
+              this._setTextIfChanged(targetLabelEl, (_c = (_b = rowViewModel.targetPresentation) == null ? void 0 : _b.text) != null ? _c : null);
             }
           } else {
             if (targetEl) this._setStyleIfChanged(targetEl, "display", "none");
@@ -3903,6 +3927,7 @@ ${paintLayers}
           }
         }
         _update() {
+          var _a, _b, _c, _d;
           if (!this._hass || !this._config) return;
           const rowsEl = this.shadowRoot.querySelector(".rows");
           if (!rowsEl) return;
@@ -3930,18 +3955,17 @@ ${paintLayers}
               const targetVal = rowViewModel.target;
               const pct = rowViewModel.percent;
               const color = this._getColor(pct, ecfg, safeMin, safeMax);
-              const display = rowViewModel.displayValue;
-              const displayUnit = rowViewModel.displayUnit;
+              const display = rowViewModel.primaryPresentation.number;
+              const displayUnit = rowViewModel.primaryPresentation.unit;
               const targetPct = rowViewModel.targetPercent;
-              const targetDisplay = rowViewModel.targetDisplay;
+              const targetDisplay = (_b = (_a = rowViewModel.targetPresentation) == null ? void 0 : _a.text) != null ? _b : null;
               let peakPct = null, peakDisplay = null;
               if (ecfg.peak_marker.show && Number.isFinite(rawVal)) {
                 if (this._peaks[entityCfg.entity] === void 0 || rawVal > this._peaks[entityCfg.entity]) {
                   this._peaks[entityCfg.entity] = rawVal;
                 }
-                const peakVal = this._peaks[entityCfg.entity];
-                peakPct = this._toScalePct(peakVal, safeMin, safeMax);
-                peakDisplay = this._formatNumericDisplay(peakVal, ecfg.formatting.decimal);
+                peakPct = rowViewModel.peakPercent;
+                peakDisplay = (_d = (_c = rowViewModel.peakPresentation) == null ? void 0 : _c.number) != null ? _d : null;
               }
               html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_marker.color, ecfg.target_marker.color, safeMin, safeMax);
             }

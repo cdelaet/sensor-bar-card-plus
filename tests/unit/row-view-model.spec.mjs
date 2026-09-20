@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createCard } from '../support/load-card-class.cjs';
 import { buildRowViewModel } from '../../src/view-model/row-view-model.js';
+import { formatNumericDisplay } from '../../src/utils/format.js';
 
 function sensor(state, attrs = {}) {
   return {
@@ -61,6 +62,12 @@ describe('buildRowViewModel', () => {
     expect(row.rawUnit).toBe('W');
     expect(row.displayUnit).toBe('W');
     expect(row.unit).toBe('W');
+    expect(row.primaryPresentation).toEqual({
+      value: 42.5,
+      number: row.displayValue,
+      unit: 'W',
+      text: '42.5 W',
+    });
     expect(row.attributes.entity).toBe('sensor.power');
   });
 
@@ -91,6 +98,12 @@ describe('buildRowViewModel', () => {
     expect(row.rawUnit).toBe('W');
     expect(row.displayUnit).toBe('');
     expect(row.unit).toBe('');
+    expect(row.primaryPresentation).toEqual({
+      value: null,
+      number: 'unavailable',
+      unit: '',
+      text: 'unavailable',
+    });
     expect(row.targetVisible).toBe(false);
     expect(row.baselineVisible).toBe(false);
     expect(row.needle.show).toBe(false);
@@ -167,6 +180,12 @@ describe('buildRowViewModel', () => {
     expect(row.targetPercent).toBe(55.25);
     expect(row.targetVisible).toBe(true);
     expect(normalizeDecimalString(row.targetDisplay)).toBe('55.3 kW');
+    expect(row.targetPresentation).toEqual({
+      value: 55.25,
+      number: formatNumericDisplay(row.target, 1),
+      unit: 'kW',
+      text: row.targetDisplay,
+    });
   });
 
   it('resolves dynamic target entities', () => {
@@ -265,7 +284,51 @@ describe('buildRowViewModel', () => {
     expect(row.peakPercent).toBe(60);
     expect(row.peakVisible).toBe(true);
     expect(row.peakDisplay).toBe('60');
+    expect(row.peakPresentation).toEqual({
+      value: 60,
+      number: formatNumericDisplay(row.peak, null),
+      unit: 'W',
+      text: '60 W',
+    });
     expect(peaks).toEqual({ 'sensor.power': 60 });
+  });
+
+  it('keeps initial and update presentation data equivalent after peak caching', () => {
+    const hass = {
+      states: {
+        'sensor.power': sensor(42.5, { unit_of_measurement: 'kW' }),
+        'sensor.target': sensor(55.25, { unit_of_measurement: 'kW' }),
+      },
+    };
+    const entityConfig = createNormalizedEntity({
+      decimal: 1,
+      min: 0,
+      max: 100,
+      target_entity: 'sensor.target',
+      show_peak: true,
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const peaks = {};
+
+    const initialRow = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      peaks,
+    });
+    peaks['sensor.power'] = initialRow.peak;
+    const updatedRow = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      peaks,
+    });
+
+    expect(updatedRow.primaryPresentation).toEqual(initialRow.primaryPresentation);
+    expect(updatedRow.targetPresentation).toEqual(initialRow.targetPresentation);
+    expect(updatedRow.peakPresentation).toEqual(initialRow.peakPresentation);
   });
 
   it('reflects normalized per-entity overrides in the derived row state', () => {

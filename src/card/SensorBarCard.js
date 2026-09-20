@@ -35,6 +35,11 @@ import {
 import { validateNormalizedConfig } from '../config/validate.js';
 import { buildRowViewModel } from '../view-model/row-view-model.js';
 import { escapeHtml } from '../utils/dom.js';
+import {
+  formatDisplayWithUnit,
+  formatNumericDisplay,
+  isTightUnit,
+} from '../utils/format.js';
 
 /**
  * sensor-bar-card-plus - A polished, configurable sensor bar card for Home Assistant
@@ -884,11 +889,7 @@ export class SensorBarCard extends HTMLElement {
   }
 
   _formatNumericDisplay(rawVal, decimal = null) {
-    if (!Number.isFinite(rawVal)) return String(rawVal);
-    if (decimal !== null) {
-      return parseFloat(rawVal.toFixed(decimal)).toLocaleString();
-    }
-    return rawVal.toLocaleString();
+    return formatNumericDisplay(rawVal, decimal);
   }
 
   _getNormalizedPercent(valuePct, baselinePct = null) {
@@ -3040,7 +3041,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
   }
 
   _isTightUnit(unit) {
-    return ['h', 'm', 's'].includes(String(unit || '').trim());
+    return isTightUnit(unit);
   }
 
   _encodeDataAttr(value) {
@@ -3145,9 +3146,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
   }
 
   _formatDisplayWithUnit(display, unit) {
-    if (!unit) return String(display);
-    const cleanUnit = String(unit);
-    return `${display}${this._isTightUnit(cleanUnit) ? '' : ' '}${cleanUnit}`;
+    return formatDisplayWithUnit(display, unit);
   }
 
   _formatRightValueMarkup(display, unit, hideUnit = false) {
@@ -3315,8 +3314,8 @@ ${paintLayers}
     const targetVal = rowViewModel.target;
     const pct = rowViewModel.percent;
     const color = this._getColor(pct, ecfg, safeMin, safeMax);
-    const display = rowViewModel.displayValue;
-    const displayUnit = rowViewModel.displayUnit;
+    const display = rowViewModel.primaryPresentation.number;
+    const displayUnit = rowViewModel.primaryPresentation.unit;
 
     const fillReveal = row.querySelector('.bar-fill-reveal');
     const paintLayer = row.querySelector('.bar-paint-layer[data-layer="base"]');
@@ -3423,7 +3422,7 @@ ${paintLayers}
       }
 
       if (targetLabelEl) {
-        this._setTextIfChanged(targetLabelEl, rowViewModel.targetDisplay);
+        this._setTextIfChanged(targetLabelEl, rowViewModel.targetPresentation?.text ?? null);
       }
     } else {
       if (targetEl) this._setStyleIfChanged(targetEl, 'display', 'none');
@@ -3463,18 +3462,17 @@ ${paintLayers}
         const targetVal = rowViewModel.target;
         const pct       = rowViewModel.percent;
         const color     = this._getColor(pct, ecfg, safeMin, safeMax);
-        const display   = rowViewModel.displayValue;
-        const displayUnit = rowViewModel.displayUnit;
+        const display   = rowViewModel.primaryPresentation.number;
+        const displayUnit = rowViewModel.primaryPresentation.unit;
         const targetPct = rowViewModel.targetPercent;
-        const targetDisplay = rowViewModel.targetDisplay;
+        const targetDisplay = rowViewModel.targetPresentation?.text ?? null;
         let peakPct = null, peakDisplay = null;
         if (ecfg.peak_marker.show && Number.isFinite(rawVal)) {
           if (this._peaks[entityCfg.entity] === undefined || rawVal > this._peaks[entityCfg.entity]) {
             this._peaks[entityCfg.entity] = rawVal;
           }
-          const peakVal = this._peaks[entityCfg.entity];
-          peakPct = this._toScalePct(peakVal, safeMin, safeMax);
-          peakDisplay = this._formatNumericDisplay(peakVal, ecfg.formatting.decimal);
+          peakPct = rowViewModel.peakPercent;
+          peakDisplay = rowViewModel.peakPresentation?.number ?? null;
         }
         html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_marker.color, ecfg.target_marker.color, safeMin, safeMax);
       }
