@@ -1298,7 +1298,9 @@ The card handles four related display concerns:
 
 ### Decimal Precision
 
-Use `formatting.decimal` to control how many decimal places are shown per row.
+Use `formatting.decimal` to display exactly how many fractional digits are shown per row, including trailing zeroes. Values are rounded to that precision; omitting the setting keeps the raw locale-aware numeric display.
+
+For example, `decimal: 2` displays `42` as `42.00` and `100.8` as `100.80`.
 
 ![Decimal places](images/example-decimals.png)
 

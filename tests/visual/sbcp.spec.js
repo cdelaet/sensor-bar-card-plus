@@ -1145,8 +1145,8 @@ test('off mode keeps narrow long values inside the row before hiding the unit', 
       targetVisible: true,
       peakVisible: true,
     }),
-    expect.objectContaining({ entity: 'sensor.zero_value', numberText: '0' }),
-    expect.objectContaining({ entity: 'sensor.negative_value', numberText: '-95' }),
+    expect.objectContaining({ entity: 'sensor.zero_value', numberText: '0.00' }),
+    expect.objectContaining({ entity: 'sensor.negative_value', numberText: '-95.00' }),
     expect.objectContaining({ entity: 'sensor.unavailable_value', numberText: 'unavailable' }),
   ]));
 
@@ -1249,24 +1249,24 @@ test('presentation update path keeps target recovery and peak maximum intact', a
   });
 
   expect(result.initial).toEqual({
-    value: '20',
+    value: '20.0',
     targetDisplay: '',
     targetLabelVisibility: 'visible',
-    targetLabelText: '60 W',
+    targetLabelText: '60.0 W',
     peakLeft: '20%',
   });
   expect(result.unavailableTarget).toEqual({
-    value: '80',
+    value: '80.0',
     targetDisplay: 'none',
     targetLabelVisibility: 'hidden',
-    targetLabelText: '60 W',
+    targetLabelText: '60.0 W',
     peakLeft: '80%',
   });
   expect(result.recoveredTarget).toEqual({
-    value: '40',
+    value: '40.0',
     targetDisplay: '',
     targetLabelVisibility: 'visible',
-    targetLabelText: '60 W',
+    targetLabelText: '60.0 W',
     peakLeft: '80%',
   });
 });

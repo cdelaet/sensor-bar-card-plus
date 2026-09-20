@@ -1,7 +1,10 @@
 export function formatNumericDisplay(rawVal, decimal = null) {
   if (!Number.isFinite(rawVal)) return String(rawVal);
   if (decimal !== null) {
-    return parseFloat(rawVal.toFixed(decimal)).toLocaleString();
+    return rawVal.toLocaleString(undefined, {
+      minimumFractionDigits: decimal,
+      maximumFractionDigits: decimal,
+    });
   }
   return rawVal.toLocaleString();
 }

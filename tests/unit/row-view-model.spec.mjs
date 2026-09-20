@@ -215,6 +215,81 @@ describe('buildRowViewModel', () => {
     expect(row.targetVisible).toBe(true);
   });
 
+  it('applies fixed precision consistently to primary, target, and peak presentations', () => {
+    const hass = {
+      states: {
+        'sensor.power': sensor(42, { unit_of_measurement: 'W' }),
+      },
+    };
+    const entityConfig = createNormalizedEntity({
+      decimal: 2,
+      unit: 'kWh',
+      min: 0,
+      max: 100,
+      target: { at: { fixed: 55.25 }, label: { show: true } },
+      show_peak: true,
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const peaks = { 'sensor.power': 42.5 };
+
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      peaks,
+    });
+
+    expect(row.primaryPresentation).toEqual({
+      value: 42,
+      number: '42.00',
+      unit: 'kWh',
+      text: '42.00 kWh',
+    });
+    expect(row.targetPresentation).toEqual({
+      value: 55.25,
+      number: '55.25',
+      unit: 'kWh',
+      text: '55.25 kWh',
+    });
+    expect(row.peakPresentation).toEqual({
+      value: 42.5,
+      number: '42.50',
+      unit: 'kWh',
+      text: '42.50 kWh',
+    });
+  });
+
+  it('applies fixed precision through structured card and entity formatting inheritance', () => {
+    const hass = {
+      states: {
+        'sensor.power': sensor(100.8),
+      },
+    };
+    const entityConfig = createNormalizedEntity({
+      formatting: { decimal: 1, unit: 'W' },
+      entities: [{
+        entity: 'sensor.power',
+        formatting: { decimal: 2, unit: 'kW' },
+      }],
+    });
+
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      peaks: {},
+    });
+
+    expect(row.primaryPresentation).toEqual({
+      value: 100.8,
+      number: '100.80',
+      unit: 'kW',
+      text: '100.80 kW',
+    });
+  });
+
   it('resolves fixed and dynamic baseline values', () => {
     const hass = {
       states: {
