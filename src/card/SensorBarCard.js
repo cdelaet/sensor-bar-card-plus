@@ -2496,7 +2496,30 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       if (!getStyle) return;
       const style = getStyle(valueEl);
       const baseWidth = parseFloat(style.getPropertyValue('--sbcp-value-width')) || valueEl.clientWidth || 0;
-      const desiredWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, false) + 2);
+      const fullWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, false) + 2);
+      const mainLine = valueEl.closest('.main-line');
+      let desiredWidth = fullWidth;
+
+      if (mainLine?.classList.contains('off-mode')) {
+        const barWrap = mainLine.querySelector('.bar-wrap');
+        const mainStyle = getStyle(mainLine);
+        const gap = parseFloat(mainStyle.getPropertyValue('gap')) || 0;
+        const rowWidth = mainLine.getBoundingClientRect?.().width ?? 0;
+        const fixedWidth = [...mainLine.children].reduce((total, child) => {
+          if (child === valueEl) return total;
+          if (child === barWrap) {
+            const barStyle = getStyle(child);
+            return total + (parseFloat(barStyle.minWidth) || child.getBoundingClientRect?.().width || 0);
+          }
+          return total + (child.getBoundingClientRect?.().width || 0);
+        }, 0);
+        const gapCount = Math.max(0, mainLine.children.length - 1);
+        const availableWidth = rowWidth - fixedWidth - (gap * gapCount);
+        if (availableWidth > 0) {
+          desiredWidth = Math.min(fullWidth, availableWidth);
+        }
+      }
+
       const extraWidth = Math.max(0, desiredWidth - baseWidth);
       valueEl.style.setProperty('--sbcp-value-extra-width', `${extraWidth}px`);
     });

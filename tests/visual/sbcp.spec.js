@@ -1066,3 +1066,207 @@ test('visual regression: inside-label-responsive-stack', async ({ page }) => {
 
   await expect(page.locator('#mount')).toHaveScreenshot('inside-label-responsive-stack.png');
 });
+
+test('off mode keeps narrow long values inside the row before hiding the unit', async ({ page }) => {
+  const mount = await render(page, {
+    width: 260,
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      title: 'Narrow off values',
+      layout: {
+        label: {
+          position: 'off',
+        },
+      },
+      formatting: {
+        decimal: 2,
+        unit: 'kilowatt-hours equivalent',
+      },
+      scale: {
+        min: { fixed: -100 },
+        max: { fixed: 2000000 },
+      },
+      target: {
+        at: { fixed: 60 },
+        label: { show: true },
+      },
+      peak: {
+        enabled: true,
+      },
+      entities: [
+        { entity: 'sensor.long_value' },
+        { entity: 'sensor.zero_value' },
+        { entity: 'sensor.negative_value' },
+        { entity: 'sensor.unavailable_value' },
+      ],
+    },
+    states: {
+      'sensor.long_value': sensor(1234567.89, { friendly_name: 'Long value' }),
+      'sensor.zero_value': sensor(0, { friendly_name: 'Zero value' }),
+      'sensor.negative_value': sensor(-95, { friendly_name: 'Negative value' }),
+      'sensor.unavailable_value': {
+        state: 'unavailable',
+        attributes: { friendly_name: 'Unavailable value' },
+      },
+    },
+  });
+
+  const result = await page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    const rows = [...card.shadowRoot.querySelectorAll('.row[data-entity]')];
+    return rows.map((row) => {
+      const mainLine = row.querySelector('.main-line');
+      const value = row.querySelector('.value-right');
+      const number = row.querySelector('.value-right-number');
+      const unit = row.querySelector('.unit');
+      const target = row.querySelector('.target-marker');
+      const peak = row.querySelector('.peak-marker');
+      const mainRect = mainLine.getBoundingClientRect();
+      const valueRect = value.getBoundingClientRect();
+      return {
+        entity: row.dataset.entity,
+        valueRight: valueRect.right,
+        mainRight: mainRect.right,
+        hideUnit: value.dataset.hideUnit,
+        numberText: number?.textContent || '',
+        unitText: unit?.textContent || '',
+        targetVisible: target?.style.display !== 'none',
+        peakVisible: !!peak,
+      };
+    });
+  });
+
+  expect(result).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      entity: 'sensor.long_value',
+      hideUnit: 'true',
+      numberText: '1,234,567.89',
+      unitText: '',
+      targetVisible: true,
+      peakVisible: true,
+    }),
+    expect.objectContaining({ entity: 'sensor.zero_value', numberText: '0' }),
+    expect.objectContaining({ entity: 'sensor.negative_value', numberText: '-95' }),
+    expect.objectContaining({ entity: 'sensor.unavailable_value', numberText: 'unavailable' }),
+  ]));
+
+  for (const row of result) {
+    expect(row.valueRight).toBeLessThanOrEqual(row.mainRight + 0.5);
+  }
+
+  await expect(mount).toHaveScreenshot('off-mode-narrow-long-unit.png');
+});
+
+test('presentation update path keeps target recovery and peak maximum intact', async ({ page }) => {
+  await page.goto('/tests/visual/fixtures/harness.html');
+  const result = await page.evaluate(async () => {
+    const card = await window.__sbcpRenderCard({
+      width: 720,
+      config: {
+        type: 'custom:sensor-bar-card-plus',
+        title: 'Presentation updates',
+        layout: {
+          label: {
+            position: 'off',
+          },
+        },
+        formatting: {
+          decimal: 1,
+        },
+        scale: {
+          min: { fixed: 0 },
+          max: { fixed: 100 },
+        },
+        target: {
+          at: { entity: 'sensor.presentation_target' },
+          label: { show: true },
+        },
+        peak: {
+          enabled: true,
+        },
+        entities: [{ entity: 'sensor.presentation_value' }],
+      },
+      states: {
+        'sensor.presentation_value': window.__sbcpCreateState(20, {
+          friendly_name: 'Presentation value',
+          unit_of_measurement: 'W',
+        }),
+        'sensor.presentation_target': window.__sbcpCreateState(60, {
+          friendly_name: 'Presentation target',
+          unit_of_measurement: 'W',
+        }),
+      },
+    });
+
+    const waitForUpdate = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const readPresentation = () => {
+      const row = card.shadowRoot.querySelector('.row[data-entity="sensor.presentation_value"]');
+      const value = row.querySelector('.value-right');
+      const target = row.querySelector('.target-marker');
+      const targetLabel = row.querySelector('.target-value-label');
+      const peak = row.querySelector('.peak-marker');
+      return {
+        value: value.querySelector('.value-right-number')?.textContent || '',
+        targetDisplay: target.style.display,
+        targetLabelVisibility: targetLabel?.style.visibility || '',
+        targetLabelText: targetLabel?.textContent || '',
+        peakLeft: peak?.style.left || '',
+      };
+    };
+
+    const initial = readPresentation();
+    card.hass = {
+      states: {
+        'sensor.presentation_value': window.__sbcpCreateState(80, {
+          friendly_name: 'Presentation value',
+          unit_of_measurement: 'W',
+        }),
+        'sensor.presentation_target': window.__sbcpCreateState('unavailable', {
+          friendly_name: 'Presentation target',
+          unit_of_measurement: 'W',
+        }),
+      },
+    };
+    await waitForUpdate();
+    const unavailableTarget = readPresentation();
+
+    card.hass = {
+      states: {
+        'sensor.presentation_value': window.__sbcpCreateState(40, {
+          friendly_name: 'Presentation value',
+          unit_of_measurement: 'W',
+        }),
+        'sensor.presentation_target': window.__sbcpCreateState(60, {
+          friendly_name: 'Presentation target',
+          unit_of_measurement: 'W',
+        }),
+      },
+    };
+    await waitForUpdate();
+    const recoveredTarget = readPresentation();
+
+    return { initial, unavailableTarget, recoveredTarget };
+  });
+
+  expect(result.initial).toEqual({
+    value: '20',
+    targetDisplay: '',
+    targetLabelVisibility: 'visible',
+    targetLabelText: '60 W',
+    peakLeft: '20%',
+  });
+  expect(result.unavailableTarget).toEqual({
+    value: '80',
+    targetDisplay: 'none',
+    targetLabelVisibility: 'hidden',
+    targetLabelText: '60 W',
+    peakLeft: '80%',
+  });
+  expect(result.recoveredTarget).toEqual({
+    value: '40',
+    targetDisplay: '',
+    targetLabelVisibility: 'visible',
+    targetLabelText: '60 W',
+    peakLeft: '80%',
+  });
+});

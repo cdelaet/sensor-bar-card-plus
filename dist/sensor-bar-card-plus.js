@@ -3108,7 +3108,7 @@
         _applyValueWidthReservation() {
           if (!this.shadowRoot) return;
           this.shadowRoot.querySelectorAll(".value-right").forEach((valueEl) => {
-            var _a, _b, _c;
+            var _a, _b, _c, _d, _e;
             const display = this._decodeDataAttr(valueEl.dataset.display || "");
             const unit = this._decodeDataAttr(valueEl.dataset.unit || "");
             if (!display) {
@@ -3119,7 +3119,29 @@
             if (!getStyle) return;
             const style = getStyle(valueEl);
             const baseWidth = parseFloat(style.getPropertyValue("--sbcp-value-width")) || valueEl.clientWidth || 0;
-            const desiredWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, false) + 2);
+            const fullWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, false) + 2);
+            const mainLine = valueEl.closest(".main-line");
+            let desiredWidth = fullWidth;
+            if (mainLine == null ? void 0 : mainLine.classList.contains("off-mode")) {
+              const barWrap = mainLine.querySelector(".bar-wrap");
+              const mainStyle = getStyle(mainLine);
+              const gap = parseFloat(mainStyle.getPropertyValue("gap")) || 0;
+              const rowWidth = (_e = (_d = mainLine.getBoundingClientRect) == null ? void 0 : _d.call(mainLine).width) != null ? _e : 0;
+              const fixedWidth = [...mainLine.children].reduce((total, child) => {
+                var _a2, _b2;
+                if (child === valueEl) return total;
+                if (child === barWrap) {
+                  const barStyle = getStyle(child);
+                  return total + (parseFloat(barStyle.minWidth) || ((_a2 = child.getBoundingClientRect) == null ? void 0 : _a2.call(child).width) || 0);
+                }
+                return total + (((_b2 = child.getBoundingClientRect) == null ? void 0 : _b2.call(child).width) || 0);
+              }, 0);
+              const gapCount = Math.max(0, mainLine.children.length - 1);
+              const availableWidth = rowWidth - fixedWidth - gap * gapCount;
+              if (availableWidth > 0) {
+                desiredWidth = Math.min(fullWidth, availableWidth);
+              }
+            }
             const extraWidth = Math.max(0, desiredWidth - baseWidth);
             valueEl.style.setProperty("--sbcp-value-extra-width", `${extraWidth}px`);
           });
