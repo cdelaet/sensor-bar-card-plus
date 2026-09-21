@@ -2534,6 +2534,67 @@ describe('Sensor Bar Card Plus editor', () => {
     });
   });
 
+  it('target label decimal override writes target.label.decimal', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({ entity: 'sensor.one' });
+    dispatchInput(editor.shadowRoot.querySelector('#target-label-decimal'), '1');
+
+    expect(events.at(-1).detail.config.target).toEqual({
+      label: { decimal: 1 },
+    });
+  });
+
+  it('target label decimal override can coexist with show and clears back to inheritance', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      formatting: { decimal: 2 },
+      target: { label: { show: true } },
+    });
+
+    const decimalInput = editor.shadowRoot.querySelector('#target-label-decimal');
+    dispatchInput(decimalInput, '1');
+    expect(events.at(-1).detail.config.target).toEqual({
+      label: { show: true, decimal: 1 },
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#target-label-decimal'), '');
+    expect(events.at(-1).detail.config.target).toEqual({
+      label: { show: true },
+    });
+  });
+
+  it('preserves an explicit zero target label decimal through load, set, and reset', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      target: { label: { show: true, decimal: 0 } },
+    });
+
+    expect(editor.shadowRoot.querySelector('#target-label-decimal').value).toBe('0');
+
+    dispatchInput(editor.shadowRoot.querySelector('#target-label-decimal'), '');
+    expect(events.at(-1).detail.config.target).toEqual({
+      label: { show: true },
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#target-label-decimal'), '0');
+    expect(events.at(-1).detail.config.target).toEqual({
+      label: { show: true, decimal: 0 },
+    });
+
+    dispatchInput(editor.shadowRoot.querySelector('#target-label-decimal'), '');
+    expect(events.at(-1).detail.config.target).toEqual({
+      label: { show: true },
+    });
+  });
+
   it('above-target fill color writes target.when_exceeded.fill_color', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
@@ -3024,6 +3085,23 @@ describe('Sensor Bar Card Plus editor', () => {
 
     expect(events.at(-1).detail.config.entities).toEqual([
       { entity: 'sensor.one', name: 'One', target: { label: { show: true } } },
+    ]);
+  });
+
+  it('per-entity target label decimal override writes entities[index].target.label.decimal', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      formatting: { decimal: 2 },
+      entities: [{ entity: 'sensor.one', name: 'One' }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-target-label-decimal'), '1');
+
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', name: 'One', target: { label: { decimal: 1 } } },
     ]);
   });
 

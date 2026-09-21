@@ -466,15 +466,21 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
     source: normalizeResolvableValue(null, null),
     color: cardConfig?.target_color ?? '#888',
     show_label: cardConfig?.show_target_label ?? false,
+    label_decimal: cardConfig?.target?.label?.decimal ?? null,
   };
 
   if (rawTarget && typeof rawTarget === 'object' && !Array.isArray(rawTarget)) {
-    return {
+    const normalizedTarget = {
       enabled: normalizeOptionalEnabled(rawTarget.enabled) ?? inheritedTarget.enabled ?? null,
       source: normalizeStructuredResolvableValue(rawTarget.at, inheritedTarget.source, null, { allowPercent: true }),
       color: rawTarget.color ?? entityConfig.target_color ?? inheritedTarget.color,
       show_label: rawTarget.label?.show ?? entityConfig.show_target_label ?? inheritedTarget.show_label,
     };
+    const labelDecimal = rawTarget.label?.decimal ?? inheritedTarget.label_decimal ?? null;
+    if (labelDecimal !== null && labelDecimal !== undefined) {
+      normalizedTarget.label_decimal = labelDecimal;
+    }
+    return normalizedTarget;
   }
 
   const value = entityConfig.target ?? inheritedTarget.source?.fixed ?? inheritedTarget.source?.value ?? legacyCardTarget;
@@ -482,12 +488,17 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
   const percent = entityConfig.target === undefined && entityConfig.target_entity === undefined
     ? inheritedTarget.source?.percent ?? null
     : null;
-  return {
+  const normalizedTarget = {
     enabled: inheritedTarget.enabled ?? null,
     source: normalizeResolvableValue(value, entity, percent),
     color: entityConfig.target_color ?? inheritedTarget.color ?? cardConfig?.target_color ?? '#888',
     show_label: entityConfig.show_target_label ?? inheritedTarget.show_label ?? cardConfig?.show_target_label ?? false,
   };
+  const labelDecimal = inheritedTarget.label_decimal ?? null;
+  if (labelDecimal !== null && labelDecimal !== undefined) {
+    normalizedTarget.label_decimal = labelDecimal;
+  }
+  return normalizedTarget;
 }
 
 export function normalizePeakMarkerConfig(entityConfig, cardConfig) {

@@ -178,8 +178,9 @@ export function buildRowViewModel(options) {
     : getNormalizedResolvableNumericValue(hass, entityConfig?.target_marker?.source, safeMin, safeMax);
   const targetPercent = targetValue !== null ? toScalePct(targetValue, safeMin, safeMax) : null;
   const targetVisible = targetValue !== null;
+  const targetDecimal = entityConfig?.target_marker?.label_decimal ?? decimal;
   const targetPresentation = targetValue !== null
-    ? createNumericPresentation(targetValue, targetUnit, decimal)
+    ? createNumericPresentation(targetValue, targetUnit, targetDecimal)
     : null;
 
   const baselineValue = entityConfig?.baseline?.enabled === false

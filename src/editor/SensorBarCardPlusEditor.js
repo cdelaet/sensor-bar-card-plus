@@ -735,6 +735,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const cleanedAt = this._cleanupResolvableValueForEmit(nextMarker.at);
     const color = this._normalizeTextValue(nextMarker.color).trim();
     const labelShow = nextMarker.label?.show === true;
+    const labelDecimal = this._normalizeDecimalValue(nextMarker.label?.decimal);
     const fillColor = this._normalizeTextValue(nextMarker.when_exceeded?.fill_color).trim();
 
     if (typeof nextMarker.enabled !== 'boolean') {
@@ -755,8 +756,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextMarker.color;
     }
 
-    if (labelShow) {
-      nextMarker.label = { ...(this._isObject(nextMarker.label) ? nextMarker.label : {}), show: true };
+    if (labelShow || labelDecimal !== null) {
+      nextMarker.label = {};
+      if (labelShow) nextMarker.label.show = true;
+      if (labelDecimal !== null) nextMarker.label.decimal = labelDecimal;
       delete nextTarget.show_target_label;
     } else {
       delete nextMarker.label;
@@ -921,7 +924,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       case 'target':
         return ['enabled', 'at', 'color', 'label', 'when_exceeded'];
       case 'target.label':
-        return ['show'];
+        return ['show', 'decimal'];
       case 'target.when_exceeded':
         return ['fill_color'];
       case 'baseline':
@@ -3252,6 +3255,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         nextTarget = this._deletePathValue(nextTarget, ['target', 'at']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'color']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'label', 'show']);
+        nextTarget = this._deletePathValue(nextTarget, ['target', 'label', 'decimal']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'when_exceeded', 'fill_color']);
       } else {
         nextTarget = this._deletePathValue(nextTarget, ['target']);
@@ -3328,6 +3332,29 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     }
     return this._setCanonicalScopedValue(scope, ['target', 'label', 'show'], true, {
       deprecatedKeys: [['show_target_label']],
+      prunePaths: [['target', 'label'], ['target']],
+    });
+  }
+
+  _getTargetLabelDecimalValue(scope) {
+    return this._getScopedValue(scope, ['target', 'label', 'decimal']) ?? '';
+  }
+
+  _getEffectiveTargetLabelDecimalValue(scope) {
+    return this._getEffectiveScopedDisplayValue(scope, ['target', 'label', 'decimal']);
+  }
+
+  _setTargetLabelDecimal(scope, rawValue) {
+    const normalizedValue = this._normalizeDecimalValue(rawValue);
+    if (rawValue === '' || rawValue === null || rawValue === undefined) {
+      return this._removeCanonicalScopedValue(scope, ['target', 'label', 'decimal'], {
+        prunePaths: [['target', 'label'], ['target']],
+      });
+    }
+    if (normalizedValue === null) {
+      return false;
+    }
+    return this._setCanonicalScopedValue(scope, ['target', 'label', 'decimal'], normalizedValue, {
       prunePaths: [['target', 'label'], ['target']],
     });
   }
@@ -3457,7 +3484,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       .some((key) => {
         const value = this._getScopedValue(scope, [key]);
         return value !== undefined && value !== null && value !== '' && value !== false;
-      });
+      }) || this._getTargetLabelDecimalValue(scope) !== '';
   }
 
   _getBaselineResolvableValue(scope) {
@@ -3723,6 +3750,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (target.entity) parts.push('Entity');
     if (this._hasCustomTargetColor(scope)) parts.push('Custom color');
     if (this._getTargetLabelShowValue(scope)) parts.push('Label');
+    const labelDecimal = this._getTargetLabelDecimalValue(scope);
+    if (labelDecimal !== '') parts.push(`Label ${labelDecimal} ${Number(labelDecimal) === 1 ? 'decimal' : 'decimals'}`);
     if (this._getTargetAboveFillColorValue(scope)) parts.push('Above');
     return parts.length ? parts.join(' • ') : 'Inherited';
   }
@@ -4069,6 +4098,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       const targetMode = this._getTargetMode({ type: 'card' });
       const targetColor = this._getTargetColorValue({ type: 'card' });
       const targetLabelShow = this._getTargetLabelShowValue({ type: 'card' });
+      const targetLabelDecimal = this._getTargetLabelDecimalValue({ type: 'card' });
       const targetAboveFillColor = this._getTargetAboveFillColorValue({ type: 'card' });
       const formattingUnit = this._getScopedFormattingValue({ type: 'card' }, 'unit');
       const formattingDecimal = this._getScopedFormattingValue({ type: 'card' }, 'decimal');
@@ -5056,6 +5086,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                           <label for="entity-${index}-target-label-show">Show target label</label>
                         </div>
                       </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-target-label-decimal">Target label decimals</label>
+                        <input id="entity-${index}-target-label-decimal" type="number" min="0" step="1" data-kind="entity-target-label-decimal" data-index="${index}" value="${this._escapeAttribute(this._getEffectiveTargetLabelDecimalValue(scope))}" placeholder="inherit primary decimals">
+                      </div>
 	                      <div class="field-row">
 	                        <div class="toggle">
 	                          <input id="entity-${index}-target-above-fill-enabled" type="checkbox" data-kind="entity-target-above-fill-enabled" data-index="${index}"${this._isTargetAboveFillEnabled(scope) ? ' checked' : ''}>
@@ -5158,6 +5192,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                 <input id="target-label-show" type="checkbox" data-field="target-label-show"${targetLabelShow ? ' checked' : ''}>
                 <label for="target-label-show">Show target label</label>
               </div>
+            </div>
+            <div class="field-row">
+              <label for="target-label-decimal">Target label decimals</label>
+              <input id="target-label-decimal" type="number" min="0" step="1" data-field="target-label-decimal" value="${this._escapeAttribute(targetLabelDecimal)}" placeholder="inherit primary decimals">
             </div>
             <div class="field-row">
               <div class="toggle">
@@ -5879,6 +5917,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     }
     if (field === 'target-color') return void this._setTargetColor({ type: 'card' }, value);
     if (field === 'target-label-show') return void this._setTargetLabelShow({ type: 'card' }, value);
+    if (field === 'target-label-decimal') return void this._setTargetLabelDecimal({ type: 'card' }, value);
     if (field === 'target-above-fill-enabled') return void this._setTargetAboveFillEnabled({ type: 'card' }, value);
     if (field === 'target-above-fill-color') return void this._setTargetAboveFillColor({ type: 'card' }, value);
     if (field === 'peak-show') return void this._setPeakShow(value);
@@ -6110,6 +6149,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
     if (kind === 'entity-target-label-show') {
       return void this._setTargetLabelShow({ type: 'entity', index: Number(target.dataset.index) }, value);
+    }
+
+    if (kind === 'entity-target-label-decimal') {
+      return void this._setTargetLabelDecimal({ type: 'entity', index: Number(target.dataset.index) }, value);
     }
 
     if (kind === 'entity-target-above-fill-enabled') {

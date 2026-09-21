@@ -1270,3 +1270,101 @@ test('presentation update path keeps target recovery and peak maximum intact', a
     peakLeft: '80%',
   });
 });
+
+test('target label precision override stays separate from primary precision', async ({ page }) => {
+  await page.goto('/tests/visual/fixtures/harness.html');
+  const result = await page.evaluate(async () => {
+    const card = await window.__sbcpRenderCard({
+      width: 320,
+      config: {
+        type: 'custom:sensor-bar-card-plus',
+        layout: { label: { position: 'off' } },
+        formatting: { decimal: 2 },
+        scale: { min: { fixed: 0 }, max: { fixed: 100 } },
+        target: {
+          at: { entity: 'sensor.precision_target' },
+          label: { show: true, decimal: 1 },
+        },
+        peak: { enabled: true },
+        entities: [{ entity: 'sensor.precision_value' }],
+      },
+      states: {
+        'sensor.precision_value': window.__sbcpCreateState(42, {
+          friendly_name: 'Precision value',
+          unit_of_measurement: 'W',
+        }),
+        'sensor.precision_target': window.__sbcpCreateState(55.25, {
+          friendly_name: 'Precision target',
+          unit_of_measurement: 'W',
+        }),
+      },
+    });
+
+    const waitForUpdate = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const readPresentation = () => {
+      const row = card.shadowRoot.querySelector('.row[data-entity="sensor.precision_value"]');
+      return {
+        value: row.querySelector('.value-right-number')?.textContent || '',
+        target: row.querySelector('.target-value-label')?.textContent || '',
+        targetDisplay: row.querySelector('.target-marker')?.style.display || '',
+        targetLeft: row.querySelector('.target-marker')?.style.left || '',
+        peakLeft: row.querySelector('.peak-marker')?.style.left || '',
+      };
+    };
+
+    const initial = readPresentation();
+    card.hass = {
+      states: {
+        'sensor.precision_value': window.__sbcpCreateState(42, {
+          friendly_name: 'Precision value',
+          unit_of_measurement: 'W',
+        }),
+        'sensor.precision_target': window.__sbcpCreateState('unavailable', {
+          friendly_name: 'Precision target',
+          unit_of_measurement: 'W',
+        }),
+      },
+    };
+    await waitForUpdate();
+    const unavailable = readPresentation();
+
+    card.hass = {
+      states: {
+        'sensor.precision_value': window.__sbcpCreateState(42, {
+          friendly_name: 'Precision value',
+          unit_of_measurement: 'W',
+        }),
+        'sensor.precision_target': window.__sbcpCreateState(55.25, {
+          friendly_name: 'Precision target',
+          unit_of_measurement: 'W',
+        }),
+      },
+    };
+    await waitForUpdate();
+    const recovered = readPresentation();
+
+    return { initial, unavailable, recovered };
+  });
+
+  expect(result.initial).toEqual({
+    value: '42.00',
+    target: '55.3 W',
+    targetDisplay: '',
+    targetLeft: '55.25%',
+    peakLeft: '42%',
+  });
+  expect(result.unavailable).toEqual({
+    value: '42.00',
+    target: '55.3 W',
+    targetDisplay: 'none',
+    targetLeft: '55.25%',
+    peakLeft: '42%',
+  });
+  expect(result.recovered).toEqual({
+    value: '42.00',
+    target: '55.3 W',
+    targetDisplay: '',
+    targetLeft: '55.25%',
+    peakLeft: '42%',
+  });
+});

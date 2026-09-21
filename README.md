@@ -922,9 +922,22 @@ target:
 
 ### Target value label
 
-Set `target.label.show: true` to render the numeric target below the marker. The label is clamped so it stays inside the track area near the edges and follows dynamic target changes smoothly.
+Set `target.label.show: true` to render the numeric target below the marker. The label is clamped so it stays inside the track area near the edges and follows dynamic target changes smoothly. By default it inherits `formatting.decimal`; use `target.label.decimal` to override the displayed target-label precision only.
 
 ![Target value label](images/target-value-label.png)
+
+```yaml
+formatting:
+  decimal: 2
+target:
+  at:
+    fixed: 55
+  label:
+    show: true
+    decimal: 1
+```
+
+With this configuration, a current value of `42` displays as `42.00` while the target label displays as `55.0`.
 
 ### Peak marker example
 
@@ -1560,7 +1573,8 @@ target
 │   └── entity
 ├── color
 ├── label
-│   └── show
+│   ├── show
+│   └── decimal
 └── when_exceeded
     └── fill_color
 
@@ -1611,6 +1625,7 @@ formatting
 | `target.at.entity` | `null` | entity id | Dynamic target entity. |
 | `target.color` | `#888888` | CSS color | Target marker color. |
 | `target.label.show` | `false` | boolean | Shows a numeric target value label. |
+| `target.label.decimal` | inherited | number | Overrides the displayed target-label precision only; omitted values inherit `formatting.decimal`. |
 | `target.when_exceeded.fill_color` | `null` | CSS color | Semantic fill color for the part of the fill beyond the target. |
 | `baseline.enabled` | auto | `true`, `false`, omitted | Controls baseline behavior. Omitted means automatic based on configured baseline source. |
 | `baseline.at.fixed` | `null` | number | Fixed baseline value. |

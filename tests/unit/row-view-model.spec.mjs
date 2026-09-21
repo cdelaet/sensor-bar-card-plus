@@ -161,10 +161,10 @@ describe('buildRowViewModel', () => {
       },
     };
     const entityConfig = createNormalizedEntity({
-      decimal: 1,
+      formatting: { decimal: 2 },
       min: 0,
       max: 100,
-      target: { at: { fixed: 55.25 }, label: { show: true } },
+      target: { at: { fixed: 55.25 }, label: { show: true, decimal: 1 } },
       entities: [{ entity: 'sensor.power' }],
     });
 
@@ -179,6 +179,7 @@ describe('buildRowViewModel', () => {
     expect(row.target).toBe(55.25);
     expect(row.targetPercent).toBe(55.25);
     expect(row.targetVisible).toBe(true);
+    expect(normalizeDecimalString(row.displayValue)).toBe('42.50');
     expect(normalizeDecimalString(row.targetDisplay)).toBe('55.3 kW');
     expect(row.targetPresentation).toEqual({
       value: 55.25,
@@ -188,17 +189,46 @@ describe('buildRowViewModel', () => {
     });
   });
 
+  it('inherits primary precision for target and peak presentations when no override is set', () => {
+    const hass = {
+      states: {
+        'sensor.power': sensor(42, { unit_of_measurement: 'kW' }),
+      },
+    };
+    const entityConfig = createNormalizedEntity({
+      formatting: { decimal: 2 },
+      min: 0,
+      max: 100,
+      target: { at: { fixed: 55 }, label: { show: true } },
+      peak: { enabled: true },
+      entities: [{ entity: 'sensor.power' }],
+    });
+
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      peaks: { 'sensor.power': 48 },
+    });
+
+    expect(row.primaryPresentation.text).toBe('42.00 kW');
+    expect(row.targetPresentation.text).toBe('55.00 kW');
+    expect(row.peakPresentation.text).toBe('48.00 kW');
+  });
+
   it('resolves dynamic target entities', () => {
     const hass = {
       states: {
         'sensor.power': sensor(42),
-        'sensor.target': sensor(75),
+        'sensor.target': sensor(75.6),
       },
     };
     const entityConfig = createNormalizedEntity({
       min: 0,
       max: 100,
-      target_entity: 'sensor.target',
+      formatting: { decimal: 1 },
+      target: { at: { entity: 'sensor.target' }, label: { decimal: 0 } },
       entities: [{ entity: 'sensor.power' }],
     });
 
@@ -210,9 +240,93 @@ describe('buildRowViewModel', () => {
       peaks: {},
     });
 
-    expect(row.target).toBe(75);
-    expect(row.targetPercent).toBe(75);
+    expect(row.target).toBe(75.6);
+    expect(row.targetPercent).toBe(75.6);
     expect(row.targetVisible).toBe(true);
+    expect(row.displayValue).toBe('42.0');
+    expect(row.targetDisplay).toBe('76 W');
+  });
+
+  it('keeps percentage target calculations unchanged by target label precision', () => {
+    const hass = {
+      states: {
+        'sensor.power': sensor(42),
+      },
+    };
+    const entityConfig = createNormalizedEntity({
+      formatting: { decimal: 2 },
+      min: 0,
+      max: 100,
+      target: { at: '55.25%', label: { decimal: 1 } },
+      entities: [{ entity: 'sensor.power' }],
+    });
+
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      peaks: {},
+    });
+
+    expect(row.target).toBe(55.25);
+    expect(row.targetPercent).toBe(55.25);
+    expect(row.targetDisplay).toBe('55.3 W');
+  });
+
+  it.each([
+    [-42.567, '-42.57 W'],
+    [0, '0.00 W'],
+  ])('formats %s target labels with the explicit fixed precision', (target, expectedDisplay) => {
+    const hass = {
+      states: {
+        'sensor.power': sensor(42),
+      },
+    };
+    const entityConfig = createNormalizedEntity({
+      formatting: { decimal: 2 },
+      min: -100,
+      max: 100,
+      target: { at: { fixed: target }, label: { decimal: 2 } },
+      entities: [{ entity: 'sensor.power' }],
+    });
+
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      peaks: {},
+    });
+
+    expect(row.target).toBe(target);
+    expect(row.targetDisplay).toBe(expectedDisplay);
+  });
+
+  it('preserves unavailable dynamic targets without changing primary presentation', () => {
+    const hass = {
+      states: {
+        'sensor.power': sensor(42),
+        'sensor.target': sensor('unavailable'),
+      },
+    };
+    const entityConfig = createNormalizedEntity({
+      formatting: { decimal: 2 },
+      target: { at: { entity: 'sensor.target' }, label: { decimal: 1 } },
+      entities: [{ entity: 'sensor.power' }],
+    });
+
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      peaks: {},
+    });
+
+    expect(row.target).toBeNull();
+    expect(row.targetPresentation).toBeNull();
+    expect(row.primaryPresentation.text).toBe('42.00 W');
   });
 
   it('applies fixed precision consistently to primary, target, and peak presentations', () => {
@@ -258,6 +372,35 @@ describe('buildRowViewModel', () => {
       unit: 'kWh',
       text: '42.50 kWh',
     });
+  });
+
+  it('allows an entity target-label precision override to inherit the card target', () => {
+    const hass = {
+      states: {
+        'sensor.power': sensor(42),
+      },
+    };
+    const entityConfig = createNormalizedEntity({
+      formatting: { decimal: 2 },
+      target: { at: { fixed: 55 }, label: { show: true } },
+      entities: [{
+        entity: 'sensor.power',
+        target: { label: { decimal: 1 } },
+      }],
+    });
+
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      peaks: {},
+    });
+
+    expect(row.target).toBe(55);
+    expect(row.targetPercent).toBeCloseTo(55);
+    expect(row.primaryPresentation.text).toBe('42.00 W');
+    expect(row.targetPresentation.text).toBe('55.0 W');
   });
 
   it('applies fixed precision through structured card and entity formatting inheritance', () => {

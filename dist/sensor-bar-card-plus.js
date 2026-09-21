@@ -420,7 +420,7 @@
     };
   }
   function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I;
     const cardTarget = cardConfig == null ? void 0 : cardConfig.target_marker;
     const rawTarget = entityConfig == null ? void 0 : entityConfig.target;
     const legacyCardTarget = (cardConfig == null ? void 0 : cardConfig.target) && typeof cardConfig.target === "object" && !Array.isArray(cardConfig.target) ? null : (_a = cardConfig == null ? void 0 : cardConfig.target) != null ? _a : null;
@@ -428,25 +428,36 @@
       enabled: null,
       source: normalizeResolvableValue(null, null),
       color: (_b = cardConfig == null ? void 0 : cardConfig.target_color) != null ? _b : "#888",
-      show_label: (_c = cardConfig == null ? void 0 : cardConfig.show_target_label) != null ? _c : false
+      show_label: (_c = cardConfig == null ? void 0 : cardConfig.show_target_label) != null ? _c : false,
+      label_decimal: (_f = (_e = (_d = cardConfig == null ? void 0 : cardConfig.target) == null ? void 0 : _d.label) == null ? void 0 : _e.decimal) != null ? _f : null
     };
     if (rawTarget && typeof rawTarget === "object" && !Array.isArray(rawTarget)) {
-      return {
-        enabled: (_e = (_d = normalizeOptionalEnabled(rawTarget.enabled)) != null ? _d : inheritedTarget.enabled) != null ? _e : null,
+      const normalizedTarget2 = {
+        enabled: (_h = (_g = normalizeOptionalEnabled(rawTarget.enabled)) != null ? _g : inheritedTarget.enabled) != null ? _h : null,
         source: normalizeStructuredResolvableValue(rawTarget.at, inheritedTarget.source, null, { allowPercent: true }),
-        color: (_g = (_f = rawTarget.color) != null ? _f : entityConfig.target_color) != null ? _g : inheritedTarget.color,
-        show_label: (_j = (_i = (_h = rawTarget.label) == null ? void 0 : _h.show) != null ? _i : entityConfig.show_target_label) != null ? _j : inheritedTarget.show_label
+        color: (_j = (_i = rawTarget.color) != null ? _i : entityConfig.target_color) != null ? _j : inheritedTarget.color,
+        show_label: (_m = (_l = (_k = rawTarget.label) == null ? void 0 : _k.show) != null ? _l : entityConfig.show_target_label) != null ? _m : inheritedTarget.show_label
       };
+      const labelDecimal2 = (_p = (_o = (_n = rawTarget.label) == null ? void 0 : _n.decimal) != null ? _o : inheritedTarget.label_decimal) != null ? _p : null;
+      if (labelDecimal2 !== null && labelDecimal2 !== void 0) {
+        normalizedTarget2.label_decimal = labelDecimal2;
+      }
+      return normalizedTarget2;
     }
-    const value = (_o = (_n = (_l = entityConfig.target) != null ? _l : (_k = inheritedTarget.source) == null ? void 0 : _k.fixed) != null ? _n : (_m = inheritedTarget.source) == null ? void 0 : _m.value) != null ? _o : legacyCardTarget;
-    const entity = (_s = (_r = (_q = entityConfig.target_entity) != null ? _q : (_p = inheritedTarget.source) == null ? void 0 : _p.entity) != null ? _r : cardConfig == null ? void 0 : cardConfig.target_entity) != null ? _s : null;
-    const percent = entityConfig.target === void 0 && entityConfig.target_entity === void 0 ? (_u = (_t = inheritedTarget.source) == null ? void 0 : _t.percent) != null ? _u : null : null;
-    return {
-      enabled: (_v = inheritedTarget.enabled) != null ? _v : null,
+    const value = (_u = (_t = (_r = entityConfig.target) != null ? _r : (_q = inheritedTarget.source) == null ? void 0 : _q.fixed) != null ? _t : (_s = inheritedTarget.source) == null ? void 0 : _s.value) != null ? _u : legacyCardTarget;
+    const entity = (_y = (_x = (_w = entityConfig.target_entity) != null ? _w : (_v = inheritedTarget.source) == null ? void 0 : _v.entity) != null ? _x : cardConfig == null ? void 0 : cardConfig.target_entity) != null ? _y : null;
+    const percent = entityConfig.target === void 0 && entityConfig.target_entity === void 0 ? (_A = (_z = inheritedTarget.source) == null ? void 0 : _z.percent) != null ? _A : null : null;
+    const normalizedTarget = {
+      enabled: (_B = inheritedTarget.enabled) != null ? _B : null,
       source: normalizeResolvableValue(value, entity, percent),
-      color: (_y = (_x = (_w = entityConfig.target_color) != null ? _w : inheritedTarget.color) != null ? _x : cardConfig == null ? void 0 : cardConfig.target_color) != null ? _y : "#888",
-      show_label: (_B = (_A = (_z = entityConfig.show_target_label) != null ? _z : inheritedTarget.show_label) != null ? _A : cardConfig == null ? void 0 : cardConfig.show_target_label) != null ? _B : false
+      color: (_E = (_D = (_C = entityConfig.target_color) != null ? _C : inheritedTarget.color) != null ? _D : cardConfig == null ? void 0 : cardConfig.target_color) != null ? _E : "#888",
+      show_label: (_H = (_G = (_F = entityConfig.show_target_label) != null ? _F : inheritedTarget.show_label) != null ? _G : cardConfig == null ? void 0 : cardConfig.show_target_label) != null ? _H : false
     };
+    const labelDecimal = (_I = inheritedTarget.label_decimal) != null ? _I : null;
+    if (labelDecimal !== null && labelDecimal !== void 0) {
+      normalizedTarget.label_decimal = labelDecimal;
+    }
+    return normalizedTarget;
   }
   function normalizePeakMarkerConfig(entityConfig, cardConfig) {
     var _a, _b, _c, _d, _e, _f, _g, _h;
@@ -934,7 +945,7 @@
     };
   }
   function buildRowViewModel(options) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O;
     const {
       hass,
       cardConfig,
@@ -960,8 +971,9 @@
     const targetValue = ((_k = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _k.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_l = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _l.source, safeMin, safeMax);
     const targetPercent = targetValue !== null ? toScalePct(targetValue, safeMin, safeMax) : null;
     const targetVisible = targetValue !== null;
-    const targetPresentation = targetValue !== null ? createNumericPresentation(targetValue, targetUnit, decimal) : null;
-    const baselineValue = ((_m = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _m.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_n = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _n.at, safeMin, safeMax);
+    const targetDecimal = (_n = (_m = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _m.label_decimal) != null ? _n : decimal;
+    const targetPresentation = targetValue !== null ? createNumericPresentation(targetValue, targetUnit, targetDecimal) : null;
+    const baselineValue = ((_o = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _o.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_p = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _p.at, safeMin, safeMax);
     const baselinePercent = Number.isFinite(baselineValue) ? toScalePct(baselineValue, safeMin, safeMax) : null;
     const baselineVisible = Number.isFinite(baselineValue);
     const peakState = getPeakState(
@@ -970,13 +982,13 @@
       safeMin,
       safeMax,
       peaks,
-      ((_o = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _o.show) === true
+      ((_q = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _q.show) === true
     );
     const peakPresentation = peakState.visible ? createNumericPresentation(peakState.value, displayUnit, decimal) : null;
     return {
       entityId,
-      name: (_r = (_q = entityConfig == null ? void 0 : entityConfig.name) != null ? _q : (_p = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _p.friendly_name) != null ? _r : entityId,
-      icon: (entityConfig == null ? void 0 : entityConfig.icon) === false ? false : (_u = (_t = entityConfig == null ? void 0 : entityConfig.icon) != null ? _t : (_s = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _s.icon) != null ? _u : getDefaultEntityIcon(entityState, entityId),
+      name: (_t = (_s = entityConfig == null ? void 0 : entityConfig.name) != null ? _s : (_r = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _r.friendly_name) != null ? _t : entityId,
+      icon: (entityConfig == null ? void 0 : entityConfig.icon) === false ? false : (_w = (_v = entityConfig == null ? void 0 : entityConfig.icon) != null ? _v : (_u = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _u.icon) != null ? _w : getDefaultEntityIcon(entityState, entityId),
       state: rawState,
       numericValue,
       rawUnit,
@@ -987,11 +999,11 @@
       displayUnit: primaryPresentation.unit,
       primaryPresentation,
       unit: primaryPresentation.unit,
-      barColor: (_w = (_v = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _v.color) != null ? _w : null,
-      fillStyle: (_y = (_x = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _x.fill_style) != null ? _y : null,
+      barColor: (_y = (_x = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _x.color) != null ? _y : null,
+      fillStyle: (_A = (_z = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _z.fill_style) != null ? _A : null,
       target: targetValue,
       targetPercent,
-      targetDisplay: (_z = targetPresentation == null ? void 0 : targetPresentation.text) != null ? _z : null,
+      targetDisplay: (_B = targetPresentation == null ? void 0 : targetPresentation.text) != null ? _B : null,
       targetPresentation,
       targetVisible,
       baseline: baselineValue,
@@ -999,21 +1011,21 @@
       baselineVisible,
       peak: peakState.value,
       peakPercent: peakState.percent,
-      peakDisplay: (_A = peakPresentation == null ? void 0 : peakPresentation.number) != null ? _A : null,
+      peakDisplay: (_C = peakPresentation == null ? void 0 : peakPresentation.number) != null ? _C : null,
       peakPresentation,
       peakVisible: peakState.visible,
-      segments: (_C = (_B = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _B.segments) != null ? _C : null,
-      gradientStops: (_E = (_D = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _D.gradient_stops) != null ? _E : null,
+      segments: (_E = (_D = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _D.segments) != null ? _E : null,
+      gradientStops: (_G = (_F = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _F.gradient_stops) != null ? _G : null,
       needle: getNeedleState(entityConfig, numericValue, safeMin, safeMax, baselinePercent),
       classes: {
-        labelPosition: (_H = (_G = (_F = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _F.label) == null ? void 0 : _G.position) != null ? _H : "left",
-        animated: ((_I = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _I.animated) !== false
+        labelPosition: (_J = (_I = (_H = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _H.label) == null ? void 0 : _I.position) != null ? _J : "left",
+        animated: ((_K = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _K.animated) !== false
       },
       attributes: {
         entity: entityId,
-        baseHeight: (_K = (_J = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _J.height) != null ? _K : 38,
-        heightExplicit: ((_L = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _L.height_explicit) === true,
-        barAnimated: ((_M = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _M.animated) !== false
+        baseHeight: (_M = (_L = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _L.height) != null ? _M : 38,
+        heightExplicit: ((_N = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _N.height_explicit) === true,
+        barAnimated: ((_O = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _O.animated) !== false
       }
     };
   }
@@ -4679,7 +4691,7 @@ ${paintLayers}
           return nextTarget;
         }
         _cleanupTargetForEmit(target) {
-          var _a, _b;
+          var _a, _b, _c;
           if (!this._isObject(target) || !this._isObject(target.target)) {
             return target;
           }
@@ -4688,7 +4700,8 @@ ${paintLayers}
           const cleanedAt = this._cleanupResolvableValueForEmit(nextMarker.at);
           const color = this._normalizeTextValue(nextMarker.color).trim();
           const labelShow = ((_a = nextMarker.label) == null ? void 0 : _a.show) === true;
-          const fillColor = this._normalizeTextValue((_b = nextMarker.when_exceeded) == null ? void 0 : _b.fill_color).trim();
+          const labelDecimal = this._normalizeDecimalValue((_b = nextMarker.label) == null ? void 0 : _b.decimal);
+          const fillColor = this._normalizeTextValue((_c = nextMarker.when_exceeded) == null ? void 0 : _c.fill_color).trim();
           if (typeof nextMarker.enabled !== "boolean") {
             delete nextMarker.enabled;
           }
@@ -4704,8 +4717,10 @@ ${paintLayers}
           } else {
             delete nextMarker.color;
           }
-          if (labelShow) {
-            nextMarker.label = { ...this._isObject(nextMarker.label) ? nextMarker.label : {}, show: true };
+          if (labelShow || labelDecimal !== null) {
+            nextMarker.label = {};
+            if (labelShow) nextMarker.label.show = true;
+            if (labelDecimal !== null) nextMarker.label.decimal = labelDecimal;
             delete nextTarget.show_target_label;
           } else {
             delete nextMarker.label;
@@ -4847,7 +4862,7 @@ ${paintLayers}
             case "target":
               return ["enabled", "at", "color", "label", "when_exceeded"];
             case "target.label":
-              return ["show"];
+              return ["show", "decimal"];
             case "target.when_exceeded":
               return ["fill_color"];
             case "baseline":
@@ -6899,6 +6914,7 @@ ${paintLayers}
               nextTarget = this._deletePathValue(nextTarget, ["target", "at"]);
               nextTarget = this._deletePathValue(nextTarget, ["target", "color"]);
               nextTarget = this._deletePathValue(nextTarget, ["target", "label", "show"]);
+              nextTarget = this._deletePathValue(nextTarget, ["target", "label", "decimal"]);
               nextTarget = this._deletePathValue(nextTarget, ["target", "when_exceeded", "fill_color"]);
             } else {
               nextTarget = this._deletePathValue(nextTarget, ["target"]);
@@ -6967,6 +6983,27 @@ ${paintLayers}
           }
           return this._setCanonicalScopedValue(scope, ["target", "label", "show"], true, {
             deprecatedKeys: [["show_target_label"]],
+            prunePaths: [["target", "label"], ["target"]]
+          });
+        }
+        _getTargetLabelDecimalValue(scope) {
+          var _a;
+          return (_a = this._getScopedValue(scope, ["target", "label", "decimal"])) != null ? _a : "";
+        }
+        _getEffectiveTargetLabelDecimalValue(scope) {
+          return this._getEffectiveScopedDisplayValue(scope, ["target", "label", "decimal"]);
+        }
+        _setTargetLabelDecimal(scope, rawValue) {
+          const normalizedValue = this._normalizeDecimalValue(rawValue);
+          if (rawValue === "" || rawValue === null || rawValue === void 0) {
+            return this._removeCanonicalScopedValue(scope, ["target", "label", "decimal"], {
+              prunePaths: [["target", "label"], ["target"]]
+            });
+          }
+          if (normalizedValue === null) {
+            return false;
+          }
+          return this._setCanonicalScopedValue(scope, ["target", "label", "decimal"], normalizedValue, {
             prunePaths: [["target", "label"], ["target"]]
           });
         }
@@ -7076,7 +7113,7 @@ ${paintLayers}
           return ["target_entity", "target_color", "show_target_label", "above_target_color"].some((key) => {
             const value = this._getScopedValue(scope, [key]);
             return value !== void 0 && value !== null && value !== "" && value !== false;
-          });
+          }) || this._getTargetLabelDecimalValue(scope) !== "";
         }
         _getBaselineResolvableValue(scope) {
           return this._getResolvableScopedValue(scope, "baseline", {
@@ -7307,6 +7344,8 @@ ${paintLayers}
           if (target.entity) parts.push("Entity");
           if (this._hasCustomTargetColor(scope)) parts.push("Custom color");
           if (this._getTargetLabelShowValue(scope)) parts.push("Label");
+          const labelDecimal = this._getTargetLabelDecimalValue(scope);
+          if (labelDecimal !== "") parts.push(`Label ${labelDecimal} ${Number(labelDecimal) === 1 ? "decimal" : "decimals"}`);
           if (this._getTargetAboveFillColorValue(scope)) parts.push("Above");
           return parts.length ? parts.join(" \u2022 ") : "Inherited";
         }
@@ -7610,6 +7649,7 @@ ${paintLayers}
             const targetMode = this._getTargetMode({ type: "card" });
             const targetColor = this._getTargetColorValue({ type: "card" });
             const targetLabelShow = this._getTargetLabelShowValue({ type: "card" });
+            const targetLabelDecimal = this._getTargetLabelDecimalValue({ type: "card" });
             const targetAboveFillColor = this._getTargetAboveFillColorValue({ type: "card" });
             const formattingUnit = this._getScopedFormattingValue({ type: "card" }, "unit");
             const formattingDecimal = this._getScopedFormattingValue({ type: "card" }, "decimal");
@@ -8594,6 +8634,10 @@ ${paintLayers}
                           <label for="entity-${index}-target-label-show">Show target label</label>
                         </div>
                       </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-target-label-decimal">Target label decimals</label>
+                        <input id="entity-${index}-target-label-decimal" type="number" min="0" step="1" data-kind="entity-target-label-decimal" data-index="${index}" value="${this._escapeAttribute(this._getEffectiveTargetLabelDecimalValue(scope))}" placeholder="inherit primary decimals">
+                      </div>
 	                      <div class="field-row">
 	                        <div class="toggle">
 	                          <input id="entity-${index}-target-above-fill-enabled" type="checkbox" data-kind="entity-target-above-fill-enabled" data-index="${index}"${this._isTargetAboveFillEnabled(scope) ? " checked" : ""}>
@@ -8697,6 +8741,10 @@ ${paintLayers}
                 <input id="target-label-show" type="checkbox" data-field="target-label-show"${targetLabelShow ? " checked" : ""}>
                 <label for="target-label-show">Show target label</label>
               </div>
+            </div>
+            <div class="field-row">
+              <label for="target-label-decimal">Target label decimals</label>
+              <input id="target-label-decimal" type="number" min="0" step="1" data-field="target-label-decimal" value="${this._escapeAttribute(targetLabelDecimal)}" placeholder="inherit primary decimals">
             </div>
             <div class="field-row">
               <div class="toggle">
@@ -9385,6 +9433,7 @@ ${paintLayers}
           }
           if (field === "target-color") return void this._setTargetColor({ type: "card" }, value);
           if (field === "target-label-show") return void this._setTargetLabelShow({ type: "card" }, value);
+          if (field === "target-label-decimal") return void this._setTargetLabelDecimal({ type: "card" }, value);
           if (field === "target-above-fill-enabled") return void this._setTargetAboveFillEnabled({ type: "card" }, value);
           if (field === "target-above-fill-color") return void this._setTargetAboveFillColor({ type: "card" }, value);
           if (field === "peak-show") return void this._setPeakShow(value);
@@ -9567,6 +9616,9 @@ ${paintLayers}
           }
           if (kind === "entity-target-label-show") {
             return void this._setTargetLabelShow({ type: "entity", index: Number(target.dataset.index) }, value);
+          }
+          if (kind === "entity-target-label-decimal") {
+            return void this._setTargetLabelDecimal({ type: "entity", index: Number(target.dataset.index) }, value);
           }
           if (kind === "entity-target-above-fill-enabled") {
             return void this._setTargetAboveFillEnabled({ type: "entity", index: Number(target.dataset.index) }, value);
