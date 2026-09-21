@@ -34,6 +34,10 @@ import {
 } from '../config/resolve.js';
 import { validateNormalizedConfig } from '../config/validate.js';
 import { buildRowViewModel } from '../view-model/row-view-model.js';
+import {
+  buildMarkerModels,
+  getMarkerLaneOccupancy,
+} from '../view-model/marker-view-model.js';
 import { escapeHtml } from '../utils/dom.js';
 import {
   formatDisplayWithUnit,
@@ -1124,6 +1128,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           --sbcp-value-width: 60px;
           --sbcp-bar-min-width: 56px;
           --sbcp-target-label-font-size: 12px;
+          --sbcp-marker-lane-size: 18px;
           --sbcp-inline-label-padding-x: 8px;
           --sbcp-inline-label-padding-y: 2px;
           --sbcp-inline-label-font-size: 12px;
@@ -1221,6 +1226,12 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           align-items: center;
           gap: var(--sbcp-main-gap);
           min-width: 0;
+        }
+        .main-line[data-marker-lane-above="true"] {
+          margin-top: var(--sbcp-marker-lane-size);
+        }
+        .main-line[data-marker-lane-below="true"] {
+          margin-bottom: var(--sbcp-marker-lane-size);
         }
         .main-line[data-row-density="tight"] {
           gap: calc(var(--sbcp-main-gap) - 1px);
@@ -3197,6 +3208,85 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     return `<span class="inside-value-text ${unitModeClass}"><span class="inside-number">${escapedDisplay}</span><span class="inside-unit">${escapedUnit}</span></span>`;
   }
 
+  _getRowMarkerModels(rowViewModel, ecfg, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor) {
+    if (rowViewModel?.markers) {
+      return rowViewModel.markers.map((marker) => {
+        if (marker.type === 'target') {
+          return {
+            ...marker,
+            position: targetPct === undefined ? marker.position : targetPct,
+            visible: targetPct !== null && targetPct !== undefined,
+            color: targetColor || marker.color,
+            label: targetDisplay === null ? null : { text: targetDisplay },
+          };
+        }
+        return {
+          ...marker,
+          position: peakPct === undefined ? marker.position : peakPct,
+          visible: peakPct !== null && peakPct !== undefined && ecfg.peak_marker.show === true,
+          color: peakColor || marker.color,
+          label: peakDisplay === null ? null : { number: peakDisplay },
+        };
+      });
+    }
+    const markers = buildMarkerModels({
+      entityConfig: ecfg,
+      targetPosition: targetPct,
+      targetPresentation: targetDisplay === null ? null : { text: targetDisplay },
+      targetVisible: Number.isFinite(targetPct),
+      peakPosition: peakPct,
+      peakPresentation: peakDisplay === null ? null : { number: peakDisplay },
+      peakVisible: Number.isFinite(peakPct),
+    });
+    const targetMarker = this._getMarkerModel(markers, 'target');
+    const peakMarker = this._getMarkerModel(markers, 'peak');
+    if (targetMarker && targetColor) targetMarker.color = targetColor;
+    if (peakMarker && peakColor) peakMarker.color = peakColor;
+    return markers;
+  }
+
+  _getMarkerModel(markers, type) {
+    return markers.find((marker) => marker.type === type) ?? null;
+  }
+
+  _renderMarker(marker) {
+    if (!marker || (marker.type === 'peak' && !marker.visible)) return '';
+    const position = Number.isFinite(marker.position) ? marker.position : 0;
+    const color = marker.color ?? '#888888';
+    const contrastColor = this._getMarkerContrastColor(color);
+    const display = marker.visible ? '' : 'none';
+
+    if (marker.type === 'target') {
+      return `
+      <div class="target-marker" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+        <div class="target-inset"></div>
+        <div class="target-outset"></div>
+      </div>`;
+    }
+
+    return `
+      <div class="peak-marker" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};">
+        <div class="peak-outset"></div>
+        <div class="peak-inset"></div>
+      </div>`;
+  }
+
+  _patchMarker(markerEl, marker) {
+    if (!markerEl || !marker) return;
+    if (marker.type === 'peak' && !marker.visible) return;
+
+    if (marker.type === 'target') {
+      this._setStyleIfChanged(markerEl, 'display', marker.visible ? '' : 'none');
+    }
+    if (marker.visible && Number.isFinite(marker.position)) {
+      this._setStyleIfChanged(markerEl, 'left', `${marker.position}%`);
+    }
+    if (marker.color) {
+      this._setStyleIfChanged(markerEl, '--marker-color', marker.color);
+      this._setStyleIfChanged(markerEl, '--marker-contrast-color', this._getMarkerContrastColor(marker.color));
+    }
+  }
+
   _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
     const ecfg = this._resolve(entityCfg);
     const stateObj = this._hass?.states?.[entityCfg.entity] ?? null;
@@ -3211,8 +3301,6 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       : null;
     const layout = ecfg.layout;
     const bar = ecfg.bar;
-    const targetMarkerCfg = ecfg.target_marker;
-    const peakMarkerCfg = ecfg.peak_marker;
     const safeMin = Number.isFinite(minValue) ? minValue : 0;
     const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
     const baselinePct = rowViewModel?.baselinePercent ?? this._resolveBaselinePct(ecfg, safeMin, safeMax);
@@ -3224,31 +3312,19 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       ?? entityCfg.entity;
     const escapedEntityId = escapeHtml(rowViewModel?.entityId ?? entityCfg.entity);
     const escapedName = escapeHtml(name);
-    const targetEnabled = targetMarkerCfg?.enabled !== false;
-    const peakMarkerColor = peakColor || '#888';
-    const targetMarkerColor = targetColor || '#888';
-    const peakContrastColor = this._getMarkerContrastColor(peakMarkerColor);
-    const targetContrastColor = this._getMarkerContrastColor(targetMarkerColor);
+    const markerModels = this._getRowMarkerModels(rowViewModel, ecfg, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor);
+    const targetMarkerModel = this._getMarkerModel(markerModels, 'target');
+    const peakMarkerModel = this._getMarkerModel(markerModels, 'peak');
+    const markerLaneOccupancy = rowViewModel?.markerLaneOccupancy ?? getMarkerLaneOccupancy(ecfg);
     const rawValue = rowViewModel?.numericValue ?? this._getFiniteNumber(stateDisplay);
     const needleState = rowViewModel?.needle ?? this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
     const fillState = this._getFillRenderState(pct, 'var(--sbcp-row-height)', ecfg, color, targetPct, baselinePct, safeMin, safeMax, needleState.show);
 
-    // Peak marker — chevron top, line full height, configurable colour
-    const peakMarker = peakMarkerCfg.show && peakPct !== null ? `
-      <div class="peak-marker" style="left:${peakPct}%;--marker-color:${peakMarkerColor};--marker-contrast-color:${peakContrastColor};">
-        <div class="peak-outset"></div>
-        <div class="peak-inset"></div>
-      </div>` : '';
-
-    // Target marker — same but chevron at bottom pointing up
-    const targetMarker = `
-      <div class="target-marker" style="left:${targetPct !== null ? targetPct : 0}%;--marker-color:${targetMarkerColor};--marker-contrast-color:${targetContrastColor};display:${targetPct !== null ? '' : 'none'};">
-        <div class="target-inset"></div>
-        <div class="target-outset"></div>
-      </div>`;
-    const targetValueLabel = targetEnabled && targetMarkerCfg.show_label ? `
-      <div class="target-value-label" style="left:${targetPct !== null ? targetPct : 0}%;">
-        ${targetDisplay !== null ? escapeHtml(targetDisplay) : ''}
+    const peakMarker = this._renderMarker(peakMarkerModel);
+    const targetMarker = this._renderMarker(targetMarkerModel);
+    const targetValueLabel = targetMarkerModel?.labelVisible ? `
+      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;">
+        ${targetMarkerModel.label?.text ? escapeHtml(targetMarkerModel.label.text) : ''}
       </div>` : '';
     const needleMarker = ecfg.bar?.needle?.show && !Number.isFinite(baselinePct) ? `
       <div class="needle-layer">
@@ -3299,7 +3375,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           ${aboveLabel}
           ${heroHeader}
           ${topRightValue}
-          <div class="main-line ${lp}-mode" style="height:${h}px;">
+          <div class="main-line ${lp}-mode" data-marker-lane-above="${markerLaneOccupancy.above ? 'true' : 'false'}" data-marker-lane-below="${markerLaneOccupancy.below ? 'true' : 'false'}" style="height:${h}px;">
             ${mainIcon}
             ${leftLabel}
             <div class="bar-wrap">
@@ -3334,7 +3410,6 @@ ${paintLayers}
     const rawVal = rowViewModel.numericValue;
     const safeMin = rowViewModel.min;
     const safeMax = rowViewModel.max;
-    const targetVal = rowViewModel.target;
     const pct = rowViewModel.percent;
     const color = this._getColor(pct, ecfg, safeMin, safeMax);
     const display = rowViewModel.primaryPresentation.number;
@@ -3421,36 +3496,20 @@ ${paintLayers}
       if (this._peaks[key] === undefined || rawVal > this._peaks[key]) {
         this._peaks[key] = rawVal;
       }
-      const peakVal = this._peaks[key];
-      const peakPct = this._toScalePct(peakVal, safeMin, safeMax);
-      const peakEl = row.querySelector('.peak-marker');
-      if (peakEl) {
-        if (Number.isFinite(peakPct)) {
-          this._setStyleIfChanged(peakEl, 'left', `${peakPct}%`);
-        }
-        this._setStyleIfChanged(peakEl, '--marker-color', ecfg.peak_marker.color);
-        this._setStyleIfChanged(peakEl, '--marker-contrast-color', this._getMarkerContrastColor(ecfg.peak_marker.color));
-      }
     }
 
     const targetEl = row.querySelector('.target-marker');
     const targetLabelEl = row.querySelector('.target-value-label');
-    if (targetVal !== null) {
-      const targetPct = rowViewModel.targetPercent;
-      if (targetEl) {
-        this._setStyleIfChanged(targetEl, 'display', '');
-        this._setStyleIfChanged(targetEl, 'left', `${targetPct}%`);
-        this._setStyleIfChanged(targetEl, '--marker-color', ecfg.target_marker.color);
-        this._setStyleIfChanged(targetEl, '--marker-contrast-color', this._getMarkerContrastColor(ecfg.target_marker.color));
+    const markerModels = rowViewModel.markers ?? [];
+    this._patchMarker(targetEl, this._getMarkerModel(markerModels, 'target'));
+    this._patchMarker(row.querySelector('.peak-marker'), this._getMarkerModel(markerModels, 'peak'));
+    const targetMarkerModel = this._getMarkerModel(markerModels, 'target');
+    if (targetLabelEl) {
+      if (targetMarkerModel?.labelVisible && targetMarkerModel.visible) {
+        this._setTextIfChanged(targetLabelEl, targetMarkerModel.label?.text ?? null);
+      } else {
+        this._setStyleIfChanged(targetLabelEl, 'visibility', 'hidden');
       }
-
-      if (targetLabelEl) {
-        this._setTextIfChanged(targetLabelEl, rowViewModel.targetPresentation?.text ?? null);
-      }
-    } else {
-      if (targetEl) this._setStyleIfChanged(targetEl, 'display', 'none');
-
-      if (targetLabelEl) this._setStyleIfChanged(targetLabelEl, 'visibility', 'hidden');
     }
   }
 

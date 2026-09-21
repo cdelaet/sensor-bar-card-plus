@@ -824,6 +824,86 @@
     }
   });
 
+  // src/view-model/marker-view-model.js
+  function hasConfiguredSource(source) {
+    if (!source) return false;
+    return source.entity !== null && source.entity !== void 0 && source.entity !== "" || source.fixed !== null && source.fixed !== void 0 && source.fixed !== "" || Number.isFinite(source.percent);
+  }
+  function createMarkerModel({
+    id,
+    type,
+    value = null,
+    position = null,
+    lane,
+    visible = false,
+    color = null,
+    label = null,
+    labelVisible = false
+  }) {
+    return {
+      id,
+      type,
+      value,
+      position,
+      lane,
+      visible: visible === true,
+      color,
+      label,
+      labelVisible: labelVisible === true
+    };
+  }
+  function getMarkerLaneOccupancy(entityConfig) {
+    const targetConfig = entityConfig == null ? void 0 : entityConfig.target_marker;
+    const peakConfig = entityConfig == null ? void 0 : entityConfig.peak_marker;
+    return {
+      above: (peakConfig == null ? void 0 : peakConfig.show) === true,
+      below: (targetConfig == null ? void 0 : targetConfig.enabled) !== false && hasConfiguredSource(targetConfig == null ? void 0 : targetConfig.source)
+    };
+  }
+  function buildMarkerModels({
+    entityConfig,
+    targetValue = null,
+    targetPosition = null,
+    targetPresentation = null,
+    targetVisible = Number.isFinite(targetPosition),
+    peakValue = null,
+    peakPosition = null,
+    peakPresentation = null,
+    peakVisible = Number.isFinite(peakPosition)
+  }) {
+    var _a, _b;
+    const targetConfig = entityConfig == null ? void 0 : entityConfig.target_marker;
+    const peakConfig = entityConfig == null ? void 0 : entityConfig.peak_marker;
+    const targetEnabled = (targetConfig == null ? void 0 : targetConfig.enabled) !== false;
+    return [
+      createMarkerModel({
+        id: "target",
+        type: "target",
+        value: targetValue,
+        position: targetPosition,
+        lane: "below",
+        visible: targetEnabled && targetVisible,
+        color: (_a = targetConfig == null ? void 0 : targetConfig.color) != null ? _a : null,
+        label: targetPresentation,
+        labelVisible: targetEnabled && (targetConfig == null ? void 0 : targetConfig.show_label) === true
+      }),
+      createMarkerModel({
+        id: "peak",
+        type: "peak",
+        value: peakValue,
+        position: peakPosition,
+        lane: "above",
+        visible: (peakConfig == null ? void 0 : peakConfig.show) === true && peakVisible,
+        color: (_b = peakConfig == null ? void 0 : peakConfig.color) != null ? _b : null,
+        label: peakPresentation
+      })
+    ];
+  }
+  var init_marker_view_model = __esm({
+    "src/view-model/marker-view-model.js"() {
+    }
+  });
+
   // src/view-model/row-view-model.js
   function getDefaultEntityIcon(stateObj, entityId = "") {
     var _a, _b, _c;
@@ -985,6 +1065,17 @@
       ((_q = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _q.show) === true
     );
     const peakPresentation = peakState.visible ? createNumericPresentation(peakState.value, displayUnit, decimal) : null;
+    const markers = buildMarkerModels({
+      entityConfig,
+      targetValue,
+      targetPosition: targetPercent,
+      targetPresentation,
+      targetVisible,
+      peakValue: peakState.value,
+      peakPosition: peakState.percent,
+      peakPresentation,
+      peakVisible: peakState.visible
+    });
     return {
       entityId,
       name: (_t = (_s = entityConfig == null ? void 0 : entityConfig.name) != null ? _s : (_r = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _r.friendly_name) != null ? _t : entityId,
@@ -1014,6 +1105,8 @@
       peakDisplay: (_C = peakPresentation == null ? void 0 : peakPresentation.number) != null ? _C : null,
       peakPresentation,
       peakVisible: peakState.visible,
+      markers,
+      markerLaneOccupancy: getMarkerLaneOccupancy(entityConfig),
       segments: (_E = (_D = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _D.segments) != null ? _E : null,
       gradientStops: (_G = (_F = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _F.gradient_stops) != null ? _G : null,
       needle: getNeedleState(entityConfig, numericValue, safeMin, safeMax, baselinePercent),
@@ -1034,6 +1127,7 @@
       init_resolve();
       init_normalize();
       init_format();
+      init_marker_view_model();
     }
   });
 
@@ -1055,6 +1149,7 @@
       init_resolve();
       init_validate();
       init_row_view_model();
+      init_marker_view_model();
       init_dom();
       init_format();
       SensorBarCard = class extends HTMLElement {
@@ -1859,6 +1954,7 @@
           --sbcp-value-width: 60px;
           --sbcp-bar-min-width: 56px;
           --sbcp-target-label-font-size: 12px;
+          --sbcp-marker-lane-size: 18px;
           --sbcp-inline-label-padding-x: 8px;
           --sbcp-inline-label-padding-y: 2px;
           --sbcp-inline-label-font-size: 12px;
@@ -1956,6 +2052,12 @@
           align-items: center;
           gap: var(--sbcp-main-gap);
           min-width: 0;
+        }
+        .main-line[data-marker-lane-above="true"] {
+          margin-top: var(--sbcp-marker-lane-size);
+        }
+        .main-line[data-marker-lane-below="true"] {
+          margin-bottom: var(--sbcp-marker-lane-size);
         }
         .main-line[data-row-density="tight"] {
           gap: calc(var(--sbcp-main-gap) - 1px);
@@ -3733,8 +3835,82 @@
           const unitModeClass = this._isTightUnit(cleanUnit) ? "tight-unit" : "has-unit";
           return `<span class="inside-value-text ${unitModeClass}"><span class="inside-number">${escapedDisplay}</span><span class="inside-unit">${escapedUnit}</span></span>`;
         }
+        _getRowMarkerModels(rowViewModel, ecfg, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor) {
+          if (rowViewModel == null ? void 0 : rowViewModel.markers) {
+            return rowViewModel.markers.map((marker) => {
+              if (marker.type === "target") {
+                return {
+                  ...marker,
+                  position: targetPct === void 0 ? marker.position : targetPct,
+                  visible: targetPct !== null && targetPct !== void 0,
+                  color: targetColor || marker.color,
+                  label: targetDisplay === null ? null : { text: targetDisplay }
+                };
+              }
+              return {
+                ...marker,
+                position: peakPct === void 0 ? marker.position : peakPct,
+                visible: peakPct !== null && peakPct !== void 0 && ecfg.peak_marker.show === true,
+                color: peakColor || marker.color,
+                label: peakDisplay === null ? null : { number: peakDisplay }
+              };
+            });
+          }
+          const markers = buildMarkerModels({
+            entityConfig: ecfg,
+            targetPosition: targetPct,
+            targetPresentation: targetDisplay === null ? null : { text: targetDisplay },
+            targetVisible: Number.isFinite(targetPct),
+            peakPosition: peakPct,
+            peakPresentation: peakDisplay === null ? null : { number: peakDisplay },
+            peakVisible: Number.isFinite(peakPct)
+          });
+          const targetMarker = this._getMarkerModel(markers, "target");
+          const peakMarker = this._getMarkerModel(markers, "peak");
+          if (targetMarker && targetColor) targetMarker.color = targetColor;
+          if (peakMarker && peakColor) peakMarker.color = peakColor;
+          return markers;
+        }
+        _getMarkerModel(markers, type) {
+          var _a;
+          return (_a = markers.find((marker) => marker.type === type)) != null ? _a : null;
+        }
+        _renderMarker(marker) {
+          var _a;
+          if (!marker || marker.type === "peak" && !marker.visible) return "";
+          const position = Number.isFinite(marker.position) ? marker.position : 0;
+          const color = (_a = marker.color) != null ? _a : "#888888";
+          const contrastColor = this._getMarkerContrastColor(color);
+          const display = marker.visible ? "" : "none";
+          if (marker.type === "target") {
+            return `
+      <div class="target-marker" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+        <div class="target-inset"></div>
+        <div class="target-outset"></div>
+      </div>`;
+          }
+          return `
+      <div class="peak-marker" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};">
+        <div class="peak-outset"></div>
+        <div class="peak-inset"></div>
+      </div>`;
+        }
+        _patchMarker(markerEl, marker) {
+          if (!markerEl || !marker) return;
+          if (marker.type === "peak" && !marker.visible) return;
+          if (marker.type === "target") {
+            this._setStyleIfChanged(markerEl, "display", marker.visible ? "" : "none");
+          }
+          if (marker.visible && Number.isFinite(marker.position)) {
+            this._setStyleIfChanged(markerEl, "left", `${marker.position}%`);
+          }
+          if (marker.color) {
+            this._setStyleIfChanged(markerEl, "--marker-color", marker.color);
+            this._setStyleIfChanged(markerEl, "--marker-contrast-color", this._getMarkerContrastColor(marker.color));
+          }
+        }
         _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
-          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w;
           const ecfg = this._resolve(entityCfg);
           const stateObj = (_c = (_b = (_a = this._hass) == null ? void 0 : _a.states) == null ? void 0 : _b[entityCfg.entity]) != null ? _c : null;
           const rowViewModel = stateObj ? buildRowViewModel({
@@ -3746,8 +3922,6 @@
           }) : null;
           const layout = ecfg.layout;
           const bar = ecfg.bar;
-          const targetMarkerCfg = ecfg.target_marker;
-          const peakMarkerCfg = ecfg.peak_marker;
           const safeMin = Number.isFinite(minValue) ? minValue : 0;
           const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
           const baselinePct = (_d = rowViewModel == null ? void 0 : rowViewModel.baselinePercent) != null ? _d : this._resolveBaselinePct(ecfg, safeMin, safeMax);
@@ -3756,31 +3930,22 @@
           const name = (_j = (_i = (_g = rowViewModel == null ? void 0 : rowViewModel.name) != null ? _g : ecfg.name) != null ? _i : (_h = stateObj == null ? void 0 : stateObj.attributes) == null ? void 0 : _h.friendly_name) != null ? _j : entityCfg.entity;
           const escapedEntityId = escapeHtml((_k = rowViewModel == null ? void 0 : rowViewModel.entityId) != null ? _k : entityCfg.entity);
           const escapedName = escapeHtml(name);
-          const targetEnabled = (targetMarkerCfg == null ? void 0 : targetMarkerCfg.enabled) !== false;
-          const peakMarkerColor = peakColor || "#888";
-          const targetMarkerColor = targetColor || "#888";
-          const peakContrastColor = this._getMarkerContrastColor(peakMarkerColor);
-          const targetContrastColor = this._getMarkerContrastColor(targetMarkerColor);
-          const rawValue = (_l = rowViewModel == null ? void 0 : rowViewModel.numericValue) != null ? _l : this._getFiniteNumber(stateDisplay);
-          const needleState = (_m = rowViewModel == null ? void 0 : rowViewModel.needle) != null ? _m : this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
+          const markerModels = this._getRowMarkerModels(rowViewModel, ecfg, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor);
+          const targetMarkerModel = this._getMarkerModel(markerModels, "target");
+          const peakMarkerModel = this._getMarkerModel(markerModels, "peak");
+          const markerLaneOccupancy = (_l = rowViewModel == null ? void 0 : rowViewModel.markerLaneOccupancy) != null ? _l : getMarkerLaneOccupancy(ecfg);
+          const rawValue = (_m = rowViewModel == null ? void 0 : rowViewModel.numericValue) != null ? _m : this._getFiniteNumber(stateDisplay);
+          const needleState = (_n = rowViewModel == null ? void 0 : rowViewModel.needle) != null ? _n : this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
           const fillState = this._getFillRenderState(pct, "var(--sbcp-row-height)", ecfg, color, targetPct, baselinePct, safeMin, safeMax, needleState.show);
-          const peakMarker = peakMarkerCfg.show && peakPct !== null ? `
-      <div class="peak-marker" style="left:${peakPct}%;--marker-color:${peakMarkerColor};--marker-contrast-color:${peakContrastColor};">
-        <div class="peak-outset"></div>
-        <div class="peak-inset"></div>
+          const peakMarker = this._renderMarker(peakMarkerModel);
+          const targetMarker = this._renderMarker(targetMarkerModel);
+          const targetValueLabel = (targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) ? `
+      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;">
+        ${((_o = targetMarkerModel.label) == null ? void 0 : _o.text) ? escapeHtml(targetMarkerModel.label.text) : ""}
       </div>` : "";
-          const targetMarker = `
-      <div class="target-marker" style="left:${targetPct !== null ? targetPct : 0}%;--marker-color:${targetMarkerColor};--marker-contrast-color:${targetContrastColor};display:${targetPct !== null ? "" : "none"};">
-        <div class="target-inset"></div>
-        <div class="target-outset"></div>
-      </div>`;
-          const targetValueLabel = targetEnabled && targetMarkerCfg.show_label ? `
-      <div class="target-value-label" style="left:${targetPct !== null ? targetPct : 0}%;">
-        ${targetDisplay !== null ? escapeHtml(targetDisplay) : ""}
-      </div>` : "";
-          const needleMarker = ((_o = (_n = ecfg.bar) == null ? void 0 : _n.needle) == null ? void 0 : _o.show) && !Number.isFinite(baselinePct) ? `
+          const needleMarker = ((_q = (_p = ecfg.bar) == null ? void 0 : _p.needle) == null ? void 0 : _q.show) && !Number.isFinite(baselinePct) ? `
       <div class="needle-layer">
-        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_p = needleState.pct) != null ? _p : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
+        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_r = needleState.pct) != null ? _r : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
       </div>` : "";
           const paintLayers = fillState.paintLayers.map((layer) => `
                   <div class="bar-paint-layer" data-layer="${layer.id}" style="z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}"></div>`).join("");
@@ -3792,7 +3957,7 @@
           ${this._formatAboveValueMarkup(stateDisplay, unit, false)}
         </div>
       </div>` : "";
-          const heroSize = (_q = layout.hero.size) != null ? _q : "small";
+          const heroSize = (_s = layout.hero.size) != null ? _s : "small";
           const heroFontSize = layout.hero.value_size;
           const heroHeader = lp === "hero" ? `
       <div class="hero-line" data-hero-size="${heroSize}"${Number.isFinite(heroFontSize) ? ` style="--sbcp-hero-base-size:${heroFontSize}px"` : ""}>
@@ -3812,12 +3977,12 @@
           const escapedIcon = ecfg.icon && ecfg.icon !== false ? escapeHtml(ecfg.icon) : "";
           const mainIcon = escapedIcon && lp !== "hero" ? `<div class="icon-wrap"><ha-icon icon="${escapedIcon}"></ha-icon></div>` : "";
           return `
-      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${((_s = (_r = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _r.heightExplicit) != null ? _s : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_u = (_t = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _t.barAnimated) != null ? _u : bar.animated) ? "true" : "false"}">
+      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${((_u = (_t = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _t.heightExplicit) != null ? _u : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_w = (_v = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _v.barAnimated) != null ? _w : bar.animated) ? "true" : "false"}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${heroHeader}
           ${topRightValue}
-          <div class="main-line ${lp}-mode" style="height:${h}px;">
+          <div class="main-line ${lp}-mode" data-marker-lane-above="${markerLaneOccupancy.above ? "true" : "false"}" data-marker-lane-below="${markerLaneOccupancy.below ? "true" : "false"}" style="height:${h}px;">
             ${mainIcon}
             ${leftLabel}
             <div class="bar-wrap">
@@ -3838,7 +4003,7 @@ ${paintLayers}
       </div>`;
         }
         _patchRow(row, entityCfg, stateObj) {
-          var _a, _b, _c;
+          var _a, _b, _c, _d;
           if (!row || !stateObj) return;
           const ecfg = this._resolve(entityCfg);
           const rowViewModel = buildRowViewModel({
@@ -3851,7 +4016,6 @@ ${paintLayers}
           const rawVal = rowViewModel.numericValue;
           const safeMin = rowViewModel.min;
           const safeMax = rowViewModel.max;
-          const targetVal = rowViewModel.target;
           const pct = rowViewModel.percent;
           const color = this._getColor(pct, ecfg, safeMin, safeMax);
           const display = rowViewModel.primaryPresentation.number;
@@ -3934,33 +4098,19 @@ ${paintLayers}
             if (this._peaks[key] === void 0 || rawVal > this._peaks[key]) {
               this._peaks[key] = rawVal;
             }
-            const peakVal = this._peaks[key];
-            const peakPct = this._toScalePct(peakVal, safeMin, safeMax);
-            const peakEl = row.querySelector(".peak-marker");
-            if (peakEl) {
-              if (Number.isFinite(peakPct)) {
-                this._setStyleIfChanged(peakEl, "left", `${peakPct}%`);
-              }
-              this._setStyleIfChanged(peakEl, "--marker-color", ecfg.peak_marker.color);
-              this._setStyleIfChanged(peakEl, "--marker-contrast-color", this._getMarkerContrastColor(ecfg.peak_marker.color));
-            }
           }
           const targetEl = row.querySelector(".target-marker");
           const targetLabelEl = row.querySelector(".target-value-label");
-          if (targetVal !== null) {
-            const targetPct = rowViewModel.targetPercent;
-            if (targetEl) {
-              this._setStyleIfChanged(targetEl, "display", "");
-              this._setStyleIfChanged(targetEl, "left", `${targetPct}%`);
-              this._setStyleIfChanged(targetEl, "--marker-color", ecfg.target_marker.color);
-              this._setStyleIfChanged(targetEl, "--marker-contrast-color", this._getMarkerContrastColor(ecfg.target_marker.color));
+          const markerModels = (_b = rowViewModel.markers) != null ? _b : [];
+          this._patchMarker(targetEl, this._getMarkerModel(markerModels, "target"));
+          this._patchMarker(row.querySelector(".peak-marker"), this._getMarkerModel(markerModels, "peak"));
+          const targetMarkerModel = this._getMarkerModel(markerModels, "target");
+          if (targetLabelEl) {
+            if ((targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) && targetMarkerModel.visible) {
+              this._setTextIfChanged(targetLabelEl, (_d = (_c = targetMarkerModel.label) == null ? void 0 : _c.text) != null ? _d : null);
+            } else {
+              this._setStyleIfChanged(targetLabelEl, "visibility", "hidden");
             }
-            if (targetLabelEl) {
-              this._setTextIfChanged(targetLabelEl, (_c = (_b = rowViewModel.targetPresentation) == null ? void 0 : _b.text) != null ? _c : null);
-            }
-          } else {
-            if (targetEl) this._setStyleIfChanged(targetEl, "display", "none");
-            if (targetLabelEl) this._setStyleIfChanged(targetLabelEl, "visibility", "hidden");
           }
         }
         _update() {

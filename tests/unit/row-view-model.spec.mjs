@@ -217,6 +217,90 @@ describe('buildRowViewModel', () => {
     expect(row.peakPresentation.text).toBe('48.00 kW');
   });
 
+  it('builds shared target and peak marker models with canonical lanes', () => {
+    const hass = {
+      states: {
+        'sensor.power': sensor(42, { unit_of_measurement: 'kW' }),
+      },
+    };
+    const entityConfig = createNormalizedEntity({
+      min: 0,
+      max: 100,
+      target: { at: { fixed: 55 }, label: { show: true } },
+      peak: { enabled: true, color: '#123456' },
+      entities: [{ entity: 'sensor.power' }],
+    });
+
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      peaks: { 'sensor.power': 48 },
+    });
+
+    const targetMarker = row.markers.find((marker) => marker.type === 'target');
+    const peakMarker = row.markers.find((marker) => marker.type === 'peak');
+    expect(targetMarker).toEqual(expect.objectContaining({
+      id: 'target',
+      lane: 'below',
+      value: 55,
+      visible: true,
+      label: row.targetPresentation,
+      labelVisible: true,
+    }));
+    expect(targetMarker.position).toBeCloseTo(55);
+    expect(peakMarker).toEqual(expect.objectContaining({
+      id: 'peak',
+      lane: 'above',
+      value: 48,
+      position: 48,
+      visible: true,
+      color: '#123456',
+    }));
+    expect(row.markerLaneOccupancy).toEqual({ above: true, below: true });
+  });
+
+  it('keeps configured marker lanes occupied while runtime values are unresolved', () => {
+    const entityConfig = createNormalizedEntity({
+      target: { at: { entity: 'sensor.target' }, label: { show: true } },
+      peak: { enabled: true },
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const unavailableHass = {
+      states: {
+        'sensor.power': sensor('unavailable'),
+        'sensor.target': sensor('unavailable'),
+      },
+    };
+    const recoveredHass = {
+      states: {
+        'sensor.power': sensor(42),
+        'sensor.target': sensor(55),
+      },
+    };
+
+    const unavailableRow = buildRowViewModel({
+      hass: unavailableHass,
+      cardConfig: null,
+      entityConfig,
+      entityState: unavailableHass.states['sensor.power'],
+      peaks: {},
+    });
+    const recoveredRow = buildRowViewModel({
+      hass: recoveredHass,
+      cardConfig: null,
+      entityConfig,
+      entityState: recoveredHass.states['sensor.power'],
+      peaks: {},
+    });
+
+    expect(unavailableRow.markers.find((marker) => marker.type === 'target').visible).toBe(false);
+    expect(unavailableRow.markers.find((marker) => marker.type === 'peak').visible).toBe(false);
+    expect(unavailableRow.markerLaneOccupancy).toEqual({ above: true, below: true });
+    expect(recoveredRow.markerLaneOccupancy).toEqual(unavailableRow.markerLaneOccupancy);
+  });
+
   it('resolves dynamic target entities', () => {
     const hass = {
       states: {

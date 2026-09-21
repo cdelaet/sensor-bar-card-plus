@@ -1021,6 +1021,41 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(source).toContain('transition: none;');
   });
 
+  it('adds conditional fixed marker-lane state without changing unmarked rows', () => {
+    const card = createCard();
+    card._hass.states = {
+      'sensor.none': {
+        state: '42',
+        attributes: { friendly_name: 'None', unit_of_measurement: 'W' },
+      },
+      'sensor.marked': {
+        state: '42',
+        attributes: { friendly_name: 'Marked', unit_of_measurement: 'W' },
+      },
+    };
+    const cfg = card.normalizeCardConfig({
+      entities: [
+        { entity: 'sensor.none' },
+        {
+          entity: 'sensor.marked',
+          target: { at: { fixed: 55 }, label: { show: true } },
+          peak: { enabled: true },
+        },
+      ],
+    });
+
+    const unmarkedHtml = card._buildRow(cfg.entities[0], '42', 'W', 42, '#4a9eff', null, null, null, null, '#888888', '#888888', 0, 100);
+    const markedHtml = card._buildRow(cfg.entities[1], '42', 'W', 42, '#4a9eff', 42, '42', 55, '55 W', '#888888', '#888888', 0, 100);
+
+    expect(unmarkedHtml).toContain('data-marker-lane-above="false" data-marker-lane-below="false"');
+    expect(markedHtml).toContain('data-marker-lane-above="true" data-marker-lane-below="true"');
+
+    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
+    expect(source).toContain('--sbcp-marker-lane-size: 18px;');
+    expect(source).toContain('.main-line[data-marker-lane-above="true"]');
+    expect(source).toContain('.main-line[data-marker-lane-below="true"]');
+  });
+
   it('keeps row animation flags in sync during patching', () => {
     const card = createCard();
     card._hass.states = {

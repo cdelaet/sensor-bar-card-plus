@@ -4,6 +4,10 @@ import {
   createNumericPresentation,
   createTextPresentation,
 } from '../utils/format.js';
+import {
+  buildMarkerModels,
+  getMarkerLaneOccupancy,
+} from './marker-view-model.js';
 
 function getDefaultEntityIcon(stateObj, entityId = '') {
   const deviceClass = String(stateObj?.attributes?.device_class ?? '').trim();
@@ -200,6 +204,17 @@ export function buildRowViewModel(options) {
   const peakPresentation = peakState.visible
     ? createNumericPresentation(peakState.value, displayUnit, decimal)
     : null;
+  const markers = buildMarkerModels({
+    entityConfig,
+    targetValue,
+    targetPosition: targetPercent,
+    targetPresentation,
+    targetVisible,
+    peakValue: peakState.value,
+    peakPosition: peakState.percent,
+    peakPresentation,
+    peakVisible: peakState.visible,
+  });
 
   return {
     entityId,
@@ -232,6 +247,8 @@ export function buildRowViewModel(options) {
     peakDisplay: peakPresentation?.number ?? null,
     peakPresentation,
     peakVisible: peakState.visible,
+    markers,
+    markerLaneOccupancy: getMarkerLaneOccupancy(entityConfig),
     segments: entityConfig?.bar?.segments ?? null,
     gradientStops: entityConfig?.bar?.gradient_stops ?? null,
     needle: getNeedleState(entityConfig, numericValue, safeMin, safeMax, baselinePercent),

@@ -52,6 +52,74 @@ async function render(page, { width = 720, config, states = baseStates }) {
   return page.locator('#mount');
 }
 
+test('marker lanes reserve fixed conditional spacing around the main line', async ({ page }) => {
+  await render(page, {
+    width: 720,
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      title: 'Marker lanes',
+      label_position: 'off',
+      min: 0,
+      max: 100,
+      entities: [
+        { entity: 'sensor.no_marker' },
+        {
+          entity: 'sensor.target_marker',
+          target: { at: { fixed: 55 }, label: { show: true } },
+        },
+        { entity: 'sensor.peak_marker', peak: { enabled: true } },
+        {
+          entity: 'sensor.both_markers',
+          target: { at: { fixed: 55 }, label: { show: true } },
+          peak: { enabled: true },
+        },
+      ],
+    },
+    states: {
+      'sensor.no_marker': sensor(42, { friendly_name: 'No marker' }),
+      'sensor.target_marker': sensor(42, { friendly_name: 'Target marker' }),
+      'sensor.peak_marker': sensor(42, { friendly_name: 'Peak marker' }),
+      'sensor.both_markers': sensor(42, { friendly_name: 'Both markers' }),
+    },
+  });
+
+  const result = await page.evaluate(() => {
+    const rows = [...document.querySelector('sensor-bar-card-plus').shadowRoot.querySelectorAll('.row[data-entity]')];
+    return rows.map((row) => {
+      const mainLine = row.querySelector('.main-line');
+      const targetLabel = row.querySelector('.target-value-label');
+      const rowRect = row.getBoundingClientRect();
+      const mainRect = mainLine.getBoundingClientRect();
+      const styles = getComputedStyle(mainLine);
+      return {
+        entity: row.dataset.entity,
+        above: mainLine.dataset.markerLaneAbove,
+        below: mainLine.dataset.markerLaneBelow,
+        marginTop: styles.marginTop,
+        marginBottom: styles.marginBottom,
+        rowHeight: rowRect.height,
+        mainHeight: mainRect.height,
+        targetLabelBottom: targetLabel?.getBoundingClientRect().bottom ?? null,
+        rowTop: rowRect.top,
+        rowBottom: rowRect.bottom,
+      };
+    });
+  });
+
+  expect(result).toEqual([
+    expect.objectContaining({ entity: 'sensor.no_marker', above: 'false', below: 'false', marginTop: '0px', marginBottom: '0px' }),
+    expect.objectContaining({ entity: 'sensor.target_marker', above: 'false', below: 'true', marginTop: '0px', marginBottom: '18px' }),
+    expect.objectContaining({ entity: 'sensor.peak_marker', above: 'true', below: 'false', marginTop: '18px', marginBottom: '0px' }),
+    expect.objectContaining({ entity: 'sensor.both_markers', above: 'true', below: 'true', marginTop: '18px', marginBottom: '18px' }),
+  ]);
+
+  expect(result[0].mainHeight).toBe(result[1].mainHeight);
+  expect(result[1].rowHeight).toBeGreaterThan(result[0].rowHeight);
+  expect(result[2].rowHeight).toBeGreaterThan(result[0].rowHeight);
+  expect(result[3].rowHeight).toBeGreaterThan(result[1].rowHeight);
+  expect(result[1].targetLabelBottom).toBeLessThanOrEqual(result[2].rowTop);
+});
+
 const scenarios = [
   {
     name: 'normal-no-baseline',
