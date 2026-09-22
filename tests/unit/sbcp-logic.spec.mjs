@@ -480,6 +480,65 @@ describe('Sensor Bar Card Plus logic', () => {
       },
       color: '#888888',
       show_label: true,
+      shape: 'diamond',
+    });
+  });
+
+  it('normalizes target shape defaults and entity inheritance', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      target: { at: { fixed: 65 } },
+      entities: [
+        { entity: 'sensor.inherited' },
+        { entity: 'sensor.diamond', target: { at: { fixed: 70 }, shape: 'diamond' } },
+        { entity: 'sensor.invalid', target: { at: { fixed: 75 }, shape: 'hexagon' } },
+      ],
+    });
+
+    expect(cfg.target_marker.shape).toBe('diamond');
+    expect(cfg.entities[0].target_marker.shape).toBe('diamond');
+    expect(cfg.entities[1].target_marker.shape).toBe('diamond');
+    expect(cfg.entities[2].target_marker.shape).toBe('diamond');
+
+    const triangleCfg = card.normalizeCardConfig({
+      target: { at: { fixed: 65 }, shape: 'triangle' },
+      entities: [
+        { entity: 'sensor.inherited' },
+        { entity: 'sensor.override', target: { at: { fixed: 70 }, shape: 'diamond' } },
+      ],
+    });
+
+    expect(triangleCfg.target_marker.shape).toBe('triangle');
+    expect(triangleCfg.entities[0].target_marker.shape).toBe('triangle');
+    expect(triangleCfg.entities[1].target_marker.shape).toBe('diamond');
+  });
+
+  it('renders all shared marker shapes while preserving canonical lanes', () => {
+    const card = createCard();
+    const shapes = ['circle', 'diamond', 'triangle', 'chevron', 'arrow', 'pin'];
+
+    shapes.forEach((shape) => {
+      const targetHtml = card._renderMarker({
+        type: 'target',
+        lane: 'below',
+        shape,
+        visible: true,
+        position: 50,
+        color: '#123456',
+      });
+      const peakHtml = card._renderMarker({
+        type: 'peak',
+        lane: 'above',
+        shape,
+        visible: true,
+        position: 50,
+        color: '#123456',
+      });
+
+      expect(targetHtml).toContain(`class="target-marker" data-shape="${shape}" data-lane="below"`);
+      expect(peakHtml).toContain(`class="peak-marker" data-shape="${shape}" data-lane="above"`);
+      expect(targetHtml).toContain(`data-shape="${shape}"`);
+      expect(peakHtml).toContain(`data-shape="${shape}"`);
     });
   });
 
@@ -2355,6 +2414,7 @@ describe('Sensor Bar Card Plus logic', () => {
       source: { fixed: 80, entity: null },
       color: '#ff00ff',
       show_label: false,
+      shape: 'diamond',
     });
     expect(row.peak_marker).toEqual({
       show: false,
@@ -2434,6 +2494,7 @@ describe('Sensor Bar Card Plus logic', () => {
       source: { fixed: 75, entity: null },
       color: '#ff0000',
       show_label: true,
+      shape: 'diamond',
     });
     expect(row.peak_marker).toEqual({
       show: true,
@@ -2513,6 +2574,7 @@ describe('Sensor Bar Card Plus logic', () => {
       source: { fixed: 80, entity: null },
       color: '#ff00ff',
       show_label: true,
+      shape: 'diamond',
     });
     expect(row.peak_marker).toEqual({
       show: true,

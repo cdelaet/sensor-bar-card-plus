@@ -2501,6 +2501,85 @@ describe('Sensor Bar Card Plus editor', () => {
     });
   });
 
+  it('renders and serializes the card-level target shape', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      target: { at: { fixed: 65 }, shape: 'triangle', custom: { keep: true } },
+    });
+
+    const shapeInput = editor.shadowRoot.querySelector('#target-shape');
+    expect(shapeInput.value).toBe('triangle');
+    dispatchChange(shapeInput, 'diamond');
+    expect(events.at(-1).detail.config.target).toEqual({
+      at: { fixed: 65 },
+      custom: { keep: true },
+    });
+
+    dispatchChange(editor.shadowRoot.querySelector('#target-shape'), 'triangle');
+    expect(events.at(-1).detail.config.target).toEqual({
+      at: { fixed: 65 },
+      shape: 'triangle',
+      custom: { keep: true },
+    });
+  });
+
+  it('supports entity target shape overrides and clears only known keys on inheritance', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      target: { at: { fixed: 65 }, shape: 'triangle' },
+      entities: [{
+        entity: 'sensor.one',
+        target: { at: { fixed: 70 }, shape: 'diamond', custom: { keep: true } },
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    const shapeInput = editor.shadowRoot.querySelector('#entity-0-target-shape');
+    expect(shapeInput.value).toBe('diamond');
+    dispatchChange(shapeInput, 'triangle');
+    expect(events.at(-1).detail.config.entities[0].target.shape).toBe('triangle');
+
+    const inheritToggle = editor.shadowRoot.querySelector('#entity-0-target-inherit');
+    inheritToggle.checked = true;
+    inheritToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+    const target = events.at(-1).detail.config.entities[0].target;
+    expect(target.shape).toBeUndefined();
+    expect(target.custom).toEqual({ keep: true });
+  });
+
+  it('distinguishes absent entity shape from explicit invalid shape values', () => {
+    const absentEditor = createEditor();
+    absentEditor.setConfig({
+      target: { shape: 'triangle' },
+      entities: [{ entity: 'sensor.one', target: { at: { fixed: 70 } } }],
+    });
+    expect(absentEditor._getEffectiveTargetShapeValue({ type: 'entity', index: 0 })).toBe('triangle');
+    expect(absentEditor._cleanupEditorEmittedConfig(absentEditor._draftConfig).entities[0].target.shape).toBeUndefined();
+
+    [null, '', 'hexagon'].forEach((shape) => {
+      const editor = createEditor();
+      editor.setConfig({
+        target: { shape: 'triangle' },
+        entities: [{
+          entity: 'sensor.one',
+          target: { at: { fixed: 70 }, shape, custom: { keep: true } },
+        }],
+      });
+
+      expect(editor._getEffectiveTargetShapeValue({ type: 'entity', index: 0 })).toBe('diamond');
+      expect(editor._cleanupEditorEmittedConfig(editor._draftConfig).entities[0].target).toEqual({
+        at: { fixed: 70 },
+        shape: 'diamond',
+        custom: { keep: true },
+      });
+    });
+  });
+
   it('show target label false is suppressed', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);

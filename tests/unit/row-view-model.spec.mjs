@@ -248,6 +248,7 @@ describe('buildRowViewModel', () => {
       visible: true,
       label: row.targetPresentation,
       labelVisible: true,
+      shape: 'diamond',
     }));
     expect(targetMarker.position).toBeCloseTo(55);
     expect(peakMarker).toEqual(expect.objectContaining({
@@ -257,6 +258,7 @@ describe('buildRowViewModel', () => {
       position: 48,
       visible: true,
       color: '#123456',
+      shape: 'triangle',
     }));
     expect(row.markerLaneOccupancy).toEqual({ above: true, below: true });
   });

@@ -455,18 +455,27 @@ export function normalizeFormattingConfig(entityConfig, cardConfig) {
   };
 }
 
+export function normalizeTargetMarkerShape(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return normalized === 'triangle' || normalized === 'diamond' ? normalized : 'diamond';
+}
+
 export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
   const cardTarget = cardConfig?.target_marker;
   const rawTarget = entityConfig?.target;
   const legacyCardTarget = cardConfig?.target && typeof cardConfig.target === 'object' && !Array.isArray(cardConfig.target)
     ? null
     : cardConfig?.target ?? null;
-  const inheritedTarget = cardTarget ?? {
+  const inheritedTarget = cardTarget ? {
+    ...cardTarget,
+    shape: normalizeTargetMarkerShape(cardTarget.shape),
+  } : {
     enabled: null,
     source: normalizeResolvableValue(null, null),
     color: cardConfig?.target_color ?? '#888',
     show_label: cardConfig?.show_target_label ?? false,
     label_decimal: cardConfig?.target?.label?.decimal ?? null,
+    shape: 'diamond',
   };
 
   if (rawTarget && typeof rawTarget === 'object' && !Array.isArray(rawTarget)) {
@@ -475,6 +484,9 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
       source: normalizeStructuredResolvableValue(rawTarget.at, inheritedTarget.source, null, { allowPercent: true }),
       color: rawTarget.color ?? entityConfig.target_color ?? inheritedTarget.color,
       show_label: rawTarget.label?.show ?? entityConfig.show_target_label ?? inheritedTarget.show_label,
+      shape: Object.prototype.hasOwnProperty.call(rawTarget, 'shape')
+        ? normalizeTargetMarkerShape(rawTarget.shape)
+        : inheritedTarget.shape,
     };
     const labelDecimal = rawTarget.label?.decimal ?? inheritedTarget.label_decimal ?? null;
     if (labelDecimal !== null && labelDecimal !== undefined) {
@@ -493,6 +505,7 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
     source: normalizeResolvableValue(value, entity, percent),
     color: entityConfig.target_color ?? inheritedTarget.color ?? cardConfig?.target_color ?? '#888',
     show_label: entityConfig.show_target_label ?? inheritedTarget.show_label ?? cardConfig?.show_target_label ?? false,
+    shape: inheritedTarget.shape,
   };
   const labelDecimal = inheritedTarget.label_decimal ?? null;
   if (labelDecimal !== null && labelDecimal !== undefined) {

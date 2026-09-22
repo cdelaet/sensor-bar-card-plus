@@ -1623,6 +1623,7 @@ formatting
 | `target.enabled` | auto | `true`, `false`, omitted | Controls target marker behavior. Omitted means automatic based on configured target source. |
 | `target.at.fixed` | `null` | number | Fixed target value. |
 | `target.at.entity` | `null` | entity id | Dynamic target entity. |
+| `target.shape` | `diamond` | `diamond`, `triangle` | Target marker shape. |
 | `target.color` | `#888888` | CSS color | Target marker color. |
 | `target.label.show` | `false` | boolean | Shows a numeric target value label. |
 | `target.label.decimal` | inherited | number | Overrides the displayed target-label precision only; omitted values inherit `formatting.decimal`. |
@@ -1876,6 +1877,15 @@ target:
     fixed: 65
 ```
 
+Target shape:
+
+```yaml
+target:
+  at:
+    fixed: 65
+  shape: triangle
+```
+
 Percentage target:
 
 ```yaml
@@ -1889,8 +1899,11 @@ Supported target features:
 - entity-backed target values
 - percentage targets on the active scale
 - optional marker color
+- diamond target marker by default; set `target.shape: triangle` to retain the previous triangle
 - optional target value label
 - optional `target.when_exceeded.fill_color`
+
+Migration note: The default Target marker is now a diamond, making it easier to distinguish from the new Floor marker. To retain the previous triangle, set `target.shape: triangle`.
 
 ## Peak Marker
 

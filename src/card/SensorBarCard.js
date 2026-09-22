@@ -37,6 +37,7 @@ import { buildRowViewModel } from '../view-model/row-view-model.js';
 import {
   buildMarkerModels,
   getMarkerLaneOccupancy,
+  normalizeMarkerShape,
 } from '../view-model/marker-view-model.js';
 import { escapeHtml } from '../utils/dom.js';
 import {
@@ -1784,6 +1785,55 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           border-top: 4px solid var(--marker-color);
           z-index: 3;
         }
+        /* Shared non-triangle marker shapes. Triangle keeps the original CSS geometry. */
+        .marker-shape-svg {
+          display: none;
+          position: absolute;
+          left: 50%;
+          width: 16px;
+          height: 16px;
+          overflow: visible;
+          color: var(--marker-color);
+          pointer-events: none;
+          z-index: 2;
+        }
+        .peak-marker .marker-shape-svg {
+          top: 0;
+          transform: translateX(-50%);
+        }
+        .target-marker .marker-shape-svg {
+          bottom: 0;
+          transform: translateX(-50%);
+        }
+        .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-inset,
+        .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-outset,
+        .target-marker[data-shape]:not([data-shape="triangle"]) .target-inset,
+        .target-marker[data-shape]:not([data-shape="triangle"]) .target-outset {
+          display: none;
+        }
+        .peak-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg,
+        .target-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
+          display: block;
+        }
+        .marker-shape-svg path {
+          display: none;
+          fill: currentColor;
+        }
+        .marker-shape-svg[data-shape="circle"] path[data-shape="circle"],
+        .marker-shape-svg[data-shape="diamond"] path[data-shape="diamond"],
+        .marker-shape-svg[data-shape="chevron"] path[data-shape="chevron"],
+        .marker-shape-svg[data-shape="arrow"] path[data-shape="arrow"],
+        .marker-shape-svg[data-shape="pin"] path[data-shape="pin"] {
+          display: block;
+        }
+        .marker-shape-svg[data-shape="chevron"] path[data-shape="chevron"] {
+          fill: none;
+        }
+        .marker-shape-svg[data-shape="chevron"][data-lane="below"],
+        .marker-shape-svg[data-shape="arrow"][data-lane="below"],
+        .marker-shape-svg[data-shape="pin"][data-lane="below"] {
+          transform: translateX(-50%) scaleY(-1);
+        }
 
         .value-right {
           --sbcp-value-extra-width: 0px;
@@ -3255,25 +3305,44 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     const color = marker.color ?? '#888888';
     const contrastColor = this._getMarkerContrastColor(color);
     const display = marker.visible ? '' : 'none';
+    const shape = normalizeMarkerShape(marker.shape, marker.type === 'peak' ? 'triangle' : 'diamond');
+    const lane = marker.lane ?? (marker.type === 'peak' ? 'above' : 'below');
+    const shapePaths = `
+      <path data-shape="circle" d="M8 1A7 7 0 1 0 8 15A7 7 0 1 0 8 1Z"></path>
+      <path data-shape="diamond" d="M8 1L15 8L8 15L1 8Z"></path>
+      <path data-shape="chevron" d="M2 4L8 10L14 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+      <path data-shape="arrow" d="M6 1H10V8H14L8 15L2 8H6Z"></path>
+      <path data-shape="pin" d="M8 15C7 13 2 10 2 6A6 6 0 1 1 14 6C14 10 9 13 8 15Z"></path>`;
 
     if (marker.type === 'target') {
       return `
-      <div class="target-marker" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+      <div class="target-marker" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
         <div class="target-inset"></div>
         <div class="target-outset"></div>
+        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
       </div>`;
     }
 
     return `
-      <div class="peak-marker" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};">
+      <div class="peak-marker" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};">
         <div class="peak-outset"></div>
         <div class="peak-inset"></div>
+        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
       </div>`;
   }
 
   _patchMarker(markerEl, marker) {
     if (!markerEl || !marker) return;
     if (marker.type === 'peak' && !marker.visible) return;
+
+    const shape = normalizeMarkerShape(marker.shape, marker.type === 'peak' ? 'triangle' : 'diamond');
+    this._setDatasetIfChanged(markerEl, 'shape', shape);
+    this._setDatasetIfChanged(markerEl, 'lane', marker.lane ?? (marker.type === 'peak' ? 'above' : 'below'));
+    const shapeSvg = markerEl.querySelector?.('.marker-shape-svg');
+    if (shapeSvg) {
+      this._setDatasetIfChanged(shapeSvg, 'shape', shape);
+      this._setDatasetIfChanged(shapeSvg, 'lane', marker.lane ?? (marker.type === 'peak' ? 'above' : 'below'));
+    }
 
     if (marker.type === 'target') {
       this._setStyleIfChanged(markerEl, 'display', marker.visible ? '' : 'none');

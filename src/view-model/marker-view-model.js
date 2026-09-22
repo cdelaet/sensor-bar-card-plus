@@ -5,6 +5,12 @@ function hasConfiguredSource(source) {
     || Number.isFinite(source.percent);
 }
 
+const MARKER_SHAPES = new Set(['circle', 'diamond', 'triangle', 'chevron', 'arrow', 'pin']);
+
+export function normalizeMarkerShape(value, fallback = 'circle') {
+  return MARKER_SHAPES.has(value) ? value : fallback;
+}
+
 export function createMarkerModel({
   id,
   type,
@@ -15,6 +21,7 @@ export function createMarkerModel({
   color = null,
   label = null,
   labelVisible = false,
+  shape = 'circle',
 }) {
   return {
     id,
@@ -26,6 +33,7 @@ export function createMarkerModel({
     color,
     label,
     labelVisible: labelVisible === true,
+    shape: normalizeMarkerShape(shape),
   };
 }
 
@@ -64,6 +72,7 @@ export function buildMarkerModels({
       color: targetConfig?.color ?? null,
       label: targetPresentation,
       labelVisible: targetEnabled && targetConfig?.show_label === true,
+      shape: targetConfig?.shape ?? 'diamond',
     }),
     createMarkerModel({
       id: 'peak',
@@ -74,6 +83,7 @@ export function buildMarkerModels({
       visible: peakConfig?.show === true && peakVisible,
       color: peakConfig?.color ?? null,
       label: peakPresentation,
+      shape: 'triangle',
     }),
   ];
 }

@@ -1,3 +1,5 @@
+import { normalizeTargetMarkerShape } from '../config/normalize.js';
+
 export class SensorBarCardPlusEditor extends HTMLElement {
   constructor() {
     super();
@@ -726,7 +728,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return nextTarget;
   }
 
-  _cleanupTargetForEmit(target) {
+  _cleanupTargetForEmit(target, scope = { type: 'card' }) {
     if (!this._isObject(target) || !this._isObject(target.target)) {
       return target;
     }
@@ -737,6 +739,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const labelShow = nextMarker.label?.show === true;
     const labelDecimal = this._normalizeDecimalValue(nextMarker.label?.decimal);
     const fillColor = this._normalizeTextValue(nextMarker.when_exceeded?.fill_color).trim();
+    const hasShape = Object.prototype.hasOwnProperty.call(nextMarker, 'shape');
+    const shape = hasShape ? normalizeTargetMarkerShape(nextMarker.shape) : null;
 
     if (typeof nextMarker.enabled !== 'boolean') {
       delete nextMarker.enabled;
@@ -773,6 +777,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextTarget.above_target_color;
     } else {
       delete nextMarker.when_exceeded;
+    }
+
+    if (scope?.type === 'card' && shape === 'diamond') {
+      delete nextMarker.shape;
+    } else if (shape) {
+      nextMarker.shape = shape;
+    } else {
+      delete nextMarker.shape;
     }
 
     if (Object.keys(nextMarker).length) {
@@ -922,7 +934,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       case 'baseline.at':
         return ['fixed', 'entity'];
       case 'target':
-        return ['enabled', 'at', 'color', 'label', 'when_exceeded'];
+        return ['enabled', 'at', 'shape', 'color', 'label', 'when_exceeded'];
       case 'target.label':
         return ['show', 'decimal'];
       case 'target.when_exceeded':
@@ -988,7 +1000,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     }
     let nextConfig = this._cleanupEntityIdentityForEmit(config);
     nextConfig = this._cleanupScaleForEmit(nextConfig);
-    nextConfig = this._cleanupTargetForEmit(nextConfig);
+    nextConfig = this._cleanupTargetForEmit(nextConfig, { type: 'card' });
     nextConfig = this._cleanupBaselineForEmit(nextConfig);
     nextConfig = this._cleanupPeakForEmit(nextConfig);
     nextConfig = this._cleanupLayoutForEmit(nextConfig);
@@ -997,13 +1009,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     nextConfig = this._cleanupBarForEmit(nextConfig);
 
     if (Array.isArray(nextConfig.entities)) {
-      nextConfig.entities = nextConfig.entities.map((entry) => {
+      nextConfig.entities = nextConfig.entities.map((entry, index) => {
         if (!this._isObject(entry)) {
           return entry;
         }
         let cleanedEntry = this._cleanupEntityIdentityForEmit(entry);
         cleanedEntry = this._cleanupScaleForEmit(cleanedEntry);
-        cleanedEntry = this._cleanupTargetForEmit(cleanedEntry);
+        cleanedEntry = this._cleanupTargetForEmit(cleanedEntry, { type: 'entity', index });
         cleanedEntry = this._cleanupBaselineForEmit(cleanedEntry);
         cleanedEntry = this._cleanupPeakForEmit(cleanedEntry);
         cleanedEntry = this._cleanupLayoutForEmit(cleanedEntry);
@@ -3206,6 +3218,34 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return 'auto';
   }
 
+  _getTargetShapeValue(scope) {
+    return this._getScopedValue(scope, ['target', 'shape']) ?? '';
+  }
+
+  _hasTargetShape(scope) {
+    const target = this._getScopedValue(scope, ['target']);
+    return this._isObject(target) && Object.prototype.hasOwnProperty.call(target, 'shape');
+  }
+
+  _getEffectiveTargetShapeValue(scope) {
+    if (scope?.type === 'entity' && !this._hasTargetShape(scope)) {
+      return this._getEffectiveTargetShapeValue({ type: 'card' });
+    }
+    return normalizeTargetMarkerShape(this._getTargetShapeValue(scope));
+  }
+
+  _setTargetShape(scope, rawValue) {
+    const normalizedShape = normalizeTargetMarkerShape(rawValue);
+    if (scope?.type !== 'entity' && normalizedShape === 'diamond') {
+      return this._removeCanonicalScopedValue(scope, ['target', 'shape'], {
+        prunePaths: [['target']],
+      });
+    }
+    return this._setCanonicalScopedTextOverride(scope, ['target', 'shape'], normalizedShape, {
+      prunePaths: [['target']],
+    });
+  }
+
   _getEffectiveTargetMode(scope) {
     const mode = this._getTargetMode(scope);
     if (scope?.type !== 'entity' || mode !== 'inherit') {
@@ -3254,6 +3294,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         nextTarget = this._deletePathValue(nextTarget, ['target', 'enabled']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'at']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'color']);
+        nextTarget = this._deletePathValue(nextTarget, ['target', 'shape']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'label', 'show']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'label', 'decimal']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'when_exceeded', 'fill_color']);
@@ -3748,6 +3789,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const target = this._getTargetResolvableValue(scope);
     if (target.fixed !== '' && target.fixed !== undefined) parts.push(`Target ${target.fixed}`);
     if (target.entity) parts.push('Entity');
+    if (this._hasTargetShape(scope)) {
+      parts.push(this._getEffectiveTargetShapeValue(scope) === 'triangle' ? 'Triangle' : 'Diamond');
+    }
     if (this._hasCustomTargetColor(scope)) parts.push('Custom color');
     if (this._getTargetLabelShowValue(scope)) parts.push('Label');
     const labelDecimal = this._getTargetLabelDecimalValue(scope);
@@ -4096,6 +4140,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       const baselineBelowColor = this._getBaselineDirectionalColorValue({ type: 'card' }, 'below');
       const target = this._getTargetResolvableValue({ type: 'card' });
       const targetMode = this._getTargetMode({ type: 'card' });
+      const targetShape = this._getEffectiveTargetShapeValue({ type: 'card' });
       const targetColor = this._getTargetColorValue({ type: 'card' });
       const targetLabelShow = this._getTargetLabelShowValue({ type: 'card' });
       const targetLabelDecimal = this._getTargetLabelDecimalValue({ type: 'card' });
@@ -4656,8 +4701,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                        const baselineParts = this._getEffectiveBaselineResolvableValue(scope);
 	                        const baselineMode = this._getEffectiveBaselineMode(scope);
 	                        const targetInherited = !this._hasTargetOverride(scope);
-	                        const targetParts = this._getEffectiveTargetResolvableValue(scope);
-	                        const targetMode = this._getEffectiveTargetMode(scope);
+                        const targetParts = this._getEffectiveTargetResolvableValue(scope);
+                        const targetMode = this._getEffectiveTargetMode(scope);
+                        const targetShape = this._getEffectiveTargetShapeValue(scope);
 	                        const formattingInherited = !this._hasFormattingOverride(scope);
 	                        const layoutInherited = !this._hasLayoutOverride(scope);
 	                        const peakInherited = !this._hasPeakOverride(scope);
@@ -5066,6 +5112,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                         <input id="entity-${index}-target-value" type="number" step="any" data-kind="entity-target-value" data-index="${index}" value="${this._escapeAttribute(targetParts.fixed)}" placeholder="inherit card default">
                       </div>
                       <div class="field-row">
+                        <label for="entity-${index}-target-shape">Target shape</label>
+                        <select id="entity-${index}-target-shape" data-kind="entity-target-shape" data-index="${index}" value="${this._escapeAttribute(targetShape)}">
+                          <option value="diamond"${targetShape === 'diamond' ? ' selected' : ''}>diamond</option>
+                          <option value="triangle"${targetShape === 'triangle' ? ' selected' : ''}>triangle</option>
+                        </select>
+                      </div>
+                      <div class="field-row">
                         <label>Target entity</label>
                         ${this._renderEntitySourceInput('entity-target-entity-source', index, targetParts.entity, 'inherit card default')}
                       </div>
@@ -5172,6 +5225,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
             <div class="field-row">
               <label for="target-value">Target fallback</label>
               <input id="target-value" type="number" step="any" data-field="target-value" value="${this._escapeAttribute(target.fixed)}">
+            </div>
+            <div class="field-row">
+              <label for="target-shape">Target shape</label>
+              <select id="target-shape" data-field="target-shape" value="${this._escapeAttribute(targetShape)}">
+                <option value="diamond"${targetShape === 'diamond' ? ' selected' : ''}>diamond</option>
+                <option value="triangle"${targetShape === 'triangle' ? ' selected' : ''}>triangle</option>
+              </select>
             </div>
             <div class="field-row">
               <label>Target entity</label>
@@ -5915,6 +5975,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (field === 'target-value') {
       return void this._setTargetResolvablePart({ type: 'card' }, 'fixed', value);
     }
+    if (field === 'target-shape') return void this._setTargetShape({ type: 'card' }, value);
     if (field === 'target-color') return void this._setTargetColor({ type: 'card' }, value);
     if (field === 'target-label-show') return void this._setTargetLabelShow({ type: 'card' }, value);
     if (field === 'target-label-decimal') return void this._setTargetLabelDecimal({ type: 'card' }, value);
@@ -6137,6 +6198,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
     if (kind === 'entity-target-value') {
       return void this._setTargetResolvablePart({ type: 'entity', index: Number(target.dataset.index) }, 'fixed', value);
+    }
+
+    if (kind === 'entity-target-shape') {
+      return void this._setTargetShape({ type: 'entity', index: Number(target.dataset.index) }, value);
     }
 
     if (kind === 'entity-target-entity-source') {

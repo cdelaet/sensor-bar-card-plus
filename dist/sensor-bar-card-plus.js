@@ -419,24 +419,33 @@
       unit: (_h = (_g = (_f = (_e = entityFormatting == null ? void 0 : entityFormatting.unit) != null ? _e : entityConfig.unit) != null ? _f : cardFormatting == null ? void 0 : cardFormatting.unit) != null ? _g : cardConfig == null ? void 0 : cardConfig.unit) != null ? _h : null
     };
   }
+  function normalizeTargetMarkerShape(value) {
+    const normalized = String(value != null ? value : "").trim().toLowerCase();
+    return normalized === "triangle" || normalized === "diamond" ? normalized : "diamond";
+  }
   function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I;
     const cardTarget = cardConfig == null ? void 0 : cardConfig.target_marker;
     const rawTarget = entityConfig == null ? void 0 : entityConfig.target;
     const legacyCardTarget = (cardConfig == null ? void 0 : cardConfig.target) && typeof cardConfig.target === "object" && !Array.isArray(cardConfig.target) ? null : (_a = cardConfig == null ? void 0 : cardConfig.target) != null ? _a : null;
-    const inheritedTarget = cardTarget != null ? cardTarget : {
+    const inheritedTarget = cardTarget ? {
+      ...cardTarget,
+      shape: normalizeTargetMarkerShape(cardTarget.shape)
+    } : {
       enabled: null,
       source: normalizeResolvableValue(null, null),
       color: (_b = cardConfig == null ? void 0 : cardConfig.target_color) != null ? _b : "#888",
       show_label: (_c = cardConfig == null ? void 0 : cardConfig.show_target_label) != null ? _c : false,
-      label_decimal: (_f = (_e = (_d = cardConfig == null ? void 0 : cardConfig.target) == null ? void 0 : _d.label) == null ? void 0 : _e.decimal) != null ? _f : null
+      label_decimal: (_f = (_e = (_d = cardConfig == null ? void 0 : cardConfig.target) == null ? void 0 : _d.label) == null ? void 0 : _e.decimal) != null ? _f : null,
+      shape: "diamond"
     };
     if (rawTarget && typeof rawTarget === "object" && !Array.isArray(rawTarget)) {
       const normalizedTarget2 = {
         enabled: (_h = (_g = normalizeOptionalEnabled(rawTarget.enabled)) != null ? _g : inheritedTarget.enabled) != null ? _h : null,
         source: normalizeStructuredResolvableValue(rawTarget.at, inheritedTarget.source, null, { allowPercent: true }),
         color: (_j = (_i = rawTarget.color) != null ? _i : entityConfig.target_color) != null ? _j : inheritedTarget.color,
-        show_label: (_m = (_l = (_k = rawTarget.label) == null ? void 0 : _k.show) != null ? _l : entityConfig.show_target_label) != null ? _m : inheritedTarget.show_label
+        show_label: (_m = (_l = (_k = rawTarget.label) == null ? void 0 : _k.show) != null ? _l : entityConfig.show_target_label) != null ? _m : inheritedTarget.show_label,
+        shape: Object.prototype.hasOwnProperty.call(rawTarget, "shape") ? normalizeTargetMarkerShape(rawTarget.shape) : inheritedTarget.shape
       };
       const labelDecimal2 = (_p = (_o = (_n = rawTarget.label) == null ? void 0 : _n.decimal) != null ? _o : inheritedTarget.label_decimal) != null ? _p : null;
       if (labelDecimal2 !== null && labelDecimal2 !== void 0) {
@@ -451,7 +460,8 @@
       enabled: (_B = inheritedTarget.enabled) != null ? _B : null,
       source: normalizeResolvableValue(value, entity, percent),
       color: (_E = (_D = (_C = entityConfig.target_color) != null ? _C : inheritedTarget.color) != null ? _D : cardConfig == null ? void 0 : cardConfig.target_color) != null ? _E : "#888",
-      show_label: (_H = (_G = (_F = entityConfig.show_target_label) != null ? _F : inheritedTarget.show_label) != null ? _G : cardConfig == null ? void 0 : cardConfig.show_target_label) != null ? _H : false
+      show_label: (_H = (_G = (_F = entityConfig.show_target_label) != null ? _F : inheritedTarget.show_label) != null ? _G : cardConfig == null ? void 0 : cardConfig.show_target_label) != null ? _H : false,
+      shape: inheritedTarget.shape
     };
     const labelDecimal = (_I = inheritedTarget.label_decimal) != null ? _I : null;
     if (labelDecimal !== null && labelDecimal !== void 0) {
@@ -829,6 +839,9 @@
     if (!source) return false;
     return source.entity !== null && source.entity !== void 0 && source.entity !== "" || source.fixed !== null && source.fixed !== void 0 && source.fixed !== "" || Number.isFinite(source.percent);
   }
+  function normalizeMarkerShape(value, fallback = "circle") {
+    return MARKER_SHAPES.has(value) ? value : fallback;
+  }
   function createMarkerModel({
     id,
     type,
@@ -838,7 +851,8 @@
     visible = false,
     color = null,
     label = null,
-    labelVisible = false
+    labelVisible = false,
+    shape = "circle"
   }) {
     return {
       id,
@@ -849,7 +863,8 @@
       visible: visible === true,
       color,
       label,
-      labelVisible: labelVisible === true
+      labelVisible: labelVisible === true,
+      shape: normalizeMarkerShape(shape)
     };
   }
   function getMarkerLaneOccupancy(entityConfig) {
@@ -871,7 +886,7 @@
     peakPresentation = null,
     peakVisible = Number.isFinite(peakPosition)
   }) {
-    var _a, _b;
+    var _a, _b, _c;
     const targetConfig = entityConfig == null ? void 0 : entityConfig.target_marker;
     const peakConfig = entityConfig == null ? void 0 : entityConfig.peak_marker;
     const targetEnabled = (targetConfig == null ? void 0 : targetConfig.enabled) !== false;
@@ -885,7 +900,8 @@
         visible: targetEnabled && targetVisible,
         color: (_a = targetConfig == null ? void 0 : targetConfig.color) != null ? _a : null,
         label: targetPresentation,
-        labelVisible: targetEnabled && (targetConfig == null ? void 0 : targetConfig.show_label) === true
+        labelVisible: targetEnabled && (targetConfig == null ? void 0 : targetConfig.show_label) === true,
+        shape: (_b = targetConfig == null ? void 0 : targetConfig.shape) != null ? _b : "diamond"
       }),
       createMarkerModel({
         id: "peak",
@@ -894,13 +910,16 @@
         position: peakPosition,
         lane: "above",
         visible: (peakConfig == null ? void 0 : peakConfig.show) === true && peakVisible,
-        color: (_b = peakConfig == null ? void 0 : peakConfig.color) != null ? _b : null,
-        label: peakPresentation
+        color: (_c = peakConfig == null ? void 0 : peakConfig.color) != null ? _c : null,
+        label: peakPresentation,
+        shape: "triangle"
       })
     ];
   }
+  var MARKER_SHAPES;
   var init_marker_view_model = __esm({
     "src/view-model/marker-view-model.js"() {
+      MARKER_SHAPES = /* @__PURE__ */ new Set(["circle", "diamond", "triangle", "chevron", "arrow", "pin"]);
     }
   });
 
@@ -2610,6 +2629,55 @@
           border-top: 4px solid var(--marker-color);
           z-index: 3;
         }
+        /* Shared non-triangle marker shapes. Triangle keeps the original CSS geometry. */
+        .marker-shape-svg {
+          display: none;
+          position: absolute;
+          left: 50%;
+          width: 16px;
+          height: 16px;
+          overflow: visible;
+          color: var(--marker-color);
+          pointer-events: none;
+          z-index: 2;
+        }
+        .peak-marker .marker-shape-svg {
+          top: 0;
+          transform: translateX(-50%);
+        }
+        .target-marker .marker-shape-svg {
+          bottom: 0;
+          transform: translateX(-50%);
+        }
+        .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-inset,
+        .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-outset,
+        .target-marker[data-shape]:not([data-shape="triangle"]) .target-inset,
+        .target-marker[data-shape]:not([data-shape="triangle"]) .target-outset {
+          display: none;
+        }
+        .peak-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg,
+        .target-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
+          display: block;
+        }
+        .marker-shape-svg path {
+          display: none;
+          fill: currentColor;
+        }
+        .marker-shape-svg[data-shape="circle"] path[data-shape="circle"],
+        .marker-shape-svg[data-shape="diamond"] path[data-shape="diamond"],
+        .marker-shape-svg[data-shape="chevron"] path[data-shape="chevron"],
+        .marker-shape-svg[data-shape="arrow"] path[data-shape="arrow"],
+        .marker-shape-svg[data-shape="pin"] path[data-shape="pin"] {
+          display: block;
+        }
+        .marker-shape-svg[data-shape="chevron"] path[data-shape="chevron"] {
+          fill: none;
+        }
+        .marker-shape-svg[data-shape="chevron"][data-lane="below"],
+        .marker-shape-svg[data-shape="arrow"][data-lane="below"],
+        .marker-shape-svg[data-shape="pin"][data-lane="below"] {
+          transform: translateX(-50%) scaleY(-1);
+        }
 
         .value-right {
           --sbcp-value-extra-width: 0px;
@@ -3876,28 +3944,47 @@
           return (_a = markers.find((marker) => marker.type === type)) != null ? _a : null;
         }
         _renderMarker(marker) {
-          var _a;
+          var _a, _b;
           if (!marker || marker.type === "peak" && !marker.visible) return "";
           const position = Number.isFinite(marker.position) ? marker.position : 0;
           const color = (_a = marker.color) != null ? _a : "#888888";
           const contrastColor = this._getMarkerContrastColor(color);
           const display = marker.visible ? "" : "none";
+          const shape = normalizeMarkerShape(marker.shape, marker.type === "peak" ? "triangle" : "diamond");
+          const lane = (_b = marker.lane) != null ? _b : marker.type === "peak" ? "above" : "below";
+          const shapePaths = `
+      <path data-shape="circle" d="M8 1A7 7 0 1 0 8 15A7 7 0 1 0 8 1Z"></path>
+      <path data-shape="diamond" d="M8 1L15 8L8 15L1 8Z"></path>
+      <path data-shape="chevron" d="M2 4L8 10L14 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+      <path data-shape="arrow" d="M6 1H10V8H14L8 15L2 8H6Z"></path>
+      <path data-shape="pin" d="M8 15C7 13 2 10 2 6A6 6 0 1 1 14 6C14 10 9 13 8 15Z"></path>`;
           if (marker.type === "target") {
             return `
-      <div class="target-marker" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+      <div class="target-marker" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
         <div class="target-inset"></div>
         <div class="target-outset"></div>
+        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
       </div>`;
           }
           return `
-      <div class="peak-marker" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};">
+      <div class="peak-marker" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};">
         <div class="peak-outset"></div>
         <div class="peak-inset"></div>
+        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
       </div>`;
         }
         _patchMarker(markerEl, marker) {
+          var _a, _b, _c;
           if (!markerEl || !marker) return;
           if (marker.type === "peak" && !marker.visible) return;
+          const shape = normalizeMarkerShape(marker.shape, marker.type === "peak" ? "triangle" : "diamond");
+          this._setDatasetIfChanged(markerEl, "shape", shape);
+          this._setDatasetIfChanged(markerEl, "lane", (_a = marker.lane) != null ? _a : marker.type === "peak" ? "above" : "below");
+          const shapeSvg = (_b = markerEl.querySelector) == null ? void 0 : _b.call(markerEl, ".marker-shape-svg");
+          if (shapeSvg) {
+            this._setDatasetIfChanged(shapeSvg, "shape", shape);
+            this._setDatasetIfChanged(shapeSvg, "lane", (_c = marker.lane) != null ? _c : marker.type === "peak" ? "above" : "below");
+          }
           if (marker.type === "target") {
             this._setStyleIfChanged(markerEl, "display", marker.visible ? "" : "none");
           }
@@ -4202,6 +4289,7 @@ ${paintLayers}
   var SensorBarCardPlusEditor;
   var init_SensorBarCardPlusEditor = __esm({
     "src/editor/SensorBarCardPlusEditor.js"() {
+      init_normalize();
       SensorBarCardPlusEditor = class extends HTMLElement {
         constructor() {
           super();
@@ -4840,7 +4928,7 @@ ${paintLayers}
           }
           return nextTarget;
         }
-        _cleanupTargetForEmit(target) {
+        _cleanupTargetForEmit(target, scope = { type: "card" }) {
           var _a, _b, _c;
           if (!this._isObject(target) || !this._isObject(target.target)) {
             return target;
@@ -4852,6 +4940,8 @@ ${paintLayers}
           const labelShow = ((_a = nextMarker.label) == null ? void 0 : _a.show) === true;
           const labelDecimal = this._normalizeDecimalValue((_b = nextMarker.label) == null ? void 0 : _b.decimal);
           const fillColor = this._normalizeTextValue((_c = nextMarker.when_exceeded) == null ? void 0 : _c.fill_color).trim();
+          const hasShape = Object.prototype.hasOwnProperty.call(nextMarker, "shape");
+          const shape = hasShape ? normalizeTargetMarkerShape(nextMarker.shape) : null;
           if (typeof nextMarker.enabled !== "boolean") {
             delete nextMarker.enabled;
           }
@@ -4883,6 +4973,13 @@ ${paintLayers}
             delete nextTarget.above_target_color;
           } else {
             delete nextMarker.when_exceeded;
+          }
+          if ((scope == null ? void 0 : scope.type) === "card" && shape === "diamond") {
+            delete nextMarker.shape;
+          } else if (shape) {
+            nextMarker.shape = shape;
+          } else {
+            delete nextMarker.shape;
           }
           if (Object.keys(nextMarker).length) {
             nextTarget.target = nextMarker;
@@ -5010,7 +5107,7 @@ ${paintLayers}
             case "baseline.at":
               return ["fixed", "entity"];
             case "target":
-              return ["enabled", "at", "color", "label", "when_exceeded"];
+              return ["enabled", "at", "shape", "color", "label", "when_exceeded"];
             case "target.label":
               return ["show", "decimal"];
             case "target.when_exceeded":
@@ -5071,7 +5168,7 @@ ${paintLayers}
           }
           let nextConfig = this._cleanupEntityIdentityForEmit(config);
           nextConfig = this._cleanupScaleForEmit(nextConfig);
-          nextConfig = this._cleanupTargetForEmit(nextConfig);
+          nextConfig = this._cleanupTargetForEmit(nextConfig, { type: "card" });
           nextConfig = this._cleanupBaselineForEmit(nextConfig);
           nextConfig = this._cleanupPeakForEmit(nextConfig);
           nextConfig = this._cleanupLayoutForEmit(nextConfig);
@@ -5079,13 +5176,13 @@ ${paintLayers}
           nextConfig = this._cleanupNeedleForEmit(nextConfig, { type: "card" });
           nextConfig = this._cleanupBarForEmit(nextConfig);
           if (Array.isArray(nextConfig.entities)) {
-            nextConfig.entities = nextConfig.entities.map((entry) => {
+            nextConfig.entities = nextConfig.entities.map((entry, index) => {
               if (!this._isObject(entry)) {
                 return entry;
               }
               let cleanedEntry = this._cleanupEntityIdentityForEmit(entry);
               cleanedEntry = this._cleanupScaleForEmit(cleanedEntry);
-              cleanedEntry = this._cleanupTargetForEmit(cleanedEntry);
+              cleanedEntry = this._cleanupTargetForEmit(cleanedEntry, { type: "entity", index });
               cleanedEntry = this._cleanupBaselineForEmit(cleanedEntry);
               cleanedEntry = this._cleanupPeakForEmit(cleanedEntry);
               cleanedEntry = this._cleanupLayoutForEmit(cleanedEntry);
@@ -7023,6 +7120,31 @@ ${paintLayers}
           if (enabled === false) return "disabled";
           return "auto";
         }
+        _getTargetShapeValue(scope) {
+          var _a;
+          return (_a = this._getScopedValue(scope, ["target", "shape"])) != null ? _a : "";
+        }
+        _hasTargetShape(scope) {
+          const target = this._getScopedValue(scope, ["target"]);
+          return this._isObject(target) && Object.prototype.hasOwnProperty.call(target, "shape");
+        }
+        _getEffectiveTargetShapeValue(scope) {
+          if ((scope == null ? void 0 : scope.type) === "entity" && !this._hasTargetShape(scope)) {
+            return this._getEffectiveTargetShapeValue({ type: "card" });
+          }
+          return normalizeTargetMarkerShape(this._getTargetShapeValue(scope));
+        }
+        _setTargetShape(scope, rawValue) {
+          const normalizedShape = normalizeTargetMarkerShape(rawValue);
+          if ((scope == null ? void 0 : scope.type) !== "entity" && normalizedShape === "diamond") {
+            return this._removeCanonicalScopedValue(scope, ["target", "shape"], {
+              prunePaths: [["target"]]
+            });
+          }
+          return this._setCanonicalScopedTextOverride(scope, ["target", "shape"], normalizedShape, {
+            prunePaths: [["target"]]
+          });
+        }
         _getEffectiveTargetMode(scope) {
           const mode = this._getTargetMode(scope);
           if ((scope == null ? void 0 : scope.type) !== "entity" || mode !== "inherit") {
@@ -7063,6 +7185,7 @@ ${paintLayers}
               nextTarget = this._deletePathValue(nextTarget, ["target", "enabled"]);
               nextTarget = this._deletePathValue(nextTarget, ["target", "at"]);
               nextTarget = this._deletePathValue(nextTarget, ["target", "color"]);
+              nextTarget = this._deletePathValue(nextTarget, ["target", "shape"]);
               nextTarget = this._deletePathValue(nextTarget, ["target", "label", "show"]);
               nextTarget = this._deletePathValue(nextTarget, ["target", "label", "decimal"]);
               nextTarget = this._deletePathValue(nextTarget, ["target", "when_exceeded", "fill_color"]);
@@ -7492,6 +7615,9 @@ ${paintLayers}
           const target = this._getTargetResolvableValue(scope);
           if (target.fixed !== "" && target.fixed !== void 0) parts.push(`Target ${target.fixed}`);
           if (target.entity) parts.push("Entity");
+          if (this._hasTargetShape(scope)) {
+            parts.push(this._getEffectiveTargetShapeValue(scope) === "triangle" ? "Triangle" : "Diamond");
+          }
           if (this._hasCustomTargetColor(scope)) parts.push("Custom color");
           if (this._getTargetLabelShowValue(scope)) parts.push("Label");
           const labelDecimal = this._getTargetLabelDecimalValue(scope);
@@ -7797,6 +7923,7 @@ ${paintLayers}
             const baselineBelowColor = this._getBaselineDirectionalColorValue({ type: "card" }, "below");
             const target = this._getTargetResolvableValue({ type: "card" });
             const targetMode = this._getTargetMode({ type: "card" });
+            const targetShape = this._getEffectiveTargetShapeValue({ type: "card" });
             const targetColor = this._getTargetColorValue({ type: "card" });
             const targetLabelShow = this._getTargetLabelShowValue({ type: "card" });
             const targetLabelDecimal = this._getTargetLabelDecimalValue({ type: "card" });
@@ -8360,6 +8487,7 @@ ${paintLayers}
                 const targetInherited = !this._hasTargetOverride(scope);
                 const targetParts = this._getEffectiveTargetResolvableValue(scope);
                 const targetMode2 = this._getEffectiveTargetMode(scope);
+                const targetShape2 = this._getEffectiveTargetShapeValue(scope);
                 const formattingInherited = !this._hasFormattingOverride(scope);
                 const layoutInherited = !this._hasLayoutOverride(scope);
                 const peakInherited = !this._hasPeakOverride(scope);
@@ -8764,6 +8892,13 @@ ${paintLayers}
                         <input id="entity-${index}-target-value" type="number" step="any" data-kind="entity-target-value" data-index="${index}" value="${this._escapeAttribute(targetParts.fixed)}" placeholder="inherit card default">
                       </div>
                       <div class="field-row">
+                        <label for="entity-${index}-target-shape">Target shape</label>
+                        <select id="entity-${index}-target-shape" data-kind="entity-target-shape" data-index="${index}" value="${this._escapeAttribute(targetShape2)}">
+                          <option value="diamond"${targetShape2 === "diamond" ? " selected" : ""}>diamond</option>
+                          <option value="triangle"${targetShape2 === "triangle" ? " selected" : ""}>triangle</option>
+                        </select>
+                      </div>
+                      <div class="field-row">
                         <label>Target entity</label>
                         ${this._renderEntitySourceInput("entity-target-entity-source", index, targetParts.entity, "inherit card default")}
                       </div>
@@ -8871,6 +9006,13 @@ ${paintLayers}
             <div class="field-row">
               <label for="target-value">Target fallback</label>
               <input id="target-value" type="number" step="any" data-field="target-value" value="${this._escapeAttribute(target.fixed)}">
+            </div>
+            <div class="field-row">
+              <label for="target-shape">Target shape</label>
+              <select id="target-shape" data-field="target-shape" value="${this._escapeAttribute(targetShape)}">
+                <option value="diamond"${targetShape === "diamond" ? " selected" : ""}>diamond</option>
+                <option value="triangle"${targetShape === "triangle" ? " selected" : ""}>triangle</option>
+              </select>
             </div>
             <div class="field-row">
               <label>Target entity</label>
@@ -9581,6 +9723,7 @@ ${paintLayers}
           if (field === "target-value") {
             return void this._setTargetResolvablePart({ type: "card" }, "fixed", value);
           }
+          if (field === "target-shape") return void this._setTargetShape({ type: "card" }, value);
           if (field === "target-color") return void this._setTargetColor({ type: "card" }, value);
           if (field === "target-label-show") return void this._setTargetLabelShow({ type: "card" }, value);
           if (field === "target-label-decimal") return void this._setTargetLabelDecimal({ type: "card" }, value);
@@ -9757,6 +9900,9 @@ ${paintLayers}
           }
           if (kind === "entity-target-value") {
             return void this._setTargetResolvablePart({ type: "entity", index: Number(target.dataset.index) }, "fixed", value);
+          }
+          if (kind === "entity-target-shape") {
+            return void this._setTargetShape({ type: "entity", index: Number(target.dataset.index) }, value);
           }
           if (kind === "entity-target-entity-source") {
             return void this._setTargetResolvablePart({ type: "entity", index: Number(target.dataset.index) }, "entity", value);

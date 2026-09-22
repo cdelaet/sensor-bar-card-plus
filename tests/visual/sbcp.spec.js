@@ -120,6 +120,183 @@ test('marker lanes reserve fixed conditional spacing around the main line', asyn
   expect(result[1].targetLabelBottom).toBeLessThanOrEqual(result[2].rowTop);
 });
 
+test('target marker defaults to diamond and supports explicit triangle overrides', async ({ page }) => {
+  const mount = await render(page, {
+    width: 720,
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      title: 'Target shapes',
+      label_position: 'off',
+      min: 0,
+      max: 100,
+      target: { at: { fixed: 60 }, label: { show: true } },
+      entities: [
+        { entity: 'sensor.default_target' },
+        { entity: 'sensor.triangle_target', target: { shape: 'triangle' } },
+      ],
+    },
+    states: {
+      'sensor.default_target': sensor(42, { friendly_name: 'Default diamond' }),
+      'sensor.triangle_target': sensor(42, { friendly_name: 'Explicit triangle' }),
+    },
+  });
+
+  const shapes = await page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    return [...card.shadowRoot.querySelectorAll('.target-marker')].map((marker) => ({
+      entity: marker.closest('.row')?.dataset.entity,
+      shape: marker.dataset.shape,
+      lane: marker.dataset.lane,
+    }));
+  });
+
+  expect(shapes).toEqual([
+    { entity: 'sensor.default_target', shape: 'diamond', lane: 'below' },
+    { entity: 'sensor.triangle_target', shape: 'triangle', lane: 'below' },
+  ]);
+  await expect(mount).toHaveScreenshot('target-shapes.png');
+});
+
+test('shared marker renderer reuses the marker node for all six shapes', async ({ page }) => {
+  await render(page, {
+    width: 720,
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      title: 'Shared marker renderer',
+      label_position: 'off',
+      target: 60,
+      entities: [{ entity: 'sensor.default_target' }],
+    },
+    states: {
+      'sensor.default_target': sensor(42, { friendly_name: 'Target' }),
+    },
+  });
+
+  const result = await page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    const marker = card.shadowRoot.querySelector('.target-marker');
+    const shapes = ['circle', 'diamond', 'triangle', 'chevron', 'arrow', 'pin'];
+    const sameMarker = shapes.map((shape) => {
+      card._patchMarker(marker, {
+        type: 'target',
+        lane: 'below',
+        shape,
+        visible: true,
+        position: 60,
+        color: '#123456',
+      });
+      const svg = marker.querySelector('.marker-shape-svg');
+      return {
+        shape: marker.dataset.shape,
+        path: !!svg?.querySelector(`path[data-shape="${shape}"]`),
+        svgDisplay: getComputedStyle(svg).display,
+        triangleDisplay: getComputedStyle(marker.querySelector('.target-inset')).display,
+      };
+    });
+    return sameMarker;
+  });
+
+  expect(result).toEqual([
+    { shape: 'circle', path: true, svgDisplay: 'block', triangleDisplay: 'none' },
+    { shape: 'diamond', path: true, svgDisplay: 'block', triangleDisplay: 'none' },
+    { shape: 'triangle', path: false, svgDisplay: 'none', triangleDisplay: 'block' },
+    { shape: 'chevron', path: true, svgDisplay: 'block', triangleDisplay: 'none' },
+    { shape: 'arrow', path: true, svgDisplay: 'block', triangleDisplay: 'none' },
+    { shape: 'pin', path: true, svgDisplay: 'block', triangleDisplay: 'none' },
+  ]);
+});
+
+test('marker shapes preserve inward direction, numeric anchoring, and lane fit', async ({ page }) => {
+  await render(page, {
+    width: 720,
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      title: 'Marker geometry',
+      label_position: 'off',
+      target: 60,
+      peak: { enabled: true },
+      entities: [{ entity: 'sensor.default_target' }],
+    },
+    states: {
+      'sensor.default_target': sensor(42, { friendly_name: 'Target' }),
+    },
+  });
+
+  const geometry = await page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    const target = card.shadowRoot.querySelector('.target-marker');
+    const peak = card.shadowRoot.querySelector('.peak-marker');
+    const shapes = ['circle', 'diamond', 'triangle', 'chevron', 'arrow', 'pin'];
+    const verticalScale = (transform) => {
+      if (transform === 'none') return 1;
+      const values = transform.match(/^matrix\(([^)]+)\)$/)?.[1].split(',').map(Number);
+      return values?.[3] ?? 1;
+    };
+    const read = (marker, type, lane, shape) => {
+      card._patchMarker(marker, {
+        type,
+        lane,
+        shape,
+        visible: true,
+        position: 60,
+        color: '#123456',
+      });
+      const svg = marker.querySelector('.marker-shape-svg');
+      const inset = marker.querySelector(`.${type}-inset`);
+      const svgStyle = getComputedStyle(svg);
+      const insetStyle = getComputedStyle(inset);
+      return {
+        shape,
+        left: marker.getBoundingClientRect().left,
+        leftStyle: marker.style.left,
+        scaleY: verticalScale(svgStyle.transform),
+        svgDisplay: svgStyle.display,
+        svgHeight: svg.getBoundingClientRect().height,
+        borderTop: insetStyle.borderTopWidth,
+        borderBottom: insetStyle.borderBottomWidth,
+      };
+    };
+
+    return {
+      below: shapes.map((shape) => read(target, 'target', 'below', shape)),
+      above: shapes.map((shape) => read(peak, 'peak', 'above', shape)),
+    };
+  });
+
+  const directional = new Set(['chevron', 'arrow', 'pin']);
+  const svgShapes = new Set(['circle', 'diamond', 'chevron', 'arrow', 'pin']);
+  const belowAnchor = geometry.below[0].left;
+  const aboveAnchor = geometry.above[0].left;
+
+  for (const entry of geometry.below) {
+    expect(entry.leftStyle).toBe('60%');
+    expect(Math.abs(entry.left - belowAnchor)).toBeLessThan(0.01);
+    if (svgShapes.has(entry.shape)) {
+      expect(entry.svgDisplay).toBe('block');
+      expect(entry.svgHeight).toBeLessThanOrEqual(18);
+      expect(entry.scaleY).toBe(directional.has(entry.shape) ? -1 : 1);
+    }
+  }
+  for (const entry of geometry.above) {
+    expect(entry.leftStyle).toBe('60%');
+    expect(Math.abs(entry.left - aboveAnchor)).toBeLessThan(0.01);
+    if (svgShapes.has(entry.shape)) {
+      expect(entry.svgDisplay).toBe('block');
+      expect(entry.svgHeight).toBeLessThanOrEqual(18);
+      expect(entry.scaleY).toBe(1);
+    }
+  }
+
+  expect(geometry.below.find((entry) => entry.shape === 'triangle')).toEqual(expect.objectContaining({
+    borderTop: '0px',
+    borderBottom: '11px',
+  }));
+  expect(geometry.above.find((entry) => entry.shape === 'triangle')).toEqual(expect.objectContaining({
+    borderTop: '11px',
+    borderBottom: '0px',
+  }));
+});
+
 const scenarios = [
   {
     name: 'normal-no-baseline',
