@@ -16,6 +16,122 @@
     }
   };
 
+  // src/utils/extrema.js
+  function getLocalBoundaryTimestamp(date, unit) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const day = date.getDate();
+    const hour = date.getHours();
+    if (unit === "quarterly") {
+      return new Date(year, month, day, hour, Math.floor(date.getMinutes() / 15) * 15, 0, 0).getTime();
+    }
+    if (unit === "hourly") {
+      return new Date(year, month, day, hour, 0, 0, 0).getTime();
+    }
+    if (unit === "daily") {
+      return new Date(year, month, day, 0, 0, 0, 0).getTime();
+    }
+    if (unit === "weekly") {
+      const daysSinceMonday = (date.getDay() + 6) % 7;
+      return new Date(year, month, day - daysSinceMonday, 0, 0, 0, 0).getTime();
+    }
+    if (unit === "monthly") {
+      return new Date(year, month, 1, 0, 0, 0, 0).getTime();
+    }
+    if (unit === "yearly") {
+      return new Date(year, 0, 1, 0, 0, 0, 0).getTime();
+    }
+    return null;
+  }
+  function normalizeReset(value) {
+    if (value === void 0) value = "never";
+    if (typeof value !== "string") return { kind: "never" };
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "never") return { kind: "never" };
+    if (CALENDAR_RESETS.has(normalized)) {
+      return { kind: "calendar", unit: normalized };
+    }
+    const durationMatch = normalized.match(/^(\d+)(m|h)$/);
+    if (!durationMatch) return { kind: "never" };
+    const amount = Number(durationMatch[1]);
+    const unit = durationMatch[2];
+    if (!Number.isInteger(amount) || amount < 1 || unit === "m" && amount > 59 || unit === "h" && amount > 23) {
+      return { kind: "never" };
+    }
+    return unit === "m" ? { kind: "duration", minutes: amount } : { kind: "duration", hours: amount };
+  }
+  function isValidReset(value) {
+    if (typeof value !== "string") return false;
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "never" || CALENDAR_RESETS.has(normalized)) return true;
+    const match = normalized.match(/^(\d+)(m|h)$/);
+    if (!match) return false;
+    const amount = Number(match[1]);
+    return Number.isInteger(amount) && amount >= 1 && (match[2] === "m" ? amount <= 59 : amount <= 23);
+  }
+  function getResetWindowKey(reset, timestamp) {
+    if ((reset == null ? void 0 : reset.kind) !== "calendar") return null;
+    const boundary = getLocalBoundaryTimestamp(new Date(timestamp), reset.unit);
+    return Number.isFinite(boundary) ? String(boundary) : null;
+  }
+  function getDurationMs(reset) {
+    if ((reset == null ? void 0 : reset.kind) !== "duration") return null;
+    if (Number.isInteger(reset.minutes)) return reset.minutes * 60 * 1e3;
+    if (Number.isInteger(reset.hours)) return reset.hours * 60 * 60 * 1e3;
+    return null;
+  }
+  function initializeExtremum(sample, reset, timestamp) {
+    if ((reset == null ? void 0 : reset.kind) === "duration") {
+      return {
+        value: sample,
+        startedAtMs: Number.isFinite(timestamp) ? timestamp : null,
+        windowKey: null
+      };
+    }
+    if ((reset == null ? void 0 : reset.kind) === "calendar") {
+      return {
+        value: sample,
+        startedAtMs: null,
+        windowKey: getResetWindowKey(reset, timestamp)
+      };
+    }
+    return {
+      value: sample,
+      startedAtMs: null,
+      windowKey: null
+    };
+  }
+  function updateExtremum(previous, sample, reset, direction, timestamp) {
+    if (!Number.isFinite(sample)) return previous != null ? previous : null;
+    const durationMs = getDurationMs(reset);
+    if (!previous) return initializeExtremum(sample, reset, timestamp);
+    if (durationMs !== null && Number.isFinite(previous.startedAtMs) && Number.isFinite(timestamp) && timestamp - previous.startedAtMs >= durationMs) {
+      return initializeExtremum(sample, reset, timestamp);
+    }
+    if ((reset == null ? void 0 : reset.kind) === "calendar") {
+      const windowKey = getResetWindowKey(reset, timestamp);
+      if (windowKey !== null && windowKey !== previous.windowKey) {
+        return initializeExtremum(sample, reset, timestamp);
+      }
+    }
+    const shouldReplace = direction === "min" ? sample < previous.value : sample > previous.value;
+    return shouldReplace ? { ...previous, value: sample } : previous;
+  }
+  var CALENDAR_RESETS;
+  var init_extrema = __esm({
+    "src/utils/extrema.js"() {
+      CALENDAR_RESETS = /* @__PURE__ */ new Set([
+        "quarterly",
+        "hourly",
+        "daily",
+        "weekly",
+        "monthly",
+        "yearly"
+      ]);
+    }
+  });
+
   // src/config/normalize.js
   function normalizeResolvableValue(value, entityValue, percentValue = null) {
     const normalized = {
@@ -469,14 +585,59 @@
     }
     return normalizedTarget;
   }
-  function normalizePeakMarkerConfig(entityConfig, cardConfig) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
-    const cardPeak = cardConfig == null ? void 0 : cardConfig.peak_marker;
-    const entityPeak = entityConfig == null ? void 0 : entityConfig.peak;
+  function getRawExtremumConfig(config, key) {
+    const value = config == null ? void 0 : config[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) return value;
+    const markerValue = config == null ? void 0 : config[`${key}_marker`];
+    return markerValue && typeof markerValue === "object" && !Array.isArray(markerValue) ? markerValue : null;
+  }
+  function normalizeLabelConfig(rawConfig, inheritedConfig) {
+    var _a, _b;
+    const rawLabel = rawConfig == null ? void 0 : rawConfig.label;
+    const hasRawLabel = rawLabel && typeof rawLabel === "object" && !Array.isArray(rawLabel);
     return {
-      show: (_d = (_c = (_b = (_a = entityPeak == null ? void 0 : entityPeak.enabled) != null ? _a : entityConfig.show_peak) != null ? _b : cardPeak == null ? void 0 : cardPeak.show) != null ? _c : cardConfig == null ? void 0 : cardConfig.show_peak) != null ? _d : false,
-      color: (_h = (_g = (_f = (_e = entityPeak == null ? void 0 : entityPeak.color) != null ? _e : entityConfig.peak_color) != null ? _f : cardPeak == null ? void 0 : cardPeak.color) != null ? _g : cardConfig == null ? void 0 : cardConfig.peak_color) != null ? _h : "#888"
+      show: hasRawLabel && typeof rawLabel.show === "boolean" ? rawLabel.show : (_a = inheritedConfig.show_label) != null ? _a : false,
+      decimal: hasRawLabel && rawLabel.decimal !== void 0 ? getFiniteNumber(rawLabel.decimal) : (_b = inheritedConfig.label_decimal) != null ? _b : null
     };
+  }
+  function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = {}) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+    const { legacy = false, defaultColor = "#888888" } = options;
+    const cardMarker = cardConfig == null ? void 0 : cardConfig[`${key}_marker`];
+    const rawMarker = getRawExtremumConfig(entityConfig, key);
+    const inherited = cardMarker != null ? cardMarker : {
+      show: legacy ? (_a = cardConfig == null ? void 0 : cardConfig.show_peak) != null ? _a : false : false,
+      color: legacy ? (_b = cardConfig == null ? void 0 : cardConfig.peak_color) != null ? _b : defaultColor : defaultColor,
+      show_label: false,
+      label_decimal: null,
+      reset: { kind: "never" }
+    };
+    const hasReset = rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, "reset");
+    const rawReset = hasReset ? rawMarker.reset : void 0;
+    const reset = hasReset ? normalizeReset(rawReset) : (_c = inherited.reset) != null ? _c : { kind: "never" };
+    const rawLabel = rawMarker == null ? void 0 : rawMarker.label;
+    const label = normalizeLabelConfig(rawMarker, inherited);
+    const normalized = {
+      show: (_f = (_e = (_d = rawMarker == null ? void 0 : rawMarker.enabled) != null ? _d : legacy ? entityConfig.show_peak : void 0) != null ? _e : inherited.show) != null ? _f : false,
+      color: (_i = (_h = (_g = rawMarker == null ? void 0 : rawMarker.color) != null ? _g : legacy ? entityConfig.peak_color : void 0) != null ? _h : inherited.color) != null ? _i : defaultColor
+    };
+    const inheritedAdvanced = cardMarker && (Object.prototype.hasOwnProperty.call(cardMarker, "show_label") || Object.prototype.hasOwnProperty.call(cardMarker, "label_decimal") || Object.prototype.hasOwnProperty.call(cardMarker, "reset"));
+    const hasAdvancedConfig = key === "floor" || hasReset || rawLabel !== void 0 || inheritedAdvanced;
+    if (hasAdvancedConfig) {
+      normalized.show_label = label.show;
+      normalized.label_decimal = label.decimal;
+      normalized.reset = reset;
+    }
+    if (hasReset && !isValidReset(rawReset)) {
+      normalized.reset_invalid = true;
+    }
+    return normalized;
+  }
+  function normalizePeakMarkerConfig(entityConfig, cardConfig) {
+    return normalizeExtremumMarkerConfig(entityConfig, cardConfig, "peak", { legacy: true, defaultColor: "#888888" });
+  }
+  function normalizeFloorMarkerConfig(entityConfig, cardConfig) {
+    return normalizeExtremumMarkerConfig(entityConfig, cardConfig, "floor", { defaultColor: "#888888" });
   }
   function normalizeEntityConfig(entityConfig, cardConfig) {
     var _a;
@@ -494,6 +655,7 @@
     normalizedEntity.formatting = normalizeFormattingConfig(entityConfig, cardConfig);
     normalizedEntity.target_marker = normalizeTargetMarkerConfig(entityConfig, cardConfig);
     normalizedEntity.peak_marker = normalizePeakMarkerConfig(entityConfig, cardConfig);
+    normalizedEntity.floor_marker = normalizeFloorMarkerConfig(entityConfig, cardConfig);
     normalizedEntity.min = normalizedEntity.scale.min.fixed;
     normalizedEntity.min_entity = normalizedEntity.scale.min.entity;
     normalizedEntity.max = normalizedEntity.scale.max.fixed;
@@ -528,7 +690,7 @@
       color: "#4a9eff",
       animated: true,
       show_peak: false,
-      peak_color: "#888",
+      peak_color: "#888888",
       target: null,
       target_entity: null,
       target_color: "#888",
@@ -571,6 +733,7 @@
     normalizedCard.formatting = normalizeFormattingConfig(baseConfig, null);
     normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);
     normalizedCard.peak_marker = normalizePeakMarkerConfig(baseConfig, null);
+    normalizedCard.floor_marker = normalizeFloorMarkerConfig(baseConfig, null);
     normalizedCard.entities = baseConfig.entities.map(
       (entityCfg) => normalizeEntityConfig(entityCfg, normalizedCard)
     );
@@ -578,6 +741,7 @@
   }
   var init_normalize = __esm({
     "src/config/normalize.js"() {
+      init_extrema();
     }
   });
 
@@ -678,6 +842,20 @@
       );
     }
   }
+  function validateExtremumReset(diagnostics, config, path, entity = null) {
+    var _a;
+    for (const marker of ["peak_marker", "floor_marker"]) {
+      if ((_a = config == null ? void 0 : config[marker]) == null ? void 0 : _a.reset_invalid) {
+        addWarning(
+          diagnostics,
+          `${marker}.invalid_reset`,
+          "Invalid marker reset; using never.",
+          `${path}.${marker}.reset`,
+          entity
+        );
+      }
+    }
+  }
   function getStaticSegmentBound(boundary) {
     var _a;
     if (!boundary || boundary.entity || Number.isFinite(boundary.percent)) return null;
@@ -753,6 +931,7 @@
     validateTargetRange(diagnostics, config, scaleBounds, path, entity);
     validateBaselineRange(diagnostics, config, scaleBounds, path, entity);
     validateBaselineSuppressesNeedle(diagnostics, config, path, entity);
+    validateExtremumReset(diagnostics, config, path, entity);
     validateSegments(diagnostics, (_a = config == null ? void 0 : config.bar) == null ? void 0 : _a.segments, scaleBounds, `${path}.bar`, entity);
     validateGradientStops(diagnostics, (_b = config == null ? void 0 : config.bar) == null ? void 0 : _b.gradient_stops, `${path}.bar`, entity);
   }
@@ -870,9 +1049,10 @@
   function getMarkerLaneOccupancy(entityConfig) {
     const targetConfig = entityConfig == null ? void 0 : entityConfig.target_marker;
     const peakConfig = entityConfig == null ? void 0 : entityConfig.peak_marker;
+    const floorConfig = entityConfig == null ? void 0 : entityConfig.floor_marker;
     return {
       above: (peakConfig == null ? void 0 : peakConfig.show) === true,
-      below: (targetConfig == null ? void 0 : targetConfig.enabled) !== false && hasConfiguredSource(targetConfig == null ? void 0 : targetConfig.source)
+      below: (targetConfig == null ? void 0 : targetConfig.enabled) !== false && hasConfiguredSource(targetConfig == null ? void 0 : targetConfig.source) || (floorConfig == null ? void 0 : floorConfig.show) === true
     };
   }
   function buildMarkerModels({
@@ -884,11 +1064,16 @@
     peakValue = null,
     peakPosition = null,
     peakPresentation = null,
-    peakVisible = Number.isFinite(peakPosition)
+    peakVisible = Number.isFinite(peakPosition),
+    floorValue = null,
+    floorPosition = null,
+    floorPresentation = null,
+    floorVisible = Number.isFinite(floorPosition)
   }) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     const targetConfig = entityConfig == null ? void 0 : entityConfig.target_marker;
     const peakConfig = entityConfig == null ? void 0 : entityConfig.peak_marker;
+    const floorConfig = entityConfig == null ? void 0 : entityConfig.floor_marker;
     const targetEnabled = (targetConfig == null ? void 0 : targetConfig.enabled) !== false;
     return [
       createMarkerModel({
@@ -904,14 +1089,27 @@
         shape: (_b = targetConfig == null ? void 0 : targetConfig.shape) != null ? _b : "diamond"
       }),
       createMarkerModel({
+        id: "floor",
+        type: "floor",
+        value: floorValue,
+        position: floorPosition,
+        lane: "below",
+        visible: (floorConfig == null ? void 0 : floorConfig.show) === true && floorVisible,
+        color: (_c = floorConfig == null ? void 0 : floorConfig.color) != null ? _c : null,
+        label: floorPresentation,
+        labelVisible: (floorConfig == null ? void 0 : floorConfig.show) === true && (floorConfig == null ? void 0 : floorConfig.show_label) === true,
+        shape: "triangle"
+      }),
+      createMarkerModel({
         id: "peak",
         type: "peak",
         value: peakValue,
         position: peakPosition,
         lane: "above",
         visible: (peakConfig == null ? void 0 : peakConfig.show) === true && peakVisible,
-        color: (_c = peakConfig == null ? void 0 : peakConfig.color) != null ? _c : null,
+        color: (_d = peakConfig == null ? void 0 : peakConfig.color) != null ? _d : null,
         label: peakPresentation,
+        labelVisible: (peakConfig == null ? void 0 : peakConfig.show) === true && (peakConfig == null ? void 0 : peakConfig.show_label) === true,
         shape: "triangle"
       })
     ];
@@ -1026,8 +1224,8 @@
       edge: percent <= 0 ? "left" : percent >= 100 ? "right" : "middle"
     };
   }
-  function getPeakState(entityId, numericValue, minValue, maxValue, peaks, peakEnabled) {
-    if (!peakEnabled || !Number.isFinite(numericValue)) {
+  function getExtremumState(numericValue, minValue, maxValue, tracker, direction, enabled) {
+    if (!enabled) {
       return {
         value: null,
         percent: null,
@@ -1035,22 +1233,30 @@
         visible: false
       };
     }
-    const existingPeak = getFiniteNumber(peaks == null ? void 0 : peaks[entityId]);
-    const peakValue = Number.isFinite(existingPeak) ? Math.max(existingPeak, numericValue) : numericValue;
+    const existingValue = getFiniteNumber(tracker == null ? void 0 : tracker.value);
+    if (!Number.isFinite(existingValue) && !Number.isFinite(numericValue)) {
+      return {
+        value: null,
+        percent: null,
+        visible: false
+      };
+    }
+    const value = Number.isFinite(existingValue) ? Number.isFinite(numericValue) ? direction === "min" ? Math.min(existingValue, numericValue) : Math.max(existingValue, numericValue) : existingValue : numericValue;
     return {
-      value: peakValue,
-      percent: toScalePct(peakValue, minValue, maxValue),
+      value,
+      percent: toScalePct(value, minValue, maxValue),
       visible: true
     };
   }
   function buildRowViewModel(options) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V;
     const {
       hass,
       cardConfig,
       entityConfig,
       entityState,
-      peaks
+      peaks,
+      extrema
     } = options;
     void cardConfig;
     const entityId = (_a = entityConfig == null ? void 0 : entityConfig.entity) != null ? _a : null;
@@ -1075,15 +1281,27 @@
     const baselineValue = ((_o = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _o.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_p = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _p.at, safeMin, safeMax);
     const baselinePercent = Number.isFinite(baselineValue) ? toScalePct(baselineValue, safeMin, safeMax) : null;
     const baselineVisible = Number.isFinite(baselineValue);
-    const peakState = getPeakState(
-      entityId,
+    const legacyPeak = Number.isFinite(getFiniteNumber(peaks == null ? void 0 : peaks[entityId])) ? { value: getFiniteNumber(peaks == null ? void 0 : peaks[entityId]) } : null;
+    const peakState = getExtremumState(
       numericValue,
       safeMin,
       safeMax,
-      peaks,
-      ((_q = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _q.show) === true
+      (_q = extrema == null ? void 0 : extrema.peak) != null ? _q : legacyPeak,
+      "max",
+      ((_r = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _r.show) === true
     );
-    const peakPresentation = peakState.visible ? createNumericPresentation(peakState.value, displayUnit, decimal) : null;
+    const floorState = getExtremumState(
+      numericValue,
+      safeMin,
+      safeMax,
+      extrema == null ? void 0 : extrema.floor,
+      "min",
+      ((_s = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _s.show) === true
+    );
+    const peakDecimal = (_u = (_t = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _t.label_decimal) != null ? _u : decimal;
+    const floorDecimal = (_w = (_v = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _v.label_decimal) != null ? _w : decimal;
+    const peakPresentation = peakState.visible ? createNumericPresentation(peakState.value, targetUnit, peakDecimal) : null;
+    const floorPresentation = floorState.visible ? createNumericPresentation(floorState.value, targetUnit, floorDecimal) : null;
     const markers = buildMarkerModels({
       entityConfig,
       targetValue,
@@ -1093,12 +1311,16 @@
       peakValue: peakState.value,
       peakPosition: peakState.percent,
       peakPresentation,
-      peakVisible: peakState.visible
+      peakVisible: peakState.visible,
+      floorValue: floorState.value,
+      floorPosition: floorState.percent,
+      floorPresentation,
+      floorVisible: floorState.visible
     });
     return {
       entityId,
-      name: (_t = (_s = entityConfig == null ? void 0 : entityConfig.name) != null ? _s : (_r = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _r.friendly_name) != null ? _t : entityId,
-      icon: (entityConfig == null ? void 0 : entityConfig.icon) === false ? false : (_w = (_v = entityConfig == null ? void 0 : entityConfig.icon) != null ? _v : (_u = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _u.icon) != null ? _w : getDefaultEntityIcon(entityState, entityId),
+      name: (_z = (_y = entityConfig == null ? void 0 : entityConfig.name) != null ? _y : (_x = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _x.friendly_name) != null ? _z : entityId,
+      icon: (entityConfig == null ? void 0 : entityConfig.icon) === false ? false : (_C = (_B = entityConfig == null ? void 0 : entityConfig.icon) != null ? _B : (_A = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _A.icon) != null ? _C : getDefaultEntityIcon(entityState, entityId),
       state: rawState,
       numericValue,
       rawUnit,
@@ -1109,11 +1331,11 @@
       displayUnit: primaryPresentation.unit,
       primaryPresentation,
       unit: primaryPresentation.unit,
-      barColor: (_y = (_x = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _x.color) != null ? _y : null,
-      fillStyle: (_A = (_z = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _z.fill_style) != null ? _A : null,
+      barColor: (_E = (_D = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _D.color) != null ? _E : null,
+      fillStyle: (_G = (_F = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _F.fill_style) != null ? _G : null,
       target: targetValue,
       targetPercent,
-      targetDisplay: (_B = targetPresentation == null ? void 0 : targetPresentation.text) != null ? _B : null,
+      targetDisplay: (_H = targetPresentation == null ? void 0 : targetPresentation.text) != null ? _H : null,
       targetPresentation,
       targetVisible,
       baseline: baselineValue,
@@ -1121,23 +1343,28 @@
       baselineVisible,
       peak: peakState.value,
       peakPercent: peakState.percent,
-      peakDisplay: (_C = peakPresentation == null ? void 0 : peakPresentation.number) != null ? _C : null,
+      peakDisplay: (_I = peakPresentation == null ? void 0 : peakPresentation.number) != null ? _I : null,
       peakPresentation,
       peakVisible: peakState.visible,
+      floor: floorState.value,
+      floorPercent: floorState.percent,
+      floorDisplay: (_J = floorPresentation == null ? void 0 : floorPresentation.number) != null ? _J : null,
+      floorPresentation,
+      floorVisible: floorState.visible,
       markers,
       markerLaneOccupancy: getMarkerLaneOccupancy(entityConfig),
-      segments: (_E = (_D = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _D.segments) != null ? _E : null,
-      gradientStops: (_G = (_F = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _F.gradient_stops) != null ? _G : null,
+      segments: (_L = (_K = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _K.segments) != null ? _L : null,
+      gradientStops: (_N = (_M = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _M.gradient_stops) != null ? _N : null,
       needle: getNeedleState(entityConfig, numericValue, safeMin, safeMax, baselinePercent),
       classes: {
-        labelPosition: (_J = (_I = (_H = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _H.label) == null ? void 0 : _I.position) != null ? _J : "left",
-        animated: ((_K = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _K.animated) !== false
+        labelPosition: (_Q = (_P = (_O = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _O.label) == null ? void 0 : _P.position) != null ? _Q : "left",
+        animated: ((_R = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _R.animated) !== false
       },
       attributes: {
         entity: entityId,
-        baseHeight: (_M = (_L = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _L.height) != null ? _M : 38,
-        heightExplicit: ((_N = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _N.height_explicit) === true,
-        barAnimated: ((_O = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _O.animated) !== false
+        baseHeight: (_T = (_S = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _S.height) != null ? _T : 38,
+        heightExplicit: ((_U = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _U.height_explicit) === true,
+        barAnimated: ((_V = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _V.animated) !== false
       }
     };
   }
@@ -1171,6 +1398,7 @@
       init_marker_view_model();
       init_dom();
       init_format();
+      init_extrema();
       SensorBarCard = class extends HTMLElement {
         static getConfigElement() {
           return document.createElement("sensor-bar-card-plus-editor");
@@ -1183,7 +1411,7 @@
           this._diagnostics = { warnings: [], errors: [] };
           this._lastDiagnosticsSignature = null;
           this._hass = null;
-          this._peaks = {};
+          this._extrema = {};
           this._rendered = false;
           this._resizeObserver = null;
           this._densityPassScheduled = false;
@@ -1208,18 +1436,37 @@
           this._densityPassDirty = false;
         }
         setConfig(config) {
+          var _a, _b, _c, _d;
           if (!config.entities && !config.entity) {
             throw new Error("You must define entities or entity");
           }
           this._rendered = false;
+          const previousConfig = this._config;
           this._config = this.normalizeCardConfig(config);
           const activeEntityIds = new Set(
             (this._config.entities || []).map((entityConfig) => entityConfig.entity)
           );
-          for (const entityId of Object.keys(this._peaks)) {
+          for (const entityId of Object.keys(this._extrema)) {
             if (!activeEntityIds.has(entityId)) {
-              delete this._peaks[entityId];
+              delete this._extrema[entityId];
             }
+          }
+          const previousEntities = new Map(((_a = previousConfig == null ? void 0 : previousConfig.entities) != null ? _a : []).map((entity) => [entity.entity, entity]));
+          for (const entityConfig of (_b = this._config.entities) != null ? _b : []) {
+            const previous = previousEntities.get(entityConfig.entity);
+            const current = entityConfig;
+            const stored = this._extrema[entityConfig.entity];
+            if (!stored) continue;
+            for (const key of ["peak", "floor"]) {
+              const previousMarker = previous == null ? void 0 : previous[`${key}_marker`];
+              const currentMarker = current == null ? void 0 : current[`${key}_marker`];
+              if ((previousMarker == null ? void 0 : previousMarker.show) === true && (currentMarker == null ? void 0 : currentMarker.show) !== true) {
+                delete stored[key];
+              } else if (JSON.stringify((_c = previousMarker == null ? void 0 : previousMarker.reset) != null ? _c : { kind: "never" }) !== JSON.stringify((_d = currentMarker == null ? void 0 : currentMarker.reset) != null ? _d : { kind: "never" })) {
+                delete stored[key];
+              }
+            }
+            if (!stored.peak && !stored.floor) delete this._extrema[entityConfig.entity];
           }
           this._diagnostics = validateNormalizedConfig(this._config);
           this._logDiagnostics();
@@ -1364,6 +1611,39 @@
             name: (_g = ecfg.name) != null ? _g : null
           };
         }
+        _getStateTimestamp(stateObj) {
+          var _a;
+          const rawTimestamp = (_a = stateObj == null ? void 0 : stateObj.last_updated) != null ? _a : stateObj == null ? void 0 : stateObj.last_changed;
+          const timestamp = rawTimestamp instanceof Date ? rawTimestamp.getTime() : Date.parse(String(rawTimestamp != null ? rawTimestamp : ""));
+          return Number.isFinite(timestamp) ? timestamp : Date.now();
+        }
+        _updateExtrema(entityCfg, normalizedEntity, stateObj) {
+          var _a, _b, _c;
+          const sample = getFiniteNumber(stateObj == null ? void 0 : stateObj.state);
+          if (!Number.isFinite(sample)) return;
+          const entityId = entityCfg.entity;
+          const current = (_a = this._extrema[entityId]) != null ? _a : {};
+          const timestamp = this._getStateTimestamp(stateObj);
+          for (const key of ["peak", "floor"]) {
+            const marker = normalizedEntity == null ? void 0 : normalizedEntity[`${key}_marker`];
+            if ((marker == null ? void 0 : marker.show) !== true) {
+              delete current[key];
+              continue;
+            }
+            current[key] = updateExtremum(
+              (_b = current[key]) != null ? _b : null,
+              sample,
+              (_c = marker.reset) != null ? _c : { kind: "never" },
+              key === "floor" ? "min" : "max",
+              timestamp
+            );
+          }
+          if (current.peak || current.floor) {
+            this._extrema[entityId] = current;
+          } else {
+            delete this._extrema[entityId];
+          }
+        }
         _getDefaultEntityIcon(stateObj, entityId = "") {
           var _a, _b, _c;
           const deviceClass = String((_b = (_a = stateObj == null ? void 0 : stateObj.attributes) == null ? void 0 : _a.device_class) != null ? _b : "").trim();
@@ -1477,12 +1757,17 @@
           if (!this.shadowRoot) return;
           this.shadowRoot.querySelectorAll(".row[data-entity]").forEach((row) => {
             this._positionTargetLabel(row);
+            this._positionMarkerValueLabel(row, ".peak-value-label", ".peak-marker");
+            this._positionMarkerValueLabel(row, ".floor-value-label", ".floor-marker");
           });
         }
         _positionTargetLabel(row) {
+          this._positionMarkerValueLabel(row, ".target-value-label", ".target-marker");
+        }
+        _positionMarkerValueLabel(row, labelSelector, markerSelector) {
           const track = row.querySelector(".bar-track");
-          const label = row.querySelector(".target-value-label");
-          const marker = row.querySelector(".target-marker");
+          const label = row.querySelector(labelSelector);
+          const marker = row.querySelector(markerSelector);
           if (!track || !label || !marker) return;
           if (marker.style.display === "none" || !label.textContent.trim()) {
             this._setStyleIfChanged(label, "visibility", "hidden");
@@ -2204,6 +2489,12 @@
         .row[data-bar-animated="false"] .needle-marker,
         .row[data-bar-animated="false"] .target-marker,
         .row[data-bar-animated="false"] .peak-marker,
+        .row[data-bar-animated="false"] .floor-marker,
+        .row[data-bar-animated="false"] .target-value-label,
+        .row[data-bar-animated="false"] .peak-value-label,
+        .row[data-bar-animated="false"] .floor-value-label {
+          transition: none;
+        }
         .row[data-bar-animated="false"] .target-value-label {
           transition: none;
         }
@@ -2345,6 +2636,29 @@
           z-index: 6;
           visibility: hidden;
           transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
+        }
+        .peak-value-label,
+        .floor-value-label {
+          position: absolute;
+          font-size: var(--sbcp-target-label-font-size);
+          line-height: 1;
+          color: var(--secondary-text-color, #888);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          box-sizing: border-box;
+          pointer-events: none;
+          z-index: 6;
+          visibility: hidden;
+          transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
+        }
+        .peak-value-label {
+          bottom: 100%;
+          margin-bottom: 3px;
+        }
+        .floor-value-label {
+          top: 100%;
+          margin-top: 3px;
         }
         .above-line {
           display: grid;
@@ -2536,7 +2850,7 @@
           text-overflow: clip;
         }
         /* \u2500\u2500 Shared marker base \u2500\u2500 */
-        .peak-marker, .target-marker {
+        .peak-marker, .target-marker, .floor-marker {
           position: absolute;
           top: 0;
           bottom: 0;
@@ -2548,6 +2862,9 @@
           --marker-contrast-color: #f3f4f6;
         }
         .target-marker {
+          z-index: 6;
+        }
+        .floor-marker {
           z-index: 6;
         }
         .peak-marker {
@@ -2586,7 +2903,9 @@
         .peak-marker .peak-inset,
         .peak-marker .peak-outset,
         .target-marker .target-inset,
-        .target-marker .target-outset {
+        .target-marker .target-outset,
+        .floor-marker .floor-inset,
+        .floor-marker .floor-outset {
           position: absolute;
           left: 50%;
           transform: translateX(-50%);
@@ -2629,6 +2948,23 @@
           border-top: 4px solid var(--marker-color);
           z-index: 3;
         }
+        .floor-marker .floor-inset {
+          bottom: 0;
+          border-left: 7px solid transparent;
+          border-right: 7px solid transparent;
+          border-bottom: 11px solid var(--marker-color);
+          z-index: 2;
+          filter:
+            drop-shadow(0 0 1.2px var(--marker-contrast-color))
+            drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
+        }
+        .floor-marker .floor-outset {
+          bottom: -4px;
+          border-left: 5px solid transparent;
+          border-right: 5px solid transparent;
+          border-top: 4px solid var(--marker-color);
+          z-index: 3;
+        }
         /* Shared non-triangle marker shapes. Triangle keeps the original CSS geometry. */
         .marker-shape-svg {
           display: none;
@@ -2649,14 +2985,23 @@
           bottom: 0;
           transform: translateX(-50%);
         }
+        .floor-marker .marker-shape-svg {
+          bottom: 0;
+          transform: translateX(-50%);
+        }
         .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-inset,
         .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-outset,
         .target-marker[data-shape]:not([data-shape="triangle"]) .target-inset,
-        .target-marker[data-shape]:not([data-shape="triangle"]) .target-outset {
+        .target-marker[data-shape]:not([data-shape="triangle"]) .target-outset,
+        .floor-marker[data-shape]:not([data-shape="triangle"]) .floor-inset,
+        .floor-marker[data-shape]:not([data-shape="triangle"]) .floor-outset {
           display: none;
         }
         .peak-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg,
         .target-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
+          display: block;
+        }
+        .floor-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
           display: block;
         }
         .marker-shape-svg path {
@@ -3790,6 +4135,8 @@
               const targetRows = rows || ((_a = this.shadowRoot) == null ? void 0 : _a.querySelectorAll(".row[data-entity]")) || [];
               targetRows.forEach((row) => {
                 this._positionTargetLabel(row);
+                this._positionMarkerValueLabel(row, ".peak-value-label", ".peak-marker");
+                this._positionMarkerValueLabel(row, ".floor-value-label", ".floor-marker");
               });
             });
           });
@@ -3915,12 +4262,15 @@
                   label: targetDisplay === null ? null : { text: targetDisplay }
                 };
               }
+              if (marker.type === "floor") {
+                return marker;
+              }
               return {
                 ...marker,
                 position: peakPct === void 0 ? marker.position : peakPct,
                 visible: peakPct !== null && peakPct !== void 0 && ecfg.peak_marker.show === true,
                 color: peakColor || marker.color,
-                label: peakDisplay === null ? null : { number: peakDisplay }
+                label: peakDisplay === null ? marker.label : { text: peakDisplay }
               };
             });
           }
@@ -3945,12 +4295,12 @@
         }
         _renderMarker(marker) {
           var _a, _b;
-          if (!marker || marker.type === "peak" && !marker.visible) return "";
+          if (!marker) return "";
           const position = Number.isFinite(marker.position) ? marker.position : 0;
           const color = (_a = marker.color) != null ? _a : "#888888";
           const contrastColor = this._getMarkerContrastColor(color);
           const display = marker.visible ? "" : "none";
-          const shape = normalizeMarkerShape(marker.shape, marker.type === "peak" ? "triangle" : "diamond");
+          const shape = normalizeMarkerShape(marker.shape, marker.type === "target" ? "diamond" : "triangle");
           const lane = (_b = marker.lane) != null ? _b : marker.type === "peak" ? "above" : "below";
           const shapePaths = `
       <path data-shape="circle" d="M8 1A7 7 0 1 0 8 15A7 7 0 1 0 8 1Z"></path>
@@ -3958,16 +4308,17 @@
       <path data-shape="chevron" d="M2 4L8 10L14 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
       <path data-shape="arrow" d="M6 1H10V8H14L8 15L2 8H6Z"></path>
       <path data-shape="pin" d="M8 15C7 13 2 10 2 6A6 6 0 1 1 14 6C14 10 9 13 8 15Z"></path>`;
-          if (marker.type === "target") {
+          if (marker.type === "target" || marker.type === "floor") {
+            const markerClass = `${marker.type}-marker`;
             return `
-      <div class="target-marker" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
-        <div class="target-inset"></div>
-        <div class="target-outset"></div>
+      <div class="${markerClass}" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+        <div class="${marker.type}-inset"></div>
+        <div class="${marker.type}-outset"></div>
         <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
       </div>`;
           }
           return `
-      <div class="peak-marker" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};">
+      <div class="peak-marker" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
         <div class="peak-outset"></div>
         <div class="peak-inset"></div>
         <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
@@ -3976,7 +4327,6 @@
         _patchMarker(markerEl, marker) {
           var _a, _b, _c;
           if (!markerEl || !marker) return;
-          if (marker.type === "peak" && !marker.visible) return;
           const shape = normalizeMarkerShape(marker.shape, marker.type === "peak" ? "triangle" : "diamond");
           this._setDatasetIfChanged(markerEl, "shape", shape);
           this._setDatasetIfChanged(markerEl, "lane", (_a = marker.lane) != null ? _a : marker.type === "peak" ? "above" : "below");
@@ -3985,9 +4335,7 @@
             this._setDatasetIfChanged(shapeSvg, "shape", shape);
             this._setDatasetIfChanged(shapeSvg, "lane", (_c = marker.lane) != null ? _c : marker.type === "peak" ? "above" : "below");
           }
-          if (marker.type === "target") {
-            this._setStyleIfChanged(markerEl, "display", marker.visible ? "" : "none");
-          }
+          this._setStyleIfChanged(markerEl, "display", marker.visible ? "" : "none");
           if (marker.visible && Number.isFinite(marker.position)) {
             this._setStyleIfChanged(markerEl, "left", `${marker.position}%`);
           }
@@ -3997,42 +4345,53 @@
           }
         }
         _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
-          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z;
           const ecfg = this._resolve(entityCfg);
           const stateObj = (_c = (_b = (_a = this._hass) == null ? void 0 : _a.states) == null ? void 0 : _b[entityCfg.entity]) != null ? _c : null;
+          if (stateObj) this._updateExtrema(entityCfg, ecfg, stateObj);
           const rowViewModel = stateObj ? buildRowViewModel({
             hass: this._hass,
             cardConfig: this._config,
             entityConfig: ecfg,
             entityState: stateObj,
-            peaks: this._peaks
+            extrema: (_d = this._extrema[entityCfg.entity]) != null ? _d : null
           }) : null;
           const layout = ecfg.layout;
           const bar = ecfg.bar;
           const safeMin = Number.isFinite(minValue) ? minValue : 0;
           const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
-          const baselinePct = (_d = rowViewModel == null ? void 0 : rowViewModel.baselinePercent) != null ? _d : this._resolveBaselinePct(ecfg, safeMin, safeMax);
+          const baselinePct = (_e = rowViewModel == null ? void 0 : rowViewModel.baselinePercent) != null ? _e : this._resolveBaselinePct(ecfg, safeMin, safeMax);
           const lp = layout.label.position;
-          const h = (_f = (_e = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _e.baseHeight) != null ? _f : layout.height;
-          const name = (_j = (_i = (_g = rowViewModel == null ? void 0 : rowViewModel.name) != null ? _g : ecfg.name) != null ? _i : (_h = stateObj == null ? void 0 : stateObj.attributes) == null ? void 0 : _h.friendly_name) != null ? _j : entityCfg.entity;
-          const escapedEntityId = escapeHtml((_k = rowViewModel == null ? void 0 : rowViewModel.entityId) != null ? _k : entityCfg.entity);
+          const h = (_g = (_f = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _f.baseHeight) != null ? _g : layout.height;
+          const name = (_k = (_j = (_h = rowViewModel == null ? void 0 : rowViewModel.name) != null ? _h : ecfg.name) != null ? _j : (_i = stateObj == null ? void 0 : stateObj.attributes) == null ? void 0 : _i.friendly_name) != null ? _k : entityCfg.entity;
+          const escapedEntityId = escapeHtml((_l = rowViewModel == null ? void 0 : rowViewModel.entityId) != null ? _l : entityCfg.entity);
           const escapedName = escapeHtml(name);
           const markerModels = this._getRowMarkerModels(rowViewModel, ecfg, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor);
           const targetMarkerModel = this._getMarkerModel(markerModels, "target");
           const peakMarkerModel = this._getMarkerModel(markerModels, "peak");
-          const markerLaneOccupancy = (_l = rowViewModel == null ? void 0 : rowViewModel.markerLaneOccupancy) != null ? _l : getMarkerLaneOccupancy(ecfg);
-          const rawValue = (_m = rowViewModel == null ? void 0 : rowViewModel.numericValue) != null ? _m : this._getFiniteNumber(stateDisplay);
-          const needleState = (_n = rowViewModel == null ? void 0 : rowViewModel.needle) != null ? _n : this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
+          const floorMarkerModel = this._getMarkerModel(markerModels, "floor");
+          const markerLaneOccupancy = (_m = rowViewModel == null ? void 0 : rowViewModel.markerLaneOccupancy) != null ? _m : getMarkerLaneOccupancy(ecfg);
+          const rawValue = (_n = rowViewModel == null ? void 0 : rowViewModel.numericValue) != null ? _n : this._getFiniteNumber(stateDisplay);
+          const needleState = (_o = rowViewModel == null ? void 0 : rowViewModel.needle) != null ? _o : this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
           const fillState = this._getFillRenderState(pct, "var(--sbcp-row-height)", ecfg, color, targetPct, baselinePct, safeMin, safeMax, needleState.show);
           const peakMarker = this._renderMarker(peakMarkerModel);
           const targetMarker = this._renderMarker(targetMarkerModel);
+          const floorMarker = this._renderMarker(floorMarkerModel);
           const targetValueLabel = (targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) ? `
       <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;">
-        ${((_o = targetMarkerModel.label) == null ? void 0 : _o.text) ? escapeHtml(targetMarkerModel.label.text) : ""}
+        ${((_p = targetMarkerModel.label) == null ? void 0 : _p.text) ? escapeHtml(targetMarkerModel.label.text) : ""}
       </div>` : "";
-          const needleMarker = ((_q = (_p = ecfg.bar) == null ? void 0 : _p.needle) == null ? void 0 : _q.show) && !Number.isFinite(baselinePct) ? `
+          const peakValueLabel = (peakMarkerModel == null ? void 0 : peakMarkerModel.labelVisible) ? `
+      <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;">
+        ${peakMarkerModel.visible && ((_q = peakMarkerModel.label) == null ? void 0 : _q.text) ? escapeHtml(peakMarkerModel.label.text) : ""}
+      </div>` : "";
+          const floorValueLabel = (floorMarkerModel == null ? void 0 : floorMarkerModel.labelVisible) ? `
+      <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;">
+        ${floorMarkerModel.visible && ((_r = floorMarkerModel.label) == null ? void 0 : _r.text) ? escapeHtml(floorMarkerModel.label.text) : ""}
+      </div>` : "";
+          const needleMarker = ((_t = (_s = ecfg.bar) == null ? void 0 : _s.needle) == null ? void 0 : _t.show) && !Number.isFinite(baselinePct) ? `
       <div class="needle-layer">
-        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_r = needleState.pct) != null ? _r : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
+        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_u = needleState.pct) != null ? _u : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
       </div>` : "";
           const paintLayers = fillState.paintLayers.map((layer) => `
                   <div class="bar-paint-layer" data-layer="${layer.id}" style="z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}"></div>`).join("");
@@ -4044,7 +4403,7 @@
           ${this._formatAboveValueMarkup(stateDisplay, unit, false)}
         </div>
       </div>` : "";
-          const heroSize = (_s = layout.hero.size) != null ? _s : "small";
+          const heroSize = (_v = layout.hero.size) != null ? _v : "small";
           const heroFontSize = layout.hero.value_size;
           const heroHeader = lp === "hero" ? `
       <div class="hero-line" data-hero-size="${heroSize}"${Number.isFinite(heroFontSize) ? ` style="--sbcp-hero-base-size:${heroFontSize}px"` : ""}>
@@ -4064,7 +4423,7 @@
           const escapedIcon = ecfg.icon && ecfg.icon !== false ? escapeHtml(ecfg.icon) : "";
           const mainIcon = escapedIcon && lp !== "hero" ? `<div class="icon-wrap"><ha-icon icon="${escapedIcon}"></ha-icon></div>` : "";
           return `
-      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${((_u = (_t = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _t.heightExplicit) != null ? _u : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_w = (_v = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _v.barAnimated) != null ? _w : bar.animated) ? "true" : "false"}">
+      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${((_x = (_w = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _w.heightExplicit) != null ? _x : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_z = (_y = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _y.barAnimated) != null ? _z : bar.animated) ? "true" : "false"}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${heroHeader}
@@ -4080,9 +4439,12 @@ ${paintLayers}
                 ${innerLabel}
                 ${peakMarker}
                 ${targetMarker}
+                ${floorMarker}
                 ${needleMarker}
               </div>
+              ${peakValueLabel}
               ${targetValueLabel}
+              ${floorValueLabel}
             </div>
             ${rightValue}
           </div>
@@ -4090,17 +4452,17 @@ ${paintLayers}
       </div>`;
         }
         _patchRow(row, entityCfg, stateObj) {
-          var _a, _b, _c, _d;
+          var _a, _b, _c, _d, _e;
           if (!row || !stateObj) return;
           const ecfg = this._resolve(entityCfg);
+          this._updateExtrema(entityCfg, ecfg, stateObj);
           const rowViewModel = buildRowViewModel({
             hass: this._hass,
             cardConfig: this._config,
             entityConfig: ecfg,
             entityState: stateObj,
-            peaks: this._peaks
+            extrema: (_a = this._extrema[entityCfg.entity]) != null ? _a : null
           });
-          const rawVal = rowViewModel.numericValue;
           const safeMin = rowViewModel.min;
           const safeMax = rowViewModel.max;
           const pct = rowViewModel.percent;
@@ -4133,7 +4495,7 @@ ${paintLayers}
           const needleEl = row.querySelector(".needle-marker");
           if (needleEl) {
             this._setStyleIfChanged(needleEl, "display", needleState.show ? "block" : "none");
-            this._setStyleIfChanged(needleEl, "left", `${(_a = needleState.pct) != null ? _a : 0}%`);
+            this._setStyleIfChanged(needleEl, "left", `${(_b = needleState.pct) != null ? _b : 0}%`);
             this._setStyleIfChanged(needleEl, "--needle-color", needleState.color);
             this._setStyleIfChanged(needleEl, "--needle-border-color", needleState.borderColor);
             this._setDatasetIfChanged(needleEl, "edge", needleState.edge);
@@ -4180,28 +4542,39 @@ ${paintLayers}
           if (aboveLabel) {
             aboveLabel.innerHTML = `<span class="above-bar-label-name label-left-text">${escapeHtml(rowViewModel.name)}</span>${this._formatAboveValueMarkup(display, displayUnit, false)}`;
           }
-          if (ecfg.peak_marker.show && Number.isFinite(rawVal)) {
-            const key = entityCfg.entity;
-            if (this._peaks[key] === void 0 || rawVal > this._peaks[key]) {
-              this._peaks[key] = rawVal;
-            }
-          }
           const targetEl = row.querySelector(".target-marker");
           const targetLabelEl = row.querySelector(".target-value-label");
-          const markerModels = (_b = rowViewModel.markers) != null ? _b : [];
+          const peakLabelEl = row.querySelector(".peak-value-label");
+          const floorLabelEl = row.querySelector(".floor-value-label");
+          const markerModels = (_c = rowViewModel.markers) != null ? _c : [];
           this._patchMarker(targetEl, this._getMarkerModel(markerModels, "target"));
           this._patchMarker(row.querySelector(".peak-marker"), this._getMarkerModel(markerModels, "peak"));
+          this._patchMarker(row.querySelector(".floor-marker"), this._getMarkerModel(markerModels, "floor"));
           const targetMarkerModel = this._getMarkerModel(markerModels, "target");
           if (targetLabelEl) {
             if ((targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) && targetMarkerModel.visible) {
-              this._setTextIfChanged(targetLabelEl, (_d = (_c = targetMarkerModel.label) == null ? void 0 : _c.text) != null ? _d : null);
+              this._setTextIfChanged(targetLabelEl, (_e = (_d = targetMarkerModel.label) == null ? void 0 : _d.text) != null ? _e : null);
             } else {
               this._setStyleIfChanged(targetLabelEl, "visibility", "hidden");
             }
           }
+          const patchValueLabel = (labelEl, markerType) => {
+            var _a2, _b2;
+            if (!labelEl) return;
+            const marker = this._getMarkerModel(markerModels, markerType);
+            if ((marker == null ? void 0 : marker.labelVisible) && marker.visible) {
+              this._setTextIfChanged(labelEl, (_b2 = (_a2 = marker.label) == null ? void 0 : _a2.text) != null ? _b2 : null);
+              this._setStyleIfChanged(labelEl, "visibility", "visible");
+              this._setStyleIfChanged(labelEl, "left", `${Number.isFinite(marker.position) ? marker.position : 0}%`);
+            } else {
+              this._setStyleIfChanged(labelEl, "visibility", "hidden");
+            }
+          };
+          patchValueLabel(peakLabelEl, "peak");
+          patchValueLabel(floorLabelEl, "floor");
         }
         _update() {
-          var _a, _b, _c, _d;
+          var _a, _b, _c, _d, _e;
           if (!this._hass || !this._config) return;
           const rowsEl = this.shadowRoot.querySelector(".rows");
           if (!rowsEl) return;
@@ -4216,31 +4589,24 @@ ${paintLayers}
                 continue;
               }
               const ecfg = this._resolve(entityCfg);
+              this._updateExtrema(entityCfg, ecfg, stateObj);
               const rowViewModel = buildRowViewModel({
                 hass: this._hass,
                 cardConfig: this._config,
                 entityConfig: ecfg,
                 entityState: stateObj,
-                peaks: this._peaks
+                extrema: (_a = this._extrema[entityCfg.entity]) != null ? _a : null
               });
-              const rawVal = rowViewModel.numericValue;
               const safeMin = rowViewModel.min;
               const safeMax = rowViewModel.max;
-              const targetVal = rowViewModel.target;
               const pct = rowViewModel.percent;
               const color = this._getColor(pct, ecfg, safeMin, safeMax);
               const display = rowViewModel.primaryPresentation.number;
               const displayUnit = rowViewModel.primaryPresentation.unit;
               const targetPct = rowViewModel.targetPercent;
-              const targetDisplay = (_b = (_a = rowViewModel.targetPresentation) == null ? void 0 : _a.text) != null ? _b : null;
-              let peakPct = null, peakDisplay = null;
-              if (ecfg.peak_marker.show && Number.isFinite(rawVal)) {
-                if (this._peaks[entityCfg.entity] === void 0 || rawVal > this._peaks[entityCfg.entity]) {
-                  this._peaks[entityCfg.entity] = rawVal;
-                }
-                peakPct = rowViewModel.peakPercent;
-                peakDisplay = (_d = (_c = rowViewModel.peakPresentation) == null ? void 0 : _c.number) != null ? _d : null;
-              }
+              const targetDisplay = (_c = (_b = rowViewModel.targetPresentation) == null ? void 0 : _b.text) != null ? _c : null;
+              const peakPct = rowViewModel.peakPercent;
+              const peakDisplay = (_e = (_d = rowViewModel.peakPresentation) == null ? void 0 : _d.number) != null ? _e : null;
               html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_marker.color, ecfg.target_marker.color, safeMin, safeMax);
             }
             rowsEl.innerHTML = html;
@@ -4665,6 +5031,7 @@ ${paintLayers}
             this._setElementChecked(`entity-${index}-baseline-inherit`, !this._hasBaselineOverride(scope));
             this._setElementChecked(`entity-${index}-needle-inherit`, !this._hasNeedleOverride(scope));
             this._setElementChecked(`entity-${index}-peak-inherit`, !this._hasPeakOverride(scope));
+            this._setElementChecked(`entity-${index}-floor-inherit`, !this._hasExtremumOverride(scope, "floor"));
             this._setElementChecked(`entity-${index}-bar-inherit`, !this._hasEntityBarAppearanceOverride(scope));
             this._setElementChecked(`entity-${index}-segments-inherit`, !this._hasSegmentsOverride(scope));
             this._setElementChecked(`entity-${index}-gradient-stops-inherit`, !this._hasGradientStopsOverride(scope));
@@ -4678,6 +5045,7 @@ ${paintLayers}
             this._setElementText(`entity-${index}-group-baseline-summary`, this._getBaselineOverrideSummary(scope));
             this._setElementText(`entity-${index}-group-needle-summary`, this._getNeedleSummary(scope));
             this._setElementText(`entity-${index}-group-peak-summary`, this._getPeakSummary(scope));
+            this._setElementText(`entity-${index}-group-floor-summary`, this._getFloorSummary(scope));
             this._setElementText(`entity-${index}-group-bar-summary`, this._getBarAppearanceSummary(scope));
             this._setElementText(`entity-${index}-group-segments-summary`, this._getSegmentsSummary(scope));
             this._setElementText(`entity-${index}-group-gradient-stops-summary`, this._getGradientStopsSummary(scope));
@@ -5022,7 +5390,7 @@ ${paintLayers}
           }
           return nextTarget;
         }
-        _cleanupPeakForEmit(target) {
+        _cleanupPeakForEmit(target, scope = { type: "card" }) {
           if (!this._isObject(target) || !this._isObject(target.peak)) {
             return target;
           }
@@ -5031,6 +5399,9 @@ ${paintLayers}
           const color = this._normalizeTextValue(nextPeak.color).trim();
           if (typeof nextPeak.enabled !== "boolean") {
             delete nextPeak.enabled;
+          }
+          if ((scope == null ? void 0 : scope.type) !== "entity" && nextPeak.reset === "never") {
+            delete nextPeak.reset;
           }
           if (color && this._normalizeColorComparisonValue(color) !== this._normalizeColorComparisonValue("#888")) {
             nextPeak.color = color;
@@ -5043,6 +5414,33 @@ ${paintLayers}
           } else {
             delete nextTarget.peak;
           }
+          return nextTarget;
+        }
+        _cleanupFloorForEmit(target, scope = { type: "card" }) {
+          if (!this._isObject(target) || !this._isObject(target.floor)) {
+            return target;
+          }
+          const nextTarget = this._cloneDeep(target);
+          const nextFloor = this._cloneDeep(nextTarget.floor);
+          const color = this._normalizeTextValue(nextFloor.color).trim();
+          if (typeof nextFloor.enabled !== "boolean") delete nextFloor.enabled;
+          if (color && this._normalizeColorComparisonValue(color) !== this._normalizeColorComparisonValue("#888888")) {
+            nextFloor.color = color;
+          } else {
+            delete nextFloor.color;
+          }
+          if (this._isObject(nextFloor.label)) {
+            if (typeof nextFloor.label.show !== "boolean") delete nextFloor.label.show;
+            if (nextFloor.label.decimal === void 0 || nextFloor.label.decimal === null || nextFloor.label.decimal === "") {
+              delete nextFloor.label.decimal;
+            }
+            if (!Object.keys(nextFloor.label).length) delete nextFloor.label;
+          }
+          if ((scope == null ? void 0 : scope.type) !== "entity" && nextFloor.reset === "never" || nextFloor.reset === void 0 || nextFloor.reset === null || nextFloor.reset === "") {
+            delete nextFloor.reset;
+          }
+          if (Object.keys(nextFloor).length) nextTarget.floor = nextFloor;
+          else delete nextTarget.floor;
           return nextTarget;
         }
         _cleanupBarForEmit(target) {
@@ -5096,9 +5494,9 @@ ${paintLayers}
           const pathKey = path.join(".");
           switch (pathKey) {
             case "":
-              return ["type", "title", "entities", "scale", "target", "baseline", "peak", "layout", "formatting", "bar"];
+              return ["type", "title", "entities", "scale", "target", "baseline", "peak", "floor", "layout", "formatting", "bar"];
             case "entities.*":
-              return ["entity", "name", "icon", "scale", "target", "baseline", "peak", "layout", "formatting", "bar"];
+              return ["entity", "name", "icon", "scale", "target", "baseline", "peak", "floor", "layout", "formatting", "bar"];
             case "scale":
               return ["min", "max"];
             case "scale.min":
@@ -5118,7 +5516,12 @@ ${paintLayers}
             case "baseline.below":
               return ["color"];
             case "peak":
-              return ["enabled", "color"];
+              return ["enabled", "color", "reset", "label"];
+            case "floor":
+              return ["enabled", "color", "reset", "label"];
+            case "peak.label":
+            case "floor.label":
+              return ["show", "decimal"];
             case "layout":
               return ["height", "label", "hero"];
             case "layout.label":
@@ -5170,7 +5573,8 @@ ${paintLayers}
           nextConfig = this._cleanupScaleForEmit(nextConfig);
           nextConfig = this._cleanupTargetForEmit(nextConfig, { type: "card" });
           nextConfig = this._cleanupBaselineForEmit(nextConfig);
-          nextConfig = this._cleanupPeakForEmit(nextConfig);
+          nextConfig = this._cleanupPeakForEmit(nextConfig, { type: "card" });
+          nextConfig = this._cleanupFloorForEmit(nextConfig, { type: "card" });
           nextConfig = this._cleanupLayoutForEmit(nextConfig);
           nextConfig = this._cleanupFormattingForEmit(nextConfig);
           nextConfig = this._cleanupNeedleForEmit(nextConfig, { type: "card" });
@@ -5184,7 +5588,8 @@ ${paintLayers}
               cleanedEntry = this._cleanupScaleForEmit(cleanedEntry);
               cleanedEntry = this._cleanupTargetForEmit(cleanedEntry, { type: "entity", index });
               cleanedEntry = this._cleanupBaselineForEmit(cleanedEntry);
-              cleanedEntry = this._cleanupPeakForEmit(cleanedEntry);
+              cleanedEntry = this._cleanupPeakForEmit(cleanedEntry, { type: "entity", index });
+              cleanedEntry = this._cleanupFloorForEmit(cleanedEntry, { type: "entity", index });
               cleanedEntry = this._cleanupLayoutForEmit(cleanedEntry);
               cleanedEntry = this._cleanupFormattingForEmit(cleanedEntry);
               cleanedEntry = this._cleanupNeedleForEmit(cleanedEntry, { type: "entity" });
@@ -6115,7 +6520,7 @@ ${paintLayers}
         _hasPeakOverride(scope) {
           var _a, _b;
           const peakValue = (_a = this._getScopedValue(scope, ["peak"])) != null ? _a : {};
-          if (this._isObject(peakValue) && (Object.prototype.hasOwnProperty.call(peakValue, "enabled") || Object.prototype.hasOwnProperty.call(peakValue, "color"))) {
+          if (this._isObject(peakValue) && (Object.prototype.hasOwnProperty.call(peakValue, "enabled") || Object.prototype.hasOwnProperty.call(peakValue, "color") || Object.prototype.hasOwnProperty.call(peakValue, "reset") || Object.prototype.hasOwnProperty.call(peakValue, "label"))) {
             return true;
           }
           const peakMarkerValue = (_b = this._getScopedValue(scope, ["peak_marker"])) != null ? _b : {};
@@ -6136,6 +6541,8 @@ ${paintLayers}
           return this._applyScopedMutation(scope, (target) => {
             let nextTarget = this._deletePathValue(target, ["peak", "enabled"]);
             nextTarget = this._deletePathValue(nextTarget, ["peak", "color"]);
+            nextTarget = this._deletePathValue(nextTarget, ["peak", "reset"]);
+            nextTarget = this._deletePathValue(nextTarget, ["peak", "label"]);
             nextTarget = this._deletePathValue(nextTarget, ["show_peak"]);
             nextTarget = this._deletePathValue(nextTarget, ["peak_color"]);
             nextTarget = this._deletePathValue(nextTarget, ["peak_marker"]);
@@ -6201,6 +6608,182 @@ ${paintLayers}
             nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["peak"]);
             return nextTarget;
           });
+        }
+        _getScopedMarkerExtras(scope, key) {
+          const raw = this._getScopedValue(scope, [key]);
+          const marker = this._isObject(raw) ? raw : {};
+          const label = this._isObject(marker.label) ? marker.label : {};
+          return {
+            reset: Object.prototype.hasOwnProperty.call(marker, "reset") ? this._normalizeTextValue(marker.reset).trim().toLowerCase() : null,
+            labelShow: typeof label.show === "boolean" ? label.show : null,
+            labelDecimal: label.decimal === void 0 || label.decimal === null || label.decimal === "" ? null : this._normalizeNumberValue(label.decimal)
+          };
+        }
+        _hasExtremumOverride(scope, key) {
+          const marker = this._getScopedValue(scope, [key]);
+          if (!this._isObject(marker)) return false;
+          return ["enabled", "color", "reset", "label"].some((field) => Object.prototype.hasOwnProperty.call(marker, field));
+        }
+        _getEffectiveMarkerExtras(scope, key) {
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+          const local = this._getScopedMarkerExtras(scope, key);
+          if ((scope == null ? void 0 : scope.type) !== "entity") {
+            return {
+              reset: (_a = local.reset) != null ? _a : "never",
+              labelShow: (_b = local.labelShow) != null ? _b : false,
+              labelDecimal: local.labelDecimal
+            };
+          }
+          const card = this._getScopedMarkerExtras({ type: "card" }, key);
+          if (!this._hasExtremumOverride(scope, key)) {
+            return {
+              reset: (_c = card.reset) != null ? _c : "never",
+              labelShow: (_d = card.labelShow) != null ? _d : false,
+              labelDecimal: card.labelDecimal
+            };
+          }
+          return {
+            reset: (_f = (_e = local.reset) != null ? _e : card.reset) != null ? _f : "never",
+            labelShow: (_h = (_g = local.labelShow) != null ? _g : card.labelShow) != null ? _h : false,
+            labelDecimal: (_i = local.labelDecimal) != null ? _i : card.labelDecimal
+          };
+        }
+        _getScopedFloorConfig(scope) {
+          const raw = this._getScopedValue(scope, ["floor"]);
+          const marker = this._isObject(raw) ? raw : {};
+          let mode = (scope == null ? void 0 : scope.type) === "entity" ? "inherit" : "disabled";
+          if (marker.enabled === true) mode = "enabled";
+          if (marker.enabled === false) mode = "disabled";
+          const color = marker.color && this._normalizeColorComparisonValue(marker.color) !== this._normalizeColorComparisonValue("#888888") ? marker.color : "";
+          return { mode, color };
+        }
+        _getEffectiveScopedFloorConfig(scope) {
+          const local = this._getScopedFloorConfig(scope);
+          const extras = this._getEffectiveMarkerExtras(scope, "floor");
+          if ((scope == null ? void 0 : scope.type) !== "entity") return { ...local, ...extras };
+          if (!this._hasExtremumOverride(scope, "floor")) {
+            return { ...this._getScopedFloorConfig({ type: "card" }), ...extras };
+          }
+          const card = this._getEffectiveScopedFloorConfig({ type: "card" });
+          return {
+            mode: local.mode === "inherit" ? card.mode : local.mode,
+            color: local.color || card.color,
+            reset: extras.reset,
+            labelShow: extras.labelShow,
+            labelDecimal: extras.labelDecimal
+          };
+        }
+        _getFloorSummary(scope) {
+          if ((scope == null ? void 0 : scope.type) === "entity" && !this._hasExtremumOverride(scope, "floor")) return "Inherited";
+          const floor = this._getEffectiveScopedFloorConfig(scope);
+          if (floor.mode === "enabled") return floor.color ? "Enabled \u2022 Custom color" : "Enabled";
+          if (floor.color) return "Disabled \u2022 Custom color";
+          return "Disabled";
+        }
+        _setScopedExtremumEnabled(scope, key, value) {
+          const boolValue = !!value;
+          const defaultColor = "#888888";
+          return this._applyScopedMutation(scope, (target) => {
+            var _a;
+            let nextTarget = this._cloneDeep(target);
+            const current = this._isObject(this._getPathValue(nextTarget, [key])) ? this._cloneDeep(this._getPathValue(nextTarget, [key])) : {};
+            const currentColor = (_a = current.color) != null ? _a : defaultColor;
+            if ((scope == null ? void 0 : scope.type) === "entity" || boolValue) current.enabled = boolValue;
+            else delete current.enabled;
+            if (currentColor && this._normalizeColorComparisonValue(currentColor) !== this._normalizeColorComparisonValue(defaultColor)) {
+              current.color = currentColor;
+            } else delete current.color;
+            if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
+            else nextTarget = this._deletePathValue(nextTarget, [key]);
+            return nextTarget;
+          });
+        }
+        _setScopedExtremumColor(scope, key, rawValue) {
+          const normalizedValue = this._normalizeTextValue(rawValue).trim();
+          const defaultColor = "#888888";
+          return this._applyScopedMutation(scope, (target) => {
+            let nextTarget = this._cloneDeep(target);
+            const current = this._isObject(this._getPathValue(nextTarget, [key])) ? this._cloneDeep(this._getPathValue(nextTarget, [key])) : {};
+            delete current.color;
+            if (normalizedValue && this._normalizeColorComparisonValue(normalizedValue) !== this._normalizeColorComparisonValue(defaultColor)) {
+              current.color = normalizedValue;
+            }
+            const mode = this._getScopedFloorConfig(scope).mode;
+            if (key === "floor" && ((scope == null ? void 0 : scope.type) === "entity" && mode !== "inherit" || (scope == null ? void 0 : scope.type) !== "entity" && mode === "enabled")) {
+              current.enabled = mode === "enabled";
+            }
+            if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
+            else nextTarget = this._deletePathValue(nextTarget, [key]);
+            if (key === "peak") {
+              nextTarget = this._deletePathValue(nextTarget, ["show_peak"]);
+              nextTarget = this._deletePathValue(nextTarget, ["peak_color"]);
+              nextTarget = this._deletePathValue(nextTarget, ["peak_marker"]);
+            }
+            return nextTarget;
+          });
+        }
+        _setScopedExtremumReset(scope, key, value) {
+          const normalized = this._normalizeTextValue(value).trim().toLowerCase();
+          return this._applyScopedMutation(scope, (target) => {
+            let nextTarget = this._cloneDeep(target);
+            const current = this._isObject(this._getPathValue(nextTarget, [key])) ? this._cloneDeep(this._getPathValue(nextTarget, [key])) : {};
+            if (normalized && ((scope == null ? void 0 : scope.type) === "entity" || normalized !== "never")) current.reset = normalized;
+            else delete current.reset;
+            if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
+            else nextTarget = this._deletePathValue(nextTarget, [key]);
+            if (key === "peak") {
+              nextTarget = this._deletePathValue(nextTarget, ["show_peak"]);
+              nextTarget = this._deletePathValue(nextTarget, ["peak_color"]);
+              nextTarget = this._deletePathValue(nextTarget, ["peak_marker"]);
+            }
+            return nextTarget;
+          });
+        }
+        _setScopedExtremumLabelShow(scope, key, value) {
+          const enabled = !!value;
+          return this._applyScopedMutation(scope, (target) => {
+            let nextTarget = this._cloneDeep(target);
+            const current = this._isObject(this._getPathValue(nextTarget, [key])) ? this._cloneDeep(this._getPathValue(nextTarget, [key])) : {};
+            const label = this._isObject(current.label) ? this._cloneDeep(current.label) : {};
+            if ((scope == null ? void 0 : scope.type) === "entity" || enabled) label.show = enabled;
+            else delete label.show;
+            if (Object.keys(label).length) current.label = label;
+            else delete current.label;
+            if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
+            else nextTarget = this._deletePathValue(nextTarget, [key]);
+            if (key === "peak") {
+              nextTarget = this._deletePathValue(nextTarget, ["show_peak"]);
+              nextTarget = this._deletePathValue(nextTarget, ["peak_color"]);
+              nextTarget = this._deletePathValue(nextTarget, ["peak_marker"]);
+            }
+            return nextTarget;
+          });
+        }
+        _setScopedExtremumLabelDecimal(scope, key, value) {
+          const decimal = this._normalizeNumberValue(value);
+          return this._applyScopedMutation(scope, (target) => {
+            let nextTarget = this._cloneDeep(target);
+            const current = this._isObject(this._getPathValue(nextTarget, [key])) ? this._cloneDeep(this._getPathValue(nextTarget, [key])) : {};
+            const label = this._isObject(current.label) ? this._cloneDeep(current.label) : {};
+            if (decimal !== null) label.decimal = decimal;
+            else delete label.decimal;
+            if (Object.keys(label).length) current.label = label;
+            else delete current.label;
+            if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
+            else nextTarget = this._deletePathValue(nextTarget, [key]);
+            return nextTarget;
+          });
+        }
+        _clearFloorOverride(scope) {
+          return this._applyScopedMutation(scope, (target) => {
+            let nextTarget = this._cloneDeep(target);
+            const floor = this._isObject(this._getPathValue(nextTarget, ["floor"])) ? this._cloneDeep(this._getPathValue(nextTarget, ["floor"])) : {};
+            ["enabled", "color", "reset", "label"].forEach((key) => delete floor[key]);
+            if (Object.keys(floor).length) nextTarget = this._setPathValue(nextTarget, ["floor"], floor);
+            else nextTarget = this._deletePathValue(nextTarget, ["floor"]);
+            nextTarget = this._deletePathValue(nextTarget, ["floor_marker"]);
+            return nextTarget;
+          }, { rerender: true });
         }
         _setFixedMarkerValue(rootKey, enabled, value) {
           const numericValue = this._normalizeNumberValue(value);
@@ -7854,6 +8437,21 @@ ${paintLayers}
           }
           return `<input type="text" data-kind="${kind}" data-index="${index}" value="${this._escapeAttribute(value)}" placeholder="${this._escapeAttribute(placeholder)}" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false">`;
         }
+        _renderResetOptions(value) {
+          const selected = this._normalizeTextValue(value).trim().toLowerCase() || "never";
+          const options = [
+            "never",
+            "quarterly",
+            "hourly",
+            "daily",
+            "weekly",
+            "monthly",
+            "yearly",
+            ...Array.from({ length: 59 }, (_, index) => `${index + 1}m`),
+            ...Array.from({ length: 23 }, (_, index) => `${index + 1}h`)
+          ];
+          return options.map((option) => `<option value="${option}"${selected === option ? " selected" : ""}>${option}</option>`).join("");
+        }
         _escapeAttribute(value) {
           return this._normalizeTextValue(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         }
@@ -7931,6 +8529,8 @@ ${paintLayers}
             const formattingUnit = this._getScopedFormattingValue({ type: "card" }, "unit");
             const formattingDecimal = this._getScopedFormattingValue({ type: "card" }, "decimal");
             const cardPeak = this._getScopedPeakConfig({ type: "card" });
+            const cardPeakExtras = this._getEffectiveMarkerExtras({ type: "card" }, "peak");
+            const cardFloor = this._getEffectiveScopedFloorConfig({ type: "card" });
             const scaleMin = this._getScaleFixedValue("min", "min");
             const scaleMax = this._getScaleFixedValue("max", "max");
             const scaleMinEntity = this._getScaleEntityValue("min");
@@ -8475,6 +9075,7 @@ ${paintLayers}
                     <div class="override-panel" style="display:${this._isEntityOverrideExpanded(index) ? "grid" : "none"};">
                       <div class="section-note">Overrides replace card defaults only for this entity.</div>
                       ${(() => {
+                var _a3, _b2;
                 const scope = { type: "entity", index };
                 const minParts = this._getEffectiveResolvableScopedValue(scope, "min");
                 const maxParts = this._getEffectiveResolvableScopedValue(scope, "max");
@@ -8495,6 +9096,9 @@ ${paintLayers}
                 const segmentsInherited = !this._hasSegmentsOverride(scope);
                 const scaleInherited = !this._hasResolvableOverride(this._getResolvableScopedValue(scope, "min")) && !this._hasResolvableOverride(this._getResolvableScopedValue(scope, "max"));
                 const entityPeak = this._getEffectiveScopedPeakConfig(scope);
+                const entityPeakExtras = this._getEffectiveMarkerExtras(scope, "peak");
+                const floorInherited = !this._hasExtremumOverride(scope, "floor");
+                const entityFloor = this._getEffectiveScopedFloorConfig(scope);
                 const entityGradientStops = this._getScopedGradientStopsValue(scope);
                 const entityGradientDraft = this._getGradientStopsDraftState(scope);
                 const entityGradientDraftMessage = this._getGradientDraftValidationMessage(scope);
@@ -8702,7 +9306,70 @@ ${paintLayers}
                     placeholder: "inherit card default"
                   })}
                       </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-peak-reset">Peak reset</label>
+                        <select id="entity-${index}-peak-reset" data-kind="entity-peak-reset" data-index="${index}" value="${this._escapeAttribute((_a3 = entityPeakExtras.reset) != null ? _a3 : "never")}">
+                          ${this._renderResetOptions((_b2 = entityPeakExtras.reset) != null ? _b2 : "never")}
+                        </select>
+                      </div>
+                      <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-peak-label-show" type="checkbox" data-kind="entity-peak-label-show" data-index="${index}"${entityPeakExtras.labelShow ? " checked" : ""}>
+                          <label for="entity-${index}-peak-label-show">Show Peak label</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-peak-label-decimal">Peak label decimals</label>
+                        <input id="entity-${index}-peak-label-decimal" type="number" min="0" step="1" data-kind="entity-peak-label-decimal" data-index="${index}" value="${this._escapeAttribute(entityPeakExtras.labelDecimal)}" placeholder="inherit primary decimals">
+                      </div>
 	                          `
+                });
+                const floorGroup = this._renderOverrideGroup({
+                  index,
+                  group: "floor",
+                  title: "Floor",
+                  summary: this._getFloorSummary(scope),
+                  content: `
+                      <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-floor-inherit" type="checkbox" data-kind="entity-floor-inherit" data-index="${index}"${floorInherited ? " checked" : ""}>
+                          <label for="entity-${index}-floor-inherit">Inherit card settings</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-floor-enabled" type="checkbox" data-kind="entity-floor-enabled" data-index="${index}"${entityFloor.mode === "enabled" ? " checked" : ""}>
+                          <label for="entity-${index}-floor-enabled">Floor enabled</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-floor-color">Floor color</label>
+                        ${this._renderColorInput({
+                    id: `entity-${index}-floor-color`,
+                    kind: "entity-floor-color",
+                    index,
+                    value: entityFloor.color,
+                    fallbackHex: "#888888",
+                    placeholder: "inherit card default"
+                  })}
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-floor-reset">Floor reset</label>
+                        <select id="entity-${index}-floor-reset" data-kind="entity-floor-reset" data-index="${index}" value="${this._escapeAttribute(entityFloor.reset)}">
+                          ${this._renderResetOptions(entityFloor.reset)}
+                        </select>
+                      </div>
+                      <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-floor-label-show" type="checkbox" data-kind="entity-floor-label-show" data-index="${index}"${entityFloor.labelShow ? " checked" : ""}>
+                          <label for="entity-${index}-floor-label-show">Show Floor label</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-floor-label-decimal">Floor label decimals</label>
+                        <input id="entity-${index}-floor-label-decimal" type="number" min="0" step="1" data-kind="entity-floor-label-decimal" data-index="${index}" value="${this._escapeAttribute(entityFloor.labelDecimal)}" placeholder="inherit primary decimals">
+                      </div>
+                          `
                 });
                 const segmentsGroup = this._renderOverrideGroup({
                   index,
@@ -8722,13 +9389,13 @@ ${paintLayers}
                         <label>Segments</label>
                         <div class="list">
                           ${this._renderListRows(entitySegments, (segment, segmentIndex) => {
-                    var _a3;
+                    var _a4;
                     return `
                             <div class="segment-editor-row">
                             <div class="list-row triple segment-row">
                               <input type="text" data-kind="entity-segment-from" data-index="${index}" data-segment-index="${segmentIndex}" value="${this._escapeAttribute(this._getSegmentBoundaryText(scope, segmentIndex, "from", segment == null ? void 0 : segment.from))}" placeholder="0%">
                               <input type="text" data-kind="entity-segment-to" data-index="${index}" data-segment-index="${segmentIndex}" value="${this._escapeAttribute(this._getSegmentBoundaryText(scope, segmentIndex, "to", segment == null ? void 0 : segment.to))}" placeholder="100%">
-                              <input type="color" data-kind="entity-segment-color" data-index="${index}" data-segment-index="${segmentIndex}" value="${this._escapeAttribute((_a3 = segment == null ? void 0 : segment.color) != null ? _a3 : "#4a9eff")}">
+                              <input type="color" data-kind="entity-segment-color" data-index="${index}" data-segment-index="${segmentIndex}" value="${this._escapeAttribute((_a4 = segment == null ? void 0 : segment.color) != null ? _a4 : "#4a9eff")}">
                               <button type="button" data-action="remove-entity-segment" data-index="${index}" data-segment-index="${segmentIndex}" aria-label="Remove" title="Remove">\u{1F5D1}</button>
                             </div>
                             <div id="entity-${index}-segment-row-hint-${segmentIndex}" class="section-note"${this._getSegmentRowValidationMessage(scope, segmentIndex) ? "" : ' style="display:none"'}>${this._escapeAttribute(this._getSegmentRowValidationMessage(scope, segmentIndex))}</div>
@@ -8769,15 +9436,15 @@ ${paintLayers}
                         <label>Gradient stops</label>
                         <div class="list gradient-stop-list">
                           ${this._renderListRows(entityGradientStops, (stop, stopIndex) => {
-                    var _a3, _b2;
+                    var _a4, _b3;
                     return `
                             <div class="list-row gradient-stop-row">
-                              <input type="number" min="0" max="100" step="any" data-kind="entity-gradient-pos" data-index="${index}" data-stop-index="${stopIndex}" value="${this._escapeAttribute(this._getGradientStopPosText(scope, stopIndex, (_a3 = stop == null ? void 0 : stop.pos) != null ? _a3 : ""))}" placeholder="0">
+                              <input type="number" min="0" max="100" step="any" data-kind="entity-gradient-pos" data-index="${index}" data-stop-index="${stopIndex}" value="${this._escapeAttribute(this._getGradientStopPosText(scope, stopIndex, (_a4 = stop == null ? void 0 : stop.pos) != null ? _a4 : ""))}" placeholder="0">
                               ${this._renderColorInput({
                       id: `entity-${index}-gradient-color-${stopIndex}`,
                       kind: "entity-gradient-color",
                       index,
-                      value: (_b2 = stop == null ? void 0 : stop.color) != null ? _b2 : "#4a9eff",
+                      value: (_b3 = stop == null ? void 0 : stop.color) != null ? _b3 : "#4a9eff",
                       fallbackHex: "#4CAF50",
                       placeholder: "CSS color value",
                       extraDataset: { "stop-index": stopIndex }
@@ -8946,8 +9613,9 @@ ${paintLayers}
 	                          ${scaleGroup}
 	                          ${targetGroup}
 	                          ${baselineGroup}
-	                          ${needleGroup}
-	                          ${peakGroup}
+                          ${needleGroup}
+                          ${peakGroup}
+                          ${floorGroup}
 	                          ${barGroup}
 	                          ${segmentsGroup}
 	                          ${gradientStopsGroup}
@@ -9117,6 +9785,54 @@ ${paintLayers}
               fallbackHex: "#888",
               placeholder: "#888"
             })}
+            </div>
+            <div class="field-row">
+              <label for="peak-reset">Peak reset</label>
+              <select id="peak-reset" data-field="peak-reset" value="${this._escapeAttribute(cardPeakExtras.reset)}">
+                ${this._renderResetOptions(cardPeakExtras.reset)}
+              </select>
+            </div>
+            <div class="field-row">
+              <div class="toggle">
+                <input id="peak-label-show" type="checkbox" data-field="peak-label-show"${cardPeakExtras.labelShow ? " checked" : ""}>
+                <label for="peak-label-show">Show Peak label</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="peak-label-decimal">Peak label decimals</label>
+              <input id="peak-label-decimal" type="number" min="0" step="1" data-field="peak-label-decimal" value="${this._escapeAttribute(cardPeakExtras.labelDecimal)}" placeholder="inherit primary decimals">
+            </div>
+            <div class="field-row">
+              <div class="toggle">
+                <input id="floor-show" type="checkbox" data-field="floor-show"${cardFloor.mode === "enabled" ? " checked" : ""}>
+                <label for="floor-show">Floor enabled</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="floor-color">Floor color</label>
+              ${this._renderColorInput({
+              id: "floor-color",
+              field: "floor-color",
+              value: cardFloor.color,
+              fallbackHex: "#888888",
+              placeholder: "#888888"
+            })}
+            </div>
+            <div class="field-row">
+              <label for="floor-reset">Floor reset</label>
+              <select id="floor-reset" data-field="floor-reset" value="${this._escapeAttribute(cardFloor.reset)}">
+                ${this._renderResetOptions(cardFloor.reset)}
+              </select>
+            </div>
+            <div class="field-row">
+              <div class="toggle">
+                <input id="floor-label-show" type="checkbox" data-field="floor-label-show"${cardFloor.labelShow ? " checked" : ""}>
+                <label for="floor-label-show">Show Floor label</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="floor-label-decimal">Floor label decimals</label>
+              <input id="floor-label-decimal" type="number" min="0" step="1" data-field="floor-label-decimal" value="${this._escapeAttribute(cardFloor.labelDecimal)}" placeholder="inherit primary decimals">
             </div>
           </div>
 	        </div>
@@ -9731,6 +10447,14 @@ ${paintLayers}
           if (field === "target-above-fill-color") return void this._setTargetAboveFillColor({ type: "card" }, value);
           if (field === "peak-show") return void this._setPeakShow(value);
           if (field === "peak-color") return void this._setScopedPeakColor({ type: "card" }, value);
+          if (field === "peak-reset") return void this._setScopedExtremumReset({ type: "card" }, "peak", value);
+          if (field === "peak-label-show") return void this._setScopedExtremumLabelShow({ type: "card" }, "peak", value);
+          if (field === "peak-label-decimal") return void this._setScopedExtremumLabelDecimal({ type: "card" }, "peak", value);
+          if (field === "floor-show") return void this._setScopedExtremumEnabled({ type: "card" }, "floor", value);
+          if (field === "floor-color") return void this._setScopedExtremumColor({ type: "card" }, "floor", value);
+          if (field === "floor-reset") return void this._setScopedExtremumReset({ type: "card" }, "floor", value);
+          if (field === "floor-label-show") return void this._setScopedExtremumLabelShow({ type: "card" }, "floor", value);
+          if (field === "floor-label-decimal") return void this._setScopedExtremumLabelDecimal({ type: "card" }, "floor", value);
           if (kind === "entity-picker" || kind === "entity-input") {
             const index = Number(target.dataset.index);
             const nextEntities = this._getEntitiesValue().map((entry, entryIndex) => entryIndex === index ? { ...entry, entity: this._normalizeTextValue(value) } : entry);
@@ -9822,6 +10546,34 @@ ${paintLayers}
           }
           if (kind === "entity-peak-color") {
             return void this._setScopedPeakColor({ type: "entity", index: Number(target.dataset.index) }, value);
+          }
+          if (kind === "entity-peak-reset") {
+            return void this._setScopedExtremumReset({ type: "entity", index: Number(target.dataset.index) }, "peak", value);
+          }
+          if (kind === "entity-peak-label-show") {
+            return void this._setScopedExtremumLabelShow({ type: "entity", index: Number(target.dataset.index) }, "peak", value);
+          }
+          if (kind === "entity-peak-label-decimal") {
+            return void this._setScopedExtremumLabelDecimal({ type: "entity", index: Number(target.dataset.index) }, "peak", value);
+          }
+          if (kind === "entity-floor-inherit") {
+            if (value) return void this._clearFloorOverride({ type: "entity", index: Number(target.dataset.index) });
+            return;
+          }
+          if (kind === "entity-floor-enabled") {
+            return void this._setScopedExtremumEnabled({ type: "entity", index: Number(target.dataset.index) }, "floor", value);
+          }
+          if (kind === "entity-floor-color") {
+            return void this._setScopedExtremumColor({ type: "entity", index: Number(target.dataset.index) }, "floor", value);
+          }
+          if (kind === "entity-floor-reset") {
+            return void this._setScopedExtremumReset({ type: "entity", index: Number(target.dataset.index) }, "floor", value);
+          }
+          if (kind === "entity-floor-label-show") {
+            return void this._setScopedExtremumLabelShow({ type: "entity", index: Number(target.dataset.index) }, "floor", value);
+          }
+          if (kind === "entity-floor-label-decimal") {
+            return void this._setScopedExtremumLabelDecimal({ type: "entity", index: Number(target.dataset.index) }, "floor", value);
           }
           if (kind === "entity-segments-inherit") {
             if (value) {

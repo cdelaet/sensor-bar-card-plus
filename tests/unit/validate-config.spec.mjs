@@ -40,6 +40,37 @@ describe('validateNormalizedConfig', () => {
     }));
   });
 
+  it('warns and falls back safely for invalid marker resets', () => {
+    const normalized = normalize({
+      peak: { enabled: true, reset: '60m' },
+      floor: { enabled: true, reset: '1h30m' },
+      entities: [{ entity: 'sensor.one' }],
+    });
+    const diagnostics = validateNormalizedConfig(normalized);
+
+    expect(normalized.peak_marker.reset).toEqual({ kind: 'never' });
+    expect(normalized.floor_marker.reset).toEqual({ kind: 'never' });
+    expect(diagnostics.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'peak_marker.invalid_reset' }),
+      expect.objectContaining({ code: 'floor_marker.invalid_reset' }),
+    ]));
+  });
+
+  it('warns and falls back for explicitly non-string reset values', () => {
+    for (const reset of [['15m'], {}, 15, null, true]) {
+      const normalized = normalize({
+        peak: { enabled: true, reset },
+        entities: [{ entity: 'sensor.one' }],
+      });
+      const diagnostics = validateNormalizedConfig(normalized);
+
+      expect(normalized.peak_marker.reset).toEqual({ kind: 'never' });
+      expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
+        code: 'peak_marker.invalid_reset',
+      }));
+    }
+  });
+
   it('warns when entity-level fixed min is greater than max', () => {
     const diagnostics = validateNormalizedConfig(normalize({
       entities: [{

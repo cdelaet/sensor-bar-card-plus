@@ -66,6 +66,20 @@ function validateBaselineSuppressesNeedle(diagnostics, config, path, entity = nu
   }
 }
 
+function validateExtremumReset(diagnostics, config, path, entity = null) {
+  for (const marker of ['peak_marker', 'floor_marker']) {
+    if (config?.[marker]?.reset_invalid) {
+      addWarning(
+        diagnostics,
+        `${marker}.invalid_reset`,
+        'Invalid marker reset; using never.',
+        `${path}.${marker}.reset`,
+        entity
+      );
+    }
+  }
+}
+
 function getStaticSegmentBound(boundary) {
   if (!boundary || boundary.entity || Number.isFinite(boundary.percent)) return null;
   return getFiniteNumber(boundary.fixed ?? boundary.value);
@@ -146,6 +160,7 @@ function validateConfigScope(diagnostics, config, path, entity = null) {
   validateTargetRange(diagnostics, config, scaleBounds, path, entity);
   validateBaselineRange(diagnostics, config, scaleBounds, path, entity);
   validateBaselineSuppressesNeedle(diagnostics, config, path, entity);
+  validateExtremumReset(diagnostics, config, path, entity);
   validateSegments(diagnostics, config?.bar?.segments, scaleBounds, `${path}.bar`, entity);
   validateGradientStops(diagnostics, config?.bar?.gradient_stops, `${path}.bar`, entity);
 }

@@ -8208,4 +8208,72 @@ describe('Sensor Bar Card Plus editor', () => {
       style: 'ha-card { background: red; }',
     });
   });
+
+  it('writes card-level Floor reset and label settings minimally', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({ entities: [{ entity: 'sensor.one' }] });
+
+    const floorToggle = editor.shadowRoot.querySelector('#floor-show');
+    floorToggle.checked = true;
+    floorToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+    dispatchChange(editor.shadowRoot.querySelector('#floor-reset'), 'quarterly');
+    const floorLabel = editor.shadowRoot.querySelector('#floor-label-show');
+    floorLabel.checked = true;
+    floorLabel.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+    dispatchInput(editor.shadowRoot.querySelector('#floor-label-decimal'), '0');
+
+    expect(events.at(-1).detail.config.floor).toEqual({
+      enabled: true,
+      reset: 'quarterly',
+      label: { show: true, decimal: 0 },
+    });
+  });
+
+  it('keeps explicit entity Floor reset and decimal zero overrides', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({
+      floor: { enabled: true, reset: 'daily' },
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-floor'));
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-floor-reset'), 'never');
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-floor-label-decimal'), '0');
+
+    expect(events.at(-1).detail.config.entities[0].floor).toEqual({
+      reset: 'never',
+      label: { decimal: 0 },
+    });
+  });
+
+  it('Floor Inherit removes managed overrides and preserves unrelated nested keys', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({
+      floor: { enabled: true, reset: 'daily' },
+      entities: [{
+        entity: 'sensor.one',
+        floor: {
+          enabled: false,
+          color: '#123456',
+          reset: 'never',
+          label: { show: true, decimal: 0 },
+          custom_floor_key: { keep: true },
+        },
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-floor'));
+    const inheritToggle = editor.shadowRoot.querySelector('#entity-0-floor-inherit');
+    inheritToggle.checked = true;
+    inheritToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+
+    expect(events.at(-1).detail.config.entities[0].floor).toEqual({
+      custom_floor_key: { keep: true },
+    });
+  });
 });

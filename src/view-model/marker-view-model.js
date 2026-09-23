@@ -40,9 +40,11 @@ export function createMarkerModel({
 export function getMarkerLaneOccupancy(entityConfig) {
   const targetConfig = entityConfig?.target_marker;
   const peakConfig = entityConfig?.peak_marker;
+  const floorConfig = entityConfig?.floor_marker;
   return {
     above: peakConfig?.show === true,
-    below: targetConfig?.enabled !== false && hasConfiguredSource(targetConfig?.source),
+    below: (targetConfig?.enabled !== false && hasConfiguredSource(targetConfig?.source))
+      || floorConfig?.show === true,
   };
 }
 
@@ -56,9 +58,14 @@ export function buildMarkerModels({
   peakPosition = null,
   peakPresentation = null,
   peakVisible = Number.isFinite(peakPosition),
+  floorValue = null,
+  floorPosition = null,
+  floorPresentation = null,
+  floorVisible = Number.isFinite(floorPosition),
 }) {
   const targetConfig = entityConfig?.target_marker;
   const peakConfig = entityConfig?.peak_marker;
+  const floorConfig = entityConfig?.floor_marker;
   const targetEnabled = targetConfig?.enabled !== false;
 
   return [
@@ -75,6 +82,18 @@ export function buildMarkerModels({
       shape: targetConfig?.shape ?? 'diamond',
     }),
     createMarkerModel({
+      id: 'floor',
+      type: 'floor',
+      value: floorValue,
+      position: floorPosition,
+      lane: 'below',
+      visible: floorConfig?.show === true && floorVisible,
+      color: floorConfig?.color ?? null,
+      label: floorPresentation,
+      labelVisible: floorConfig?.show === true && floorConfig?.show_label === true,
+      shape: 'triangle',
+    }),
+    createMarkerModel({
       id: 'peak',
       type: 'peak',
       value: peakValue,
@@ -83,6 +102,7 @@ export function buildMarkerModels({
       visible: peakConfig?.show === true && peakVisible,
       color: peakConfig?.color ?? null,
       label: peakPresentation,
+      labelVisible: peakConfig?.show === true && peakConfig?.show_label === true,
       shape: 'triangle',
     }),
   ];

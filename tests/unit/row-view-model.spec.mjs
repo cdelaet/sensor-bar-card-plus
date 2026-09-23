@@ -154,6 +154,61 @@ describe('buildRowViewModel', () => {
     expect(textualRow.unit).toBe('');
   });
 
+  it('keeps tracked Peak and Floor units through unavailable states and recovery', () => {
+    const card = createCard();
+    const config = card.normalizeCardConfig({
+      formatting: { unit: 'W' },
+      entities: [{
+        entity: 'sensor.power',
+        peak: { enabled: true, label: { show: true } },
+        floor: { enabled: true, label: { show: true } },
+      }],
+    });
+    const entityConfig = config.entities[0];
+    const state = {
+      state: '80',
+      last_updated: '2026-01-01T10:07:00.000Z',
+      attributes: { unit_of_measurement: 'W' },
+    };
+    card._updateExtrema(entityConfig, entityConfig, state);
+    state.state = '20';
+    state.last_updated = '2026-01-01T10:08:00.000Z';
+    card._updateExtrema(entityConfig, entityConfig, state);
+
+    for (const unavailableState of ['unavailable', 'unknown']) {
+      state.state = unavailableState;
+      state.last_updated = unavailableState === 'unavailable'
+        ? '2026-01-01T10:09:00.000Z'
+        : '2026-01-01T10:10:00.000Z';
+      const row = buildRowViewModel({
+        hass: { states: { 'sensor.power': state } },
+        cardConfig: config,
+        entityConfig,
+        entityState: state,
+        extrema: card._extrema['sensor.power'],
+      });
+
+      expect(row.primaryPresentation.text).toBe(unavailableState);
+      expect(row.primaryPresentation.unit).toBe('');
+      expect(row.peakPresentation.text).toBe('80 W');
+      expect(row.floorPresentation.text).toBe('20 W');
+    }
+
+    state.state = '42';
+    state.last_updated = '2026-01-01T10:11:00.000Z';
+    card._updateExtrema(entityConfig, entityConfig, state);
+    const recoveredRow = buildRowViewModel({
+      hass: { states: { 'sensor.power': state } },
+      cardConfig: config,
+      entityConfig,
+      entityState: state,
+      extrema: card._extrema['sensor.power'],
+    });
+    expect(recoveredRow.primaryPresentation.text).toBe('42 W');
+    expect(recoveredRow.peakPresentation.text).toBe('80 W');
+    expect(recoveredRow.floorPresentation.text).toBe('20 W');
+  });
+
   it('resolves fixed target values and formats target display with decimals and unit', () => {
     const hass = {
       states: {
@@ -908,5 +963,67 @@ describe('buildRowViewModel', () => {
       entityState,
       peaks,
     })).toBe(before);
+  });
+
+  it('builds independent Peak and Floor markers with shared below occupancy', () => {
+    const hass = {
+      states: {
+        'sensor.power': sensor(42, { unit_of_measurement: 'W' }),
+      },
+    };
+    const entityConfig = createNormalizedEntity({
+      min: 0,
+      max: 100,
+      peak: { enabled: true, label: { show: true, decimal: 0 } },
+      floor: { enabled: true, label: { show: true, decimal: 1 } },
+      target: { at: { fixed: 60 } },
+      entities: [{ entity: 'sensor.power' }],
+    });
+
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      extrema: {
+        peak: { value: 80, startedAtMs: null, windowKey: null },
+        floor: { value: 20, startedAtMs: null, windowKey: null },
+      },
+    });
+
+    expect(row.peak).toBe(80);
+    expect(row.floor).toBe(20);
+    expect(row.peakPresentation.text).toBe('80 W');
+    expect(row.floorPresentation.text).toBe('20.0 W');
+    expect(row.markers.find((marker) => marker.type === 'peak')).toMatchObject({
+      lane: 'above',
+      labelVisible: true,
+    });
+    expect(row.markers.find((marker) => marker.type === 'floor')).toMatchObject({
+      lane: 'below',
+      labelVisible: true,
+    });
+    expect(row.markerLaneOccupancy).toEqual({ above: true, below: true });
+  });
+
+  it('preserves raw extrema values while clamping marker positions', () => {
+    const hass = { states: { 'sensor.power': sensor(42) } };
+    const entityConfig = createNormalizedEntity({
+      min: 0,
+      max: 100,
+      floor: { enabled: true, label: { show: true } },
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      extrema: { floor: { value: -20, startedAtMs: null, windowKey: null } },
+    });
+
+    expect(row.floor).toBe(-20);
+    expect(row.floorPercent).toBe(0);
+    expect(row.floorPresentation.text).toBe('-20 W');
   });
 });

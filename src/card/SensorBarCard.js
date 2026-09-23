@@ -45,6 +45,7 @@ import {
   formatNumericDisplay,
   isTightUnit,
 } from '../utils/format.js';
+import { updateExtremum } from '../utils/extrema.js';
 
 /**
  * sensor-bar-card-plus - A polished, configurable sensor bar card for Home Assistant
@@ -65,7 +66,7 @@ import {
  *   color: '#4a9eff'              # bar colour when color_mode is 'single'
  *   animated: true                # smooth bar fill transition on value change
  *   show_peak: true               # show peak marker (highest value seen this session)
- *   peak_color: '#888'             # colour of the peak marker (default grey)
+ *   peak_color: '#888888'          # colour of the peak marker (default grey)
  *   target: 2400                   # optional fixed target marker (absolute value, same scale as min/max)
  *   target_entity: sensor.my_target_sensor   # optional entity providing the target marker value
  *   target_color: '#4a9eff'        # colour of the target marker (default grey)
@@ -186,7 +187,7 @@ export class SensorBarCard extends HTMLElement {
     this._diagnostics = { warnings: [], errors: [] };
     this._lastDiagnosticsSignature = null;
     this._hass = null;
-    this._peaks = {};
+    this._extrema = {};
     this._rendered = false;
     this._resizeObserver = null;
     this._densityPassScheduled = false;
@@ -218,14 +219,33 @@ export class SensorBarCard extends HTMLElement {
       throw new Error('You must define entities or entity');
     }
     this._rendered = false; // force full rebuild on config change
+    const previousConfig = this._config;
     this._config = this.normalizeCardConfig(config);
     const activeEntityIds = new Set(
       (this._config.entities || []).map((entityConfig) => entityConfig.entity)
     );
-    for (const entityId of Object.keys(this._peaks)) {
+    for (const entityId of Object.keys(this._extrema)) {
       if (!activeEntityIds.has(entityId)) {
-        delete this._peaks[entityId];
+        delete this._extrema[entityId];
       }
+    }
+    const previousEntities = new Map((previousConfig?.entities ?? []).map((entity) => [entity.entity, entity]));
+    for (const entityConfig of this._config.entities ?? []) {
+      const previous = previousEntities.get(entityConfig.entity);
+      const current = entityConfig;
+      const stored = this._extrema[entityConfig.entity];
+      if (!stored) continue;
+      for (const key of ['peak', 'floor']) {
+        const previousMarker = previous?.[`${key}_marker`];
+        const currentMarker = current?.[`${key}_marker`];
+        if (previousMarker?.show === true && currentMarker?.show !== true) {
+          delete stored[key];
+        } else if (JSON.stringify(previousMarker?.reset ?? { kind: 'never' })
+          !== JSON.stringify(currentMarker?.reset ?? { kind: 'never' })) {
+          delete stored[key];
+        }
+      }
+      if (!stored.peak && !stored.floor) delete this._extrema[entityConfig.entity];
     }
     this._diagnostics = validateNormalizedConfig(this._config);
     this._logDiagnostics();
@@ -405,6 +425,42 @@ export class SensorBarCard extends HTMLElement {
     };
   }
 
+  _getStateTimestamp(stateObj) {
+    const rawTimestamp = stateObj?.last_updated ?? stateObj?.last_changed;
+    const timestamp = rawTimestamp instanceof Date
+      ? rawTimestamp.getTime()
+      : Date.parse(String(rawTimestamp ?? ''));
+    return Number.isFinite(timestamp) ? timestamp : Date.now();
+  }
+
+  _updateExtrema(entityCfg, normalizedEntity, stateObj) {
+    const sample = getFiniteNumber(stateObj?.state);
+    if (!Number.isFinite(sample)) return;
+
+    const entityId = entityCfg.entity;
+    const current = this._extrema[entityId] ?? {};
+    const timestamp = this._getStateTimestamp(stateObj);
+    for (const key of ['peak', 'floor']) {
+      const marker = normalizedEntity?.[`${key}_marker`];
+      if (marker?.show !== true) {
+        delete current[key];
+        continue;
+      }
+      current[key] = updateExtremum(
+        current[key] ?? null,
+        sample,
+        marker.reset ?? { kind: 'never' },
+        key === 'floor' ? 'min' : 'max',
+        timestamp,
+      );
+    }
+    if (current.peak || current.floor) {
+      this._extrema[entityId] = current;
+    } else {
+      delete this._extrema[entityId];
+    }
+  }
+
   _getDefaultEntityIcon(stateObj, entityId = '') {
     const deviceClass = String(stateObj?.attributes?.device_class ?? '').trim();
     if (deviceClass) {
@@ -526,13 +582,19 @@ export class SensorBarCard extends HTMLElement {
     
     this.shadowRoot.querySelectorAll('.row[data-entity]').forEach(row => {
       this._positionTargetLabel(row);
+      this._positionMarkerValueLabel(row, '.peak-value-label', '.peak-marker');
+      this._positionMarkerValueLabel(row, '.floor-value-label', '.floor-marker');
     });
   }
   
   _positionTargetLabel(row) {
+    this._positionMarkerValueLabel(row, '.target-value-label', '.target-marker');
+  }
+
+  _positionMarkerValueLabel(row, labelSelector, markerSelector) {
     const track = row.querySelector('.bar-track');
-    const label = row.querySelector('.target-value-label');
-    const marker = row.querySelector('.target-marker');
+    const label = row.querySelector(labelSelector);
+    const marker = row.querySelector(markerSelector);
     
     if (!track || !label || !marker) return;
     
@@ -1360,6 +1422,12 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         .row[data-bar-animated="false"] .needle-marker,
         .row[data-bar-animated="false"] .target-marker,
         .row[data-bar-animated="false"] .peak-marker,
+        .row[data-bar-animated="false"] .floor-marker,
+        .row[data-bar-animated="false"] .target-value-label,
+        .row[data-bar-animated="false"] .peak-value-label,
+        .row[data-bar-animated="false"] .floor-value-label {
+          transition: none;
+        }
         .row[data-bar-animated="false"] .target-value-label {
           transition: none;
         }
@@ -1501,6 +1569,29 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           z-index: 6;
           visibility: hidden;
           transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
+        }
+        .peak-value-label,
+        .floor-value-label {
+          position: absolute;
+          font-size: var(--sbcp-target-label-font-size);
+          line-height: 1;
+          color: var(--secondary-text-color, #888);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          box-sizing: border-box;
+          pointer-events: none;
+          z-index: 6;
+          visibility: hidden;
+          transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
+        }
+        .peak-value-label {
+          bottom: 100%;
+          margin-bottom: 3px;
+        }
+        .floor-value-label {
+          top: 100%;
+          margin-top: 3px;
         }
         .above-line {
           display: grid;
@@ -1692,7 +1783,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           text-overflow: clip;
         }
         /* ── Shared marker base ── */
-        .peak-marker, .target-marker {
+        .peak-marker, .target-marker, .floor-marker {
           position: absolute;
           top: 0;
           bottom: 0;
@@ -1704,6 +1795,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           --marker-contrast-color: #f3f4f6;
         }
         .target-marker {
+          z-index: 6;
+        }
+        .floor-marker {
           z-index: 6;
         }
         .peak-marker {
@@ -1742,7 +1836,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         .peak-marker .peak-inset,
         .peak-marker .peak-outset,
         .target-marker .target-inset,
-        .target-marker .target-outset {
+        .target-marker .target-outset,
+        .floor-marker .floor-inset,
+        .floor-marker .floor-outset {
           position: absolute;
           left: 50%;
           transform: translateX(-50%);
@@ -1785,6 +1881,23 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           border-top: 4px solid var(--marker-color);
           z-index: 3;
         }
+        .floor-marker .floor-inset {
+          bottom: 0;
+          border-left: 7px solid transparent;
+          border-right: 7px solid transparent;
+          border-bottom: 11px solid var(--marker-color);
+          z-index: 2;
+          filter:
+            drop-shadow(0 0 1.2px var(--marker-contrast-color))
+            drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
+        }
+        .floor-marker .floor-outset {
+          bottom: -4px;
+          border-left: 5px solid transparent;
+          border-right: 5px solid transparent;
+          border-top: 4px solid var(--marker-color);
+          z-index: 3;
+        }
         /* Shared non-triangle marker shapes. Triangle keeps the original CSS geometry. */
         .marker-shape-svg {
           display: none;
@@ -1805,14 +1918,23 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           bottom: 0;
           transform: translateX(-50%);
         }
+        .floor-marker .marker-shape-svg {
+          bottom: 0;
+          transform: translateX(-50%);
+        }
         .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-inset,
         .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-outset,
         .target-marker[data-shape]:not([data-shape="triangle"]) .target-inset,
-        .target-marker[data-shape]:not([data-shape="triangle"]) .target-outset {
+        .target-marker[data-shape]:not([data-shape="triangle"]) .target-outset,
+        .floor-marker[data-shape]:not([data-shape="triangle"]) .floor-inset,
+        .floor-marker[data-shape]:not([data-shape="triangle"]) .floor-outset {
           display: none;
         }
         .peak-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg,
         .target-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
+          display: block;
+        }
+        .floor-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
           display: block;
         }
         .marker-shape-svg path {
@@ -3119,6 +3241,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         const targetRows = rows || this.shadowRoot?.querySelectorAll('.row[data-entity]') || [];
         targetRows.forEach(row => {
           this._positionTargetLabel(row);
+          this._positionMarkerValueLabel(row, '.peak-value-label', '.peak-marker');
+          this._positionMarkerValueLabel(row, '.floor-value-label', '.floor-marker');
         });
       });
     });
@@ -3270,12 +3394,15 @@ _getAboveTargetLayerGeometry(targetPct = null) {
             label: targetDisplay === null ? null : { text: targetDisplay },
           };
         }
+        if (marker.type === 'floor') {
+          return marker;
+        }
         return {
           ...marker,
           position: peakPct === undefined ? marker.position : peakPct,
           visible: peakPct !== null && peakPct !== undefined && ecfg.peak_marker.show === true,
           color: peakColor || marker.color,
-          label: peakDisplay === null ? null : { number: peakDisplay },
+          label: peakDisplay === null ? marker.label : { text: peakDisplay },
         };
       });
     }
@@ -3300,12 +3427,12 @@ _getAboveTargetLayerGeometry(targetPct = null) {
   }
 
   _renderMarker(marker) {
-    if (!marker || (marker.type === 'peak' && !marker.visible)) return '';
+    if (!marker) return '';
     const position = Number.isFinite(marker.position) ? marker.position : 0;
     const color = marker.color ?? '#888888';
     const contrastColor = this._getMarkerContrastColor(color);
     const display = marker.visible ? '' : 'none';
-    const shape = normalizeMarkerShape(marker.shape, marker.type === 'peak' ? 'triangle' : 'diamond');
+    const shape = normalizeMarkerShape(marker.shape, marker.type === 'target' ? 'diamond' : 'triangle');
     const lane = marker.lane ?? (marker.type === 'peak' ? 'above' : 'below');
     const shapePaths = `
       <path data-shape="circle" d="M8 1A7 7 0 1 0 8 15A7 7 0 1 0 8 1Z"></path>
@@ -3314,17 +3441,18 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       <path data-shape="arrow" d="M6 1H10V8H14L8 15L2 8H6Z"></path>
       <path data-shape="pin" d="M8 15C7 13 2 10 2 6A6 6 0 1 1 14 6C14 10 9 13 8 15Z"></path>`;
 
-    if (marker.type === 'target') {
+    if (marker.type === 'target' || marker.type === 'floor') {
+      const markerClass = `${marker.type}-marker`;
       return `
-      <div class="target-marker" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
-        <div class="target-inset"></div>
-        <div class="target-outset"></div>
+      <div class="${markerClass}" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+        <div class="${marker.type}-inset"></div>
+        <div class="${marker.type}-outset"></div>
         <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
       </div>`;
     }
 
     return `
-      <div class="peak-marker" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};">
+      <div class="peak-marker" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
         <div class="peak-outset"></div>
         <div class="peak-inset"></div>
         <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
@@ -3333,7 +3461,6 @@ _getAboveTargetLayerGeometry(targetPct = null) {
 
   _patchMarker(markerEl, marker) {
     if (!markerEl || !marker) return;
-    if (marker.type === 'peak' && !marker.visible) return;
 
     const shape = normalizeMarkerShape(marker.shape, marker.type === 'peak' ? 'triangle' : 'diamond');
     this._setDatasetIfChanged(markerEl, 'shape', shape);
@@ -3344,9 +3471,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       this._setDatasetIfChanged(shapeSvg, 'lane', marker.lane ?? (marker.type === 'peak' ? 'above' : 'below'));
     }
 
-    if (marker.type === 'target') {
-      this._setStyleIfChanged(markerEl, 'display', marker.visible ? '' : 'none');
-    }
+    this._setStyleIfChanged(markerEl, 'display', marker.visible ? '' : 'none');
     if (marker.visible && Number.isFinite(marker.position)) {
       this._setStyleIfChanged(markerEl, 'left', `${marker.position}%`);
     }
@@ -3359,13 +3484,14 @@ _getAboveTargetLayerGeometry(targetPct = null) {
   _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
     const ecfg = this._resolve(entityCfg);
     const stateObj = this._hass?.states?.[entityCfg.entity] ?? null;
+    if (stateObj) this._updateExtrema(entityCfg, ecfg, stateObj);
     const rowViewModel = stateObj
       ? buildRowViewModel({
         hass: this._hass,
         cardConfig: this._config,
         entityConfig: ecfg,
         entityState: stateObj,
-        peaks: this._peaks,
+        extrema: this._extrema[entityCfg.entity] ?? null,
       })
       : null;
     const layout = ecfg.layout;
@@ -3384,6 +3510,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     const markerModels = this._getRowMarkerModels(rowViewModel, ecfg, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor);
     const targetMarkerModel = this._getMarkerModel(markerModels, 'target');
     const peakMarkerModel = this._getMarkerModel(markerModels, 'peak');
+    const floorMarkerModel = this._getMarkerModel(markerModels, 'floor');
     const markerLaneOccupancy = rowViewModel?.markerLaneOccupancy ?? getMarkerLaneOccupancy(ecfg);
     const rawValue = rowViewModel?.numericValue ?? this._getFiniteNumber(stateDisplay);
     const needleState = rowViewModel?.needle ?? this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
@@ -3391,9 +3518,18 @@ _getAboveTargetLayerGeometry(targetPct = null) {
 
     const peakMarker = this._renderMarker(peakMarkerModel);
     const targetMarker = this._renderMarker(targetMarkerModel);
+    const floorMarker = this._renderMarker(floorMarkerModel);
     const targetValueLabel = targetMarkerModel?.labelVisible ? `
       <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;">
         ${targetMarkerModel.label?.text ? escapeHtml(targetMarkerModel.label.text) : ''}
+      </div>` : '';
+    const peakValueLabel = peakMarkerModel?.labelVisible ? `
+      <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;">
+        ${peakMarkerModel.visible && peakMarkerModel.label?.text ? escapeHtml(peakMarkerModel.label.text) : ''}
+      </div>` : '';
+    const floorValueLabel = floorMarkerModel?.labelVisible ? `
+      <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;">
+        ${floorMarkerModel.visible && floorMarkerModel.label?.text ? escapeHtml(floorMarkerModel.label.text) : ''}
       </div>` : '';
     const needleMarker = ecfg.bar?.needle?.show && !Number.isFinite(baselinePct) ? `
       <div class="needle-layer">
@@ -3455,9 +3591,12 @@ ${paintLayers}
                 ${innerLabel}
                 ${peakMarker}
                 ${targetMarker}
+                ${floorMarker}
                 ${needleMarker}
               </div>
+              ${peakValueLabel}
               ${targetValueLabel}
+              ${floorValueLabel}
             </div>
             ${rightValue}
           </div>
@@ -3469,14 +3608,14 @@ ${paintLayers}
     if (!row || !stateObj) return;
 
     const ecfg = this._resolve(entityCfg);
+    this._updateExtrema(entityCfg, ecfg, stateObj);
     const rowViewModel = buildRowViewModel({
       hass: this._hass,
       cardConfig: this._config,
       entityConfig: ecfg,
       entityState: stateObj,
-      peaks: this._peaks,
+      extrema: this._extrema[entityCfg.entity] ?? null,
     });
-    const rawVal = rowViewModel.numericValue;
     const safeMin = rowViewModel.min;
     const safeMax = rowViewModel.max;
     const pct = rowViewModel.percent;
@@ -3560,18 +3699,14 @@ ${paintLayers}
       aboveLabel.innerHTML = `<span class="above-bar-label-name label-left-text">${escapeHtml(rowViewModel.name)}</span>${this._formatAboveValueMarkup(display, displayUnit, false)}`;
     }
 
-    if (ecfg.peak_marker.show && Number.isFinite(rawVal)) {
-      const key = entityCfg.entity;
-      if (this._peaks[key] === undefined || rawVal > this._peaks[key]) {
-        this._peaks[key] = rawVal;
-      }
-    }
-
     const targetEl = row.querySelector('.target-marker');
     const targetLabelEl = row.querySelector('.target-value-label');
+    const peakLabelEl = row.querySelector('.peak-value-label');
+    const floorLabelEl = row.querySelector('.floor-value-label');
     const markerModels = rowViewModel.markers ?? [];
     this._patchMarker(targetEl, this._getMarkerModel(markerModels, 'target'));
     this._patchMarker(row.querySelector('.peak-marker'), this._getMarkerModel(markerModels, 'peak'));
+    this._patchMarker(row.querySelector('.floor-marker'), this._getMarkerModel(markerModels, 'floor'));
     const targetMarkerModel = this._getMarkerModel(markerModels, 'target');
     if (targetLabelEl) {
       if (targetMarkerModel?.labelVisible && targetMarkerModel.visible) {
@@ -3580,6 +3715,19 @@ ${paintLayers}
         this._setStyleIfChanged(targetLabelEl, 'visibility', 'hidden');
       }
     }
+    const patchValueLabel = (labelEl, markerType) => {
+      if (!labelEl) return;
+      const marker = this._getMarkerModel(markerModels, markerType);
+      if (marker?.labelVisible && marker.visible) {
+        this._setTextIfChanged(labelEl, marker.label?.text ?? null);
+        this._setStyleIfChanged(labelEl, 'visibility', 'visible');
+        this._setStyleIfChanged(labelEl, 'left', `${Number.isFinite(marker.position) ? marker.position : 0}%`);
+      } else {
+        this._setStyleIfChanged(labelEl, 'visibility', 'hidden');
+      }
+    };
+    patchValueLabel(peakLabelEl, 'peak');
+    patchValueLabel(floorLabelEl, 'floor');
   }
 
   _update() {
@@ -3600,31 +3748,24 @@ ${paintLayers}
           continue;
         }
         const ecfg      = this._resolve(entityCfg);
+        this._updateExtrema(entityCfg, ecfg, stateObj);
         const rowViewModel = buildRowViewModel({
           hass: this._hass,
           cardConfig: this._config,
           entityConfig: ecfg,
           entityState: stateObj,
-          peaks: this._peaks,
+          extrema: this._extrema[entityCfg.entity] ?? null,
         });
-        const rawVal    = rowViewModel.numericValue;
         const safeMin   = rowViewModel.min;
         const safeMax   = rowViewModel.max;
-        const targetVal = rowViewModel.target;
         const pct       = rowViewModel.percent;
         const color     = this._getColor(pct, ecfg, safeMin, safeMax);
         const display   = rowViewModel.primaryPresentation.number;
         const displayUnit = rowViewModel.primaryPresentation.unit;
         const targetPct = rowViewModel.targetPercent;
         const targetDisplay = rowViewModel.targetPresentation?.text ?? null;
-        let peakPct = null, peakDisplay = null;
-        if (ecfg.peak_marker.show && Number.isFinite(rawVal)) {
-          if (this._peaks[entityCfg.entity] === undefined || rawVal > this._peaks[entityCfg.entity]) {
-            this._peaks[entityCfg.entity] = rawVal;
-          }
-          peakPct = rowViewModel.peakPercent;
-          peakDisplay = rowViewModel.peakPresentation?.number ?? null;
-        }
+        const peakPct = rowViewModel.peakPercent;
+        const peakDisplay = rowViewModel.peakPresentation?.number ?? null;
         html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_marker.color, ecfg.target_marker.color, safeMin, safeMax);
       }
       rowsEl.innerHTML = html;

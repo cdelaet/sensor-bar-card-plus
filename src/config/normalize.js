@@ -1,3 +1,5 @@
+import { isValidReset, normalizeReset } from '../utils/extrema.js';
+
 export function normalizeResolvableValue(value, entityValue, percentValue = null) {
   const normalized = {
     fixed: value ?? null,
@@ -514,13 +516,81 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
   return normalizedTarget;
 }
 
-export function normalizePeakMarkerConfig(entityConfig, cardConfig) {
-  const cardPeak = cardConfig?.peak_marker;
-  const entityPeak = entityConfig?.peak;
+function getRawExtremumConfig(config, key) {
+  const value = config?.[key];
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  const markerValue = config?.[`${key}_marker`];
+  return markerValue && typeof markerValue === 'object' && !Array.isArray(markerValue)
+    ? markerValue
+    : null;
+}
+
+function normalizeLabelConfig(rawConfig, inheritedConfig) {
+  const rawLabel = rawConfig?.label;
+  const hasRawLabel = rawLabel && typeof rawLabel === 'object' && !Array.isArray(rawLabel);
   return {
-    show: entityPeak?.enabled ?? entityConfig.show_peak ?? cardPeak?.show ?? cardConfig?.show_peak ?? false,
-    color: entityPeak?.color ?? entityConfig.peak_color ?? cardPeak?.color ?? cardConfig?.peak_color ?? '#888',
+    show: hasRawLabel && typeof rawLabel.show === 'boolean'
+      ? rawLabel.show
+      : inheritedConfig.show_label ?? false,
+    decimal: hasRawLabel && rawLabel.decimal !== undefined
+      ? getFiniteNumber(rawLabel.decimal)
+      : inheritedConfig.label_decimal ?? null,
   };
+}
+
+function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = {}) {
+  const { legacy = false, defaultColor = '#888888' } = options;
+  const cardMarker = cardConfig?.[`${key}_marker`];
+  const rawMarker = getRawExtremumConfig(entityConfig, key);
+  const inherited = cardMarker ?? {
+    show: legacy ? cardConfig?.show_peak ?? false : false,
+    color: legacy ? cardConfig?.peak_color ?? defaultColor : defaultColor,
+    show_label: false,
+    label_decimal: null,
+    reset: { kind: 'never' },
+  };
+  const hasReset = rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, 'reset');
+  const rawReset = hasReset ? rawMarker.reset : undefined;
+  const reset = hasReset ? normalizeReset(rawReset) : (inherited.reset ?? { kind: 'never' });
+  const rawLabel = rawMarker?.label;
+  const label = normalizeLabelConfig(rawMarker, inherited);
+  const normalized = {
+    show: rawMarker?.enabled
+      ?? (legacy ? entityConfig.show_peak : undefined)
+      ?? inherited.show
+      ?? false,
+    color: rawMarker?.color
+      ?? (legacy ? entityConfig.peak_color : undefined)
+      ?? inherited.color
+      ?? defaultColor,
+  };
+  const inheritedAdvanced = cardMarker && (
+    Object.prototype.hasOwnProperty.call(cardMarker, 'show_label')
+    || Object.prototype.hasOwnProperty.call(cardMarker, 'label_decimal')
+    || Object.prototype.hasOwnProperty.call(cardMarker, 'reset')
+  );
+  const hasAdvancedConfig = key === 'floor'
+    || hasReset
+    || rawLabel !== undefined
+    || inheritedAdvanced;
+
+  if (hasAdvancedConfig) {
+    normalized.show_label = label.show;
+    normalized.label_decimal = label.decimal;
+    normalized.reset = reset;
+  }
+  if (hasReset && !isValidReset(rawReset)) {
+    normalized.reset_invalid = true;
+  }
+  return normalized;
+}
+
+export function normalizePeakMarkerConfig(entityConfig, cardConfig) {
+  return normalizeExtremumMarkerConfig(entityConfig, cardConfig, 'peak', { legacy: true, defaultColor: '#888888' });
+}
+
+export function normalizeFloorMarkerConfig(entityConfig, cardConfig) {
+  return normalizeExtremumMarkerConfig(entityConfig, cardConfig, 'floor', { defaultColor: '#888888' });
 }
 
 export function normalizeEntityConfig(entityConfig, cardConfig) {
@@ -539,6 +609,7 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
   normalizedEntity.formatting = normalizeFormattingConfig(entityConfig, cardConfig);
   normalizedEntity.target_marker = normalizeTargetMarkerConfig(entityConfig, cardConfig);
   normalizedEntity.peak_marker = normalizePeakMarkerConfig(entityConfig, cardConfig);
+  normalizedEntity.floor_marker = normalizeFloorMarkerConfig(entityConfig, cardConfig);
 
   normalizedEntity.min = normalizedEntity.scale.min.fixed;
   normalizedEntity.min_entity = normalizedEntity.scale.min.entity;
@@ -575,7 +646,7 @@ export function normalizeCardConfig(rawConfig) {
     color: '#4a9eff',
     animated: true,
     show_peak: false,
-    peak_color: '#888',
+    peak_color: '#888888',
     target: null,
     target_entity: null,
     target_color: '#888',
@@ -621,6 +692,7 @@ export function normalizeCardConfig(rawConfig) {
   normalizedCard.formatting = normalizeFormattingConfig(baseConfig, null);
   normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);
   normalizedCard.peak_marker = normalizePeakMarkerConfig(baseConfig, null);
+  normalizedCard.floor_marker = normalizeFloorMarkerConfig(baseConfig, null);
   normalizedCard.entities = baseConfig.entities.map((entityCfg) =>
     normalizeEntityConfig(entityCfg, normalizedCard)
   );

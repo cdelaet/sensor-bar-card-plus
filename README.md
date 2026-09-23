@@ -873,8 +873,11 @@ The card supports:
 - optional `target.label.show`
 - optional `target.when_exceeded.fill_color`
 - optional `peak.enabled`
+- optional `floor.enabled`
+- optional Peak and Floor labels
+- reset policies for Peak and Floor
 
-The target marker sits on the bottom edge of the bar. The peak marker sits on the top edge. They coexist cleanly and can overlap at the same position without fighting for visibility.
+The target and floor markers sit in the bottom marker lane. The peak marker sits in the top lane. Target and Floor use independent positions in the shared bottom lane; Stage 3 does not attempt collision avoidance when their markers or labels overlap.
 
 ![Dynamic target and above-target color](images/example-above-target-color-small.gif)
 
@@ -961,6 +964,57 @@ entities:
     name: Caravan
     icon: mdi:caravan
 ```
+
+### Floor marker and extrema labels
+
+Floor tracks the lowest finite value observed for the current card session. Peak and Floor labels are hidden by default and use the row's effective unit and decimal precision unless explicitly overridden.
+
+```yaml
+formatting:
+  decimal: 1
+peak:
+  enabled: true
+  color: '#fde68a'
+  label:
+    show: true
+floor:
+  enabled: true
+  color: '#888888'
+  label:
+    show: true
+    decimal: 0
+entities:
+  - entity: sensor.caravan_power
+```
+
+### Peak and Floor reset policies
+
+Peak and Floor state is in-memory visualization state. It is lost when the card or browser is recreated and is not a durable historical statistic.
+
+Calendar resets use local clock boundaries:
+
+```yaml
+peak:
+  enabled: true
+  reset: quarterly   # :00, :15, :30, and :45
+floor:
+  enabled: true
+  reset: daily       # local midnight
+```
+
+Supported calendar values are `quarterly`, `hourly`, `daily`, `weekly`, `monthly`, `yearly`, and `never`.
+
+Duration resets are relative to the first finite sample in the current tracker window. They are not clock-aligned:
+
+```yaml
+peak:
+  enabled: true
+  reset: 26m
+```
+
+If the tracker starts at 10:07, the next window starts when a finite sample arrives at or after 10:33. `reset: 15m` therefore differs from `reset: quarterly`: the former is elapsed time from initialization, while the latter follows local `:00`, `:15`, `:30`, and `:45` boundaries.
+
+Valid duration values are `1m` through `59m` and `1h` through `23h`. Invalid values fall back safely to `never` with a configuration warning.
 
 ### Target marker example
 
@@ -1590,7 +1644,19 @@ baseline
 
 peak
 ├── enabled
-└── color
+├── color
+├── reset
+└── label
+    ├── show
+    └── decimal
+
+floor
+├── enabled
+├── color
+├── reset
+└── label
+    ├── show
+    └── decimal
 
 formatting
 ├── decimal
@@ -1635,6 +1701,14 @@ formatting
 | `baseline.below.color` | `null` | CSS color | Optional semantic color below the baseline. |
 | `peak.enabled` | `false` | boolean | Shows a session peak marker. |
 | `peak.color` | `#888888` | CSS color | Peak marker color. |
+| `peak.reset` | `never` | reset value | Resets Peak using a relative duration or local calendar boundary. |
+| `peak.label.show` | `false` | boolean | Shows the formatted Peak value label. |
+| `peak.label.decimal` | inherited | number | Overrides Peak label precision; omitted values inherit `formatting.decimal`. |
+| `floor.enabled` | `false` | boolean | Shows a session Floor marker for the lowest finite value. |
+| `floor.color` | `#888888` | CSS color | Floor marker color. |
+| `floor.reset` | `never` | reset value | Resets Floor using a relative duration or local calendar boundary. |
+| `floor.label.show` | `false` | boolean | Shows the formatted Floor value label. |
+| `floor.label.decimal` | inherited | number | Overrides Floor label precision; omitted values inherit `formatting.decimal`. |
 | `formatting.decimal` | `null` | number | Decimal places for displayed numeric values. |
 | `formatting.unit` | entity unit | string | Display unit override. |
 
@@ -1691,6 +1765,7 @@ Entity-level configuration uses the same structured option groups as card-level 
 | `bar` | object | Per-row fill and needle override |
 | `target` | object/number | Per-row target override |
 | `peak` | object | Per-row peak override |
+| `floor` | object | Per-row floor override |
 | `baseline` | object/number/null | Per-row baseline override or explicit disable |
 | `formatting` | object | Per-row decimal and unit override |
 | `label_position` | string | Legacy alias for `layout.label.position` |
@@ -1911,9 +1986,26 @@ Migration note: The default Target marker is now a diamond, making it easier to 
 peak:
   enabled: true
   color: '#fde68a'
+  reset: never
+  label:
+    show: false
 ```
 
-The peak marker tracks the highest observed value for the current page session.
+The Peak marker tracks the highest finite value observed for the current card session. `reset: never` is the default. See [Peak and Floor reset policies](#peak-and-floor-reset-policies) for relative duration and local calendar resets.
+
+## Floor Marker
+
+```yaml
+floor:
+  enabled: true
+  color: '#888888'
+  reset: daily
+  label:
+    show: true
+    decimal: 1
+```
+
+The Floor marker tracks the lowest finite value observed for the current card session. It uses the shared below marker lane with Target and does not allocate another vertical lane.
 
 ## Formatting
 
@@ -1930,7 +2022,7 @@ formatting:
 ## Behavior Notes
 
 - Clicking a row opens the native Home Assistant more-info dialog.
-- Peak values are stored in memory and reset when the page reloads.
+- Peak and Floor values are stored in memory and reset when the card or browser is recreated.
 - Textual states do not show leftover units.
 - Time units `h`, `m`, and `s` render tight, for example `43s` and `4h`.
 - Responsive fallbacks prioritize the bar and keep value + unit readable. In tight spaces, labels and icons may step aside automatically.

@@ -125,8 +125,8 @@ function getNeedleState(entityConfig, numericValue, minValue, maxValue, baseline
   };
 }
 
-function getPeakState(entityId, numericValue, minValue, maxValue, peaks, peakEnabled) {
-  if (!peakEnabled || !Number.isFinite(numericValue)) {
+function getExtremumState(numericValue, minValue, maxValue, tracker, direction, enabled) {
+  if (!enabled) {
     return {
       value: null,
       percent: null,
@@ -135,14 +135,23 @@ function getPeakState(entityId, numericValue, minValue, maxValue, peaks, peakEna
     };
   }
 
-  const existingPeak = getFiniteNumber(peaks?.[entityId]);
-  const peakValue = Number.isFinite(existingPeak)
-    ? Math.max(existingPeak, numericValue)
+  const existingValue = getFiniteNumber(tracker?.value);
+  if (!Number.isFinite(existingValue) && !Number.isFinite(numericValue)) {
+    return {
+      value: null,
+      percent: null,
+      visible: false,
+    };
+  }
+  const value = Number.isFinite(existingValue)
+    ? (Number.isFinite(numericValue)
+      ? (direction === 'min' ? Math.min(existingValue, numericValue) : Math.max(existingValue, numericValue))
+      : existingValue)
     : numericValue;
 
   return {
-    value: peakValue,
-    percent: toScalePct(peakValue, minValue, maxValue),
+    value,
+    percent: toScalePct(value, minValue, maxValue),
     visible: true,
   };
 }
@@ -154,6 +163,7 @@ export function buildRowViewModel(options) {
     entityConfig,
     entityState,
     peaks,
+    extrema,
   } = options;
 
   void cardConfig;
@@ -193,16 +203,32 @@ export function buildRowViewModel(options) {
   const baselinePercent = Number.isFinite(baselineValue) ? toScalePct(baselineValue, safeMin, safeMax) : null;
   const baselineVisible = Number.isFinite(baselineValue);
 
-  const peakState = getPeakState(
-    entityId,
+  const legacyPeak = Number.isFinite(getFiniteNumber(peaks?.[entityId]))
+    ? { value: getFiniteNumber(peaks?.[entityId]) }
+    : null;
+  const peakState = getExtremumState(
     numericValue,
     safeMin,
     safeMax,
-    peaks,
-    entityConfig?.peak_marker?.show === true
+    extrema?.peak ?? legacyPeak,
+    'max',
+    entityConfig?.peak_marker?.show === true,
   );
+  const floorState = getExtremumState(
+    numericValue,
+    safeMin,
+    safeMax,
+    extrema?.floor,
+    'min',
+    entityConfig?.floor_marker?.show === true,
+  );
+  const peakDecimal = entityConfig?.peak_marker?.label_decimal ?? decimal;
+  const floorDecimal = entityConfig?.floor_marker?.label_decimal ?? decimal;
   const peakPresentation = peakState.visible
-    ? createNumericPresentation(peakState.value, displayUnit, decimal)
+    ? createNumericPresentation(peakState.value, targetUnit, peakDecimal)
+    : null;
+  const floorPresentation = floorState.visible
+    ? createNumericPresentation(floorState.value, targetUnit, floorDecimal)
     : null;
   const markers = buildMarkerModels({
     entityConfig,
@@ -214,6 +240,10 @@ export function buildRowViewModel(options) {
     peakPosition: peakState.percent,
     peakPresentation,
     peakVisible: peakState.visible,
+    floorValue: floorState.value,
+    floorPosition: floorState.percent,
+    floorPresentation,
+    floorVisible: floorState.visible,
   });
 
   return {
@@ -247,6 +277,11 @@ export function buildRowViewModel(options) {
     peakDisplay: peakPresentation?.number ?? null,
     peakPresentation,
     peakVisible: peakState.visible,
+    floor: floorState.value,
+    floorPercent: floorState.percent,
+    floorDisplay: floorPresentation?.number ?? null,
+    floorPresentation,
+    floorVisible: floorState.visible,
     markers,
     markerLaneOccupancy: getMarkerLaneOccupancy(entityConfig),
     segments: entityConfig?.bar?.segments ?? null,

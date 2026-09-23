@@ -431,6 +431,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementChecked(`entity-${index}-baseline-inherit`, !this._hasBaselineOverride(scope));
       this._setElementChecked(`entity-${index}-needle-inherit`, !this._hasNeedleOverride(scope));
       this._setElementChecked(`entity-${index}-peak-inherit`, !this._hasPeakOverride(scope));
+      this._setElementChecked(`entity-${index}-floor-inherit`, !this._hasExtremumOverride(scope, 'floor'));
       this._setElementChecked(`entity-${index}-bar-inherit`, !this._hasEntityBarAppearanceOverride(scope));
       this._setElementChecked(`entity-${index}-segments-inherit`, !this._hasSegmentsOverride(scope));
       this._setElementChecked(`entity-${index}-gradient-stops-inherit`, !this._hasGradientStopsOverride(scope));
@@ -445,6 +446,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementText(`entity-${index}-group-baseline-summary`, this._getBaselineOverrideSummary(scope));
       this._setElementText(`entity-${index}-group-needle-summary`, this._getNeedleSummary(scope));
       this._setElementText(`entity-${index}-group-peak-summary`, this._getPeakSummary(scope));
+      this._setElementText(`entity-${index}-group-floor-summary`, this._getFloorSummary(scope));
       this._setElementText(`entity-${index}-group-bar-summary`, this._getBarAppearanceSummary(scope));
       this._setElementText(`entity-${index}-group-segments-summary`, this._getSegmentsSummary(scope));
       this._setElementText(`entity-${index}-group-gradient-stops-summary`, this._getGradientStopsSummary(scope));
@@ -836,7 +838,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return nextTarget;
   }
 
-  _cleanupPeakForEmit(target) {
+  _cleanupPeakForEmit(target, scope = { type: 'card' }) {
     if (!this._isObject(target) || !this._isObject(target.peak)) {
       return target;
     }
@@ -846,6 +848,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
     if (typeof nextPeak.enabled !== 'boolean') {
       delete nextPeak.enabled;
+    }
+    if (scope?.type !== 'entity' && nextPeak.reset === 'never') {
+      delete nextPeak.reset;
     }
 
     if (color && this._normalizeColorComparisonValue(color) !== this._normalizeColorComparisonValue('#888')) {
@@ -861,6 +866,35 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextTarget.peak;
     }
 
+    return nextTarget;
+  }
+
+  _cleanupFloorForEmit(target, scope = { type: 'card' }) {
+    if (!this._isObject(target) || !this._isObject(target.floor)) {
+      return target;
+    }
+    const nextTarget = this._cloneDeep(target);
+    const nextFloor = this._cloneDeep(nextTarget.floor);
+    const color = this._normalizeTextValue(nextFloor.color).trim();
+    if (typeof nextFloor.enabled !== 'boolean') delete nextFloor.enabled;
+    if (color && this._normalizeColorComparisonValue(color) !== this._normalizeColorComparisonValue('#888888')) {
+      nextFloor.color = color;
+    } else {
+      delete nextFloor.color;
+    }
+    if (this._isObject(nextFloor.label)) {
+      if (typeof nextFloor.label.show !== 'boolean') delete nextFloor.label.show;
+      if (nextFloor.label.decimal === undefined || nextFloor.label.decimal === null || nextFloor.label.decimal === '') {
+        delete nextFloor.label.decimal;
+      }
+      if (!Object.keys(nextFloor.label).length) delete nextFloor.label;
+    }
+    if ((scope?.type !== 'entity' && nextFloor.reset === 'never')
+      || nextFloor.reset === undefined || nextFloor.reset === null || nextFloor.reset === '') {
+      delete nextFloor.reset;
+    }
+    if (Object.keys(nextFloor).length) nextTarget.floor = nextFloor;
+    else delete nextTarget.floor;
     return nextTarget;
   }
 
@@ -923,9 +957,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const pathKey = path.join('.');
     switch (pathKey) {
       case '':
-        return ['type', 'title', 'entities', 'scale', 'target', 'baseline', 'peak', 'layout', 'formatting', 'bar'];
+        return ['type', 'title', 'entities', 'scale', 'target', 'baseline', 'peak', 'floor', 'layout', 'formatting', 'bar'];
       case 'entities.*':
-        return ['entity', 'name', 'icon', 'scale', 'target', 'baseline', 'peak', 'layout', 'formatting', 'bar'];
+        return ['entity', 'name', 'icon', 'scale', 'target', 'baseline', 'peak', 'floor', 'layout', 'formatting', 'bar'];
       case 'scale':
         return ['min', 'max'];
       case 'scale.min':
@@ -945,7 +979,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       case 'baseline.below':
         return ['color'];
       case 'peak':
-        return ['enabled', 'color'];
+        return ['enabled', 'color', 'reset', 'label'];
+      case 'floor':
+        return ['enabled', 'color', 'reset', 'label'];
+      case 'peak.label':
+      case 'floor.label':
+        return ['show', 'decimal'];
       case 'layout':
         return ['height', 'label', 'hero'];
       case 'layout.label':
@@ -1002,7 +1041,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     nextConfig = this._cleanupScaleForEmit(nextConfig);
     nextConfig = this._cleanupTargetForEmit(nextConfig, { type: 'card' });
     nextConfig = this._cleanupBaselineForEmit(nextConfig);
-    nextConfig = this._cleanupPeakForEmit(nextConfig);
+    nextConfig = this._cleanupPeakForEmit(nextConfig, { type: 'card' });
+    nextConfig = this._cleanupFloorForEmit(nextConfig, { type: 'card' });
     nextConfig = this._cleanupLayoutForEmit(nextConfig);
     nextConfig = this._cleanupFormattingForEmit(nextConfig);
     nextConfig = this._cleanupNeedleForEmit(nextConfig, { type: 'card' });
@@ -1017,7 +1057,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         cleanedEntry = this._cleanupScaleForEmit(cleanedEntry);
         cleanedEntry = this._cleanupTargetForEmit(cleanedEntry, { type: 'entity', index });
         cleanedEntry = this._cleanupBaselineForEmit(cleanedEntry);
-        cleanedEntry = this._cleanupPeakForEmit(cleanedEntry);
+        cleanedEntry = this._cleanupPeakForEmit(cleanedEntry, { type: 'entity', index });
+        cleanedEntry = this._cleanupFloorForEmit(cleanedEntry, { type: 'entity', index });
         cleanedEntry = this._cleanupLayoutForEmit(cleanedEntry);
         cleanedEntry = this._cleanupFormattingForEmit(cleanedEntry);
         cleanedEntry = this._cleanupNeedleForEmit(cleanedEntry, { type: 'entity' });
@@ -2088,6 +2129,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (this._isObject(peakValue) && (
       Object.prototype.hasOwnProperty.call(peakValue, 'enabled')
       || Object.prototype.hasOwnProperty.call(peakValue, 'color')
+      || Object.prototype.hasOwnProperty.call(peakValue, 'reset')
+      || Object.prototype.hasOwnProperty.call(peakValue, 'label')
     )) {
       return true;
     }
@@ -2117,6 +2160,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return this._applyScopedMutation(scope, (target) => {
       let nextTarget = this._deletePathValue(target, ['peak', 'enabled']);
       nextTarget = this._deletePathValue(nextTarget, ['peak', 'color']);
+      nextTarget = this._deletePathValue(nextTarget, ['peak', 'reset']);
+      nextTarget = this._deletePathValue(nextTarget, ['peak', 'label']);
       nextTarget = this._deletePathValue(nextTarget, ['show_peak']);
       nextTarget = this._deletePathValue(nextTarget, ['peak_color']);
       nextTarget = this._deletePathValue(nextTarget, ['peak_marker']);
@@ -2198,6 +2243,210 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['peak']);
       return nextTarget;
     });
+  }
+
+  _getScopedMarkerExtras(scope, key) {
+    const raw = this._getScopedValue(scope, [key]);
+    const marker = this._isObject(raw) ? raw : {};
+    const label = this._isObject(marker.label) ? marker.label : {};
+    return {
+      reset: Object.prototype.hasOwnProperty.call(marker, 'reset') ? this._normalizeTextValue(marker.reset).trim().toLowerCase() : null,
+      labelShow: typeof label.show === 'boolean' ? label.show : null,
+      labelDecimal: label.decimal === undefined || label.decimal === null || label.decimal === ''
+        ? null
+        : this._normalizeNumberValue(label.decimal),
+    };
+  }
+
+  _hasExtremumOverride(scope, key) {
+    const marker = this._getScopedValue(scope, [key]);
+    if (!this._isObject(marker)) return false;
+    return ['enabled', 'color', 'reset', 'label'].some((field) => (
+      Object.prototype.hasOwnProperty.call(marker, field)
+    ));
+  }
+
+  _getEffectiveMarkerExtras(scope, key) {
+    const local = this._getScopedMarkerExtras(scope, key);
+    if (scope?.type !== 'entity') {
+      return {
+        reset: local.reset ?? 'never',
+        labelShow: local.labelShow ?? false,
+        labelDecimal: local.labelDecimal,
+      };
+    }
+    const card = this._getScopedMarkerExtras({ type: 'card' }, key);
+    if (!this._hasExtremumOverride(scope, key)) {
+      return {
+        reset: card.reset ?? 'never',
+        labelShow: card.labelShow ?? false,
+        labelDecimal: card.labelDecimal,
+      };
+    }
+    return {
+      reset: local.reset ?? card.reset ?? 'never',
+      labelShow: local.labelShow ?? card.labelShow ?? false,
+      labelDecimal: local.labelDecimal ?? card.labelDecimal,
+    };
+  }
+
+  _getScopedFloorConfig(scope) {
+    const raw = this._getScopedValue(scope, ['floor']);
+    const marker = this._isObject(raw) ? raw : {};
+    let mode = scope?.type === 'entity' ? 'inherit' : 'disabled';
+    if (marker.enabled === true) mode = 'enabled';
+    if (marker.enabled === false) mode = 'disabled';
+    const color = marker.color && this._normalizeColorComparisonValue(marker.color) !== this._normalizeColorComparisonValue('#888888')
+      ? marker.color
+      : '';
+    return { mode, color };
+  }
+
+  _getEffectiveScopedFloorConfig(scope) {
+    const local = this._getScopedFloorConfig(scope);
+    const extras = this._getEffectiveMarkerExtras(scope, 'floor');
+    if (scope?.type !== 'entity') return { ...local, ...extras };
+    if (!this._hasExtremumOverride(scope, 'floor')) {
+      return { ...this._getScopedFloorConfig({ type: 'card' }), ...extras };
+    }
+    const card = this._getEffectiveScopedFloorConfig({ type: 'card' });
+    return {
+      mode: local.mode === 'inherit' ? card.mode : local.mode,
+      color: local.color || card.color,
+      reset: extras.reset,
+      labelShow: extras.labelShow,
+      labelDecimal: extras.labelDecimal,
+    };
+  }
+
+  _getFloorSummary(scope) {
+    if (scope?.type === 'entity' && !this._hasExtremumOverride(scope, 'floor')) return 'Inherited';
+    const floor = this._getEffectiveScopedFloorConfig(scope);
+    if (floor.mode === 'enabled') return floor.color ? 'Enabled • Custom color' : 'Enabled';
+    if (floor.color) return 'Disabled • Custom color';
+    return 'Disabled';
+  }
+
+  _setScopedExtremumEnabled(scope, key, value) {
+    const boolValue = !!value;
+    const defaultColor = '#888888';
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._cloneDeep(target);
+      const current = this._isObject(this._getPathValue(nextTarget, [key]))
+        ? this._cloneDeep(this._getPathValue(nextTarget, [key]))
+        : {};
+      const currentColor = current.color ?? defaultColor;
+      if (scope?.type === 'entity' || boolValue) current.enabled = boolValue;
+      else delete current.enabled;
+      if (currentColor && this._normalizeColorComparisonValue(currentColor) !== this._normalizeColorComparisonValue(defaultColor)) {
+        current.color = currentColor;
+      } else delete current.color;
+      if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
+      else nextTarget = this._deletePathValue(nextTarget, [key]);
+      return nextTarget;
+    });
+  }
+
+  _setScopedExtremumColor(scope, key, rawValue) {
+    const normalizedValue = this._normalizeTextValue(rawValue).trim();
+    const defaultColor = '#888888';
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._cloneDeep(target);
+      const current = this._isObject(this._getPathValue(nextTarget, [key]))
+        ? this._cloneDeep(this._getPathValue(nextTarget, [key]))
+        : {};
+      delete current.color;
+      if (normalizedValue && this._normalizeColorComparisonValue(normalizedValue) !== this._normalizeColorComparisonValue(defaultColor)) {
+        current.color = normalizedValue;
+      }
+      const mode = this._getScopedFloorConfig(scope).mode;
+      if (key === 'floor' && ((scope?.type === 'entity' && mode !== 'inherit') || (scope?.type !== 'entity' && mode === 'enabled'))) {
+        current.enabled = mode === 'enabled';
+      }
+      if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
+      else nextTarget = this._deletePathValue(nextTarget, [key]);
+      if (key === 'peak') {
+        nextTarget = this._deletePathValue(nextTarget, ['show_peak']);
+        nextTarget = this._deletePathValue(nextTarget, ['peak_color']);
+        nextTarget = this._deletePathValue(nextTarget, ['peak_marker']);
+      }
+      return nextTarget;
+    });
+  }
+
+  _setScopedExtremumReset(scope, key, value) {
+    const normalized = this._normalizeTextValue(value).trim().toLowerCase();
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._cloneDeep(target);
+      const current = this._isObject(this._getPathValue(nextTarget, [key]))
+        ? this._cloneDeep(this._getPathValue(nextTarget, [key]))
+        : {};
+      if (normalized && (scope?.type === 'entity' || normalized !== 'never')) current.reset = normalized;
+      else delete current.reset;
+      if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
+      else nextTarget = this._deletePathValue(nextTarget, [key]);
+      if (key === 'peak') {
+        nextTarget = this._deletePathValue(nextTarget, ['show_peak']);
+        nextTarget = this._deletePathValue(nextTarget, ['peak_color']);
+        nextTarget = this._deletePathValue(nextTarget, ['peak_marker']);
+      }
+      return nextTarget;
+    });
+  }
+
+  _setScopedExtremumLabelShow(scope, key, value) {
+    const enabled = !!value;
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._cloneDeep(target);
+      const current = this._isObject(this._getPathValue(nextTarget, [key]))
+        ? this._cloneDeep(this._getPathValue(nextTarget, [key]))
+        : {};
+      const label = this._isObject(current.label) ? this._cloneDeep(current.label) : {};
+      if (scope?.type === 'entity' || enabled) label.show = enabled;
+      else delete label.show;
+      if (Object.keys(label).length) current.label = label;
+      else delete current.label;
+      if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
+      else nextTarget = this._deletePathValue(nextTarget, [key]);
+      if (key === 'peak') {
+        nextTarget = this._deletePathValue(nextTarget, ['show_peak']);
+        nextTarget = this._deletePathValue(nextTarget, ['peak_color']);
+        nextTarget = this._deletePathValue(nextTarget, ['peak_marker']);
+      }
+      return nextTarget;
+    });
+  }
+
+  _setScopedExtremumLabelDecimal(scope, key, value) {
+    const decimal = this._normalizeNumberValue(value);
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._cloneDeep(target);
+      const current = this._isObject(this._getPathValue(nextTarget, [key]))
+        ? this._cloneDeep(this._getPathValue(nextTarget, [key]))
+        : {};
+      const label = this._isObject(current.label) ? this._cloneDeep(current.label) : {};
+      if (decimal !== null) label.decimal = decimal;
+      else delete label.decimal;
+      if (Object.keys(label).length) current.label = label;
+      else delete current.label;
+      if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
+      else nextTarget = this._deletePathValue(nextTarget, [key]);
+      return nextTarget;
+    });
+  }
+
+  _clearFloorOverride(scope) {
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._cloneDeep(target);
+      const floor = this._isObject(this._getPathValue(nextTarget, ['floor']))
+        ? this._cloneDeep(this._getPathValue(nextTarget, ['floor']))
+        : {};
+      ['enabled', 'color', 'reset', 'label'].forEach((key) => delete floor[key]);
+      if (Object.keys(floor).length) nextTarget = this._setPathValue(nextTarget, ['floor'], floor);
+      else nextTarget = this._deletePathValue(nextTarget, ['floor']);
+      nextTarget = this._deletePathValue(nextTarget, ['floor_marker']);
+      return nextTarget;
+    }, { rerender: true });
   }
 
   _setFixedMarkerValue(rootKey, enabled, value) {
@@ -4053,6 +4302,16 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return `<input type="text" data-kind="${kind}" data-index="${index}" value="${this._escapeAttribute(value)}" placeholder="${this._escapeAttribute(placeholder)}" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false">`;
   }
 
+  _renderResetOptions(value) {
+    const selected = this._normalizeTextValue(value).trim().toLowerCase() || 'never';
+    const options = [
+      'never', 'quarterly', 'hourly', 'daily', 'weekly', 'monthly', 'yearly',
+      ...Array.from({ length: 59 }, (_, index) => `${index + 1}m`),
+      ...Array.from({ length: 23 }, (_, index) => `${index + 1}h`),
+    ];
+    return options.map((option) => `<option value="${option}"${selected === option ? ' selected' : ''}>${option}</option>`).join('');
+  }
+
   _escapeAttribute(value) {
     return this._normalizeTextValue(value)
       .replace(/&/g, '&amp;')
@@ -4148,6 +4407,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       const formattingUnit = this._getScopedFormattingValue({ type: 'card' }, 'unit');
       const formattingDecimal = this._getScopedFormattingValue({ type: 'card' }, 'decimal');
       const cardPeak = this._getScopedPeakConfig({ type: 'card' });
+      const cardPeakExtras = this._getEffectiveMarkerExtras({ type: 'card' }, 'peak');
+      const cardFloor = this._getEffectiveScopedFloorConfig({ type: 'card' });
       const scaleMin = this._getScaleFixedValue('min', 'min');
       const scaleMax = this._getScaleFixedValue('max', 'max');
       const scaleMinEntity = this._getScaleEntityValue('min');
@@ -4711,7 +4972,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                        const segmentsInherited = !this._hasSegmentsOverride(scope);
 	                        const scaleInherited = !this._hasResolvableOverride(this._getResolvableScopedValue(scope, 'min'))
 	                          && !this._hasResolvableOverride(this._getResolvableScopedValue(scope, 'max'));
-	                        const entityPeak = this._getEffectiveScopedPeakConfig(scope);
+                        const entityPeak = this._getEffectiveScopedPeakConfig(scope);
+                        const entityPeakExtras = this._getEffectiveMarkerExtras(scope, 'peak');
+                        const floorInherited = !this._hasExtremumOverride(scope, 'floor');
+                        const entityFloor = this._getEffectiveScopedFloorConfig(scope);
 	                        const entityGradientStops = this._getScopedGradientStopsValue(scope);
 	                        const entityGradientDraft = this._getGradientStopsDraftState(scope);
 	                        const entityGradientDraftMessage = this._getGradientDraftValidationMessage(scope);
@@ -4890,7 +5154,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                       </div>
 	                          `,
 	                        });
-	                        const peakGroup = this._renderOverrideGroup({
+                        const peakGroup = this._renderOverrideGroup({
 	                          index,
 	                          group: 'peak',
 	                          title: 'Peak',
@@ -4919,8 +5183,71 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                           placeholder: 'inherit card default',
                         })}
                       </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-peak-reset">Peak reset</label>
+                        <select id="entity-${index}-peak-reset" data-kind="entity-peak-reset" data-index="${index}" value="${this._escapeAttribute(entityPeakExtras.reset ?? 'never')}">
+                          ${this._renderResetOptions(entityPeakExtras.reset ?? 'never')}
+                        </select>
+                      </div>
+                      <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-peak-label-show" type="checkbox" data-kind="entity-peak-label-show" data-index="${index}"${entityPeakExtras.labelShow ? ' checked' : ''}>
+                          <label for="entity-${index}-peak-label-show">Show Peak label</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-peak-label-decimal">Peak label decimals</label>
+                        <input id="entity-${index}-peak-label-decimal" type="number" min="0" step="1" data-kind="entity-peak-label-decimal" data-index="${index}" value="${this._escapeAttribute(entityPeakExtras.labelDecimal)}" placeholder="inherit primary decimals">
+                      </div>
 	                          `,
-	                        });
+                        });
+                        const floorGroup = this._renderOverrideGroup({
+                          index,
+                          group: 'floor',
+                          title: 'Floor',
+                          summary: this._getFloorSummary(scope),
+                          content: `
+                      <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-floor-inherit" type="checkbox" data-kind="entity-floor-inherit" data-index="${index}"${floorInherited ? ' checked' : ''}>
+                          <label for="entity-${index}-floor-inherit">Inherit card settings</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-floor-enabled" type="checkbox" data-kind="entity-floor-enabled" data-index="${index}"${entityFloor.mode === 'enabled' ? ' checked' : ''}>
+                          <label for="entity-${index}-floor-enabled">Floor enabled</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-floor-color">Floor color</label>
+                        ${this._renderColorInput({
+                          id: `entity-${index}-floor-color`,
+                          kind: 'entity-floor-color',
+                          index,
+                          value: entityFloor.color,
+                          fallbackHex: '#888888',
+                          placeholder: 'inherit card default',
+                        })}
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-floor-reset">Floor reset</label>
+                        <select id="entity-${index}-floor-reset" data-kind="entity-floor-reset" data-index="${index}" value="${this._escapeAttribute(entityFloor.reset)}">
+                          ${this._renderResetOptions(entityFloor.reset)}
+                        </select>
+                      </div>
+                      <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-floor-label-show" type="checkbox" data-kind="entity-floor-label-show" data-index="${index}"${entityFloor.labelShow ? ' checked' : ''}>
+                          <label for="entity-${index}-floor-label-show">Show Floor label</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-floor-label-decimal">Floor label decimals</label>
+                        <input id="entity-${index}-floor-label-decimal" type="number" min="0" step="1" data-kind="entity-floor-label-decimal" data-index="${index}" value="${this._escapeAttribute(entityFloor.labelDecimal)}" placeholder="inherit primary decimals">
+                      </div>
+                          `,
+                        });
 	                        const segmentsGroup = this._renderOverrideGroup({
 	                          index,
 	                          group: 'segments',
@@ -5166,8 +5493,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                          ${scaleGroup}
 	                          ${targetGroup}
 	                          ${baselineGroup}
-	                          ${needleGroup}
-	                          ${peakGroup}
+                          ${needleGroup}
+                          ${peakGroup}
+                          ${floorGroup}
 	                          ${barGroup}
 	                          ${segmentsGroup}
 	                          ${gradientStopsGroup}
@@ -5336,6 +5664,54 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                 fallbackHex: '#888',
                 placeholder: '#888',
               })}
+            </div>
+            <div class="field-row">
+              <label for="peak-reset">Peak reset</label>
+              <select id="peak-reset" data-field="peak-reset" value="${this._escapeAttribute(cardPeakExtras.reset)}">
+                ${this._renderResetOptions(cardPeakExtras.reset)}
+              </select>
+            </div>
+            <div class="field-row">
+              <div class="toggle">
+                <input id="peak-label-show" type="checkbox" data-field="peak-label-show"${cardPeakExtras.labelShow ? ' checked' : ''}>
+                <label for="peak-label-show">Show Peak label</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="peak-label-decimal">Peak label decimals</label>
+              <input id="peak-label-decimal" type="number" min="0" step="1" data-field="peak-label-decimal" value="${this._escapeAttribute(cardPeakExtras.labelDecimal)}" placeholder="inherit primary decimals">
+            </div>
+            <div class="field-row">
+              <div class="toggle">
+                <input id="floor-show" type="checkbox" data-field="floor-show"${cardFloor.mode === 'enabled' ? ' checked' : ''}>
+                <label for="floor-show">Floor enabled</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="floor-color">Floor color</label>
+              ${this._renderColorInput({
+                id: 'floor-color',
+                field: 'floor-color',
+                value: cardFloor.color,
+                fallbackHex: '#888888',
+                placeholder: '#888888',
+              })}
+            </div>
+            <div class="field-row">
+              <label for="floor-reset">Floor reset</label>
+              <select id="floor-reset" data-field="floor-reset" value="${this._escapeAttribute(cardFloor.reset)}">
+                ${this._renderResetOptions(cardFloor.reset)}
+              </select>
+            </div>
+            <div class="field-row">
+              <div class="toggle">
+                <input id="floor-label-show" type="checkbox" data-field="floor-label-show"${cardFloor.labelShow ? ' checked' : ''}>
+                <label for="floor-label-show">Show Floor label</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="floor-label-decimal">Floor label decimals</label>
+              <input id="floor-label-decimal" type="number" min="0" step="1" data-field="floor-label-decimal" value="${this._escapeAttribute(cardFloor.labelDecimal)}" placeholder="inherit primary decimals">
             </div>
           </div>
 	        </div>
@@ -5983,6 +6359,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (field === 'target-above-fill-color') return void this._setTargetAboveFillColor({ type: 'card' }, value);
     if (field === 'peak-show') return void this._setPeakShow(value);
     if (field === 'peak-color') return void this._setScopedPeakColor({ type: 'card' }, value);
+    if (field === 'peak-reset') return void this._setScopedExtremumReset({ type: 'card' }, 'peak', value);
+    if (field === 'peak-label-show') return void this._setScopedExtremumLabelShow({ type: 'card' }, 'peak', value);
+    if (field === 'peak-label-decimal') return void this._setScopedExtremumLabelDecimal({ type: 'card' }, 'peak', value);
+    if (field === 'floor-show') return void this._setScopedExtremumEnabled({ type: 'card' }, 'floor', value);
+    if (field === 'floor-color') return void this._setScopedExtremumColor({ type: 'card' }, 'floor', value);
+    if (field === 'floor-reset') return void this._setScopedExtremumReset({ type: 'card' }, 'floor', value);
+    if (field === 'floor-label-show') return void this._setScopedExtremumLabelShow({ type: 'card' }, 'floor', value);
+    if (field === 'floor-label-decimal') return void this._setScopedExtremumLabelDecimal({ type: 'card' }, 'floor', value);
 
     if (kind === 'entity-picker' || kind === 'entity-input') {
       const index = Number(target.dataset.index);
@@ -6100,6 +6484,43 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
     if (kind === 'entity-peak-color') {
       return void this._setScopedPeakColor({ type: 'entity', index: Number(target.dataset.index) }, value);
+    }
+
+    if (kind === 'entity-peak-reset') {
+      return void this._setScopedExtremumReset({ type: 'entity', index: Number(target.dataset.index) }, 'peak', value);
+    }
+
+    if (kind === 'entity-peak-label-show') {
+      return void this._setScopedExtremumLabelShow({ type: 'entity', index: Number(target.dataset.index) }, 'peak', value);
+    }
+
+    if (kind === 'entity-peak-label-decimal') {
+      return void this._setScopedExtremumLabelDecimal({ type: 'entity', index: Number(target.dataset.index) }, 'peak', value);
+    }
+
+    if (kind === 'entity-floor-inherit') {
+      if (value) return void this._clearFloorOverride({ type: 'entity', index: Number(target.dataset.index) });
+      return;
+    }
+
+    if (kind === 'entity-floor-enabled') {
+      return void this._setScopedExtremumEnabled({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
+    }
+
+    if (kind === 'entity-floor-color') {
+      return void this._setScopedExtremumColor({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
+    }
+
+    if (kind === 'entity-floor-reset') {
+      return void this._setScopedExtremumReset({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
+    }
+
+    if (kind === 'entity-floor-label-show') {
+      return void this._setScopedExtremumLabelShow({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
+    }
+
+    if (kind === 'entity-floor-label-decimal') {
+      return void this._setScopedExtremumLabelDecimal({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
     }
 
     if (kind === 'entity-segments-inherit') {

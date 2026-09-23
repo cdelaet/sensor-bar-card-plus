@@ -120,6 +120,60 @@ test('marker lanes reserve fixed conditional spacing around the main line', asyn
   expect(result[1].targetLabelBottom).toBeLessThanOrEqual(result[2].rowTop);
 });
 
+test('Floor shares the below lane with Target and renders extrema labels', async ({ page }) => {
+  const mount = await render(page, {
+    width: 720,
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      title: 'Peak and Floor',
+      label_position: 'off',
+      formatting: { decimal: 1 },
+      min: 0,
+      max: 100,
+      entities: [{
+        entity: 'sensor.floor_marker',
+        target: { at: { fixed: 60 }, label: { show: true } },
+        peak: { enabled: true, label: { show: true, decimal: 0 } },
+        floor: { enabled: true, label: { show: true, decimal: 1 } },
+      }],
+    },
+    states: {
+      'sensor.floor_marker': sensor(42, { friendly_name: 'Peak and Floor' }),
+    },
+  });
+
+  const result = await page.evaluate(() => {
+    const row = document.querySelector('sensor-bar-card-plus').shadowRoot.querySelector('.row[data-entity="sensor.floor_marker"]');
+    const mainLine = row.querySelector('.main-line');
+    return {
+      above: mainLine.dataset.markerLaneAbove,
+      below: mainLine.dataset.markerLaneBelow,
+      peakLane: row.querySelector('.peak-marker')?.dataset.lane,
+      floorLane: row.querySelector('.floor-marker')?.dataset.lane,
+      targetLane: row.querySelector('.target-marker')?.dataset.lane,
+      peakLabel: row.querySelector('.peak-value-label')?.textContent.trim(),
+      floorLabel: row.querySelector('.floor-value-label')?.textContent.trim(),
+      targetLabel: row.querySelector('.target-value-label')?.textContent.trim(),
+      peakShape: row.querySelector('.peak-marker')?.dataset.shape,
+      floorShape: row.querySelector('.floor-marker')?.dataset.shape,
+    };
+  });
+
+  expect(result).toEqual({
+    above: 'true',
+    below: 'true',
+    peakLane: 'above',
+    floorLane: 'below',
+    targetLane: 'below',
+    peakLabel: '42 W',
+    floorLabel: '42.0 W',
+    targetLabel: '60.0 W',
+    peakShape: 'triangle',
+    floorShape: 'triangle',
+  });
+  await expect(mount).toHaveScreenshot('floor-markers.png');
+});
+
 test('target marker defaults to diamond and supports explicit triangle overrides', async ({ page }) => {
   const mount = await render(page, {
     width: 720,
