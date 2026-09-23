@@ -196,6 +196,9 @@ export class SensorBarCard extends HTMLElement {
     this._densityPassFrame = null;
     this._densityPassRetries = 0;
     this._boundWindowResize = () => this._schedulePostLayoutDensityPass();
+    this._markerHover = null;
+    this._boundMarkerPointerOver = (event) => this._handleMarkerPointerOver(event);
+    this._boundMarkerPointerOut = (event) => this._handleMarkerPointerOut(event);
     this._ensureBaseDom();
   }
 
@@ -206,6 +209,7 @@ export class SensorBarCard extends HTMLElement {
 
   disconnectedCallback() {
     window.removeEventListener('resize', this._boundWindowResize);
+    this._clearMarkerHover();
     this._disconnectResizeObserver();
     if (this._densityPassFrame) {
       cancelAnimationFrame(this._densityPassFrame);
@@ -605,6 +609,51 @@ export class SensorBarCard extends HTMLElement {
   
   _positionTargetLabel(row) {
     this._positionMarkerValueLabel(row, '.target-value-label', '.target-marker');
+  }
+
+  _getMarkerLabel(markerEl) {
+    const row = markerEl?.closest('.row');
+    if (!row) return null;
+    if (markerEl.matches('.generic-marker[data-marker-id]')) {
+      const markerId = markerEl.dataset.markerId;
+      return [...row.querySelectorAll('.generic-value-label[data-marker-id]')]
+        .find((label) => label.dataset.markerId === markerId) ?? null;
+    }
+    const labelSelector = markerEl.matches('.target-marker') ? '.target-value-label'
+      : markerEl.matches('.peak-marker') ? '.peak-value-label'
+        : markerEl.matches('.floor-marker') ? '.floor-value-label' : null;
+    return labelSelector ? row.querySelector(labelSelector) : null;
+  }
+
+  _setMarkerHover(markerEl) {
+    const label = this._getMarkerLabel(markerEl);
+    if (!label || markerEl.style.display === 'none' || getComputedStyle(label).visibility !== 'visible') {
+      this._clearMarkerHover(markerEl);
+      return;
+    }
+    if (this._markerHover?.label === label) return;
+    this._clearMarkerHover();
+    label.dataset.markerHovered = 'true';
+    this._markerHover = { marker: markerEl, label };
+  }
+
+  _clearMarkerHover(markerEl = null) {
+    if (!this._markerHover || (markerEl && this._markerHover.marker !== markerEl)) return;
+    delete this._markerHover.label.dataset.markerHovered;
+    this._markerHover = null;
+  }
+
+  _handleMarkerPointerOver(event) {
+    if (event.pointerType === 'touch') return;
+    const markerEl = event.target?.closest?.('.generic-marker, .target-marker, .peak-marker, .floor-marker');
+    if (markerEl) this._setMarkerHover(markerEl);
+  }
+
+  _handleMarkerPointerOut(event) {
+    if (event.pointerType === 'touch') return;
+    const markerEl = event.target?.closest?.('.generic-marker, .target-marker, .peak-marker, .floor-marker');
+    if (!markerEl || markerEl.contains(event.relatedTarget)) return;
+    this._clearMarkerHover(markerEl);
   }
 
   _positionMarkerValueLabel(row, labelSelector, markerSelector) {
@@ -1306,7 +1355,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         .hero-line,
         .top-right-value {
           position: relative;
-          z-index: 7;
+          z-index: 10;
         }
         .row:hover .bar-track { filter: brightness(0.95); transition: filter 0.15s; }
         .main-line {
@@ -1385,6 +1434,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           display: block;
         }
         .label-left {
+          position: relative;
+          z-index: 10;
           flex: 1 1 auto;
           height: var(--sbcp-row-height);
           min-width: 0;
@@ -1462,7 +1513,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           gap: 6px;
           padding: 0 6px;
           pointer-events: none;
-          z-index: 8;
+          z-index: 10;
         }
         .bar-inner-label[data-inside-density="compact"] {
           gap: 5px;
@@ -1578,16 +1629,21 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         .target-value-label {
           position: absolute;
           top: 100%;
-          margin-top: 3px;
+          margin-top: 2px;
           font-size: var(--sbcp-target-label-font-size);
           line-height: 1;
           color: var(--secondary-text-color, #888);
+          background-color: var(--card-background-color, #fff);
+          padding: 0 2px;
+          border: 0;
+          border-radius: 2px;
+          box-shadow: none;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
           box-sizing: border-box;
           pointer-events: none;
-          z-index: 6;
+          z-index: 8;
           visibility: hidden;
           transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
         }
@@ -1598,30 +1654,41 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           font-size: var(--sbcp-target-label-font-size);
           line-height: 1;
           color: var(--secondary-text-color, #888);
+          background-color: var(--card-background-color, #fff);
+          padding: 0 2px;
+          border: 0;
+          border-radius: 2px;
+          box-shadow: none;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
           box-sizing: border-box;
           pointer-events: none;
-          z-index: 6;
+          z-index: 8;
           visibility: hidden;
           transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
         }
         .peak-value-label {
           bottom: 100%;
-          margin-bottom: 3px;
+          margin-bottom: 2px;
         }
         .floor-value-label {
           top: 100%;
-          margin-top: 3px;
+          margin-top: 2px;
         }
         .generic-value-label[data-lane="above"] {
           bottom: 100%;
-          margin-bottom: 3px;
+          margin-bottom: 2px;
         }
         .generic-value-label[data-lane="below"] {
           top: 100%;
-          margin-top: 3px;
+          margin-top: 2px;
+        }
+        .target-value-label[data-marker-hovered="true"],
+        .peak-value-label[data-marker-hovered="true"],
+        .floor-value-label[data-marker-hovered="true"],
+        .generic-value-label[data-marker-hovered="true"] {
+          z-index: 9;
         }
         .above-line {
           display: grid;
@@ -1824,6 +1891,18 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           --marker-color: #888;
           --marker-contrast-color: #f3f4f6;
         }
+        .peak-marker .peak-inset,
+        .peak-marker .peak-outset,
+        .target-marker .target-inset,
+        .target-marker .target-outset,
+        .floor-marker .floor-inset,
+        .floor-marker .floor-outset,
+        .generic-marker .peak-inset,
+        .generic-marker .peak-outset,
+        .generic-marker .target-inset,
+        .generic-marker .target-outset {
+          pointer-events: auto;
+        }
         .target-marker {
           z-index: 6;
         }
@@ -2011,6 +2090,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           display: none;
           fill: currentColor;
         }
+        .marker-shape-svg path[data-shape] {
+          pointer-events: visiblePainted;
+        }
         .marker-shape-svg[data-shape="circle"] path[data-shape="circle"],
         .marker-shape-svg[data-shape="diamond"] path[data-shape="diamond"],
         .marker-shape-svg[data-shape="chevron"] path[data-shape="chevron"],
@@ -2030,6 +2112,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         }
 
         .value-right {
+          position: relative;
+          z-index: 10;
           --sbcp-value-extra-width: 0px;
           flex: 0 0 calc(var(--sbcp-value-width) + var(--sbcp-value-extra-width));
           width: calc(var(--sbcp-value-width) + var(--sbcp-value-extra-width));
@@ -2117,6 +2201,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         </div>
       </ha-card>
     `;
+    this.shadowRoot.addEventListener('pointerover', this._boundMarkerPointerOver);
+    this.shadowRoot.addEventListener('pointerout', this._boundMarkerPointerOut);
     this._baseDomReady = true;
   }
 
@@ -3549,6 +3635,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
 
   _patchMarker(markerEl, marker) {
     if (!markerEl || !marker) return;
+    if (!marker.visible) this._clearMarkerHover(markerEl);
 
     const defaultShape = marker.type === 'generic' ? 'circle' : marker.type === 'peak' || marker.type === 'floor' ? 'triangle' : 'diamond';
     const shape = normalizeMarkerShape(marker.shape, defaultShape);
@@ -3884,6 +3971,7 @@ ${paintLayers}
         const peakDisplay = rowViewModel.peakPresentation?.number ?? null;
         html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_marker.color, ecfg.target_marker.color, safeMin, safeMax);
       }
+      this._clearMarkerHover();
       rowsEl.innerHTML = html;
       this._rendered = true;
 

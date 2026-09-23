@@ -166,6 +166,7 @@ test('above marker labels overlay without moving above, Hero, or narrow top-valu
   for (const scenario of [
     { position: 'above', width: 720, selector: '.above-line' },
     { position: 'hero', width: 720, selector: '.hero-line' },
+    { position: 'left', width: 720, selector: '.value-right' },
     { position: 'left', width: 320, selector: '.top-right-value', forceTopValue: true },
   ]) {
     await render(page, {
@@ -225,15 +226,328 @@ test('above marker labels overlay without moving above, Hero, or narrow top-valu
     expect(result[1].barTop).toBe(result[0].barTop);
     expect(result[1].mainTop).toBe(result[0].mainTop);
     expect(result[1].rowHeight).toBe(result[0].rowHeight);
-    expect(result[1].contentZIndex).toBe('7');
-    expect(result[1].labelZIndex).toBe('6');
+    expect(result[1].contentZIndex).toBe('10');
+    expect(result[1].labelZIndex).toBe('8');
     expect(result[1].labelVisibility).toBe('visible');
-    if (!scenario.forceTopValue) expect(result[1].labelOverlapsContent).toBe(true);
+    if (!scenario.forceTopValue && scenario.selector !== '.value-right') {
+      expect(result[1].labelOverlapsContent).toBe(true);
+    }
     if (scenario.forceTopValue) {
       expect(result[0].topValueActive).toBe('true');
       expect(result[1].topValueActive).toBe('true');
     }
+
+    const marker = page.locator('sensor-bar-card-plus .row[data-entity="sensor.with_above_label"] .peak-marker .peak-inset');
+    await marker.hover();
+    const hoverState = await page.evaluate(({ selector }) => {
+      const row = document.querySelector('sensor-bar-card-plus').shadowRoot
+        .querySelector('.row[data-entity="sensor.with_above_label"]');
+      return {
+        hovered: row.querySelector('.peak-value-label').dataset.markerHovered ?? null,
+        labelZIndex: getComputedStyle(row.querySelector('.peak-value-label')).zIndex,
+        contentZIndex: getComputedStyle(row.querySelector(selector)).zIndex,
+        sensorNameZIndex: row.querySelector('.label-left')
+          ? getComputedStyle(row.querySelector('.label-left')).zIndex : null,
+      };
+    }, { selector: scenario.selector });
+    expect(hoverState).toEqual({
+      hovered: 'true',
+      labelZIndex: '9',
+      contentZIndex: '10',
+      sensorNameZIndex: scenario.position === 'left' ? '10' : null,
+    });
+    await page.mouse.move(2, 2);
+    await expect.poll(() => page.evaluate(() => {
+      const row = document.querySelector('sensor-bar-card-plus').shadowRoot
+        .querySelector('.row[data-entity="sensor.with_above_label"]');
+      return row.querySelector('.peak-value-label').dataset.markerHovered ?? null;
+    })).toBeNull();
   }
+});
+
+test('marker labels use a compact card surface and move 1px toward their bars without changing row geometry', async ({ page }) => {
+  await render(page, {
+    width: 720,
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      label_position: 'off',
+      min: 0,
+      max: 100,
+      entities: [
+        { entity: 'sensor.baseline' },
+        { entity: 'sensor.above_label', peak: { enabled: true, label: { show: true } } },
+        {
+          entity: 'sensor.below_label',
+          target: { at: { fixed: 50 }, label: { show: true } },
+          floor: { enabled: true, label: { show: true } },
+        },
+        { entity: 'sensor.after' },
+      ],
+    },
+    states: {
+      'sensor.baseline': sensor(42, { friendly_name: 'Baseline' }),
+      'sensor.above_label': sensor(42, { friendly_name: 'Above' }),
+      'sensor.below_label': sensor(42, { friendly_name: 'Below' }),
+      'sensor.after': sensor(42, { friendly_name: 'After' }),
+    },
+  });
+
+  const metrics = await page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    const root = card.shadowRoot;
+    const rows = ['sensor.baseline', 'sensor.above_label', 'sensor.below_label'].map((entity) =>
+      root.querySelector(`.row[data-entity="${entity}"]`));
+    const geometry = (row) => {
+      const main = row.querySelector('.main-line').getBoundingClientRect();
+      const track = row.querySelector('.bar-track').getBoundingClientRect();
+      return { rowHeight: row.getBoundingClientRect().height, mainHeight: main.height, trackHeight: track.height };
+    };
+    const aboveLabel = rows[1].querySelector('.peak-value-label');
+    const belowLabel = rows[2].querySelector('.target-value-label');
+    const floorLabel = rows[2].querySelector('.floor-value-label');
+    const trackAbove = rows[1].querySelector('.bar-track').getBoundingClientRect();
+    const trackBelow = rows[2].querySelector('.bar-track').getBoundingClientRect();
+    const style = getComputedStyle(belowLabel);
+    return {
+      geometry: rows.map(geometry),
+      aboveGap: trackAbove.top - aboveLabel.getBoundingClientRect().bottom,
+      belowGap: belowLabel.getBoundingClientRect().top - trackBelow.bottom,
+      floorGap: floorLabel.getBoundingClientRect().top - trackBelow.bottom,
+      aboveMargin: getComputedStyle(aboveLabel).marginBottom,
+      belowMargin: style.marginTop,
+      floorMargin: getComputedStyle(floorLabel).marginTop,
+      background: style.backgroundColor,
+      padding: style.padding,
+      radius: style.borderRadius,
+      border: style.borderTopWidth,
+      shadow: style.boxShadow,
+      lineHeight: style.lineHeight,
+      rowClearance: getComputedStyle(rows[2]).marginBottom,
+      markerLaneSize: getComputedStyle(root.querySelector('.card')).getPropertyValue('--sbcp-marker-label-lane-size').trim(),
+    };
+  });
+
+  expect(metrics.geometry[1]).toEqual(metrics.geometry[0]);
+  expect(metrics.geometry[2]).toEqual(metrics.geometry[0]);
+  expect(metrics.aboveGap).toBe(2);
+  expect(metrics.belowGap).toBe(2);
+  expect(metrics.floorGap).toBe(2);
+  expect(metrics.aboveMargin).toBe('2px');
+  expect(metrics.belowMargin).toBe('2px');
+  expect(metrics.floorMargin).toBe('2px');
+  expect(metrics.background).toBe('rgb(255, 255, 255)');
+  expect(metrics.padding).toBe('0px 2px');
+  expect(metrics.radius).toBe('2px');
+  expect(metrics.border).toBe('0px');
+  expect(metrics.shadow).toBe('none');
+  expect(metrics.lineHeight).toBe('12px');
+  expect(metrics.rowClearance).toBe('13px');
+  expect(metrics.markerLaneSize).toBe('15px');
+});
+
+test('built-in hover promotes only its own overlapping label and restores stacking on leave', async ({ page }) => {
+  await render(page, {
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      label_position: 'off',
+      min: 0,
+      max: 100,
+      entities: [{
+        entity: 'sensor.builtins',
+        target: { at: { fixed: 54 }, label: { show: true } },
+        floor: { enabled: true, label: { show: true } },
+      }],
+    },
+    states: { 'sensor.builtins': sensor(50, { friendly_name: 'Built-in markers' }) },
+  });
+  const card = page.locator('sensor-bar-card-plus');
+  const targetGlyph = card.locator('.target-marker .marker-shape-svg path[data-shape="diamond"]');
+  await targetGlyph.hover();
+  const hovered = await page.evaluate(() => {
+    const row = document.querySelector('sensor-bar-card-plus').shadowRoot.querySelector('.row[data-entity="sensor.builtins"]');
+    return {
+      target: row.querySelector('.target-value-label').dataset.markerHovered ?? null,
+      floor: row.querySelector('.floor-value-label').dataset.markerHovered ?? null,
+      targetZ: getComputedStyle(row.querySelector('.target-value-label')).zIndex,
+      floorZ: getComputedStyle(row.querySelector('.floor-value-label')).zIndex,
+      targetRect: row.querySelector('.target-value-label').getBoundingClientRect().toJSON(),
+      floorRect: row.querySelector('.floor-value-label').getBoundingClientRect().toJSON(),
+      trackRect: row.querySelector('.bar-track').getBoundingClientRect().toJSON(),
+      rowHeight: row.getBoundingClientRect().height,
+    };
+  });
+  expect(hovered.target).toBe('true');
+  expect(hovered.floor).toBeNull();
+  expect(hovered.targetZ).toBe('9');
+  expect(hovered.floorZ).toBe('8');
+  expect(hovered.targetRect.left).toBeLessThan(hovered.floorRect.right);
+  expect(hovered.targetRect.right).toBeGreaterThan(hovered.floorRect.left);
+  await page.mouse.move(2, 2);
+  await expect.poll(() => page.evaluate(() => {
+    const row = document.querySelector('sensor-bar-card-plus').shadowRoot.querySelector('.row[data-entity="sensor.builtins"]');
+    return [row.querySelector('.target-value-label').dataset.markerHovered ?? null,
+      getComputedStyle(row.querySelector('.target-value-label')).zIndex,
+      getComputedStyle(row.querySelector('.floor-value-label')).zIndex];
+  })).toEqual([null, '8', '8']);
+
+  await card.locator('.floor-marker .floor-inset').hover();
+  await expect.poll(() => page.evaluate(() => {
+    const row = document.querySelector('sensor-bar-card-plus').shadowRoot.querySelector('.row[data-entity="sensor.builtins"]');
+    return [row.querySelector('.target-value-label').dataset.markerHovered ?? null,
+      row.querySelector('.floor-value-label').dataset.markerHovered ?? null,
+      getComputedStyle(row.querySelector('.floor-value-label')).zIndex];
+  })).toEqual([null, 'true', '9']);
+  await page.mouse.move(2, 2);
+});
+
+test('generic marker hover is per-ID, keeps nodes/geometry stable, and clears on unresolved source updates', async ({ page }) => {
+  await render(page, {
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      label_position: 'off',
+      min: 0,
+      max: 100,
+      markers: [
+        { at: { fixed: 48 }, lane: 'below', shape: 'circle', label: { show: true } },
+        { at: { entity: 'sensor.marker_b' }, lane: 'below', shape: 'diamond', label: { show: true } },
+      ],
+      entities: [{ entity: 'sensor.generic_row' }],
+    },
+    states: {
+      'sensor.generic_row': sensor(40, { friendly_name: 'Generic row' }),
+      'sensor.marker_b': sensor(52, { friendly_name: 'Marker B', unit_of_measurement: 'kW' }),
+    },
+  });
+  const card = page.locator('sensor-bar-card-plus');
+  const markerA = card.locator('.generic-marker[data-marker-id="generic-0"] .marker-shape-svg path[data-shape="circle"]');
+  const markerB = card.locator('.generic-marker[data-marker-id="generic-1"] .marker-shape-svg path[data-shape="diamond"]');
+  const stableBefore = await page.evaluate(() => {
+    const row = document.querySelector('sensor-bar-card-plus').shadowRoot.querySelector('.row[data-entity="sensor.generic_row"]');
+    const track = row.querySelector('.bar-track');
+    const labels = [...row.querySelectorAll('.generic-value-label')];
+    window.__markerHoverRefs = {
+      markers: [...row.querySelectorAll('.generic-marker')],
+      labels,
+      rects: [row.getBoundingClientRect().toJSON(), row.querySelector('.main-line').getBoundingClientRect().toJSON(), track.getBoundingClientRect().toJSON(), ...labels.map((label) => label.getBoundingClientRect().toJSON())],
+    };
+    return { ids: labels.map((label) => label.dataset.markerId), overlap: labels[0].getBoundingClientRect().right > labels[1].getBoundingClientRect().left };
+  });
+  expect(stableBefore.ids).toEqual(['generic-0', 'generic-1']);
+  expect(stableBefore.overlap).toBe(true);
+
+  await markerA.hover();
+  await expect.poll(() => page.evaluate(() => {
+    const row = document.querySelector('sensor-bar-card-plus').shadowRoot.querySelector('.row[data-entity="sensor.generic_row"]');
+    return [...row.querySelectorAll('.generic-value-label')].map((label) => [label.dataset.markerHovered ?? null, getComputedStyle(label).zIndex]);
+  })).toEqual([['true', '9'], [null, '8']]);
+
+  await markerB.hover();
+  await expect.poll(() => page.evaluate(() => {
+    const row = document.querySelector('sensor-bar-card-plus').shadowRoot.querySelector('.row[data-entity="sensor.generic_row"]');
+    return [...row.querySelectorAll('.generic-value-label')].map((label) => [label.dataset.markerHovered ?? null, getComputedStyle(label).zIndex]);
+  })).toEqual([[null, '8'], ['true', '9']]);
+  expect(await page.evaluate(() => {
+    const row = document.querySelector('sensor-bar-card-plus').shadowRoot.querySelector('.row[data-entity="sensor.generic_row"]');
+    const labels = [...row.querySelectorAll('.generic-value-label')];
+    return [row.getBoundingClientRect().toJSON(), row.querySelector('.main-line').getBoundingClientRect().toJSON(),
+      row.querySelector('.bar-track').getBoundingClientRect().toJSON(), ...labels.map((label) => label.getBoundingClientRect().toJSON())];
+  })).toEqual(await page.evaluate(() => window.__markerHoverRefs.rects));
+
+  await page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    card.hass = { states: {
+      ...card._hass.states,
+      'sensor.marker_b': { state: 'unavailable', attributes: { friendly_name: 'Marker B', unit_of_measurement: 'kW' } },
+    } };
+  });
+  await expect.poll(() => page.evaluate(() => {
+    const row = document.querySelector('sensor-bar-card-plus').shadowRoot.querySelector('.row[data-entity="sensor.generic_row"]');
+    const marker = row.querySelector('.generic-marker[data-marker-id="generic-1"]');
+    const label = row.querySelector('.generic-value-label[data-marker-id="generic-1"]');
+    return { display: marker.style.display, visibility: getComputedStyle(label).visibility, hover: label.dataset.markerHovered ?? null };
+  })).toEqual({ display: 'none', visibility: 'hidden', hover: null });
+
+  await page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    card.hass = { states: {
+      ...card._hass.states,
+      'sensor.marker_b': { state: '52', attributes: { friendly_name: 'Marker B', unit_of_measurement: 'kW' } },
+    } };
+  });
+  await expect.poll(() => page.evaluate(() => {
+    const row = document.querySelector('sensor-bar-card-plus').shadowRoot.querySelector('.row[data-entity="sensor.generic_row"]');
+    return getComputedStyle(row.querySelector('.generic-value-label[data-marker-id="generic-1"]')).visibility;
+  })).toBe('visible');
+
+  await page.mouse.move(2, 2);
+  const stableAfter = await page.evaluate(() => {
+    const row = document.querySelector('sensor-bar-card-plus').shadowRoot.querySelector('.row[data-entity="sensor.generic_row"]');
+    const before = window.__markerHoverRefs;
+    const markers = [...row.querySelectorAll('.generic-marker')];
+    const labels = [...row.querySelectorAll('.generic-value-label')];
+    return {
+      sameMarkers: markers.every((marker, index) => marker === before.markers[index]),
+      sameLabels: labels.every((label, index) => label === before.labels[index]),
+      rects: [row.getBoundingClientRect().toJSON(), row.querySelector('.main-line').getBoundingClientRect().toJSON(), row.querySelector('.bar-track').getBoundingClientRect().toJSON(), ...labels.map((label) => label.getBoundingClientRect().toJSON())],
+      promoted: labels.some((label) => label.dataset.markerHovered === 'true'),
+    };
+  });
+  expect(stableAfter.sameMarkers).toBe(true);
+  expect(stableAfter.sameLabels).toBe(true);
+  expect(stableAfter.rects).toEqual(await page.evaluate(() => window.__markerHoverRefs.rects));
+  expect(stableAfter.promoted).toBe(false);
+});
+
+test('disconnecting and reconnecting the card clears and restores marker hover through lifecycle callbacks', async ({ page }) => {
+  await render(page, {
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      label_position: 'off',
+      min: 0,
+      max: 100,
+      markers: [{ at: { fixed: 50 }, lane: 'below', shape: 'circle', label: { show: true } }],
+      entities: [{ entity: 'sensor.hover_lifecycle' }],
+    },
+    states: { 'sensor.hover_lifecycle': sensor(40, { friendly_name: 'Hover lifecycle' }) },
+  });
+  const marker = page.locator('sensor-bar-card-plus .generic-marker[data-marker-id="generic-0"] .marker-shape-svg path[data-shape="circle"]');
+  await marker.hover();
+  expect(await page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    window.__hoverLifecycleCard = card;
+    const label = card.shadowRoot.querySelector('.generic-value-label[data-marker-id="generic-0"]');
+    window.__hoverLifecycleLabel = label;
+    return { active: !!card._markerHover, promoted: label.dataset.markerHovered ?? null };
+  })).toEqual({ active: true, promoted: 'true' });
+
+  await page.evaluate(() => window.__hoverLifecycleCard.remove());
+  expect(await page.evaluate(() => ({
+    connected: window.__hoverLifecycleCard.isConnected,
+    active: !!window.__hoverLifecycleCard._markerHover,
+    promoted: window.__hoverLifecycleLabel.dataset.markerHovered ?? null,
+  }))).toEqual({ connected: false, active: false, promoted: null });
+
+  await page.mouse.move(2, 2);
+  await page.evaluate(async () => {
+    document.querySelector('#mount').appendChild(window.__hoverLifecycleCard);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  expect(await page.evaluate(() => {
+    const card = window.__hoverLifecycleCard;
+    return {
+      connected: card.isConnected,
+      sameCard: document.querySelector('sensor-bar-card-plus') === card,
+      sameLabel: card.shadowRoot.querySelector('.generic-value-label[data-marker-id="generic-0"]') === window.__hoverLifecycleLabel,
+      active: !!card._markerHover,
+      promoted: window.__hoverLifecycleLabel.dataset.markerHovered ?? null,
+    };
+  })).toEqual({ connected: true, sameCard: true, sameLabel: true, active: false, promoted: null });
+
+  await marker.hover();
+  expect(await page.evaluate(() => ({
+    active: !!window.__hoverLifecycleCard._markerHover,
+    promoted: window.__hoverLifecycleLabel.dataset.markerHovered ?? null,
+  }))).toEqual({ active: true, promoted: 'true' });
 });
 
 test('Floor shares the below lane with Target and renders extrema labels', async ({ page }) => {
