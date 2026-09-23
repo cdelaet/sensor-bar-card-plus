@@ -1165,6 +1165,23 @@
       above: (peakConfig == null ? void 0 : peakConfig.show) === true || genericMarkers.some((marker) => marker.lane === "above")
     };
   }
+  function getMarkerLabelLaneOccupancy(entityConfig) {
+    var _a;
+    const targetConfig = entityConfig == null ? void 0 : entityConfig.target_marker;
+    const peakConfig = entityConfig == null ? void 0 : entityConfig.peak_marker;
+    const floorConfig = entityConfig == null ? void 0 : entityConfig.floor_marker;
+    const genericMarkers = ((_a = entityConfig == null ? void 0 : entityConfig.generic_markers) != null ? _a : []).filter((marker) => marker.accepted);
+    return {
+      below: (targetConfig == null ? void 0 : targetConfig.enabled) !== false && hasConfiguredSource(targetConfig == null ? void 0 : targetConfig.source) && (targetConfig == null ? void 0 : targetConfig.show_label) === true || (floorConfig == null ? void 0 : floorConfig.show) === true && (floorConfig == null ? void 0 : floorConfig.show_label) === true || genericMarkers.some((marker) => {
+        var _a2;
+        return marker.lane === "below" && ((_a2 = marker.label) == null ? void 0 : _a2.show) === true;
+      }),
+      above: (peakConfig == null ? void 0 : peakConfig.show) === true && (peakConfig == null ? void 0 : peakConfig.show_label) === true || genericMarkers.some((marker) => {
+        var _a2;
+        return marker.lane === "above" && ((_a2 = marker.label) == null ? void 0 : _a2.show) === true;
+      })
+    };
+  }
   function buildMarkerModels({
     entityConfig,
     targetValue = null,
@@ -1495,6 +1512,7 @@
       floorVisible: floorState.visible,
       markers,
       markerLaneOccupancy: getMarkerLaneOccupancy(entityConfig),
+      markerLabelLaneOccupancy: getMarkerLabelLaneOccupancy(entityConfig),
       segments: (_M = (_L = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _L.segments) != null ? _M : null,
       gradientStops: (_O = (_N = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _N.gradient_stops) != null ? _O : null,
       needle: getNeedleState(entityConfig, numericValue, safeMin, safeMax, baselinePercent),
@@ -2416,7 +2434,7 @@
           --sbcp-value-width: 60px;
           --sbcp-bar-min-width: 56px;
           --sbcp-target-label-font-size: 12px;
-          --sbcp-marker-lane-size: 18px;
+          --sbcp-marker-label-lane-size: 15px;
           --sbcp-inline-label-padding-x: 8px;
           --sbcp-inline-label-padding-y: 2px;
           --sbcp-inline-label-font-size: 12px;
@@ -2481,6 +2499,9 @@
           padding: 2px 4px;
         }
         .row:last-child { margin-bottom: 0; }
+        .row[data-marker-label-lane-below="true"]:not(:last-child) {
+          margin-bottom: calc(10px + max(0px, var(--sbcp-marker-label-lane-size) - 12px));
+        }
         .row-stack {
           --sbcp-row-height: 38px;
           display: flex;
@@ -2508,18 +2529,18 @@
         .top-right-value[data-active="true"] {
           display: flex;
         }
+        .above-line,
+        .hero-line,
+        .top-right-value {
+          position: relative;
+          z-index: 7;
+        }
         .row:hover .bar-track { filter: brightness(0.95); transition: filter 0.15s; }
         .main-line {
           display: flex;
           align-items: center;
           gap: var(--sbcp-main-gap);
           min-width: 0;
-        }
-        .main-line[data-marker-lane-above="true"] {
-          margin-top: var(--sbcp-marker-lane-size);
-        }
-        .main-line[data-marker-lane-below="true"] {
-          margin-bottom: var(--sbcp-marker-lane-size);
         }
         .main-line[data-row-density="tight"] {
           gap: calc(var(--sbcp-main-gap) - 1px);
@@ -3159,26 +3180,37 @@
           color: var(--marker-color);
           pointer-events: none;
           z-index: 2;
+          transform: translateX(-50%);
         }
         .peak-marker .marker-shape-svg {
           top: 0;
-          transform: translateX(-50%);
         }
         .target-marker .marker-shape-svg {
           bottom: 0;
-          transform: translateX(-50%);
         }
         .floor-marker .marker-shape-svg {
           bottom: 0;
-          transform: translateX(-50%);
         }
         .generic-marker[data-lane="above"] .marker-shape-svg {
           top: 0;
-          transform: translateX(-50%);
         }
         .generic-marker[data-lane="below"] .marker-shape-svg {
           bottom: 0;
-          transform: translateX(-50%);
+        }
+        .marker-shape-svg[data-lane="above"] {
+          transform-origin: 50% 0;
+        }
+        .marker-shape-svg[data-lane="below"] {
+          transform-origin: 50% 100%;
+        }
+        .marker-shape-svg[data-shape="diamond"],
+        .marker-shape-svg[data-shape="arrow"],
+        .marker-shape-svg[data-shape="chevron"],
+        .marker-shape-svg[data-shape="pin"] {
+          transform: translateX(-50%) scale(0.75);
+        }
+        .marker-shape-svg[data-shape="circle"] {
+          transform: translateX(-50%) scale(0.64);
         }
         .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-inset,
         .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-outset,
@@ -3216,10 +3248,12 @@
         .marker-shape-svg[data-shape="chevron"] path[data-shape="chevron"] {
           fill: none;
         }
-        .marker-shape-svg[data-shape="chevron"][data-lane="below"],
-        .marker-shape-svg[data-shape="arrow"][data-lane="below"],
-        .marker-shape-svg[data-shape="pin"][data-lane="below"] {
-          transform: translateX(-50%) scaleY(-1);
+        .marker-shape-svg[data-shape="chevron"][data-lane="below"] .marker-shape-paths,
+        .marker-shape-svg[data-shape="arrow"][data-lane="below"] .marker-shape-paths,
+        .marker-shape-svg[data-shape="pin"][data-lane="below"] .marker-shape-paths {
+          transform-box: view-box;
+          transform-origin: 0 0;
+          transform: translateY(16px) scaleY(-1);
         }
 
         .value-right {
@@ -4503,12 +4537,13 @@
           const defaultShape = marker.type === "target" ? "diamond" : marker.type === "generic" ? "circle" : "triangle";
           const shape = normalizeMarkerShape(marker.shape, defaultShape);
           const lane = (_b = marker.lane) != null ? _b : marker.type === "peak" ? "above" : "below";
-          const shapePaths = `
+          const shapePaths = `<g class="marker-shape-paths">
       <path data-shape="circle" d="M8 1A7 7 0 1 0 8 15A7 7 0 1 0 8 1Z"></path>
       <path data-shape="diamond" d="M8 1L15 8L8 15L1 8Z"></path>
-      <path data-shape="chevron" d="M2 4L8 10L14 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+      <path data-shape="chevron" d="M2 2L8 8L14 2 M2 8L8 14L14 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
       <path data-shape="arrow" d="M6 1H10V8H14L8 15L2 8H6Z"></path>
-      <path data-shape="pin" d="M8 15C7 13 2 10 2 6A6 6 0 1 1 14 6C14 10 9 13 8 15Z"></path>`;
+      <path data-shape="pin" d="M8 15C7 13 2 10 2 6A6 6 0 1 1 14 6C14 10 9 13 8 15Z"></path>
+    </g>`;
           if (marker.type === "generic") {
             const triangleClasses = lane === "above" ? ["peak-inset", "peak-outset"] : ["target-inset", "target-outset"];
             return `
@@ -4556,7 +4591,7 @@
           }
         }
         _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
-          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A;
           const ecfg = this._resolve(entityCfg);
           const stateObj = (_c = (_b = (_a = this._hass) == null ? void 0 : _a.states) == null ? void 0 : _b[entityCfg.entity]) != null ? _c : null;
           if (stateObj) this._updateExtrema(entityCfg, ecfg, stateObj);
@@ -4583,23 +4618,24 @@
           const floorMarkerModel = this._getMarkerModel(markerModels, "floor");
           const genericMarkerModels = markerModels.filter((marker) => marker.type === "generic");
           const markerLaneOccupancy = (_m = rowViewModel == null ? void 0 : rowViewModel.markerLaneOccupancy) != null ? _m : getMarkerLaneOccupancy(ecfg);
-          const rawValue = (_n = rowViewModel == null ? void 0 : rowViewModel.numericValue) != null ? _n : this._getFiniteNumber(stateDisplay);
-          const needleState = (_o = rowViewModel == null ? void 0 : rowViewModel.needle) != null ? _o : this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
+          const markerLabelLaneOccupancy = (_n = rowViewModel == null ? void 0 : rowViewModel.markerLabelLaneOccupancy) != null ? _n : getMarkerLabelLaneOccupancy(ecfg);
+          const rawValue = (_o = rowViewModel == null ? void 0 : rowViewModel.numericValue) != null ? _o : this._getFiniteNumber(stateDisplay);
+          const needleState = (_p = rowViewModel == null ? void 0 : rowViewModel.needle) != null ? _p : this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
           const fillState = this._getFillRenderState(pct, "var(--sbcp-row-height)", ecfg, color, targetPct, baselinePct, safeMin, safeMax, needleState.show);
           const peakMarker = this._renderMarker(peakMarkerModel);
           const targetMarker = this._renderMarker(targetMarkerModel);
           const floorMarker = this._renderMarker(floorMarkerModel);
           const targetValueLabel = (targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) ? `
       <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;">
-        ${((_p = targetMarkerModel.label) == null ? void 0 : _p.text) ? escapeHtml(targetMarkerModel.label.text) : ""}
+        ${((_q = targetMarkerModel.label) == null ? void 0 : _q.text) ? escapeHtml(targetMarkerModel.label.text) : ""}
       </div>` : "";
           const peakValueLabel = (peakMarkerModel == null ? void 0 : peakMarkerModel.labelVisible) ? `
       <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;">
-        ${peakMarkerModel.visible && ((_q = peakMarkerModel.label) == null ? void 0 : _q.text) ? escapeHtml(peakMarkerModel.label.text) : ""}
+        ${peakMarkerModel.visible && ((_r = peakMarkerModel.label) == null ? void 0 : _r.text) ? escapeHtml(peakMarkerModel.label.text) : ""}
       </div>` : "";
           const floorValueLabel = (floorMarkerModel == null ? void 0 : floorMarkerModel.labelVisible) ? `
       <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;">
-        ${floorMarkerModel.visible && ((_r = floorMarkerModel.label) == null ? void 0 : _r.text) ? escapeHtml(floorMarkerModel.label.text) : ""}
+        ${floorMarkerModel.visible && ((_s = floorMarkerModel.label) == null ? void 0 : _s.text) ? escapeHtml(floorMarkerModel.label.text) : ""}
       </div>` : "";
           const genericMarkers = genericMarkerModels.map((marker) => this._renderMarker(marker)).join("");
           const genericValueLabels = genericMarkerModels.filter((marker) => marker.labelVisible).map((marker) => {
@@ -4609,9 +4645,9 @@
         ${marker.visible && ((_a2 = marker.label) == null ? void 0 : _a2.text) ? escapeHtml(marker.label.text) : ""}
       </div>`;
           }).join("");
-          const needleMarker = ((_t = (_s = ecfg.bar) == null ? void 0 : _s.needle) == null ? void 0 : _t.show) && !Number.isFinite(baselinePct) ? `
+          const needleMarker = ((_u = (_t = ecfg.bar) == null ? void 0 : _t.needle) == null ? void 0 : _u.show) && !Number.isFinite(baselinePct) ? `
       <div class="needle-layer">
-        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_u = needleState.pct) != null ? _u : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
+        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_v = needleState.pct) != null ? _v : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
       </div>` : "";
           const paintLayers = fillState.paintLayers.map((layer) => `
                   <div class="bar-paint-layer" data-layer="${layer.id}" style="z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}"></div>`).join("");
@@ -4623,7 +4659,7 @@
           ${this._formatAboveValueMarkup(stateDisplay, unit, false)}
         </div>
       </div>` : "";
-          const heroSize = (_v = layout.hero.size) != null ? _v : "small";
+          const heroSize = (_w = layout.hero.size) != null ? _w : "small";
           const heroFontSize = layout.hero.value_size;
           const heroHeader = lp === "hero" ? `
       <div class="hero-line" data-hero-size="${heroSize}"${Number.isFinite(heroFontSize) ? ` style="--sbcp-hero-base-size:${heroFontSize}px"` : ""}>
@@ -4643,7 +4679,7 @@
           const escapedIcon = ecfg.icon && ecfg.icon !== false ? escapeHtml(ecfg.icon) : "";
           const mainIcon = escapedIcon && lp !== "hero" ? `<div class="icon-wrap"><ha-icon icon="${escapedIcon}"></ha-icon></div>` : "";
           return `
-      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${((_x = (_w = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _w.heightExplicit) != null ? _x : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_z = (_y = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _y.barAnimated) != null ? _z : bar.animated) ? "true" : "false"}">
+      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${((_y = (_x = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _x.heightExplicit) != null ? _y : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_A = (_z = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _z.barAnimated) != null ? _A : bar.animated) ? "true" : "false"}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? "true" : "false"}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? "true" : "false"}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${heroHeader}

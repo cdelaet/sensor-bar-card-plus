@@ -50,6 +50,22 @@ export function getMarkerLaneOccupancy(entityConfig) {
   };
 }
 
+export function getMarkerLabelLaneOccupancy(entityConfig) {
+  const targetConfig = entityConfig?.target_marker;
+  const peakConfig = entityConfig?.peak_marker;
+  const floorConfig = entityConfig?.floor_marker;
+  const genericMarkers = (entityConfig?.generic_markers ?? []).filter((marker) => marker.accepted);
+  return {
+    below: (targetConfig?.enabled !== false
+      && hasConfiguredSource(targetConfig?.source)
+      && targetConfig?.show_label === true)
+      || (floorConfig?.show === true && floorConfig?.show_label === true)
+      || genericMarkers.some((marker) => marker.lane === 'below' && marker.label?.show === true),
+    above: (peakConfig?.show === true && peakConfig?.show_label === true)
+      || genericMarkers.some((marker) => marker.lane === 'above' && marker.label?.show === true),
+  };
+}
+
 export function buildMarkerModels({
   entityConfig,
   targetValue = null,

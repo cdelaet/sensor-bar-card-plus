@@ -36,6 +36,7 @@ import { validateNormalizedConfig } from '../config/validate.js';
 import { buildRowViewModel } from '../view-model/row-view-model.js';
 import {
   buildMarkerModels,
+  getMarkerLabelLaneOccupancy,
   getMarkerLaneOccupancy,
   normalizeMarkerShape,
 } from '../view-model/marker-view-model.js';
@@ -1206,7 +1207,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           --sbcp-value-width: 60px;
           --sbcp-bar-min-width: 56px;
           --sbcp-target-label-font-size: 12px;
-          --sbcp-marker-lane-size: 18px;
+          --sbcp-marker-label-lane-size: 15px;
           --sbcp-inline-label-padding-x: 8px;
           --sbcp-inline-label-padding-y: 2px;
           --sbcp-inline-label-font-size: 12px;
@@ -1271,6 +1272,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           padding: 2px 4px;
         }
         .row:last-child { margin-bottom: 0; }
+        .row[data-marker-label-lane-below="true"]:not(:last-child) {
+          margin-bottom: calc(10px + max(0px, var(--sbcp-marker-label-lane-size) - 12px));
+        }
         .row-stack {
           --sbcp-row-height: 38px;
           display: flex;
@@ -1298,18 +1302,18 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         .top-right-value[data-active="true"] {
           display: flex;
         }
+        .above-line,
+        .hero-line,
+        .top-right-value {
+          position: relative;
+          z-index: 7;
+        }
         .row:hover .bar-track { filter: brightness(0.95); transition: filter 0.15s; }
         .main-line {
           display: flex;
           align-items: center;
           gap: var(--sbcp-main-gap);
           min-width: 0;
-        }
-        .main-line[data-marker-lane-above="true"] {
-          margin-top: var(--sbcp-marker-lane-size);
-        }
-        .main-line[data-marker-lane-below="true"] {
-          margin-bottom: var(--sbcp-marker-lane-size);
         }
         .main-line[data-row-density="tight"] {
           gap: calc(var(--sbcp-main-gap) - 1px);
@@ -1949,26 +1953,37 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           color: var(--marker-color);
           pointer-events: none;
           z-index: 2;
+          transform: translateX(-50%);
         }
         .peak-marker .marker-shape-svg {
           top: 0;
-          transform: translateX(-50%);
         }
         .target-marker .marker-shape-svg {
           bottom: 0;
-          transform: translateX(-50%);
         }
         .floor-marker .marker-shape-svg {
           bottom: 0;
-          transform: translateX(-50%);
         }
         .generic-marker[data-lane="above"] .marker-shape-svg {
           top: 0;
-          transform: translateX(-50%);
         }
         .generic-marker[data-lane="below"] .marker-shape-svg {
           bottom: 0;
-          transform: translateX(-50%);
+        }
+        .marker-shape-svg[data-lane="above"] {
+          transform-origin: 50% 0;
+        }
+        .marker-shape-svg[data-lane="below"] {
+          transform-origin: 50% 100%;
+        }
+        .marker-shape-svg[data-shape="diamond"],
+        .marker-shape-svg[data-shape="arrow"],
+        .marker-shape-svg[data-shape="chevron"],
+        .marker-shape-svg[data-shape="pin"] {
+          transform: translateX(-50%) scale(0.75);
+        }
+        .marker-shape-svg[data-shape="circle"] {
+          transform: translateX(-50%) scale(0.64);
         }
         .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-inset,
         .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-outset,
@@ -2006,10 +2021,12 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         .marker-shape-svg[data-shape="chevron"] path[data-shape="chevron"] {
           fill: none;
         }
-        .marker-shape-svg[data-shape="chevron"][data-lane="below"],
-        .marker-shape-svg[data-shape="arrow"][data-lane="below"],
-        .marker-shape-svg[data-shape="pin"][data-lane="below"] {
-          transform: translateX(-50%) scaleY(-1);
+        .marker-shape-svg[data-shape="chevron"][data-lane="below"] .marker-shape-paths,
+        .marker-shape-svg[data-shape="arrow"][data-lane="below"] .marker-shape-paths,
+        .marker-shape-svg[data-shape="pin"][data-lane="below"] .marker-shape-paths {
+          transform-box: view-box;
+          transform-origin: 0 0;
+          transform: translateY(16px) scaleY(-1);
         }
 
         .value-right {
@@ -3492,12 +3509,13 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     const defaultShape = marker.type === 'target' ? 'diamond' : marker.type === 'generic' ? 'circle' : 'triangle';
     const shape = normalizeMarkerShape(marker.shape, defaultShape);
     const lane = marker.lane ?? (marker.type === 'peak' ? 'above' : 'below');
-    const shapePaths = `
+    const shapePaths = `<g class="marker-shape-paths">
       <path data-shape="circle" d="M8 1A7 7 0 1 0 8 15A7 7 0 1 0 8 1Z"></path>
       <path data-shape="diamond" d="M8 1L15 8L8 15L1 8Z"></path>
-      <path data-shape="chevron" d="M2 4L8 10L14 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+      <path data-shape="chevron" d="M2 2L8 8L14 2 M2 8L8 14L14 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
       <path data-shape="arrow" d="M6 1H10V8H14L8 15L2 8H6Z"></path>
-      <path data-shape="pin" d="M8 15C7 13 2 10 2 6A6 6 0 1 1 14 6C14 10 9 13 8 15Z"></path>`;
+      <path data-shape="pin" d="M8 15C7 13 2 10 2 6A6 6 0 1 1 14 6C14 10 9 13 8 15Z"></path>
+    </g>`;
 
     if (marker.type === 'generic') {
       const triangleClasses = lane === 'above'
@@ -3584,6 +3602,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     const floorMarkerModel = this._getMarkerModel(markerModels, 'floor');
     const genericMarkerModels = markerModels.filter((marker) => marker.type === 'generic');
     const markerLaneOccupancy = rowViewModel?.markerLaneOccupancy ?? getMarkerLaneOccupancy(ecfg);
+    const markerLabelLaneOccupancy = rowViewModel?.markerLabelLaneOccupancy ?? getMarkerLabelLaneOccupancy(ecfg);
     const rawValue = rowViewModel?.numericValue ?? this._getFiniteNumber(stateDisplay);
     const needleState = rowViewModel?.needle ?? this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
     const fillState = this._getFillRenderState(pct, 'var(--sbcp-row-height)', ecfg, color, targetPct, baselinePct, safeMin, safeMax, needleState.show);
@@ -3655,7 +3674,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       ? `<div class="icon-wrap"><ha-icon icon="${escapedIcon}"></ha-icon></div>`
       : '';
     return `
-      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${(rowViewModel?.attributes?.heightExplicit ?? layout.height_explicit) ? 'true' : 'false'}" data-bar-animated="${(rowViewModel?.attributes?.barAnimated ?? bar.animated) ? 'true' : 'false'}">
+      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${(rowViewModel?.attributes?.heightExplicit ?? layout.height_explicit) ? 'true' : 'false'}" data-bar-animated="${(rowViewModel?.attributes?.barAnimated ?? bar.animated) ? 'true' : 'false'}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? 'true' : 'false'}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? 'true' : 'false'}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${heroHeader}

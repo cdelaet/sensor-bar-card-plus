@@ -1080,7 +1080,7 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(source).toContain('transition: none;');
   });
 
-  it('adds conditional fixed marker-lane state without changing unmarked rows', () => {
+  it('keeps glyph occupancy separate from configured marker-label lanes', () => {
     const card = createCard();
     card._hass.states = {
       'sensor.none': {
@@ -1100,19 +1100,29 @@ describe('Sensor Bar Card Plus logic', () => {
           target: { at: { fixed: 55 }, label: { show: true } },
           peak: { enabled: true },
         },
+        {
+          entity: 'sensor.glyphs',
+          target: { at: { fixed: 55 } },
+          peak: { enabled: true },
+        },
       ],
     });
 
     const unmarkedHtml = card._buildRow(cfg.entities[0], '42', 'W', 42, '#4a9eff', null, null, null, null, '#888888', '#888888', 0, 100);
     const markedHtml = card._buildRow(cfg.entities[1], '42', 'W', 42, '#4a9eff', 42, '42', 55, '55 W', '#888888', '#888888', 0, 100);
+    const glyphOnlyHtml = card._buildRow(cfg.entities[2], '42', 'W', 42, '#4a9eff', 42, '42', 55, '55 W', '#888888', '#888888', 0, 100);
 
     expect(unmarkedHtml).toContain('data-marker-lane-above="false" data-marker-lane-below="false"');
     expect(markedHtml).toContain('data-marker-lane-above="true" data-marker-lane-below="true"');
+    expect(markedHtml).toContain('data-marker-label-lane-above="false" data-marker-label-lane-below="true"');
+    expect(glyphOnlyHtml).toContain('data-marker-lane-above="true" data-marker-lane-below="true"');
+    expect(glyphOnlyHtml).toContain('data-marker-label-lane-above="false" data-marker-label-lane-below="false"');
 
     const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
-    expect(source).toContain('--sbcp-marker-lane-size: 18px;');
-    expect(source).toContain('.main-line[data-marker-lane-above="true"]');
-    expect(source).toContain('.main-line[data-marker-lane-below="true"]');
+    expect(source).toContain('--sbcp-marker-label-lane-size: 15px;');
+    expect(source).toContain('.row[data-marker-label-lane-below="true"]:not(:last-child)');
+    expect(source).not.toContain('.main-line[data-marker-lane-above="true"]');
+    expect(source).not.toContain('.main-line[data-marker-lane-below="true"]');
   });
 
   it('keeps row animation flags in sync during patching', () => {

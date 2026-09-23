@@ -6,6 +6,7 @@ import {
 } from '../utils/format.js';
 import {
   buildMarkerModels,
+  getMarkerLabelLaneOccupancy,
   getMarkerLaneOccupancy,
 } from './marker-view-model.js';
 
@@ -306,6 +307,7 @@ export function buildRowViewModel(options) {
     floorVisible: floorState.visible,
     markers,
     markerLaneOccupancy: getMarkerLaneOccupancy(entityConfig),
+    markerLabelLaneOccupancy: getMarkerLabelLaneOccupancy(entityConfig),
     segments: entityConfig?.bar?.segments ?? null,
     gradientStops: entityConfig?.bar?.gradient_stops ?? null,
     needle: getNeedleState(entityConfig, numericValue, safeMin, safeMax, baselinePercent),

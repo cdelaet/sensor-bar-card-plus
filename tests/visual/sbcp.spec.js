@@ -52,7 +52,7 @@ async function render(page, { width = 720, config, states = baseStates }) {
   return page.locator('#mount');
 }
 
-test('marker lanes reserve fixed conditional spacing around the main line', async ({ page }) => {
+test('glyph-only markers preserve row geometry and below labels use only needed clearance', async ({ page }) => {
   await render(page, {
     width: 720,
     config: {
@@ -64,22 +64,48 @@ test('marker lanes reserve fixed conditional spacing around the main line', asyn
       entities: [
         { entity: 'sensor.no_marker' },
         {
-          entity: 'sensor.target_marker',
-          target: { at: { fixed: 55 }, label: { show: true } },
-        },
-        { entity: 'sensor.peak_marker', peak: { enabled: true } },
-        {
-          entity: 'sensor.both_markers',
-          target: { at: { fixed: 55 }, label: { show: true } },
+          entity: 'sensor.above_glyph',
           peak: { enabled: true },
         },
+        {
+          entity: 'sensor.below_glyph',
+          target: { at: { fixed: 55 } },
+        },
+        {
+          entity: 'sensor.both_glyphs',
+          target: { at: { fixed: 55 } },
+          peak: { enabled: true },
+        },
+        {
+          entity: 'sensor.below_labeled',
+          target: { at: { fixed: 55 }, label: { show: true } },
+        },
+        {
+          entity: 'sensor.below_multiple_labeled',
+          target: { at: { fixed: 55 }, label: { show: true } },
+          floor: { enabled: true, label: { show: true } },
+          markers: [
+            { at: 30, lane: 'below', color: '#336699', label: { show: true } },
+            { at: 70, lane: 'below', color: '#996633', label: { show: true } },
+          ],
+        },
+        {
+          entity: 'sensor.both_labeled',
+          target: { at: { fixed: 55 }, label: { show: true } },
+          peak: { enabled: true, label: { show: true } },
+        },
+        { entity: 'sensor.following' },
       ],
     },
     states: {
       'sensor.no_marker': sensor(42, { friendly_name: 'No marker' }),
-      'sensor.target_marker': sensor(42, { friendly_name: 'Target marker' }),
-      'sensor.peak_marker': sensor(42, { friendly_name: 'Peak marker' }),
-      'sensor.both_markers': sensor(42, { friendly_name: 'Both markers' }),
+      'sensor.above_glyph': sensor(42, { friendly_name: 'Above glyph' }),
+      'sensor.below_glyph': sensor(42, { friendly_name: 'Below glyph' }),
+      'sensor.both_glyphs': sensor(42, { friendly_name: 'Both glyphs' }),
+      'sensor.below_labeled': sensor(42, { friendly_name: 'Below labeled' }),
+      'sensor.below_multiple_labeled': sensor(42, { friendly_name: 'Multiple below labels' }),
+      'sensor.both_labeled': sensor(42, { friendly_name: 'Both labeled' }),
+      'sensor.following': sensor(42, { friendly_name: 'Following' }),
     },
   });
 
@@ -87,37 +113,127 @@ test('marker lanes reserve fixed conditional spacing around the main line', asyn
     const rows = [...document.querySelector('sensor-bar-card-plus').shadowRoot.querySelectorAll('.row[data-entity]')];
     return rows.map((row) => {
       const mainLine = row.querySelector('.main-line');
-      const targetLabel = row.querySelector('.target-value-label');
       const rowRect = row.getBoundingClientRect();
       const mainRect = mainLine.getBoundingClientRect();
-      const styles = getComputedStyle(mainLine);
+      const labels = [...row.querySelectorAll('.target-value-label, .peak-value-label, .floor-value-label, .generic-value-label')];
       return {
         entity: row.dataset.entity,
         above: mainLine.dataset.markerLaneAbove,
         below: mainLine.dataset.markerLaneBelow,
-        marginTop: styles.marginTop,
-        marginBottom: styles.marginBottom,
+        labelAbove: row.dataset.markerLabelLaneAbove,
+        labelBelow: row.dataset.markerLabelLaneBelow,
+        marginBottom: getComputedStyle(row).marginBottom,
         rowHeight: rowRect.height,
         mainHeight: mainRect.height,
-        targetLabelBottom: targetLabel?.getBoundingClientRect().bottom ?? null,
+        mainOffset: mainRect.top - rowRect.top,
+        lastLabelBottom: labels.length ? Math.max(...labels.map((label) => label.getBoundingClientRect().bottom)) : null,
         rowTop: rowRect.top,
         rowBottom: rowRect.bottom,
       };
     });
   });
 
-  expect(result).toEqual([
-    expect.objectContaining({ entity: 'sensor.no_marker', above: 'false', below: 'false', marginTop: '0px', marginBottom: '0px' }),
-    expect.objectContaining({ entity: 'sensor.target_marker', above: 'false', below: 'true', marginTop: '0px', marginBottom: '18px' }),
-    expect.objectContaining({ entity: 'sensor.peak_marker', above: 'true', below: 'false', marginTop: '18px', marginBottom: '0px' }),
-    expect.objectContaining({ entity: 'sensor.both_markers', above: 'true', below: 'true', marginTop: '18px', marginBottom: '18px' }),
-  ]);
+  const baseline = result[0];
+  for (const row of result.slice(1, 4)) {
+    expect(row.rowHeight).toBe(baseline.rowHeight);
+    expect(row.mainHeight).toBe(baseline.mainHeight);
+    expect(row.mainOffset).toBe(baseline.mainOffset);
+    expect(row.marginBottom).toBe('10px');
+    expect(row.labelAbove).toBe('false');
+    expect(row.labelBelow).toBe('false');
+  }
+  expect(result[1].above).toBe('true');
+  expect(result[2].below).toBe('true');
+  expect(result[3].above).toBe('true');
+  expect(result[3].below).toBe('true');
 
-  expect(result[0].mainHeight).toBe(result[1].mainHeight);
-  expect(result[1].rowHeight).toBeGreaterThan(result[0].rowHeight);
-  expect(result[2].rowHeight).toBeGreaterThan(result[0].rowHeight);
-  expect(result[3].rowHeight).toBeGreaterThan(result[1].rowHeight);
-  expect(result[1].targetLabelBottom).toBeLessThanOrEqual(result[2].rowTop);
+  expect(result[4].labelBelow).toBe('true');
+  expect(result[4].marginBottom).toBe('13px');
+  expect(result[5].labelBelow).toBe('true');
+  expect(result[5].marginBottom).toBe('13px');
+  expect(result[6].labelAbove).toBe('true');
+  expect(result[6].labelBelow).toBe('true');
+  expect(result[6].marginBottom).toBe('13px');
+  expect(result[4].mainOffset).toBe(baseline.mainOffset);
+  expect(result[5].mainOffset).toBe(baseline.mainOffset);
+  expect(result[6].mainOffset).toBe(baseline.mainOffset);
+  expect(result[4].lastLabelBottom).toBeLessThanOrEqual(result[5].rowTop + 0.5);
+  expect(result[5].lastLabelBottom).toBeLessThanOrEqual(result[6].rowTop + 0.5);
+  expect(result[6].lastLabelBottom).toBeLessThanOrEqual(result[7].rowTop + 0.5);
+});
+
+test('above marker labels overlay without moving above, Hero, or narrow top-value content', async ({ page }) => {
+  for (const scenario of [
+    { position: 'above', width: 720, selector: '.above-line' },
+    { position: 'hero', width: 720, selector: '.hero-line' },
+    { position: 'left', width: 320, selector: '.top-right-value', forceTopValue: true },
+  ]) {
+    await render(page, {
+      width: scenario.width,
+      config: {
+        type: 'custom:sensor-bar-card-plus',
+        title: 'Above marker overlay',
+        label_position: scenario.position,
+        label_width: 180,
+        min: 0,
+        max: 100,
+        entities: [
+          { entity: 'sensor.no_marker' },
+          { entity: 'sensor.with_above_label', peak: { enabled: true, label: { show: true } } },
+        ],
+      },
+      states: {
+        'sensor.no_marker': sensor(42, { friendly_name: 'Production sensor content' }),
+        'sensor.with_above_label': sensor(42, { friendly_name: 'Production sensor content' }),
+      },
+    });
+
+    const result = await page.evaluate(({ selector, forceTopValue }) => {
+      const card = document.querySelector('sensor-bar-card-plus');
+      const rows = [...card.shadowRoot.querySelectorAll('.row[data-entity]')];
+      if (forceTopValue) {
+        rows.forEach((row) => card._forceMinimumBarShareTopValue(row, 'left'));
+        card._applyTopRightValueLayout();
+      }
+      return rows.map((row) => {
+        const content = row.querySelector(selector);
+        const mainLine = row.querySelector('.main-line');
+        const barTrack = row.querySelector('.bar-track');
+        const label = row.querySelector('.peak-value-label');
+        const contentRect = content?.getBoundingClientRect();
+        const barRect = barTrack.getBoundingClientRect();
+        const labelRect = label?.getBoundingClientRect();
+        const rowRect = row.getBoundingClientRect();
+        return {
+          contentTop: contentRect ? contentRect.top - rowRect.top : null,
+          contentBottom: contentRect ? contentRect.bottom - rowRect.top : null,
+          barTop: barRect.top - rowRect.top,
+          mainTop: mainLine.getBoundingClientRect().top - rowRect.top,
+          rowHeight: rowRect.height,
+          contentZIndex: content ? getComputedStyle(content).zIndex : null,
+          labelZIndex: label ? getComputedStyle(label).zIndex : null,
+          labelVisibility: label ? getComputedStyle(label).visibility : null,
+          labelOverlapsContent: !!labelRect && labelRect.top < contentRect.bottom && labelRect.bottom > contentRect.top,
+          topValueActive: row.querySelector('.top-right-value')?.dataset.active ?? null,
+        };
+      });
+    }, { selector: scenario.selector, forceTopValue: scenario.forceTopValue === true });
+
+    expect(result[0].contentTop).not.toBeNull();
+    expect(result[1].contentTop).toBe(result[0].contentTop);
+    expect(result[1].contentBottom).toBe(result[0].contentBottom);
+    expect(result[1].barTop).toBe(result[0].barTop);
+    expect(result[1].mainTop).toBe(result[0].mainTop);
+    expect(result[1].rowHeight).toBe(result[0].rowHeight);
+    expect(result[1].contentZIndex).toBe('7');
+    expect(result[1].labelZIndex).toBe('6');
+    expect(result[1].labelVisibility).toBe('visible');
+    if (!scenario.forceTopValue) expect(result[1].labelOverlapsContent).toBe(true);
+    if (scenario.forceTopValue) {
+      expect(result[0].topValueActive).toBe('true');
+      expect(result[1].topValueActive).toBe('true');
+    }
+  }
 });
 
 test('Floor shares the below lane with Target and renders extrema labels', async ({ page }) => {
@@ -239,11 +355,15 @@ test('generic marker DOM identity survives unresolved and resolved source update
       min: 0,
       max: 100,
       formatting: { decimal: 0 },
-      markers: [{ at: { entity: 'sensor.dynamic_limit' }, lane: 'above', label: { show: true } }],
-      entities: [{ entity: 'sensor.reference_row' }],
+      markers: [{ at: { entity: 'sensor.dynamic_limit' }, lane: 'below', label: { show: true } }],
+      entities: [
+        { entity: 'sensor.reference_row' },
+        { entity: 'sensor.following_row' },
+      ],
     },
     states: {
       'sensor.reference_row': sensor(20, { friendly_name: 'Reference row' }),
+      'sensor.following_row': sensor(80, { friendly_name: 'Following row' }),
       'sensor.dynamic_limit': sensor('unavailable'),
     },
   });
@@ -253,6 +373,8 @@ test('generic marker DOM identity survives unresolved and resolved source update
     const row = card.shadowRoot.querySelector('.row[data-entity="sensor.reference_row"]');
     const marker = row.querySelector('.generic-marker[data-marker-id="generic-0"]');
     const label = row.querySelector('.generic-value-label[data-marker-id="generic-0"]');
+    const rowRect = row.getBoundingClientRect();
+    const nextRow = card.shadowRoot.querySelector('.row[data-entity="sensor.following_row"]');
     return {
       sameNode: window.__genericMarkerNode === marker,
       connected: marker?.isConnected ?? false,
@@ -260,7 +382,12 @@ test('generic marker DOM identity survives unresolved and resolved source update
       position: marker?.style.left ?? null,
       labelVisibility: label?.style.visibility ?? null,
       label: label?.textContent.trim() ?? null,
-      aboveOccupied: row.querySelector('.main-line')?.dataset.markerLaneAbove ?? null,
+      belowOccupied: row.querySelector('.main-line')?.dataset.markerLaneBelow ?? null,
+      labelLaneBelow: row.dataset.markerLabelLaneBelow ?? null,
+      rowHeight: rowRect.height,
+      mainOffset: row.querySelector('.main-line').getBoundingClientRect().top - rowRect.top,
+      rowMarginBottom: getComputedStyle(row).marginBottom,
+      clearanceToNextRow: nextRow.getBoundingClientRect().top - rowRect.bottom,
     };
   });
   const retainMarker = () => page.evaluate(() => {
@@ -291,7 +418,12 @@ test('generic marker DOM identity survives unresolved and resolved source update
     position: '0%',
     labelVisibility: 'hidden',
     label: '',
-    aboveOccupied: 'true',
+    belowOccupied: 'true',
+    labelLaneBelow: 'true',
+    rowHeight: 42,
+    mainOffset: 2,
+    rowMarginBottom: '13px',
+    clearanceToNextRow: 13,
   });
 
   await updateLimit(35);
@@ -302,7 +434,12 @@ test('generic marker DOM identity survives unresolved and resolved source update
     position: '35%',
     labelVisibility: 'visible',
     label: '35 W',
-    aboveOccupied: 'true',
+    belowOccupied: 'true',
+    labelLaneBelow: 'true',
+    rowHeight: 42,
+    mainOffset: 2,
+    rowMarginBottom: '13px',
+    clearanceToNextRow: 13,
   });
 
   await updateLimit('unknown');
@@ -313,7 +450,12 @@ test('generic marker DOM identity survives unresolved and resolved source update
     position: '35%',
     labelVisibility: 'hidden',
     label: '35 W',
-    aboveOccupied: 'true',
+    belowOccupied: 'true',
+    labelLaneBelow: 'true',
+    rowHeight: 42,
+    mainOffset: 2,
+    rowMarginBottom: '13px',
+    clearanceToNextRow: 13,
   });
 
   await updateLimit(72);
@@ -324,7 +466,12 @@ test('generic marker DOM identity survives unresolved and resolved source update
     position: '72%',
     labelVisibility: 'visible',
     label: '72 W',
-    aboveOccupied: 'true',
+    belowOccupied: 'true',
+    labelLaneBelow: 'true',
+    rowHeight: 42,
+    mainOffset: 2,
+    rowMarginBottom: '13px',
+    clearanceToNextRow: 13,
   });
 });
 
@@ -453,13 +600,33 @@ test('marker shapes preserve inward direction, numeric anchoring, and lane fit',
       const inset = marker.querySelector(`.${type}-inset`);
       const svgStyle = getComputedStyle(svg);
       const insetStyle = getComputedStyle(inset);
+      const trackRect = marker.closest('.bar-track').getBoundingClientRect();
+      const svgRect = svg.getBoundingClientRect();
+      const transform = svgStyle.transform === 'none'
+        ? [1, 0, 0, 1, 0, 0]
+        : svgStyle.transform.match(/^matrix\(([^)]+)\)$/)[1].split(',').map(Number);
+      const pathGroupTransform = getComputedStyle(svg.querySelector('.marker-shape-paths')).transform;
+      const pathGroupMatrix = pathGroupTransform === 'none'
+        ? [1, 0, 0, 1, 0, 0]
+        : pathGroupTransform.match(/^matrix\(([^)]+)\)$/)[1].split(',').map(Number);
+      const chevronPath = shape === 'chevron' ? svg.querySelector('path[data-shape="chevron"]') : null;
+      const chevronBox = chevronPath?.getBBox();
+      const shapePath = svg.querySelector(`path[data-shape="${shape}"]`);
+      const shapePathRect = shapePath?.getBoundingClientRect();
       return {
         shape,
         left: marker.getBoundingClientRect().left,
         leftStyle: marker.style.left,
-        scaleY: verticalScale(svgStyle.transform),
+        scaleX: transform[0],
+        scaleY: transform[3],
+        pathScaleY: pathGroupMatrix[3],
+        transformOrigin: svgStyle.transformOrigin,
         svgDisplay: svgStyle.display,
         svgHeight: svg.getBoundingClientRect().height,
+        edgeDelta: lane === 'above' ? svgRect.top - trackRect.top : trackRect.bottom - svgRect.bottom,
+        chevronBox: chevronBox ? { x: chevronBox.x, y: chevronBox.y, width: chevronBox.width, height: chevronBox.height } : null,
+        shapeWidth: shapePathRect?.width ?? null,
+        shapeHeight: shapePathRect?.height ?? null,
         borderTop: insetStyle.borderTopWidth,
         borderBottom: insetStyle.borderBottomWidth,
       };
@@ -471,8 +638,8 @@ test('marker shapes preserve inward direction, numeric anchoring, and lane fit',
     };
   });
 
-  const directional = new Set(['chevron', 'arrow', 'pin']);
   const svgShapes = new Set(['circle', 'diamond', 'chevron', 'arrow', 'pin']);
+  const reducedShapes = new Set(['diamond', 'chevron', 'arrow', 'pin']);
   const belowAnchor = geometry.below[0].left;
   const aboveAnchor = geometry.above[0].left;
 
@@ -481,8 +648,12 @@ test('marker shapes preserve inward direction, numeric anchoring, and lane fit',
     expect(Math.abs(entry.left - belowAnchor)).toBeLessThan(0.01);
     if (svgShapes.has(entry.shape)) {
       expect(entry.svgDisplay).toBe('block');
-      expect(entry.svgHeight).toBeLessThanOrEqual(18);
-      expect(entry.scaleY).toBe(directional.has(entry.shape) ? -1 : 1);
+      expect(entry.edgeDelta, `${entry.shape}: ${JSON.stringify(entry)}`).toBeCloseTo(0, 2);
+      expect(entry.scaleX).toBeCloseTo(entry.shape === 'circle' ? 0.64 : reducedShapes.has(entry.shape) ? 0.75 : 1, 2);
+      expect(entry.scaleY).toBeCloseTo(entry.shape === 'circle' ? 0.64 : reducedShapes.has(entry.shape) ? 0.75 : 1, 2);
+      expect(entry.pathScaleY).toBeCloseTo(['chevron', 'arrow', 'pin'].includes(entry.shape) ? -1 : 1, 2);
+      expect(entry.svgHeight).toBeCloseTo(entry.shape === 'circle' ? 10.24 : reducedShapes.has(entry.shape) ? 12 : 16, 1);
+      expect(entry.transformOrigin).toContain('16px');
     }
   }
   for (const entry of geometry.above) {
@@ -490,9 +661,23 @@ test('marker shapes preserve inward direction, numeric anchoring, and lane fit',
     expect(Math.abs(entry.left - aboveAnchor)).toBeLessThan(0.01);
     if (svgShapes.has(entry.shape)) {
       expect(entry.svgDisplay).toBe('block');
-      expect(entry.svgHeight).toBeLessThanOrEqual(18);
-      expect(entry.scaleY).toBe(1);
+      expect(entry.edgeDelta, `${entry.shape}: ${JSON.stringify(entry)}`).toBeCloseTo(0, 2);
+      expect(entry.scaleX).toBeCloseTo(entry.shape === 'circle' ? 0.64 : reducedShapes.has(entry.shape) ? 0.75 : 1, 2);
+      expect(entry.scaleY).toBeCloseTo(entry.shape === 'circle' ? 0.64 : reducedShapes.has(entry.shape) ? 0.75 : 1, 2);
+      expect(entry.pathScaleY).toBe(1);
+      expect(entry.svgHeight).toBeCloseTo(entry.shape === 'circle' ? 10.24 : reducedShapes.has(entry.shape) ? 12 : 16, 1);
+      expect(entry.transformOrigin).toContain('0px');
     }
+  }
+
+  expect(geometry.below.find((entry) => entry.shape === 'chevron')?.chevronBox).toEqual({ x: 2, y: 2, width: 12, height: 12 });
+  for (const lane of ['below', 'above']) {
+    const circle = geometry[lane].find((entry) => entry.shape === 'circle');
+    const chevron = geometry[lane].find((entry) => entry.shape === 'chevron');
+    expect(circle.shapeWidth).toBeCloseTo(8.96, 1);
+    expect(circle.shapeHeight).toBeCloseTo(8.96, 1);
+    expect(chevron.shapeWidth).toBeCloseTo(9, 1);
+    expect(chevron.shapeHeight).toBeCloseTo(9, 1);
   }
 
   expect(geometry.below.find((entry) => entry.shape === 'triangle')).toEqual(expect.objectContaining({
@@ -503,6 +688,33 @@ test('marker shapes preserve inward direction, numeric anchoring, and lane fit',
     borderTop: '11px',
     borderBottom: '0px',
   }));
+});
+
+test('marker endpoint clipping remains provided by the bar track', async ({ page }) => {
+  await render(page, {
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      label_position: 'off',
+      min: 0,
+      max: 100,
+      target: 0,
+      peak: { enabled: true },
+      entities: [{ entity: 'sensor.endpoint' }],
+    },
+    states: { 'sensor.endpoint': sensor(100, { friendly_name: 'Endpoint' }) },
+  });
+
+  const result = await page.evaluate(() => {
+    const row = document.querySelector('sensor-bar-card-plus').shadowRoot.querySelector('.row[data-entity="sensor.endpoint"]');
+    const track = row.querySelector('.bar-track');
+    return {
+      overflow: getComputedStyle(track).overflow,
+      left: row.querySelector('.target-marker')?.style.left,
+      right: row.querySelector('.peak-marker')?.style.left,
+    };
+  });
+
+  expect(result).toEqual({ overflow: 'hidden', left: '0%', right: '100%' });
 });
 
 const scenarios = [

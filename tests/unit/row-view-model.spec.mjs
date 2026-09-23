@@ -557,6 +557,61 @@ describe('buildRowViewModel', () => {
     expect(recoveredRow.markerLaneOccupancy).toEqual(unavailableRow.markerLaneOccupancy);
   });
 
+  it('tracks configured label lanes independently of glyph lanes and acceptance', () => {
+    const hass = { states: { 'sensor.power': sensor(42), 'sensor.limit': sensor('unknown') } };
+    const entityConfig = createNormalizedEntity({
+      target: { at: { fixed: 55 } },
+      peak: { enabled: true },
+      floor: { enabled: true, label: { show: true } },
+      markers: [
+        { at: 35, lane: 'above' },
+        { at: 45, lane: 'above' },
+        { at: 55, lane: 'above', label: { show: true } },
+        { at: 65, lane: 'below', label: { show: true } },
+        { at: 75, lane: 'below', label: { show: true } },
+      ],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+    });
+
+    expect(row.markerLaneOccupancy).toEqual({ above: true, below: true });
+    expect(row.markerLabelLaneOccupancy).toEqual({ above: false, below: true });
+
+    const malformedConfig = createNormalizedEntity({
+      markers: [{ at: null, lane: 'above', label: { show: true } }],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const malformedRow = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig: malformedConfig,
+      entityState: hass.states['sensor.power'],
+    });
+    expect(malformedRow.markerLabelLaneOccupancy).toEqual({ above: false, below: false });
+  });
+
+  it('keeps configured generic label-lane occupancy when its source is unresolved', () => {
+    const hass = { states: { 'sensor.power': sensor(42), 'sensor.limit': sensor('unavailable') } };
+    const entityConfig = createNormalizedEntity({
+      markers: [{ at: { entity: 'sensor.limit' }, lane: 'above', label: { show: true } }],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+    });
+
+    expect(row.markers.find((marker) => marker.id === 'generic-0').visible).toBe(false);
+    expect(row.markerLabelLaneOccupancy).toEqual({ above: true, below: false });
+  });
+
   it('resolves dynamic target entities', () => {
     const hass = {
       states: {
