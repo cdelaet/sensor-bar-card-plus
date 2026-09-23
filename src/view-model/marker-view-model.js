@@ -41,10 +41,12 @@ export function getMarkerLaneOccupancy(entityConfig) {
   const targetConfig = entityConfig?.target_marker;
   const peakConfig = entityConfig?.peak_marker;
   const floorConfig = entityConfig?.floor_marker;
+  const genericMarkers = (entityConfig?.generic_markers ?? []).filter((marker) => marker.accepted);
   return {
-    above: peakConfig?.show === true,
     below: (targetConfig?.enabled !== false && hasConfiguredSource(targetConfig?.source))
-      || floorConfig?.show === true,
+      || floorConfig?.show === true
+      || genericMarkers.some((marker) => marker.lane === 'below'),
+    above: peakConfig?.show === true || genericMarkers.some((marker) => marker.lane === 'above'),
   };
 }
 
@@ -62,6 +64,7 @@ export function buildMarkerModels({
   floorPosition = null,
   floorPresentation = null,
   floorVisible = Number.isFinite(floorPosition),
+  genericMarkers = [],
 }) {
   const targetConfig = entityConfig?.target_marker;
   const peakConfig = entityConfig?.peak_marker;
@@ -105,5 +108,17 @@ export function buildMarkerModels({
       labelVisible: peakConfig?.show === true && peakConfig?.show_label === true,
       shape: 'triangle',
     }),
+    ...genericMarkers.map((marker) => createMarkerModel({
+      id: marker.id,
+      type: 'generic',
+      value: marker.value,
+      position: marker.position,
+      lane: marker.lane,
+      visible: marker.visible,
+      color: marker.color,
+      label: marker.label,
+      labelVisible: marker.labelVisible,
+      shape: marker.shape,
+    })),
   ];
 }

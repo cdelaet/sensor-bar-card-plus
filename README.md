@@ -2007,6 +2007,49 @@ floor:
 
 The Floor marker tracks the lowest finite value observed for the current card session. It uses the shared below marker lane with Target and does not allocate another vertical lane.
 
+## Generic Reference Markers
+
+Use `markers:` to add up to two reference markers in each lane. Generic markers are fixed reference values, not trackers. They share the row's scale and effective unit; SBCP does not convert values from a dynamic source entity.
+
+```yaml
+type: custom:sensor-bar-card-plus
+scale:
+  min: { fixed: 0 }
+  max: { fixed: 100 }
+target:
+  at: 50%
+  label: { show: true }
+peak:
+  enabled: true
+floor:
+  enabled: true
+markers:
+  - at: 35%
+    lane: above
+    shape: diamond
+    color: "#4488CC"
+    label:
+      show: true
+      decimal: 0
+  - at:
+      entity: sensor.warning_threshold
+      fixed: 75
+    lane: below
+    shape: circle
+    color: "#F59E0B"
+    label:
+      show: true
+      unit: false
+entities:
+  - entity: sensor.grid_power
+```
+
+`at` accepts a fixed value (`{ fixed: 75 }`), a dynamic entity (`{ entity: sensor.limit }`), an entity with fixed fallback, or a percentage string such as `35%`. Percentages are inclusive from `0%` to `100%` of the effective row scale. Their labels show the resolved scale value. Finite fixed and dynamic values outside the scale remain valid: only their graphical position is clamped, while the label keeps the original value.
+
+Markers default to the `below` lane, `circle` shape, color `#888888`, and a hidden label. The supported shapes are `circle`, `diamond`, `triangle`, `chevron`, `arrow`, and `pin`; lanes are `above` and `below`. A shown label defaults to the row's effective `formatting.decimal` and unit. Set `label.decimal: 0` for integer precision or `label.unit: false` to omit the effective row unit. Dynamic source units are ignored, and labels remain in the row unit even when a marker falls back to its fixed value.
+
+At card scope, `markers:` supplies the list inherited by each entity. An entity may replace the list with its own `markers: [...]`; `markers: []` explicitly clears the inherited list. Lists replace rather than merge. A valid but unresolved marker still reserves its lane and one of that lane's two slots. Malformed markers are skipped without consuming a slot; further valid markers remain in configuration but are ignored at runtime with a non-fatal warning. Target, Peak, and Floor do not count toward this limit. Nearby marker labels may overlap.
+
 ## Formatting
 
 ```yaml
@@ -2269,7 +2312,6 @@ It is not a drop-in replacement for the original card.
 Likely future work includes:
 
 - visible `scale.ticks` support under `scale`
-- a more general marker collection once the current target and peak semantics are stable
 - verticality, baby!
 
 ## Contributing

@@ -8276,4 +8276,112 @@ describe('Sensor Bar Card Plus editor', () => {
       custom_floor_key: { keep: true },
     });
   });
+
+  it('renders generic marker controls and preserves order, capacity feedback, and supported shapes', () => {
+    const editor = createEditor();
+    editor.setConfig({
+      markers: [{ at: { entity: 'sensor.limit', fixed: 50 } }, { at: '35%', lane: 'above' }, { at: { fixed: 75 }, lane: 'above' }],
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    const markup = editor._renderGenericMarkersEditor({ type: 'card' });
+    expect(markup).toContain('First two valid markers per lane render');
+    expect(markup).toContain('move-generic-marker-up');
+    expect(markup).toContain('move-generic-marker-down');
+    expect(markup).toContain('generic-marker-entity');
+    expect(markup).toContain('generic-marker-percent');
+    for (const shape of ['circle', 'diamond', 'triangle', 'chevron', 'arrow', 'pin']) {
+      expect(markup).toContain(`<option value="${shape}"`);
+    }
+    expect(markup).toContain('#888888');
+  });
+
+  it('adds, removes, and reorders generic markers without losing item data', () => {
+    const editor = createEditor();
+    editor.setConfig({
+      markers: [
+        { at: { fixed: 10 }, extension: { keep: true } },
+        { at: { fixed: 20 }, extension: { second: true } },
+      ],
+      entities: [{ entity: 'sensor.one' }],
+    });
+    const clickAction = (action, markerIndex = 0) => editor._handleClick({
+      target: {
+        dataset: { action, scopeType: 'card', index: 'card', markerIndex: String(markerIndex) },
+        closest() { return this; },
+      },
+    });
+
+    clickAction('move-generic-marker-down', 0);
+    expect(editor._draftConfig.markers.map((marker) => marker.at.fixed)).toEqual([20, 10]);
+    expect(editor._draftConfig.markers[1].extension).toEqual({ keep: true });
+    clickAction('add-generic-marker');
+    expect(editor._draftConfig.markers.at(-1)).toEqual({ at: { fixed: 50 } });
+    clickAction('remove-generic-marker', 1);
+    expect(editor._draftConfig.markers).toHaveLength(2);
+  });
+
+  it('deep-copies inherited generic markers on entity override and preserves explicit empty lists', () => {
+    const editor = createEditor();
+    editor.setConfig({
+      markers: [{ at: { fixed: 50 }, vendor_key: { preserved: true } }],
+      entities: [{ entity: 'sensor.one' }],
+    });
+    const target = {
+      dataset: { kind: 'entity-markers-inherit', index: '0', checked: false },
+      type: 'checkbox',
+    };
+    editor._handleFieldEvent({ target });
+    expect(editor._draftConfig.entities[0].markers).toEqual(editor._draftConfig.markers);
+    expect(editor._draftConfig.entities[0].markers).not.toBe(editor._draftConfig.markers);
+    editor._setGenericMarkerList({ type: 'entity', index: 0 }, []);
+    const emitted = editor._cleanupEditorEmittedConfig(editor._cloneDeep(editor._draftConfig));
+    expect(emitted.entities[0].markers).toEqual([]);
+  });
+
+  it('round-trips decimal zero, unit false, and unknown marker and nested label keys', () => {
+    const editor = createEditor();
+    editor.setConfig({
+      markers: [{
+        at: { fixed: 10, source_extension: 'keep' },
+        extension: { keep: true },
+        label: { show: true, extension: 'also keep' },
+      }],
+      entities: [{ entity: 'sensor.one' }],
+    });
+    editor._setGenericMarkerField({ type: 'card' }, 0, 'generic-marker-label-decimal', '0');
+    editor._setGenericMarkerField({ type: 'card' }, 0, 'generic-marker-label-unit', false);
+    const emitted = editor._cleanupEditorEmittedConfig(editor._cloneDeep(editor._draftConfig));
+
+    expect(emitted.markers[0]).toEqual({
+      at: { fixed: 10, source_extension: 'keep' },
+      extension: { keep: true },
+      label: { show: true, extension: 'also keep', decimal: 0, unit: false },
+    });
+  });
+
+  it('keeps excess generic markers editable and serialized after an ordinary edit', () => {
+    const editor = createEditor();
+    editor.setConfig({
+      markers: [
+        { at: { fixed: 10 }, lane: 'above' },
+        { at: { fixed: 20 }, lane: 'above' },
+        { at: { fixed: 30 }, lane: 'above', vendor_key: { preserve: true } },
+      ],
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    editor._setGenericMarkerField({ type: 'card' }, 0, 'generic-marker-label-show', true);
+    const markup = editor._renderGenericMarkersEditor({ type: 'card' });
+    const emitted = editor._cleanupEditorEmittedConfig(editor._cloneDeep(editor._draftConfig));
+
+    expect((markup.match(/class="list-row generic-marker-row"/g) ?? [])).toHaveLength(3);
+    expect(emitted.markers).toHaveLength(3);
+    expect(emitted.markers[0].label).toEqual({ show: true });
+    expect(emitted.markers[2]).toEqual({
+      at: { fixed: 30 },
+      lane: 'above',
+      vendor_key: { preserve: true },
+    });
+  });
 });

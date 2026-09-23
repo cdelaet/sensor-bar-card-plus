@@ -71,6 +71,72 @@ describe('validateNormalizedConfig', () => {
     }
   });
 
+  it('validates generic marker inputs, percentage bounds, lanes, shapes, and capacity non-fatally', () => {
+    const normalized = normalize({
+      markers: [
+        { at: '0%', lane: 'above' },
+        { at: '35%', lane: 'above' },
+        { at: '100%', lane: 'above' },
+        { at: { entity: 'sensor.unavailable_limit' }, lane: 'below' },
+        { at: '120%' },
+        { at: '-1%' },
+        { at: { percent: 35 } },
+        { at: { fixed: 42 }, lane: 'top' },
+        { at: { fixed: 42 }, shape: 'hexagon' },
+        null,
+      ],
+      entities: [{ entity: 'sensor.one' }],
+    });
+    const diagnostics = validateNormalizedConfig(normalized);
+    const markers = normalized.entities[0].generic_markers;
+
+    expect(markers.slice(0, 4).map((marker) => marker.accepted)).toEqual([true, true, false, true]);
+    expect(markers[3]).toMatchObject({ lane: 'below', accepted: true });
+    expect(markers[8]).toMatchObject({ shape: 'circle', accepted: true });
+    expect(diagnostics.errors).toEqual([]);
+    expect(diagnostics.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'markers.excess_capacity' }),
+      expect.objectContaining({ code: 'markers.invalid_percentage' }),
+      expect.objectContaining({ code: 'markers.invalid_source' }),
+      expect.objectContaining({ code: 'markers.invalid_lane' }),
+      expect.objectContaining({ code: 'markers.invalid_shape' }),
+      expect.objectContaining({ code: 'markers.invalid_item' }),
+    ]));
+  });
+
+  it('warns on a malformed marker list and skips invalid items without consuming capacity', () => {
+    const normalized = normalize({
+      markers: [
+        { at: { fixed: 1 }, lane: 'above' },
+        {},
+        { at: { fixed: 2 }, lane: 'above' },
+      ],
+      entities: [{
+        entity: 'sensor.one',
+        markers: [
+          { at: { fixed: 3 }, lane: 'below' },
+          'bad marker',
+          { at: { fixed: 4 }, lane: 'below' },
+          { at: { fixed: 5 }, lane: 'below' },
+        ],
+      }, { entity: 'sensor.clear', markers: [] }],
+    });
+    const diagnostics = validateNormalizedConfig(normalized);
+
+    expect(normalized.entities[0].generic_markers.map((marker) => marker.accepted)).toEqual([true, false, true, false]);
+    expect(normalized.entities[1].generic_markers).toEqual([]);
+    expect(diagnostics.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'markers.invalid_source', path: 'markers[1].at' }),
+      expect.objectContaining({ code: 'markers.invalid_item' }),
+      expect.objectContaining({ code: 'markers.excess_capacity' }),
+    ]));
+
+    const malformedList = normalize({ markers: {}, entities: [{ entity: 'sensor.one' }] });
+    expect(validateNormalizedConfig(malformedList).warnings).toContainEqual(
+      expect.objectContaining({ code: 'markers.invalid_list' })
+    );
+  });
+
   it('warns when entity-level fixed min is greater than max', () => {
     const diagnostics = validateNormalizedConfig(normalize({
       entities: [{

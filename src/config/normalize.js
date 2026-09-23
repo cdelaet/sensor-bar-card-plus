@@ -67,6 +67,86 @@ export function normalizeStructuredResolvableValue(input, inheritedResolvable = 
   return normalizeResolvableValue(input, null);
 }
 
+export function normalizeGenericMarkerList(input) {
+  if (!Array.isArray(input)) {
+    return { markers: [], invalidList: input !== undefined };
+  }
+
+  const markers = input.map((rawMarker, index) => {
+    if (!rawMarker || typeof rawMarker !== 'object' || Array.isArray(rawMarker)) {
+      return { id: `generic-${index}`, index, valid: false, accepted: false, malformed: true };
+    }
+
+    const rawAt = rawMarker.at;
+    const hasUnsupportedPercentField = rawAt && typeof rawAt === 'object'
+      && Object.prototype.hasOwnProperty.call(rawAt, 'percent');
+    const atInput = typeof rawAt === 'string' ? rawAt.trim() : rawAt;
+    const source = normalizeStructuredResolvableValue(atInput, null, null, { allowPercent: true });
+    const explicitEntity = rawAt && typeof rawAt === 'object' && rawAt.entity !== undefined
+      ? rawAt.entity
+      : (typeof atInput === 'string' && looksLikeEntityId(atInput) ? atInput : null);
+    const invalidEntity = explicitEntity !== null && explicitEntity !== undefined && explicitEntity !== ''
+      && !looksLikeEntityId(explicitEntity);
+    const invalidFixed = rawAt && typeof rawAt === 'object'
+      && rawAt.fixed !== undefined && rawAt.fixed !== null
+      && getFiniteNumber(rawAt.fixed) === null;
+    const hasSource = !!source.entity
+      || getFiniteNumber(source.fixed) !== null
+      || Number.isFinite(source.percent);
+    const invalidPercentage = Number.isFinite(source.percent)
+      && (source.percent < 0 || source.percent > 100);
+    const validSource = rawAt !== undefined && rawAt !== null
+      && !hasUnsupportedPercentField
+      && !invalidEntity
+      && !invalidFixed
+      && hasSource
+      && !invalidPercentage;
+    const lane = rawMarker.lane === undefined ? 'below' : rawMarker.lane;
+    const validLane = lane === 'above' || lane === 'below';
+    const supportedShapes = ['circle', 'diamond', 'triangle', 'chevron', 'arrow', 'pin'];
+    const validShape = rawMarker.shape === undefined || supportedShapes.includes(rawMarker.shape);
+    const label = rawMarker.label && typeof rawMarker.label === 'object' && !Array.isArray(rawMarker.label)
+      ? rawMarker.label
+      : {};
+    const decimal = label.decimal === undefined ? null : getFiniteNumber(label.decimal);
+    const validDecimal = decimal === null || (Number.isInteger(decimal) && decimal >= 0);
+
+    return {
+      id: `generic-${index}`,
+      index,
+      source: {
+        ...source,
+        entity: typeof source.entity === 'string' ? source.entity.trim() : source.entity,
+      },
+      lane: validLane ? lane : null,
+      shape: validShape ? (rawMarker.shape ?? 'circle') : 'circle',
+      color: typeof rawMarker.color === 'string' && rawMarker.color.trim() ? rawMarker.color : '#888888',
+      label: {
+        show: label.show === true,
+        decimal: validDecimal ? decimal : null,
+        unit: label.unit !== false,
+      },
+      valid: validSource && validLane,
+      invalidSource: !validSource,
+      invalidPercentage,
+      unsupportedPercentField: hasUnsupportedPercentField,
+      invalidLane: !validLane,
+      invalidShape: !validShape,
+      invalidDecimal: !validDecimal,
+      accepted: false,
+    };
+  });
+
+  const laneCounts = { above: 0, below: 0 };
+  for (const marker of markers) {
+    if (!marker.valid) continue;
+    if (laneCounts[marker.lane] < 2) marker.accepted = true;
+    laneCounts[marker.lane] += 1;
+  }
+
+  return { markers, invalidList: false };
+}
+
 export function normalizeBaselineDirectionConfig(input, inheritedDirection = null) {
   const inherited = inheritedDirection ?? { color: null };
   if (input === undefined) {
@@ -610,6 +690,11 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
   normalizedEntity.target_marker = normalizeTargetMarkerConfig(entityConfig, cardConfig);
   normalizedEntity.peak_marker = normalizePeakMarkerConfig(entityConfig, cardConfig);
   normalizedEntity.floor_marker = normalizeFloorMarkerConfig(entityConfig, cardConfig);
+  const normalizedMarkers = entityConfig.markers === undefined
+    ? { markers: cardConfig?.generic_markers ?? [], invalidList: cardConfig?.generic_markers_invalid === true }
+    : normalizeGenericMarkerList(entityConfig.markers);
+  normalizedEntity.generic_markers = normalizedMarkers.markers;
+  normalizedEntity.generic_markers_invalid = normalizedMarkers.invalidList;
 
   normalizedEntity.min = normalizedEntity.scale.min.fixed;
   normalizedEntity.min_entity = normalizedEntity.scale.min.entity;
@@ -693,6 +778,9 @@ export function normalizeCardConfig(rawConfig) {
   normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);
   normalizedCard.peak_marker = normalizePeakMarkerConfig(baseConfig, null);
   normalizedCard.floor_marker = normalizeFloorMarkerConfig(baseConfig, null);
+  const normalizedMarkers = normalizeGenericMarkerList(baseConfig.markers);
+  normalizedCard.generic_markers = normalizedMarkers.markers;
+  normalizedCard.generic_markers_invalid = normalizedMarkers.invalidList;
   normalizedCard.entities = baseConfig.entities.map((entityCfg) =>
     normalizeEntityConfig(entityCfg, normalizedCard)
   );

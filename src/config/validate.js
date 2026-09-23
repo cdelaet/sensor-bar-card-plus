@@ -80,6 +80,41 @@ function validateExtremumReset(diagnostics, config, path, entity = null) {
   }
 }
 
+function validateGenericMarkers(diagnostics, markers, invalidList, path, entity = null) {
+  if (invalidList) {
+    addWarning(diagnostics, 'markers.invalid_list', 'Markers must be a list; ignoring the malformed value.', path, entity);
+  }
+
+  for (const marker of markers ?? []) {
+    const markerPath = `${path}[${marker.index}]`;
+    if (marker.malformed) {
+      addWarning(diagnostics, 'markers.invalid_item', 'Marker must be an object; ignoring this item.', markerPath, entity);
+      continue;
+    }
+    if (marker.invalidSource && !marker.invalidPercentage && !marker.unsupportedPercentField) {
+      addWarning(diagnostics, 'markers.invalid_source', 'Marker requires a valid fixed value, percentage, or entity source.', `${markerPath}.at`, entity);
+    }
+    if (marker.invalidPercentage) {
+      addWarning(diagnostics, 'markers.invalid_percentage', 'Marker percentage must be between 0 and 100 inclusive.', `${markerPath}.at`, entity);
+    }
+    if (marker.unsupportedPercentField) {
+      addWarning(diagnostics, 'markers.invalid_source', 'Use a percentage string such as "35%" instead of an at.percent field.', `${markerPath}.at`, entity);
+    }
+    if (marker.invalidLane) {
+      addWarning(diagnostics, 'markers.invalid_lane', 'Marker lane must be above or below; ignoring this marker.', `${markerPath}.lane`, entity);
+    }
+    if (marker.invalidShape) {
+      addWarning(diagnostics, 'markers.invalid_shape', 'Invalid marker shape; using circle.', `${markerPath}.shape`, entity);
+    }
+    if (marker.invalidDecimal) {
+      addWarning(diagnostics, 'markers.invalid_decimal', 'Marker label decimal must be a non-negative integer; inheriting row precision.', `${markerPath}.label.decimal`, entity);
+    }
+    if (marker.valid && !marker.accepted) {
+      addWarning(diagnostics, 'markers.excess_capacity', `Only the first two valid markers in the ${marker.lane} lane are rendered.`, markerPath, entity);
+    }
+  }
+}
+
 function getStaticSegmentBound(boundary) {
   if (!boundary || boundary.entity || Number.isFinite(boundary.percent)) return null;
   return getFiniteNumber(boundary.fixed ?? boundary.value);
@@ -176,6 +211,7 @@ export function validateNormalizedConfig(config) {
   }
 
   validateConfigScope(diagnostics, config, 'card');
+  validateGenericMarkers(diagnostics, config.generic_markers, config.generic_markers_invalid, 'markers');
 
   const seenEntities = new Set();
   const entities = Array.isArray(config.entities) ? config.entities : [];
@@ -196,6 +232,15 @@ export function validateNormalizedConfig(config) {
     }
 
     validateConfigScope(diagnostics, entityConfig, path, entityId);
+    if (Object.prototype.hasOwnProperty.call(entityConfig, 'markers')) {
+      validateGenericMarkers(
+        diagnostics,
+        entityConfig.generic_markers,
+        entityConfig.generic_markers_invalid,
+        `${path}.markers`,
+        entityId
+      );
+    }
   }
 
   return diagnostics;

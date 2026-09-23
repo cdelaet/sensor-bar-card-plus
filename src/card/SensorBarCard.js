@@ -506,7 +506,10 @@ export class SensorBarCard extends HTMLElement {
         ecfg.scale?.min?.entity,
         ecfg.scale?.max?.entity,
         ecfg.baseline?.at?.entity,
-        ecfg.target_marker?.source?.entity
+        ecfg.target_marker?.source?.entity,
+        ...(ecfg.generic_markers ?? [])
+          .filter((marker) => marker.accepted)
+          .map((marker) => marker.source?.entity)
       ].filter(Boolean);
       
       for (const ent of entitiesToWatch) {
@@ -584,6 +587,18 @@ export class SensorBarCard extends HTMLElement {
       this._positionTargetLabel(row);
       this._positionMarkerValueLabel(row, '.peak-value-label', '.peak-marker');
       this._positionMarkerValueLabel(row, '.floor-value-label', '.floor-marker');
+      this._positionGenericMarkerLabels(row);
+    });
+  }
+
+  _positionGenericMarkerLabels(row) {
+    (row.querySelectorAll?.('.generic-value-label[data-marker-id]') ?? []).forEach((label) => {
+      const id = label.dataset.markerId;
+      this._positionMarkerValueLabel(
+        row,
+        `.generic-value-label[data-marker-id="${id}"]`,
+        `.generic-marker[data-marker-id="${id}"]`
+      );
     });
   }
   
@@ -1423,9 +1438,11 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         .row[data-bar-animated="false"] .target-marker,
         .row[data-bar-animated="false"] .peak-marker,
         .row[data-bar-animated="false"] .floor-marker,
+        .row[data-bar-animated="false"] .generic-marker,
         .row[data-bar-animated="false"] .target-value-label,
         .row[data-bar-animated="false"] .peak-value-label,
-        .row[data-bar-animated="false"] .floor-value-label {
+        .row[data-bar-animated="false"] .floor-value-label,
+        .row[data-bar-animated="false"] .generic-value-label {
           transition: none;
         }
         .row[data-bar-animated="false"] .target-value-label {
@@ -1571,7 +1588,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
         }
         .peak-value-label,
-        .floor-value-label {
+        .floor-value-label,
+        .generic-value-label {
           position: absolute;
           font-size: var(--sbcp-target-label-font-size);
           line-height: 1;
@@ -1590,6 +1608,14 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           margin-bottom: 3px;
         }
         .floor-value-label {
+          top: 100%;
+          margin-top: 3px;
+        }
+        .generic-value-label[data-lane="above"] {
+          bottom: 100%;
+          margin-bottom: 3px;
+        }
+        .generic-value-label[data-lane="below"] {
           top: 100%;
           margin-top: 3px;
         }
@@ -1783,7 +1809,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           text-overflow: clip;
         }
         /* ── Shared marker base ── */
-        .peak-marker, .target-marker, .floor-marker {
+        .peak-marker, .target-marker, .floor-marker, .generic-marker {
           position: absolute;
           top: 0;
           bottom: 0;
@@ -1800,7 +1826,13 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         .floor-marker {
           z-index: 6;
         }
+        .generic-marker[data-lane="below"] {
+          z-index: 6;
+        }
         .peak-marker {
+          z-index: 7;
+        }
+        .generic-marker[data-lane="above"] {
           z-index: 7;
         }
         .needle-layer {
@@ -1838,7 +1870,11 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         .target-marker .target-inset,
         .target-marker .target-outset,
         .floor-marker .floor-inset,
-        .floor-marker .floor-outset {
+        .floor-marker .floor-outset,
+        .generic-marker[data-lane="above"] .peak-inset,
+        .generic-marker[data-lane="above"] .peak-outset,
+        .generic-marker[data-lane="below"] .target-inset,
+        .generic-marker[data-lane="below"] .target-outset {
           position: absolute;
           left: 50%;
           transform: translateX(-50%);
@@ -1846,7 +1882,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           height: 0;
         }
         /* Peak marker: large triangle intrudes into the bar, small one sits just above it. */
-        .peak-marker .peak-inset {
+        .peak-marker .peak-inset,
+        .generic-marker[data-lane="above"] .peak-inset {
           top: 0;
           border-left: 7px solid transparent;
           border-right: 7px solid transparent;
@@ -1856,7 +1893,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
             drop-shadow(0 0 1.2px var(--marker-contrast-color))
             drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
         }
-        .peak-marker .peak-outset {
+        .peak-marker .peak-outset,
+        .generic-marker[data-lane="above"] .peak-outset {
           top: -4px;
           border-left: 5px solid transparent;
           border-right: 5px solid transparent;
@@ -1864,7 +1902,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           z-index: 3;
         }
         /* Target marker: large triangle intrudes into the bar, small one sits just below it. */
-        .target-marker .target-inset {
+        .target-marker .target-inset,
+        .generic-marker[data-lane="below"] .target-inset {
           bottom: 0;
           border-left: 7px solid transparent;
           border-right: 7px solid transparent;
@@ -1874,7 +1913,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
             drop-shadow(0 0 1.2px var(--marker-contrast-color))
             drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
         }
-        .target-marker .target-outset {
+        .target-marker .target-outset,
+        .generic-marker[data-lane="below"] .target-outset {
           bottom: -4px;
           border-left: 5px solid transparent;
           border-right: 5px solid transparent;
@@ -1922,12 +1962,24 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           bottom: 0;
           transform: translateX(-50%);
         }
+        .generic-marker[data-lane="above"] .marker-shape-svg {
+          top: 0;
+          transform: translateX(-50%);
+        }
+        .generic-marker[data-lane="below"] .marker-shape-svg {
+          bottom: 0;
+          transform: translateX(-50%);
+        }
         .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-inset,
         .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-outset,
         .target-marker[data-shape]:not([data-shape="triangle"]) .target-inset,
         .target-marker[data-shape]:not([data-shape="triangle"]) .target-outset,
         .floor-marker[data-shape]:not([data-shape="triangle"]) .floor-inset,
-        .floor-marker[data-shape]:not([data-shape="triangle"]) .floor-outset {
+        .floor-marker[data-shape]:not([data-shape="triangle"]) .floor-outset,
+        .generic-marker[data-shape]:not([data-shape="triangle"]) .peak-inset,
+        .generic-marker[data-shape]:not([data-shape="triangle"]) .peak-outset,
+        .generic-marker[data-shape]:not([data-shape="triangle"]) .target-inset,
+        .generic-marker[data-shape]:not([data-shape="triangle"]) .target-outset {
           display: none;
         }
         .peak-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg,
@@ -1935,6 +1987,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           display: block;
         }
         .floor-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
+          display: block;
+        }
+        .generic-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
           display: block;
         }
         .marker-shape-svg path {
@@ -3243,6 +3298,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           this._positionTargetLabel(row);
           this._positionMarkerValueLabel(row, '.peak-value-label', '.peak-marker');
           this._positionMarkerValueLabel(row, '.floor-value-label', '.floor-marker');
+          this._positionGenericMarkerLabels(row);
         });
       });
     });
@@ -3397,6 +3453,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         if (marker.type === 'floor') {
           return marker;
         }
+        if (marker.type !== 'peak') return marker;
         return {
           ...marker,
           position: peakPct === undefined ? marker.position : peakPct,
@@ -3423,7 +3480,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
   }
 
   _getMarkerModel(markers, type) {
-    return markers.find((marker) => marker.type === type) ?? null;
+    return markers.find((marker) => marker.id === type || marker.type === type) ?? null;
   }
 
   _renderMarker(marker) {
@@ -3432,7 +3489,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     const color = marker.color ?? '#888888';
     const contrastColor = this._getMarkerContrastColor(color);
     const display = marker.visible ? '' : 'none';
-    const shape = normalizeMarkerShape(marker.shape, marker.type === 'target' ? 'diamond' : 'triangle');
+    const defaultShape = marker.type === 'target' ? 'diamond' : marker.type === 'generic' ? 'circle' : 'triangle';
+    const shape = normalizeMarkerShape(marker.shape, defaultShape);
     const lane = marker.lane ?? (marker.type === 'peak' ? 'above' : 'below');
     const shapePaths = `
       <path data-shape="circle" d="M8 1A7 7 0 1 0 8 15A7 7 0 1 0 8 1Z"></path>
@@ -3440,6 +3498,18 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       <path data-shape="chevron" d="M2 4L8 10L14 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
       <path data-shape="arrow" d="M6 1H10V8H14L8 15L2 8H6Z"></path>
       <path data-shape="pin" d="M8 15C7 13 2 10 2 6A6 6 0 1 1 14 6C14 10 9 13 8 15Z"></path>`;
+
+    if (marker.type === 'generic') {
+      const triangleClasses = lane === 'above'
+        ? ['peak-inset', 'peak-outset']
+        : ['target-inset', 'target-outset'];
+      return `
+      <div class="generic-marker" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+        <div class="${triangleClasses[0]}"></div>
+        <div class="${triangleClasses[1]}"></div>
+        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
+      </div>`;
+    }
 
     if (marker.type === 'target' || marker.type === 'floor') {
       const markerClass = `${marker.type}-marker`;
@@ -3462,7 +3532,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
   _patchMarker(markerEl, marker) {
     if (!markerEl || !marker) return;
 
-    const shape = normalizeMarkerShape(marker.shape, marker.type === 'peak' ? 'triangle' : 'diamond');
+    const defaultShape = marker.type === 'generic' ? 'circle' : marker.type === 'peak' || marker.type === 'floor' ? 'triangle' : 'diamond';
+    const shape = normalizeMarkerShape(marker.shape, defaultShape);
     this._setDatasetIfChanged(markerEl, 'shape', shape);
     this._setDatasetIfChanged(markerEl, 'lane', marker.lane ?? (marker.type === 'peak' ? 'above' : 'below'));
     const shapeSvg = markerEl.querySelector?.('.marker-shape-svg');
@@ -3511,6 +3582,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     const targetMarkerModel = this._getMarkerModel(markerModels, 'target');
     const peakMarkerModel = this._getMarkerModel(markerModels, 'peak');
     const floorMarkerModel = this._getMarkerModel(markerModels, 'floor');
+    const genericMarkerModels = markerModels.filter((marker) => marker.type === 'generic');
     const markerLaneOccupancy = rowViewModel?.markerLaneOccupancy ?? getMarkerLaneOccupancy(ecfg);
     const rawValue = rowViewModel?.numericValue ?? this._getFiniteNumber(stateDisplay);
     const needleState = rowViewModel?.needle ?? this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
@@ -3531,6 +3603,14 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;">
         ${floorMarkerModel.visible && floorMarkerModel.label?.text ? escapeHtml(floorMarkerModel.label.text) : ''}
       </div>` : '';
+    const genericMarkers = genericMarkerModels.map((marker) => this._renderMarker(marker)).join('');
+    const genericValueLabels = genericMarkerModels
+      .filter((marker) => marker.labelVisible)
+      .map((marker) => `
+      <div class="generic-value-label" data-marker-id="${escapeHtml(marker.id)}" data-lane="${marker.lane}" style="left:${Number.isFinite(marker.position) ? marker.position : 0}%">
+        ${marker.visible && marker.label?.text ? escapeHtml(marker.label.text) : ''}
+      </div>`)
+      .join('');
     const needleMarker = ecfg.bar?.needle?.show && !Number.isFinite(baselinePct) ? `
       <div class="needle-layer">
         <div class="needle-marker" data-edge="${needleState.edge}" style="left:${needleState.pct ?? 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? 'block' : 'none'};"></div>
@@ -3592,11 +3672,13 @@ ${paintLayers}
                 ${peakMarker}
                 ${targetMarker}
                 ${floorMarker}
+                ${genericMarkers}
                 ${needleMarker}
               </div>
               ${peakValueLabel}
               ${targetValueLabel}
               ${floorValueLabel}
+              ${genericValueLabels}
             </div>
             ${rightValue}
           </div>
@@ -3707,6 +3789,21 @@ ${paintLayers}
     this._patchMarker(targetEl, this._getMarkerModel(markerModels, 'target'));
     this._patchMarker(row.querySelector('.peak-marker'), this._getMarkerModel(markerModels, 'peak'));
     this._patchMarker(row.querySelector('.floor-marker'), this._getMarkerModel(markerModels, 'floor'));
+    (row.querySelectorAll?.('.generic-marker[data-marker-id]') ?? []).forEach((markerEl) => {
+      const markerId = markerEl.dataset.markerId;
+      const marker = this._getMarkerModel(markerModels, markerId);
+      this._patchMarker(markerEl, marker);
+      const labelEl = [...(row.querySelectorAll?.('.generic-value-label[data-marker-id]') ?? [])]
+        .find((label) => label.dataset.markerId === markerId);
+      if (!labelEl) return;
+      if (marker?.labelVisible && marker.visible) {
+        this._setTextIfChanged(labelEl, marker.label?.text ?? null);
+        this._setStyleIfChanged(labelEl, 'visibility', 'visible');
+        this._setStyleIfChanged(labelEl, 'left', `${Number.isFinite(marker.position) ? marker.position : 0}%`);
+      } else {
+        this._setStyleIfChanged(labelEl, 'visibility', 'hidden');
+      }
+    });
     const targetMarkerModel = this._getMarkerModel(markerModels, 'target');
     if (targetLabelEl) {
       if (targetMarkerModel?.labelVisible && targetMarkerModel.visible) {

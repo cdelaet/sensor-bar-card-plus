@@ -174,6 +174,160 @@ test('Floor shares the below lane with Target and renders extrema labels', async
   await expect(mount).toHaveScreenshot('floor-markers.png');
 });
 
+test('generic reference markers share both lanes with built-in markers', async ({ page }) => {
+  const mount = await render(page, {
+    width: 620,
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      title: 'Reference markers',
+      label_position: 'off',
+      min: 0,
+      max: 100,
+      formatting: { decimal: 0 },
+      target: { at: 25, label: { show: true } },
+      peak: { enabled: true, label: { show: true } },
+      floor: { enabled: true, label: { show: true } },
+      markers: [
+        { at: '65%', lane: 'above', shape: 'arrow', color: '#4488CC', label: { show: true } },
+        { at: { entity: 'sensor.reference_high' }, lane: 'above', shape: 'pin', color: '#F59E0B', label: { show: true, decimal: 1 } },
+        { at: { fixed: -20 }, lane: 'below', shape: 'circle', color: '#DC2626', label: { show: true } },
+        { at: { entity: 'sensor.reference_low', fixed: 80 }, lane: 'below', shape: 'chevron', color: '#14B8A6', label: { show: true, unit: false } },
+      ],
+      entities: [{ entity: 'sensor.reference_row' }],
+    },
+    states: {
+      'sensor.reference_row': sensor(42, { friendly_name: 'Grid power' }),
+      'sensor.reference_high': sensor(85, { friendly_name: 'High reference', unit_of_measurement: 'kW' }),
+      'sensor.reference_low': sensor(12, { friendly_name: 'Low reference', unit_of_measurement: 'kW' }),
+    },
+  });
+
+  const result = await page.evaluate(() => {
+    const row = document.querySelector('sensor-bar-card-plus').shadowRoot.querySelector('.row[data-entity="sensor.reference_row"]');
+    const mainLine = row.querySelector('.main-line');
+    return {
+      lanes: [mainLine.dataset.markerLaneAbove, mainLine.dataset.markerLaneBelow],
+      generic: [...row.querySelectorAll('.generic-marker')].map((marker) => ({
+        id: marker.dataset.markerId,
+        shape: marker.dataset.shape,
+        lane: marker.dataset.lane,
+        left: marker.style.left,
+      })),
+      labels: [...row.querySelectorAll('.generic-value-label')].map((label) => label.textContent.trim()),
+      builtins: ['.target-marker', '.peak-marker', '.floor-marker'].map((selector) => Boolean(row.querySelector(selector))),
+    };
+  });
+
+  expect(result.lanes).toEqual(['true', 'true']);
+  expect(result.generic).toEqual([
+    { id: 'generic-0', shape: 'arrow', lane: 'above', left: '65%' },
+    { id: 'generic-1', shape: 'pin', lane: 'above', left: '85%' },
+    { id: 'generic-2', shape: 'circle', lane: 'below', left: '0%' },
+    { id: 'generic-3', shape: 'chevron', lane: 'below', left: '12%' },
+  ]);
+  expect(result.labels).toEqual(['65 W', '85.0 W', '-20 W', '12']);
+  expect(result.builtins).toEqual([true, true, true]);
+  await expect(mount).toHaveScreenshot('generic-reference-markers.png');
+});
+
+test('generic marker DOM identity survives unresolved and resolved source updates', async ({ page }) => {
+  await render(page, {
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      title: 'Dynamic reference lifecycle',
+      label_position: 'off',
+      min: 0,
+      max: 100,
+      formatting: { decimal: 0 },
+      markers: [{ at: { entity: 'sensor.dynamic_limit' }, lane: 'above', label: { show: true } }],
+      entities: [{ entity: 'sensor.reference_row' }],
+    },
+    states: {
+      'sensor.reference_row': sensor(20, { friendly_name: 'Reference row' }),
+      'sensor.dynamic_limit': sensor('unavailable'),
+    },
+  });
+
+  const readMarker = () => page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    const row = card.shadowRoot.querySelector('.row[data-entity="sensor.reference_row"]');
+    const marker = row.querySelector('.generic-marker[data-marker-id="generic-0"]');
+    const label = row.querySelector('.generic-value-label[data-marker-id="generic-0"]');
+    return {
+      sameNode: window.__genericMarkerNode === marker,
+      connected: marker?.isConnected ?? false,
+      display: marker?.style.display ?? null,
+      position: marker?.style.left ?? null,
+      labelVisibility: label?.style.visibility ?? null,
+      label: label?.textContent.trim() ?? null,
+      aboveOccupied: row.querySelector('.main-line')?.dataset.markerLaneAbove ?? null,
+    };
+  });
+  const retainMarker = () => page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    window.__genericMarkerNode = card.shadowRoot.querySelector('.generic-marker[data-marker-id="generic-0"]');
+  });
+  const updateLimit = async (state) => {
+    await page.evaluate((nextState) => {
+      const card = document.querySelector('sensor-bar-card-plus');
+      card.hass = {
+        states: {
+          'sensor.reference_row': window.__sbcpCreateState(20, {
+            friendly_name: 'Reference row',
+            unit_of_measurement: 'W',
+          }),
+          'sensor.dynamic_limit': window.__sbcpCreateState(nextState),
+        },
+      };
+    }, state);
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  };
+
+  await retainMarker();
+  expect(await readMarker()).toEqual({
+    sameNode: true,
+    connected: true,
+    display: 'none',
+    position: '0%',
+    labelVisibility: 'hidden',
+    label: '',
+    aboveOccupied: 'true',
+  });
+
+  await updateLimit(35);
+  expect(await readMarker()).toEqual({
+    sameNode: true,
+    connected: true,
+    display: '',
+    position: '35%',
+    labelVisibility: 'visible',
+    label: '35 W',
+    aboveOccupied: 'true',
+  });
+
+  await updateLimit('unknown');
+  expect(await readMarker()).toEqual({
+    sameNode: true,
+    connected: true,
+    display: 'none',
+    position: '35%',
+    labelVisibility: 'hidden',
+    label: '35 W',
+    aboveOccupied: 'true',
+  });
+
+  await updateLimit(72);
+  expect(await readMarker()).toEqual({
+    sameNode: true,
+    connected: true,
+    display: '',
+    position: '72%',
+    labelVisibility: 'visible',
+    label: '72 W',
+    aboveOccupied: 'true',
+  });
+});
+
 test('target marker defaults to diamond and supports explicit triangle overrides', async ({ page }) => {
   const mount = await render(page, {
     width: 720,

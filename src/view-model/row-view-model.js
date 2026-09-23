@@ -230,6 +230,27 @@ export function buildRowViewModel(options) {
   const floorPresentation = floorState.visible
     ? createNumericPresentation(floorState.value, targetUnit, floorDecimal)
     : null;
+  const genericMarkers = (entityConfig?.generic_markers ?? [])
+    .filter((marker) => marker.accepted)
+    .map((marker) => {
+      const value = getNormalizedResolvableNumericValue(hass, marker.source, safeMin, safeMax);
+      const visible = Number.isFinite(value);
+      const markerDecimal = marker.label.decimal ?? decimal;
+      const label = visible && marker.label.show
+        ? createNumericPresentation(value, marker.label.unit ? targetUnit : '', markerDecimal)
+        : null;
+      return {
+        id: marker.id,
+        value,
+        position: visible ? toScalePct(value, safeMin, safeMax) : null,
+        lane: marker.lane,
+        visible,
+        color: marker.color,
+        shape: marker.shape,
+        label,
+        labelVisible: marker.label.show,
+      };
+    });
   const markers = buildMarkerModels({
     entityConfig,
     targetValue,
@@ -244,6 +265,7 @@ export function buildRowViewModel(options) {
     floorPosition: floorState.percent,
     floorPresentation,
     floorVisible: floorState.visible,
+    genericMarkers,
   });
 
   return {

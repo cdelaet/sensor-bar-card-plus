@@ -2824,6 +2824,46 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(card._shouldUpdate(oldHass, newHass)).toBe(true);
   });
 
+  it('watches effective generic sources after setConfig replaces inherited markers', () => {
+    const card = createCard();
+    card._render = () => {};
+    card.setConfig({
+      markers: [{ at: { entity: 'sensor.old_limit' } }],
+      entities: [{ entity: 'sensor.row' }],
+    });
+
+    const primary = { state: '20', attributes: {} };
+    const oldLimit = { state: '40', attributes: {} };
+    const newLimit = { state: '60', attributes: {} };
+    card._hass = { states: {
+      'sensor.row': primary,
+      'sensor.old_limit': oldLimit,
+      'sensor.new_limit': newLimit,
+    } };
+    const entityOverride = {
+      markers: [{ at: { entity: 'sensor.new_limit' } }],
+    };
+    card.setConfig({
+      markers: [{ at: { entity: 'sensor.old_limit' } }],
+      entities: [{ entity: 'sensor.row', ...entityOverride }],
+    });
+
+    const oldSourceOnlyChanged = { states: {
+      'sensor.row': primary,
+      'sensor.old_limit': { state: '41', attributes: {} },
+      'sensor.new_limit': newLimit,
+    } };
+    const newSourceChanged = { states: {
+      'sensor.row': primary,
+      'sensor.old_limit': oldLimit,
+      'sensor.new_limit': { state: '61', attributes: {} },
+    } };
+
+    expect(card._config.entities[0].generic_markers.map((marker) => marker.source.entity)).toEqual(['sensor.new_limit']);
+    expect(card._shouldUpdate(card._hass, oldSourceOnlyChanged)).toBe(false);
+    expect(card._shouldUpdate(card._hass, newSourceChanged)).toBe(true);
+  });
+
   it('supports baseline direction color shorthand and expanded color objects', () => {
     const card = createCard();
     const shorthandCfg = card.normalizeCardConfig({

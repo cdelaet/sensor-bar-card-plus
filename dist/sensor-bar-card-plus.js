@@ -196,6 +196,65 @@
     }
     return normalizeResolvableValue(input, null);
   }
+  function normalizeGenericMarkerList(input) {
+    if (!Array.isArray(input)) {
+      return { markers: [], invalidList: input !== void 0 };
+    }
+    const markers = input.map((rawMarker, index) => {
+      var _a;
+      if (!rawMarker || typeof rawMarker !== "object" || Array.isArray(rawMarker)) {
+        return { id: `generic-${index}`, index, valid: false, accepted: false, malformed: true };
+      }
+      const rawAt = rawMarker.at;
+      const hasUnsupportedPercentField = rawAt && typeof rawAt === "object" && Object.prototype.hasOwnProperty.call(rawAt, "percent");
+      const atInput = typeof rawAt === "string" ? rawAt.trim() : rawAt;
+      const source = normalizeStructuredResolvableValue(atInput, null, null, { allowPercent: true });
+      const explicitEntity = rawAt && typeof rawAt === "object" && rawAt.entity !== void 0 ? rawAt.entity : typeof atInput === "string" && looksLikeEntityId(atInput) ? atInput : null;
+      const invalidEntity = explicitEntity !== null && explicitEntity !== void 0 && explicitEntity !== "" && !looksLikeEntityId(explicitEntity);
+      const invalidFixed = rawAt && typeof rawAt === "object" && rawAt.fixed !== void 0 && rawAt.fixed !== null && getFiniteNumber(rawAt.fixed) === null;
+      const hasSource = !!source.entity || getFiniteNumber(source.fixed) !== null || Number.isFinite(source.percent);
+      const invalidPercentage = Number.isFinite(source.percent) && (source.percent < 0 || source.percent > 100);
+      const validSource = rawAt !== void 0 && rawAt !== null && !hasUnsupportedPercentField && !invalidEntity && !invalidFixed && hasSource && !invalidPercentage;
+      const lane = rawMarker.lane === void 0 ? "below" : rawMarker.lane;
+      const validLane = lane === "above" || lane === "below";
+      const supportedShapes = ["circle", "diamond", "triangle", "chevron", "arrow", "pin"];
+      const validShape = rawMarker.shape === void 0 || supportedShapes.includes(rawMarker.shape);
+      const label = rawMarker.label && typeof rawMarker.label === "object" && !Array.isArray(rawMarker.label) ? rawMarker.label : {};
+      const decimal = label.decimal === void 0 ? null : getFiniteNumber(label.decimal);
+      const validDecimal = decimal === null || Number.isInteger(decimal) && decimal >= 0;
+      return {
+        id: `generic-${index}`,
+        index,
+        source: {
+          ...source,
+          entity: typeof source.entity === "string" ? source.entity.trim() : source.entity
+        },
+        lane: validLane ? lane : null,
+        shape: validShape ? (_a = rawMarker.shape) != null ? _a : "circle" : "circle",
+        color: typeof rawMarker.color === "string" && rawMarker.color.trim() ? rawMarker.color : "#888888",
+        label: {
+          show: label.show === true,
+          decimal: validDecimal ? decimal : null,
+          unit: label.unit !== false
+        },
+        valid: validSource && validLane,
+        invalidSource: !validSource,
+        invalidPercentage,
+        unsupportedPercentField: hasUnsupportedPercentField,
+        invalidLane: !validLane,
+        invalidShape: !validShape,
+        invalidDecimal: !validDecimal,
+        accepted: false
+      };
+    });
+    const laneCounts = { above: 0, below: 0 };
+    for (const marker of markers) {
+      if (!marker.valid) continue;
+      if (laneCounts[marker.lane] < 2) marker.accepted = true;
+      laneCounts[marker.lane] += 1;
+    }
+    return { markers, invalidList: false };
+  }
   function normalizeBaselineDirectionConfig(input, inheritedDirection = null) {
     var _a;
     const inherited = inheritedDirection != null ? inheritedDirection : { color: null };
@@ -640,7 +699,7 @@
     return normalizeExtremumMarkerConfig(entityConfig, cardConfig, "floor", { defaultColor: "#888888" });
   }
   function normalizeEntityConfig(entityConfig, cardConfig) {
-    var _a;
+    var _a, _b;
     const normalizedEntity = {
       ...entityConfig,
       _normalized: true,
@@ -656,6 +715,9 @@
     normalizedEntity.target_marker = normalizeTargetMarkerConfig(entityConfig, cardConfig);
     normalizedEntity.peak_marker = normalizePeakMarkerConfig(entityConfig, cardConfig);
     normalizedEntity.floor_marker = normalizeFloorMarkerConfig(entityConfig, cardConfig);
+    const normalizedMarkers = entityConfig.markers === void 0 ? { markers: (_b = cardConfig == null ? void 0 : cardConfig.generic_markers) != null ? _b : [], invalidList: (cardConfig == null ? void 0 : cardConfig.generic_markers_invalid) === true } : normalizeGenericMarkerList(entityConfig.markers);
+    normalizedEntity.generic_markers = normalizedMarkers.markers;
+    normalizedEntity.generic_markers_invalid = normalizedMarkers.invalidList;
     normalizedEntity.min = normalizedEntity.scale.min.fixed;
     normalizedEntity.min_entity = normalizedEntity.scale.min.entity;
     normalizedEntity.max = normalizedEntity.scale.max.fixed;
@@ -734,6 +796,9 @@
     normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);
     normalizedCard.peak_marker = normalizePeakMarkerConfig(baseConfig, null);
     normalizedCard.floor_marker = normalizeFloorMarkerConfig(baseConfig, null);
+    const normalizedMarkers = normalizeGenericMarkerList(baseConfig.markers);
+    normalizedCard.generic_markers = normalizedMarkers.markers;
+    normalizedCard.generic_markers_invalid = normalizedMarkers.invalidList;
     normalizedCard.entities = baseConfig.entities.map(
       (entityCfg) => normalizeEntityConfig(entityCfg, normalizedCard)
     );
@@ -856,6 +921,39 @@
       }
     }
   }
+  function validateGenericMarkers(diagnostics, markers, invalidList, path, entity = null) {
+    if (invalidList) {
+      addWarning(diagnostics, "markers.invalid_list", "Markers must be a list; ignoring the malformed value.", path, entity);
+    }
+    for (const marker of markers != null ? markers : []) {
+      const markerPath = `${path}[${marker.index}]`;
+      if (marker.malformed) {
+        addWarning(diagnostics, "markers.invalid_item", "Marker must be an object; ignoring this item.", markerPath, entity);
+        continue;
+      }
+      if (marker.invalidSource && !marker.invalidPercentage && !marker.unsupportedPercentField) {
+        addWarning(diagnostics, "markers.invalid_source", "Marker requires a valid fixed value, percentage, or entity source.", `${markerPath}.at`, entity);
+      }
+      if (marker.invalidPercentage) {
+        addWarning(diagnostics, "markers.invalid_percentage", "Marker percentage must be between 0 and 100 inclusive.", `${markerPath}.at`, entity);
+      }
+      if (marker.unsupportedPercentField) {
+        addWarning(diagnostics, "markers.invalid_source", 'Use a percentage string such as "35%" instead of an at.percent field.', `${markerPath}.at`, entity);
+      }
+      if (marker.invalidLane) {
+        addWarning(diagnostics, "markers.invalid_lane", "Marker lane must be above or below; ignoring this marker.", `${markerPath}.lane`, entity);
+      }
+      if (marker.invalidShape) {
+        addWarning(diagnostics, "markers.invalid_shape", "Invalid marker shape; using circle.", `${markerPath}.shape`, entity);
+      }
+      if (marker.invalidDecimal) {
+        addWarning(diagnostics, "markers.invalid_decimal", "Marker label decimal must be a non-negative integer; inheriting row precision.", `${markerPath}.label.decimal`, entity);
+      }
+      if (marker.valid && !marker.accepted) {
+        addWarning(diagnostics, "markers.excess_capacity", `Only the first two valid markers in the ${marker.lane} lane are rendered.`, markerPath, entity);
+      }
+    }
+  }
   function getStaticSegmentBound(boundary) {
     var _a;
     if (!boundary || boundary.entity || Number.isFinite(boundary.percent)) return null;
@@ -945,6 +1043,7 @@
       return diagnostics;
     }
     validateConfigScope(diagnostics, config, "card");
+    validateGenericMarkers(diagnostics, config.generic_markers, config.generic_markers_invalid, "markers");
     const seenEntities = /* @__PURE__ */ new Set();
     const entities = Array.isArray(config.entities) ? config.entities : [];
     for (let index = 0; index < entities.length; index += 1) {
@@ -961,6 +1060,15 @@
         seenEntities.add(entityId);
       }
       validateConfigScope(diagnostics, entityConfig, path, entityId);
+      if (Object.prototype.hasOwnProperty.call(entityConfig, "markers")) {
+        validateGenericMarkers(
+          diagnostics,
+          entityConfig.generic_markers,
+          entityConfig.generic_markers_invalid,
+          `${path}.markers`,
+          entityId
+        );
+      }
     }
     return diagnostics;
   }
@@ -1047,12 +1155,14 @@
     };
   }
   function getMarkerLaneOccupancy(entityConfig) {
+    var _a;
     const targetConfig = entityConfig == null ? void 0 : entityConfig.target_marker;
     const peakConfig = entityConfig == null ? void 0 : entityConfig.peak_marker;
     const floorConfig = entityConfig == null ? void 0 : entityConfig.floor_marker;
+    const genericMarkers = ((_a = entityConfig == null ? void 0 : entityConfig.generic_markers) != null ? _a : []).filter((marker) => marker.accepted);
     return {
-      above: (peakConfig == null ? void 0 : peakConfig.show) === true,
-      below: (targetConfig == null ? void 0 : targetConfig.enabled) !== false && hasConfiguredSource(targetConfig == null ? void 0 : targetConfig.source) || (floorConfig == null ? void 0 : floorConfig.show) === true
+      below: (targetConfig == null ? void 0 : targetConfig.enabled) !== false && hasConfiguredSource(targetConfig == null ? void 0 : targetConfig.source) || (floorConfig == null ? void 0 : floorConfig.show) === true || genericMarkers.some((marker) => marker.lane === "below"),
+      above: (peakConfig == null ? void 0 : peakConfig.show) === true || genericMarkers.some((marker) => marker.lane === "above")
     };
   }
   function buildMarkerModels({
@@ -1068,7 +1178,8 @@
     floorValue = null,
     floorPosition = null,
     floorPresentation = null,
-    floorVisible = Number.isFinite(floorPosition)
+    floorVisible = Number.isFinite(floorPosition),
+    genericMarkers = []
   }) {
     var _a, _b, _c, _d;
     const targetConfig = entityConfig == null ? void 0 : entityConfig.target_marker;
@@ -1111,7 +1222,19 @@
         label: peakPresentation,
         labelVisible: (peakConfig == null ? void 0 : peakConfig.show) === true && (peakConfig == null ? void 0 : peakConfig.show_label) === true,
         shape: "triangle"
-      })
+      }),
+      ...genericMarkers.map((marker) => createMarkerModel({
+        id: marker.id,
+        type: "generic",
+        value: marker.value,
+        position: marker.position,
+        lane: marker.lane,
+        visible: marker.visible,
+        color: marker.color,
+        label: marker.label,
+        labelVisible: marker.labelVisible,
+        shape: marker.shape
+      }))
     ];
   }
   var MARKER_SHAPES;
@@ -1249,7 +1372,7 @@
     };
   }
   function buildRowViewModel(options) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W;
     const {
       hass,
       cardConfig,
@@ -1302,6 +1425,24 @@
     const floorDecimal = (_w = (_v = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _v.label_decimal) != null ? _w : decimal;
     const peakPresentation = peakState.visible ? createNumericPresentation(peakState.value, targetUnit, peakDecimal) : null;
     const floorPresentation = floorState.visible ? createNumericPresentation(floorState.value, targetUnit, floorDecimal) : null;
+    const genericMarkers = ((_x = entityConfig == null ? void 0 : entityConfig.generic_markers) != null ? _x : []).filter((marker) => marker.accepted).map((marker) => {
+      var _a2;
+      const value = getNormalizedResolvableNumericValue(hass, marker.source, safeMin, safeMax);
+      const visible = Number.isFinite(value);
+      const markerDecimal = (_a2 = marker.label.decimal) != null ? _a2 : decimal;
+      const label = visible && marker.label.show ? createNumericPresentation(value, marker.label.unit ? targetUnit : "", markerDecimal) : null;
+      return {
+        id: marker.id,
+        value,
+        position: visible ? toScalePct(value, safeMin, safeMax) : null,
+        lane: marker.lane,
+        visible,
+        color: marker.color,
+        shape: marker.shape,
+        label,
+        labelVisible: marker.label.show
+      };
+    });
     const markers = buildMarkerModels({
       entityConfig,
       targetValue,
@@ -1315,12 +1456,13 @@
       floorValue: floorState.value,
       floorPosition: floorState.percent,
       floorPresentation,
-      floorVisible: floorState.visible
+      floorVisible: floorState.visible,
+      genericMarkers
     });
     return {
       entityId,
-      name: (_z = (_y = entityConfig == null ? void 0 : entityConfig.name) != null ? _y : (_x = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _x.friendly_name) != null ? _z : entityId,
-      icon: (entityConfig == null ? void 0 : entityConfig.icon) === false ? false : (_C = (_B = entityConfig == null ? void 0 : entityConfig.icon) != null ? _B : (_A = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _A.icon) != null ? _C : getDefaultEntityIcon(entityState, entityId),
+      name: (_A = (_z = entityConfig == null ? void 0 : entityConfig.name) != null ? _z : (_y = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _y.friendly_name) != null ? _A : entityId,
+      icon: (entityConfig == null ? void 0 : entityConfig.icon) === false ? false : (_D = (_C = entityConfig == null ? void 0 : entityConfig.icon) != null ? _C : (_B = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _B.icon) != null ? _D : getDefaultEntityIcon(entityState, entityId),
       state: rawState,
       numericValue,
       rawUnit,
@@ -1331,11 +1473,11 @@
       displayUnit: primaryPresentation.unit,
       primaryPresentation,
       unit: primaryPresentation.unit,
-      barColor: (_E = (_D = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _D.color) != null ? _E : null,
-      fillStyle: (_G = (_F = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _F.fill_style) != null ? _G : null,
+      barColor: (_F = (_E = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _E.color) != null ? _F : null,
+      fillStyle: (_H = (_G = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _G.fill_style) != null ? _H : null,
       target: targetValue,
       targetPercent,
-      targetDisplay: (_H = targetPresentation == null ? void 0 : targetPresentation.text) != null ? _H : null,
+      targetDisplay: (_I = targetPresentation == null ? void 0 : targetPresentation.text) != null ? _I : null,
       targetPresentation,
       targetVisible,
       baseline: baselineValue,
@@ -1343,28 +1485,28 @@
       baselineVisible,
       peak: peakState.value,
       peakPercent: peakState.percent,
-      peakDisplay: (_I = peakPresentation == null ? void 0 : peakPresentation.number) != null ? _I : null,
+      peakDisplay: (_J = peakPresentation == null ? void 0 : peakPresentation.number) != null ? _J : null,
       peakPresentation,
       peakVisible: peakState.visible,
       floor: floorState.value,
       floorPercent: floorState.percent,
-      floorDisplay: (_J = floorPresentation == null ? void 0 : floorPresentation.number) != null ? _J : null,
+      floorDisplay: (_K = floorPresentation == null ? void 0 : floorPresentation.number) != null ? _K : null,
       floorPresentation,
       floorVisible: floorState.visible,
       markers,
       markerLaneOccupancy: getMarkerLaneOccupancy(entityConfig),
-      segments: (_L = (_K = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _K.segments) != null ? _L : null,
-      gradientStops: (_N = (_M = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _M.gradient_stops) != null ? _N : null,
+      segments: (_M = (_L = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _L.segments) != null ? _M : null,
+      gradientStops: (_O = (_N = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _N.gradient_stops) != null ? _O : null,
       needle: getNeedleState(entityConfig, numericValue, safeMin, safeMax, baselinePercent),
       classes: {
-        labelPosition: (_Q = (_P = (_O = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _O.label) == null ? void 0 : _P.position) != null ? _Q : "left",
-        animated: ((_R = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _R.animated) !== false
+        labelPosition: (_R = (_Q = (_P = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _P.label) == null ? void 0 : _Q.position) != null ? _R : "left",
+        animated: ((_S = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _S.animated) !== false
       },
       attributes: {
         entity: entityId,
-        baseHeight: (_T = (_S = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _S.height) != null ? _T : 38,
-        heightExplicit: ((_U = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _U.height_explicit) === true,
-        barAnimated: ((_V = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _V.animated) !== false
+        baseHeight: (_U = (_T = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _T.height) != null ? _U : 38,
+        heightExplicit: ((_V = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _V.height_explicit) === true,
+        barAnimated: ((_W = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _W.animated) !== false
       }
     };
   }
@@ -1679,7 +1821,7 @@
           return (_c = domainIcons[domain]) != null ? _c : null;
         }
         _shouldUpdate(oldHass, newHass) {
-          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
           if (!this._config || !this._config.entities) return true;
           for (const entityCfg of this._config.entities) {
             const ecfg = this._resolve(entityCfg);
@@ -1688,11 +1830,15 @@
               (_b = (_a = ecfg.scale) == null ? void 0 : _a.min) == null ? void 0 : _b.entity,
               (_d = (_c = ecfg.scale) == null ? void 0 : _c.max) == null ? void 0 : _d.entity,
               (_f = (_e = ecfg.baseline) == null ? void 0 : _e.at) == null ? void 0 : _f.entity,
-              (_h = (_g = ecfg.target_marker) == null ? void 0 : _g.source) == null ? void 0 : _h.entity
+              (_h = (_g = ecfg.target_marker) == null ? void 0 : _g.source) == null ? void 0 : _h.entity,
+              ...((_i = ecfg.generic_markers) != null ? _i : []).filter((marker) => marker.accepted).map((marker) => {
+                var _a2;
+                return (_a2 = marker.source) == null ? void 0 : _a2.entity;
+              })
             ].filter(Boolean);
             for (const ent of entitiesToWatch) {
-              const oldState = (_i = oldHass.states[ent]) != null ? _i : null;
-              const newState = (_j = newHass.states[ent]) != null ? _j : null;
+              const oldState = (_j = oldHass.states[ent]) != null ? _j : null;
+              const newState = (_k = newHass.states[ent]) != null ? _k : null;
               if (oldState !== newState) {
                 return true;
               }
@@ -1759,6 +1905,18 @@
             this._positionTargetLabel(row);
             this._positionMarkerValueLabel(row, ".peak-value-label", ".peak-marker");
             this._positionMarkerValueLabel(row, ".floor-value-label", ".floor-marker");
+            this._positionGenericMarkerLabels(row);
+          });
+        }
+        _positionGenericMarkerLabels(row) {
+          var _a, _b;
+          ((_b = (_a = row.querySelectorAll) == null ? void 0 : _a.call(row, ".generic-value-label[data-marker-id]")) != null ? _b : []).forEach((label) => {
+            const id = label.dataset.markerId;
+            this._positionMarkerValueLabel(
+              row,
+              `.generic-value-label[data-marker-id="${id}"]`,
+              `.generic-marker[data-marker-id="${id}"]`
+            );
           });
         }
         _positionTargetLabel(row) {
@@ -2490,9 +2648,11 @@
         .row[data-bar-animated="false"] .target-marker,
         .row[data-bar-animated="false"] .peak-marker,
         .row[data-bar-animated="false"] .floor-marker,
+        .row[data-bar-animated="false"] .generic-marker,
         .row[data-bar-animated="false"] .target-value-label,
         .row[data-bar-animated="false"] .peak-value-label,
-        .row[data-bar-animated="false"] .floor-value-label {
+        .row[data-bar-animated="false"] .floor-value-label,
+        .row[data-bar-animated="false"] .generic-value-label {
           transition: none;
         }
         .row[data-bar-animated="false"] .target-value-label {
@@ -2638,7 +2798,8 @@
           transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
         }
         .peak-value-label,
-        .floor-value-label {
+        .floor-value-label,
+        .generic-value-label {
           position: absolute;
           font-size: var(--sbcp-target-label-font-size);
           line-height: 1;
@@ -2657,6 +2818,14 @@
           margin-bottom: 3px;
         }
         .floor-value-label {
+          top: 100%;
+          margin-top: 3px;
+        }
+        .generic-value-label[data-lane="above"] {
+          bottom: 100%;
+          margin-bottom: 3px;
+        }
+        .generic-value-label[data-lane="below"] {
           top: 100%;
           margin-top: 3px;
         }
@@ -2850,7 +3019,7 @@
           text-overflow: clip;
         }
         /* \u2500\u2500 Shared marker base \u2500\u2500 */
-        .peak-marker, .target-marker, .floor-marker {
+        .peak-marker, .target-marker, .floor-marker, .generic-marker {
           position: absolute;
           top: 0;
           bottom: 0;
@@ -2867,7 +3036,13 @@
         .floor-marker {
           z-index: 6;
         }
+        .generic-marker[data-lane="below"] {
+          z-index: 6;
+        }
         .peak-marker {
+          z-index: 7;
+        }
+        .generic-marker[data-lane="above"] {
           z-index: 7;
         }
         .needle-layer {
@@ -2905,7 +3080,11 @@
         .target-marker .target-inset,
         .target-marker .target-outset,
         .floor-marker .floor-inset,
-        .floor-marker .floor-outset {
+        .floor-marker .floor-outset,
+        .generic-marker[data-lane="above"] .peak-inset,
+        .generic-marker[data-lane="above"] .peak-outset,
+        .generic-marker[data-lane="below"] .target-inset,
+        .generic-marker[data-lane="below"] .target-outset {
           position: absolute;
           left: 50%;
           transform: translateX(-50%);
@@ -2913,7 +3092,8 @@
           height: 0;
         }
         /* Peak marker: large triangle intrudes into the bar, small one sits just above it. */
-        .peak-marker .peak-inset {
+        .peak-marker .peak-inset,
+        .generic-marker[data-lane="above"] .peak-inset {
           top: 0;
           border-left: 7px solid transparent;
           border-right: 7px solid transparent;
@@ -2923,7 +3103,8 @@
             drop-shadow(0 0 1.2px var(--marker-contrast-color))
             drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
         }
-        .peak-marker .peak-outset {
+        .peak-marker .peak-outset,
+        .generic-marker[data-lane="above"] .peak-outset {
           top: -4px;
           border-left: 5px solid transparent;
           border-right: 5px solid transparent;
@@ -2931,7 +3112,8 @@
           z-index: 3;
         }
         /* Target marker: large triangle intrudes into the bar, small one sits just below it. */
-        .target-marker .target-inset {
+        .target-marker .target-inset,
+        .generic-marker[data-lane="below"] .target-inset {
           bottom: 0;
           border-left: 7px solid transparent;
           border-right: 7px solid transparent;
@@ -2941,7 +3123,8 @@
             drop-shadow(0 0 1.2px var(--marker-contrast-color))
             drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
         }
-        .target-marker .target-outset {
+        .target-marker .target-outset,
+        .generic-marker[data-lane="below"] .target-outset {
           bottom: -4px;
           border-left: 5px solid transparent;
           border-right: 5px solid transparent;
@@ -2989,12 +3172,24 @@
           bottom: 0;
           transform: translateX(-50%);
         }
+        .generic-marker[data-lane="above"] .marker-shape-svg {
+          top: 0;
+          transform: translateX(-50%);
+        }
+        .generic-marker[data-lane="below"] .marker-shape-svg {
+          bottom: 0;
+          transform: translateX(-50%);
+        }
         .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-inset,
         .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-outset,
         .target-marker[data-shape]:not([data-shape="triangle"]) .target-inset,
         .target-marker[data-shape]:not([data-shape="triangle"]) .target-outset,
         .floor-marker[data-shape]:not([data-shape="triangle"]) .floor-inset,
-        .floor-marker[data-shape]:not([data-shape="triangle"]) .floor-outset {
+        .floor-marker[data-shape]:not([data-shape="triangle"]) .floor-outset,
+        .generic-marker[data-shape]:not([data-shape="triangle"]) .peak-inset,
+        .generic-marker[data-shape]:not([data-shape="triangle"]) .peak-outset,
+        .generic-marker[data-shape]:not([data-shape="triangle"]) .target-inset,
+        .generic-marker[data-shape]:not([data-shape="triangle"]) .target-outset {
           display: none;
         }
         .peak-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg,
@@ -3002,6 +3197,9 @@
           display: block;
         }
         .floor-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
+          display: block;
+        }
+        .generic-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
           display: block;
         }
         .marker-shape-svg path {
@@ -4137,6 +4335,7 @@
                 this._positionTargetLabel(row);
                 this._positionMarkerValueLabel(row, ".peak-value-label", ".peak-marker");
                 this._positionMarkerValueLabel(row, ".floor-value-label", ".floor-marker");
+                this._positionGenericMarkerLabels(row);
               });
             });
           });
@@ -4265,6 +4464,7 @@
               if (marker.type === "floor") {
                 return marker;
               }
+              if (marker.type !== "peak") return marker;
               return {
                 ...marker,
                 position: peakPct === void 0 ? marker.position : peakPct,
@@ -4291,7 +4491,7 @@
         }
         _getMarkerModel(markers, type) {
           var _a;
-          return (_a = markers.find((marker) => marker.type === type)) != null ? _a : null;
+          return (_a = markers.find((marker) => marker.id === type || marker.type === type)) != null ? _a : null;
         }
         _renderMarker(marker) {
           var _a, _b;
@@ -4300,7 +4500,8 @@
           const color = (_a = marker.color) != null ? _a : "#888888";
           const contrastColor = this._getMarkerContrastColor(color);
           const display = marker.visible ? "" : "none";
-          const shape = normalizeMarkerShape(marker.shape, marker.type === "target" ? "diamond" : "triangle");
+          const defaultShape = marker.type === "target" ? "diamond" : marker.type === "generic" ? "circle" : "triangle";
+          const shape = normalizeMarkerShape(marker.shape, defaultShape);
           const lane = (_b = marker.lane) != null ? _b : marker.type === "peak" ? "above" : "below";
           const shapePaths = `
       <path data-shape="circle" d="M8 1A7 7 0 1 0 8 15A7 7 0 1 0 8 1Z"></path>
@@ -4308,6 +4509,15 @@
       <path data-shape="chevron" d="M2 4L8 10L14 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
       <path data-shape="arrow" d="M6 1H10V8H14L8 15L2 8H6Z"></path>
       <path data-shape="pin" d="M8 15C7 13 2 10 2 6A6 6 0 1 1 14 6C14 10 9 13 8 15Z"></path>`;
+          if (marker.type === "generic") {
+            const triangleClasses = lane === "above" ? ["peak-inset", "peak-outset"] : ["target-inset", "target-outset"];
+            return `
+      <div class="generic-marker" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+        <div class="${triangleClasses[0]}"></div>
+        <div class="${triangleClasses[1]}"></div>
+        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
+      </div>`;
+          }
           if (marker.type === "target" || marker.type === "floor") {
             const markerClass = `${marker.type}-marker`;
             return `
@@ -4327,7 +4537,8 @@
         _patchMarker(markerEl, marker) {
           var _a, _b, _c;
           if (!markerEl || !marker) return;
-          const shape = normalizeMarkerShape(marker.shape, marker.type === "peak" ? "triangle" : "diamond");
+          const defaultShape = marker.type === "generic" ? "circle" : marker.type === "peak" || marker.type === "floor" ? "triangle" : "diamond";
+          const shape = normalizeMarkerShape(marker.shape, defaultShape);
           this._setDatasetIfChanged(markerEl, "shape", shape);
           this._setDatasetIfChanged(markerEl, "lane", (_a = marker.lane) != null ? _a : marker.type === "peak" ? "above" : "below");
           const shapeSvg = (_b = markerEl.querySelector) == null ? void 0 : _b.call(markerEl, ".marker-shape-svg");
@@ -4370,6 +4581,7 @@
           const targetMarkerModel = this._getMarkerModel(markerModels, "target");
           const peakMarkerModel = this._getMarkerModel(markerModels, "peak");
           const floorMarkerModel = this._getMarkerModel(markerModels, "floor");
+          const genericMarkerModels = markerModels.filter((marker) => marker.type === "generic");
           const markerLaneOccupancy = (_m = rowViewModel == null ? void 0 : rowViewModel.markerLaneOccupancy) != null ? _m : getMarkerLaneOccupancy(ecfg);
           const rawValue = (_n = rowViewModel == null ? void 0 : rowViewModel.numericValue) != null ? _n : this._getFiniteNumber(stateDisplay);
           const needleState = (_o = rowViewModel == null ? void 0 : rowViewModel.needle) != null ? _o : this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
@@ -4389,6 +4601,14 @@
       <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;">
         ${floorMarkerModel.visible && ((_r = floorMarkerModel.label) == null ? void 0 : _r.text) ? escapeHtml(floorMarkerModel.label.text) : ""}
       </div>` : "";
+          const genericMarkers = genericMarkerModels.map((marker) => this._renderMarker(marker)).join("");
+          const genericValueLabels = genericMarkerModels.filter((marker) => marker.labelVisible).map((marker) => {
+            var _a2;
+            return `
+      <div class="generic-value-label" data-marker-id="${escapeHtml(marker.id)}" data-lane="${marker.lane}" style="left:${Number.isFinite(marker.position) ? marker.position : 0}%">
+        ${marker.visible && ((_a2 = marker.label) == null ? void 0 : _a2.text) ? escapeHtml(marker.label.text) : ""}
+      </div>`;
+          }).join("");
           const needleMarker = ((_t = (_s = ecfg.bar) == null ? void 0 : _s.needle) == null ? void 0 : _t.show) && !Number.isFinite(baselinePct) ? `
       <div class="needle-layer">
         <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_u = needleState.pct) != null ? _u : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
@@ -4440,11 +4660,13 @@ ${paintLayers}
                 ${peakMarker}
                 ${targetMarker}
                 ${floorMarker}
+                ${genericMarkers}
                 ${needleMarker}
               </div>
               ${peakValueLabel}
               ${targetValueLabel}
               ${floorValueLabel}
+              ${genericValueLabels}
             </div>
             ${rightValue}
           </div>
@@ -4452,7 +4674,7 @@ ${paintLayers}
       </div>`;
         }
         _patchRow(row, entityCfg, stateObj) {
-          var _a, _b, _c, _d, _e;
+          var _a, _b, _c, _d, _e, _f, _g;
           if (!row || !stateObj) return;
           const ecfg = this._resolve(entityCfg);
           this._updateExtrema(entityCfg, ecfg, stateObj);
@@ -4550,10 +4772,25 @@ ${paintLayers}
           this._patchMarker(targetEl, this._getMarkerModel(markerModels, "target"));
           this._patchMarker(row.querySelector(".peak-marker"), this._getMarkerModel(markerModels, "peak"));
           this._patchMarker(row.querySelector(".floor-marker"), this._getMarkerModel(markerModels, "floor"));
+          ((_e = (_d = row.querySelectorAll) == null ? void 0 : _d.call(row, ".generic-marker[data-marker-id]")) != null ? _e : []).forEach((markerEl) => {
+            var _a2, _b2, _c2, _d2;
+            const markerId = markerEl.dataset.markerId;
+            const marker = this._getMarkerModel(markerModels, markerId);
+            this._patchMarker(markerEl, marker);
+            const labelEl = [...(_b2 = (_a2 = row.querySelectorAll) == null ? void 0 : _a2.call(row, ".generic-value-label[data-marker-id]")) != null ? _b2 : []].find((label) => label.dataset.markerId === markerId);
+            if (!labelEl) return;
+            if ((marker == null ? void 0 : marker.labelVisible) && marker.visible) {
+              this._setTextIfChanged(labelEl, (_d2 = (_c2 = marker.label) == null ? void 0 : _c2.text) != null ? _d2 : null);
+              this._setStyleIfChanged(labelEl, "visibility", "visible");
+              this._setStyleIfChanged(labelEl, "left", `${Number.isFinite(marker.position) ? marker.position : 0}%`);
+            } else {
+              this._setStyleIfChanged(labelEl, "visibility", "hidden");
+            }
+          });
           const targetMarkerModel = this._getMarkerModel(markerModels, "target");
           if (targetLabelEl) {
             if ((targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) && targetMarkerModel.visible) {
-              this._setTextIfChanged(targetLabelEl, (_e = (_d = targetMarkerModel.label) == null ? void 0 : _d.text) != null ? _e : null);
+              this._setTextIfChanged(targetLabelEl, (_g = (_f = targetMarkerModel.label) == null ? void 0 : _f.text) != null ? _g : null);
             } else {
               this._setStyleIfChanged(targetLabelEl, "visibility", "hidden");
             }
@@ -5032,6 +5269,7 @@ ${paintLayers}
             this._setElementChecked(`entity-${index}-needle-inherit`, !this._hasNeedleOverride(scope));
             this._setElementChecked(`entity-${index}-peak-inherit`, !this._hasPeakOverride(scope));
             this._setElementChecked(`entity-${index}-floor-inherit`, !this._hasExtremumOverride(scope, "floor"));
+            this._setElementChecked(`entity-${index}-markers-inherit`, !this._hasMarkersOverride(scope));
             this._setElementChecked(`entity-${index}-bar-inherit`, !this._hasEntityBarAppearanceOverride(scope));
             this._setElementChecked(`entity-${index}-segments-inherit`, !this._hasSegmentsOverride(scope));
             this._setElementChecked(`entity-${index}-gradient-stops-inherit`, !this._hasGradientStopsOverride(scope));
@@ -5046,6 +5284,7 @@ ${paintLayers}
             this._setElementText(`entity-${index}-group-needle-summary`, this._getNeedleSummary(scope));
             this._setElementText(`entity-${index}-group-peak-summary`, this._getPeakSummary(scope));
             this._setElementText(`entity-${index}-group-floor-summary`, this._getFloorSummary(scope));
+            this._setElementText(`entity-${index}-group-markers-summary`, this._getGenericMarkersSummary(scope));
             this._setElementText(`entity-${index}-group-bar-summary`, this._getBarAppearanceSummary(scope));
             this._setElementText(`entity-${index}-group-segments-summary`, this._getSegmentsSummary(scope));
             this._setElementText(`entity-${index}-group-gradient-stops-summary`, this._getGradientStopsSummary(scope));
@@ -5575,6 +5814,7 @@ ${paintLayers}
           nextConfig = this._cleanupBaselineForEmit(nextConfig);
           nextConfig = this._cleanupPeakForEmit(nextConfig, { type: "card" });
           nextConfig = this._cleanupFloorForEmit(nextConfig, { type: "card" });
+          nextConfig = this._cleanupGenericMarkersForEmit(nextConfig);
           nextConfig = this._cleanupLayoutForEmit(nextConfig);
           nextConfig = this._cleanupFormattingForEmit(nextConfig);
           nextConfig = this._cleanupNeedleForEmit(nextConfig, { type: "card" });
@@ -5590,6 +5830,7 @@ ${paintLayers}
               cleanedEntry = this._cleanupBaselineForEmit(cleanedEntry);
               cleanedEntry = this._cleanupPeakForEmit(cleanedEntry, { type: "entity", index });
               cleanedEntry = this._cleanupFloorForEmit(cleanedEntry, { type: "entity", index });
+              cleanedEntry = this._cleanupGenericMarkersForEmit(cleanedEntry);
               cleanedEntry = this._cleanupLayoutForEmit(cleanedEntry);
               cleanedEntry = this._cleanupFormattingForEmit(cleanedEntry);
               cleanedEntry = this._cleanupNeedleForEmit(cleanedEntry, { type: "entity" });
@@ -8431,11 +8672,285 @@ ${paintLayers}
           }
           return `<input type="text" data-kind="entity-input" data-index="${index}" value="${this._escapeAttribute(entry.entity)}" placeholder="sensor.example" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false">`;
         }
-        _renderEntitySourceInput(kind, index, value, placeholder = "sensor.example") {
+        _renderEntitySourceInput(kind, index, value, placeholder = "sensor.example", extraDataset = {}) {
+          const extraAttrs = Object.entries(extraDataset).map(([key, entry]) => `data-${key}="${this._escapeAttribute(entry)}"`).join(" ");
           if (customElements.get("ha-entity-picker")) {
-            return `<ha-entity-picker data-kind="${kind}" data-index="${index}"></ha-entity-picker>`;
+            return `<ha-entity-picker data-kind="${kind}" data-index="${index}"${extraAttrs ? ` ${extraAttrs}` : ""}></ha-entity-picker>`;
           }
-          return `<input type="text" data-kind="${kind}" data-index="${index}" value="${this._escapeAttribute(value)}" placeholder="${this._escapeAttribute(placeholder)}" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false">`;
+          return `<input type="text" data-kind="${kind}" data-index="${index}"${extraAttrs ? ` ${extraAttrs}` : ""} value="${this._escapeAttribute(value)}" placeholder="${this._escapeAttribute(placeholder)}" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false">`;
+        }
+        _hasMarkersOverride(scope) {
+          return (scope == null ? void 0 : scope.type) === "entity" && this._getScopedValue(scope, ["markers"]) !== void 0;
+        }
+        _getGenericMarkers(scope, effective = true) {
+          const local = this._getScopedValue(scope, ["markers"]);
+          if ((scope == null ? void 0 : scope.type) === "entity" && local === void 0 && effective) {
+            const cardMarkers = this._getScopedValue({ type: "card" }, ["markers"]);
+            return Array.isArray(cardMarkers) ? this._cloneDeep(cardMarkers) : [];
+          }
+          return Array.isArray(local) ? this._cloneDeep(local) : [];
+        }
+        _getGenericMarkersSummary(scope) {
+          if ((scope == null ? void 0 : scope.type) === "entity" && !this._hasMarkersOverride(scope)) return "Inherited";
+          const count = this._getGenericMarkers(scope, false).length;
+          return count === 0 ? "No reference markers" : `${count} reference marker${count === 1 ? "" : "s"}`;
+        }
+        _getGenericMarkerSource(marker) {
+          var _a, _b;
+          const at = marker == null ? void 0 : marker.at;
+          if (typeof at === "string" && /^\s*[+-]?(?:\d+(?:\.\d+)?|\.\d+)\s*%\s*$/.test(at)) {
+            return { mode: "percent", percent: at.replace(/%/g, "").trim() };
+          }
+          if (typeof at === "string" && /^[a-z0-9_]+\.[a-z0-9_]+$/i.test(at.trim())) {
+            return { mode: "entity", entity: at.trim(), fixed: "" };
+          }
+          const source = this._isObject(at) ? at : {};
+          if (source.entity) {
+            return {
+              mode: source.fixed !== void 0 && source.fixed !== null && source.fixed !== "" ? "entity-fallback" : "entity",
+              entity: source.entity,
+              fixed: (_a = source.fixed) != null ? _a : ""
+            };
+          }
+          return { mode: "fixed", fixed: (_b = source.fixed) != null ? _b : "" };
+        }
+        _renderGenericMarkersEditor(scope) {
+          const scopeType = scope.type;
+          const scopeIndex = scopeType === "entity" ? scope.index : "card";
+          const markers = this._getGenericMarkers(scope);
+          const override = this._hasMarkersOverride(scope);
+          const rows = markers.map((marker, markerIndex) => {
+            var _a, _b, _c, _d, _e, _f;
+            const source = this._getGenericMarkerSource(marker);
+            const rowId = `${scopeType}-${scopeIndex}-generic-marker-${markerIndex}`;
+            const dataset = { "scope-type": scopeType, index: scopeIndex, "marker-index": markerIndex };
+            const entitySource = source.mode === "entity" || source.mode === "entity-fallback" ? this._renderEntitySourceInput("generic-marker-entity", scopeIndex, source.entity, "sensor.reference", {
+              "scope-type": scopeType,
+              "marker-index": markerIndex
+            }) : "";
+            return `
+        <div class="list-row generic-marker-row">
+          <div class="field-row">
+            <label for="${rowId}-source-mode">Source</label>
+            <select id="${rowId}-source-mode" data-kind="generic-marker-source-mode" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
+              <option value="fixed"${source.mode === "fixed" ? " selected" : ""}>Fixed</option>
+              <option value="entity"${source.mode === "entity" ? " selected" : ""}>Entity</option>
+              <option value="entity-fallback"${source.mode === "entity-fallback" ? " selected" : ""}>Entity with fixed fallback</option>
+              <option value="percent"${source.mode === "percent" ? " selected" : ""}>Percentage</option>
+            </select>
+          </div>
+          ${source.mode === "fixed" ? `
+            <div class="field-row">
+              <label for="${rowId}-fixed">Fixed value</label>
+              <input id="${rowId}-fixed" type="number" step="any" data-kind="generic-marker-fixed" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(source.fixed)}">
+            </div>` : ""}
+          ${source.mode === "entity" || source.mode === "entity-fallback" ? `
+            <div class="field-row">
+              <label>Entity</label>
+              ${entitySource}
+            </div>` : ""}
+          ${source.mode === "entity-fallback" ? `
+            <div class="field-row">
+              <label for="${rowId}-fallback">Fixed fallback</label>
+              <input id="${rowId}-fallback" type="number" step="any" data-kind="generic-marker-fallback" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(source.fixed)}">
+            </div>` : ""}
+          ${source.mode === "percent" ? `
+            <div class="field-row">
+              <label for="${rowId}-percent">Scale percentage</label>
+              <input id="${rowId}-percent" type="number" min="0" max="100" step="any" data-kind="generic-marker-percent" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(source.percent)}">%
+            </div>` : ""}
+          <div class="field-row">
+            <label for="${rowId}-lane">Lane</label>
+            <select id="${rowId}-lane" data-kind="generic-marker-lane" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
+              <option value="above"${(marker == null ? void 0 : marker.lane) === "above" ? " selected" : ""}>Above</option>
+              <option value="below"${((_a = marker == null ? void 0 : marker.lane) != null ? _a : "below") === "below" ? " selected" : ""}>Below</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label for="${rowId}-shape">Shape</label>
+            <select id="${rowId}-shape" data-kind="generic-marker-shape" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
+              ${["circle", "diamond", "triangle", "chevron", "arrow", "pin"].map((shape) => {
+              var _a2;
+              return `<option value="${shape}"${((_a2 = marker == null ? void 0 : marker.shape) != null ? _a2 : "circle") === shape ? " selected" : ""}>${shape}</option>`;
+            }).join("")}
+            </select>
+          </div>
+          <div class="field-row">
+            <label for="${rowId}-color">Color</label>
+            ${this._renderColorInput({
+              id: `${rowId}-color`,
+              kind: "generic-marker-color",
+              index: scopeIndex,
+              value: (_b = marker == null ? void 0 : marker.color) != null ? _b : "#888888",
+              fallbackHex: "#888888",
+              placeholder: "#888888",
+              extraDataset: { "scope-type": scopeType, "marker-index": markerIndex }
+            })}
+          </div>
+          <div class="field-row">
+            <div class="toggle">
+              <input id="${rowId}-label-show" type="checkbox" data-kind="generic-marker-label-show" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_c = marker == null ? void 0 : marker.label) == null ? void 0 : _c.show) === true ? " checked" : ""}>
+              <label for="${rowId}-label-show">Show value label</label>
+            </div>
+          </div>
+          <div class="field-row">
+            <label for="${rowId}-label-decimal">Label decimals</label>
+            <input id="${rowId}-label-decimal" type="number" min="0" step="1" data-kind="generic-marker-label-decimal" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute((_e = (_d = marker == null ? void 0 : marker.label) == null ? void 0 : _d.decimal) != null ? _e : "")}" placeholder="inherit row decimals">
+          </div>
+          <div class="field-row">
+            <div class="toggle">
+              <input id="${rowId}-label-unit" type="checkbox" data-kind="generic-marker-label-unit" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_f = marker == null ? void 0 : marker.label) == null ? void 0 : _f.unit) === false ? "" : " checked"}>
+              <label for="${rowId}-label-unit">Show row unit</label>
+            </div>
+          </div>
+          <div class="generic-marker-actions">
+            <button type="button" data-action="move-generic-marker-up" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${markerIndex === 0 ? " disabled" : ""} aria-label="Move marker up">\u2191</button>
+            <button type="button" data-action="move-generic-marker-down" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${markerIndex === markers.length - 1 ? " disabled" : ""} aria-label="Move marker down">\u2193</button>
+            <button type="button" data-action="remove-generic-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" aria-label="Remove marker">Remove</button>
+          </div>
+        </div>`;
+          }).join("");
+          const inheritControl = scopeType === "entity" ? `
+      <div class="field-row">
+        <div class="toggle">
+          <input id="entity-${scopeIndex}-markers-inherit" type="checkbox" data-kind="entity-markers-inherit" data-index="${scopeIndex}"${override ? "" : " checked"}>
+          <label for="entity-${scopeIndex}-markers-inherit">Inherit card markers</label>
+        </div>
+      </div>` : "";
+          const overrideNote = scopeType === "entity" && !override ? '<div class="section-note">Enable the override to replace the card marker list. An empty override clears all card markers.</div>' : "";
+          return `
+      ${inheritControl}
+      ${overrideNote}
+      ${scopeType === "card" || override ? `
+        <div class="section-note">First two valid markers per lane render; excess markers remain editable and show a warning. Unresolved markers still reserve a slot and lane.</div>
+        <div class="list generic-marker-list">${rows}</div>
+        <button type="button" data-action="add-generic-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}">Add reference marker</button>` : ""}
+    `;
+        }
+        _getGenericMarkerScope(target) {
+          var _a;
+          return ((_a = target == null ? void 0 : target.dataset) == null ? void 0 : _a.scopeType) === "entity" ? { type: "entity", index: Number(target.dataset.index) } : { type: "card" };
+        }
+        _setGenericMarkerList(scope, markers, options = {}) {
+          return this._setScopedValue(scope, ["markers"], markers, { rerender: true, ...options });
+        }
+        _updateGenericMarker(scope, markerIndex, update, options = {}) {
+          var _a;
+          const markers = this._getGenericMarkers(scope);
+          if (!markers[markerIndex]) return false;
+          const marker = this._isObject(markers[markerIndex]) ? this._cloneDeep(markers[markerIndex]) : {};
+          const nextMarker = (_a = update(marker)) != null ? _a : marker;
+          markers[markerIndex] = nextMarker;
+          return this._setGenericMarkerList(scope, markers, options);
+        }
+        _setGenericMarkerSourceMode(scope, markerIndex, mode) {
+          return this._updateGenericMarker(scope, markerIndex, (marker) => {
+            if (mode === "percent") {
+              marker.at = "50%";
+              return marker;
+            }
+            const oldAt = this._isObject(marker.at) ? this._cloneDeep(marker.at) : {};
+            if (mode === "fixed") {
+              delete oldAt.entity;
+              delete oldAt.percent;
+              if (oldAt.fixed === void 0) oldAt.fixed = 50;
+            } else {
+              delete oldAt.percent;
+              if (!oldAt.entity) oldAt.entity = "";
+              if (mode === "entity") delete oldAt.fixed;
+              if (mode === "entity-fallback" && oldAt.fixed === void 0) oldAt.fixed = 50;
+            }
+            marker.at = oldAt;
+            return marker;
+          }, { rerender: true });
+        }
+        _setGenericMarkerField(scope, markerIndex, kind, value) {
+          var _a, _b;
+          const atLeaf = (key, nextValue) => this._updateGenericMarker(scope, markerIndex, (marker) => {
+            const at = this._isObject(marker.at) ? this._cloneDeep(marker.at) : {};
+            if (nextValue === void 0) delete at[key];
+            else at[key] = nextValue;
+            marker.at = Object.keys(at).length ? at : null;
+            return marker;
+          });
+          if (kind === "generic-marker-source-mode") return this._setGenericMarkerSourceMode(scope, markerIndex, value);
+          if (kind === "generic-marker-fixed") {
+            return atLeaf("fixed", (_a = this._normalizeNumberValue(value)) != null ? _a : void 0);
+          }
+          if (kind === "generic-marker-fallback") {
+            return atLeaf("fixed", (_b = this._normalizeNumberValue(value)) != null ? _b : void 0);
+          }
+          if (kind === "generic-marker-entity") {
+            return atLeaf("entity", this._normalizeTextValue(value).trim() || void 0);
+          }
+          if (kind === "generic-marker-percent") {
+            const percent = this._normalizeNumberValue(value);
+            return this._updateGenericMarker(scope, markerIndex, (marker) => {
+              marker.at = percent === null ? null : `${percent}%`;
+              return marker;
+            });
+          }
+          if (kind === "generic-marker-lane" || kind === "generic-marker-shape") {
+            return this._updateGenericMarker(scope, markerIndex, (marker) => {
+              marker[kind === "generic-marker-lane" ? "lane" : "shape"] = value;
+              return marker;
+            });
+          }
+          if (kind === "generic-marker-color") {
+            return this._updateGenericMarker(scope, markerIndex, (marker) => {
+              marker.color = this._normalizeTextValue(value).trim();
+              return marker;
+            });
+          }
+          if (kind === "generic-marker-label-show" || kind === "generic-marker-label-unit" || kind === "generic-marker-label-decimal") {
+            return this._updateGenericMarker(scope, markerIndex, (marker) => {
+              const label = this._isObject(marker.label) ? this._cloneDeep(marker.label) : {};
+              if (kind === "generic-marker-label-show") label.show = value === true;
+              if (kind === "generic-marker-label-unit") label.unit = value === true;
+              if (kind === "generic-marker-label-decimal") {
+                const decimal = this._normalizeDecimalValue(value);
+                if (decimal === null) delete label.decimal;
+                else label.decimal = decimal;
+              }
+              marker.label = label;
+              return marker;
+            });
+          }
+          return false;
+        }
+        _cleanupGenericMarkersForEmit(target) {
+          if (!this._isObject(target) || !Array.isArray(target.markers)) return target;
+          const nextTarget = this._cloneDeep(target);
+          nextTarget.markers = nextTarget.markers.map((rawMarker) => {
+            if (!this._isObject(rawMarker)) return rawMarker;
+            const marker = this._cloneDeep(rawMarker);
+            if (this._isObject(marker.at)) {
+              const at = this._cloneDeep(marker.at);
+              const fixed = this._normalizeNumberValue(at.fixed);
+              const entity = this._normalizeTextValue(at.entity).trim();
+              if (fixed !== null) at.fixed = fixed;
+              else delete at.fixed;
+              if (entity) at.entity = entity;
+              else delete at.entity;
+              if (Object.keys(at).length) marker.at = at;
+              else delete marker.at;
+            }
+            if (marker.lane === "below") delete marker.lane;
+            if (marker.shape === "circle") delete marker.shape;
+            if (this._normalizeColorComparisonValue(marker.color) === this._normalizeColorComparisonValue("#888888")) delete marker.color;
+            if (this._isObject(marker.label)) {
+              const label = this._cloneDeep(marker.label);
+              if (label.show === false) delete label.show;
+              if (label.unit === true) delete label.unit;
+              const decimal = this._normalizeDecimalValue(label.decimal);
+              if (decimal === null) delete label.decimal;
+              else label.decimal = decimal;
+              if (Object.keys(label).length) marker.label = label;
+              else delete marker.label;
+            }
+            return marker;
+          });
+          return nextTarget;
         }
         _renderResetOptions(value) {
           const selected = this._normalizeTextValue(value).trim().toLowerCase() || "never";
@@ -8645,6 +9160,16 @@ ${paintLayers}
 	          grid-template-columns: minmax(0, 1fr) auto;
 	          align-items: end;
 	          min-width: 0;
+	        }
+	        .generic-marker-row {
+	          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	          padding: 10px 0;
+	          border-bottom: 1px solid var(--divider-color, rgba(127, 127, 127, 0.2));
+	        }
+	        .generic-marker-actions {
+	          display: flex;
+	          gap: 8px;
+	          align-items: center;
 	        }
 	        .list-row.triple {
 	          grid-template-columns: repeat(3, minmax(120px, 1fr)) auto;
@@ -9006,6 +9531,9 @@ ${paintLayers}
 	            flex: 1 1 120px;
 	          }
 	          .list-row {
+	            grid-template-columns: minmax(0, 1fr);
+	          }
+	          .generic-marker-row {
 	            grid-template-columns: minmax(0, 1fr);
 	          }
 	          .list-row.triple,
@@ -9371,6 +9899,13 @@ ${paintLayers}
                       </div>
                           `
                 });
+                const markersGroup = this._renderOverrideGroup({
+                  index,
+                  group: "markers",
+                  title: "Reference markers",
+                  summary: this._getGenericMarkersSummary(scope),
+                  content: this._renderGenericMarkersEditor(scope)
+                });
                 const segmentsGroup = this._renderOverrideGroup({
                   index,
                   group: "segments",
@@ -9616,6 +10151,7 @@ ${paintLayers}
                           ${needleGroup}
                           ${peakGroup}
                           ${floorGroup}
+	                          ${markersGroup}
 	                          ${barGroup}
 	                          ${segmentsGroup}
 	                          ${gradientStopsGroup}
@@ -9834,6 +10370,8 @@ ${paintLayers}
               <label for="floor-label-decimal">Floor label decimals</label>
               <input id="floor-label-decimal" type="number" min="0" step="1" data-field="floor-label-decimal" value="${this._escapeAttribute(cardFloor.labelDecimal)}" placeholder="inherit primary decimals">
             </div>
+            <div class="field-row"><h4>Generic reference markers</h4></div>
+            ${this._renderGenericMarkersEditor({ type: "card" })}
           </div>
 	        </div>
 
@@ -10071,7 +10609,7 @@ ${paintLayers}
           if (!this.shadowRoot) return;
           const entities = this._getEntitiesValue();
           const syncPicker = (picker) => {
-            var _a;
+            var _a, _b;
             const kind = picker.dataset.kind;
             const indexValue = picker.dataset.index;
             const index = Number(indexValue);
@@ -10121,6 +10659,13 @@ ${paintLayers}
             if (kind === "entity-target-entity-source") {
               picker.value = this._getEffectiveTargetResolvableValue({ type: "entity", index }).entity;
               picker.label = `Entity ${index + 1} target entity`;
+              return;
+            }
+            if (kind === "generic-marker-entity") {
+              const scope = this._getGenericMarkerScope(picker);
+              const marker = this._getGenericMarkers(scope)[Number(picker.dataset.markerIndex)];
+              picker.value = (_b = this._getGenericMarkerSource(marker).entity) != null ? _b : "";
+              picker.label = "Reference marker entity";
             }
           };
           [
@@ -10132,7 +10677,8 @@ ${paintLayers}
             'ha-entity-picker[data-kind="entity-override-min-entity-source"]',
             'ha-entity-picker[data-kind="entity-override-max-entity-source"]',
             'ha-entity-picker[data-kind="entity-baseline-entity-source"]',
-            'ha-entity-picker[data-kind="entity-target-entity-source"]'
+            'ha-entity-picker[data-kind="entity-target-entity-source"]',
+            'ha-entity-picker[data-kind="generic-marker-entity"]'
           ].forEach((selector) => {
             this.shadowRoot.querySelectorAll(selector).forEach(syncPicker);
           });
@@ -10147,7 +10693,8 @@ ${paintLayers}
                 'ha-entity-picker[data-kind="entity-override-min-entity-source"]',
                 'ha-entity-picker[data-kind="entity-override-max-entity-source"]',
                 'ha-entity-picker[data-kind="entity-baseline-entity-source"]',
-                'ha-entity-picker[data-kind="entity-target-entity-source"]'
+                'ha-entity-picker[data-kind="entity-target-entity-source"]',
+                'ha-entity-picker[data-kind="generic-marker-entity"]'
               ].forEach((selector) => {
                 var _a;
                 (_a = this.shadowRoot) == null ? void 0 : _a.querySelectorAll(selector).forEach(syncPicker);
@@ -10211,6 +10758,27 @@ ${paintLayers}
           }
           if (action === "remove-entity") {
             this._removeEntityRow(Number(target.dataset.index));
+            return;
+          }
+          if (action === "add-generic-marker") {
+            const scope = this._getGenericMarkerScope(target);
+            const markers = this._getGenericMarkers(scope);
+            markers.push({ at: { fixed: 50 } });
+            this._setGenericMarkerList(scope, markers);
+            return;
+          }
+          if (action === "remove-generic-marker" || action === "move-generic-marker-up" || action === "move-generic-marker-down") {
+            const scope = this._getGenericMarkerScope(target);
+            const markerIndex = Number(target.dataset.markerIndex);
+            const markers = this._getGenericMarkers(scope);
+            if (action === "remove-generic-marker") {
+              markers.splice(markerIndex, 1);
+            } else {
+              const nextIndex = markerIndex + (action === "move-generic-marker-up" ? -1 : 1);
+              if (nextIndex < 0 || nextIndex >= markers.length) return;
+              [markers[markerIndex], markers[nextIndex]] = [markers[nextIndex], markers[markerIndex]];
+            }
+            this._setGenericMarkerList(scope, markers);
             return;
           }
           if (action === "add-gradient-stop") {
@@ -10412,6 +10980,21 @@ ${paintLayers}
           const kind = (rawKind == null ? void 0 : rawKind.endsWith("-text-fallback")) ? rawKind.slice(0, -14) : rawKind;
           const detailValue = (_c = event.detail) == null ? void 0 : _c.value;
           const value = detailValue != null ? detailValue : (target == null ? void 0 : target.type) === "checkbox" ? target.checked : target == null ? void 0 : target.value;
+          if (kind === "entity-markers-inherit") {
+            const scope = { type: "entity", index: Number(target.dataset.index) };
+            if (value) this._removeScopedValue(scope, ["markers"], { rerender: true });
+            else this._setGenericMarkerList(scope, this._getGenericMarkers(scope));
+            return;
+          }
+          if (kind == null ? void 0 : kind.startsWith("generic-marker-")) {
+            this._setGenericMarkerField(
+              this._getGenericMarkerScope(target),
+              Number(target.dataset.markerIndex),
+              kind,
+              value
+            );
+            return;
+          }
           if (field === "title") return void this._setTitle(value);
           if (field === "formatting-unit") return void this._setScopedFormattingUnit({ type: "card" }, value);
           if (field === "formatting-decimal") return void this._setScopedFormattingDecimal({ type: "card" }, value);

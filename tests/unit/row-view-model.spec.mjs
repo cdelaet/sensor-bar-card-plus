@@ -209,6 +209,34 @@ describe('buildRowViewModel', () => {
     expect(recoveredRow.floorPresentation.text).toBe('20 W');
   });
 
+  it('retains the effective row unit for generic labels while the primary state is unavailable or unknown', () => {
+    const entityConfig = createNormalizedEntity({
+      formatting: { decimal: 0 },
+      markers: [{ at: { entity: 'sensor.limit' }, label: { show: true } }],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const limit = sensor(35, { unit_of_measurement: 'MW' });
+
+    for (const primaryState of ['unavailable', 'unknown']) {
+      const primary = sensor(primaryState, { unit_of_measurement: 'W' });
+      const hass = { states: { 'sensor.power': primary, 'sensor.limit': limit } };
+      const row = buildRowViewModel({
+        hass,
+        cardConfig: null,
+        entityConfig,
+        entityState: primary,
+      });
+
+      expect(row.primaryPresentation.text).toBe(primaryState);
+      expect(row.primaryPresentation.unit).toBe('');
+      expect(row.markers.find((marker) => marker.id === 'generic-0')).toMatchObject({
+        visible: true,
+        value: 35,
+        label: { text: '35 W' },
+      });
+    }
+  });
+
   it('resolves fixed target values and formats target display with decimals and unit', () => {
     const hass = {
       states: {
@@ -316,6 +344,177 @@ describe('buildRowViewModel', () => {
       shape: 'triangle',
     }));
     expect(row.markerLaneOccupancy).toEqual({ above: true, below: true });
+  });
+
+  it('resolves generic percentages against the effective scale and formats resolved values', () => {
+    const hass = { states: { 'sensor.power': sensor(180) } };
+    const config = {
+      scale: { min: { fixed: 100 }, max: { fixed: 300 } },
+      formatting: { decimal: 1 },
+      markers: [
+        { at: '0%', label: { show: true } },
+        { at: '35%', lane: 'above', label: { show: true, decimal: 0, unit: true } },
+        { at: '100%', lane: 'above', label: { show: true, unit: false } },
+      ],
+      entities: [{ entity: 'sensor.power' }],
+    };
+    const entityConfig = createNormalizedEntity(config);
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+    });
+    const markers = row.markers.filter((marker) => marker.type === 'generic');
+
+    expect(markers.map(({ value, position }) => ({ value, position }))).toEqual([
+      { value: 100, position: 0 },
+      { value: 170, position: 35 },
+      { value: 300, position: 100 },
+    ]);
+    expect(markers.map((marker) => marker.label?.text)).toEqual(['100.0 W', '170 W', '300.0']);
+
+    const changedScaleConfig = createNormalizedEntity({
+      ...config,
+      scale: { min: { fixed: 0 }, max: { fixed: 400 } },
+    });
+    const changedScaleRow = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig: changedScaleConfig,
+      entityState: hass.states['sensor.power'],
+    });
+    expect(changedScaleRow.markers.find((marker) => marker.id === 'generic-1')).toMatchObject({
+      value: 140,
+      position: 35,
+      label: { text: '140 W' },
+    });
+  });
+
+  it('uses row units for dynamic values and fallbacks while clamping only off-scale positions', () => {
+    const hass = {
+      states: {
+        'sensor.power': sensor(42, { unit_of_measurement: 'W' }),
+        'sensor.threshold': sensor(25, { unit_of_measurement: 'MW' }),
+        'sensor.low': sensor(-20, { unit_of_measurement: 'MW' }),
+        'sensor.high': sensor(140, { unit_of_measurement: 'MW' }),
+      },
+    };
+    const config = createNormalizedEntity({
+      scale: { min: { fixed: 0 }, max: { fixed: 100 } },
+      formatting: { decimal: 1, unit: 'kW' },
+      markers: [
+        { at: { entity: 'sensor.low' }, lane: 'above', label: { show: true } },
+        { at: { entity: 'sensor.high' }, lane: 'above', label: { show: true } },
+        { at: { entity: 'sensor.threshold', fixed: 75 }, label: { show: true } },
+      ],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig: config,
+      entityState: hass.states['sensor.power'],
+    });
+    const markers = row.markers.filter((marker) => marker.type === 'generic');
+
+    expect(markers.map(({ value, position, label }) => ({ value, position, label: label?.text }))).toEqual([
+      { value: -20, position: 0, label: '-20.0 kW' },
+      { value: 140, position: 100, label: '140.0 kW' },
+      { value: 25, position: 25, label: '25.0 kW' },
+    ]);
+
+    const fallbackHass = {
+      ...hass,
+      states: { ...hass.states, 'sensor.threshold': sensor('unavailable', { unit_of_measurement: 'MW' }) },
+    };
+    const fallbackRow = buildRowViewModel({
+      hass: fallbackHass,
+      cardConfig: null,
+      entityConfig: config,
+      entityState: fallbackHass.states['sensor.power'],
+    });
+    expect(fallbackRow.markers.find((marker) => marker.id === 'generic-2')).toMatchObject({
+      value: 75,
+      position: 75,
+      label: { text: '75.0 kW' },
+    });
+  });
+
+  it('prefers finite dynamic values, falls back when unavailable, and recovers without changing units', () => {
+    const config = createNormalizedEntity({
+      scale: { min: { fixed: 0 }, max: { fixed: 100 } },
+      formatting: { unit: 'W', decimal: 0 },
+      markers: [
+        { at: { entity: 'sensor.dynamic', fixed: 50 }, label: { show: true, unit: false } },
+        { at: { entity: 'sensor.unresolved' }, lane: 'above', label: { show: true } },
+      ],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const makeRow = (dynamicState, unresolvedState) => {
+      const hass = {
+        states: {
+          'sensor.power': sensor(20),
+          'sensor.dynamic': sensor(dynamicState, { unit_of_measurement: 'kW' }),
+          'sensor.unresolved': sensor(unresolvedState),
+        },
+      };
+      return buildRowViewModel({
+        hass,
+        cardConfig: null,
+        entityConfig: config,
+        entityState: hass.states['sensor.power'],
+      });
+    };
+
+    const dynamicRow = makeRow(65, 'unavailable');
+    expect(dynamicRow.markers.find((marker) => marker.id === 'generic-0')).toMatchObject({
+      value: 65,
+      position: 65,
+      label: { text: '65' },
+    });
+    expect(dynamicRow.markerLaneOccupancy.above).toBe(true);
+
+    const fallbackRow = makeRow('unavailable', 'unknown');
+    expect(fallbackRow.markers.find((marker) => marker.id === 'generic-0')).toMatchObject({
+      value: 50,
+      position: 50,
+      label: { text: '50' },
+    });
+    expect(fallbackRow.markers.find((marker) => marker.id === 'generic-1')).toMatchObject({
+      visible: false,
+      value: null,
+      label: null,
+    });
+
+    const recoveredRow = makeRow(72, '35');
+    expect(recoveredRow.markers.find((marker) => marker.id === 'generic-0').value).toBe(72);
+    expect(recoveredRow.markers.find((marker) => marker.id === 'generic-1')).toMatchObject({
+      visible: true,
+      value: 35,
+      label: { text: '35 W' },
+    });
+  });
+
+  it('keeps unresolved generic markers hidden while reserving their configured lanes', () => {
+    const hass = { states: { 'sensor.power': sensor(42), 'sensor.limit': sensor('unknown') } };
+    const entityConfig = createNormalizedEntity({
+      markers: [{ at: { entity: 'sensor.limit' }, lane: 'above', label: { show: true } }],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+    });
+    expect(row.markers.find((marker) => marker.id === 'generic-0')).toMatchObject({
+      value: null,
+      position: null,
+      visible: false,
+      labelVisible: true,
+    });
+    expect(row.markerLaneOccupancy).toEqual({ above: true, below: false });
   });
 
   it('keeps configured marker lanes occupied while runtime values are unresolved', () => {
