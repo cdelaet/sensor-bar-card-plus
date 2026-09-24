@@ -104,6 +104,199 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(cfg.layout.label.position).toBe('left');
   });
 
+  it('uses a solid fill for a card-level legacy color-only configuration', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      color: 'red',
+      entities: [{ entity: 'sensor.row' }],
+    });
+
+    expect(cfg.bar.fill_style).toBe('solid');
+    expect(cfg.entities[0].bar.fill_style).toBe('solid');
+    expect(card._getColor(50, cfg.entities[0])).toBe('red');
+  });
+
+  it('uses a solid fill for a card-level structured bar.color-only configuration', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      bar: { color: '#123456' },
+      entities: [{ entity: 'sensor.row' }],
+    });
+
+    expect(cfg.bar.fill_style).toBe('solid');
+    expect(cfg.entities[0].bar.fill_style).toBe('solid');
+    expect(card._getColor(50, cfg.entities[0])).toBe('#123456');
+  });
+
+  it('promotes only the entity with a legacy color-only override to solid', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      entities: [
+        { entity: 'sensor.red', color: 'red' },
+        { entity: 'sensor.default' },
+      ],
+    });
+
+    expect(cfg.bar.fill_style).toBe('bands');
+    expect(cfg.entities[0].bar.fill_style).toBe('solid');
+    expect(cfg.entities[1].bar.fill_style).toBe('bands');
+    expect(card._getColor(50, cfg.entities[0])).toBe('red');
+    expect(card._getColor(50, cfg.entities[1])).toBe('#FF9800');
+  });
+
+  it('promotes only the entity with a structured bar.color-only override to solid', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      entities: [
+        { entity: 'sensor.red', bar: { color: 'red' } },
+        { entity: 'sensor.default' },
+      ],
+    });
+
+    expect(cfg.entities[0].bar.fill_style).toBe('solid');
+    expect(cfg.entities[1].bar.fill_style).toBe('bands');
+    expect(card._getColor(50, cfg.entities[0])).toBe('red');
+    expect(card._getColor(50, cfg.entities[1])).toBe('#FF9800');
+  });
+
+  it('keeps an explicit inherited card paint model authoritative over entity color', () => {
+    const card = createCard();
+    const bands = card.normalizeCardConfig({
+      color: 'blue',
+      bar: { fill_style: 'bands' },
+      entities: [{ entity: 'sensor.row', color: 'red' }],
+    });
+    const severity = card.normalizeCardConfig({
+      color_mode: 'severity',
+      entities: [{ entity: 'sensor.row', color: 'red' }],
+    });
+    const gradient = card.normalizeCardConfig({
+      bar: {
+        fill_style: 'gradient',
+        gradient_stops: [
+          { pos: 0, color: '#0000ff' },
+          { pos: 100, color: '#00ff00' },
+        ],
+      },
+      entities: [{ entity: 'sensor.row', color: 'red' }],
+    });
+
+    expect(bands.entities[0].bar.fill_style).toBe('bands');
+    expect(severity.entities[0].bar.fill_style).toBe('bands');
+    expect(gradient.entities[0].bar.fill_style).toBe('gradient');
+    expect(card._getColor(50, bands.entities[0])).toBe('#FF9800');
+    expect(card._getColor(50, severity.entities[0])).toBe('#FF9800');
+    expect(card._getColor(50, gradient.entities[0])).not.toBe('red');
+  });
+
+  it('keeps an explicit entity paint model authoritative over entity color', () => {
+    const card = createCard();
+    const bands = card.normalizeCardConfig({
+      entities: [{ entity: 'sensor.row', color: 'red', bar: { fill_style: 'bands' } }],
+    });
+    const gradient = card.normalizeCardConfig({
+      entities: [{
+        entity: 'sensor.row',
+        color: 'red',
+        bar: {
+          fill_style: 'gradient',
+          gradient_stops: [
+            { pos: 0, color: '#0000ff' },
+            { pos: 100, color: '#00ff00' },
+          ],
+        },
+      }],
+    });
+
+    expect(bands.entities[0].bar.fill_style).toBe('bands');
+    expect(gradient.entities[0].bar.fill_style).toBe('gradient');
+    expect(card._getColor(50, bands.entities[0])).toBe('#FF9800');
+    expect(card._getColor(50, gradient.entities[0])).not.toBe('red');
+  });
+
+  it('preserves explicit palettes without changing their existing mode selection', () => {
+    const card = createCard();
+    const segments = card.normalizeCardConfig({
+      color: 'red',
+      segments: [
+        { from: 0, to: 100, color: '#abcdef' },
+      ],
+      entities: [{ entity: 'sensor.row' }],
+    });
+    const gradientStops = card.normalizeCardConfig({
+      color: 'red',
+      gradient_stops: [
+        { pos: 0, color: '#0000ff' },
+        { pos: 100, color: '#00ff00' },
+      ],
+      entities: [{ entity: 'sensor.row' }],
+    });
+    const solidFill = card.normalizeCardConfig({
+      color: 'red',
+      bar: { solid_fill: true },
+      entities: [{ entity: 'sensor.row' }],
+    });
+
+    expect(segments.bar.fill_style).toBe('bands');
+    expect(card._getColor(50, segments.entities[0])).toBe('#abcdef');
+    expect(gradientStops.bar.fill_style).toBe('bands');
+    expect(card._getColor(50, gradientStops.entities[0])).toBe('#FF9800');
+    expect(solidFill.bar.fill_style).toBe('bands');
+    expect(card._getColor(50, solidFill.entities[0])).toBe('#FF9800');
+  });
+
+  it('does not let semantic overlays block simple color or change their precedence', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      color: 'red',
+      baseline: {
+        at: 50,
+        below: '#0000ff',
+        above: '#00ff00',
+      },
+      target: {
+        at: 60,
+        when_exceeded: { fill_color: '#ff00ff' },
+      },
+      entities: [{ entity: 'sensor.row' }],
+    });
+    const row = cfg.entities[0];
+    const layers = card._getFillPaintLayers(
+      { start: 50, end: 80, usesBaseline: true, positive: true },
+      38,
+      row,
+      card._getColor(80, row),
+      60,
+      50,
+      0,
+      100
+    );
+
+    expect(row.bar.fill_style).toBe('solid');
+    expect(layers[0].paintStyle).toContain('#00ff00');
+    expect(layers.find((layer) => layer.id === 'above-target')).toMatchObject({
+      visible: true,
+      paintStyle: expect.stringContaining('#ff00ff'),
+    });
+  });
+
+  it('keeps needle presentation independent of simple color mode selection', () => {
+    const card = createCard();
+    const row = card.normalizeCardConfig({
+      bar: {
+        color: 'red',
+        needle: { show: true, color: '#00ffcc' },
+      },
+      entities: [{ entity: 'sensor.row' }],
+    }).entities[0];
+
+    expect(row.bar.fill_style).toBe('solid');
+    expect(card._getNeedleRenderState(50, row, 0, 100, null)).toMatchObject({
+      show: true,
+      color: '#00ffcc',
+    });
+  });
+
   it('propagates card-level name when using single-entity shorthand', () => {
     const card = createCard();
     card._hass.states = {

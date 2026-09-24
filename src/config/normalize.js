@@ -361,6 +361,41 @@ export function colorModeToFillStyle(colorMode) {
   }
 }
 
+const PAINT_EXPLICITNESS = Symbol('sbcp.paintExplicitness');
+
+function hasOwnConfigValue(config, key) {
+  return config !== null && config !== undefined
+    && Object.prototype.hasOwnProperty.call(config, key);
+}
+
+function hasExplicitColor(config) {
+  const values = [
+    hasOwnConfigValue(config, 'color') ? config.color : undefined,
+    hasOwnConfigValue(config?.bar, 'color') ? config.bar.color : undefined,
+  ];
+  return values.some((value) => value !== undefined && value !== null);
+}
+
+function getPaintExplicitness(config) {
+  const bar = config?.bar;
+  const explicitPaintKeys = [
+    [config, 'color_mode'],
+    [bar, 'color_mode'],
+    [bar, 'fill_style'],
+    [config, 'severity'],
+    [config, 'segments'],
+    [bar, 'segments'],
+    [config, 'gradient_stops'],
+    [bar, 'gradient_stops'],
+    [bar, 'solid_fill'],
+  ];
+
+  return {
+    color: hasExplicitColor(config),
+    paint: explicitPaintKeys.some(([source, key]) => hasOwnConfigValue(source, key)),
+  };
+}
+
 export function normalizeBarModeConfig(barConfig = null, flatColorMode = null) {
   const fillStyle = barConfig?.fill_style ?? null;
   const colorMode = barConfig?.color_mode ?? flatColorMode ?? null;
@@ -371,7 +406,19 @@ export function normalizeBarModeConfig(barConfig = null, flatColorMode = null) {
   };
 }
 
-export function resolveNormalizedBarMode(entityBar, entityConfig, cardBar, cardConfig) {
+export function resolveNormalizedBarMode(
+  entityBar,
+  entityConfig,
+  cardBar,
+  cardConfig,
+  { scopeExplicitness = null, inheritedExplicitness = null, isCardScope = false } = {}
+) {
+  const colorOnlyScope = scopeExplicitness?.color === true && scopeExplicitness.paint !== true;
+  const inheritedPaintIsExplicit = inheritedExplicitness?.paint === true;
+  if (colorOnlyScope && (isCardScope || !inheritedPaintIsExplicit)) {
+    return normalizeBarModeConfig({ fill_style: 'solid' }, null);
+  }
+
   if (entityBar?.fill_style !== undefined || entityBar?.color_mode !== undefined || entityConfig.color_mode !== undefined) {
     return normalizeBarModeConfig(entityBar, entityConfig.color_mode);
   }
@@ -422,7 +469,12 @@ export function normalizeNeedleConfig(input, inheritedNeedle = null) {
   return { ...base };
 }
 
-export function normalizeBarConfig(entityConfig, cardConfig) {
+export function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
+  const scopeExplicitness = options.scopeExplicitness ?? getPaintExplicitness(entityConfig);
+  const inheritedExplicitness = options.inheritedExplicitness
+    ?? cardConfig?.[PAINT_EXPLICITNESS]
+    ?? getPaintExplicitness(cardConfig);
+  const isCardScope = options.isCardScope ?? cardConfig == null;
   const cardBar = cardConfig?.bar;
   const entityBar = entityConfig?.bar;
   const entityStructuredSegments = entityBar?.segments;
@@ -460,7 +512,13 @@ export function normalizeBarConfig(entityConfig, cardConfig) {
   const inheritedStructuredAboveTargetColor = cardConfig?.target && typeof cardConfig.target === 'object' && !Array.isArray(cardConfig.target)
     ? cardConfig.target.when_exceeded?.fill_color
     : undefined;
-  const normalizedMode = resolveNormalizedBarMode(entityBar, entityConfig, cardBar, cardConfig);
+  const normalizedMode = resolveNormalizedBarMode(
+    entityBar,
+    entityConfig,
+    cardBar,
+    cardConfig,
+    { scopeExplicitness, inheritedExplicitness, isCardScope }
+  );
 
   return {
     fill_style: normalizedMode.fill_style,
@@ -800,7 +858,11 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
 
   normalizedEntity.layout = normalizeLayoutConfig(entityConfig, cardConfig);
   normalizedEntity.scale = normalizeScaleConfig(entityConfig, cardConfig);
-  normalizedEntity.bar = normalizeBarConfig(entityConfig, cardConfig);
+  normalizedEntity.bar = normalizeBarConfig(entityConfig, cardConfig, {
+    scopeExplicitness: getPaintExplicitness(entityConfig),
+    inheritedExplicitness: cardConfig?.[PAINT_EXPLICITNESS] ?? getPaintExplicitness(cardConfig),
+    isCardScope: false,
+  });
   normalizedEntity.baseline = normalizeBaselineConfig(entityConfig, cardConfig);
   normalizedEntity.formatting = normalizeFormattingConfig(entityConfig, cardConfig);
   normalizedEntity.target_marker = normalizeTargetMarkerConfig(entityConfig, cardConfig);
@@ -840,6 +902,7 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
 }
 
 export function normalizeCardConfig(rawConfig) {
+  const cardPaintExplicitness = getPaintExplicitness(rawConfig);
   const baseConfig = {
     title: '',
     label_position: 'left',
@@ -885,10 +948,18 @@ export function normalizeCardConfig(rawConfig) {
     ...baseConfig,
     _normalized: true,
   };
+  Object.defineProperty(normalizedCard, PAINT_EXPLICITNESS, {
+    value: cardPaintExplicitness,
+    enumerable: false,
+  });
 
   normalizedCard.layout = normalizeLayoutConfig(baseConfig, null);
   normalizedCard.scale = normalizeScaleConfig(baseConfig, null);
-  normalizedCard.bar = normalizeBarConfig(baseConfig, null);
+  normalizedCard.bar = normalizeBarConfig(baseConfig, null, {
+    scopeExplicitness: cardPaintExplicitness,
+    inheritedExplicitness: null,
+    isCardScope: true,
+  });
   normalizedCard.baseline = normalizeBaselineConfig(baseConfig, null);
   normalizedCard.formatting = normalizeFormattingConfig(baseConfig, null);
   normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);

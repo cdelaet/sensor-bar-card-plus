@@ -283,7 +283,7 @@ Notes:
 
 Current `color_mode` compatibility names map directly to these fill styles.
 
-If no fill style is specified, Sensor Bar Card Plus defaults to `bands`. This preserves visual compatibility with the original Sensor Bar Card, ensuring that existing dashboards continue to render as expected. New dashboards are encouraged to specify `bar.fill_style` explicitly, but doing so is optional.
+If no fill model or palette is specified, Sensor Bar Card Plus defaults to `bands`. This preserves visual compatibility with the original Sensor Bar Card, ensuring that existing dashboards continue to render as expected. An explicitly supplied `color` or `bar.color` by itself selects a solid bar; the implicit default bands do not override that simple color. When a fill mode or palette is explicitly configured, that paint model remains authoritative and `bar.color` remains its solid/fallback color.
 
 Sensor Bar Card Plus separates semantic fill composition from animated reveal geometry. That is what allows gradients, bands, above-target colors, markers, and animations to stay visually coherent while the bar updates.
 
@@ -1707,7 +1707,7 @@ formatting
 | `scale.max.entity` | `null` | entity id | Dynamic upper bound entity. |
 | `bar.fill_style` | `bands` | `solid`, `gradient`, `bands`, `soft_bands`, `band_gradient` | Fill rendering style. |
 | `bar.segment_space` | `percent` | `percent`, `scale` | Determines whether `bar.segments` are interpreted as percentages of the bar or as actual values on the configured scale. |
-| `bar.color` | `#4a9eff` | CSS color | Solid or fallback fill color. |
+| `bar.color` | `#4a9eff` | CSS color | Solid or fallback fill color. If it is the only paint setting at the applicable card or entity scope, it selects a solid bar; explicit fill modes and palettes retain their own semantics. |
 | `bar.solid_fill` | `false` | boolean | Samples the active color and renders the revealed fill as one solid color. |
 | `bar.animated` | `true` | boolean | Enables or disables value-change animations for the revealed fill and related visual elements. |
 | `bar.needle` | `false` | boolean or object | Enables needle mode using `true`, or accepts the expanded `{ show, color }` configuration. |

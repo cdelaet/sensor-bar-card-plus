@@ -448,6 +448,34 @@
         return null;
     }
   }
+  function hasOwnConfigValue(config, key) {
+    return config !== null && config !== void 0 && Object.prototype.hasOwnProperty.call(config, key);
+  }
+  function hasExplicitColor(config) {
+    const values = [
+      hasOwnConfigValue(config, "color") ? config.color : void 0,
+      hasOwnConfigValue(config == null ? void 0 : config.bar, "color") ? config.bar.color : void 0
+    ];
+    return values.some((value) => value !== void 0 && value !== null);
+  }
+  function getPaintExplicitness(config) {
+    const bar = config == null ? void 0 : config.bar;
+    const explicitPaintKeys = [
+      [config, "color_mode"],
+      [bar, "color_mode"],
+      [bar, "fill_style"],
+      [config, "severity"],
+      [config, "segments"],
+      [bar, "segments"],
+      [config, "gradient_stops"],
+      [bar, "gradient_stops"],
+      [bar, "solid_fill"]
+    ];
+    return {
+      color: hasExplicitColor(config),
+      paint: explicitPaintKeys.some(([source, key]) => hasOwnConfigValue(source, key))
+    };
+  }
   function normalizeBarModeConfig(barConfig = null, flatColorMode = null) {
     var _a, _b, _c, _d, _e, _f;
     const fillStyle = (_a = barConfig == null ? void 0 : barConfig.fill_style) != null ? _a : null;
@@ -458,7 +486,12 @@
       color_mode: normalizedColorMode
     };
   }
-  function resolveNormalizedBarMode(entityBar, entityConfig, cardBar, cardConfig) {
+  function resolveNormalizedBarMode(entityBar, entityConfig, cardBar, cardConfig, { scopeExplicitness = null, inheritedExplicitness = null, isCardScope = false } = {}) {
+    const colorOnlyScope = (scopeExplicitness == null ? void 0 : scopeExplicitness.color) === true && scopeExplicitness.paint !== true;
+    const inheritedPaintIsExplicit = (inheritedExplicitness == null ? void 0 : inheritedExplicitness.paint) === true;
+    if (colorOnlyScope && (isCardScope || !inheritedPaintIsExplicit)) {
+      return normalizeBarModeConfig({ fill_style: "solid" }, null);
+    }
     if ((entityBar == null ? void 0 : entityBar.fill_style) !== void 0 || (entityBar == null ? void 0 : entityBar.color_mode) !== void 0 || entityConfig.color_mode !== void 0) {
       return normalizeBarModeConfig(entityBar, entityConfig.color_mode);
     }
@@ -501,18 +534,21 @@
     }
     return { ...base };
   }
-  function normalizeBarConfig(entityConfig, cardConfig) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y;
+  function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C;
+    const scopeExplicitness = (_a = options.scopeExplicitness) != null ? _a : getPaintExplicitness(entityConfig);
+    const inheritedExplicitness = (_c = (_b = options.inheritedExplicitness) != null ? _b : cardConfig == null ? void 0 : cardConfig[PAINT_EXPLICITNESS]) != null ? _c : getPaintExplicitness(cardConfig);
+    const isCardScope = (_d = options.isCardScope) != null ? _d : cardConfig == null;
     const cardBar = cardConfig == null ? void 0 : cardConfig.bar;
     const entityBar = entityConfig == null ? void 0 : entityConfig.bar;
     const entityStructuredSegments = entityBar == null ? void 0 : entityBar.segments;
     const entityTopLevelSegments = entityConfig.segments;
     const entityLegacySeverity = entityConfig.severity;
-    const cardStructuredSegments = (_a = cardBar == null ? void 0 : cardBar.segments) != null ? _a : null;
-    const cardTopLevelSegments = (_b = cardConfig == null ? void 0 : cardConfig.segments) != null ? _b : null;
-    const cardLegacySeverity = (_c = cardConfig == null ? void 0 : cardConfig.severity) != null ? _c : null;
+    const cardStructuredSegments = (_e = cardBar == null ? void 0 : cardBar.segments) != null ? _e : null;
+    const cardTopLevelSegments = (_f = cardConfig == null ? void 0 : cardConfig.segments) != null ? _f : null;
+    const cardLegacySeverity = (_g = cardConfig == null ? void 0 : cardConfig.severity) != null ? _g : null;
     let segments = null;
-    let segment_space = (_d = cardBar == null ? void 0 : cardBar.segment_space) != null ? _d : "percent";
+    let segment_space = (_h = cardBar == null ? void 0 : cardBar.segment_space) != null ? _h : "percent";
     if (entityStructuredSegments !== void 0 && entityStructuredSegments !== null) {
       segments = normalizeGaugeSegments(entityStructuredSegments);
       segment_space = "scale";
@@ -524,7 +560,7 @@
       segment_space = "percent";
     } else if (cardStructuredSegments !== null && cardStructuredSegments !== void 0) {
       segments = cardStructuredSegments.map((segment) => ({ ...segment }));
-      segment_space = (_e = cardBar == null ? void 0 : cardBar.segment_space) != null ? _e : "percent";
+      segment_space = (_i = cardBar == null ? void 0 : cardBar.segment_space) != null ? _i : "percent";
     } else if (cardTopLevelSegments !== null && cardTopLevelSegments !== void 0) {
       segments = normalizeGaugeSegments(cardTopLevelSegments);
       segment_space = "scale";
@@ -532,23 +568,29 @@
       segments = normalizeSeverityToSegments(cardLegacySeverity);
       segment_space = "percent";
     }
-    const structuredAboveTargetColor = (entityConfig == null ? void 0 : entityConfig.target) && typeof entityConfig.target === "object" && !Array.isArray(entityConfig.target) ? (_f = entityConfig.target.when_exceeded) == null ? void 0 : _f.fill_color : void 0;
-    const inheritedStructuredAboveTargetColor = (cardConfig == null ? void 0 : cardConfig.target) && typeof cardConfig.target === "object" && !Array.isArray(cardConfig.target) ? (_g = cardConfig.target.when_exceeded) == null ? void 0 : _g.fill_color : void 0;
-    const normalizedMode = resolveNormalizedBarMode(entityBar, entityConfig, cardBar, cardConfig);
+    const structuredAboveTargetColor = (entityConfig == null ? void 0 : entityConfig.target) && typeof entityConfig.target === "object" && !Array.isArray(entityConfig.target) ? (_j = entityConfig.target.when_exceeded) == null ? void 0 : _j.fill_color : void 0;
+    const inheritedStructuredAboveTargetColor = (cardConfig == null ? void 0 : cardConfig.target) && typeof cardConfig.target === "object" && !Array.isArray(cardConfig.target) ? (_k = cardConfig.target.when_exceeded) == null ? void 0 : _k.fill_color : void 0;
+    const normalizedMode = resolveNormalizedBarMode(
+      entityBar,
+      entityConfig,
+      cardBar,
+      cardConfig,
+      { scopeExplicitness, inheritedExplicitness, isCardScope }
+    );
     return {
       fill_style: normalizedMode.fill_style,
       color_mode: normalizedMode.color_mode,
       needle: normalizeNeedleConfig(entityBar == null ? void 0 : entityBar.needle, cardBar == null ? void 0 : cardBar.needle),
-      solid_fill: (_i = (_h = entityBar == null ? void 0 : entityBar.solid_fill) != null ? _h : cardBar == null ? void 0 : cardBar.solid_fill) != null ? _i : false,
-      color: (_m = (_l = (_k = (_j = entityBar == null ? void 0 : entityBar.color) != null ? _j : entityConfig.color) != null ? _k : cardBar == null ? void 0 : cardBar.color) != null ? _l : cardConfig == null ? void 0 : cardConfig.color) != null ? _m : "#4a9eff",
+      solid_fill: (_m = (_l = entityBar == null ? void 0 : entityBar.solid_fill) != null ? _l : cardBar == null ? void 0 : cardBar.solid_fill) != null ? _m : false,
+      color: (_q = (_p = (_o = (_n = entityBar == null ? void 0 : entityBar.color) != null ? _n : entityConfig.color) != null ? _o : cardBar == null ? void 0 : cardBar.color) != null ? _p : cardConfig == null ? void 0 : cardConfig.color) != null ? _q : "#4a9eff",
       gradient_stops: normalizeGradientStops(
-        (_q = (_p = (_o = (_n = entityBar == null ? void 0 : entityBar.gradient_stops) != null ? _n : entityConfig.gradient_stops) != null ? _o : cardBar == null ? void 0 : cardBar.gradient_stops) != null ? _p : cardConfig == null ? void 0 : cardConfig.gradient_stops) != null ? _q : null
+        (_u = (_t = (_s = (_r = entityBar == null ? void 0 : entityBar.gradient_stops) != null ? _r : entityConfig.gradient_stops) != null ? _s : cardBar == null ? void 0 : cardBar.gradient_stops) != null ? _t : cardConfig == null ? void 0 : cardConfig.gradient_stops) != null ? _u : null
       ),
       severity: segments,
       segments,
       segment_space,
-      animated: (_u = (_t = (_s = (_r = entityBar == null ? void 0 : entityBar.animated) != null ? _r : entityConfig.animated) != null ? _s : cardBar == null ? void 0 : cardBar.animated) != null ? _t : cardConfig == null ? void 0 : cardConfig.animated) != null ? _u : true,
-      above_target_color: (_y = (_x = (_w = (_v = structuredAboveTargetColor != null ? structuredAboveTargetColor : entityConfig.above_target_color) != null ? _v : cardBar == null ? void 0 : cardBar.above_target_color) != null ? _w : inheritedStructuredAboveTargetColor) != null ? _x : cardConfig == null ? void 0 : cardConfig.above_target_color) != null ? _y : null
+      animated: (_y = (_x = (_w = (_v = entityBar == null ? void 0 : entityBar.animated) != null ? _v : entityConfig.animated) != null ? _w : cardBar == null ? void 0 : cardBar.animated) != null ? _x : cardConfig == null ? void 0 : cardConfig.animated) != null ? _y : true,
+      above_target_color: (_C = (_B = (_A = (_z = structuredAboveTargetColor != null ? structuredAboveTargetColor : entityConfig.above_target_color) != null ? _z : cardBar == null ? void 0 : cardBar.above_target_color) != null ? _A : inheritedStructuredAboveTargetColor) != null ? _B : cardConfig == null ? void 0 : cardConfig.above_target_color) != null ? _C : null
     };
   }
   function clampSupportedRowHeight(height) {
@@ -802,7 +844,7 @@
     return normalizeExtremumMarkerConfig(entityConfig, cardConfig, "floor", { defaultColor: "#888888" });
   }
   function normalizeEntityConfig(entityConfig, cardConfig) {
-    var _a, _b;
+    var _a, _b, _c;
     const normalizedEntity = {
       ...entityConfig,
       _normalized: true,
@@ -812,13 +854,17 @@
     };
     normalizedEntity.layout = normalizeLayoutConfig(entityConfig, cardConfig);
     normalizedEntity.scale = normalizeScaleConfig(entityConfig, cardConfig);
-    normalizedEntity.bar = normalizeBarConfig(entityConfig, cardConfig);
+    normalizedEntity.bar = normalizeBarConfig(entityConfig, cardConfig, {
+      scopeExplicitness: getPaintExplicitness(entityConfig),
+      inheritedExplicitness: (_b = cardConfig == null ? void 0 : cardConfig[PAINT_EXPLICITNESS]) != null ? _b : getPaintExplicitness(cardConfig),
+      isCardScope: false
+    });
     normalizedEntity.baseline = normalizeBaselineConfig(entityConfig, cardConfig);
     normalizedEntity.formatting = normalizeFormattingConfig(entityConfig, cardConfig);
     normalizedEntity.target_marker = normalizeTargetMarkerConfig(entityConfig, cardConfig);
     normalizedEntity.peak_marker = normalizePeakMarkerConfig(entityConfig, cardConfig);
     normalizedEntity.floor_marker = normalizeFloorMarkerConfig(entityConfig, cardConfig);
-    const normalizedMarkers = entityConfig.markers === void 0 ? { markers: (_b = cardConfig == null ? void 0 : cardConfig.generic_markers) != null ? _b : [], invalidList: (cardConfig == null ? void 0 : cardConfig.generic_markers_invalid) === true } : normalizeGenericMarkerList(entityConfig.markers);
+    const normalizedMarkers = entityConfig.markers === void 0 ? { markers: (_c = cardConfig == null ? void 0 : cardConfig.generic_markers) != null ? _c : [], invalidList: (cardConfig == null ? void 0 : cardConfig.generic_markers_invalid) === true } : normalizeGenericMarkerList(entityConfig.markers);
     normalizedEntity.generic_markers = normalizedMarkers.markers;
     normalizedEntity.generic_markers_invalid = normalizedMarkers.invalidList;
     normalizedEntity.min = normalizedEntity.scale.min.fixed;
@@ -848,6 +894,7 @@
   }
   function normalizeCardConfig(rawConfig) {
     var _a;
+    const cardPaintExplicitness = getPaintExplicitness(rawConfig);
     const baseConfig = {
       title: "",
       label_position: "left",
@@ -891,9 +938,17 @@
       ...baseConfig,
       _normalized: true
     };
+    Object.defineProperty(normalizedCard, PAINT_EXPLICITNESS, {
+      value: cardPaintExplicitness,
+      enumerable: false
+    });
     normalizedCard.layout = normalizeLayoutConfig(baseConfig, null);
     normalizedCard.scale = normalizeScaleConfig(baseConfig, null);
-    normalizedCard.bar = normalizeBarConfig(baseConfig, null);
+    normalizedCard.bar = normalizeBarConfig(baseConfig, null, {
+      scopeExplicitness: cardPaintExplicitness,
+      inheritedExplicitness: null,
+      isCardScope: true
+    });
     normalizedCard.baseline = normalizeBaselineConfig(baseConfig, null);
     normalizedCard.formatting = normalizeFormattingConfig(baseConfig, null);
     normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);
@@ -907,9 +962,11 @@
     );
     return normalizedCard;
   }
+  var PAINT_EXPLICITNESS;
   var init_normalize = __esm({
     "src/config/normalize.js"() {
       init_extrema();
+      PAINT_EXPLICITNESS = /* @__PURE__ */ Symbol("sbcp.paintExplicitness");
     }
   });
 
