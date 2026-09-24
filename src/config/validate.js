@@ -98,6 +98,7 @@ function validateBuiltinMarkerLabels(diagnostics, config, path, entity = null) {
   for (const [key, publicKey] of [['target_marker', 'target'], ['peak_marker', 'peak'], ['floor_marker', 'floor']]) {
     const marker = config?.[key];
     const labelPath = `${path}.${publicKey}.label`;
+    if (marker?.label_invalid_show) addWarning(diagnostics, 'markers.invalid_label_show', 'Marker label show must be a boolean; using the existing fallback.', `${labelPath}.show`, entity);
     if (marker?.label_invalid_text) addWarning(diagnostics, 'markers.invalid_label_text', 'Marker label text must be a string; ignoring it.', `${labelPath}.text`, entity);
     if (marker?.label_invalid_show_value) addWarning(diagnostics, 'markers.invalid_label_show_value', 'Marker label show_value must be a boolean; using the inherited or default value.', `${labelPath}.show_value`, entity);
     if (marker?.label_invalid_show_unit) addWarning(diagnostics, 'markers.invalid_label_show_unit', 'Marker label show_unit must be a boolean; using the inherited or default value.', `${labelPath}.show_unit`, entity);
@@ -135,6 +136,7 @@ function validateGenericMarkers(diagnostics, markers, invalidList, path, entity 
     if (marker.invalidDirection) {
       addWarning(diagnostics, 'markers.invalid_direction', 'Invalid marker direction; using inward.', `${markerPath}.direction`, entity);
     }
+    if (marker.label?.invalidShow) addWarning(diagnostics, 'markers.invalid_label_show', 'Marker label show must be a boolean; using the existing fallback.', `${markerPath}.label.show`, entity);
     if (marker.label?.invalidText) addWarning(diagnostics, 'markers.invalid_label_text', 'Marker label text must be a string; ignoring it.', `${markerPath}.label.text`, entity);
     if (marker.label?.invalidShowValue) addWarning(diagnostics, 'markers.invalid_label_show_value', 'Marker label show_value must be a boolean; using the inherited or default value.', `${markerPath}.label.show_value`, entity);
     if (marker.label?.invalidShowUnit) addWarning(diagnostics, 'markers.invalid_label_show_unit', 'Marker label show_unit must be a boolean; using the inherited or default value.', `${markerPath}.label.show_unit`, entity);

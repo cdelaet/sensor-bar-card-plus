@@ -129,6 +129,41 @@ describe('validateNormalizedConfig', () => {
     }));
   });
 
+  it('warns on non-boolean marker label show values and accepts true or false', () => {
+    const invalid = normalize({
+      target: { at: 25, label: { show: 'true' } },
+      peak: { enabled: true, label: { show: 'true' } },
+      floor: { enabled: true, label: { show: 1 } },
+      markers: [{ at: 50, label: { show: 'true' } }],
+      entities: [{ entity: 'sensor.one' }],
+    });
+    const diagnostics = validateNormalizedConfig(invalid);
+
+    expect(invalid.target_marker.show_label).toBe('true');
+    expect(invalid.peak_marker.show_label).toBe(false);
+    expect(invalid.floor_marker.show_label).toBe(false);
+    expect(invalid.entities[0].generic_markers[0].label.show).toBe(false);
+    expect(diagnostics.errors).toEqual([]);
+    expect(diagnostics.warnings.filter(({ code }) => code === 'markers.invalid_label_show'))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: 'card.target.label.show' }),
+        expect.objectContaining({ path: 'card.peak.label.show' }),
+        expect.objectContaining({ path: 'card.floor.label.show' }),
+        expect.objectContaining({ path: 'markers[0].label.show' }),
+      ]));
+
+    const valid = normalize({
+      target: { at: 25, label: { show: true } },
+      peak: { enabled: true, label: { show: false } },
+      floor: { enabled: true, label: { show: true } },
+      markers: [{ at: 50, label: { show: false } }],
+      entities: [{ entity: 'sensor.one' }],
+    });
+    expect(validateNormalizedConfig(valid).warnings).not.toContainEqual(
+      expect.objectContaining({ code: 'markers.invalid_label_show' })
+    );
+  });
+
   it('warns on invalid marker directions and falls back to inward without skipping markers', () => {
     const normalized = normalize({
       target: { at: { fixed: 50 }, direction: 'sideways' },

@@ -1626,9 +1626,14 @@ target
 │   ├── fixed
 │   └── entity
 ├── color
+├── direction
 ├── label
 │   ├── show
-│   └── decimal
+│   ├── text
+│   ├── show_value
+│   ├── show_unit
+│   ├── precision
+│   └── decimal (compatibility alias)
 └── when_exceeded
     └── fill_color
 
@@ -1645,18 +1650,42 @@ baseline
 peak
 ├── enabled
 ├── color
+├── direction
 ├── reset
 └── label
     ├── show
-    └── decimal
+    ├── text
+    ├── show_value
+    ├── show_unit
+    ├── precision
+    └── decimal (compatibility alias)
 
 floor
 ├── enabled
 ├── color
+├── direction
 ├── reset
 └── label
     ├── show
-    └── decimal
+    ├── text
+    ├── show_value
+    ├── show_unit
+    ├── precision
+    └── decimal (compatibility alias)
+
+markers[]
+├── at
+├── lane
+├── shape
+├── direction
+├── color
+└── label
+    ├── show
+    ├── text
+    ├── show_value
+    ├── show_unit
+    ├── precision
+    └── decimal (compatibility alias)
 
 formatting
 ├── decimal
@@ -1691,7 +1720,8 @@ formatting
 | `target.at.entity` | `null` | entity id | Dynamic target entity. |
 | `target.shape` | `diamond` | `diamond`, `triangle` | Target marker shape. |
 | `target.color` | `#888888` | CSS color | Target marker color. |
-| `target.label.show` | `false` | boolean | Shows a numeric target value label. |
+| `target.direction` | `inward` | `inward`, `outward` | Direction for directional marker shapes; Circle and Diamond are visually unaffected. Entity-level Target direction inherits the card-level value unless overridden. |
+| `target.label.show` | `false` | boolean | Enables the composed Target label; its text, value, and unit components are configured independently below. |
 | `target.label.text` | absent | string | Optional plain text shown before the value and unit. |
 | `target.label.show_value` | `true` | boolean | Includes or omits the formatted Target value independently of text and unit. |
 | `target.label.show_unit` | `true` | boolean | Includes or omits the effective row unit independently of text and value. |
@@ -1705,6 +1735,7 @@ formatting
 | `peak.enabled` | `false` | boolean | Shows a session peak marker. |
 | `peak.color` | `#888888` | CSS color | Peak marker color. |
 | `peak.reset` | `never` | reset value | Resets Peak using a relative duration or local calendar boundary. |
+| `peak.direction` | `inward` | `inward`, `outward` | Direction for directional marker shapes; Circle and Diamond are visually unaffected. Entity-level Peak direction inherits the card-level value unless overridden. |
 | `peak.label.show` | `false` | boolean | Shows the formatted Peak value label. |
 | `peak.label.text` | absent | string | Optional plain text shown before the value and unit. |
 | `peak.label.show_value` | `true` | boolean | Includes or omits the formatted Peak value independently of text and unit. |
@@ -1713,11 +1744,13 @@ formatting
 | `floor.enabled` | `false` | boolean | Shows a session Floor marker for the lowest finite value. |
 | `floor.color` | `#888888` | CSS color | Floor marker color. |
 | `floor.reset` | `never` | reset value | Resets Floor using a relative duration or local calendar boundary. |
+| `floor.direction` | `inward` | `inward`, `outward` | Direction for directional marker shapes; Circle and Diamond are visually unaffected. Entity-level Floor direction inherits the card-level value unless overridden. |
 | `floor.label.show` | `false` | boolean | Shows the formatted Floor value label. |
 | `floor.label.text` | absent | string | Optional plain text shown before the value and unit. |
 | `floor.label.show_value` | `true` | boolean | Includes or omits the formatted Floor value independently of text and unit. |
 | `floor.label.show_unit` | `true` | boolean | Includes or omits the effective row unit independently of text and value. |
 | `floor.label.precision` | inherited | number | Overrides the numeric component's precision; omitted values inherit `formatting.decimal`. `floor.label.decimal` remains accepted for existing configurations. |
+| `markers[]` | `[]` | list | Generic reference markers. The card-level list is inherited; an entity-level list replaces it, and `markers: []` clears it. Each item supports `at`, `lane`, `shape`, `direction`, `color`, and the shared `label` fields. Direction defaults to `inward`; Circle and Diamond are visually unaffected. |
 | `formatting.decimal` | `null` | number | Decimal places for displayed numeric values. |
 | `formatting.unit` | entity unit | string | Display unit override. |
 
@@ -2060,7 +2093,9 @@ entities:
 
 `at` accepts a fixed value (`{ fixed: 75 }`), a dynamic entity (`{ entity: sensor.limit }`), an entity with fixed fallback, or a percentage string such as `35%`. Percentages are inclusive from `0%` to `100%` of the effective row scale. Their labels show the resolved scale value. Finite fixed and dynamic values outside the scale remain valid: only their graphical position is clamped, while the label keeps the original value.
 
-Markers default to the `below` lane, `circle` shape, color `#888888`, and a hidden label. The supported shapes are `circle`, `diamond`, `triangle`, `chevron`, `arrow`, and `pin`; lanes are `above` and `below`. A shown label defaults to the row's effective `formatting.decimal` and unit, and can independently compose optional `text`, `show_value` (default `true`), and `show_unit` (default `true`). Components are joined by one space. If all three components are disabled or absent, no label is rendered. Set `label.precision: 0` for integer precision; generic, Peak, and Floor labels also accept legacy `label.decimal`, and Target continues to accept its established `target.label.decimal` spelling. Use `label.show_unit: false` to omit the effective row unit. Dynamic source units are ignored, and labels remain in the row unit even when a marker falls back to its fixed value. The former marker-label `unit` option is unsupported; use `show_unit`.
+Markers default to the `below` lane, `circle` shape, color `#888888`, and a hidden label. The supported shapes are `circle`, `diamond`, `triangle`, `chevron`, `arrow`, and `pin`; lanes are `above` and `below`. Direction defaults to `inward`; `direction: inward | outward` controls directional shapes, while Circle and Diamond are visually unaffected. Target, Peak, and Floor inherit their card-level direction in entity rows unless overridden. Generic markers are inherited as a card-level list, or replaced as a whole by an entity-level `markers` list.
+
+A shown marker label is composed from `text`, `show_value` (default `true`), and `show_unit` (default `true`), each independently enabled; `label.show` enables the label. Components are joined by one space. If all three components are disabled or absent, no label is rendered. The numeric component defaults to the row's effective `formatting.decimal` and the unit component uses the effective row unit. Set `label.precision: 0` for integer precision. For compatibility, generic, Peak, and Floor labels also accept `label.decimal`; Target continues to accept its established `target.label.decimal` spelling. Use `label.show_unit: false` to omit the effective row unit. Dynamic source units are ignored, and labels remain in the row unit even when a marker falls back to its fixed value. The former marker-label `unit` option is unsupported; use `show_unit`.
 
 At card scope, `markers:` supplies the list inherited by each entity. An entity may replace the list with its own `markers: [...]`; `markers: []` explicitly clears the inherited list. Lists replace rather than merge. A valid but unresolved marker still reserves its lane and one of that lane's two slots. Malformed markers are skipped without consuming a slot; further valid markers remain in configuration but are ignored at runtime with a non-fatal warning. Target, Peak, and Floor do not count toward this limit. Nearby marker labels may overlap.
 

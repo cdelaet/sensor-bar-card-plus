@@ -243,6 +243,7 @@
           showValue: labelConfig.label_show_value,
           showUnit: labelConfig.label_show_unit,
           precision: labelConfig.label_precision,
+          invalidShow: labelConfig.label_invalid_show,
           invalidText: labelConfig.label_invalid_text,
           invalidShowValue: labelConfig.label_invalid_show_value,
           invalidShowUnit: labelConfig.label_invalid_show_unit,
@@ -630,6 +631,7 @@
       label_show_value: typeof label.show_value === "boolean" ? label.show_value : (_b = inherited.label_show_value) != null ? _b : true,
       label_show_unit: typeof label.show_unit === "boolean" ? label.show_unit : (_c = inherited.label_show_unit) != null ? _c : true,
       label_precision: precisionInvalid ? null : precision,
+      label_invalid_show: label.show !== void 0 && typeof label.show !== "boolean",
       label_invalid_text: hasText && typeof label.text !== "string",
       label_invalid_show_value: label.show_value !== void 0 && typeof label.show_value !== "boolean",
       label_invalid_show_unit: label.show_unit !== void 0 && typeof label.show_unit !== "boolean",
@@ -647,6 +649,7 @@
     if (options.label_invalid_text) fields.label_invalid_text = true;
     if (options.label_invalid_show_value) fields.label_invalid_show_value = true;
     if (options.label_invalid_show_unit) fields.label_invalid_show_unit = true;
+    if (options.label_invalid_show) fields.label_invalid_show = true;
     if (options.label_invalid_precision) fields.label_invalid_precision = true;
     if (options.label_invalid_precision && options.label_precision_key) fields.label_precision_key = options.label_precision_key;
     if (options.label_unsupported_unit) fields.label_unsupported_unit = true;
@@ -727,6 +730,7 @@
     return {
       show: hasRawLabel && typeof rawLabel.show === "boolean" ? rawLabel.show : (_a = inheritedConfig.show_label) != null ? _a : false,
       text: options.label_text,
+      invalidShow: options.label_invalid_show,
       showValue: options.label_show_value,
       showUnit: options.label_show_unit,
       precision: options.label_invalid_precision ? null : (_c = (_b = options.label_precision) != null ? _b : inheritedConfig.label_decimal) != null ? _c : null,
@@ -779,6 +783,7 @@
       label_show_unit: label.showUnit === true ? void 0 : label.showUnit,
       label_precision: label.precision,
       label_invalid_text: label.invalidText,
+      label_invalid_show: label.invalidShow,
       label_invalid_show_value: label.invalidShowValue,
       label_invalid_show_unit: label.invalidShowUnit,
       label_invalid_precision: label.invalidPrecision,
@@ -1038,6 +1043,7 @@
     for (const [key, publicKey] of [["target_marker", "target"], ["peak_marker", "peak"], ["floor_marker", "floor"]]) {
       const marker = config == null ? void 0 : config[key];
       const labelPath = `${path}.${publicKey}.label`;
+      if (marker == null ? void 0 : marker.label_invalid_show) addWarning(diagnostics, "markers.invalid_label_show", "Marker label show must be a boolean; using the existing fallback.", `${labelPath}.show`, entity);
       if (marker == null ? void 0 : marker.label_invalid_text) addWarning(diagnostics, "markers.invalid_label_text", "Marker label text must be a string; ignoring it.", `${labelPath}.text`, entity);
       if (marker == null ? void 0 : marker.label_invalid_show_value) addWarning(diagnostics, "markers.invalid_label_show_value", "Marker label show_value must be a boolean; using the inherited or default value.", `${labelPath}.show_value`, entity);
       if (marker == null ? void 0 : marker.label_invalid_show_unit) addWarning(diagnostics, "markers.invalid_label_show_unit", "Marker label show_unit must be a boolean; using the inherited or default value.", `${labelPath}.show_unit`, entity);
@@ -1046,7 +1052,7 @@
     }
   }
   function validateGenericMarkers(diagnostics, markers, invalidList, path, entity = null) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g;
     if (invalidList) {
       addWarning(diagnostics, "markers.invalid_list", "Markers must be a list; ignoring the malformed value.", path, entity);
     }
@@ -1074,11 +1080,12 @@
       if (marker.invalidDirection) {
         addWarning(diagnostics, "markers.invalid_direction", "Invalid marker direction; using inward.", `${markerPath}.direction`, entity);
       }
-      if ((_a = marker.label) == null ? void 0 : _a.invalidText) addWarning(diagnostics, "markers.invalid_label_text", "Marker label text must be a string; ignoring it.", `${markerPath}.label.text`, entity);
-      if ((_b = marker.label) == null ? void 0 : _b.invalidShowValue) addWarning(diagnostics, "markers.invalid_label_show_value", "Marker label show_value must be a boolean; using the inherited or default value.", `${markerPath}.label.show_value`, entity);
-      if ((_c = marker.label) == null ? void 0 : _c.invalidShowUnit) addWarning(diagnostics, "markers.invalid_label_show_unit", "Marker label show_unit must be a boolean; using the inherited or default value.", `${markerPath}.label.show_unit`, entity);
-      if ((_d = marker.label) == null ? void 0 : _d.invalidPrecision) addWarning(diagnostics, "markers.invalid_label_precision", "Marker label precision must be a non-negative integer; using the inherited or row precision.", `${markerPath}.label.${(_e = marker.label.invalidPrecisionKey) != null ? _e : "precision"}`, entity);
-      if ((_f = marker.label) == null ? void 0 : _f.unsupportedUnit) addWarning(diagnostics, "markers.unsupported_label_unit", "Marker label unit is no longer supported; use show_unit instead.", `${markerPath}.label.unit`, entity);
+      if ((_a = marker.label) == null ? void 0 : _a.invalidShow) addWarning(diagnostics, "markers.invalid_label_show", "Marker label show must be a boolean; using the existing fallback.", `${markerPath}.label.show`, entity);
+      if ((_b = marker.label) == null ? void 0 : _b.invalidText) addWarning(diagnostics, "markers.invalid_label_text", "Marker label text must be a string; ignoring it.", `${markerPath}.label.text`, entity);
+      if ((_c = marker.label) == null ? void 0 : _c.invalidShowValue) addWarning(diagnostics, "markers.invalid_label_show_value", "Marker label show_value must be a boolean; using the inherited or default value.", `${markerPath}.label.show_value`, entity);
+      if ((_d = marker.label) == null ? void 0 : _d.invalidShowUnit) addWarning(diagnostics, "markers.invalid_label_show_unit", "Marker label show_unit must be a boolean; using the inherited or default value.", `${markerPath}.label.show_unit`, entity);
+      if ((_e = marker.label) == null ? void 0 : _e.invalidPrecision) addWarning(diagnostics, "markers.invalid_label_precision", "Marker label precision must be a non-negative integer; using the inherited or row precision.", `${markerPath}.label.${(_f = marker.label.invalidPrecisionKey) != null ? _f : "precision"}`, entity);
+      if ((_g = marker.label) == null ? void 0 : _g.unsupportedUnit) addWarning(diagnostics, "markers.unsupported_label_unit", "Marker label unit is no longer supported; use show_unit instead.", `${markerPath}.label.unit`, entity);
       if (marker.valid && !marker.accepted) {
         addWarning(diagnostics, "markers.excess_capacity", `Only the first two valid markers in the ${marker.lane} lane are rendered.`, markerPath, entity);
       }
