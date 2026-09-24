@@ -1,3 +1,5 @@
+import { isValidReset, normalizeReset } from '../utils/extrema.js';
+
 export function normalizeResolvableValue(value, entityValue, percentValue = null) {
   const normalized = {
     fixed: value ?? null,
@@ -63,6 +65,99 @@ export function normalizeStructuredResolvableValue(input, inheritedResolvable = 
     }
   }
   return normalizeResolvableValue(input, null);
+}
+
+export function normalizeGenericMarkerList(input) {
+  if (!Array.isArray(input)) {
+    return { markers: [], invalidList: input !== undefined };
+  }
+
+  const markers = input.map((rawMarker, index) => {
+    if (!rawMarker || typeof rawMarker !== 'object' || Array.isArray(rawMarker)) {
+      return { id: `generic-${index}`, index, valid: false, accepted: false, malformed: true };
+    }
+
+    const rawAt = rawMarker.at;
+    const hasUnsupportedPercentField = rawAt && typeof rawAt === 'object'
+      && Object.prototype.hasOwnProperty.call(rawAt, 'percent');
+    const atInput = typeof rawAt === 'string' ? rawAt.trim() : rawAt;
+    const source = normalizeStructuredResolvableValue(atInput, null, null, { allowPercent: true });
+    const explicitEntity = rawAt && typeof rawAt === 'object' && rawAt.entity !== undefined
+      ? rawAt.entity
+      : (typeof atInput === 'string' && looksLikeEntityId(atInput) ? atInput : null);
+    const invalidEntity = explicitEntity !== null && explicitEntity !== undefined && explicitEntity !== ''
+      && !looksLikeEntityId(explicitEntity);
+    const invalidFixed = rawAt && typeof rawAt === 'object'
+      && rawAt.fixed !== undefined && rawAt.fixed !== null
+      && getFiniteNumber(rawAt.fixed) === null;
+    const hasSource = !!source.entity
+      || getFiniteNumber(source.fixed) !== null
+      || Number.isFinite(source.percent);
+    const invalidPercentage = Number.isFinite(source.percent)
+      && (source.percent < 0 || source.percent > 100);
+    const validSource = rawAt !== undefined && rawAt !== null
+      && !hasUnsupportedPercentField
+      && !invalidEntity
+      && !invalidFixed
+      && hasSource
+      && !invalidPercentage;
+    const lane = rawMarker.lane === undefined ? 'below' : rawMarker.lane;
+    const validLane = lane === 'above' || lane === 'below';
+    const supportedShapes = ['circle', 'diamond', 'triangle', 'chevron', 'arrow', 'pin'];
+    const validShape = rawMarker.shape === undefined || supportedShapes.includes(rawMarker.shape);
+    const direction = normalizeMarkerDirection(rawMarker.direction);
+    const invalidDirection = rawMarker.direction !== undefined && !['inward', 'outward'].includes(
+      typeof rawMarker.direction === 'string' ? rawMarker.direction.trim().toLowerCase() : ''
+    );
+    const label = rawMarker.label && typeof rawMarker.label === 'object' && !Array.isArray(rawMarker.label)
+      ? rawMarker.label
+      : {};
+    const labelConfig = normalizeMarkerLabelConfig(label);
+
+    return {
+      id: `generic-${index}`,
+      index,
+      source: {
+        ...source,
+        entity: typeof source.entity === 'string' ? source.entity.trim() : source.entity,
+      },
+      lane: validLane ? lane : null,
+      shape: validShape ? (rawMarker.shape ?? 'circle') : 'circle',
+      direction,
+      invalidDirection,
+      color: typeof rawMarker.color === 'string' && rawMarker.color.trim() ? rawMarker.color : '#888888',
+      label: {
+        show: label.show === true,
+        text: labelConfig.label_text,
+        showValue: labelConfig.label_show_value,
+        showUnit: labelConfig.label_show_unit,
+        precision: labelConfig.label_precision,
+        invalidShow: labelConfig.label_invalid_show,
+        invalidText: labelConfig.label_invalid_text,
+        invalidShowValue: labelConfig.label_invalid_show_value,
+        invalidShowUnit: labelConfig.label_invalid_show_unit,
+        invalidPrecision: labelConfig.label_invalid_precision,
+        invalidPrecisionKey: labelConfig.label_precision_key,
+        unsupportedUnit: labelConfig.label_unsupported_unit,
+      },
+      valid: validSource && validLane,
+      invalidSource: !validSource,
+      invalidPercentage,
+      unsupportedPercentField: hasUnsupportedPercentField,
+      invalidLane: !validLane,
+      invalidShape: !validShape,
+      accepted: false,
+    };
+  });
+
+  const laneCounts = { above: 0, below: 0 };
+  for (const marker of markers) {
+    if (!marker.valid) continue;
+    if (laneCounts[marker.lane] < 2) marker.accepted = true;
+    laneCounts[marker.lane] += 1;
+  }
+
+  return { markers, invalidList: false };
 }
 
 export function normalizeBaselineDirectionConfig(input, inheritedDirection = null) {
@@ -455,30 +550,108 @@ export function normalizeFormattingConfig(entityConfig, cardConfig) {
   };
 }
 
+export function normalizeTargetMarkerShape(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return normalized === 'triangle' || normalized === 'diamond' ? normalized : 'diamond';
+}
+
+export function normalizeMarkerDirection(value) {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return normalized === 'outward' ? 'outward' : 'inward';
+}
+
+function normalizeMarkerLabelConfig(rawLabel, inherited = {}) {
+  const label = rawLabel && typeof rawLabel === 'object' && !Array.isArray(rawLabel) ? rawLabel : {};
+  const hasText = Object.prototype.hasOwnProperty.call(label, 'text');
+  const textValue = hasText
+    ? (typeof label.text === 'string' ? label.text.replace(/\s+/g, ' ').trim() : inherited.label_text)
+    : inherited.label_text;
+  const hasPrecision = Object.prototype.hasOwnProperty.call(label, 'precision');
+  const hasDecimal = Object.prototype.hasOwnProperty.call(label, 'decimal');
+  const precisionValue = hasPrecision ? label.precision : label.decimal;
+  const precisionSet = hasPrecision || hasDecimal;
+  const precision = precisionSet ? getFiniteNumber(precisionValue) : inherited.label_precision ?? null;
+  const precisionInvalid = precisionSet && precisionValue !== null && precisionValue !== ''
+    && !(Number.isInteger(precision) && precision >= 0);
+
+  return {
+    label_text: textValue ?? null,
+    label_show_value: typeof label.show_value === 'boolean' ? label.show_value : inherited.label_show_value ?? true,
+    label_show_unit: typeof label.show_unit === 'boolean' ? label.show_unit : inherited.label_show_unit ?? true,
+    label_precision: precisionInvalid ? null : precision,
+    label_invalid_show: label.show !== undefined && typeof label.show !== 'boolean',
+    label_invalid_text: hasText && typeof label.text !== 'string',
+    label_invalid_show_value: label.show_value !== undefined && typeof label.show_value !== 'boolean',
+    label_invalid_show_unit: label.show_unit !== undefined && typeof label.show_unit !== 'boolean',
+    label_invalid_precision: precisionInvalid,
+    label_precision_key: precisionInvalid ? (hasPrecision ? 'precision' : 'decimal') : undefined,
+    label_unsupported_unit: Object.prototype.hasOwnProperty.call(label, 'unit'),
+  };
+}
+
+function builtinMarkerLabelFields(options) {
+  const fields = {};
+  if (options.label_text !== null && options.label_text !== undefined) fields.label_text = options.label_text;
+  if (options.label_show_value === false) fields.label_show_value = false;
+  if (options.label_show_unit === false) fields.label_show_unit = false;
+  if (options.label_precision !== null && options.label_precision !== undefined) fields.label_precision = options.label_precision;
+  if (options.label_invalid_text) fields.label_invalid_text = true;
+  if (options.label_invalid_show_value) fields.label_invalid_show_value = true;
+  if (options.label_invalid_show_unit) fields.label_invalid_show_unit = true;
+  if (options.label_invalid_show) fields.label_invalid_show = true;
+  if (options.label_invalid_precision) fields.label_invalid_precision = true;
+  if (options.label_invalid_precision && options.label_precision_key) fields.label_precision_key = options.label_precision_key;
+  if (options.label_unsupported_unit) fields.label_unsupported_unit = true;
+  return fields;
+}
+
+function isInvalidMarkerDirection(value) {
+  return value !== undefined && !['inward', 'outward'].includes(
+    typeof value === 'string' ? value.trim().toLowerCase() : ''
+  );
+}
+
 export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
   const cardTarget = cardConfig?.target_marker;
   const rawTarget = entityConfig?.target;
   const legacyCardTarget = cardConfig?.target && typeof cardConfig.target === 'object' && !Array.isArray(cardConfig.target)
     ? null
     : cardConfig?.target ?? null;
-  const inheritedTarget = cardTarget ?? {
+  const inheritedTarget = cardTarget ? {
+    ...cardTarget,
+    shape: normalizeTargetMarkerShape(cardTarget.shape),
+    direction: normalizeMarkerDirection(cardTarget.direction),
+  } : {
     enabled: null,
     source: normalizeResolvableValue(null, null),
     color: cardConfig?.target_color ?? '#888',
     show_label: cardConfig?.show_target_label ?? false,
-    label_decimal: cardConfig?.target?.label?.decimal ?? null,
+    ...builtinMarkerLabelFields(normalizeMarkerLabelConfig(cardConfig?.target?.label)),
+    label_decimal: cardConfig?.target?.label?.precision ?? cardConfig?.target?.label?.decimal ?? null,
+    shape: 'diamond',
+    direction: 'inward',
   };
 
   if (rawTarget && typeof rawTarget === 'object' && !Array.isArray(rawTarget)) {
+    const labelOptions = normalizeMarkerLabelConfig(rawTarget.label, inheritedTarget);
     const normalizedTarget = {
       enabled: normalizeOptionalEnabled(rawTarget.enabled) ?? inheritedTarget.enabled ?? null,
       source: normalizeStructuredResolvableValue(rawTarget.at, inheritedTarget.source, null, { allowPercent: true }),
       color: rawTarget.color ?? entityConfig.target_color ?? inheritedTarget.color,
       show_label: rawTarget.label?.show ?? entityConfig.show_target_label ?? inheritedTarget.show_label,
+      shape: Object.prototype.hasOwnProperty.call(rawTarget, 'shape')
+        ? normalizeTargetMarkerShape(rawTarget.shape)
+        : inheritedTarget.shape,
+      direction: Object.prototype.hasOwnProperty.call(rawTarget, 'direction')
+        ? normalizeMarkerDirection(rawTarget.direction)
+        : inheritedTarget.direction,
+      ...(isInvalidMarkerDirection(rawTarget.direction) ? { direction_invalid: true } : {}),
+      ...builtinMarkerLabelFields(labelOptions),
     };
-    const labelDecimal = rawTarget.label?.decimal ?? inheritedTarget.label_decimal ?? null;
+    const labelDecimal = labelOptions.label_precision;
     if (labelDecimal !== null && labelDecimal !== undefined) {
       normalizedTarget.label_decimal = labelDecimal;
+      normalizedTarget.label_precision = labelDecimal;
     }
     return normalizedTarget;
   }
@@ -493,21 +666,127 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
     source: normalizeResolvableValue(value, entity, percent),
     color: entityConfig.target_color ?? inheritedTarget.color ?? cardConfig?.target_color ?? '#888',
     show_label: entityConfig.show_target_label ?? inheritedTarget.show_label ?? cardConfig?.show_target_label ?? false,
+    shape: inheritedTarget.shape,
+    direction: inheritedTarget.direction,
+    ...builtinMarkerLabelFields(inheritedTarget),
   };
-  const labelDecimal = inheritedTarget.label_decimal ?? null;
+  const labelDecimal = normalizedTarget.label_precision;
   if (labelDecimal !== null && labelDecimal !== undefined) {
     normalizedTarget.label_decimal = labelDecimal;
   }
   return normalizedTarget;
 }
 
-export function normalizePeakMarkerConfig(entityConfig, cardConfig) {
-  const cardPeak = cardConfig?.peak_marker;
-  const entityPeak = entityConfig?.peak;
+function getRawExtremumConfig(config, key) {
+  const value = config?.[key];
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  const markerValue = config?.[`${key}_marker`];
+  return markerValue && typeof markerValue === 'object' && !Array.isArray(markerValue)
+    ? markerValue
+    : null;
+}
+
+function normalizeLabelConfig(rawConfig, inheritedConfig) {
+  const rawLabel = rawConfig?.label;
+  const hasRawLabel = rawLabel && typeof rawLabel === 'object' && !Array.isArray(rawLabel);
+  const options = normalizeMarkerLabelConfig(rawLabel, inheritedConfig);
   return {
-    show: entityPeak?.enabled ?? entityConfig.show_peak ?? cardPeak?.show ?? cardConfig?.show_peak ?? false,
-    color: entityPeak?.color ?? entityConfig.peak_color ?? cardPeak?.color ?? cardConfig?.peak_color ?? '#888',
+    show: hasRawLabel && typeof rawLabel.show === 'boolean'
+      ? rawLabel.show
+      : inheritedConfig.show_label ?? false,
+    text: options.label_text,
+    invalidShow: options.label_invalid_show,
+    showValue: options.label_show_value,
+    showUnit: options.label_show_unit,
+    precision: options.label_invalid_precision ? null : options.label_precision ?? inheritedConfig.label_decimal ?? null,
+    invalidText: options.label_invalid_text,
+    invalidShowValue: options.label_invalid_show_value,
+    invalidShowUnit: options.label_invalid_show_unit,
+    invalidPrecision: options.label_invalid_precision,
+    precisionKey: options.label_precision_key,
+    unsupportedUnit: options.label_unsupported_unit,
   };
+}
+
+function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = {}) {
+  const { legacy = false, defaultColor = '#888888' } = options;
+  const cardMarker = cardConfig?.[`${key}_marker`];
+  const rawMarker = getRawExtremumConfig(entityConfig, key);
+  const inherited = cardMarker ?? {
+    show: legacy ? cardConfig?.show_peak ?? false : false,
+    color: legacy ? cardConfig?.peak_color ?? defaultColor : defaultColor,
+    show_label: false,
+    label_decimal: null,
+    label_text: null,
+    label_show_value: true,
+    label_show_unit: true,
+    label_precision: null,
+    reset: { kind: 'never' },
+    direction: 'inward',
+  };
+  const hasReset = rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, 'reset');
+  const rawReset = hasReset ? rawMarker.reset : undefined;
+  const reset = hasReset ? normalizeReset(rawReset) : (inherited.reset ?? { kind: 'never' });
+  const rawLabel = rawMarker?.label;
+  const label = normalizeLabelConfig(rawMarker, inherited);
+  const normalized = {
+    show: rawMarker?.enabled
+      ?? (legacy ? entityConfig.show_peak : undefined)
+      ?? inherited.show
+      ?? false,
+    color: rawMarker?.color
+      ?? (legacy ? entityConfig.peak_color : undefined)
+      ?? inherited.color
+      ?? defaultColor,
+    direction: rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, 'direction')
+      ? normalizeMarkerDirection(rawMarker.direction)
+      : normalizeMarkerDirection(inherited.direction),
+    ...(isInvalidMarkerDirection(rawMarker?.direction) ? { direction_invalid: true } : {}),
+  };
+  const inheritedAdvanced = cardMarker && (
+    Object.prototype.hasOwnProperty.call(cardMarker, 'show_label')
+    || Object.prototype.hasOwnProperty.call(cardMarker, 'label_decimal')
+    || Object.prototype.hasOwnProperty.call(cardMarker, 'label_text')
+    || Object.prototype.hasOwnProperty.call(cardMarker, 'label_show_value')
+    || Object.prototype.hasOwnProperty.call(cardMarker, 'label_show_unit')
+    || Object.prototype.hasOwnProperty.call(cardMarker, 'label_precision')
+    || Object.prototype.hasOwnProperty.call(cardMarker, 'reset')
+  );
+  const hasAdvancedConfig = key === 'floor'
+    || hasReset
+    || rawLabel !== undefined
+    || inheritedAdvanced;
+
+  if (hasAdvancedConfig) {
+    normalized.show_label = label.show;
+    normalized.label_decimal = label.precision;
+    normalized.reset = reset;
+  }
+  Object.assign(normalized, builtinMarkerLabelFields({
+    label_text: label.text,
+    label_show_value: label.showValue === true ? undefined : label.showValue,
+    label_show_unit: label.showUnit === true ? undefined : label.showUnit,
+    label_precision: label.precision,
+    label_invalid_text: label.invalidText,
+    label_invalid_show: label.invalidShow,
+    label_invalid_show_value: label.invalidShowValue,
+    label_invalid_show_unit: label.invalidShowUnit,
+    label_invalid_precision: label.invalidPrecision,
+    label_precision_key: label.precisionKey,
+    label_unsupported_unit: label.unsupportedUnit,
+  }));
+  if (hasReset && !isValidReset(rawReset)) {
+    normalized.reset_invalid = true;
+  }
+  return normalized;
+}
+
+export function normalizePeakMarkerConfig(entityConfig, cardConfig) {
+  return normalizeExtremumMarkerConfig(entityConfig, cardConfig, 'peak', { legacy: true, defaultColor: '#888888' });
+}
+
+export function normalizeFloorMarkerConfig(entityConfig, cardConfig) {
+  return normalizeExtremumMarkerConfig(entityConfig, cardConfig, 'floor', { defaultColor: '#888888' });
 }
 
 export function normalizeEntityConfig(entityConfig, cardConfig) {
@@ -526,6 +805,12 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
   normalizedEntity.formatting = normalizeFormattingConfig(entityConfig, cardConfig);
   normalizedEntity.target_marker = normalizeTargetMarkerConfig(entityConfig, cardConfig);
   normalizedEntity.peak_marker = normalizePeakMarkerConfig(entityConfig, cardConfig);
+  normalizedEntity.floor_marker = normalizeFloorMarkerConfig(entityConfig, cardConfig);
+  const normalizedMarkers = entityConfig.markers === undefined
+    ? { markers: cardConfig?.generic_markers ?? [], invalidList: cardConfig?.generic_markers_invalid === true }
+    : normalizeGenericMarkerList(entityConfig.markers);
+  normalizedEntity.generic_markers = normalizedMarkers.markers;
+  normalizedEntity.generic_markers_invalid = normalizedMarkers.invalidList;
 
   normalizedEntity.min = normalizedEntity.scale.min.fixed;
   normalizedEntity.min_entity = normalizedEntity.scale.min.entity;
@@ -562,7 +847,7 @@ export function normalizeCardConfig(rawConfig) {
     color: '#4a9eff',
     animated: true,
     show_peak: false,
-    peak_color: '#888',
+    peak_color: '#888888',
     target: null,
     target_entity: null,
     target_color: '#888',
@@ -608,6 +893,10 @@ export function normalizeCardConfig(rawConfig) {
   normalizedCard.formatting = normalizeFormattingConfig(baseConfig, null);
   normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);
   normalizedCard.peak_marker = normalizePeakMarkerConfig(baseConfig, null);
+  normalizedCard.floor_marker = normalizeFloorMarkerConfig(baseConfig, null);
+  const normalizedMarkers = normalizeGenericMarkerList(baseConfig.markers);
+  normalizedCard.generic_markers = normalizedMarkers.markers;
+  normalizedCard.generic_markers_invalid = normalizedMarkers.invalidList;
   normalizedCard.entities = baseConfig.entities.map((entityCfg) =>
     normalizeEntityConfig(entityCfg, normalizedCard)
   );

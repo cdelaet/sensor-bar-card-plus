@@ -3859,6 +3859,275 @@ views:
         fill_style: solid
         color: '#ea580c'
         needle: true
+  - type: markdown
+    content: |
+      ## Advanced marker integration — Needle
+
+      The existing Wave Driver is intentionally reused. For the uncluttered motion test, set its min/max to 0/100, choose `current_value` and a 6–10 second period, then enable it: the Needle travels across stationary marker positions. The dense seven-marker card below combines Needle, Target, Peak, Floor, and two generic references in each lane; its Peak/Floor track the changing current sample. Watch the Needle approach, cross, coincide with, and leave the fixed references. Hover individual glyphs during motion to confirm the corresponding label still promotes independently. In the independent-source card, choose `target_value` to animate the dynamic generic marker while current/Needle remains still; switch back to `current_value` to watch it cross the marker. For the bipolar card, use wave limits -100/100 to watch current cross the stored Peak and Floor. The exact-coincidence card deliberately overlays the Needle, Target, and generic glyph. Turn the Wave Driver off after the check.
+  - type: entities
+    title: Needle / marker motion controls
+    show_header_toggle: false
+    entities:
+    - entity: input_boolean.sbcp_wave_enabled
+      name: Wave Driver
+    - entity: input_select.sbcp_wave_target
+      name: Animate current, Target, or baseline
+    - entity: input_select.sbcp_waveform
+      name: Waveform
+    - entity: input_number.sbcp_wave_period
+      name: Wave period
+    - entity: input_number.sbcp_min_value
+      name: Wave minimum
+    - entity: input_number.sbcp_max_value
+      name: Wave maximum
+    - entity: input_number.sbcp_current_value
+      name: Current / Needle source
+    - entity: input_number.sbcp_target_value
+      name: Dynamic marker source
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Moving Needle across stationary markers — 0..100 W
+      entities:
+      - entity: sensor.sbcp_playground_sensor
+        name: Animated current through references
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      target:
+        at:
+          fixed: 50
+        color: '#F8FAFC'
+      markers:
+      - at: 22%
+        lane: above
+        shape: diamond
+        color: '#2563EB'
+      - at: 76%
+        lane: below
+        shape: pin
+        color: '#F59E0B'
+      bar:
+        fill_style: gradient
+        needle:
+          show: true
+          color: '#F8FAFC'
+        gradient_stops:
+        - pos: 0
+          color: '#0F172A'
+        - pos: 100
+          color: '#0F766E'
+    - type: custom:sensor-bar-card-plus
+      title: Needle and independently moving dynamic marker
+      entities:
+      - entity: sensor.sbcp_playground_sensor
+        name: Current stays independent
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      markers:
+      - at:
+          entity: sensor.sbcp_playground_target
+          fixed: 65
+        lane: above
+        shape: arrow
+        color: '#DC2626'
+        label:
+          show: true
+      - at: 28%
+        lane: below
+        shape: circle
+        color: '#F8FAFC'
+      bar:
+        fill_style: solid
+        color: '#0F766E'
+        needle:
+          show: true
+          color: '#F8FAFC'
+    - type: custom:sensor-bar-card-plus
+      title: Seven markers + moving Needle — dense coexistence
+      entities:
+      - entity: sensor.sbcp_playground_sensor
+        name: Peak / Floor evolve with current
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      target:
+        at:
+          fixed: 50
+        color: '#F8FAFC'
+        label:
+          show: true
+          decimal: 0
+      peak:
+        enabled: true
+        reset: never
+        label:
+          show: true
+      floor:
+        enabled: true
+        reset: never
+        label:
+          show: true
+      markers:
+      - at: 24%
+        lane: above
+        shape: diamond
+        color: '#38BDF8'
+        label:
+          show: true
+      - at: 78%
+        lane: above
+        shape: pin
+        direction: outward
+        color: '#F59E0B'
+        label:
+          show: true
+      - at: 35%
+        lane: below
+        shape: circle
+        color: '#DC2626'
+        label:
+          show: true
+      - at: 68%
+        lane: below
+        shape: chevron
+        direction: outward
+        color: '#16A34A'
+        label:
+          show: true
+      bar:
+        fill_style: bands
+        segments:
+        - from: 0%
+          to: 45%
+          color: '#1D4ED8'
+        - from: 45%
+          to: 100%
+          color: '#0F766E'
+        needle:
+          show: true
+          color: '#FDE047'
+    - type: custom:sensor-bar-card-plus
+      title: Coincident Needle, Target, and generic glyph
+      entities:
+      - entity: sensor.sbcp_playground_sensor
+        name: Exact shared source position
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      target:
+        at:
+          entity: sensor.sbcp_playground_sensor
+        color: '#F59E0B'
+        label:
+          show: true
+      markers:
+      - at:
+          entity: sensor.sbcp_playground_sensor
+        lane: below
+        shape: circle
+        color: '#DC2626'
+        label:
+          show: true
+      bar:
+        fill_style: solid
+        color: '#111827'
+        needle:
+          show: true
+          color: '#F8FAFC'
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Bipolar Needle crossing Peak and Floor — -100..100 W
+      entities:
+      - entity: sensor.sbcp_playground_sensor
+        name: Positive / negative current
+      scale:
+        min:
+          fixed: -100
+        max:
+          fixed: 100
+      target:
+        at:
+          fixed: 0
+          label:
+            show: true
+      peak:
+        enabled: true
+        reset: never
+      floor:
+        enabled: true
+        reset: never
+      layout:
+        label:
+          position: inside
+      bar:
+        fill_style: gradient
+        needle:
+          show: true
+          color: '#FDE047'
+        gradient_stops:
+        - pos: 0
+          color: '#DC2626'
+        - pos: 50
+          color: '#334155'
+        - pos: 100
+          color: '#16A34A'
+    - type: custom:sensor-bar-card-plus
+      title: Grid exchange Needle — -10..10 kW
+      entities:
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Grid import / export
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+        unit: kW
+      target:
+        at:
+          fixed: 0
+        label:
+          show: true
+      markers:
+      - at: 35%
+        lane: above
+        shape: triangle
+        color: '#F59E0B'
+      - at: 72%
+        lane: below
+        shape: chevron
+        color: '#38BDF8'
+      layout:
+        label:
+          position: above
+      bar:
+        fill_style: gradient
+        needle:
+          show: true
+          color: '#F8FAFC'
+        gradient_stops:
+        - pos: 0
+          color: '#1D4ED8'
+        - pos: 50
+          color: '#0F766E'
+        - pos: 100
+          color: '#F59E0B'
 - title: Baseline Matrix
   path: sensor-bar-card-plus-baseline-matrix
   icon: mdi:vector-line
@@ -5199,6 +5468,102 @@ views:
       bar:
         animated: false
         fill_style: gradient
+  - type: markdown
+    content: |
+      ## Advanced marker integration — Baseline
+
+      Compare markers on both sides of the neutral baseline, including the exact/near-zero case. The scale and row sample remain bipolar; labels and contrasting fills make it easier to judge whether marker positions remain clear against the baseline transition.
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Bipolar energy flow — references around zero
+      entities:
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Utility exchange
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+        unit: kW
+      baseline:
+        at:
+          fixed: 0
+      target:
+        at:
+          fixed: 0
+        color: '#F8FAFC'
+        label:
+          show: true
+      markers:
+      - at: 35%
+        lane: above
+        shape: diamond
+        color: '#DC2626'
+        label:
+          show: true
+      - at: 68%
+        lane: below
+        shape: pin
+        color: '#38BDF8'
+        label:
+          show: true
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#1D4ED8'
+        - pos: 50
+          color: '#64748B'
+        - pos: 100
+          color: '#F59E0B'
+    - type: custom:sensor-bar-card-plus
+      title: Peak and Floor straddling the baseline
+      entities:
+      - entity: sensor.sbcp_playground_sensor
+        name: Import / export excursion
+      scale:
+        min:
+          fixed: -100
+        max:
+          fixed: 100
+      baseline:
+        at:
+          fixed: 0
+      target:
+        at:
+          fixed: 2
+        label:
+          show: true
+      peak:
+        enabled: true
+        reset: never
+        label:
+          show: true
+      floor:
+        enabled: true
+        reset: never
+        label:
+          show: true
+      markers:
+      - at:
+          fixed: -2
+        lane: below
+        shape: circle
+        color: '#DC2626'
+      bar:
+        fill_style: band_gradient
+        segments:
+        - from: 0%
+          to: 50%
+          color: '#2563EB'
+        - from: 50%
+          to: 100%
+          color: '#16A34A'
 - title: Hero
   path: hero
   icon: mdi:star-four-points
@@ -6418,6 +6783,94 @@ views:
       bar:
         fill_style: solid
         color: '#64748b'
+  - type: markdown
+    content: |
+      ### Advanced marker integration — Hero and responsive presentation
+
+      These are compact integration examples rather than collision torture cases. Inspect the Hero headline with a labelled above marker and multiple glyphs, then compare an inside-layout card with labelled lanes at reduced width. Hover visible glyphs individually and confirm the established per-marker label priority.
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Hero energy with labelled marker lanes
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Rooftop solar generation
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      layout:
+        height: 48
+        label:
+          position: hero
+          hero_size: large
+      target:
+        at:
+          fixed: 7.5
+        label:
+          show: true
+      markers:
+      - at: 55%
+        lane: above
+        shape: diamond
+        color: '#38BDF8'
+        label:
+          show: true
+      - at: 78%
+        lane: below
+        shape: pin
+        color: '#F59E0B'
+      bar:
+        fill_style: gradient
+        needle:
+          show: true
+          color: '#F8FAFC'
+    - type: custom:sensor-bar-card-plus
+      title: Inside presentation with markers at narrow width
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Long household demand reading
+      scale:
+        min:
+          fixed: -500
+        max:
+          fixed: 1500
+      layout:
+        height: 42
+        label:
+          position: inside
+      target:
+        at:
+          fixed: 700
+        label:
+          show: true
+      markers:
+      - at: 30%
+        lane: above
+        shape: arrow
+        color: '#DC2626'
+        label:
+          show: true
+      - at: 70%
+        lane: below
+        shape: chevron
+        color: '#16A34A'
+        label:
+          show: true
+      bar:
+        fill_style: bands
+        segments:
+        - from: 0%
+          to: 40%
+          color: '#2563EB'
+        - from: 40%
+          to: 100%
+          color: '#0F766E'
 - title: Edge Cases
   path: sensor-bar-card-plus-edge-cases
   icon: mdi:alert-outline
@@ -7226,3 +7679,2086 @@ views:
           entity: sensor.sbcp_playground_target
       bar:
         fill_style: gradient
+- title: Markers
+  path: markers
+  icon: mdi:map-marker-multiple
+  badges: []
+  cards:
+  - type: markdown
+    content: |
+      # Marker System — Manual Acceptance
+
+      Work down the page. Each group keeps its instructions beside the cards that use them. Deliberate label overlaps are limited to the Collision Lab and the explicitly named five-card stress case. Peak/Floor state is in-memory and timing resets are lazy: the next finite sample after a boundary or expiry starts the new window.
+
+  - type: markdown
+    content: |
+      ## Overview — a realistic energy row
+
+      The dedicated primary and Target controls below are isolated from the older playground controls. The reference helper deliberately reports kW while the row is W: marker values are read directly on the row scale, without conversion, and marker labels use the row unit.
+
+  - type: entities
+    title: Overview controls
+    show_header_toggle: false
+    entities:
+    - entity: input_number.sbcp_marker_primary_value
+      name: Primary sample (W)
+    - entity: input_select.sbcp_marker_primary_state
+      name: Primary state
+    - entity: input_number.sbcp_marker_target_value
+      name: Target reference (W)
+    - entity: input_select.sbcp_marker_target_state
+      name: Target source state
+    - entity: input_number.sbcp_marker_reference_value
+      name: Generic reference number (source metadata kW)
+    - entity: input_select.sbcp_marker_reference_state
+      name: Generic source state
+
+  - type: custom:sensor-bar-card-plus
+    title: Home energy — Target, Peak, Floor, and references
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Grid demand
+      icon: mdi:transmission-tower
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    formatting:
+      decimal: 1
+    layout:
+      label:
+        position: left
+        width: 170
+    bar:
+      fill_style: band_gradient
+      segments:
+      - from: 0%
+        to: 35%
+        color: '#16A34A'
+      - from: 35%
+        to: 75%
+        color: '#0EA5E9'
+      - from: 75%
+        to: 100%
+        color: '#F59E0B'
+    target:
+      at:
+        entity: sensor.sbcp_marker_target
+      color: '#F8FAFC'
+      label:
+        show: true
+        decimal: 0
+    peak:
+      enabled: true
+      reset: never
+      color: '#A78BFA'
+    floor:
+      enabled: true
+      reset: never
+      color: '#F97316'
+    markers:
+    - at: 35%
+      lane: above
+      shape: diamond
+      color: '#38BDF8'
+      label:
+        show: true
+        decimal: 0
+        show_unit: false
+    - at:
+        entity: sensor.sbcp_marker_reference
+        fixed: 75
+      lane: below
+      shape: pin
+      color: '#FBBF24'
+      label:
+        show: true
+        decimal: 0
+
+  - type: markdown
+    content: |
+      ## Responsive / Grid Density Laboratory
+
+      The first comparison holds the complete card and marker configuration constant; only the number of cards across changes. Inspect sensor-name truncation/placement, value placement and any moved-above/top-right transition, marker-label overlap and its relationship to the real sensor name/value, both lanes, bar geometry, row/card height, glyph anchoring, and overall usability. Do not simplify the configuration at narrower widths. The same entity is intentionally repeated when the dashboard permits it.
+
+  - &marker_density_reference
+    type: custom:sensor-bar-card-plus
+    title: Same marker reference — compare width only
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Kitchen grid import — afternoon reading
+      icon: mdi:transmission-tower
+    scale:
+      min:
+        fixed: -500
+      max:
+        fixed: 1500
+    formatting:
+      decimal: 1
+    bar:
+      fill_style: gradient
+      gradient_stops:
+      - pos: 0
+        color: '#1D4ED8'
+      - pos: 55
+        color: '#0F766E'
+      - pos: 100
+        color: '#F59E0B'
+    markers:
+    - at: 35%
+      lane: above
+      shape: diamond
+      color: '#38BDF8'
+      label:
+        show: true
+        decimal: 0
+    - at: 68%
+      lane: below
+      shape: pin
+      color: '#FBBF24'
+      label:
+        show: true
+        decimal: 0
+    - at:
+        fixed: 1250
+      lane: below
+      shape: circle
+      color: '#DC2626'
+
+  - type: markdown
+    content: |
+      ### 1 card across
+
+      Full-width baseline for the exact configuration reused below.
+
+  - *marker_density_reference
+
+  - type: markdown
+    content: |
+      ### 2 cards across — identical reference cards
+
+      Compare against the full-width baseline; card configuration and entity are unchanged.
+
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - *marker_density_reference
+    - *marker_density_reference
+
+  - type: markdown
+    content: |
+      ### 3 cards across — identical reference cards
+
+      Compare truncation, moved value, labels, lane appearance, geometry, and anchoring with the same reference at 1 and 2 across.
+
+  - type: grid
+    columns: 3
+    square: false
+    cards:
+    - *marker_density_reference
+    - *marker_density_reference
+    - *marker_density_reference
+
+  - type: markdown
+    content: |
+      ### 4 cards across — identical reference cards
+
+      Keep the marker setup fixed and note where responsive presentation changes, if at all.
+
+  - type: grid
+    columns: 4
+    square: false
+    cards:
+    - *marker_density_reference
+    - *marker_density_reference
+    - *marker_density_reference
+    - *marker_density_reference
+
+  - type: markdown
+    content: |
+      ### 5 cards across — identical reference cards
+
+      Deliberate width stress case. Record when the row becomes difficult to read; do not tune individual cards to hide that transition.
+
+  - type: grid
+    columns: 5
+    square: false
+    cards:
+    - *marker_density_reference
+    - *marker_density_reference
+    - *marker_density_reference
+    - *marker_density_reference
+    - *marker_density_reference
+
+  - type: markdown
+    content: |
+      ### Mixed markers — 2 cards across
+
+      Plausible combinations at the same dashboard width: a labelled Target with one generic reference, and labelled Peak/Floor with one generic reference. Check label priority and that row units remain consistent.
+
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Target and reference — grid demand
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Grid demand
+      scale:
+        min:
+          fixed: -500
+        max:
+          fixed: 1500
+      formatting:
+        decimal: 0
+      target:
+        at:
+          fixed: 900
+        label:
+          show: true
+      markers:
+      - at: 62%
+        lane: above
+        shape: diamond
+        color: '#38BDF8'
+        label:
+          show: true
+    - type: custom:sensor-bar-card-plus
+      title: Peak, Floor, and reference
+      entities:
+      - entity: sensor.sbcp_showcase_battery_power
+        name: Battery charge / discharge
+      scale:
+        min:
+          fixed: -6000
+        max:
+          fixed: 3000
+      formatting:
+        decimal: 0
+      peak:
+        enabled: true
+        reset: never
+        label:
+          show: true
+      floor:
+        enabled: true
+        reset: never
+        label:
+          show: true
+      markers:
+      - at: 55%
+        lane: above
+        shape: pin
+        color: '#F59E0B'
+        label:
+          show: true
+
+  - type: markdown
+    content: |
+      ### Presentation modes — 3 cards across
+
+      Normal, inside, and Hero remain marker-bearing at reduced width. Compare name/value priority and visible above/below labels; Hero headline content should remain clear of marker labels.
+
+  - type: grid
+    columns: 3
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Normal — operating range
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Normal grid import
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+      markers:
+      - at: 35%
+        lane: above
+        shape: diamond
+        color: '#2563EB'
+        label:
+          show: true
+      - at: 72%
+        lane: below
+        shape: circle
+        color: '#F59E0B'
+    - type: custom:sensor-bar-card-plus
+      title: Inside — room temperature
+      entities:
+      - entity: sensor.sbcp_marker_comfort
+        name: Living area comfort
+      scale:
+        min:
+          fixed: 14
+        max:
+          fixed: 30
+      formatting:
+        decimal: 1
+      layout:
+        label:
+          position: inside
+      target:
+        at:
+          fixed: 22
+        label:
+          show: true
+      markers:
+      - at:
+          fixed: 25
+        lane: below
+        shape: pin
+        color: '#0F766E'
+        label:
+          show: true
+    - type: custom:sensor-bar-card-plus
+      title: Hero — solar production
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Rooftop solar production
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      layout:
+        height: 48
+        label:
+          position: hero
+          hero_size: large
+      markers:
+      - at: 58%
+        lane: above
+        shape: diamond
+        color: '#38BDF8'
+        label:
+          show: true
+      - at:
+          fixed: 8
+        lane: below
+        shape: pin
+        color: '#FBBF24'
+
+  - type: markdown
+    content: |
+      ### Mixed responsive pressure — 4 cards across
+
+      These valid configurations combine labelled lanes, an above presentation, and a long name/unit. Note whether the responsive moved/top-right value remains distinct from sensor text and marker labels. Scales intentionally include power and voltage ranges rather than only 0..100.
+
+  - type: grid
+    columns: 4
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Above label — solar
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Rooftop solar
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      layout:
+        label:
+          position: above
+      markers:
+      - at: 44%
+        lane: above
+        shape: arrow
+        color: '#2563EB'
+        label:
+          show: true
+    - type: custom:sensor-bar-card-plus
+      title: Below label — battery
+      entities:
+      - entity: sensor.sbcp_showcase_battery_power
+        name: Home battery flow
+      scale:
+        min:
+          fixed: -6000
+        max:
+          fixed: 3000
+      markers:
+      - at: 68%
+        lane: below
+        shape: pin
+        color: '#F59E0B'
+        label:
+          show: true
+    - type: custom:sensor-bar-card-plus
+      title: Both lanes — grid exchange
+      entities:
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Utility exchange
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+        unit: kW
+      markers:
+      - at: 30%
+        lane: above
+        shape: diamond
+        color: '#38BDF8'
+        label:
+          show: true
+      - at: 72%
+        lane: below
+        shape: circle
+        color: '#DC2626'
+        label:
+          show: true
+    - type: custom:sensor-bar-card-plus
+      title: Long name and narrow voltage scale
+      entities:
+      - entity: sensor.sbcp_showcase_grid_voltage
+        name: Remote distribution panel voltage under variable load
+      scale:
+        min:
+          fixed: 225
+        max:
+          fixed: 233
+      formatting:
+        decimal: 1
+        unit: V
+      markers:
+      - at:
+          fixed: 229
+        lane: below
+        shape: chevron
+        color: '#7C3AED'
+        label:
+          show: true
+
+  - type: markdown
+    content: |
+      ### Five-card marker stress — 5 cards across
+
+      This is intentionally dense, not a showcase. Compare Target, Peak/Floor, above-only, both-lane generic markers, and coincident labels at one card width. Keep the resulting responsive and collision behavior visible; each generic lane stays within its two-marker capacity.
+
+  - type: grid
+    columns: 5
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Target label
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Grid
+      scale:
+        min:
+          fixed: -500
+        max:
+          fixed: 1500
+      target:
+        at:
+          fixed: 950
+        label:
+          show: true
+    - type: custom:sensor-bar-card-plus
+      title: Peak + Floor labels
+      entities:
+      - entity: sensor.sbcp_showcase_battery_power
+        name: Battery
+      scale:
+        min:
+          fixed: -6000
+        max:
+          fixed: 3000
+      peak:
+        enabled: true
+        reset: never
+        label:
+          show: true
+      floor:
+        enabled: true
+        reset: never
+        label:
+          show: true
+    - type: custom:sensor-bar-card-plus
+      title: Above generic labels
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Above refs
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+      markers:
+      - at: 38%
+        lane: above
+        color: '#2563EB'
+        label:
+          show: true
+      - at: 61%
+        lane: above
+        shape: diamond
+        color: '#F59E0B'
+        label:
+          show: true
+    - type: custom:sensor-bar-card-plus
+      title: Above + below refs
+      entities:
+      - entity: sensor.sbcp_showcase_grid_voltage
+        name: Voltage
+      scale:
+        min:
+          fixed: 100
+        max:
+          fixed: 300
+      formatting:
+        decimal: 1
+        unit: V
+      markers:
+      - at: 42%
+        lane: above
+        shape: arrow
+        color: '#0F766E'
+        label:
+          show: true
+      - at: 58%
+        lane: below
+        shape: pin
+        color: '#DC2626'
+        label:
+          show: true
+    - type: custom:sensor-bar-card-plus
+      title: Coincident labels
+      entities:
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Grid labels
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+        unit: kW
+      target:
+        at:
+          fixed: -3.4
+        label:
+          show: true
+      markers:
+      - at:
+          fixed: -3.4
+        lane: below
+        shape: diamond
+        color: '#38BDF8'
+        label:
+          show: true
+
+  - type: markdown
+    content: |
+      ## Coexistence and capacity
+
+      A full stack can show seven glyphs: Peak plus two generic references above, Target plus Floor plus two generic references below. In the capacity examples, the first two valid generic markers in each lane are accepted; an unresolved accepted marker still occupies its slot, while malformed markers are skipped. Excess valid markers remain configured and produce a non-fatal warning.
+
+  - type: entities
+    title: Full-stack sample controls
+    show_header_toggle: false
+    entities:
+    - entity: input_number.sbcp_marker_primary_value
+      name: Grid demand (W)
+    - entity: input_number.sbcp_marker_target_value
+      name: Target (W)
+    - entity: input_number.sbcp_marker_reference_value
+      name: Generic source number (reported kW, interpreted on the row scale)
+    - entity: input_select.sbcp_marker_reference_state
+      name: Generic source state
+
+  - type: custom:sensor-bar-card-plus
+    title: Seven-glyph coexistence
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Grid demand
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    target:
+      at:
+        entity: sensor.sbcp_marker_target
+      label:
+        show: true
+        decimal: 0
+    peak:
+      enabled: true
+      reset: never
+      label:
+        show: true
+        decimal: 0
+    floor:
+      enabled: true
+      reset: never
+      label:
+        show: true
+        decimal: 0
+    markers:
+    - at: 25%
+      lane: above
+      shape: diamond
+      color: '#2563EB'
+      label:
+        show: true
+        decimal: 0
+    - at: 70%
+      lane: above
+      shape: arrow
+      color: '#0891B2'
+      label:
+        show: true
+        decimal: 0
+        show_unit: false
+    - at: 35%
+      lane: below
+      shape: circle
+      color: '#DC2626'
+      label:
+        show: true
+        decimal: 0
+    - at:
+        fixed: 240
+      lane: below
+      shape: pin
+      color: '#16A34A'
+      label:
+        show: true
+        decimal: 0
+        show_unit: false
+
+  - type: custom:sensor-bar-card-plus
+    title: Third valid reference in each lane is excess
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Capacity
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    markers:
+    - at:
+        fixed: 30
+      lane: above
+      color: '#2563EB'
+    - at:
+        fixed: 90
+      lane: above
+      color: '#0891B2'
+    - at:
+        fixed: 150
+      lane: above
+      color: '#7C3AED'
+    - at:
+        fixed: 45
+      lane: below
+      color: '#DC2626'
+    - at:
+        fixed: 180
+      lane: below
+      color: '#EA580C'
+    - at:
+        fixed: 270
+      lane: below
+      color: '#16A34A'
+
+  - type: custom:sensor-bar-card-plus
+    title: Unresolved references reserve both lane slots
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Change the source selector above
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    markers:
+    - at:
+        entity: sensor.sbcp_marker_reference
+      lane: above
+      shape: arrow
+      color: '#2563EB'
+      label:
+        show: true
+    - at:
+        fixed: 90
+      lane: above
+      shape: diamond
+      color: '#0891B2'
+    - at:
+        fixed: 150
+      lane: above
+      color: '#7C3AED'
+    - at:
+        entity: sensor.sbcp_marker_reference
+      lane: below
+      shape: pin
+      color: '#DC2626'
+      label:
+        show: true
+    - at:
+        fixed: 45
+      lane: below
+      shape: circle
+      color: '#EA580C'
+    - at:
+        fixed: 180
+      lane: below
+      color: '#16A34A'
+
+  - type: custom:sensor-bar-card-plus
+    title: Malformed item is skipped before two valid references
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Malformed does not consume capacity
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    markers:
+    - at: "not-a-number"
+      lane: above
+    - at:
+        fixed: 60
+      lane: above
+      color: '#2563EB'
+    - at:
+        fixed: 180
+      lane: above
+      color: '#0891B2'
+    - at:
+        fixed: 120
+      lane: above
+      color: '#7C3AED'
+
+  - type: markdown
+    content: |
+      ## Collision Lab — intentional overlap only here
+
+      These cards deliberately bring marker labels close to the row value or another label. Compare normal, inside, above, Hero, and narrow responsive presentation. Hover each visible glyph individually: only its associated marker label should come forward; the actual sensor name/value must remain above marker labels. Move off the glyph and confirm ordinary stacking returns. The label background is the card surface; no overlap is expected outside this lab.
+
+  - type: custom:sensor-bar-card-plus
+    title: Default / normal — marker labels meet at the sample
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Long sensor label beside a live value
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    target:
+      at:
+        entity: sensor.sbcp_marker_primary
+      label:
+        show: true
+    markers:
+    - at:
+        entity: sensor.sbcp_marker_primary
+      lane: below
+      shape: diamond
+      color: '#2563EB'
+      label:
+        show: true
+        decimal: 1
+
+  - type: custom:sensor-bar-card-plus
+    title: Inside — marker label meets the bar value
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Inside value / label overlap
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    layout:
+      label:
+        position: inside
+    target:
+      at:
+        entity: sensor.sbcp_marker_primary
+      label:
+        show: true
+    markers:
+    - at:
+        entity: sensor.sbcp_marker_primary
+      lane: above
+      shape: arrow
+      color: '#7C3AED'
+      label:
+        show: true
+
+  - type: custom:sensor-bar-card-plus
+    title: Above — marker label crosses the sensor label row
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Kitchen grid import — afternoon reading
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    layout:
+      label:
+        position: above
+    markers:
+    - at:
+        entity: sensor.sbcp_marker_primary
+      lane: above
+      shape: pin
+      color: '#DC2626'
+      label:
+        show: true
+        decimal: 1
+
+  - type: custom:sensor-bar-card-plus
+    title: Hero — marker label overlaps the prominent value
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Home energy, live demand
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+      layout:
+        label:
+          hero_size: large
+    layout:
+      label:
+        position: hero
+    target:
+      at:
+        entity: sensor.sbcp_marker_primary
+      label:
+        show: true
+    markers:
+    - at:
+        entity: sensor.sbcp_marker_primary
+      lane: below
+      shape: chevron
+      color: '#F97316'
+      label:
+        show: true
+        decimal: 1
+
+  - type: custom:sensor-bar-card-plus
+    title: Narrow / responsive — long label and coincident marker labels
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Very long sensor name for a narrow dashboard viewport
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    layout:
+      label:
+        position: left
+        width: 210
+    target:
+      at:
+        entity: sensor.sbcp_marker_primary
+      label:
+        show: true
+    markers:
+    - at:
+        entity: sensor.sbcp_marker_primary
+      lane: below
+      shape: circle
+      color: '#0F766E'
+      label:
+        show: true
+        decimal: 1
+
+  - type: markdown
+    content: |
+      ### Narrow grid collision and hover comparison — 2 cards across
+
+      The Target and generic labels intentionally overlap while their glyph coordinates remain separately hoverable. Hover Target, then the generic glyph; verify only the corresponding label is promoted, the real sensor name/value stays on top, and leaving either glyph restores normal stacking. Compare normal and above sensor-name presentation without changing the collision setup.
+
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Narrow collision — normal
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Kitchen grid import — afternoon reading
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+      target:
+        at:
+          fixed: 165
+        label:
+          show: true
+      markers:
+      - at:
+          fixed: 195
+        lane: below
+        shape: diamond
+        color: '#38BDF8'
+        label:
+          show: true
+    - type: custom:sensor-bar-card-plus
+      title: Narrow collision — above presentation
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Kitchen grid import — afternoon reading
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+      layout:
+        label:
+          position: above
+      target:
+        at:
+          fixed: 165
+        label:
+          show: true
+      markers:
+      - at:
+          fixed: 195
+        lane: below
+        shape: diamond
+        color: '#38BDF8'
+        label:
+          show: true
+
+  - type: markdown
+    content: |
+      ## Direction Laboratory
+
+      Inward points toward the bar; outward points away from it. Omitted `direction` defaults to inward. Circle and Diamond are intentionally unaffected because they are not directional. Each compact comparison card uses the same shape at two positions in each lane: blue is inward and amber is outward. `chevron` is the public Double Chevron shape.
+
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Triangle — both lanes and directions
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Inward / outward
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+      markers:
+      - at: 35%
+        lane: above
+        shape: triangle
+        direction: inward
+        color: '#2563EB'
+      - at: 68%
+        lane: above
+        shape: triangle
+        direction: outward
+        color: '#F59E0B'
+      - at: 35%
+        lane: below
+        shape: triangle
+        direction: inward
+        color: '#2563EB'
+      - at: 68%
+        lane: below
+        shape: triangle
+        direction: outward
+        color: '#F59E0B'
+    - type: custom:sensor-bar-card-plus
+      title: Double Chevron — both lanes and directions
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Inward / outward
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+      markers:
+      - at: 35%
+        lane: above
+        shape: chevron
+        direction: inward
+        color: '#2563EB'
+      - at: 68%
+        lane: above
+        shape: chevron
+        direction: outward
+        color: '#F59E0B'
+      - at: 35%
+        lane: below
+        shape: chevron
+        direction: inward
+        color: '#2563EB'
+      - at: 68%
+        lane: below
+        shape: chevron
+        direction: outward
+        color: '#F59E0B'
+    - type: custom:sensor-bar-card-plus
+      title: Arrow — both lanes and directions
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Inward / outward
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+      markers:
+      - at: 35%
+        lane: above
+        shape: arrow
+        direction: inward
+        color: '#2563EB'
+      - at: 68%
+        lane: above
+        shape: arrow
+        direction: outward
+        color: '#F59E0B'
+      - at: 35%
+        lane: below
+        shape: arrow
+        direction: inward
+        color: '#2563EB'
+      - at: 68%
+        lane: below
+        shape: arrow
+        direction: outward
+        color: '#F59E0B'
+    - type: custom:sensor-bar-card-plus
+      title: Pin — both lanes and directions
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Inward / outward
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+      markers:
+      - at: 35%
+        lane: above
+        shape: pin
+        direction: inward
+        color: '#2563EB'
+      - at: 68%
+        lane: above
+        shape: pin
+        direction: outward
+        color: '#F59E0B'
+      - at: 35%
+        lane: below
+        shape: pin
+        direction: inward
+        color: '#2563EB'
+      - at: 68%
+        lane: below
+        shape: pin
+        direction: outward
+        color: '#F59E0B'
+    - type: custom:sensor-bar-card-plus
+      title: Default direction — omitted means inward
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Above-lane default points toward the bar
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+      markers:
+      - at: 50%
+        lane: above
+        shape: arrow
+        color: '#2563EB'
+
+  - type: markdown
+    content: |
+      ## Color and Contrast
+
+      Compare the glyph halo and marker-colored labels across solid, banded, softened, gradient, and segmented fills. Inspect this section in both HA light and dark themes; check near-white, near-black, neutral, yellow, red, and blue markers, including the close-match and high-contrast cases. Some markers are intentionally unlabelled for glyph-only comparison.
+
+  - type: custom:sensor-bar-card-plus
+    title: Solid — cool slate
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Solid fill
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    bar:
+      fill_style: solid
+      color: '#155E75'
+    markers:
+    - at: 55%
+      lane: above
+      shape: diamond
+      color: '#FDE047'
+      label:
+        show: true
+
+  - type: custom:sensor-bar-card-plus
+    title: Bands — contrasting semantic zones
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Hard bands
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    bar:
+      fill_style: bands
+      segments:
+      - from: 0%
+        to: 35%
+        color: '#16A34A'
+      - from: 35%
+        to: 75%
+        color: '#F59E0B'
+      - from: 75%
+        to: 100%
+        color: '#DC2626'
+    markers:
+    - at: 75%
+      lane: below
+      shape: circle
+      color: '#1D4ED8'
+
+  - type: custom:sensor-bar-card-plus
+    title: Soft Bands — dusk palette
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Soft transitions
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    bar:
+      fill_style: soft_bands
+      segments:
+      - from: 0%
+        to: 40%
+        color: '#0F766E'
+      - from: 40%
+        to: 72%
+        color: '#7C3AED'
+      - from: 72%
+        to: 100%
+        color: '#DB2777'
+    markers:
+    - at: 40%
+      lane: above
+      shape: pin
+      color: '#F8FAFC'
+      label:
+        show: true
+
+  - type: custom:sensor-bar-card-plus
+    title: Gradient — continuous ocean to amber
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Continuous gradient
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    bar:
+      fill_style: gradient
+      gradient_stops:
+      - pos: 0
+        color: '#082F49'
+      - pos: 48
+        color: '#0EA5E9'
+      - pos: 100
+        color: '#F59E0B'
+    markers:
+    - at: 48%
+      lane: above
+      shape: chevron
+      color: '#FFFFFF'
+      label:
+        show: true
+
+  - type: custom:sensor-bar-card-plus
+    title: Band Gradient — segments with interpolated color
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Segmented gradient
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    bar:
+      fill_style: band_gradient
+      segments:
+      - from: 0%
+        to: 30%
+        color: '#0369A1'
+      - from: 30%
+        to: 68%
+        color: '#22C55E'
+      - from: 68%
+        to: 100%
+        color: '#F97316'
+    markers:
+    - at: 68%
+      lane: below
+      shape: arrow
+      color: '#111827'
+      label:
+        show: true
+
+  - type: custom:sensor-bar-card-plus
+    title: Close-match grey and contrasting red — segmented fill
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Segment color comparison
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+    bar:
+      fill_style: bands
+      segments:
+      - from: 0%
+        to: 30%
+        color: '#6B7280'
+      - from: 30%
+        to: 100%
+        color: '#16A34A'
+    markers:
+    - at: 20%
+      lane: above
+      shape: triangle
+      color: '#6B7280'
+      label:
+        show: true
+    - at: 80%
+      lane: below
+      shape: pin
+      color: '#DC2626'
+      label:
+        show: true
+
+  - type: markdown
+    content: |
+      ## Scale Laboratory
+
+      The first card compares independent static scales on the same W row. 0%, 35%, and 100% are scale-relative; the labelled 35% marker shows the resolved W value. The separate interactive card starts at 100..300, so 35% resolves to 170 W. Change only its local min/max controls to verify the logical 35% position stays fixed while the label value follows the effective scale.
+
+  - type: custom:sensor-bar-card-plus
+    title: Seven static scales — 0%, 35%, and 100% references
+    formatting:
+      decimal: 1
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: 0..100
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+    - entity: sensor.sbcp_marker_primary
+      name: 100..300
+      scale:
+        min:
+          fixed: 100
+        max:
+          fixed: 300
+    - entity: sensor.sbcp_marker_primary
+      name: -100..100
+      scale:
+        min:
+          fixed: -100
+        max:
+          fixed: 100
+    - entity: sensor.sbcp_marker_primary
+      name: -500..1500
+      scale:
+        min:
+          fixed: -500
+        max:
+          fixed: 1500
+    - entity: sensor.sbcp_marker_primary
+      name: -100..0
+      scale:
+        min:
+          fixed: -100
+        max:
+          fixed: 0
+    - entity: sensor.sbcp_marker_primary
+      name: 0..1000
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 1000
+    - entity: sensor.sbcp_marker_primary
+      name: Narrow 225..233
+      scale:
+        min:
+          fixed: 225
+        max:
+          fixed: 233
+    markers:
+    - at: 0%
+      lane: above
+      shape: circle
+      color: '#2563EB'
+    - at: 35%
+      lane: above
+      shape: diamond
+      color: '#0891B2'
+      label:
+        show: true
+        decimal: 0
+        show_unit: true
+    - at: 100%
+      lane: below
+      shape: chevron
+      color: '#7C3AED'
+
+  - type: entities
+    title: Interactive percentage scale controls
+    show_header_toggle: false
+    entities:
+    - entity: input_number.sbcp_marker_scale_min_value
+      name: Local scale minimum (W)
+    - entity: input_number.sbcp_marker_scale_max_value
+      name: Local scale maximum (W)
+
+  - type: custom:sensor-bar-card-plus
+    title: Interactive scale — 35% stays relative
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Adjustable scale row
+    scale:
+      min:
+        entity: sensor.sbcp_marker_scale_min
+      max:
+        entity: sensor.sbcp_marker_scale_max
+    formatting:
+      decimal: 2
+    markers:
+    - at: 0%
+      lane: above
+      shape: circle
+      color: '#2563EB'
+    - at: 35%
+      lane: above
+      shape: diamond
+      color: '#0891B2'
+      label:
+        show: true
+        decimal: 0
+        show_unit: true
+    - at: 100%
+      lane: below
+      shape: chevron
+      color: '#7C3AED'
+
+  - type: custom:sensor-bar-card-plus
+    title: Off-scale raw values — glyphs clamp, labels do not
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Reference row (W)
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+    markers:
+    - at:
+        fixed: -20
+      lane: below
+      shape: triangle
+      color: '#DC2626'
+      label:
+        show: true
+        decimal: 0
+    - at:
+        fixed: 140
+      lane: below
+      shape: pin
+      color: '#EA580C'
+      label:
+        show: true
+        decimal: 0
+    - at:
+        entity: sensor.sbcp_marker_reference
+      lane: above
+      shape: arrow
+      color: '#2563EB'
+      label:
+        show: true
+        decimal: 0
+
+  - type: markdown
+    content: |
+      Set the generic reference number to -20 and then 140. Its helper advertises kW, but on this W row the marker uses the raw number: the glyph clamps to the nearest endpoint and the label retains -20 W or 140 W. The two fixed references provide the same raw-value/clamped-position check.
+
+  - type: markdown
+    content: |
+      ## Source Resolution
+
+      Fixed, percentage, dynamic-only, and dynamic-with-fixed-fallback sources are shown together. With the default 140 reference, the dynamic value wins over fallback 75 and is clamped at the right edge. Set its state to unavailable, then unknown, then finite: dynamic-only hides, while dynamic-plus-fixed resolves to 75. The displayed unit remains the W row unit throughout.
+
+  - type: entities
+    title: Dynamic generic source controls
+    show_header_toggle: false
+    entities:
+    - entity: input_number.sbcp_marker_reference_value
+      name: Dynamic source number (kW metadata; no conversion)
+    - entity: input_select.sbcp_marker_reference_state
+      name: Source state — finite / unavailable / unknown
+
+  - type: custom:sensor-bar-card-plus
+    title: Fixed, percentage, dynamic, fallback, and state recovery
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Reference row (W)
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+    formatting:
+      decimal: 1
+    markers:
+    - at:
+        fixed: 25
+      lane: above
+      shape: circle
+      color: '#16A34A'
+      label:
+        show: true
+        decimal: 0
+    - at:
+        entity: sensor.sbcp_marker_reference
+      lane: above
+      shape: arrow
+      color: '#2563EB'
+      label:
+        show: true
+        decimal: 0
+    - at: 35%
+      lane: below
+      shape: diamond
+      color: '#0891B2'
+      label:
+        show: true
+        decimal: 0
+    - at:
+        entity: sensor.sbcp_marker_reference
+        fixed: 75
+      lane: below
+      shape: pin
+      color: '#DC2626'
+      label:
+        show: true
+        decimal: 0
+
+  - type: markdown
+    content: |
+      ## Peak and Floor — reset windows
+
+      Change the dedicated primary sample between highs and lows. Unavailable/unknown primary states should pause ingestion without erasing the tracked extrema. The never policy persists for the card instance; 1m starts at its initializing finite sample and resets lazily at the next finite update after expiry. Quarterly uses local quarter-hour boundaries and is intentionally different from relative 15m; hourly uses the local hour boundary.
+
+  - type: entities
+    title: Extrema sample controls
+    show_header_toggle: false
+    entities:
+    - entity: input_number.sbcp_marker_primary_value
+      name: Primary sample (W)
+    - entity: input_select.sbcp_marker_primary_state
+      name: Primary state
+
+  - type: markdown
+    content: |
+      ### LIVE EXTREMA TRACKING — RESET NEVER
+
+      This card tests pure session extrema tracking with a continuously oscillating battery value. Reset is `never`: Max can only move upward and Min can only move downward, even as the current value reverses. If the value is stationary, confirm the existing SBCP Showcase Enabled helper is on. Use the timed reset examples below to test reset behavior separately.
+
+  - type: custom:sensor-bar-card-plus
+    title: Live extrema tracking — Reset never
+    entities:
+    - entity: sensor.sbcp_showcase_battery
+      name: Battery charge
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+    peak:
+      enabled: true
+      reset: never
+      color: '#7C3AED'
+      label:
+        show: true
+        text: Max
+    floor:
+      enabled: true
+      reset: never
+      color: '#D97706'
+      label:
+        show: true
+        text: Min
+
+  - type: custom:sensor-bar-card-plus
+    title: Peak — never
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Highest sample
+    scale:
+      min:
+        fixed: -100
+      max:
+        fixed: 300
+    peak:
+      enabled: true
+      reset: never
+      color: '#7C3AED'
+      label:
+        show: true
+        decimal: 1
+
+  - type: custom:sensor-bar-card-plus
+    title: Floor — never
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Lowest sample
+    scale:
+      min:
+        fixed: -100
+      max:
+        fixed: 300
+    floor:
+      enabled: true
+      reset: never
+      color: '#D97706'
+      label:
+        show: true
+        decimal: 1
+
+  - type: custom:sensor-bar-card-plus
+    title: Peak and Floor — independent relative 1m windows
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Rolling extrema
+    scale:
+      min:
+        fixed: -100
+      max:
+        fixed: 300
+    peak:
+      enabled: true
+      reset: 1m
+      color: '#7C3AED'
+      label:
+        show: true
+    floor:
+      enabled: true
+      reset: 1m
+      color: '#D97706'
+      label:
+        show: true
+
+  - type: custom:sensor-bar-card-plus
+    title: Peak quarterly and Floor hourly
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Local calendar windows
+    scale:
+      min:
+        fixed: -100
+      max:
+        fixed: 300
+    peak:
+      enabled: true
+      reset: quarterly
+      color: '#7C3AED'
+      label:
+        show: true
+    floor:
+      enabled: true
+      reset: hourly
+      color: '#D97706'
+      label:
+        show: true
+
+  - type: markdown
+    content: |
+      ## Layout and Density
+
+      These examples isolate lane height and label placement, then combine a compact group of realistic energy rows. Glyph-only rows should retain compact spacing; visible labels add the below-lane spacing; above places the sensor label above the bar and can overlap marker labels.
+
+  - type: custom:sensor-bar-card-plus
+    title: Glyph-only rows — compact lanes
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Grid
+    - entity: sensor.sbcp_marker_target
+      name: Target reference
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    peak:
+      enabled: true
+      reset: never
+    floor:
+      enabled: true
+      reset: never
+    markers:
+    - at: 35%
+      lane: above
+      shape: diamond
+      color: '#2563EB'
+    - at:
+        fixed: 210
+      lane: below
+      shape: circle
+      color: '#16A34A'
+
+  - type: custom:sensor-bar-card-plus
+    title: Labelled below lane — additional marker spacing
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Grid demand
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    target:
+      at:
+        fixed: 225
+      label:
+        show: true
+        decimal: 0
+    floor:
+      enabled: true
+      reset: never
+      label:
+        show: true
+        decimal: 0
+    markers:
+    - at: 35%
+      lane: below
+      shape: pin
+      color: '#0891B2'
+      label:
+        show: true
+        decimal: 0
+
+  - type: custom:sensor-bar-card-plus
+    title: Above sensor label — overlay behavior
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Main service feed
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 300
+    layout:
+      label:
+        position: above
+    markers:
+    - at: 35%
+      lane: above
+      shape: arrow
+      color: '#7C3AED'
+      label:
+        show: true
+        decimal: 0
+    - at: 70%
+      lane: above
+      shape: diamond
+      color: '#DC2626'
+      label:
+        show: true
+        decimal: 0
+
+  - type: custom:sensor-bar-card-plus
+    title: Realistic multi-row household power density
+    entities:
+    - entity: sensor.sbcp_showcase_solar
+      name: Rooftop solar
+      icon: mdi:solar-power
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 8000
+    - entity: sensor.sbcp_showcase_battery_power
+      name: Battery flow
+      icon: mdi:home-battery
+      scale:
+        min:
+          fixed: -4000
+        max:
+          fixed: 4000
+    - entity: sensor.sbcp_showcase_grid
+      name: Utility exchange
+      icon: mdi:transmission-tower
+      scale:
+        min:
+          fixed: -5000
+        max:
+          fixed: 5000
+    layout:
+      label:
+        position: left
+        width: 170
+      height: 34
+    formatting:
+      decimal: 0
+    bar:
+      fill_style: gradient
+      gradient_stops:
+      - pos: 0
+        color: '#1D4ED8'
+      - pos: 50
+        color: '#0F766E'
+      - pos: 100
+        color: '#F59E0B'
+    target:
+      at:
+        fixed: 1200
+      color: '#F8FAFC'
+    markers:
+    - at: 35%
+      lane: above
+      shape: diamond
+      color: '#38BDF8'
+    - at: 70%
+      lane: below
+      shape: pin
+      color: '#FDE047'
+
+  - type: markdown
+    content: |
+      ### Per-row marker mix — vertical multi-row density
+
+      A normal compact household stack with deliberately different row configurations: no markers, glyph-only, labelled above, labelled below, both lanes, and multiple below labels. Compare row height and spacing; glyph-only rows should stay compact and labelled below lanes should receive only their normal clearance.
+
+  - type: custom:sensor-bar-card-plus
+    title: Household power — mixed marker rows
+    entities:
+    - entity: sensor.sbcp_marker_primary
+      name: Grid demand — no markers
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+    - entity: sensor.sbcp_showcase_solar
+      name: Rooftop solar — glyph only
+      icon: mdi:solar-power
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 8000
+      markers:
+      - at: 65%
+        lane: above
+        shape: diamond
+        color: '#38BDF8'
+    - entity: sensor.sbcp_showcase_battery_power
+      name: Battery — glyph-only extrema
+      icon: mdi:home-battery
+      scale:
+        min:
+          fixed: -6000
+        max:
+          fixed: 3000
+      peak:
+        enabled: true
+        reset: never
+      floor:
+        enabled: true
+        reset: never
+    - entity: sensor.sbcp_hero_shot_grid
+      name: Utility exchange — above label
+      icon: mdi:transmission-tower
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+        unit: kW
+      markers:
+      - at: 68%
+        lane: above
+        shape: arrow
+        color: '#2563EB'
+        label:
+          show: true
+    - entity: sensor.sbcp_showcase_grid_voltage
+      name: Distribution voltage — below label
+      icon: mdi:sine-wave
+      scale:
+        min:
+          fixed: 100
+        max:
+          fixed: 300
+      formatting:
+        decimal: 1
+        unit: V
+      target:
+        at:
+          fixed: 230
+        label:
+          show: true
+    - entity: sensor.sbcp_showcase_consumption
+      name: Household load — both lanes
+      icon: mdi:home-lightning-bolt
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 3000
+      peak:
+        enabled: true
+        reset: never
+        label:
+          show: true
+      markers:
+      - at: 38%
+        lane: above
+        shape: diamond
+        color: '#0F766E'
+        label:
+          show: true
+      - at: 76%
+        lane: below
+        shape: pin
+        color: '#F59E0B'
+    - entity: sensor.sbcp_marker_primary
+      name: Grid demand — multiple below labels
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+      target:
+        at:
+          fixed: 215
+        label:
+          show: true
+      floor:
+        enabled: true
+        reset: never
+        label:
+          show: true
+      markers:
+      - at: 32%
+        lane: below
+        shape: circle
+        color: '#7C3AED'
+        label:
+          show: true
+      - at: 84%
+        lane: below
+        shape: diamond
+        color: '#DC2626'
+        label:
+          show: true
+    layout:
+      label:
+        position: left
+        width: 190
+      height: 34
+    formatting:
+      decimal: 0
+    bar:
+      fill_style: gradient
+      gradient_stops:
+      - pos: 0
+        color: '#1D4ED8'
+      - pos: 50
+        color: '#0F766E'
+      - pos: 100
+        color: '#F59E0B'
+
+  - type: markdown
+    content: |
+      ## Semantic Label / Label Content
+
+      These compact examples isolate the independent label components. Compare value + unit, semantic text + value + unit, text + value without unit, text + unit without value, text only, value only, and unit only. Empty composition is intentionally covered in automated tests and should produce no visible label.
+
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Target / extrema semantics
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: House load
+      scale:
+        min: { fixed: 0 }
+        max: { fixed: 300 }
+      formatting:
+        decimal: 1
+        unit: W
+      target:
+        at: 180
+        label:
+          show: true
+          text: Target
+          show_value: true
+          show_unit: true
+      peak:
+        enabled: true
+        reset: never
+        label:
+          show: true
+          text: Max
+      floor:
+        enabled: true
+        reset: never
+        label:
+          show: true
+          text: Min
+
+    - type: custom:sensor-bar-card-plus
+      title: Generic compositions
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Grid exchange
+      scale:
+        min: { fixed: -300 }
+        max: { fixed: 300 }
+      formatting:
+        decimal: 1
+        unit: W
+      markers:
+      - at: 25%
+        lane: above
+        shape: diamond
+        color: '#2563EB'
+        label:
+          show: true
+          text: Prediction
+          show_value: true
+          show_unit: false
+      - at: 72%
+        lane: below
+        shape: pin
+        color: '#F59E0B'
+        label:
+          show: true
+          text: Trigger
+          show_value: false
+          show_unit: true
+
+    - type: custom:sensor-bar-card-plus
+      title: Text only / value only
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Solar output
+      scale:
+        min: { fixed: 0 }
+        max: { fixed: 10 }
+      formatting:
+        decimal: 1
+        unit: kW
+      markers:
+      - at: 30%
+        lane: above
+        shape: circle
+        color: '#7C3AED'
+        label:
+          show: true
+          text: Previous max
+          show_value: false
+          show_unit: false
+      - at: 55%
+        lane: above
+        shape: diamond
+        color: '#0891B2'
+        label:
+          show: true
+      - at: 75%
+        lane: below
+        shape: triangle
+        color: '#DC2626'
+        label:
+          show: true
+          show_unit: false
+
+    - type: custom:sensor-bar-card-plus
+      title: Unit only / text + unit
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Supply voltage
+      scale:
+        min: { fixed: 225 }
+        max: { fixed: 233 }
+      formatting:
+        decimal: 2
+        unit: V
+      markers:
+      - at: 20%
+        lane: above
+        shape: chevron
+        color: '#0891B2'
+        label:
+          show: true
+          show_value: false
+          show_unit: true
+      - at: 80%
+        lane: below
+        shape: arrow
+        color: '#16A34A'
+        label:
+          show: true
+          text: High
+          show_value: false
+          show_unit: true
+
+  - type: markdown
+    content: |
+      ## Visual editor handoff
+
+      Use a disposable card in an editable Home Assistant dashboard to check add/remove/reorder, source modes, lane/shape/color/label options, card-level inheritance, entity list replacement, explicit markers: [], and save/reopen preservation of excess configured markers. This YAML playground demonstrates runtime acceptance and does not replace the editor round-trip check.

@@ -66,6 +66,88 @@ function validateBaselineSuppressesNeedle(diagnostics, config, path, entity = nu
   }
 }
 
+function validateExtremumReset(diagnostics, config, path, entity = null) {
+  for (const marker of ['peak_marker', 'floor_marker']) {
+    if (config?.[marker]?.reset_invalid) {
+      addWarning(
+        diagnostics,
+        `${marker}.invalid_reset`,
+        'Invalid marker reset; using never.',
+        `${path}.${marker}.reset`,
+        entity
+      );
+    }
+  }
+}
+
+function validateMarkerDirections(diagnostics, config, path, entity = null) {
+  for (const marker of ['target_marker', 'peak_marker', 'floor_marker']) {
+    if (config?.[marker]?.direction_invalid) {
+      addWarning(
+        diagnostics,
+        `${marker}.invalid_direction`,
+        'Invalid marker direction; using inward.',
+        `${path}.${marker === 'target_marker' ? 'target' : marker.replace('_marker', '')}.direction`,
+        entity
+      );
+    }
+  }
+}
+
+function validateBuiltinMarkerLabels(diagnostics, config, path, entity = null) {
+  for (const [key, publicKey] of [['target_marker', 'target'], ['peak_marker', 'peak'], ['floor_marker', 'floor']]) {
+    const marker = config?.[key];
+    const labelPath = `${path}.${publicKey}.label`;
+    if (marker?.label_invalid_show) addWarning(diagnostics, 'markers.invalid_label_show', 'Marker label show must be a boolean; using the existing fallback.', `${labelPath}.show`, entity);
+    if (marker?.label_invalid_text) addWarning(diagnostics, 'markers.invalid_label_text', 'Marker label text must be a string; ignoring it.', `${labelPath}.text`, entity);
+    if (marker?.label_invalid_show_value) addWarning(diagnostics, 'markers.invalid_label_show_value', 'Marker label show_value must be a boolean; using the inherited or default value.', `${labelPath}.show_value`, entity);
+    if (marker?.label_invalid_show_unit) addWarning(diagnostics, 'markers.invalid_label_show_unit', 'Marker label show_unit must be a boolean; using the inherited or default value.', `${labelPath}.show_unit`, entity);
+    if (marker?.label_invalid_precision) addWarning(diagnostics, 'markers.invalid_label_precision', 'Marker label precision must be a non-negative integer; using the inherited or row precision.', `${labelPath}.${marker.label_precision_key ?? 'precision'}`, entity);
+    if (marker?.label_unsupported_unit) addWarning(diagnostics, 'markers.unsupported_label_unit', 'Marker label unit is no longer supported; use show_unit instead.', `${labelPath}.unit`, entity);
+  }
+}
+
+function validateGenericMarkers(diagnostics, markers, invalidList, path, entity = null) {
+  if (invalidList) {
+    addWarning(diagnostics, 'markers.invalid_list', 'Markers must be a list; ignoring the malformed value.', path, entity);
+  }
+
+  for (const marker of markers ?? []) {
+    const markerPath = `${path}[${marker.index}]`;
+    if (marker.malformed) {
+      addWarning(diagnostics, 'markers.invalid_item', 'Marker must be an object; ignoring this item.', markerPath, entity);
+      continue;
+    }
+    if (marker.invalidSource && !marker.invalidPercentage && !marker.unsupportedPercentField) {
+      addWarning(diagnostics, 'markers.invalid_source', 'Marker requires a valid fixed value, percentage, or entity source.', `${markerPath}.at`, entity);
+    }
+    if (marker.invalidPercentage) {
+      addWarning(diagnostics, 'markers.invalid_percentage', 'Marker percentage must be between 0 and 100 inclusive.', `${markerPath}.at`, entity);
+    }
+    if (marker.unsupportedPercentField) {
+      addWarning(diagnostics, 'markers.invalid_source', 'Use a percentage string such as "35%" instead of an at.percent field.', `${markerPath}.at`, entity);
+    }
+    if (marker.invalidLane) {
+      addWarning(diagnostics, 'markers.invalid_lane', 'Marker lane must be above or below; ignoring this marker.', `${markerPath}.lane`, entity);
+    }
+    if (marker.invalidShape) {
+      addWarning(diagnostics, 'markers.invalid_shape', 'Invalid marker shape; using circle.', `${markerPath}.shape`, entity);
+    }
+    if (marker.invalidDirection) {
+      addWarning(diagnostics, 'markers.invalid_direction', 'Invalid marker direction; using inward.', `${markerPath}.direction`, entity);
+    }
+    if (marker.label?.invalidShow) addWarning(diagnostics, 'markers.invalid_label_show', 'Marker label show must be a boolean; using the existing fallback.', `${markerPath}.label.show`, entity);
+    if (marker.label?.invalidText) addWarning(diagnostics, 'markers.invalid_label_text', 'Marker label text must be a string; ignoring it.', `${markerPath}.label.text`, entity);
+    if (marker.label?.invalidShowValue) addWarning(diagnostics, 'markers.invalid_label_show_value', 'Marker label show_value must be a boolean; using the inherited or default value.', `${markerPath}.label.show_value`, entity);
+    if (marker.label?.invalidShowUnit) addWarning(diagnostics, 'markers.invalid_label_show_unit', 'Marker label show_unit must be a boolean; using the inherited or default value.', `${markerPath}.label.show_unit`, entity);
+    if (marker.label?.invalidPrecision) addWarning(diagnostics, 'markers.invalid_label_precision', 'Marker label precision must be a non-negative integer; using the inherited or row precision.', `${markerPath}.label.${marker.label.invalidPrecisionKey ?? 'precision'}`, entity);
+    if (marker.label?.unsupportedUnit) addWarning(diagnostics, 'markers.unsupported_label_unit', 'Marker label unit is no longer supported; use show_unit instead.', `${markerPath}.label.unit`, entity);
+    if (marker.valid && !marker.accepted) {
+      addWarning(diagnostics, 'markers.excess_capacity', `Only the first two valid markers in the ${marker.lane} lane are rendered.`, markerPath, entity);
+    }
+  }
+}
+
 function getStaticSegmentBound(boundary) {
   if (!boundary || boundary.entity || Number.isFinite(boundary.percent)) return null;
   return getFiniteNumber(boundary.fixed ?? boundary.value);
@@ -146,6 +228,9 @@ function validateConfigScope(diagnostics, config, path, entity = null) {
   validateTargetRange(diagnostics, config, scaleBounds, path, entity);
   validateBaselineRange(diagnostics, config, scaleBounds, path, entity);
   validateBaselineSuppressesNeedle(diagnostics, config, path, entity);
+  validateExtremumReset(diagnostics, config, path, entity);
+  validateMarkerDirections(diagnostics, config, path, entity);
+  validateBuiltinMarkerLabels(diagnostics, config, path, entity);
   validateSegments(diagnostics, config?.bar?.segments, scaleBounds, `${path}.bar`, entity);
   validateGradientStops(diagnostics, config?.bar?.gradient_stops, `${path}.bar`, entity);
 }
@@ -161,6 +246,7 @@ export function validateNormalizedConfig(config) {
   }
 
   validateConfigScope(diagnostics, config, 'card');
+  validateGenericMarkers(diagnostics, config.generic_markers, config.generic_markers_invalid, 'markers');
 
   const seenEntities = new Set();
   const entities = Array.isArray(config.entities) ? config.entities : [];
@@ -181,6 +267,15 @@ export function validateNormalizedConfig(config) {
     }
 
     validateConfigScope(diagnostics, entityConfig, path, entityId);
+    if (Object.prototype.hasOwnProperty.call(entityConfig, 'markers')) {
+      validateGenericMarkers(
+        diagnostics,
+        entityConfig.generic_markers,
+        entityConfig.generic_markers_invalid,
+        `${path}.markers`,
+        entityId
+      );
+    }
   }
 
   return diagnostics;

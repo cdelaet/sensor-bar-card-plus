@@ -30,6 +30,24 @@ export function createNumericPresentation(value, unit, decimal = null) {
   };
 }
 
+export function createMarkerLabelPresentation(value, unit, precision = null, options = {}) {
+  const semanticText = typeof options.text === 'string' ? options.text : '';
+  const number = options.showValue === false || !Number.isFinite(value)
+    ? ''
+    : formatNumericDisplay(value, precision);
+  const cleanUnit = options.showUnit === false ? '' : String(unit ?? '').trim();
+  const text = [semanticText, number, cleanUnit].filter(Boolean).join(' ');
+  return {
+    value: Number.isFinite(value) ? value : null,
+    semanticText,
+    number,
+    unit: cleanUnit,
+    showValue: options.showValue !== false,
+    showUnit: options.showUnit !== false,
+    text,
+  };
+}
+
 export function createTextPresentation(text) {
   const value = String(text);
   return {

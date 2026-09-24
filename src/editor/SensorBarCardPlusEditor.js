@@ -1,3 +1,5 @@
+import { normalizeMarkerDirection, normalizeTargetMarkerShape } from '../config/normalize.js';
+
 export class SensorBarCardPlusEditor extends HTMLElement {
   constructor() {
     super();
@@ -429,6 +431,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementChecked(`entity-${index}-baseline-inherit`, !this._hasBaselineOverride(scope));
       this._setElementChecked(`entity-${index}-needle-inherit`, !this._hasNeedleOverride(scope));
       this._setElementChecked(`entity-${index}-peak-inherit`, !this._hasPeakOverride(scope));
+      this._setElementChecked(`entity-${index}-floor-inherit`, !this._hasExtremumOverride(scope, 'floor'));
+      this._setElementChecked(`entity-${index}-markers-inherit`, !this._hasMarkersOverride(scope));
       this._setElementChecked(`entity-${index}-bar-inherit`, !this._hasEntityBarAppearanceOverride(scope));
       this._setElementChecked(`entity-${index}-segments-inherit`, !this._hasSegmentsOverride(scope));
       this._setElementChecked(`entity-${index}-gradient-stops-inherit`, !this._hasGradientStopsOverride(scope));
@@ -443,6 +447,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementText(`entity-${index}-group-baseline-summary`, this._getBaselineOverrideSummary(scope));
       this._setElementText(`entity-${index}-group-needle-summary`, this._getNeedleSummary(scope));
       this._setElementText(`entity-${index}-group-peak-summary`, this._getPeakSummary(scope));
+      this._setElementText(`entity-${index}-group-floor-summary`, this._getFloorSummary(scope));
+      this._setElementText(`entity-${index}-group-markers-summary`, this._getGenericMarkersSummary(scope));
       this._setElementText(`entity-${index}-group-bar-summary`, this._getBarAppearanceSummary(scope));
       this._setElementText(`entity-${index}-group-segments-summary`, this._getSegmentsSummary(scope));
       this._setElementText(`entity-${index}-group-gradient-stops-summary`, this._getGradientStopsSummary(scope));
@@ -726,7 +732,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return nextTarget;
   }
 
-  _cleanupTargetForEmit(target) {
+  _cleanupTargetForEmit(target, scope = { type: 'card' }) {
     if (!this._isObject(target) || !this._isObject(target.target)) {
       return target;
     }
@@ -734,9 +740,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const nextMarker = this._cloneDeep(nextTarget.target);
     const cleanedAt = this._cleanupResolvableValueForEmit(nextMarker.at);
     const color = this._normalizeTextValue(nextMarker.color).trim();
-    const labelShow = nextMarker.label?.show === true;
-    const labelDecimal = this._normalizeDecimalValue(nextMarker.label?.decimal);
+    const label = this._cleanBuiltinMarkerLabelForEmit(nextMarker.label, scope, 'target');
     const fillColor = this._normalizeTextValue(nextMarker.when_exceeded?.fill_color).trim();
+    const hasShape = Object.prototype.hasOwnProperty.call(nextMarker, 'shape');
+    const shape = hasShape ? normalizeTargetMarkerShape(nextMarker.shape) : null;
+    const direction = Object.prototype.hasOwnProperty.call(nextMarker, 'direction')
+      ? normalizeMarkerDirection(nextMarker.direction)
+      : null;
 
     if (typeof nextMarker.enabled !== 'boolean') {
       delete nextMarker.enabled;
@@ -756,13 +766,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextMarker.color;
     }
 
-    if (labelShow || labelDecimal !== null) {
-      nextMarker.label = {};
-      if (labelShow) nextMarker.label.show = true;
-      if (labelDecimal !== null) nextMarker.label.decimal = labelDecimal;
-      delete nextTarget.show_target_label;
+    if (Object.keys(label).length) {
+      nextMarker.label = label;
+      if (label.show === true) delete nextTarget.show_target_label;
     } else {
       delete nextMarker.label;
+      delete nextTarget.show_target_label;
     }
 
     if (fillColor) {
@@ -773,6 +782,21 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextTarget.above_target_color;
     } else {
       delete nextMarker.when_exceeded;
+    }
+
+    if (scope?.type === 'card' && shape === 'diamond') {
+      delete nextMarker.shape;
+    } else if (shape) {
+      nextMarker.shape = shape;
+    } else {
+      delete nextMarker.shape;
+    }
+
+    if (direction === 'inward' && (scope?.type !== 'entity'
+      || direction === this._getEffectiveMarkerDirection({ type: 'card' }, 'target'))) {
+      delete nextMarker.direction;
+    } else if (direction) {
+      nextMarker.direction = direction;
     }
 
     if (Object.keys(nextMarker).length) {
@@ -824,16 +848,28 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return nextTarget;
   }
 
-  _cleanupPeakForEmit(target) {
+  _cleanupPeakForEmit(target, scope = { type: 'card' }) {
     if (!this._isObject(target) || !this._isObject(target.peak)) {
       return target;
     }
     const nextTarget = this._cloneDeep(target);
     const nextPeak = this._cloneDeep(nextTarget.peak);
     const color = this._normalizeTextValue(nextPeak.color).trim();
+    const direction = Object.prototype.hasOwnProperty.call(nextPeak, 'direction')
+      ? normalizeMarkerDirection(nextPeak.direction)
+      : null;
 
     if (typeof nextPeak.enabled !== 'boolean') {
       delete nextPeak.enabled;
+    }
+    if (scope?.type !== 'entity' && nextPeak.reset === 'never') {
+      delete nextPeak.reset;
+    }
+    if (direction === 'inward' && (scope?.type !== 'entity'
+      || direction === this._getEffectiveMarkerDirection({ type: 'card' }, 'peak'))) {
+      delete nextPeak.direction;
+    } else if (direction) {
+      nextPeak.direction = direction;
     }
 
     if (color && this._normalizeColorComparisonValue(color) !== this._normalizeColorComparisonValue('#888')) {
@@ -842,6 +878,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     } else {
       delete nextPeak.color;
     }
+    nextPeak.label = this._cleanBuiltinMarkerLabelForEmit(nextPeak.label, scope, 'peak');
+    if (!Object.keys(nextPeak.label).length) delete nextPeak.label;
 
     if (Object.keys(nextPeak).length) {
       nextTarget.peak = nextPeak;
@@ -850,6 +888,61 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     }
 
     return nextTarget;
+  }
+
+  _cleanupFloorForEmit(target, scope = { type: 'card' }) {
+    if (!this._isObject(target) || !this._isObject(target.floor)) {
+      return target;
+    }
+    const nextTarget = this._cloneDeep(target);
+    const nextFloor = this._cloneDeep(nextTarget.floor);
+    const color = this._normalizeTextValue(nextFloor.color).trim();
+    const direction = Object.prototype.hasOwnProperty.call(nextFloor, 'direction')
+      ? normalizeMarkerDirection(nextFloor.direction)
+      : null;
+    if (typeof nextFloor.enabled !== 'boolean') delete nextFloor.enabled;
+    if (color && this._normalizeColorComparisonValue(color) !== this._normalizeColorComparisonValue('#888888')) {
+      nextFloor.color = color;
+    } else {
+      delete nextFloor.color;
+    }
+    if (this._isObject(nextFloor.label)) {
+      nextFloor.label = this._cleanBuiltinMarkerLabelForEmit(nextFloor.label, scope, 'floor');
+      if (!Object.keys(nextFloor.label).length) delete nextFloor.label;
+    }
+    if ((scope?.type !== 'entity' && nextFloor.reset === 'never')
+      || nextFloor.reset === undefined || nextFloor.reset === null || nextFloor.reset === '') {
+      delete nextFloor.reset;
+    }
+    if (direction === 'inward' && (scope?.type !== 'entity'
+      || direction === this._getEffectiveMarkerDirection({ type: 'card' }, 'floor'))) {
+      delete nextFloor.direction;
+    } else if (direction) {
+      nextFloor.direction = direction;
+    }
+    if (Object.keys(nextFloor).length) nextTarget.floor = nextFloor;
+    else delete nextTarget.floor;
+    return nextTarget;
+  }
+
+  _cleanBuiltinMarkerLabelForEmit(rawLabel, scope, key) {
+    const label = this._isObject(rawLabel) ? this._cloneDeep(rawLabel) : {};
+    const cardLabel = scope?.type === 'entity'
+      ? (this._getScopedValue({ type: 'card' }, [key, 'label']) ?? {}) : {};
+    if (label.show === false && scope?.type !== 'entity') delete label.show;
+    if (label.show === false && scope?.type === 'entity' && cardLabel.show !== true) delete label.show;
+    if (label.show_value === true && (scope?.type !== 'entity' || cardLabel.show_value !== false)) delete label.show_value;
+    if (label.show_unit === true && (scope?.type !== 'entity' || cardLabel.show_unit !== false)) delete label.show_unit;
+    if (typeof label.text === 'string') {
+      label.text = label.text.replace(/\s+/g, ' ').trim();
+      if (!label.text && scope?.type !== 'entity') delete label.text;
+    }
+    const precision = this._normalizeDecimalValue(label.precision ?? label.decimal);
+    delete label.decimal;
+    if (precision === null) delete label.precision;
+    else if (scope?.type === 'entity' && precision === (cardLabel.precision ?? cardLabel.decimal)) delete label.precision;
+    else label.precision = precision;
+    return label;
   }
 
   _cleanupBarForEmit(target) {
@@ -911,9 +1004,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const pathKey = path.join('.');
     switch (pathKey) {
       case '':
-        return ['type', 'title', 'entities', 'scale', 'target', 'baseline', 'peak', 'layout', 'formatting', 'bar'];
+        return ['type', 'title', 'entities', 'scale', 'target', 'baseline', 'peak', 'floor', 'layout', 'formatting', 'bar'];
       case 'entities.*':
-        return ['entity', 'name', 'icon', 'scale', 'target', 'baseline', 'peak', 'layout', 'formatting', 'bar'];
+        return ['entity', 'name', 'icon', 'scale', 'target', 'baseline', 'peak', 'floor', 'layout', 'formatting', 'bar'];
       case 'scale':
         return ['min', 'max'];
       case 'scale.min':
@@ -922,7 +1015,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       case 'baseline.at':
         return ['fixed', 'entity'];
       case 'target':
-        return ['enabled', 'at', 'color', 'label', 'when_exceeded'];
+        return ['enabled', 'at', 'shape', 'color', 'label', 'when_exceeded'];
       case 'target.label':
         return ['show', 'decimal'];
       case 'target.when_exceeded':
@@ -933,7 +1026,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       case 'baseline.below':
         return ['color'];
       case 'peak':
-        return ['enabled', 'color'];
+        return ['enabled', 'color', 'reset', 'label'];
+      case 'floor':
+        return ['enabled', 'color', 'reset', 'label'];
+      case 'peak.label':
+      case 'floor.label':
+        return ['show', 'decimal'];
       case 'layout':
         return ['height', 'label', 'hero'];
       case 'layout.label':
@@ -988,24 +1086,28 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     }
     let nextConfig = this._cleanupEntityIdentityForEmit(config);
     nextConfig = this._cleanupScaleForEmit(nextConfig);
-    nextConfig = this._cleanupTargetForEmit(nextConfig);
+    nextConfig = this._cleanupTargetForEmit(nextConfig, { type: 'card' });
     nextConfig = this._cleanupBaselineForEmit(nextConfig);
-    nextConfig = this._cleanupPeakForEmit(nextConfig);
+    nextConfig = this._cleanupPeakForEmit(nextConfig, { type: 'card' });
+    nextConfig = this._cleanupFloorForEmit(nextConfig, { type: 'card' });
+    nextConfig = this._cleanupGenericMarkersForEmit(nextConfig);
     nextConfig = this._cleanupLayoutForEmit(nextConfig);
     nextConfig = this._cleanupFormattingForEmit(nextConfig);
     nextConfig = this._cleanupNeedleForEmit(nextConfig, { type: 'card' });
     nextConfig = this._cleanupBarForEmit(nextConfig);
 
     if (Array.isArray(nextConfig.entities)) {
-      nextConfig.entities = nextConfig.entities.map((entry) => {
+      nextConfig.entities = nextConfig.entities.map((entry, index) => {
         if (!this._isObject(entry)) {
           return entry;
         }
         let cleanedEntry = this._cleanupEntityIdentityForEmit(entry);
         cleanedEntry = this._cleanupScaleForEmit(cleanedEntry);
-        cleanedEntry = this._cleanupTargetForEmit(cleanedEntry);
+        cleanedEntry = this._cleanupTargetForEmit(cleanedEntry, { type: 'entity', index });
         cleanedEntry = this._cleanupBaselineForEmit(cleanedEntry);
-        cleanedEntry = this._cleanupPeakForEmit(cleanedEntry);
+        cleanedEntry = this._cleanupPeakForEmit(cleanedEntry, { type: 'entity', index });
+        cleanedEntry = this._cleanupFloorForEmit(cleanedEntry, { type: 'entity', index });
+        cleanedEntry = this._cleanupGenericMarkersForEmit(cleanedEntry);
         cleanedEntry = this._cleanupLayoutForEmit(cleanedEntry);
         cleanedEntry = this._cleanupFormattingForEmit(cleanedEntry);
         cleanedEntry = this._cleanupNeedleForEmit(cleanedEntry, { type: 'entity' });
@@ -2076,6 +2178,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (this._isObject(peakValue) && (
       Object.prototype.hasOwnProperty.call(peakValue, 'enabled')
       || Object.prototype.hasOwnProperty.call(peakValue, 'color')
+      || Object.prototype.hasOwnProperty.call(peakValue, 'reset')
+      || Object.prototype.hasOwnProperty.call(peakValue, 'label')
+      || Object.prototype.hasOwnProperty.call(peakValue, 'direction')
     )) {
       return true;
     }
@@ -2084,6 +2189,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (this._isObject(peakMarkerValue) && (
       Object.prototype.hasOwnProperty.call(peakMarkerValue, 'show')
       || Object.prototype.hasOwnProperty.call(peakMarkerValue, 'color')
+      || Object.prototype.hasOwnProperty.call(peakMarkerValue, 'direction')
     )) {
       return true;
     }
@@ -2105,6 +2211,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return this._applyScopedMutation(scope, (target) => {
       let nextTarget = this._deletePathValue(target, ['peak', 'enabled']);
       nextTarget = this._deletePathValue(nextTarget, ['peak', 'color']);
+      nextTarget = this._deletePathValue(nextTarget, ['peak', 'reset']);
+      nextTarget = this._deletePathValue(nextTarget, ['peak', 'label']);
+      nextTarget = this._deletePathValue(nextTarget, ['peak', 'direction']);
       nextTarget = this._deletePathValue(nextTarget, ['show_peak']);
       nextTarget = this._deletePathValue(nextTarget, ['peak_color']);
       nextTarget = this._deletePathValue(nextTarget, ['peak_marker']);
@@ -2186,6 +2295,310 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['peak']);
       return nextTarget;
     });
+  }
+
+  _getScopedMarkerExtras(scope, key) {
+    const raw = this._getScopedValue(scope, [key]);
+    const marker = this._isObject(raw) ? raw : {};
+    const label = this._isObject(marker.label) ? marker.label : {};
+    return {
+      reset: Object.prototype.hasOwnProperty.call(marker, 'reset') ? this._normalizeTextValue(marker.reset).trim().toLowerCase() : null,
+      labelShow: typeof label.show === 'boolean' ? label.show : null,
+      labelText: typeof label.text === 'string' ? label.text.replace(/\s+/g, ' ').trim() : null,
+      labelShowValue: typeof label.show_value === 'boolean' ? label.show_value : null,
+      labelShowUnit: typeof label.show_unit === 'boolean' ? label.show_unit : null,
+      labelPrecision: (label.precision ?? label.decimal) === undefined || (label.precision ?? label.decimal) === null || (label.precision ?? label.decimal) === ''
+        ? null
+        : this._normalizeNumberValue(label.precision ?? label.decimal),
+    };
+  }
+
+  _hasExtremumOverride(scope, key) {
+    const marker = this._getScopedValue(scope, [key]);
+    if (!this._isObject(marker)) return false;
+    return ['enabled', 'color', 'reset', 'label', 'direction'].some((field) => (
+      Object.prototype.hasOwnProperty.call(marker, field)
+    ));
+  }
+
+  _getEffectiveMarkerExtras(scope, key) {
+    const local = this._getScopedMarkerExtras(scope, key);
+    if (scope?.type !== 'entity') {
+      return {
+        reset: local.reset ?? 'never',
+        labelShow: local.labelShow ?? false,
+        labelText: local.labelText,
+        labelShowValue: local.labelShowValue ?? true,
+        labelShowUnit: local.labelShowUnit ?? true,
+        labelPrecision: local.labelPrecision,
+      };
+    }
+    const card = this._getScopedMarkerExtras({ type: 'card' }, key);
+    if (!this._hasExtremumOverride(scope, key)) {
+      return {
+        reset: card.reset ?? 'never',
+        labelShow: card.labelShow ?? false,
+        labelText: card.labelText,
+        labelShowValue: card.labelShowValue ?? true,
+        labelShowUnit: card.labelShowUnit ?? true,
+        labelPrecision: card.labelPrecision,
+      };
+    }
+    return {
+      reset: local.reset ?? card.reset ?? 'never',
+      labelShow: local.labelShow ?? card.labelShow ?? false,
+      labelText: Object.prototype.hasOwnProperty.call(this._getScopedValue(scope, [key, 'label']) ?? {}, 'text') ? local.labelText : card.labelText,
+      labelShowValue: local.labelShowValue ?? card.labelShowValue ?? true,
+      labelShowUnit: local.labelShowUnit ?? card.labelShowUnit ?? true,
+      labelPrecision: local.labelPrecision ?? card.labelPrecision,
+    };
+  }
+
+  _getScopedFloorConfig(scope) {
+    const raw = this._getScopedValue(scope, ['floor']);
+    const marker = this._isObject(raw) ? raw : {};
+    let mode = scope?.type === 'entity' ? 'inherit' : 'disabled';
+    if (marker.enabled === true) mode = 'enabled';
+    if (marker.enabled === false) mode = 'disabled';
+    const color = marker.color && this._normalizeColorComparisonValue(marker.color) !== this._normalizeColorComparisonValue('#888888')
+      ? marker.color
+      : '';
+    return { mode, color };
+  }
+
+  _getEffectiveScopedFloorConfig(scope) {
+    const local = this._getScopedFloorConfig(scope);
+    const extras = this._getEffectiveMarkerExtras(scope, 'floor');
+    if (scope?.type !== 'entity') return { ...local, ...extras };
+    if (!this._hasExtremumOverride(scope, 'floor')) {
+      return { ...this._getScopedFloorConfig({ type: 'card' }), ...extras };
+    }
+    const card = this._getEffectiveScopedFloorConfig({ type: 'card' });
+    return {
+      mode: local.mode === 'inherit' ? card.mode : local.mode,
+      color: local.color || card.color,
+      ...extras,
+    };
+  }
+
+  _getFloorSummary(scope) {
+    if (scope?.type === 'entity' && !this._hasExtremumOverride(scope, 'floor')) return 'Inherited';
+    const floor = this._getEffectiveScopedFloorConfig(scope);
+    if (floor.mode === 'enabled') return floor.color ? 'Enabled • Custom color' : 'Enabled';
+    if (floor.color) return 'Disabled • Custom color';
+    return 'Disabled';
+  }
+
+  _setScopedExtremumEnabled(scope, key, value) {
+    const boolValue = !!value;
+    const defaultColor = '#888888';
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._cloneDeep(target);
+      const current = this._isObject(this._getPathValue(nextTarget, [key]))
+        ? this._cloneDeep(this._getPathValue(nextTarget, [key]))
+        : {};
+      const currentColor = current.color ?? defaultColor;
+      if (scope?.type === 'entity' || boolValue) current.enabled = boolValue;
+      else delete current.enabled;
+      if (currentColor && this._normalizeColorComparisonValue(currentColor) !== this._normalizeColorComparisonValue(defaultColor)) {
+        current.color = currentColor;
+      } else delete current.color;
+      if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
+      else nextTarget = this._deletePathValue(nextTarget, [key]);
+      return nextTarget;
+    });
+  }
+
+  _setScopedExtremumColor(scope, key, rawValue) {
+    const normalizedValue = this._normalizeTextValue(rawValue).trim();
+    const defaultColor = '#888888';
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._cloneDeep(target);
+      const current = this._isObject(this._getPathValue(nextTarget, [key]))
+        ? this._cloneDeep(this._getPathValue(nextTarget, [key]))
+        : {};
+      delete current.color;
+      if (normalizedValue && this._normalizeColorComparisonValue(normalizedValue) !== this._normalizeColorComparisonValue(defaultColor)) {
+        current.color = normalizedValue;
+      }
+      const mode = this._getScopedFloorConfig(scope).mode;
+      if (key === 'floor' && ((scope?.type === 'entity' && mode !== 'inherit') || (scope?.type !== 'entity' && mode === 'enabled'))) {
+        current.enabled = mode === 'enabled';
+      }
+      if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
+      else nextTarget = this._deletePathValue(nextTarget, [key]);
+      if (key === 'peak') {
+        nextTarget = this._deletePathValue(nextTarget, ['show_peak']);
+        nextTarget = this._deletePathValue(nextTarget, ['peak_color']);
+        nextTarget = this._deletePathValue(nextTarget, ['peak_marker']);
+      }
+      return nextTarget;
+    });
+  }
+
+  _setScopedExtremumReset(scope, key, value) {
+    const normalized = this._normalizeTextValue(value).trim().toLowerCase();
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._cloneDeep(target);
+      const current = this._isObject(this._getPathValue(nextTarget, [key]))
+        ? this._cloneDeep(this._getPathValue(nextTarget, [key]))
+        : {};
+      if (normalized && (scope?.type === 'entity' || normalized !== 'never')) current.reset = normalized;
+      else delete current.reset;
+      if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
+      else nextTarget = this._deletePathValue(nextTarget, [key]);
+      if (key === 'peak') {
+        nextTarget = this._deletePathValue(nextTarget, ['show_peak']);
+        nextTarget = this._deletePathValue(nextTarget, ['peak_color']);
+        nextTarget = this._deletePathValue(nextTarget, ['peak_marker']);
+      }
+      return nextTarget;
+    });
+  }
+
+  _setScopedExtremumLabelShow(scope, key, value) {
+    const enabled = !!value;
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._cloneDeep(target);
+      const current = this._isObject(this._getPathValue(nextTarget, [key]))
+        ? this._cloneDeep(this._getPathValue(nextTarget, [key]))
+        : {};
+      const label = this._isObject(current.label) ? this._cloneDeep(current.label) : {};
+      if (scope?.type === 'entity' || enabled) label.show = enabled;
+      else delete label.show;
+      if (Object.keys(label).length) current.label = label;
+      else delete current.label;
+      if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
+      else nextTarget = this._deletePathValue(nextTarget, [key]);
+      if (key === 'peak') {
+        nextTarget = this._deletePathValue(nextTarget, ['show_peak']);
+        nextTarget = this._deletePathValue(nextTarget, ['peak_color']);
+        nextTarget = this._deletePathValue(nextTarget, ['peak_marker']);
+      }
+      return nextTarget;
+    });
+  }
+
+  _setScopedExtremumLabelDecimal(scope, key, value) {
+    const decimal = this._normalizeNumberValue(value);
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._cloneDeep(target);
+      const current = this._isObject(this._getPathValue(nextTarget, [key]))
+        ? this._cloneDeep(this._getPathValue(nextTarget, [key]))
+        : {};
+      const label = this._isObject(current.label) ? this._cloneDeep(current.label) : {};
+      if (decimal !== null) label.decimal = decimal;
+      else delete label.decimal;
+      if (Object.keys(label).length) current.label = label;
+      else delete current.label;
+      if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
+      else nextTarget = this._deletePathValue(nextTarget, [key]);
+      return nextTarget;
+    });
+  }
+
+  _getBuiltinMarkerLabelOptions(scope, key) {
+    const marker = this._getScopedValue(scope, [key]);
+    const label = this._isObject(marker?.label) ? marker.label : {};
+    const cardLabel = scope?.type === 'entity'
+      ? (this._getScopedValue({ type: 'card' }, [key, 'label']) ?? {})
+      : {};
+    const own = (name) => Object.prototype.hasOwnProperty.call(label, name);
+    const inheritedValue = (name, fallback) => own(name) ? label[name] : (cardLabel[name] ?? fallback);
+    const precision = inheritedValue('precision', inheritedValue('decimal', ''));
+    return {
+      show: key === 'target'
+        ? this._getEffectiveTargetLabelShowValue(scope)
+        : this._getEffectiveMarkerExtras(scope, key).labelShow,
+      text: inheritedValue('text', ''),
+      showValue: inheritedValue('show_value', true) !== false,
+      showUnit: inheritedValue('show_unit', true) !== false,
+      precision: precision === null ? '' : precision,
+    };
+  }
+
+  _renderBuiltinMarkerLabelControls(scope, key, title) {
+    const options = this._getBuiltinMarkerLabelOptions(scope, key);
+    const isEntity = scope?.type === 'entity';
+    const prefix = isEntity ? `entity-${scope.index}-${key}` : key;
+    const attr = isEntity ? `data-kind="entity-${key}-label-` : `data-field="${key}-label-`;
+    const suffix = isEntity ? `" data-index="${scope.index}"` : '"';
+    return `
+      <div class="field-row"><div class="toggle">
+        <input id="${prefix}-label-show" type="checkbox" ${attr}show${suffix}${options.show ? ' checked' : ''}>
+        <label for="${prefix}-label-show">Show ${title} label</label>
+      </div></div>
+      <div class="field-row"><label for="${prefix}-label-text">${title} label text</label>
+        <input id="${prefix}-label-text" type="text" ${attr}text${suffix} value="${this._escapeAttribute(options.text ?? '')}" placeholder="optional semantic text">
+      </div>
+      <div class="field-row"><div class="toggle">
+        <input id="${prefix}-label-show-value" type="checkbox" ${attr}show-value${suffix}${options.showValue ? ' checked' : ''}>
+        <label for="${prefix}-label-show-value">Show value</label>
+      </div></div>
+      <div class="field-row"><div class="toggle">
+        <input id="${prefix}-label-show-unit" type="checkbox" ${attr}show-unit${suffix}${options.showUnit ? ' checked' : ''}>
+        <label for="${prefix}-label-show-unit">Show unit</label>
+      </div></div>
+      <div class="field-row"><label for="${prefix}-label-precision">${title} label precision</label>
+        <input id="${prefix}-label-precision" type="number" min="0" step="1" ${attr}precision${suffix} value="${this._escapeAttribute(options.precision)}" placeholder="inherit primary precision">
+      </div>`;
+  }
+
+  _setBuiltinMarkerLabelField(scope, key, field, value) {
+    const publicField = field === 'showValue' ? 'show_value'
+      : field === 'showUnit' ? 'show_unit'
+        : field === 'precision' ? 'precision' : field;
+    const isText = field === 'text';
+    const normalized = isText
+      ? this._normalizeTextValue(value).replace(/\s+/g, ' ').trim()
+      : field === 'show' || field === 'showValue' || field === 'showUnit' ? value === true
+        : this._normalizeDecimalValue(value);
+    if (field === 'precision' && value !== '' && normalized === null) return false;
+    return this._applyScopedMutation(scope, (target) => {
+      let next = this._cloneDeep(target);
+      const marker = this._isObject(this._getPathValue(next, [key]))
+        ? this._cloneDeep(this._getPathValue(next, [key])) : {};
+      const label = this._isObject(marker.label) ? this._cloneDeep(marker.label) : {};
+      const inheritedLabel = scope?.type === 'entity'
+        ? (this._getScopedValue({ type: 'card' }, [key, 'label']) ?? {}) : {};
+      const inheritedValue = field === 'precision'
+        ? (inheritedLabel.precision ?? inheritedLabel.decimal ?? null)
+        : inheritedLabel[publicField] ?? (field === 'show' ? false : field === 'showValue' || field === 'showUnit' ? true : undefined);
+      if (normalized === null || (isText && !normalized)) {
+        if (isText && scope?.type === 'entity' && typeof inheritedLabel.text === 'string' && inheritedLabel.text.trim()) {
+          label[publicField] = '';
+        } else {
+          delete label[publicField];
+        }
+      } else if (scope?.type === 'entity' && normalized === inheritedValue) {
+        delete label[publicField];
+      } else if ((field === 'show' || field === 'showValue' || field === 'showUnit') && scope?.type !== 'entity'
+        && normalized === (field === 'show' ? false : true)) {
+        delete label[publicField];
+      } else {
+        label[publicField] = normalized;
+      }
+      if (field === 'precision') delete label.decimal;
+      if (Object.keys(label).length) marker.label = label;
+      else delete marker.label;
+      if (Object.keys(marker).length) next = this._setPathValue(next, [key], marker);
+      else next = this._deletePathValue(next, [key]);
+      return next;
+    });
+  }
+
+  _clearFloorOverride(scope) {
+    return this._applyScopedMutation(scope, (target) => {
+      let nextTarget = this._cloneDeep(target);
+      const floor = this._isObject(this._getPathValue(nextTarget, ['floor']))
+        ? this._cloneDeep(this._getPathValue(nextTarget, ['floor']))
+        : {};
+      ['enabled', 'color', 'reset', 'label', 'direction'].forEach((key) => delete floor[key]);
+      if (Object.keys(floor).length) nextTarget = this._setPathValue(nextTarget, ['floor'], floor);
+      else nextTarget = this._deletePathValue(nextTarget, ['floor']);
+      nextTarget = this._deletePathValue(nextTarget, ['floor_marker']);
+      return nextTarget;
+    }, { rerender: true });
   }
 
   _setFixedMarkerValue(rootKey, enabled, value) {
@@ -3206,6 +3619,59 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return 'auto';
   }
 
+  _getTargetShapeValue(scope) {
+    return this._getScopedValue(scope, ['target', 'shape']) ?? '';
+  }
+
+  _getEffectiveMarkerDirection(scope, key) {
+    const canonical = this._getScopedValue(scope, [key, 'direction']);
+    const local = canonical !== undefined
+      ? canonical
+      : this._getScopedValue(scope, [`${key}_marker`, 'direction']);
+    if (scope?.type === 'entity' && local === undefined) {
+      return this._getEffectiveMarkerDirection({ type: 'card' }, key);
+    }
+    return normalizeMarkerDirection(local);
+  }
+
+  _setMarkerDirection(scope, key, rawValue) {
+    const direction = normalizeMarkerDirection(rawValue);
+    const cardDirection = this._getEffectiveMarkerDirection({ type: 'card' }, key);
+    if ((scope?.type !== 'entity' && direction === 'inward')
+      || (scope?.type === 'entity' && direction === cardDirection)) {
+      return this._removeCanonicalScopedValue(scope, [key, 'direction'], {
+        prunePaths: [[key]],
+      });
+    }
+    return this._setCanonicalScopedTextOverride(scope, [key, 'direction'], direction, {
+      prunePaths: [[key]],
+    });
+  }
+
+  _hasTargetShape(scope) {
+    const target = this._getScopedValue(scope, ['target']);
+    return this._isObject(target) && Object.prototype.hasOwnProperty.call(target, 'shape');
+  }
+
+  _getEffectiveTargetShapeValue(scope) {
+    if (scope?.type === 'entity' && !this._hasTargetShape(scope)) {
+      return this._getEffectiveTargetShapeValue({ type: 'card' });
+    }
+    return normalizeTargetMarkerShape(this._getTargetShapeValue(scope));
+  }
+
+  _setTargetShape(scope, rawValue) {
+    const normalizedShape = normalizeTargetMarkerShape(rawValue);
+    if (scope?.type !== 'entity' && normalizedShape === 'diamond') {
+      return this._removeCanonicalScopedValue(scope, ['target', 'shape'], {
+        prunePaths: [['target']],
+      });
+    }
+    return this._setCanonicalScopedTextOverride(scope, ['target', 'shape'], normalizedShape, {
+      prunePaths: [['target']],
+    });
+  }
+
   _getEffectiveTargetMode(scope) {
     const mode = this._getTargetMode(scope);
     if (scope?.type !== 'entity' || mode !== 'inherit') {
@@ -3254,6 +3720,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         nextTarget = this._deletePathValue(nextTarget, ['target', 'enabled']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'at']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'color']);
+        nextTarget = this._deletePathValue(nextTarget, ['target', 'shape']);
+        nextTarget = this._deletePathValue(nextTarget, ['target', 'direction']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'label', 'show']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'label', 'decimal']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'when_exceeded', 'fill_color']);
@@ -3337,11 +3805,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _getTargetLabelDecimalValue(scope) {
-    return this._getScopedValue(scope, ['target', 'label', 'decimal']) ?? '';
+    return this._getScopedValue(scope, ['target', 'label', 'precision'])
+      ?? this._getScopedValue(scope, ['target', 'label', 'decimal']) ?? '';
   }
 
   _getEffectiveTargetLabelDecimalValue(scope) {
-    return this._getEffectiveScopedDisplayValue(scope, ['target', 'label', 'decimal']);
+    const local = this._getTargetLabelDecimalValue(scope);
+    return local !== '' && local !== null && local !== undefined
+      ? local : (scope?.type === 'entity' ? this._getTargetLabelDecimalValue({ type: 'card' }) : '');
   }
 
   _setTargetLabelDecimal(scope, rawValue) {
@@ -3748,6 +4219,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const target = this._getTargetResolvableValue(scope);
     if (target.fixed !== '' && target.fixed !== undefined) parts.push(`Target ${target.fixed}`);
     if (target.entity) parts.push('Entity');
+    if (this._hasTargetShape(scope)) {
+      parts.push(this._getEffectiveTargetShapeValue(scope) === 'triangle' ? 'Triangle' : 'Diamond');
+    }
     if (this._hasCustomTargetColor(scope)) parts.push('Custom color');
     if (this._getTargetLabelShowValue(scope)) parts.push('Label');
     const labelDecimal = this._getTargetLabelDecimalValue(scope);
@@ -4002,11 +4476,338 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return `<input type="text" data-kind="entity-input" data-index="${index}" value="${this._escapeAttribute(entry.entity)}" placeholder="sensor.example" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false">`;
   }
 
-  _renderEntitySourceInput(kind, index, value, placeholder = 'sensor.example') {
+  _renderEntitySourceInput(kind, index, value, placeholder = 'sensor.example', extraDataset = {}) {
+    const extraAttrs = Object.entries(extraDataset)
+      .map(([key, entry]) => `data-${key}="${this._escapeAttribute(entry)}"`)
+      .join(' ');
     if (customElements.get('ha-entity-picker')) {
-      return `<ha-entity-picker data-kind="${kind}" data-index="${index}"></ha-entity-picker>`;
+      return `<ha-entity-picker data-kind="${kind}" data-index="${index}"${extraAttrs ? ` ${extraAttrs}` : ''}></ha-entity-picker>`;
     }
-    return `<input type="text" data-kind="${kind}" data-index="${index}" value="${this._escapeAttribute(value)}" placeholder="${this._escapeAttribute(placeholder)}" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false">`;
+    return `<input type="text" data-kind="${kind}" data-index="${index}"${extraAttrs ? ` ${extraAttrs}` : ''} value="${this._escapeAttribute(value)}" placeholder="${this._escapeAttribute(placeholder)}" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false">`;
+  }
+
+  _hasMarkersOverride(scope) {
+    return scope?.type === 'entity'
+      && this._getScopedValue(scope, ['markers']) !== undefined;
+  }
+
+  _getGenericMarkers(scope, effective = true) {
+    const local = this._getScopedValue(scope, ['markers']);
+    if (scope?.type === 'entity' && local === undefined && effective) {
+      const cardMarkers = this._getScopedValue({ type: 'card' }, ['markers']);
+      return Array.isArray(cardMarkers) ? this._cloneDeep(cardMarkers) : [];
+    }
+    return Array.isArray(local) ? this._cloneDeep(local) : [];
+  }
+
+  _getGenericMarkersSummary(scope) {
+    if (scope?.type === 'entity' && !this._hasMarkersOverride(scope)) return 'Inherited';
+    const count = this._getGenericMarkers(scope, false).length;
+    return count === 0 ? 'No reference markers' : `${count} reference marker${count === 1 ? '' : 's'}`;
+  }
+
+  _getGenericMarkerSource(marker) {
+    const at = marker?.at;
+    if (typeof at === 'string' && /^\s*[+-]?(?:\d+(?:\.\d+)?|\.\d+)\s*%\s*$/.test(at)) {
+      return { mode: 'percent', percent: at.replace(/%/g, '').trim() };
+    }
+    if (typeof at === 'string' && /^[a-z0-9_]+\.[a-z0-9_]+$/i.test(at.trim())) {
+      return { mode: 'entity', entity: at.trim(), fixed: '' };
+    }
+    const source = this._isObject(at) ? at : {};
+    if (source.entity) {
+      return {
+        mode: source.fixed !== undefined && source.fixed !== null && source.fixed !== '' ? 'entity-fallback' : 'entity',
+        entity: source.entity,
+        fixed: source.fixed ?? '',
+      };
+    }
+    return { mode: 'fixed', fixed: source.fixed ?? '' };
+  }
+
+  _renderGenericMarkersEditor(scope) {
+    const scopeType = scope.type;
+    const scopeIndex = scopeType === 'entity' ? scope.index : 'card';
+    const markers = this._getGenericMarkers(scope);
+    const override = this._hasMarkersOverride(scope);
+    const rows = markers.map((marker, markerIndex) => {
+      const source = this._getGenericMarkerSource(marker);
+      const rowId = `${scopeType}-${scopeIndex}-generic-marker-${markerIndex}`;
+      const dataset = { 'scope-type': scopeType, index: scopeIndex, 'marker-index': markerIndex };
+      const entitySource = (source.mode === 'entity' || source.mode === 'entity-fallback')
+        ? this._renderEntitySourceInput('generic-marker-entity', scopeIndex, source.entity, 'sensor.reference', {
+          'scope-type': scopeType,
+          'marker-index': markerIndex,
+        })
+        : '';
+      return `
+        <div class="list-row generic-marker-row">
+          <div class="field-row">
+            <label for="${rowId}-source-mode">Source</label>
+            <select id="${rowId}-source-mode" data-kind="generic-marker-source-mode" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
+              <option value="fixed"${source.mode === 'fixed' ? ' selected' : ''}>Fixed</option>
+              <option value="entity"${source.mode === 'entity' ? ' selected' : ''}>Entity</option>
+              <option value="entity-fallback"${source.mode === 'entity-fallback' ? ' selected' : ''}>Entity with fixed fallback</option>
+              <option value="percent"${source.mode === 'percent' ? ' selected' : ''}>Percentage</option>
+            </select>
+          </div>
+          ${source.mode === 'fixed' ? `
+            <div class="field-row">
+              <label for="${rowId}-fixed">Fixed value</label>
+              <input id="${rowId}-fixed" type="number" step="any" data-kind="generic-marker-fixed" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(source.fixed)}">
+            </div>` : ''}
+          ${source.mode === 'entity' || source.mode === 'entity-fallback' ? `
+            <div class="field-row">
+              <label>Entity</label>
+              ${entitySource}
+            </div>` : ''}
+          ${source.mode === 'entity-fallback' ? `
+            <div class="field-row">
+              <label for="${rowId}-fallback">Fixed fallback</label>
+              <input id="${rowId}-fallback" type="number" step="any" data-kind="generic-marker-fallback" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(source.fixed)}">
+            </div>` : ''}
+          ${source.mode === 'percent' ? `
+            <div class="field-row">
+              <label for="${rowId}-percent">Scale percentage</label>
+              <input id="${rowId}-percent" type="number" min="0" max="100" step="any" data-kind="generic-marker-percent" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(source.percent)}">%
+            </div>` : ''}
+          <div class="field-row">
+            <label for="${rowId}-lane">Lane</label>
+            <select id="${rowId}-lane" data-kind="generic-marker-lane" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
+              <option value="above"${marker?.lane === 'above' ? ' selected' : ''}>Above</option>
+              <option value="below"${(marker?.lane ?? 'below') === 'below' ? ' selected' : ''}>Below</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label for="${rowId}-shape">Shape</label>
+            <select id="${rowId}-shape" data-kind="generic-marker-shape" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
+              ${['circle', 'diamond', 'triangle', 'chevron', 'arrow', 'pin'].map((shape) => `<option value="${shape}"${(marker?.shape ?? 'circle') === shape ? ' selected' : ''}>${shape}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field-row">
+            <label for="${rowId}-direction">Direction</label>
+            <select id="${rowId}-direction" data-kind="generic-marker-direction" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${normalizeMarkerDirection(marker?.direction)}">
+              <option value="inward"${(marker?.direction ?? 'inward') === 'inward' ? ' selected' : ''}>Inward</option>
+              <option value="outward"${marker?.direction === 'outward' ? ' selected' : ''}>Outward</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label for="${rowId}-color">Color</label>
+            ${this._renderColorInput({
+              id: `${rowId}-color`,
+              kind: 'generic-marker-color',
+              index: scopeIndex,
+              value: marker?.color ?? '#888888',
+              fallbackHex: '#888888',
+              placeholder: '#888888',
+              extraDataset: { 'scope-type': scopeType, 'marker-index': markerIndex },
+            })}
+          </div>
+          <div class="field-row"><div class="toggle">
+            <input id="${rowId}-label-show" type="checkbox" data-kind="generic-marker-label-show" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.label?.show === true ? ' checked' : ''}>
+            <label for="${rowId}-label-show">Show label</label>
+          </div></div>
+          <div class="field-row"><label for="${rowId}-label-text">Label text</label>
+            <input id="${rowId}-label-text" type="text" data-kind="generic-marker-label-text" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(marker?.label?.text ?? '')}" placeholder="optional semantic text">
+          </div>
+          <div class="field-row"><div class="toggle">
+            <input id="${rowId}-label-show-value" type="checkbox" data-kind="generic-marker-label-show-value" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.label?.show_value === false ? '' : ' checked'}>
+            <label for="${rowId}-label-show-value">Show value</label>
+          </div></div>
+          <div class="field-row"><div class="toggle">
+            <input id="${rowId}-label-show-unit" type="checkbox" data-kind="generic-marker-label-show-unit" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.label?.show_unit === false ? '' : ' checked'}>
+            <label for="${rowId}-label-show-unit">Show row unit</label>
+          </div></div>
+          <div class="field-row"><label for="${rowId}-label-precision">Label precision</label>
+            <input id="${rowId}-label-precision" type="number" min="0" step="1" data-kind="generic-marker-label-precision" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(marker?.label?.precision ?? marker?.label?.decimal ?? '')}" placeholder="inherit row precision">
+          </div>
+          <div class="generic-marker-actions">
+            <button type="button" data-action="move-generic-marker-up" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${markerIndex === 0 ? ' disabled' : ''} aria-label="Move marker up">↑</button>
+            <button type="button" data-action="move-generic-marker-down" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${markerIndex === markers.length - 1 ? ' disabled' : ''} aria-label="Move marker down">↓</button>
+            <button type="button" data-action="remove-generic-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" aria-label="Remove marker">Remove</button>
+          </div>
+        </div>`;
+    }).join('');
+
+    const inheritControl = scopeType === 'entity' ? `
+      <div class="field-row">
+        <div class="toggle">
+          <input id="entity-${scopeIndex}-markers-inherit" type="checkbox" data-kind="entity-markers-inherit" data-index="${scopeIndex}"${override ? '' : ' checked'}>
+          <label for="entity-${scopeIndex}-markers-inherit">Inherit card markers</label>
+        </div>
+      </div>` : '';
+    const overrideNote = scopeType === 'entity' && !override
+      ? '<div class="section-note">Enable the override to replace the card marker list. An empty override clears all card markers.</div>'
+      : '';
+    return `
+      ${inheritControl}
+      ${overrideNote}
+      ${scopeType === 'card' || override ? `
+        <div class="section-note">First two valid markers per lane render; excess markers remain editable and show a warning. Unresolved markers still reserve a slot and lane.</div>
+        <div class="list generic-marker-list">${rows}</div>
+        <button type="button" data-action="add-generic-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}">Add reference marker</button>` : ''}
+    `;
+  }
+
+  _getGenericMarkerScope(target) {
+    return target?.dataset?.scopeType === 'entity'
+      ? { type: 'entity', index: Number(target.dataset.index) }
+      : { type: 'card' };
+  }
+
+  _setGenericMarkerList(scope, markers, options = {}) {
+    return this._setScopedValue(scope, ['markers'], markers, { rerender: true, ...options });
+  }
+
+  _updateGenericMarker(scope, markerIndex, update, options = {}) {
+    const markers = this._getGenericMarkers(scope);
+    if (!markers[markerIndex]) return false;
+    const marker = this._isObject(markers[markerIndex]) ? this._cloneDeep(markers[markerIndex]) : {};
+    const nextMarker = update(marker) ?? marker;
+    markers[markerIndex] = nextMarker;
+    return this._setGenericMarkerList(scope, markers, options);
+  }
+
+  _setGenericMarkerSourceMode(scope, markerIndex, mode) {
+    return this._updateGenericMarker(scope, markerIndex, (marker) => {
+      if (mode === 'percent') {
+        marker.at = '50%';
+        return marker;
+      }
+      const oldAt = this._isObject(marker.at) ? this._cloneDeep(marker.at) : {};
+      if (mode === 'fixed') {
+        delete oldAt.entity;
+        delete oldAt.percent;
+        if (oldAt.fixed === undefined) oldAt.fixed = 50;
+      } else {
+        delete oldAt.percent;
+        if (!oldAt.entity) oldAt.entity = '';
+        if (mode === 'entity') delete oldAt.fixed;
+        if (mode === 'entity-fallback' && oldAt.fixed === undefined) oldAt.fixed = 50;
+      }
+      marker.at = oldAt;
+      return marker;
+    }, { rerender: true });
+  }
+
+  _setGenericMarkerField(scope, markerIndex, kind, value) {
+    const atLeaf = (key, nextValue) => this._updateGenericMarker(scope, markerIndex, (marker) => {
+      const at = this._isObject(marker.at) ? this._cloneDeep(marker.at) : {};
+      if (nextValue === undefined) delete at[key];
+      else at[key] = nextValue;
+      marker.at = Object.keys(at).length ? at : null;
+      return marker;
+    });
+    if (kind === 'generic-marker-source-mode') return this._setGenericMarkerSourceMode(scope, markerIndex, value);
+    if (kind === 'generic-marker-fixed') {
+      return atLeaf('fixed', this._normalizeNumberValue(value) ?? undefined);
+    }
+    if (kind === 'generic-marker-fallback') {
+      return atLeaf('fixed', this._normalizeNumberValue(value) ?? undefined);
+    }
+    if (kind === 'generic-marker-entity') {
+      return atLeaf('entity', this._normalizeTextValue(value).trim() || undefined);
+    }
+    if (kind === 'generic-marker-percent') {
+      const percent = this._normalizeNumberValue(value);
+      return this._updateGenericMarker(scope, markerIndex, (marker) => {
+        marker.at = percent === null ? null : `${percent}%`;
+        return marker;
+      });
+    }
+    if (kind === 'generic-marker-lane' || kind === 'generic-marker-shape' || kind === 'generic-marker-direction') {
+      return this._updateGenericMarker(scope, markerIndex, (marker) => {
+        const key = kind === 'generic-marker-lane' ? 'lane'
+          : kind === 'generic-marker-shape' ? 'shape' : 'direction';
+        marker[key] = key === 'direction' ? normalizeMarkerDirection(value) : value;
+        return marker;
+      });
+    }
+    if (kind === 'generic-marker-color') {
+      return this._updateGenericMarker(scope, markerIndex, (marker) => {
+        marker.color = this._normalizeTextValue(value).trim();
+        return marker;
+      });
+    }
+    if (kind.startsWith('generic-marker-label-')) {
+      return this._updateGenericMarker(scope, markerIndex, (marker) => {
+        const label = this._isObject(marker.label) ? this._cloneDeep(marker.label) : {};
+        if (kind === 'generic-marker-label-show') label.show = value === true;
+        if (kind === 'generic-marker-label-text') {
+          const text = this._normalizeTextValue(value).replace(/\s+/g, ' ').trim();
+          if (text) label.text = text;
+          else delete label.text;
+        }
+        if (kind === 'generic-marker-label-show-value') label.show_value = value === true;
+        if (kind === 'generic-marker-label-show-unit') label.show_unit = value === true;
+        if (kind === 'generic-marker-label-precision') {
+          const precision = this._normalizeDecimalValue(value);
+          if (precision === null) {
+            delete label.precision;
+            delete label.decimal;
+          } else {
+            label.precision = precision;
+            delete label.decimal;
+          }
+        }
+        marker.label = label;
+        return marker;
+      });
+    }
+    return false;
+  }
+
+  _cleanupGenericMarkersForEmit(target) {
+    if (!this._isObject(target) || !Array.isArray(target.markers)) return target;
+    const nextTarget = this._cloneDeep(target);
+    nextTarget.markers = nextTarget.markers.map((rawMarker) => {
+      if (!this._isObject(rawMarker)) return rawMarker;
+      const marker = this._cloneDeep(rawMarker);
+      if (this._isObject(marker.at)) {
+        const at = this._cloneDeep(marker.at);
+        const fixed = this._normalizeNumberValue(at.fixed);
+        const entity = this._normalizeTextValue(at.entity).trim();
+        if (fixed !== null) at.fixed = fixed;
+        else delete at.fixed;
+        if (entity) at.entity = entity;
+        else delete at.entity;
+        if (Object.keys(at).length) marker.at = at;
+        else delete marker.at;
+      }
+      if (marker.lane === 'below') delete marker.lane;
+      if (marker.shape === 'circle') delete marker.shape;
+      if (marker.direction === 'inward') delete marker.direction;
+      if (this._normalizeColorComparisonValue(marker.color) === this._normalizeColorComparisonValue('#888888')) delete marker.color;
+      if (this._isObject(marker.label)) {
+        const label = this._cloneDeep(marker.label);
+        if (label.show === false) delete label.show;
+        if (label.show_value === true) delete label.show_value;
+        if (label.show_unit === true) delete label.show_unit;
+        if (typeof label.text === 'string') {
+          label.text = label.text.replace(/\s+/g, ' ').trim();
+          if (!label.text) delete label.text;
+        }
+        const precision = this._normalizeDecimalValue(label.precision ?? label.decimal);
+        delete label.decimal;
+        if (precision === null) delete label.precision;
+        else label.precision = precision;
+        delete label.unit;
+        if (Object.keys(label).length) marker.label = label;
+        else delete marker.label;
+      }
+      return marker;
+    });
+    return nextTarget;
+  }
+
+  _renderResetOptions(value) {
+    const selected = this._normalizeTextValue(value).trim().toLowerCase() || 'never';
+    const options = [
+      'never', 'quarterly', 'hourly', 'daily', 'weekly', 'monthly', 'yearly',
+      ...Array.from({ length: 59 }, (_, index) => `${index + 1}m`),
+      ...Array.from({ length: 23 }, (_, index) => `${index + 1}h`),
+    ];
+    return options.map((option) => `<option value="${option}"${selected === option ? ' selected' : ''}>${option}</option>`).join('');
   }
 
   _escapeAttribute(value) {
@@ -4096,6 +4897,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       const baselineBelowColor = this._getBaselineDirectionalColorValue({ type: 'card' }, 'below');
       const target = this._getTargetResolvableValue({ type: 'card' });
       const targetMode = this._getTargetMode({ type: 'card' });
+      const targetShape = this._getEffectiveTargetShapeValue({ type: 'card' });
+      const targetDirection = this._getEffectiveMarkerDirection({ type: 'card' }, 'target');
       const targetColor = this._getTargetColorValue({ type: 'card' });
       const targetLabelShow = this._getTargetLabelShowValue({ type: 'card' });
       const targetLabelDecimal = this._getTargetLabelDecimalValue({ type: 'card' });
@@ -4103,6 +4906,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       const formattingUnit = this._getScopedFormattingValue({ type: 'card' }, 'unit');
       const formattingDecimal = this._getScopedFormattingValue({ type: 'card' }, 'decimal');
       const cardPeak = this._getScopedPeakConfig({ type: 'card' });
+      const cardPeakExtras = this._getEffectiveMarkerExtras({ type: 'card' }, 'peak');
+      const cardFloor = this._getEffectiveScopedFloorConfig({ type: 'card' });
       const scaleMin = this._getScaleFixedValue('min', 'min');
       const scaleMax = this._getScaleFixedValue('max', 'max');
       const scaleMinEntity = this._getScaleEntityValue('min');
@@ -4218,6 +5023,16 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	          grid-template-columns: minmax(0, 1fr) auto;
 	          align-items: end;
 	          min-width: 0;
+	        }
+	        .generic-marker-row {
+	          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	          padding: 10px 0;
+	          border-bottom: 1px solid var(--divider-color, rgba(127, 127, 127, 0.2));
+	        }
+	        .generic-marker-actions {
+	          display: flex;
+	          gap: 8px;
+	          align-items: center;
 	        }
 	        .list-row.triple {
 	          grid-template-columns: repeat(3, minmax(120px, 1fr)) auto;
@@ -4581,6 +5396,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	          .list-row {
 	            grid-template-columns: minmax(0, 1fr);
 	          }
+	          .generic-marker-row {
+	            grid-template-columns: minmax(0, 1fr);
+	          }
 	          .list-row.triple,
 	          .list-row.gradient-stop-row {
 	            grid-template-columns: minmax(0, 1fr);
@@ -4656,8 +5474,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                        const baselineParts = this._getEffectiveBaselineResolvableValue(scope);
 	                        const baselineMode = this._getEffectiveBaselineMode(scope);
 	                        const targetInherited = !this._hasTargetOverride(scope);
-	                        const targetParts = this._getEffectiveTargetResolvableValue(scope);
-	                        const targetMode = this._getEffectiveTargetMode(scope);
+                        const targetParts = this._getEffectiveTargetResolvableValue(scope);
+                        const targetMode = this._getEffectiveTargetMode(scope);
+                        const targetShape = this._getEffectiveTargetShapeValue(scope);
+                        const targetDirection = this._getEffectiveMarkerDirection(scope, 'target');
 	                        const formattingInherited = !this._hasFormattingOverride(scope);
 	                        const layoutInherited = !this._hasLayoutOverride(scope);
 	                        const peakInherited = !this._hasPeakOverride(scope);
@@ -4665,7 +5485,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                        const segmentsInherited = !this._hasSegmentsOverride(scope);
 	                        const scaleInherited = !this._hasResolvableOverride(this._getResolvableScopedValue(scope, 'min'))
 	                          && !this._hasResolvableOverride(this._getResolvableScopedValue(scope, 'max'));
-	                        const entityPeak = this._getEffectiveScopedPeakConfig(scope);
+                        const entityPeak = this._getEffectiveScopedPeakConfig(scope);
+                        const entityPeakExtras = this._getEffectiveMarkerExtras(scope, 'peak');
+                        const floorInherited = !this._hasExtremumOverride(scope, 'floor');
+                        const entityFloor = this._getEffectiveScopedFloorConfig(scope);
 	                        const entityGradientStops = this._getScopedGradientStopsValue(scope);
 	                        const entityGradientDraft = this._getGradientStopsDraftState(scope);
 	                        const entityGradientDraftMessage = this._getGradientDraftValidationMessage(scope);
@@ -4844,7 +5667,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                       </div>
 	                          `,
 	                        });
-	                        const peakGroup = this._renderOverrideGroup({
+                        const peakGroup = this._renderOverrideGroup({
 	                          index,
 	                          group: 'peak',
 	                          title: 'Peak',
@@ -4873,7 +5696,73 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                           placeholder: 'inherit card default',
                         })}
                       </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-peak-reset">Peak reset</label>
+                        <select id="entity-${index}-peak-reset" data-kind="entity-peak-reset" data-index="${index}" value="${this._escapeAttribute(entityPeakExtras.reset ?? 'never')}">
+                          ${this._renderResetOptions(entityPeakExtras.reset ?? 'never')}
+                        </select>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-peak-direction">Direction</label>
+                        <select id="entity-${index}-peak-direction" data-kind="entity-peak-direction" data-index="${index}" value="${this._getEffectiveMarkerDirection(scope, 'peak')}">
+                          <option value="inward"${this._getEffectiveMarkerDirection(scope, 'peak') === 'inward' ? ' selected' : ''}>Inward</option>
+                          <option value="outward"${this._getEffectiveMarkerDirection(scope, 'peak') === 'outward' ? ' selected' : ''}>Outward</option>
+                        </select>
+                      </div>
+                      ${this._renderBuiltinMarkerLabelControls(scope, 'peak', 'Peak')}
 	                          `,
+                        });
+                        const floorGroup = this._renderOverrideGroup({
+                          index,
+                          group: 'floor',
+                          title: 'Floor',
+                          summary: this._getFloorSummary(scope),
+                          content: `
+                      <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-floor-inherit" type="checkbox" data-kind="entity-floor-inherit" data-index="${index}"${floorInherited ? ' checked' : ''}>
+                          <label for="entity-${index}-floor-inherit">Inherit card settings</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-floor-enabled" type="checkbox" data-kind="entity-floor-enabled" data-index="${index}"${entityFloor.mode === 'enabled' ? ' checked' : ''}>
+                          <label for="entity-${index}-floor-enabled">Floor enabled</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-floor-color">Floor color</label>
+                        ${this._renderColorInput({
+                          id: `entity-${index}-floor-color`,
+                          kind: 'entity-floor-color',
+                          index,
+                          value: entityFloor.color,
+                          fallbackHex: '#888888',
+                          placeholder: 'inherit card default',
+                        })}
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-floor-reset">Floor reset</label>
+                        <select id="entity-${index}-floor-reset" data-kind="entity-floor-reset" data-index="${index}" value="${this._escapeAttribute(entityFloor.reset)}">
+                          ${this._renderResetOptions(entityFloor.reset)}
+                        </select>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-floor-direction">Direction</label>
+                        <select id="entity-${index}-floor-direction" data-kind="entity-floor-direction" data-index="${index}" value="${this._getEffectiveMarkerDirection(scope, 'floor')}">
+                          <option value="inward"${this._getEffectiveMarkerDirection(scope, 'floor') === 'inward' ? ' selected' : ''}>Inward</option>
+                          <option value="outward"${this._getEffectiveMarkerDirection(scope, 'floor') === 'outward' ? ' selected' : ''}>Outward</option>
+                        </select>
+                      </div>
+                      ${this._renderBuiltinMarkerLabelControls(scope, 'floor', 'Floor')}
+                          `,
+                        });
+	                        const markersGroup = this._renderOverrideGroup({
+	                          index,
+	                          group: 'markers',
+	                          title: 'Reference markers',
+	                          summary: this._getGenericMarkersSummary(scope),
+	                          content: this._renderGenericMarkersEditor(scope),
 	                        });
 	                        const segmentsGroup = this._renderOverrideGroup({
 	                          index,
@@ -5066,6 +5955,20 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                         <input id="entity-${index}-target-value" type="number" step="any" data-kind="entity-target-value" data-index="${index}" value="${this._escapeAttribute(targetParts.fixed)}" placeholder="inherit card default">
                       </div>
                       <div class="field-row">
+                        <label for="entity-${index}-target-shape">Target shape</label>
+                        <select id="entity-${index}-target-shape" data-kind="entity-target-shape" data-index="${index}" value="${this._escapeAttribute(targetShape)}">
+                          <option value="diamond"${targetShape === 'diamond' ? ' selected' : ''}>diamond</option>
+                          <option value="triangle"${targetShape === 'triangle' ? ' selected' : ''}>triangle</option>
+                        </select>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-target-direction">Direction</label>
+                        <select id="entity-${index}-target-direction" data-kind="entity-target-direction" data-index="${index}" value="${targetDirection}">
+                          <option value="inward"${targetDirection === 'inward' ? ' selected' : ''}>Inward</option>
+                          <option value="outward"${targetDirection === 'outward' ? ' selected' : ''}>Outward</option>
+                        </select>
+                      </div>
+                      <div class="field-row">
                         <label>Target entity</label>
                         ${this._renderEntitySourceInput('entity-target-entity-source', index, targetParts.entity, 'inherit card default')}
                       </div>
@@ -5080,16 +5983,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                           placeholder: 'inherit card default',
                         })}
                       </div>
-                      <div class="field-row">
-                        <div class="toggle">
-                          <input id="entity-${index}-target-label-show" type="checkbox" data-kind="entity-target-label-show" data-index="${index}"${this._getEffectiveTargetLabelShowValue(scope) ? ' checked' : ''}>
-                          <label for="entity-${index}-target-label-show">Show target label</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-target-label-decimal">Target label decimals</label>
-                        <input id="entity-${index}-target-label-decimal" type="number" min="0" step="1" data-kind="entity-target-label-decimal" data-index="${index}" value="${this._escapeAttribute(this._getEffectiveTargetLabelDecimalValue(scope))}" placeholder="inherit primary decimals">
-                      </div>
+                      ${this._renderBuiltinMarkerLabelControls(scope, 'target', 'Target')}
 	                      <div class="field-row">
 	                        <div class="toggle">
 	                          <input id="entity-${index}-target-above-fill-enabled" type="checkbox" data-kind="entity-target-above-fill-enabled" data-index="${index}"${this._isTargetAboveFillEnabled(scope) ? ' checked' : ''}>
@@ -5113,8 +6007,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                          ${scaleGroup}
 	                          ${targetGroup}
 	                          ${baselineGroup}
-	                          ${needleGroup}
-	                          ${peakGroup}
+                          ${needleGroup}
+                          ${peakGroup}
+                          ${floorGroup}
+	                          ${markersGroup}
 	                          ${barGroup}
 	                          ${segmentsGroup}
 	                          ${gradientStopsGroup}
@@ -5174,6 +6070,20 @@ export class SensorBarCardPlusEditor extends HTMLElement {
               <input id="target-value" type="number" step="any" data-field="target-value" value="${this._escapeAttribute(target.fixed)}">
             </div>
             <div class="field-row">
+              <label for="target-shape">Target shape</label>
+              <select id="target-shape" data-field="target-shape" value="${this._escapeAttribute(targetShape)}">
+                <option value="diamond"${targetShape === 'diamond' ? ' selected' : ''}>diamond</option>
+                <option value="triangle"${targetShape === 'triangle' ? ' selected' : ''}>triangle</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="target-direction">Direction</label>
+              <select id="target-direction" data-field="target-direction" value="${targetDirection}">
+                <option value="inward"${targetDirection === 'inward' ? ' selected' : ''}>Inward</option>
+                <option value="outward"${targetDirection === 'outward' ? ' selected' : ''}>Outward</option>
+              </select>
+            </div>
+            <div class="field-row">
               <label>Target entity</label>
               ${this._renderEntitySourceInput('target-entity-source', 'card', target.entity)}
             </div>
@@ -5187,16 +6097,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                 placeholder: '#888',
               })}
             </div>
-            <div class="field-row">
-              <div class="toggle">
-                <input id="target-label-show" type="checkbox" data-field="target-label-show"${targetLabelShow ? ' checked' : ''}>
-                <label for="target-label-show">Show target label</label>
-              </div>
-            </div>
-            <div class="field-row">
-              <label for="target-label-decimal">Target label decimals</label>
-              <input id="target-label-decimal" type="number" min="0" step="1" data-field="target-label-decimal" value="${this._escapeAttribute(targetLabelDecimal)}" placeholder="inherit primary decimals">
-            </div>
+            ${this._renderBuiltinMarkerLabelControls({ type: 'card' }, 'target', 'Target')}
             <div class="field-row">
               <div class="toggle">
                 <input id="target-above-fill-enabled" type="checkbox" data-field="target-above-fill-enabled"${this._isTargetAboveFillEnabled({ type: 'card' }) ? ' checked' : ''}>
@@ -5277,6 +6178,52 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                 placeholder: '#888',
               })}
             </div>
+            <div class="field-row">
+              <label for="peak-reset">Peak reset</label>
+              <select id="peak-reset" data-field="peak-reset" value="${this._escapeAttribute(cardPeakExtras.reset)}">
+                ${this._renderResetOptions(cardPeakExtras.reset)}
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="peak-direction">Direction</label>
+              <select id="peak-direction" data-field="peak-direction" value="${this._getEffectiveMarkerDirection({ type: 'card' }, 'peak')}">
+                <option value="inward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'peak') === 'inward' ? ' selected' : ''}>Inward</option>
+                <option value="outward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'peak') === 'outward' ? ' selected' : ''}>Outward</option>
+              </select>
+            </div>
+            ${this._renderBuiltinMarkerLabelControls({ type: 'card' }, 'peak', 'Peak')}
+            <div class="field-row">
+              <div class="toggle">
+                <input id="floor-show" type="checkbox" data-field="floor-show"${cardFloor.mode === 'enabled' ? ' checked' : ''}>
+                <label for="floor-show">Floor enabled</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="floor-color">Floor color</label>
+              ${this._renderColorInput({
+                id: 'floor-color',
+                field: 'floor-color',
+                value: cardFloor.color,
+                fallbackHex: '#888888',
+                placeholder: '#888888',
+              })}
+            </div>
+            <div class="field-row">
+              <label for="floor-reset">Floor reset</label>
+              <select id="floor-reset" data-field="floor-reset" value="${this._escapeAttribute(cardFloor.reset)}">
+                ${this._renderResetOptions(cardFloor.reset)}
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="floor-direction">Direction</label>
+              <select id="floor-direction" data-field="floor-direction" value="${this._getEffectiveMarkerDirection({ type: 'card' }, 'floor')}">
+                <option value="inward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'floor') === 'inward' ? ' selected' : ''}>Inward</option>
+                <option value="outward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'floor') === 'outward' ? ' selected' : ''}>Outward</option>
+              </select>
+            </div>
+            ${this._renderBuiltinMarkerLabelControls({ type: 'card' }, 'floor', 'Floor')}
+            <div class="field-row"><h4>Generic reference markers</h4></div>
+            ${this._renderGenericMarkersEditor({ type: 'card' })}
           </div>
 	        </div>
 
@@ -5581,6 +6528,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       if (kind === 'entity-target-entity-source') {
         picker.value = this._getEffectiveTargetResolvableValue({ type: 'entity', index }).entity;
         picker.label = `Entity ${index + 1} target entity`;
+        return;
+      }
+
+      if (kind === 'generic-marker-entity') {
+        const scope = this._getGenericMarkerScope(picker);
+        const marker = this._getGenericMarkers(scope)[Number(picker.dataset.markerIndex)];
+        picker.value = this._getGenericMarkerSource(marker).entity ?? '';
+        picker.label = 'Reference marker entity';
       }
     };
 
@@ -5594,6 +6549,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       'ha-entity-picker[data-kind="entity-override-max-entity-source"]',
       'ha-entity-picker[data-kind="entity-baseline-entity-source"]',
       'ha-entity-picker[data-kind="entity-target-entity-source"]',
+      'ha-entity-picker[data-kind="generic-marker-entity"]',
     ].forEach((selector) => {
       this.shadowRoot.querySelectorAll(selector).forEach(syncPicker);
     });
@@ -5609,6 +6565,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           'ha-entity-picker[data-kind="entity-override-max-entity-source"]',
           'ha-entity-picker[data-kind="entity-baseline-entity-source"]',
           'ha-entity-picker[data-kind="entity-target-entity-source"]',
+          'ha-entity-picker[data-kind="generic-marker-entity"]',
         ].forEach((selector) => {
           this.shadowRoot?.querySelectorAll(selector).forEach(syncPicker);
         });
@@ -5678,6 +6635,29 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
     if (action === 'remove-entity') {
       this._removeEntityRow(Number(target.dataset.index));
+      return;
+    }
+
+    if (action === 'add-generic-marker') {
+      const scope = this._getGenericMarkerScope(target);
+      const markers = this._getGenericMarkers(scope);
+      markers.push({ at: { fixed: 50 } });
+      this._setGenericMarkerList(scope, markers);
+      return;
+    }
+
+    if (action === 'remove-generic-marker' || action === 'move-generic-marker-up' || action === 'move-generic-marker-down') {
+      const scope = this._getGenericMarkerScope(target);
+      const markerIndex = Number(target.dataset.markerIndex);
+      const markers = this._getGenericMarkers(scope);
+      if (action === 'remove-generic-marker') {
+        markers.splice(markerIndex, 1);
+      } else {
+        const nextIndex = markerIndex + (action === 'move-generic-marker-up' ? -1 : 1);
+        if (nextIndex < 0 || nextIndex >= markers.length) return;
+        [markers[markerIndex], markers[nextIndex]] = [markers[nextIndex], markers[markerIndex]];
+      }
+      this._setGenericMarkerList(scope, markers);
       return;
     }
 
@@ -5888,6 +6868,22 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const detailValue = event.detail?.value;
     const value = detailValue ?? (target?.type === 'checkbox' ? target.checked : target?.value);
 
+    if (kind === 'entity-markers-inherit') {
+      const scope = { type: 'entity', index: Number(target.dataset.index) };
+      if (value) this._removeScopedValue(scope, ['markers'], { rerender: true });
+      else this._setGenericMarkerList(scope, this._getGenericMarkers(scope));
+      return;
+    }
+    if (kind?.startsWith('generic-marker-')) {
+      this._setGenericMarkerField(
+        this._getGenericMarkerScope(target),
+        Number(target.dataset.markerIndex),
+        kind,
+        value
+      );
+      return;
+    }
+
     if (field === 'title') return void this._setTitle(value);
     if (field === 'formatting-unit') return void this._setScopedFormattingUnit({ type: 'card' }, value);
     if (field === 'formatting-decimal') return void this._setScopedFormattingDecimal({ type: 'card' }, value);
@@ -5915,13 +6911,32 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (field === 'target-value') {
       return void this._setTargetResolvablePart({ type: 'card' }, 'fixed', value);
     }
+    if (field === 'target-shape') return void this._setTargetShape({ type: 'card' }, value);
+    if (field === 'target-direction') return void this._setMarkerDirection({ type: 'card' }, 'target', value);
     if (field === 'target-color') return void this._setTargetColor({ type: 'card' }, value);
-    if (field === 'target-label-show') return void this._setTargetLabelShow({ type: 'card' }, value);
-    if (field === 'target-label-decimal') return void this._setTargetLabelDecimal({ type: 'card' }, value);
+    if (field?.startsWith('target-label-') || field?.startsWith('peak-label-') || field?.startsWith('floor-label-')) {
+      const key = field.startsWith('target-') ? 'target' : field.startsWith('peak-') ? 'peak' : 'floor';
+      const option = field.slice(`${key}-label-`.length);
+      const scope = { type: 'card' };
+      if (option === 'show') {
+        this._setBuiltinMarkerLabelField(scope, key, 'show', value);
+      } else {
+        const labelField = option === 'show-value' ? 'showValue'
+          : option === 'show-unit' ? 'showUnit' : option;
+        this._setBuiltinMarkerLabelField(scope, key, labelField, value);
+      }
+      return;
+    }
     if (field === 'target-above-fill-enabled') return void this._setTargetAboveFillEnabled({ type: 'card' }, value);
     if (field === 'target-above-fill-color') return void this._setTargetAboveFillColor({ type: 'card' }, value);
     if (field === 'peak-show') return void this._setPeakShow(value);
     if (field === 'peak-color') return void this._setScopedPeakColor({ type: 'card' }, value);
+    if (field === 'peak-direction') return void this._setMarkerDirection({ type: 'card' }, 'peak', value);
+    if (field === 'peak-reset') return void this._setScopedExtremumReset({ type: 'card' }, 'peak', value);
+    if (field === 'floor-show') return void this._setScopedExtremumEnabled({ type: 'card' }, 'floor', value);
+    if (field === 'floor-color') return void this._setScopedExtremumColor({ type: 'card' }, 'floor', value);
+    if (field === 'floor-direction') return void this._setMarkerDirection({ type: 'card' }, 'floor', value);
+    if (field === 'floor-reset') return void this._setScopedExtremumReset({ type: 'card' }, 'floor', value);
 
     if (kind === 'entity-picker' || kind === 'entity-input') {
       const index = Number(target.dataset.index);
@@ -6041,6 +7056,49 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return void this._setScopedPeakColor({ type: 'entity', index: Number(target.dataset.index) }, value);
     }
 
+    if (kind === 'entity-peak-direction') {
+      return void this._setMarkerDirection({ type: 'entity', index: Number(target.dataset.index) }, 'peak', value);
+    }
+
+    if (kind === 'entity-peak-reset') {
+      return void this._setScopedExtremumReset({ type: 'entity', index: Number(target.dataset.index) }, 'peak', value);
+    }
+
+    const entityLabelMatch = kind?.match(/^entity-(target|peak|floor)-label-(show|text|show-value|show-unit|precision)$/);
+    if (entityLabelMatch) {
+      const [, key, option] = entityLabelMatch;
+      const scope = { type: 'entity', index: Number(target.dataset.index) };
+      if (option === 'show') {
+        this._setBuiltinMarkerLabelField(scope, key, 'show', value);
+      } else {
+        this._setBuiltinMarkerLabelField(scope, key, option === 'show-value' ? 'showValue'
+          : option === 'show-unit' ? 'showUnit' : option, value);
+      }
+      return;
+    }
+
+    if (kind === 'entity-floor-inherit') {
+      if (value) return void this._clearFloorOverride({ type: 'entity', index: Number(target.dataset.index) });
+      return;
+    }
+
+    if (kind === 'entity-floor-enabled') {
+      return void this._setScopedExtremumEnabled({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
+    }
+
+    if (kind === 'entity-floor-color') {
+      return void this._setScopedExtremumColor({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
+    }
+
+    if (kind === 'entity-floor-direction') {
+      return void this._setMarkerDirection({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
+    }
+
+    if (kind === 'entity-floor-reset') {
+      return void this._setScopedExtremumReset({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
+    }
+
+
     if (kind === 'entity-segments-inherit') {
       if (value) {
         return void this._clearSegmentsOverride({ type: 'entity', index: Number(target.dataset.index) });
@@ -6139,6 +7197,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return void this._setTargetResolvablePart({ type: 'entity', index: Number(target.dataset.index) }, 'fixed', value);
     }
 
+    if (kind === 'entity-target-shape') {
+      return void this._setTargetShape({ type: 'entity', index: Number(target.dataset.index) }, value);
+    }
+
+    if (kind === 'entity-target-direction') {
+      return void this._setMarkerDirection({ type: 'entity', index: Number(target.dataset.index) }, 'target', value);
+    }
+
     if (kind === 'entity-target-entity-source') {
       return void this._setTargetResolvablePart({ type: 'entity', index: Number(target.dataset.index) }, 'entity', value);
     }
@@ -6147,13 +7213,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return void this._setTargetColor({ type: 'entity', index: Number(target.dataset.index) }, value);
     }
 
-    if (kind === 'entity-target-label-show') {
-      return void this._setTargetLabelShow({ type: 'entity', index: Number(target.dataset.index) }, value);
-    }
-
-    if (kind === 'entity-target-label-decimal') {
-      return void this._setTargetLabelDecimal({ type: 'entity', index: Number(target.dataset.index) }, value);
-    }
 
     if (kind === 'entity-target-above-fill-enabled') {
       return void this._setTargetAboveFillEnabled({ type: 'entity', index: Number(target.dataset.index) }, value);

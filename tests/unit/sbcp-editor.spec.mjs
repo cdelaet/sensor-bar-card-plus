@@ -2501,6 +2501,117 @@ describe('Sensor Bar Card Plus editor', () => {
     });
   });
 
+  it('renders and serializes the card-level target shape', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      target: { at: { fixed: 65 }, shape: 'triangle', custom: { keep: true } },
+    });
+
+    const shapeInput = editor.shadowRoot.querySelector('#target-shape');
+    expect(shapeInput.value).toBe('triangle');
+    dispatchChange(shapeInput, 'diamond');
+    expect(events.at(-1).detail.config.target).toEqual({
+      at: { fixed: 65 },
+      custom: { keep: true },
+    });
+
+    dispatchChange(editor.shadowRoot.querySelector('#target-shape'), 'triangle');
+    expect(events.at(-1).detail.config.target).toEqual({
+      at: { fixed: 65 },
+      shape: 'triangle',
+      custom: { keep: true },
+    });
+  });
+
+  it('supports entity target shape overrides and clears only known keys on inheritance', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      target: { at: { fixed: 65 }, shape: 'triangle' },
+      entities: [{
+        entity: 'sensor.one',
+        target: { at: { fixed: 70 }, shape: 'diamond', custom: { keep: true } },
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    const shapeInput = editor.shadowRoot.querySelector('#entity-0-target-shape');
+    expect(shapeInput.value).toBe('diamond');
+    dispatchChange(shapeInput, 'triangle');
+    expect(events.at(-1).detail.config.entities[0].target.shape).toBe('triangle');
+
+    const inheritToggle = editor.shadowRoot.querySelector('#entity-0-target-inherit');
+    inheritToggle.checked = true;
+    inheritToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+    const target = events.at(-1).detail.config.entities[0].target;
+    expect(target.shape).toBeUndefined();
+    expect(target.custom).toEqual({ keep: true });
+  });
+
+  it('edits marker directions and preserves an explicit inward entity override', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({
+      target: { at: { fixed: 65 }, direction: 'outward' },
+      peak: { enabled: true, direction: 'outward' },
+      floor: { enabled: true, direction: 'outward' },
+      markers: [{ at: { fixed: 20 }, direction: 'outward' }],
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    expect(editor.shadowRoot.querySelector('#target-direction').value).toBe('outward');
+    expect(editor.shadowRoot.querySelector('#peak-direction').value).toBe('outward');
+    expect(editor.shadowRoot.querySelector('#floor-direction').value).toBe('outward');
+    expect(editor.shadowRoot.querySelector('#card-card-generic-marker-0-direction').value).toBe('outward');
+    expect(editor.shadowRoot.querySelector('#entity-0-target-direction').value).toBe('outward');
+
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-target-direction'), 'inward');
+    expect(events.at(-1).detail.config.entities[0].target.direction).toBe('inward');
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-peak-direction'), 'inward');
+    expect(events.at(-1).detail.config.entities[0].peak.direction).toBe('inward');
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-floor-direction'), 'inward');
+    expect(events.at(-1).detail.config.entities[0].floor.direction).toBe('inward');
+
+    const genericDirection = editor.shadowRoot.querySelector('#card-card-generic-marker-0-direction');
+    dispatchChange(genericDirection, 'inward');
+    expect(events.at(-1).detail.config.markers[0].direction).toBeUndefined();
+
+    dispatchChange(editor.shadowRoot.querySelector('#target-direction'), 'inward');
+    expect(events.at(-1).detail.config.target.direction).toBeUndefined();
+  });
+
+  it('distinguishes absent entity shape from explicit invalid shape values', () => {
+    const absentEditor = createEditor();
+    absentEditor.setConfig({
+      target: { shape: 'triangle' },
+      entities: [{ entity: 'sensor.one', target: { at: { fixed: 70 } } }],
+    });
+    expect(absentEditor._getEffectiveTargetShapeValue({ type: 'entity', index: 0 })).toBe('triangle');
+    expect(absentEditor._cleanupEditorEmittedConfig(absentEditor._draftConfig).entities[0].target.shape).toBeUndefined();
+
+    [null, '', 'hexagon'].forEach((shape) => {
+      const editor = createEditor();
+      editor.setConfig({
+        target: { shape: 'triangle' },
+        entities: [{
+          entity: 'sensor.one',
+          target: { at: { fixed: 70 }, shape, custom: { keep: true } },
+        }],
+      });
+
+      expect(editor._getEffectiveTargetShapeValue({ type: 'entity', index: 0 })).toBe('diamond');
+      expect(editor._cleanupEditorEmittedConfig(editor._draftConfig).entities[0].target).toEqual({
+        at: { fixed: 70 },
+        shape: 'diamond',
+        custom: { keep: true },
+      });
+    });
+  });
+
   it('show target label false is suppressed', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
@@ -2534,19 +2645,19 @@ describe('Sensor Bar Card Plus editor', () => {
     });
   });
 
-  it('target label decimal override writes target.label.decimal', () => {
+  it('target label precision override writes target.label.precision', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({ entity: 'sensor.one' });
-    dispatchInput(editor.shadowRoot.querySelector('#target-label-decimal'), '1');
+    dispatchInput(editor.shadowRoot.querySelector('#target-label-precision'), '1');
 
     expect(events.at(-1).detail.config.target).toEqual({
-      label: { decimal: 1 },
+      label: { precision: 1 },
     });
   });
 
-  it('target label decimal override can coexist with show and clears back to inheritance', () => {
+  it('target label precision override can coexist with show and clears back to inheritance', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -2556,19 +2667,19 @@ describe('Sensor Bar Card Plus editor', () => {
       target: { label: { show: true } },
     });
 
-    const decimalInput = editor.shadowRoot.querySelector('#target-label-decimal');
+    const decimalInput = editor.shadowRoot.querySelector('#target-label-precision');
     dispatchInput(decimalInput, '1');
     expect(events.at(-1).detail.config.target).toEqual({
-      label: { show: true, decimal: 1 },
+      label: { show: true, precision: 1 },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#target-label-decimal'), '');
+    dispatchInput(editor.shadowRoot.querySelector('#target-label-precision'), '');
     expect(events.at(-1).detail.config.target).toEqual({
       label: { show: true },
     });
   });
 
-  it('preserves an explicit zero target label decimal through load, set, and reset', () => {
+  it('preserves an explicit zero target label precision through load, set, and reset', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -2577,19 +2688,19 @@ describe('Sensor Bar Card Plus editor', () => {
       target: { label: { show: true, decimal: 0 } },
     });
 
-    expect(editor.shadowRoot.querySelector('#target-label-decimal').value).toBe('0');
+    expect(editor.shadowRoot.querySelector('#target-label-precision').value).toBe('0');
 
-    dispatchInput(editor.shadowRoot.querySelector('#target-label-decimal'), '');
+    dispatchInput(editor.shadowRoot.querySelector('#target-label-precision'), '');
     expect(events.at(-1).detail.config.target).toEqual({
       label: { show: true },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#target-label-decimal'), '0');
+    dispatchInput(editor.shadowRoot.querySelector('#target-label-precision'), '0');
     expect(events.at(-1).detail.config.target).toEqual({
-      label: { show: true, decimal: 0 },
+      label: { show: true, precision: 0 },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#target-label-decimal'), '');
+    dispatchInput(editor.shadowRoot.querySelector('#target-label-precision'), '');
     expect(events.at(-1).detail.config.target).toEqual({
       label: { show: true },
     });
@@ -3088,7 +3199,7 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('per-entity target label decimal override writes entities[index].target.label.decimal', () => {
+  it('per-entity target label precision override writes entities[index].target.label.precision', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -3098,11 +3209,34 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchInput(editor.shadowRoot.querySelector('#entity-0-target-label-decimal'), '1');
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-target-label-precision'), '1');
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', target: { label: { decimal: 1 } } },
+      { entity: 'sensor.one', name: 'One', target: { label: { precision: 1 } } },
     ]);
+  });
+
+  it('preserves an explicit entity label override against the card default', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({
+      target: { at: { fixed: 20 }, label: { show: true, text: 'Goal', show_value: false, show_unit: true } },
+      markers: [{ at: { fixed: 35 }, label: { show: true } }],
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    const overrides = editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0];
+    dispatchClick(overrides);
+    const entityShowValue = editor.shadowRoot.querySelector('#entity-0-target-label-show-value');
+    expect(entityShowValue.checked).toBe(false);
+    entityShowValue.checked = true;
+    entityShowValue.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+    expect(events.at(-1).detail.config.entities[0].target.label).toEqual({ show_value: true });
+
+    const entityShowLabel = editor.shadowRoot.querySelector('#entity-0-target-label-show');
+    entityShowLabel.checked = false;
+    entityShowLabel.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+    expect(events.at(-1).detail.config.entities[0].target.label).toEqual({ show: false, show_value: true });
   });
 
   it('per-entity target above-target fill color writes entities[index].target.when_exceeded.fill_color', () => {
@@ -8127,6 +8261,187 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
     expect(finalConfig.card_mod).toEqual({
       style: 'ha-card { background: red; }',
+    });
+  });
+
+  it('writes card-level Floor reset and label settings minimally', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({ entities: [{ entity: 'sensor.one' }] });
+
+    const floorToggle = editor.shadowRoot.querySelector('#floor-show');
+    floorToggle.checked = true;
+    floorToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+    dispatchChange(editor.shadowRoot.querySelector('#floor-reset'), 'quarterly');
+    const floorLabel = editor.shadowRoot.querySelector('#floor-label-show');
+    floorLabel.checked = true;
+    floorLabel.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+    dispatchInput(editor.shadowRoot.querySelector('#floor-label-precision'), '0');
+
+    expect(events.at(-1).detail.config.floor).toEqual({
+      enabled: true,
+      reset: 'quarterly',
+      label: { show: true, precision: 0 },
+    });
+  });
+
+  it('keeps explicit entity Floor reset and decimal zero overrides', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({
+      floor: { enabled: true, reset: 'daily' },
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-floor'));
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-floor-reset'), 'never');
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-floor-label-precision'), '0');
+
+    expect(events.at(-1).detail.config.entities[0].floor).toEqual({
+      reset: 'never',
+      label: { precision: 0 },
+    });
+  });
+
+  it('Floor Inherit removes managed overrides and preserves unrelated nested keys', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({
+      floor: { enabled: true, reset: 'daily' },
+      entities: [{
+        entity: 'sensor.one',
+        floor: {
+          enabled: false,
+          color: '#123456',
+          reset: 'never',
+          label: { show: true, decimal: 0 },
+          custom_floor_key: { keep: true },
+        },
+      }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-floor'));
+    const inheritToggle = editor.shadowRoot.querySelector('#entity-0-floor-inherit');
+    inheritToggle.checked = true;
+    inheritToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+
+    expect(events.at(-1).detail.config.entities[0].floor).toEqual({
+      custom_floor_key: { keep: true },
+    });
+  });
+
+  it('renders generic marker controls and preserves order, capacity feedback, and supported shapes', () => {
+    const editor = createEditor();
+    editor.setConfig({
+      markers: [{ at: { entity: 'sensor.limit', fixed: 50 } }, { at: '35%', lane: 'above' }, { at: { fixed: 75 }, lane: 'above' }],
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    const markup = editor._renderGenericMarkersEditor({ type: 'card' });
+    expect(markup).toContain('First two valid markers per lane render');
+    expect(markup).toContain('move-generic-marker-up');
+    expect(markup).toContain('move-generic-marker-down');
+    expect(markup).toContain('generic-marker-entity');
+    expect(markup).toContain('generic-marker-percent');
+    expect(markup).toContain('generic-marker-label-text');
+    expect(markup).toContain('generic-marker-label-show-value');
+    expect(markup).toContain('generic-marker-label-show-unit');
+    expect(markup).toContain('generic-marker-label-precision');
+    expect(markup).not.toContain('generic-marker-label-unit');
+    for (const shape of ['circle', 'diamond', 'triangle', 'chevron', 'arrow', 'pin']) {
+      expect(markup).toContain(`<option value="${shape}"`);
+    }
+    expect(markup).toContain('#888888');
+  });
+
+  it('adds, removes, and reorders generic markers without losing item data', () => {
+    const editor = createEditor();
+    editor.setConfig({
+      markers: [
+        { at: { fixed: 10 }, extension: { keep: true } },
+        { at: { fixed: 20 }, extension: { second: true } },
+      ],
+      entities: [{ entity: 'sensor.one' }],
+    });
+    const clickAction = (action, markerIndex = 0) => editor._handleClick({
+      target: {
+        dataset: { action, scopeType: 'card', index: 'card', markerIndex: String(markerIndex) },
+        closest() { return this; },
+      },
+    });
+
+    clickAction('move-generic-marker-down', 0);
+    expect(editor._draftConfig.markers.map((marker) => marker.at.fixed)).toEqual([20, 10]);
+    expect(editor._draftConfig.markers[1].extension).toEqual({ keep: true });
+    clickAction('add-generic-marker');
+    expect(editor._draftConfig.markers.at(-1)).toEqual({ at: { fixed: 50 } });
+    clickAction('remove-generic-marker', 1);
+    expect(editor._draftConfig.markers).toHaveLength(2);
+  });
+
+  it('deep-copies inherited generic markers on entity override and preserves explicit empty lists', () => {
+    const editor = createEditor();
+    editor.setConfig({
+      markers: [{ at: { fixed: 50 }, vendor_key: { preserved: true } }],
+      entities: [{ entity: 'sensor.one' }],
+    });
+    const target = {
+      dataset: { kind: 'entity-markers-inherit', index: '0', checked: false },
+      type: 'checkbox',
+    };
+    editor._handleFieldEvent({ target });
+    expect(editor._draftConfig.entities[0].markers).toEqual(editor._draftConfig.markers);
+    expect(editor._draftConfig.entities[0].markers).not.toBe(editor._draftConfig.markers);
+    editor._setGenericMarkerList({ type: 'entity', index: 0 }, []);
+    const emitted = editor._cleanupEditorEmittedConfig(editor._cloneDeep(editor._draftConfig));
+    expect(emitted.entities[0].markers).toEqual([]);
+  });
+
+  it('round-trips precision zero, show_unit false, and unknown marker and nested label keys', () => {
+    const editor = createEditor();
+    editor.setConfig({
+      markers: [{
+        at: { fixed: 10, source_extension: 'keep' },
+        extension: { keep: true },
+        label: { show: true, extension: 'also keep' },
+      }],
+      entities: [{ entity: 'sensor.one' }],
+    });
+    editor._setGenericMarkerField({ type: 'card' }, 0, 'generic-marker-label-precision', '0');
+    editor._setGenericMarkerField({ type: 'card' }, 0, 'generic-marker-label-show-unit', false);
+    const emitted = editor._cleanupEditorEmittedConfig(editor._cloneDeep(editor._draftConfig));
+
+    expect(emitted.markers[0]).toEqual({
+      at: { fixed: 10, source_extension: 'keep' },
+      extension: { keep: true },
+      label: { show: true, extension: 'also keep', precision: 0, show_unit: false },
+    });
+  });
+
+  it('keeps excess generic markers editable and serialized after an ordinary edit', () => {
+    const editor = createEditor();
+    editor.setConfig({
+      markers: [
+        { at: { fixed: 10 }, lane: 'above' },
+        { at: { fixed: 20 }, lane: 'above' },
+        { at: { fixed: 30 }, lane: 'above', vendor_key: { preserve: true } },
+      ],
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    editor._setGenericMarkerField({ type: 'card' }, 0, 'generic-marker-label-show', true);
+    const markup = editor._renderGenericMarkersEditor({ type: 'card' });
+    const emitted = editor._cleanupEditorEmittedConfig(editor._cloneDeep(editor._draftConfig));
+
+    expect((markup.match(/class="list-row generic-marker-row"/g) ?? [])).toHaveLength(3);
+    expect(emitted.markers).toHaveLength(3);
+    expect(emitted.markers[0].label).toEqual({ show: true });
+    expect(emitted.markers[2]).toEqual({
+      at: { fixed: 30 },
+      lane: 'above',
+      vendor_key: { preserve: true },
     });
   });
 });

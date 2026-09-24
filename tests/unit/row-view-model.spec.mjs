@@ -154,6 +154,89 @@ describe('buildRowViewModel', () => {
     expect(textualRow.unit).toBe('');
   });
 
+  it('keeps tracked Peak and Floor units through unavailable states and recovery', () => {
+    const card = createCard();
+    const config = card.normalizeCardConfig({
+      formatting: { unit: 'W' },
+      entities: [{
+        entity: 'sensor.power',
+        peak: { enabled: true, label: { show: true } },
+        floor: { enabled: true, label: { show: true } },
+      }],
+    });
+    const entityConfig = config.entities[0];
+    const state = {
+      state: '80',
+      last_updated: '2026-01-01T10:07:00.000Z',
+      attributes: { unit_of_measurement: 'W' },
+    };
+    card._updateExtrema(entityConfig, entityConfig, state);
+    state.state = '20';
+    state.last_updated = '2026-01-01T10:08:00.000Z';
+    card._updateExtrema(entityConfig, entityConfig, state);
+
+    for (const unavailableState of ['unavailable', 'unknown']) {
+      state.state = unavailableState;
+      state.last_updated = unavailableState === 'unavailable'
+        ? '2026-01-01T10:09:00.000Z'
+        : '2026-01-01T10:10:00.000Z';
+      const row = buildRowViewModel({
+        hass: { states: { 'sensor.power': state } },
+        cardConfig: config,
+        entityConfig,
+        entityState: state,
+        extrema: card._extrema['sensor.power'],
+      });
+
+      expect(row.primaryPresentation.text).toBe(unavailableState);
+      expect(row.primaryPresentation.unit).toBe('');
+      expect(row.peakPresentation.text).toBe('80 W');
+      expect(row.floorPresentation.text).toBe('20 W');
+    }
+
+    state.state = '42';
+    state.last_updated = '2026-01-01T10:11:00.000Z';
+    card._updateExtrema(entityConfig, entityConfig, state);
+    const recoveredRow = buildRowViewModel({
+      hass: { states: { 'sensor.power': state } },
+      cardConfig: config,
+      entityConfig,
+      entityState: state,
+      extrema: card._extrema['sensor.power'],
+    });
+    expect(recoveredRow.primaryPresentation.text).toBe('42 W');
+    expect(recoveredRow.peakPresentation.text).toBe('80 W');
+    expect(recoveredRow.floorPresentation.text).toBe('20 W');
+  });
+
+  it('retains the effective row unit for generic labels while the primary state is unavailable or unknown', () => {
+    const entityConfig = createNormalizedEntity({
+      formatting: { decimal: 0 },
+      markers: [{ at: { entity: 'sensor.limit' }, label: { show: true } }],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const limit = sensor(35, { unit_of_measurement: 'MW' });
+
+    for (const primaryState of ['unavailable', 'unknown']) {
+      const primary = sensor(primaryState, { unit_of_measurement: 'W' });
+      const hass = { states: { 'sensor.power': primary, 'sensor.limit': limit } };
+      const row = buildRowViewModel({
+        hass,
+        cardConfig: null,
+        entityConfig,
+        entityState: primary,
+      });
+
+      expect(row.primaryPresentation.text).toBe(primaryState);
+      expect(row.primaryPresentation.unit).toBe('');
+      expect(row.markers.find((marker) => marker.id === 'generic-0')).toMatchObject({
+        visible: true,
+        value: 35,
+        label: { text: '35 W' },
+      });
+    }
+  });
+
   it('resolves fixed target values and formats target display with decimals and unit', () => {
     const hass = {
       states: {
@@ -215,6 +298,407 @@ describe('buildRowViewModel', () => {
     expect(row.primaryPresentation.text).toBe('42.00 kW');
     expect(row.targetPresentation.text).toBe('55.00 kW');
     expect(row.peakPresentation.text).toBe('48.00 kW');
+  });
+
+  it('builds shared target and peak marker models with canonical lanes', () => {
+    const hass = {
+      states: {
+        'sensor.power': sensor(42, { unit_of_measurement: 'kW' }),
+      },
+    };
+    const entityConfig = createNormalizedEntity({
+      min: 0,
+      max: 100,
+      target: { at: { fixed: 55 }, label: { show: true } },
+      peak: { enabled: true, color: '#123456' },
+      entities: [{ entity: 'sensor.power' }],
+    });
+
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      peaks: { 'sensor.power': 48 },
+    });
+
+    const targetMarker = row.markers.find((marker) => marker.type === 'target');
+    const peakMarker = row.markers.find((marker) => marker.type === 'peak');
+    expect(targetMarker).toEqual(expect.objectContaining({
+      id: 'target',
+      lane: 'below',
+      value: 55,
+      visible: true,
+      label: row.targetLabelPresentation,
+      labelVisible: true,
+      shape: 'diamond',
+    }));
+    expect(targetMarker.position).toBeCloseTo(55);
+    expect(peakMarker).toEqual(expect.objectContaining({
+      id: 'peak',
+      lane: 'above',
+      value: 48,
+      position: 48,
+      visible: true,
+      color: '#123456',
+      shape: 'triangle',
+    }));
+    expect(row.markerLaneOccupancy).toEqual({ above: true, below: true });
+  });
+
+  it('resolves generic percentages against the effective scale and formats resolved values', () => {
+    const hass = { states: { 'sensor.power': sensor(180) } };
+    const config = {
+      scale: { min: { fixed: 100 }, max: { fixed: 300 } },
+      formatting: { decimal: 1 },
+      markers: [
+        { at: '0%', label: { show: true } },
+        { at: '35%', lane: 'above', label: { show: true, precision: 0, show_unit: true } },
+        { at: '100%', lane: 'above', label: { show: true, show_unit: false } },
+      ],
+      entities: [{ entity: 'sensor.power' }],
+    };
+    const entityConfig = createNormalizedEntity(config);
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+    });
+    const markers = row.markers.filter((marker) => marker.type === 'generic');
+
+    expect(markers.map(({ value, position }) => ({ value, position }))).toEqual([
+      { value: 100, position: 0 },
+      { value: 170, position: 35 },
+      { value: 300, position: 100 },
+    ]);
+    expect(markers.map((marker) => marker.label?.text)).toEqual(['100.0 W', '170 W', '300.0']);
+
+    const changedScaleConfig = createNormalizedEntity({
+      ...config,
+      scale: { min: { fixed: 0 }, max: { fixed: 400 } },
+    });
+    const changedScaleRow = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig: changedScaleConfig,
+      entityState: hass.states['sensor.power'],
+    });
+    expect(changedScaleRow.markers.find((marker) => marker.id === 'generic-1')).toMatchObject({
+      value: 140,
+      position: 35,
+      label: { text: '140 W' },
+    });
+  });
+
+  it('composes marker label text, value, and unit independently with defaults and precision', () => {
+    const hass = { states: { 'sensor.power': sensor(42, { unit_of_measurement: 'W' }) } };
+    const cases = [
+      [{ show: true }, '8.8 W'],
+      [{ show: true, text: 'Max', precision: 1 }, 'Max 8.8 W'],
+      [{ show: true, text: 'Trigger', show_unit: false }, 'Trigger 8.8'],
+      [{ show: true, text: 'Low', show_value: false }, 'Low W'],
+      [{ show: true, text: 'Prediction', show_value: false, show_unit: false }, 'Prediction'],
+      [{ show: true, show_unit: false, precision: 3 }, '8.765'],
+      [{ show: true, show_value: false, text: '', show_unit: true }, 'W'],
+      [{ show: true, show_value: false, show_unit: false }, ''],
+    ];
+
+    for (const [label, expected] of cases) {
+      const entityConfig = createNormalizedEntity({
+        scale: { min: { fixed: 0 }, max: { fixed: 100 } },
+        formatting: { decimal: 1 },
+        markers: [{ at: { fixed: 8.765 }, label }],
+        entities: [{ entity: 'sensor.power' }],
+      });
+      const row = buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.power'] });
+      const marker = row.markers.find((entry) => entry.id === 'generic-0');
+      expect(marker.label?.text).toBe(expected);
+      expect(marker.labelVisible).toBe(expected !== '');
+    }
+  });
+
+  it('composes Target, Peak, and Floor labels and inherits independent label options', () => {
+    const hass = { states: { 'sensor.power': sensor(42, { unit_of_measurement: 'kW' }) } };
+    const config = {
+      scale: { min: { fixed: 0 }, max: { fixed: 100 } },
+      formatting: { decimal: 2 },
+      target: { at: { fixed: 34.567 }, label: { show: true, text: 'Target', precision: 1 } },
+      peak: { enabled: true, label: { show: true, text: 'Max', precision: 0 } },
+      floor: { enabled: true, label: { show: true, text: 'Min', show_value: false } },
+      entities: [{ entity: 'sensor.power' }],
+    };
+    const entityConfig = createNormalizedEntity(config);
+    const row = buildRowViewModel({
+      hass,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      extrema: { peak: { value: 80 }, floor: { value: 12 } },
+    });
+    expect(row.markers.find((marker) => marker.type === 'target').label.text).toBe('Target 34.6 kW');
+    expect(row.markers.find((marker) => marker.type === 'peak').label.text).toBe('Max 80 kW');
+    expect(row.markers.find((marker) => marker.type === 'floor').label.text).toBe('Min kW');
+
+    const inheritedConfig = createNormalizedEntity({
+      target: { at: 30, label: { show: true, text: 'Goal', show_unit: true, precision: 1 } },
+      peak: { enabled: true, label: { show: true, text: 'High', show_value: true } },
+      entities: [{ entity: 'sensor.power', target: { label: { show_value: false } }, peak: { label: { show_unit: false } } }],
+    });
+    const inheritedRow = buildRowViewModel({
+      hass,
+      entityConfig: inheritedConfig,
+      entityState: hass.states['sensor.power'],
+      extrema: { peak: { value: 80 } },
+    });
+    expect(inheritedRow.markers.find((marker) => marker.type === 'target').label.text).toBe('Goal kW');
+    expect(inheritedRow.markers.find((marker) => marker.type === 'peak').label.text).toBe('High 80');
+
+    const emptyConfig = createNormalizedEntity({
+      target: { at: 30, label: { show: true, show_value: false, show_unit: false } },
+      peak: { enabled: true, label: { show: true, show_value: false, show_unit: false } },
+      floor: { enabled: true, label: { show: true, show_value: false, show_unit: false } },
+      markers: [{ at: 15, label: { show: true, show_value: false, show_unit: false } }],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const emptyRow = buildRowViewModel({
+      hass,
+      entityConfig: emptyConfig,
+      entityState: hass.states['sensor.power'],
+      extrema: { peak: { value: 80 }, floor: { value: 12 } },
+    });
+    expect(emptyRow.markers.map((marker) => marker.labelVisible)).toEqual([false, false, false, false]);
+    expect(emptyRow.markerLabelLaneOccupancy).toEqual({ above: false, below: false });
+  });
+
+  it('does not treat the removed generic label unit key as an alias for show_unit', () => {
+    const hass = { states: { 'sensor.power': sensor(20, { unit_of_measurement: 'W' }) } };
+    const entityConfig = createNormalizedEntity({
+      markers: [{ at: 10, label: { show: true, unit: false } }],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.power'] });
+    expect(row.markers.find((marker) => marker.type === 'generic').label.text).toBe('10 W');
+  });
+
+  it('uses row units for dynamic values and fallbacks while clamping only off-scale positions', () => {
+    const hass = {
+      states: {
+        'sensor.power': sensor(42, { unit_of_measurement: 'W' }),
+        'sensor.threshold': sensor(25, { unit_of_measurement: 'MW' }),
+        'sensor.low': sensor(-20, { unit_of_measurement: 'MW' }),
+        'sensor.high': sensor(140, { unit_of_measurement: 'MW' }),
+      },
+    };
+    const config = createNormalizedEntity({
+      scale: { min: { fixed: 0 }, max: { fixed: 100 } },
+      formatting: { decimal: 1, unit: 'kW' },
+      markers: [
+        { at: { entity: 'sensor.low' }, lane: 'above', label: { show: true } },
+        { at: { entity: 'sensor.high' }, lane: 'above', label: { show: true } },
+        { at: { entity: 'sensor.threshold', fixed: 75 }, label: { show: true } },
+      ],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig: config,
+      entityState: hass.states['sensor.power'],
+    });
+    const markers = row.markers.filter((marker) => marker.type === 'generic');
+
+    expect(markers.map(({ value, position, label }) => ({ value, position, label: label?.text }))).toEqual([
+      { value: -20, position: 0, label: '-20.0 kW' },
+      { value: 140, position: 100, label: '140.0 kW' },
+      { value: 25, position: 25, label: '25.0 kW' },
+    ]);
+
+    const fallbackHass = {
+      ...hass,
+      states: { ...hass.states, 'sensor.threshold': sensor('unavailable', { unit_of_measurement: 'MW' }) },
+    };
+    const fallbackRow = buildRowViewModel({
+      hass: fallbackHass,
+      cardConfig: null,
+      entityConfig: config,
+      entityState: fallbackHass.states['sensor.power'],
+    });
+    expect(fallbackRow.markers.find((marker) => marker.id === 'generic-2')).toMatchObject({
+      value: 75,
+      position: 75,
+      label: { text: '75.0 kW' },
+    });
+  });
+
+  it('prefers finite dynamic values, falls back when unavailable, and recovers without changing units', () => {
+    const config = createNormalizedEntity({
+      scale: { min: { fixed: 0 }, max: { fixed: 100 } },
+      formatting: { unit: 'W', decimal: 0 },
+      markers: [
+        { at: { entity: 'sensor.dynamic', fixed: 50 }, label: { show: true, show_unit: false } },
+        { at: { entity: 'sensor.unresolved' }, lane: 'above', label: { show: true } },
+      ],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const makeRow = (dynamicState, unresolvedState) => {
+      const hass = {
+        states: {
+          'sensor.power': sensor(20),
+          'sensor.dynamic': sensor(dynamicState, { unit_of_measurement: 'kW' }),
+          'sensor.unresolved': sensor(unresolvedState),
+        },
+      };
+      return buildRowViewModel({
+        hass,
+        cardConfig: null,
+        entityConfig: config,
+        entityState: hass.states['sensor.power'],
+      });
+    };
+
+    const dynamicRow = makeRow(65, 'unavailable');
+    expect(dynamicRow.markers.find((marker) => marker.id === 'generic-0')).toMatchObject({
+      value: 65,
+      position: 65,
+      label: { text: '65' },
+    });
+    expect(dynamicRow.markerLaneOccupancy.above).toBe(true);
+
+    const fallbackRow = makeRow('unavailable', 'unknown');
+    expect(fallbackRow.markers.find((marker) => marker.id === 'generic-0')).toMatchObject({
+      value: 50,
+      position: 50,
+      label: { text: '50' },
+    });
+    expect(fallbackRow.markers.find((marker) => marker.id === 'generic-1')).toMatchObject({
+      visible: false,
+      value: null,
+      label: { text: 'W' },
+    });
+
+    const recoveredRow = makeRow(72, '35');
+    expect(recoveredRow.markers.find((marker) => marker.id === 'generic-0').value).toBe(72);
+    expect(recoveredRow.markers.find((marker) => marker.id === 'generic-1')).toMatchObject({
+      visible: true,
+      value: 35,
+      label: { text: '35 W' },
+    });
+  });
+
+  it('keeps unresolved generic markers hidden while reserving their configured lanes', () => {
+    const hass = { states: { 'sensor.power': sensor(42), 'sensor.limit': sensor('unknown') } };
+    const entityConfig = createNormalizedEntity({
+      markers: [{ at: { entity: 'sensor.limit' }, lane: 'above', label: { show: true } }],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+    });
+    expect(row.markers.find((marker) => marker.id === 'generic-0')).toMatchObject({
+      value: null,
+      position: null,
+      visible: false,
+      labelVisible: true,
+    });
+    expect(row.markerLaneOccupancy).toEqual({ above: true, below: false });
+  });
+
+  it('keeps configured marker lanes occupied while runtime values are unresolved', () => {
+    const entityConfig = createNormalizedEntity({
+      target: { at: { entity: 'sensor.target' }, label: { show: true } },
+      peak: { enabled: true },
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const unavailableHass = {
+      states: {
+        'sensor.power': sensor('unavailable'),
+        'sensor.target': sensor('unavailable'),
+      },
+    };
+    const recoveredHass = {
+      states: {
+        'sensor.power': sensor(42),
+        'sensor.target': sensor(55),
+      },
+    };
+
+    const unavailableRow = buildRowViewModel({
+      hass: unavailableHass,
+      cardConfig: null,
+      entityConfig,
+      entityState: unavailableHass.states['sensor.power'],
+      peaks: {},
+    });
+    const recoveredRow = buildRowViewModel({
+      hass: recoveredHass,
+      cardConfig: null,
+      entityConfig,
+      entityState: recoveredHass.states['sensor.power'],
+      peaks: {},
+    });
+
+    expect(unavailableRow.markers.find((marker) => marker.type === 'target').visible).toBe(false);
+    expect(unavailableRow.markers.find((marker) => marker.type === 'peak').visible).toBe(false);
+    expect(unavailableRow.markerLaneOccupancy).toEqual({ above: true, below: true });
+    expect(recoveredRow.markerLaneOccupancy).toEqual(unavailableRow.markerLaneOccupancy);
+  });
+
+  it('tracks configured label lanes independently of glyph lanes and acceptance', () => {
+    const hass = { states: { 'sensor.power': sensor(42), 'sensor.limit': sensor('unknown') } };
+    const entityConfig = createNormalizedEntity({
+      target: { at: { fixed: 55 } },
+      peak: { enabled: true },
+      floor: { enabled: true, label: { show: true } },
+      markers: [
+        { at: 35, lane: 'above' },
+        { at: 45, lane: 'above' },
+        { at: 55, lane: 'above', label: { show: true } },
+        { at: 65, lane: 'below', label: { show: true } },
+        { at: 75, lane: 'below', label: { show: true } },
+      ],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+    });
+
+    expect(row.markerLaneOccupancy).toEqual({ above: true, below: true });
+    expect(row.markerLabelLaneOccupancy).toEqual({ above: false, below: true });
+
+    const malformedConfig = createNormalizedEntity({
+      markers: [{ at: null, lane: 'above', label: { show: true } }],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const malformedRow = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig: malformedConfig,
+      entityState: hass.states['sensor.power'],
+    });
+    expect(malformedRow.markerLabelLaneOccupancy).toEqual({ above: false, below: false });
+  });
+
+  it('keeps configured generic label-lane occupancy when its source is unresolved', () => {
+    const hass = { states: { 'sensor.power': sensor(42), 'sensor.limit': sensor('unavailable') } };
+    const entityConfig = createNormalizedEntity({
+      markers: [{ at: { entity: 'sensor.limit' }, lane: 'above', label: { show: true } }],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+    });
+
+    expect(row.markers.find((marker) => marker.id === 'generic-0').visible).toBe(false);
+    expect(row.markerLabelLaneOccupancy).toEqual({ above: true, below: false });
   });
 
   it('resolves dynamic target entities', () => {
@@ -822,5 +1306,67 @@ describe('buildRowViewModel', () => {
       entityState,
       peaks,
     })).toBe(before);
+  });
+
+  it('builds independent Peak and Floor markers with shared below occupancy', () => {
+    const hass = {
+      states: {
+        'sensor.power': sensor(42, { unit_of_measurement: 'W' }),
+      },
+    };
+    const entityConfig = createNormalizedEntity({
+      min: 0,
+      max: 100,
+      peak: { enabled: true, label: { show: true, decimal: 0 } },
+      floor: { enabled: true, label: { show: true, decimal: 1 } },
+      target: { at: { fixed: 60 } },
+      entities: [{ entity: 'sensor.power' }],
+    });
+
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      extrema: {
+        peak: { value: 80, startedAtMs: null, windowKey: null },
+        floor: { value: 20, startedAtMs: null, windowKey: null },
+      },
+    });
+
+    expect(row.peak).toBe(80);
+    expect(row.floor).toBe(20);
+    expect(row.peakPresentation.text).toBe('80 W');
+    expect(row.floorPresentation.text).toBe('20.0 W');
+    expect(row.markers.find((marker) => marker.type === 'peak')).toMatchObject({
+      lane: 'above',
+      labelVisible: true,
+    });
+    expect(row.markers.find((marker) => marker.type === 'floor')).toMatchObject({
+      lane: 'below',
+      labelVisible: true,
+    });
+    expect(row.markerLaneOccupancy).toEqual({ above: true, below: true });
+  });
+
+  it('preserves raw extrema values while clamping marker positions', () => {
+    const hass = { states: { 'sensor.power': sensor(42) } };
+    const entityConfig = createNormalizedEntity({
+      min: 0,
+      max: 100,
+      floor: { enabled: true, label: { show: true } },
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: null,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      extrema: { floor: { value: -20, startedAtMs: null, windowKey: null } },
+    });
+
+    expect(row.floor).toBe(-20);
+    expect(row.floorPercent).toBe(0);
+    expect(row.floorPresentation.text).toBe('-20 W');
   });
 });

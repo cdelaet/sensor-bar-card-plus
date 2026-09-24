@@ -873,8 +873,11 @@ The card supports:
 - optional `target.label.show`
 - optional `target.when_exceeded.fill_color`
 - optional `peak.enabled`
+- optional `floor.enabled`
+- optional Peak and Floor labels
+- reset policies for Peak and Floor
 
-The target marker sits on the bottom edge of the bar. The peak marker sits on the top edge. They coexist cleanly and can overlap at the same position without fighting for visibility.
+The target and floor markers sit in the bottom marker lane. The peak marker sits in the top lane. Target and Floor use independent positions in the shared bottom lane; Stage 3 does not attempt collision avoidance when their markers or labels overlap.
 
 ![Dynamic target and above-target color](images/example-above-target-color-small.gif)
 
@@ -922,7 +925,7 @@ target:
 
 ### Target value label
 
-Set `target.label.show: true` to render the numeric target below the marker. The label is clamped so it stays inside the track area near the edges and follows dynamic target changes smoothly. By default it inherits `formatting.decimal`; use `target.label.decimal` to override the displayed target-label precision only.
+Set `target.label.show: true` to render a target label below the marker. The label is clamped so it stays inside the track area near the edges and follows dynamic target changes smoothly. By default its numeric component inherits `formatting.decimal`; use `target.label.precision` to override precision. Existing `target.label.decimal` configurations remain supported. Target labels also support the shared text/value/unit composition options documented below.
 
 ![Target value label](images/target-value-label.png)
 
@@ -961,6 +964,57 @@ entities:
     name: Caravan
     icon: mdi:caravan
 ```
+
+### Floor marker and extrema labels
+
+Floor tracks the lowest finite value observed for the current card session. Peak and Floor labels are hidden by default and use the row's effective unit and decimal precision unless explicitly overridden.
+
+```yaml
+formatting:
+  decimal: 1
+peak:
+  enabled: true
+  color: '#fde68a'
+  label:
+    show: true
+floor:
+  enabled: true
+  color: '#888888'
+  label:
+    show: true
+    decimal: 0
+entities:
+  - entity: sensor.caravan_power
+```
+
+### Peak and Floor reset policies
+
+Peak and Floor state is in-memory visualization state. It is lost when the card or browser is recreated and is not a durable historical statistic.
+
+Calendar resets use local clock boundaries:
+
+```yaml
+peak:
+  enabled: true
+  reset: quarterly   # :00, :15, :30, and :45
+floor:
+  enabled: true
+  reset: daily       # local midnight
+```
+
+Supported calendar values are `quarterly`, `hourly`, `daily`, `weekly`, `monthly`, `yearly`, and `never`.
+
+Duration resets are relative to the first finite sample in the current tracker window. They are not clock-aligned:
+
+```yaml
+peak:
+  enabled: true
+  reset: 26m
+```
+
+If the tracker starts at 10:07, the next window starts when a finite sample arrives at or after 10:33. `reset: 15m` therefore differs from `reset: quarterly`: the former is elapsed time from initialization, while the latter follows local `:00`, `:15`, `:30`, and `:45` boundaries.
+
+Valid duration values are `1m` through `59m` and `1h` through `23h`. Invalid values fall back safely to `never` with a configuration warning.
 
 ### Target marker example
 
@@ -1572,9 +1626,14 @@ target
 │   ├── fixed
 │   └── entity
 ├── color
+├── direction
 ├── label
 │   ├── show
-│   └── decimal
+│   ├── text
+│   ├── show_value
+│   ├── show_unit
+│   ├── precision
+│   └── decimal (compatibility alias)
 └── when_exceeded
     └── fill_color
 
@@ -1590,7 +1649,43 @@ baseline
 
 peak
 ├── enabled
-└── color
+├── color
+├── direction
+├── reset
+└── label
+    ├── show
+    ├── text
+    ├── show_value
+    ├── show_unit
+    ├── precision
+    └── decimal (compatibility alias)
+
+floor
+├── enabled
+├── color
+├── direction
+├── reset
+└── label
+    ├── show
+    ├── text
+    ├── show_value
+    ├── show_unit
+    ├── precision
+    └── decimal (compatibility alias)
+
+markers[]
+├── at
+├── lane
+├── shape
+├── direction
+├── color
+└── label
+    ├── show
+    ├── text
+    ├── show_value
+    ├── show_unit
+    ├── precision
+    └── decimal (compatibility alias)
 
 formatting
 ├── decimal
@@ -1623,9 +1718,14 @@ formatting
 | `target.enabled` | auto | `true`, `false`, omitted | Controls target marker behavior. Omitted means automatic based on configured target source. |
 | `target.at.fixed` | `null` | number | Fixed target value. |
 | `target.at.entity` | `null` | entity id | Dynamic target entity. |
+| `target.shape` | `diamond` | `diamond`, `triangle` | Target marker shape. |
 | `target.color` | `#888888` | CSS color | Target marker color. |
-| `target.label.show` | `false` | boolean | Shows a numeric target value label. |
-| `target.label.decimal` | inherited | number | Overrides the displayed target-label precision only; omitted values inherit `formatting.decimal`. |
+| `target.direction` | `inward` | `inward`, `outward` | Direction for directional marker shapes; Circle and Diamond are visually unaffected. Entity-level Target direction inherits the card-level value unless overridden. |
+| `target.label.show` | `false` | boolean | Enables the composed Target label; its text, value, and unit components are configured independently below. |
+| `target.label.text` | absent | string | Optional plain text shown before the value and unit. |
+| `target.label.show_value` | `true` | boolean | Includes or omits the formatted Target value independently of text and unit. |
+| `target.label.show_unit` | `true` | boolean | Includes or omits the effective row unit independently of text and value. |
+| `target.label.precision` | inherited | number | Overrides the numeric component's precision; omitted values inherit `formatting.decimal`. The established `target.label.decimal` spelling remains accepted for existing configurations. |
 | `target.when_exceeded.fill_color` | `null` | CSS color | Semantic fill color for the part of the fill beyond the target. |
 | `baseline.enabled` | auto | `true`, `false`, omitted | Controls baseline behavior. Omitted means automatic based on configured baseline source. |
 | `baseline.at.fixed` | `null` | number | Fixed baseline value. |
@@ -1634,6 +1734,23 @@ formatting
 | `baseline.below.color` | `null` | CSS color | Optional semantic color below the baseline. |
 | `peak.enabled` | `false` | boolean | Shows a session peak marker. |
 | `peak.color` | `#888888` | CSS color | Peak marker color. |
+| `peak.reset` | `never` | reset value | Resets Peak using a relative duration or local calendar boundary. |
+| `peak.direction` | `inward` | `inward`, `outward` | Direction for directional marker shapes; Circle and Diamond are visually unaffected. Entity-level Peak direction inherits the card-level value unless overridden. |
+| `peak.label.show` | `false` | boolean | Shows the formatted Peak value label. |
+| `peak.label.text` | absent | string | Optional plain text shown before the value and unit. |
+| `peak.label.show_value` | `true` | boolean | Includes or omits the formatted Peak value independently of text and unit. |
+| `peak.label.show_unit` | `true` | boolean | Includes or omits the effective row unit independently of text and value. |
+| `peak.label.precision` | inherited | number | Overrides the numeric component's precision; omitted values inherit `formatting.decimal`. `peak.label.decimal` remains accepted for existing configurations. |
+| `floor.enabled` | `false` | boolean | Shows a session Floor marker for the lowest finite value. |
+| `floor.color` | `#888888` | CSS color | Floor marker color. |
+| `floor.reset` | `never` | reset value | Resets Floor using a relative duration or local calendar boundary. |
+| `floor.direction` | `inward` | `inward`, `outward` | Direction for directional marker shapes; Circle and Diamond are visually unaffected. Entity-level Floor direction inherits the card-level value unless overridden. |
+| `floor.label.show` | `false` | boolean | Shows the formatted Floor value label. |
+| `floor.label.text` | absent | string | Optional plain text shown before the value and unit. |
+| `floor.label.show_value` | `true` | boolean | Includes or omits the formatted Floor value independently of text and unit. |
+| `floor.label.show_unit` | `true` | boolean | Includes or omits the effective row unit independently of text and value. |
+| `floor.label.precision` | inherited | number | Overrides the numeric component's precision; omitted values inherit `formatting.decimal`. `floor.label.decimal` remains accepted for existing configurations. |
+| `markers[]` | `[]` | list | Generic reference markers. The card-level list is inherited; an entity-level list replaces it, and `markers: []` clears it. Each item supports `at`, `lane`, `shape`, `direction`, `color`, and the shared `label` fields. Direction defaults to `inward`; Circle and Diamond are visually unaffected. |
 | `formatting.decimal` | `null` | number | Decimal places for displayed numeric values. |
 | `formatting.unit` | entity unit | string | Display unit override. |
 
@@ -1690,6 +1807,7 @@ Entity-level configuration uses the same structured option groups as card-level 
 | `bar` | object | Per-row fill and needle override |
 | `target` | object/number | Per-row target override |
 | `peak` | object | Per-row peak override |
+| `floor` | object | Per-row floor override |
 | `baseline` | object/number/null | Per-row baseline override or explicit disable |
 | `formatting` | object | Per-row decimal and unit override |
 | `label_position` | string | Legacy alias for `layout.label.position` |
@@ -1876,6 +1994,15 @@ target:
     fixed: 65
 ```
 
+Target shape:
+
+```yaml
+target:
+  at:
+    fixed: 65
+  shape: triangle
+```
+
 Percentage target:
 
 ```yaml
@@ -1889,8 +2016,11 @@ Supported target features:
 - entity-backed target values
 - percentage targets on the active scale
 - optional marker color
+- diamond target marker by default; set `target.shape: triangle` to retain the previous triangle
 - optional target value label
 - optional `target.when_exceeded.fill_color`
+
+Migration note: The default Target marker is now a diamond, making it easier to distinguish from the new Floor marker. To retain the previous triangle, set `target.shape: triangle`.
 
 ## Peak Marker
 
@@ -1898,9 +2028,76 @@ Supported target features:
 peak:
   enabled: true
   color: '#fde68a'
+  reset: never
+  label:
+    show: false
 ```
 
-The peak marker tracks the highest observed value for the current page session.
+The Peak marker tracks the highest finite value observed for the current card session. `reset: never` is the default. See [Peak and Floor reset policies](#peak-and-floor-reset-policies) for relative duration and local calendar resets.
+
+## Floor Marker
+
+```yaml
+floor:
+  enabled: true
+  color: '#888888'
+  reset: daily
+  label:
+    show: true
+    decimal: 1
+```
+
+The Floor marker tracks the lowest finite value observed for the current card session. It uses the shared below marker lane with Target and does not allocate another vertical lane.
+
+## Generic Reference Markers
+
+Use `markers:` to add up to two reference markers in each lane. Generic markers are fixed reference values, not trackers. They share the row's scale and effective unit; SBCP does not convert values from a dynamic source entity.
+
+```yaml
+type: custom:sensor-bar-card-plus
+scale:
+  min: { fixed: 0 }
+  max: { fixed: 100 }
+target:
+  at: 50%
+  label: { show: true, text: Target }
+peak:
+  enabled: true
+floor:
+  enabled: true
+markers:
+  - at: 35%
+    lane: above
+    shape: diamond
+    color: "#4488CC"
+    label:
+      show: true
+      text: Prediction
+      show_value: true
+      show_unit: true
+      precision: 0
+  - at:
+      entity: sensor.warning_threshold
+      fixed: 75
+    lane: below
+    shape: circle
+    color: "#F59E0B"
+    label:
+      show: true
+      text: Trigger
+      show_value: false
+      show_unit: true
+entities:
+  - entity: sensor.grid_power
+```
+
+`at` accepts a fixed value (`{ fixed: 75 }`), a dynamic entity (`{ entity: sensor.limit }`), an entity with fixed fallback, or a percentage string such as `35%`. Percentages are inclusive from `0%` to `100%` of the effective row scale. Their labels show the resolved scale value. Finite fixed and dynamic values outside the scale remain valid: only their graphical position is clamped, while the label keeps the original value.
+
+Markers default to the `below` lane, `circle` shape, color `#888888`, and a hidden label. The supported shapes are `circle`, `diamond`, `triangle`, `chevron`, `arrow`, and `pin`; lanes are `above` and `below`. Direction defaults to `inward`; `direction: inward | outward` controls directional shapes, while Circle and Diamond are visually unaffected. Target, Peak, and Floor inherit their card-level direction in entity rows unless overridden. Generic markers are inherited as a card-level list, or replaced as a whole by an entity-level `markers` list.
+
+A shown marker label is composed from `text`, `show_value` (default `true`), and `show_unit` (default `true`), each independently enabled; `label.show` enables the label. Components are joined by one space. If all three components are disabled or absent, no label is rendered. The numeric component defaults to the row's effective `formatting.decimal` and the unit component uses the effective row unit. Set `label.precision: 0` for integer precision. For compatibility, generic, Peak, and Floor labels also accept `label.decimal`; Target continues to accept its established `target.label.decimal` spelling. Use `label.show_unit: false` to omit the effective row unit. Dynamic source units are ignored, and labels remain in the row unit even when a marker falls back to its fixed value. The former marker-label `unit` option is unsupported; use `show_unit`.
+
+At card scope, `markers:` supplies the list inherited by each entity. An entity may replace the list with its own `markers: [...]`; `markers: []` explicitly clears the inherited list. Lists replace rather than merge. A valid but unresolved marker still reserves its lane and one of that lane's two slots. Malformed markers are skipped without consuming a slot; further valid markers remain in configuration but are ignored at runtime with a non-fatal warning. Target, Peak, and Floor do not count toward this limit. Nearby marker labels may overlap.
 
 ## Formatting
 
@@ -1917,7 +2114,7 @@ formatting:
 ## Behavior Notes
 
 - Clicking a row opens the native Home Assistant more-info dialog.
-- Peak values are stored in memory and reset when the page reloads.
+- Peak and Floor values are stored in memory and reset when the card or browser is recreated.
 - Textual states do not show leftover units.
 - Time units `h`, `m`, and `s` render tight, for example `43s` and `4h`.
 - Responsive fallbacks prioritize the bar and keep value + unit readable. In tight spaces, labels and icons may step aside automatically.
@@ -2164,7 +2361,6 @@ It is not a drop-in replacement for the original card.
 Likely future work includes:
 
 - visible `scale.ticks` support under `scale`
-- a more general marker collection once the current target and peak semantics are stable
 - verticality, baby!
 
 ## Contributing

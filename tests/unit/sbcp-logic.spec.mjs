@@ -480,6 +480,114 @@ describe('Sensor Bar Card Plus logic', () => {
       },
       color: '#888888',
       show_label: true,
+      shape: 'diamond',
+      direction: 'inward',
+    });
+  });
+
+  it('normalizes target shape defaults and entity inheritance', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      target: { at: { fixed: 65 } },
+      entities: [
+        { entity: 'sensor.inherited' },
+        { entity: 'sensor.diamond', target: { at: { fixed: 70 }, shape: 'diamond' } },
+        { entity: 'sensor.invalid', target: { at: { fixed: 75 }, shape: 'hexagon' } },
+      ],
+    });
+
+    expect(cfg.target_marker.shape).toBe('diamond');
+    expect(cfg.entities[0].target_marker.shape).toBe('diamond');
+    expect(cfg.entities[1].target_marker.shape).toBe('diamond');
+    expect(cfg.entities[2].target_marker.shape).toBe('diamond');
+
+    const triangleCfg = card.normalizeCardConfig({
+      target: { at: { fixed: 65 }, shape: 'triangle' },
+      entities: [
+        { entity: 'sensor.inherited' },
+        { entity: 'sensor.override', target: { at: { fixed: 70 }, shape: 'diamond' } },
+      ],
+    });
+
+    expect(triangleCfg.target_marker.shape).toBe('triangle');
+    expect(triangleCfg.entities[0].target_marker.shape).toBe('triangle');
+    expect(triangleCfg.entities[1].target_marker.shape).toBe('diamond');
+  });
+
+  it('normalizes marker directions with card inheritance and explicit entity overrides', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      target: { at: { fixed: 65 }, direction: 'outward' },
+      peak: { enabled: true, direction: 'outward' },
+      floor: { enabled: true, direction: 'outward' },
+      markers: [{ at: { fixed: 20 }, shape: 'circle', direction: 'outward' }],
+      entities: [
+        { entity: 'sensor.inherited' },
+        {
+          entity: 'sensor.overrides',
+          target: { direction: 'inward' },
+          peak: { direction: 'inward' },
+          floor: { direction: 'inward' },
+          markers: [{ at: { fixed: 25 }, shape: 'diamond', direction: 'outward' }],
+        },
+      ],
+    });
+
+    expect(cfg.target_marker.direction).toBe('outward');
+    expect(cfg.peak_marker.direction).toBe('outward');
+    expect(cfg.floor_marker.direction).toBe('outward');
+    expect(cfg.entities[0]).toMatchObject({
+      target_marker: { direction: 'outward' },
+      peak_marker: { direction: 'outward' },
+      floor_marker: { direction: 'outward' },
+      generic_markers: [{ direction: 'outward' }],
+    });
+    expect(cfg.entities[1]).toMatchObject({
+      target_marker: { direction: 'inward' },
+      peak_marker: { direction: 'inward' },
+      floor_marker: { direction: 'inward' },
+      generic_markers: [{ shape: 'diamond', direction: 'outward' }],
+    });
+
+    const defaults = card.normalizeCardConfig({
+      target: { at: { fixed: 65 } },
+      peak: { enabled: true },
+      floor: { enabled: true },
+      markers: [{ at: { fixed: 20 }, shape: 'diamond' }],
+      entities: [{ entity: 'sensor.default' }],
+    });
+    expect(defaults.target_marker.direction).toBe('inward');
+    expect(defaults.peak_marker.direction).toBe('inward');
+    expect(defaults.floor_marker.direction).toBe('inward');
+    expect(defaults.entities[0].generic_markers[0].direction).toBe('inward');
+  });
+
+  it('renders all shared marker shapes while preserving canonical lanes', () => {
+    const card = createCard();
+    const shapes = ['circle', 'diamond', 'triangle', 'chevron', 'arrow', 'pin'];
+
+    shapes.forEach((shape) => {
+      const targetHtml = card._renderMarker({
+        type: 'target',
+        lane: 'below',
+        shape,
+        visible: true,
+        position: 50,
+        color: '#123456',
+      });
+      const peakHtml = card._renderMarker({
+        type: 'peak',
+        lane: 'above',
+        shape,
+        visible: true,
+        position: 50,
+        color: '#123456',
+      });
+
+      expect(targetHtml).toContain(`class="target-marker" data-shape="${shape}" data-lane="below"`);
+      expect(peakHtml).toContain(`class="peak-marker" data-shape="${shape}" data-lane="above"`);
+      expect(targetHtml).toContain(`data-shape="${shape}"`);
+      expect(peakHtml).toContain(`data-shape="${shape}"`);
     });
   });
 
@@ -536,6 +644,7 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(cfg.peak_marker).toEqual({
       show: true,
       color: '#888888',
+      direction: 'inward',
     });
   });
 
@@ -1021,6 +1130,51 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(source).toContain('transition: none;');
   });
 
+  it('keeps glyph occupancy separate from configured marker-label lanes', () => {
+    const card = createCard();
+    card._hass.states = {
+      'sensor.none': {
+        state: '42',
+        attributes: { friendly_name: 'None', unit_of_measurement: 'W' },
+      },
+      'sensor.marked': {
+        state: '42',
+        attributes: { friendly_name: 'Marked', unit_of_measurement: 'W' },
+      },
+    };
+    const cfg = card.normalizeCardConfig({
+      entities: [
+        { entity: 'sensor.none' },
+        {
+          entity: 'sensor.marked',
+          target: { at: { fixed: 55 }, label: { show: true } },
+          peak: { enabled: true },
+        },
+        {
+          entity: 'sensor.glyphs',
+          target: { at: { fixed: 55 } },
+          peak: { enabled: true },
+        },
+      ],
+    });
+
+    const unmarkedHtml = card._buildRow(cfg.entities[0], '42', 'W', 42, '#4a9eff', null, null, null, null, '#888888', '#888888', 0, 100);
+    const markedHtml = card._buildRow(cfg.entities[1], '42', 'W', 42, '#4a9eff', 42, '42', 55, '55 W', '#888888', '#888888', 0, 100);
+    const glyphOnlyHtml = card._buildRow(cfg.entities[2], '42', 'W', 42, '#4a9eff', 42, '42', 55, '55 W', '#888888', '#888888', 0, 100);
+
+    expect(unmarkedHtml).toContain('data-marker-lane-above="false" data-marker-lane-below="false"');
+    expect(markedHtml).toContain('data-marker-lane-above="true" data-marker-lane-below="true"');
+    expect(markedHtml).toContain('data-marker-label-lane-above="false" data-marker-label-lane-below="true"');
+    expect(glyphOnlyHtml).toContain('data-marker-lane-above="true" data-marker-lane-below="true"');
+    expect(glyphOnlyHtml).toContain('data-marker-label-lane-above="false" data-marker-label-lane-below="false"');
+
+    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
+    expect(source).toContain('--sbcp-marker-label-lane-size: 15px;');
+    expect(source).toContain('.row[data-marker-label-lane-below="true"]:not(:last-child)');
+    expect(source).not.toContain('.main-line[data-marker-lane-above="true"]');
+    expect(source).not.toContain('.main-line[data-marker-lane-below="true"]');
+  });
+
   it('keeps row animation flags in sync during patching', () => {
     const card = createCard();
     card._hass.states = {
@@ -1085,6 +1239,8 @@ describe('Sensor Bar Card Plus logic', () => {
       style: {
         left: '65%',
         visibility: 'visible',
+        '--marker-color': '#888',
+        '--marker-contrast-color': card._getMarkerContrastColor('#888'),
       },
       textContent: '65 W',
     });
@@ -1123,6 +1279,8 @@ describe('Sensor Bar Card Plus logic', () => {
       style: {
         left: '123px',
         visibility: 'visible',
+        '--marker-color': '#888',
+        '--marker-contrast-color': card._getMarkerContrastColor('#888'),
       },
       textContent: '50 W',
     });
@@ -1168,6 +1326,8 @@ describe('Sensor Bar Card Plus logic', () => {
       style: {
         left: '123px',
         visibility: 'visible',
+        '--marker-color': '#888',
+        '--marker-contrast-color': card._getMarkerContrastColor('#888'),
       },
       textContent: '50 W',
     });
@@ -1248,7 +1408,7 @@ describe('Sensor Bar Card Plus logic', () => {
       entities: [{ entity: 'sensor.row', name: 'Sensor' }],
     }).entities[0];
 
-    card._peaks['sensor.row'] = 42;
+    card._extrema['sensor.row'] = { peak: { value: 42, startedAtMs: null, windowKey: null } };
     const peakMarker = createTrackedElement({
       style: {
         left: '42%',
@@ -1288,7 +1448,7 @@ describe('Sensor Bar Card Plus logic', () => {
       entities: [{ entity: 'sensor.row', name: 'Sensor' }],
     }).entities[0];
 
-    card._peaks['sensor.row'] = 80;
+    card._extrema['sensor.row'] = { peak: { value: 80, startedAtMs: null, windowKey: null } };
     const peakMarker = createTrackedElement({
       style: {
         left: '80%',
@@ -1314,7 +1474,7 @@ describe('Sensor Bar Card Plus logic', () => {
       },
     });
 
-    expect(card._peaks['sensor.row']).toBe(80);
+    expect(card._extrema['sensor.row'].peak.value).toBe(80);
     expect(peakMarker.style.left).toBe('80%');
   });
 
@@ -1327,7 +1487,7 @@ describe('Sensor Bar Card Plus logic', () => {
       entities: [{ entity: 'sensor.row', name: 'Sensor' }],
     }).entities[0];
 
-    card._peaks['sensor.row'] = 80;
+    card._extrema['sensor.row'] = { peak: { value: 80, startedAtMs: null, windowKey: null } };
     const peakMarker = createTrackedElement({
       style: {
         left: '80%',
@@ -1385,7 +1545,7 @@ describe('Sensor Bar Card Plus logic', () => {
         },
       },
     };
-    card._peaks['sensor.row'] = 80;
+    card._extrema['sensor.row'] = { peak: { value: 80, startedAtMs: null, windowKey: null } };
     card.shadowRoot = {
       querySelectorAll: () => [],
       querySelector: (selector) => (
@@ -1408,7 +1568,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
     card._update();
 
-    expect(card._peaks['sensor.row']).toBe(80);
+    expect(card._extrema['sensor.row'].peak.value).toBe(80);
     expect(capturedPeakPct).toBe(80);
     expect(capturedPeakDisplay).toBe('80');
   });
@@ -1416,9 +1576,9 @@ describe('Sensor Bar Card Plus logic', () => {
   it('prunes stale peak entries when config entities change and preserves active peaks', () => {
     const card = createCard();
     card._render = () => {};
-    card._peaks = {
-      'sensor.keep': 75,
-      'sensor.remove': 42,
+    card._extrema = {
+      'sensor.keep': { peak: { value: 75, startedAtMs: null, windowKey: null } },
+      'sensor.remove': { peak: { value: 42, startedAtMs: null, windowKey: null } },
     };
 
     card.setConfig({
@@ -1428,8 +1588,8 @@ describe('Sensor Bar Card Plus logic', () => {
       ],
     });
 
-    expect(card._peaks).toEqual({
-      'sensor.keep': 75,
+    expect(card._extrema).toEqual({
+      'sensor.keep': { peak: { value: 75, startedAtMs: null, windowKey: null } },
     });
   });
 
@@ -2320,10 +2480,13 @@ describe('Sensor Bar Card Plus logic', () => {
       source: { fixed: 80, entity: null },
       color: '#ff00ff',
       show_label: false,
+      shape: 'diamond',
+      direction: 'inward',
     });
     expect(row.peak_marker).toEqual({
       show: false,
       color: '#00ffff',
+      direction: 'inward',
     });
     expect(row.bar.color_mode).toBe('gradient');
     expect(row.bar.animated).toBe(false);
@@ -2399,10 +2562,13 @@ describe('Sensor Bar Card Plus logic', () => {
       source: { fixed: 75, entity: null },
       color: '#ff0000',
       show_label: true,
+      shape: 'diamond',
+      direction: 'inward',
     });
     expect(row.peak_marker).toEqual({
       show: true,
       color: '#00ff00',
+      direction: 'inward',
     });
     expect(row.bar.color_mode).toBe('single');
     expect(row.bar.animated).toBe(true);
@@ -2478,10 +2644,13 @@ describe('Sensor Bar Card Plus logic', () => {
       source: { fixed: 80, entity: null },
       color: '#ff00ff',
       show_label: true,
+      shape: 'diamond',
+      direction: 'inward',
     });
     expect(row.peak_marker).toEqual({
       show: true,
       color: '#00ffff',
+      direction: 'inward',
     });
     expect(row.bar.color_mode).toBe('gradient');
     expect(row.bar.animated).toBe(false);
@@ -2725,6 +2894,46 @@ describe('Sensor Bar Card Plus logic', () => {
     };
 
     expect(card._shouldUpdate(oldHass, newHass)).toBe(true);
+  });
+
+  it('watches effective generic sources after setConfig replaces inherited markers', () => {
+    const card = createCard();
+    card._render = () => {};
+    card.setConfig({
+      markers: [{ at: { entity: 'sensor.old_limit' } }],
+      entities: [{ entity: 'sensor.row' }],
+    });
+
+    const primary = { state: '20', attributes: {} };
+    const oldLimit = { state: '40', attributes: {} };
+    const newLimit = { state: '60', attributes: {} };
+    card._hass = { states: {
+      'sensor.row': primary,
+      'sensor.old_limit': oldLimit,
+      'sensor.new_limit': newLimit,
+    } };
+    const entityOverride = {
+      markers: [{ at: { entity: 'sensor.new_limit' } }],
+    };
+    card.setConfig({
+      markers: [{ at: { entity: 'sensor.old_limit' } }],
+      entities: [{ entity: 'sensor.row', ...entityOverride }],
+    });
+
+    const oldSourceOnlyChanged = { states: {
+      'sensor.row': primary,
+      'sensor.old_limit': { state: '41', attributes: {} },
+      'sensor.new_limit': newLimit,
+    } };
+    const newSourceChanged = { states: {
+      'sensor.row': primary,
+      'sensor.old_limit': oldLimit,
+      'sensor.new_limit': { state: '61', attributes: {} },
+    } };
+
+    expect(card._config.entities[0].generic_markers.map((marker) => marker.source.entity)).toEqual(['sensor.new_limit']);
+    expect(card._shouldUpdate(card._hass, oldSourceOnlyChanged)).toBe(false);
+    expect(card._shouldUpdate(card._hass, newSourceChanged)).toBe(true);
   });
 
   it('supports baseline direction color shorthand and expanded color objects', () => {
@@ -5490,5 +5699,223 @@ describe('Sensor Bar Card Plus logic', () => {
         stdio: 'pipe',
       });
     }).not.toThrow();
+  });
+
+  it('tracks Peak and Floor independently and clears only disabled state', () => {
+    const card = createCard();
+    card._render = () => {};
+    card.setConfig({
+      entities: [{
+        entity: 'sensor.row',
+        peak: { enabled: true },
+        floor: { enabled: true },
+      }],
+    });
+    const entityCfg = card._config.entities[0];
+    const state = {
+      state: '42',
+      last_updated: '2026-01-01T10:07:00.000Z',
+      attributes: { unit_of_measurement: 'W' },
+    };
+
+    card._updateExtrema(entityCfg, entityCfg, state);
+    state.state = '60';
+    card._updateExtrema(entityCfg, entityCfg, state);
+    state.state = '20';
+    card._updateExtrema(entityCfg, entityCfg, state);
+    expect(card._extrema['sensor.row'].peak.value).toBe(60);
+    expect(card._extrema['sensor.row'].floor.value).toBe(20);
+
+    card.setConfig({ entities: [{ entity: 'sensor.row', peak: { enabled: false }, floor: { enabled: true } }] });
+    expect(card._extrema['sensor.row'].peak).toBeUndefined();
+    expect(card._extrema['sensor.row'].floor.value).toBe(20);
+  });
+
+  it('clears only Peak when its effective reset policy changes', () => {
+    const card = createCard();
+    card._render = () => {};
+    const config = (reset) => ({
+      entities: [{
+        entity: 'sensor.row',
+        peak: { enabled: true, reset },
+        floor: { enabled: true, reset: 'quarterly' },
+      }],
+    });
+    card.setConfig(config('daily'));
+    let entityCfg = card._config.entities[0];
+    const state = { state: '80', last_updated: '2026-01-01T10:07:00.000Z' };
+    card._updateExtrema(entityCfg, entityCfg, state);
+    state.state = '20';
+    card._updateExtrema(entityCfg, entityCfg, state);
+    const floorBefore = card._extrema['sensor.row'].floor;
+    const peakBefore = card._extrema['sensor.row'].peak;
+
+    card.setConfig(config('hourly'));
+    expect(card._extrema['sensor.row'].peak).toBeUndefined();
+    expect(card._extrema['sensor.row'].floor).toBe(floorBefore);
+
+    entityCfg = card._config.entities[0];
+    state.state = '55';
+    state.last_updated = '2026-01-01T10:08:00.000Z';
+    card._updateExtrema(entityCfg, entityCfg, state);
+    expect(entityCfg.peak_marker.reset).toEqual({ kind: 'calendar', unit: 'hourly' });
+    expect(card._extrema['sensor.row'].peak).toMatchObject({ value: 55, startedAtMs: null });
+    expect(card._extrema['sensor.row'].peak.windowKey).not.toBe(peakBefore.windowKey);
+    expect(card._extrema['sensor.row'].floor).toBe(floorBefore);
+  });
+
+  it('clears only Floor when its effective reset policy changes', () => {
+    const card = createCard();
+    card._render = () => {};
+    const config = (reset) => ({
+      entities: [{
+        entity: 'sensor.row',
+        peak: { enabled: true, reset: 'daily' },
+        floor: { enabled: true, reset },
+      }],
+    });
+    card.setConfig(config('quarterly'));
+    let entityCfg = card._config.entities[0];
+    const state = { state: '80', last_updated: '2026-01-01T10:07:00.000Z' };
+    card._updateExtrema(entityCfg, entityCfg, state);
+    state.state = '20';
+    card._updateExtrema(entityCfg, entityCfg, state);
+    const peakBefore = card._extrema['sensor.row'].peak;
+    const floorBefore = card._extrema['sensor.row'].floor;
+
+    card.setConfig(config('daily'));
+    expect(card._extrema['sensor.row'].floor).toBeUndefined();
+    expect(card._extrema['sensor.row'].peak).toBe(peakBefore);
+
+    entityCfg = card._config.entities[0];
+    state.state = '55';
+    state.last_updated = '2026-01-01T10:08:00.000Z';
+    card._updateExtrema(entityCfg, entityCfg, state);
+    expect(entityCfg.floor_marker.reset).toEqual({ kind: 'calendar', unit: 'daily' });
+    expect(card._extrema['sensor.row'].floor).toMatchObject({ value: 55, startedAtMs: null });
+    expect(card._extrema['sensor.row'].floor.windowKey).not.toBe(floorBefore.windowKey);
+    expect(card._extrema['sensor.row'].peak).toBe(peakBefore);
+  });
+
+  it('preserves Peak and Floor across visual-only configuration changes', () => {
+    const card = createCard();
+    card._render = () => {};
+    const config = (color, show, decimal) => ({
+      entities: [{
+        entity: 'sensor.row',
+        peak: { enabled: true, reset: 'daily', color, label: { show, decimal } },
+        floor: { enabled: true, reset: 'quarterly', color, label: { show, decimal } },
+      }],
+    });
+    card.setConfig(config('#111111', false, 1));
+    let entityCfg = card._config.entities[0];
+    const state = { state: '80', last_updated: '2026-01-01T10:07:00.000Z' };
+    card._updateExtrema(entityCfg, entityCfg, state);
+    state.state = '20';
+    card._updateExtrema(entityCfg, entityCfg, state);
+    const extremaBefore = structuredClone(card._extrema['sensor.row']);
+
+    card.setConfig(config('#ff0000', true, 0));
+
+    expect(card._extrema['sensor.row']).toEqual(extremaBefore);
+  });
+
+  it('preserves extrema when equivalent reset and enabled settings move between inherited and explicit config', () => {
+    const card = createCard();
+    card._render = () => {};
+    const inherited = {
+      peak: { enabled: true, reset: 'daily' },
+      floor: { enabled: true, reset: 'quarterly' },
+      entities: [{ entity: 'sensor.row' }],
+    };
+    card.setConfig(inherited);
+    let entityCfg = card._config.entities[0];
+    const state = { state: '80', last_updated: '2026-01-01T10:07:00.000Z' };
+    card._updateExtrema(entityCfg, entityCfg, state);
+    state.state = '20';
+    card._updateExtrema(entityCfg, entityCfg, state);
+    const extremaBefore = structuredClone(card._extrema['sensor.row']);
+
+    card.setConfig({
+      ...inherited,
+      entities: [{
+        entity: 'sensor.row',
+        peak: { enabled: true, reset: 'daily' },
+        floor: { enabled: true, reset: 'quarterly' },
+      }],
+    });
+    expect(card._extrema['sensor.row']).toEqual(extremaBefore);
+
+    card.setConfig(inherited);
+    expect(card._extrema['sensor.row']).toEqual(extremaBefore);
+  });
+
+  it('applies relative 26m resets through the card update path, including delayed samples', () => {
+    const card = createCard();
+    card._render = () => {};
+    card.setConfig({ entities: [{ entity: 'sensor.row', peak: { enabled: true, reset: '26m' } }] });
+    const entityCfg = card._config.entities[0];
+    const state = { state: '10', last_updated: '2026-01-01T10:07:00.000Z' };
+
+    card._updateExtrema(entityCfg, entityCfg, state);
+    expect(card._extrema['sensor.row'].peak).toMatchObject({ value: 10, startedAtMs: Date.parse(state.last_updated) });
+
+    state.state = '20';
+    state.last_updated = '2026-01-01T10:32:00.000Z';
+    card._updateExtrema(entityCfg, entityCfg, state);
+    expect(card._extrema['sensor.row'].peak).toMatchObject({ value: 20, startedAtMs: Date.parse('2026-01-01T10:07:00.000Z') });
+
+    state.state = '5';
+    state.last_updated = '2026-01-01T10:33:00.000Z';
+    card._updateExtrema(entityCfg, entityCfg, state);
+    expect(card._extrema['sensor.row'].peak).toMatchObject({ value: 5, startedAtMs: Date.parse(state.last_updated) });
+
+    card._extrema = {};
+    state.state = '10';
+    state.last_updated = '2026-01-01T10:07:00.000Z';
+    card._updateExtrema(entityCfg, entityCfg, state);
+    state.state = '5';
+    state.last_updated = '2026-01-01T10:36:00.000Z';
+    card._updateExtrema(entityCfg, entityCfg, state);
+    expect(card._extrema['sensor.row'].peak).toMatchObject({ value: 5, startedAtMs: Date.parse(state.last_updated) });
+  });
+
+  it('distinguishes relative 15m from quarterly resets through the card update path', () => {
+    const card = createCard();
+    card._render = () => {};
+    card.setConfig({
+      entities: [{
+        entity: 'sensor.row',
+        peak: { enabled: true, reset: '15m' },
+        floor: { enabled: true, reset: 'quarterly' },
+      }],
+    });
+    const entityCfg = card._config.entities[0];
+    const localIso = (hour, minute) => new Date(2026, 0, 1, hour, minute).toISOString();
+    const state = { state: '50', last_updated: localIso(10, 7) };
+
+    card._updateExtrema(entityCfg, entityCfg, state);
+    const initialFloorWindow = card._extrema['sensor.row'].floor.windowKey;
+    const initialPeakStart = card._extrema['sensor.row'].peak.startedAtMs;
+
+    state.state = '60';
+    state.last_updated = localIso(10, 14);
+    card._updateExtrema(entityCfg, entityCfg, state);
+    expect(card._extrema['sensor.row'].peak.startedAtMs).toBe(initialPeakStart);
+    expect(card._extrema['sensor.row'].floor.windowKey).toBe(initialFloorWindow);
+
+    state.state = '40';
+    state.last_updated = localIso(10, 15);
+    card._updateExtrema(entityCfg, entityCfg, state);
+    expect(card._extrema['sensor.row'].peak.value).toBe(60);
+    expect(card._extrema['sensor.row'].peak.startedAtMs).toBe(initialPeakStart);
+    expect(card._extrema['sensor.row'].floor.value).toBe(40);
+    expect(card._extrema['sensor.row'].floor.windowKey).not.toBe(initialFloorWindow);
+
+    state.state = '30';
+    state.last_updated = localIso(10, 22);
+    card._updateExtrema(entityCfg, entityCfg, state);
+    expect(card._extrema['sensor.row'].peak.value).toBe(30);
+    expect(card._extrema['sensor.row'].peak.startedAtMs).toBe(Date.parse(state.last_updated));
   });
 });

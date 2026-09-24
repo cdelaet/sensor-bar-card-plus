@@ -175,7 +175,7 @@ describe('Sensor Bar Card Plus public API smoke', () => {
       unit_of_measurement: 'W&h',
     });
     const rowCfg = card.normalizeCardConfig({
-      target: { at: { fixed: 50 }, label: { show: true } },
+      target: { at: { fixed: 50 }, label: { show: true, text: '50 < 60 & "goal"' } },
       entities: [{ entity: 'sensor.one' }],
     }).entities[0];
 
