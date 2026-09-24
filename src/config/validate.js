@@ -94,6 +94,18 @@ function validateMarkerDirections(diagnostics, config, path, entity = null) {
   }
 }
 
+function validateBuiltinMarkerLabels(diagnostics, config, path, entity = null) {
+  for (const [key, publicKey] of [['target_marker', 'target'], ['peak_marker', 'peak'], ['floor_marker', 'floor']]) {
+    const marker = config?.[key];
+    const labelPath = `${path}.${publicKey}.label`;
+    if (marker?.label_invalid_text) addWarning(diagnostics, 'markers.invalid_label_text', 'Marker label text must be a string; ignoring it.', `${labelPath}.text`, entity);
+    if (marker?.label_invalid_show_value) addWarning(diagnostics, 'markers.invalid_label_show_value', 'Marker label show_value must be a boolean; using the inherited or default value.', `${labelPath}.show_value`, entity);
+    if (marker?.label_invalid_show_unit) addWarning(diagnostics, 'markers.invalid_label_show_unit', 'Marker label show_unit must be a boolean; using the inherited or default value.', `${labelPath}.show_unit`, entity);
+    if (marker?.label_invalid_precision) addWarning(diagnostics, 'markers.invalid_label_precision', 'Marker label precision must be a non-negative integer; using the inherited or row precision.', `${labelPath}.${marker.label_precision_key ?? 'precision'}`, entity);
+    if (marker?.label_unsupported_unit) addWarning(diagnostics, 'markers.unsupported_label_unit', 'Marker label unit is no longer supported; use show_unit instead.', `${labelPath}.unit`, entity);
+  }
+}
+
 function validateGenericMarkers(diagnostics, markers, invalidList, path, entity = null) {
   if (invalidList) {
     addWarning(diagnostics, 'markers.invalid_list', 'Markers must be a list; ignoring the malformed value.', path, entity);
@@ -123,9 +135,11 @@ function validateGenericMarkers(diagnostics, markers, invalidList, path, entity 
     if (marker.invalidDirection) {
       addWarning(diagnostics, 'markers.invalid_direction', 'Invalid marker direction; using inward.', `${markerPath}.direction`, entity);
     }
-    if (marker.invalidDecimal) {
-      addWarning(diagnostics, 'markers.invalid_decimal', 'Marker label decimal must be a non-negative integer; inheriting row precision.', `${markerPath}.label.decimal`, entity);
-    }
+    if (marker.label?.invalidText) addWarning(diagnostics, 'markers.invalid_label_text', 'Marker label text must be a string; ignoring it.', `${markerPath}.label.text`, entity);
+    if (marker.label?.invalidShowValue) addWarning(diagnostics, 'markers.invalid_label_show_value', 'Marker label show_value must be a boolean; using the inherited or default value.', `${markerPath}.label.show_value`, entity);
+    if (marker.label?.invalidShowUnit) addWarning(diagnostics, 'markers.invalid_label_show_unit', 'Marker label show_unit must be a boolean; using the inherited or default value.', `${markerPath}.label.show_unit`, entity);
+    if (marker.label?.invalidPrecision) addWarning(diagnostics, 'markers.invalid_label_precision', 'Marker label precision must be a non-negative integer; using the inherited or row precision.', `${markerPath}.label.${marker.label.invalidPrecisionKey ?? 'precision'}`, entity);
+    if (marker.label?.unsupportedUnit) addWarning(diagnostics, 'markers.unsupported_label_unit', 'Marker label unit is no longer supported; use show_unit instead.', `${markerPath}.label.unit`, entity);
     if (marker.valid && !marker.accepted) {
       addWarning(diagnostics, 'markers.excess_capacity', `Only the first two valid markers in the ${marker.lane} lane are rendered.`, markerPath, entity);
     }
@@ -214,6 +228,7 @@ function validateConfigScope(diagnostics, config, path, entity = null) {
   validateBaselineSuppressesNeedle(diagnostics, config, path, entity);
   validateExtremumReset(diagnostics, config, path, entity);
   validateMarkerDirections(diagnostics, config, path, entity);
+  validateBuiltinMarkerLabels(diagnostics, config, path, entity);
   validateSegments(diagnostics, config?.bar?.segments, scaleBounds, `${path}.bar`, entity);
   validateGradientStops(diagnostics, config?.bar?.gradient_stops, `${path}.bar`, entity);
 }

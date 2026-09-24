@@ -9202,28 +9202,109 @@ views:
       content: |
         # Sensor Bar Card Plus — Marker Showcase
 
-        Six capture-ready marker examples using stable screenshot entities, including one clean Needle/Target composition. These cards demonstrate restrained, practical marker combinations rather than validation or collision cases.
+        Curated marker examples for static capture and live acceptance. The existing Showcase Phase Driver animates a few practical rows; the screenshot-only Hero entities remain stable for deterministic captures.
+
+    - type: markdown
+      content: |
+        ## Live multi-row energy
+
+        Three related W rows share a restrained above/below reference treatment while their phase-driven values evolve. Peak and Floor labels show the observed range without turning the card into a collision test.
+
+    - type: custom:sensor-bar-card-plus
+      title: Home energy — live grid, solar, and battery rows
+      entities:
+      - entity: sensor.sbcp_showcase_grid
+        name: Grid exchange
+        scale:
+          min:
+            fixed: -6000
+          max:
+            fixed: 6000
+      - entity: sensor.sbcp_showcase_solar
+        name: Solar production
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 8000
+      - entity: sensor.sbcp_showcase_battery_power
+        name: Battery charge / discharge
+        scale:
+          min:
+            fixed: -2500
+          max:
+            fixed: 2500
+      layout:
+        label:
+          position: left
+          width: 150
+      formatting:
+        decimal: 0
+      peak:
+        enabled: true
+        reset: never
+        color: '#7C3AED'
+        label:
+          show: true
+          decimal: 0
+          text: Max
+      floor:
+        enabled: true
+        reset: never
+        color: '#EA580C'
+        label:
+          show: true
+          decimal: 0
+          text: Min
+      markers:
+      - at: 35%
+        lane: above
+        shape: arrow
+        direction: inward
+        color: '#38BDF8'
+        label:
+          show: true
+          decimal: 0
+          text: Guide
+      - at: 72%
+        lane: below
+        shape: pin
+        direction: outward
+        color: '#FDE047'
+        label:
+          show: true
+          text: Target
+          decimal: 0
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#1D4ED8'
+        - pos: 52
+          color: '#0F766E'
+        - pos: 100
+          color: '#F59E0B'
 
     - type: markdown
       content: |
         ## Grid Flow
 
-        Bidirectional utility exchange with a centered balance Target and two subtle operating references.
+        Live bidirectional utility exchange with a labelled zero-balance Target and two restrained references. The existing phase-driven simulation moves the value across the Target.
 
     - type: custom:sensor-bar-card-plus
       title: Grid Flow
       entities:
-      - entity: sensor.sbcp_hero_shot_grid
+      - entity: sensor.sbcp_showcase_grid
         name: Utility exchange
         icon: mdi:transmission-tower
       scale:
         min:
-          fixed: -10
+          fixed: -6000
         max:
-          fixed: 10
+          fixed: 6000
       formatting:
-        decimal: 1
-        unit: kW
+        decimal: 0
+        unit: W
       layout:
         label:
           position: above
@@ -9240,15 +9321,27 @@ views:
         at:
           fixed: 0
         color: '#F8FAFC'
+        label:
+          show: true
+          text: Balance
+          decimal: 0
       markers:
       - at: 25%
         lane: above
         shape: diamond
         color: '#38BDF8'
+        label:
+          show: true
+          text: Prediction
+          decimal: 0
       - at: 75%
         lane: below
         shape: circle
         color: '#FDE047'
+        label:
+          show: true
+          text: Reserve
+          decimal: 0
 
     - type: markdown
       content: |
@@ -9279,15 +9372,22 @@ views:
         color: '#F8FAFC'
         label:
           show: true
+          text: Target
       markers:
       - at: 35%
         lane: above
         shape: diamond
         color: '#38BDF8'
+        label:
+          show: true
+          text: Low
       - at: 82%
         lane: below
         shape: pin
         color: '#FDE047'
+        label:
+          show: true
+          text: High
       bar:
         fill_style: gradient
         needle:
@@ -9336,11 +9436,17 @@ views:
       target:
         at:
           fixed: 8
+        label:
+          show: true
+          text: Target
       markers:
       - at: 70%
         lane: above
         shape: pin
         color: '#F8FAFC'
+        label:
+          show: true
+          text: High
 
     - type: custom:sensor-bar-card-plus
       title: Battery State of Charge
@@ -9410,23 +9516,32 @@ views:
       target:
         at:
           fixed: 22
+        label:
+          show: true
+          text: Target
       markers:
       - at:
           fixed: 20
         lane: above
         shape: diamond
         color: '#38BDF8'
+        label:
+          show: true
+          text: Low
       - at:
           fixed: 25
         lane: below
         shape: pin
         color: '#FDE047'
+        label:
+          show: true
+          text: High
 
     - type: markdown
       content: |
         ## Shape Gallery
 
-        The complete shared shape set, kept to two references per lane and without labels to keep the silhouettes clear.
+        The complete shared shape set at restrained density. Labels use the glyph colors so the shape and value remain associated.
 
     - type: custom:sensor-bar-card-plus
       title: Circles, Diamonds, Triangles, and Double Chevrons
@@ -9444,21 +9559,33 @@ views:
         lane: above
         shape: circle
         color: '#2563EB'
+        label:
+          show: true
+          text: Low
       - at: 75%
         lane: above
         shape: diamond
         color: '#0891B2'
+        label:
+          show: true
+          text: High
       - at: 25%
         lane: below
         shape: triangle
         color: '#7C3AED'
+        label:
+          show: true
+          text: Min
       - at: 75%
         lane: below
         shape: chevron
         color: '#EA5808'
+        label:
+          show: true
+          text: Max
 
     - type: custom:sensor-bar-card-plus
-      title: Arrow and Pin orientation
+      title: Arrow and Pin — same-lane direction comparison
       entities:
       - entity: sensor.sbcp_hero_shot_ev
         name: EV charging
@@ -9469,14 +9596,80 @@ views:
         max:
           fixed: 11
       markers:
-      - at: 35%
+      - at: 28%
         lane: above
         shape: arrow
+        direction: inward
         color: '#16A34A'
-      - at: 65%
+        label:
+          show: true
+      - at: 68%
+        lane: above
+        shape: arrow
+        direction: outward
+        color: '#D97706'
+        label:
+          show: true
+      - at: 28%
         lane: below
         shape: pin
+        direction: inward
+        color: '#16A34A'
+        label:
+          show: true
+      - at: 68%
+        lane: below
+        shape: pin
+        direction: outward
         color: '#D97706'
+        label:
+          show: true
+
+    - type: markdown
+      content: |
+        ## Peak and Floor
+
+        Dynamic battery flow crosses its stored extrema as the showcase phase advances. The two labelled trackers make the observed range explicit.
+
+    - type: custom:sensor-bar-card-plus
+      title: Battery flow — Peak and Floor
+      entities:
+      - entity: sensor.sbcp_showcase_battery_power
+        name: Battery charge / discharge
+        icon: mdi:battery-sync
+      scale:
+        min:
+          fixed: -2500
+        max:
+          fixed: 2500
+      formatting:
+        decimal: 0
+        unit: W
+      peak:
+        enabled: true
+        reset: never
+        color: '#7C3AED'
+        label:
+          show: true
+          decimal: 0
+          text: Max
+      floor:
+        enabled: true
+        reset: never
+        color: '#EA580C'
+        label:
+          show: true
+          decimal: 0
+          text: Min
+      bar:
+        fill_style: soft_bands
+        segments:
+        - from: 0%
+          to: 50%
+          color: '#2563EB'
+        - from: 50%
+          to: 100%
+          color: '#16A34A'
 
     - type: markdown
       content: |
@@ -9516,8 +9709,14 @@ views:
       target:
         at:
           fixed: 8.5
+        label:
+          show: true
+          text: Capacity
       markers:
       - at: 55%
         lane: above
         shape: chevron
         color: '#F8FAFC'
+        label:
+          show: true
+          text: Forecast

@@ -2645,19 +2645,19 @@ describe('Sensor Bar Card Plus editor', () => {
     });
   });
 
-  it('target label decimal override writes target.label.decimal', () => {
+  it('target label precision override writes target.label.precision', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({ entity: 'sensor.one' });
-    dispatchInput(editor.shadowRoot.querySelector('#target-label-decimal'), '1');
+    dispatchInput(editor.shadowRoot.querySelector('#target-label-precision'), '1');
 
     expect(events.at(-1).detail.config.target).toEqual({
-      label: { decimal: 1 },
+      label: { precision: 1 },
     });
   });
 
-  it('target label decimal override can coexist with show and clears back to inheritance', () => {
+  it('target label precision override can coexist with show and clears back to inheritance', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -2667,19 +2667,19 @@ describe('Sensor Bar Card Plus editor', () => {
       target: { label: { show: true } },
     });
 
-    const decimalInput = editor.shadowRoot.querySelector('#target-label-decimal');
+    const decimalInput = editor.shadowRoot.querySelector('#target-label-precision');
     dispatchInput(decimalInput, '1');
     expect(events.at(-1).detail.config.target).toEqual({
-      label: { show: true, decimal: 1 },
+      label: { show: true, precision: 1 },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#target-label-decimal'), '');
+    dispatchInput(editor.shadowRoot.querySelector('#target-label-precision'), '');
     expect(events.at(-1).detail.config.target).toEqual({
       label: { show: true },
     });
   });
 
-  it('preserves an explicit zero target label decimal through load, set, and reset', () => {
+  it('preserves an explicit zero target label precision through load, set, and reset', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -2688,19 +2688,19 @@ describe('Sensor Bar Card Plus editor', () => {
       target: { label: { show: true, decimal: 0 } },
     });
 
-    expect(editor.shadowRoot.querySelector('#target-label-decimal').value).toBe('0');
+    expect(editor.shadowRoot.querySelector('#target-label-precision').value).toBe('0');
 
-    dispatchInput(editor.shadowRoot.querySelector('#target-label-decimal'), '');
+    dispatchInput(editor.shadowRoot.querySelector('#target-label-precision'), '');
     expect(events.at(-1).detail.config.target).toEqual({
       label: { show: true },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#target-label-decimal'), '0');
+    dispatchInput(editor.shadowRoot.querySelector('#target-label-precision'), '0');
     expect(events.at(-1).detail.config.target).toEqual({
-      label: { show: true, decimal: 0 },
+      label: { show: true, precision: 0 },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#target-label-decimal'), '');
+    dispatchInput(editor.shadowRoot.querySelector('#target-label-precision'), '');
     expect(events.at(-1).detail.config.target).toEqual({
       label: { show: true },
     });
@@ -3199,7 +3199,7 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('per-entity target label decimal override writes entities[index].target.label.decimal', () => {
+  it('per-entity target label precision override writes entities[index].target.label.precision', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -3209,11 +3209,34 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchInput(editor.shadowRoot.querySelector('#entity-0-target-label-decimal'), '1');
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-target-label-precision'), '1');
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', target: { label: { decimal: 1 } } },
+      { entity: 'sensor.one', name: 'One', target: { label: { precision: 1 } } },
     ]);
+  });
+
+  it('preserves an explicit entity label override against the card default', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({
+      target: { at: { fixed: 20 }, label: { show: true, text: 'Goal', show_value: false, show_unit: true } },
+      markers: [{ at: { fixed: 35 }, label: { show: true } }],
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    const overrides = editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0];
+    dispatchClick(overrides);
+    const entityShowValue = editor.shadowRoot.querySelector('#entity-0-target-label-show-value');
+    expect(entityShowValue.checked).toBe(false);
+    entityShowValue.checked = true;
+    entityShowValue.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+    expect(events.at(-1).detail.config.entities[0].target.label).toEqual({ show_value: true });
+
+    const entityShowLabel = editor.shadowRoot.querySelector('#entity-0-target-label-show');
+    entityShowLabel.checked = false;
+    entityShowLabel.dispatchEvent({ type: 'change', bubbles: true, composed: true });
+    expect(events.at(-1).detail.config.entities[0].target.label).toEqual({ show: false, show_value: true });
   });
 
   it('per-entity target above-target fill color writes entities[index].target.when_exceeded.fill_color', () => {
@@ -8253,12 +8276,12 @@ describe('Sensor Bar Card Plus editor', () => {
     const floorLabel = editor.shadowRoot.querySelector('#floor-label-show');
     floorLabel.checked = true;
     floorLabel.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    dispatchInput(editor.shadowRoot.querySelector('#floor-label-decimal'), '0');
+    dispatchInput(editor.shadowRoot.querySelector('#floor-label-precision'), '0');
 
     expect(events.at(-1).detail.config.floor).toEqual({
       enabled: true,
       reset: 'quarterly',
-      label: { show: true, decimal: 0 },
+      label: { show: true, precision: 0 },
     });
   });
 
@@ -8273,11 +8296,11 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-floor'));
     dispatchChange(editor.shadowRoot.querySelector('#entity-0-floor-reset'), 'never');
-    dispatchInput(editor.shadowRoot.querySelector('#entity-0-floor-label-decimal'), '0');
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-floor-label-precision'), '0');
 
     expect(events.at(-1).detail.config.entities[0].floor).toEqual({
       reset: 'never',
-      label: { decimal: 0 },
+      label: { precision: 0 },
     });
   });
 
@@ -8322,6 +8345,11 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(markup).toContain('move-generic-marker-down');
     expect(markup).toContain('generic-marker-entity');
     expect(markup).toContain('generic-marker-percent');
+    expect(markup).toContain('generic-marker-label-text');
+    expect(markup).toContain('generic-marker-label-show-value');
+    expect(markup).toContain('generic-marker-label-show-unit');
+    expect(markup).toContain('generic-marker-label-precision');
+    expect(markup).not.toContain('generic-marker-label-unit');
     for (const shape of ['circle', 'diamond', 'triangle', 'chevron', 'arrow', 'pin']) {
       expect(markup).toContain(`<option value="${shape}"`);
     }
@@ -8371,7 +8399,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(emitted.entities[0].markers).toEqual([]);
   });
 
-  it('round-trips decimal zero, unit false, and unknown marker and nested label keys', () => {
+  it('round-trips precision zero, show_unit false, and unknown marker and nested label keys', () => {
     const editor = createEditor();
     editor.setConfig({
       markers: [{
@@ -8381,14 +8409,14 @@ describe('Sensor Bar Card Plus editor', () => {
       }],
       entities: [{ entity: 'sensor.one' }],
     });
-    editor._setGenericMarkerField({ type: 'card' }, 0, 'generic-marker-label-decimal', '0');
-    editor._setGenericMarkerField({ type: 'card' }, 0, 'generic-marker-label-unit', false);
+    editor._setGenericMarkerField({ type: 'card' }, 0, 'generic-marker-label-precision', '0');
+    editor._setGenericMarkerField({ type: 'card' }, 0, 'generic-marker-label-show-unit', false);
     const emitted = editor._cleanupEditorEmittedConfig(editor._cloneDeep(editor._draftConfig));
 
     expect(emitted.markers[0]).toEqual({
       at: { fixed: 10, source_extension: 'keep' },
       extension: { keep: true },
-      label: { show: true, extension: 'also keep', decimal: 0, unit: false },
+      label: { show: true, extension: 'also keep', precision: 0, show_unit: false },
     });
   });
 

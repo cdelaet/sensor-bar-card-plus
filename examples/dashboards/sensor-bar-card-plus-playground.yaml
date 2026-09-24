@@ -3863,7 +3863,7 @@ views:
     content: |
       ## Advanced marker integration — Needle
 
-      The existing Wave Driver is intentionally reused. For the uncluttered motion test, set its min/max to 0/100, choose `current_value` and a 6–10 second period, then enable it: the Needle travels across stationary marker positions. In the independent-source card, choose `target_value` to animate the dynamic generic marker while current/Needle remains still; switch back to `current_value` to watch it cross the marker. For the bipolar card, use wave limits -100/100 to watch current cross the stored Peak and Floor. The exact-coincidence card deliberately overlays the Needle, Target, and generic glyph. Observe the existing z-order; this page does not prescribe a change. Turn the Wave Driver off after the check.
+      The existing Wave Driver is intentionally reused. For the uncluttered motion test, set its min/max to 0/100, choose `current_value` and a 6–10 second period, then enable it: the Needle travels across stationary marker positions. The dense seven-marker card below combines Needle, Target, Peak, Floor, and two generic references in each lane; its Peak/Floor track the changing current sample. Watch the Needle approach, cross, coincide with, and leave the fixed references. Hover individual glyphs during motion to confirm the corresponding label still promotes independently. In the independent-source card, choose `target_value` to animate the dynamic generic marker while current/Needle remains still; switch back to `current_value` to watch it cross the marker. For the bipolar card, use wave limits -100/100 to watch current cross the stored Peak and Floor. The exact-coincidence card deliberately overlays the Needle, Target, and generic glyph. Turn the Wave Driver off after the check.
   - type: entities
     title: Needle / marker motion controls
     show_header_toggle: false
@@ -3951,7 +3951,7 @@ views:
           show: true
           color: '#F8FAFC'
     - type: custom:sensor-bar-card-plus
-      title: Seven glyphs with an animated Needle
+      title: Seven markers + moving Needle — dense coexistence
       entities:
       - entity: sensor.sbcp_playground_sensor
         name: Peak / Floor evolve with current
@@ -3963,31 +3963,47 @@ views:
       target:
         at:
           fixed: 50
+        color: '#F8FAFC'
         label:
           show: true
+          decimal: 0
       peak:
         enabled: true
         reset: never
+        label:
+          show: true
       floor:
         enabled: true
         reset: never
+        label:
+          show: true
       markers:
       - at: 24%
         lane: above
         shape: diamond
         color: '#38BDF8'
+        label:
+          show: true
       - at: 78%
         lane: above
         shape: pin
+        direction: outward
         color: '#F59E0B'
+        label:
+          show: true
       - at: 35%
         lane: below
         shape: circle
         color: '#DC2626'
+        label:
+          show: true
       - at: 68%
         lane: below
         shape: chevron
+        direction: outward
         color: '#16A34A'
+        label:
+          show: true
       bar:
         fill_style: bands
         segments:
@@ -7749,7 +7765,7 @@ views:
       label:
         show: true
         decimal: 0
-        unit: false
+        show_unit: false
     - at:
         entity: sensor.sbcp_marker_reference
         fixed: 75
@@ -8308,7 +8324,7 @@ views:
       label:
         show: true
         decimal: 0
-        unit: false
+        show_unit: false
     - at: 35%
       lane: below
       shape: circle
@@ -8324,7 +8340,7 @@ views:
       label:
         show: true
         decimal: 0
-        unit: false
+        show_unit: false
 
   - type: custom:sensor-bar-card-plus
     title: Third valid reference in each lane is excess
@@ -8635,69 +8651,153 @@ views:
 
   - type: markdown
     content: |
-      ## Shapes and Direction
+      ## Direction Laboratory
 
-      Every supported shape appears in the two lanes. The below-lane Chevron is the inward/upward Double Chevron: its orientation follows the existing shared marker shape behavior.
+      Inward points toward the bar; outward points away from it. Omitted `direction` defaults to inward. Circle and Diamond are intentionally unaffected because they are not directional. Each compact comparison card uses the same shape at two positions in each lane: blue is inward and amber is outward. `chevron` is the public Double Chevron shape.
 
-  - type: custom:sensor-bar-card-plus
-    title: Circle, Diamond, Triangle, and Double Chevron
-    entities:
-    - entity: sensor.sbcp_marker_primary
-      name: Shape direction reference
-    scale:
-      min:
-        fixed: 0
-      max:
-        fixed: 300
-    markers:
-    - at: 25%
-      lane: above
-      shape: circle
-      color: '#2563EB'
-    - at: 70%
-      lane: above
-      shape: diamond
-      color: '#0891B2'
-    - at: 25%
-      lane: below
-      shape: triangle
-      color: '#7C3AED'
-    - at: 70%
-      lane: below
-      shape: chevron
-      color: '#EA5808'
-
-  - type: custom:sensor-bar-card-plus
-    title: Arrow and Pin direction in both lanes
-    entities:
-    - entity: sensor.sbcp_marker_primary
-      name: Above points outward; below points inward
-    scale:
-      min:
-        fixed: 0
-      max:
-        fixed: 300
-    markers:
-    - at:
-        fixed: 75
-      lane: above
-      shape: arrow
-      color: '#16A34A'
-    - at:
-        fixed: 225
-      lane: above
-      shape: pin
-      color: '#D97706'
-    - at:
-        fixed: 75
-      lane: below
-      shape: arrow
-      color: '#16A34A'
-    - at:
-        fixed: 225
-      lane: below
-      shape: pin
-      color: '#D97706'
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Triangle — both lanes and directions
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Inward / outward
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+      markers:
+      - at: 35%
+        lane: above
+        shape: triangle
+        direction: inward
+        color: '#2563EB'
+      - at: 68%
+        lane: above
+        shape: triangle
+        direction: outward
+        color: '#F59E0B'
+      - at: 35%
+        lane: below
+        shape: triangle
+        direction: inward
+        color: '#2563EB'
+      - at: 68%
+        lane: below
+        shape: triangle
+        direction: outward
+        color: '#F59E0B'
+    - type: custom:sensor-bar-card-plus
+      title: Double Chevron — both lanes and directions
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Inward / outward
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+      markers:
+      - at: 35%
+        lane: above
+        shape: chevron
+        direction: inward
+        color: '#2563EB'
+      - at: 68%
+        lane: above
+        shape: chevron
+        direction: outward
+        color: '#F59E0B'
+      - at: 35%
+        lane: below
+        shape: chevron
+        direction: inward
+        color: '#2563EB'
+      - at: 68%
+        lane: below
+        shape: chevron
+        direction: outward
+        color: '#F59E0B'
+    - type: custom:sensor-bar-card-plus
+      title: Arrow — both lanes and directions
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Inward / outward
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+      markers:
+      - at: 35%
+        lane: above
+        shape: arrow
+        direction: inward
+        color: '#2563EB'
+      - at: 68%
+        lane: above
+        shape: arrow
+        direction: outward
+        color: '#F59E0B'
+      - at: 35%
+        lane: below
+        shape: arrow
+        direction: inward
+        color: '#2563EB'
+      - at: 68%
+        lane: below
+        shape: arrow
+        direction: outward
+        color: '#F59E0B'
+    - type: custom:sensor-bar-card-plus
+      title: Pin — both lanes and directions
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Inward / outward
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+      markers:
+      - at: 35%
+        lane: above
+        shape: pin
+        direction: inward
+        color: '#2563EB'
+      - at: 68%
+        lane: above
+        shape: pin
+        direction: outward
+        color: '#F59E0B'
+      - at: 35%
+        lane: below
+        shape: pin
+        direction: inward
+        color: '#2563EB'
+      - at: 68%
+        lane: below
+        shape: pin
+        direction: outward
+        color: '#F59E0B'
+    - type: custom:sensor-bar-card-plus
+      title: Default direction — omitted means inward
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Above-lane default points toward the bar
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 300
+      markers:
+      - at: 50%
+        lane: above
+        shape: arrow
+        color: '#2563EB'
 
   - type: markdown
     content: |
@@ -8946,7 +9046,7 @@ views:
       label:
         show: true
         decimal: 0
-        unit: true
+        show_unit: true
     - at: 100%
       lane: below
       shape: chevron
@@ -8985,7 +9085,7 @@ views:
       label:
         show: true
         decimal: 0
-        unit: true
+        show_unit: true
     - at: 100%
       lane: below
       shape: chevron
@@ -9106,6 +9206,37 @@ views:
       name: Primary sample (W)
     - entity: input_select.sbcp_marker_primary_state
       name: Primary state
+
+  - type: markdown
+    content: |
+      ### LIVE EXTREMA TRACKING — RESET NEVER
+
+      This card tests pure session extrema tracking with a continuously oscillating battery value. Reset is `never`: Max can only move upward and Min can only move downward, even as the current value reverses. If the value is stationary, confirm the existing SBCP Showcase Enabled helper is on. Use the timed reset examples below to test reset behavior separately.
+
+  - type: custom:sensor-bar-card-plus
+    title: Live extrema tracking — Reset never
+    entities:
+    - entity: sensor.sbcp_showcase_battery
+      name: Battery charge
+    scale:
+      min:
+        fixed: 0
+      max:
+        fixed: 100
+    peak:
+      enabled: true
+      reset: never
+      color: '#7C3AED'
+      label:
+        show: true
+        text: Max
+    floor:
+      enabled: true
+      reset: never
+      color: '#D97706'
+      label:
+        show: true
+        text: Min
 
   - type: custom:sensor-bar-card-plus
     title: Peak — never
@@ -9488,6 +9619,143 @@ views:
         color: '#0F766E'
       - pos: 100
         color: '#F59E0B'
+
+  - type: markdown
+    content: |
+      ## Semantic Label / Label Content
+
+      These compact examples isolate the independent label components. Compare value + unit, semantic text + value + unit, text + value without unit, text + unit without value, text only, value only, and unit only. Empty composition is intentionally covered in automated tests and should produce no visible label.
+
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Target / extrema semantics
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: House load
+      scale:
+        min: { fixed: 0 }
+        max: { fixed: 300 }
+      formatting:
+        decimal: 1
+        unit: W
+      target:
+        at: 180
+        label:
+          show: true
+          text: Target
+          show_value: true
+          show_unit: true
+      peak:
+        enabled: true
+        reset: never
+        label:
+          show: true
+          text: Max
+      floor:
+        enabled: true
+        reset: never
+        label:
+          show: true
+          text: Min
+
+    - type: custom:sensor-bar-card-plus
+      title: Generic compositions
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Grid exchange
+      scale:
+        min: { fixed: -300 }
+        max: { fixed: 300 }
+      formatting:
+        decimal: 1
+        unit: W
+      markers:
+      - at: 25%
+        lane: above
+        shape: diamond
+        color: '#2563EB'
+        label:
+          show: true
+          text: Prediction
+          show_value: true
+          show_unit: false
+      - at: 72%
+        lane: below
+        shape: pin
+        color: '#F59E0B'
+        label:
+          show: true
+          text: Trigger
+          show_value: false
+          show_unit: true
+
+    - type: custom:sensor-bar-card-plus
+      title: Text only / value only
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Solar output
+      scale:
+        min: { fixed: 0 }
+        max: { fixed: 10 }
+      formatting:
+        decimal: 1
+        unit: kW
+      markers:
+      - at: 30%
+        lane: above
+        shape: circle
+        color: '#7C3AED'
+        label:
+          show: true
+          text: Previous max
+          show_value: false
+          show_unit: false
+      - at: 55%
+        lane: above
+        shape: diamond
+        color: '#0891B2'
+        label:
+          show: true
+      - at: 75%
+        lane: below
+        shape: triangle
+        color: '#DC2626'
+        label:
+          show: true
+          show_unit: false
+
+    - type: custom:sensor-bar-card-plus
+      title: Unit only / text + unit
+      entities:
+      - entity: sensor.sbcp_marker_primary
+        name: Supply voltage
+      scale:
+        min: { fixed: 225 }
+        max: { fixed: 233 }
+      formatting:
+        decimal: 2
+        unit: V
+      markers:
+      - at: 20%
+        lane: above
+        shape: chevron
+        color: '#0891B2'
+        label:
+          show: true
+          show_value: false
+          show_unit: true
+      - at: 80%
+        lane: below
+        shape: arrow
+        color: '#16A34A'
+        label:
+          show: true
+          text: High
+          show_value: false
+          show_unit: true
 
   - type: markdown
     content: |

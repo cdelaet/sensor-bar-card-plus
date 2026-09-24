@@ -329,7 +329,7 @@ describe('buildRowViewModel', () => {
       lane: 'below',
       value: 55,
       visible: true,
-      label: row.targetPresentation,
+      label: row.targetLabelPresentation,
       labelVisible: true,
       shape: 'diamond',
     }));
@@ -353,8 +353,8 @@ describe('buildRowViewModel', () => {
       formatting: { decimal: 1 },
       markers: [
         { at: '0%', label: { show: true } },
-        { at: '35%', lane: 'above', label: { show: true, decimal: 0, unit: true } },
-        { at: '100%', lane: 'above', label: { show: true, unit: false } },
+        { at: '35%', lane: 'above', label: { show: true, precision: 0, show_unit: true } },
+        { at: '100%', lane: 'above', label: { show: true, show_unit: false } },
       ],
       entities: [{ entity: 'sensor.power' }],
     };
@@ -389,6 +389,95 @@ describe('buildRowViewModel', () => {
       position: 35,
       label: { text: '140 W' },
     });
+  });
+
+  it('composes marker label text, value, and unit independently with defaults and precision', () => {
+    const hass = { states: { 'sensor.power': sensor(42, { unit_of_measurement: 'W' }) } };
+    const cases = [
+      [{ show: true }, '8.8 W'],
+      [{ show: true, text: 'Max', precision: 1 }, 'Max 8.8 W'],
+      [{ show: true, text: 'Trigger', show_unit: false }, 'Trigger 8.8'],
+      [{ show: true, text: 'Low', show_value: false }, 'Low W'],
+      [{ show: true, text: 'Prediction', show_value: false, show_unit: false }, 'Prediction'],
+      [{ show: true, show_unit: false, precision: 3 }, '8.765'],
+      [{ show: true, show_value: false, text: '', show_unit: true }, 'W'],
+      [{ show: true, show_value: false, show_unit: false }, ''],
+    ];
+
+    for (const [label, expected] of cases) {
+      const entityConfig = createNormalizedEntity({
+        scale: { min: { fixed: 0 }, max: { fixed: 100 } },
+        formatting: { decimal: 1 },
+        markers: [{ at: { fixed: 8.765 }, label }],
+        entities: [{ entity: 'sensor.power' }],
+      });
+      const row = buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.power'] });
+      const marker = row.markers.find((entry) => entry.id === 'generic-0');
+      expect(marker.label?.text).toBe(expected);
+      expect(marker.labelVisible).toBe(expected !== '');
+    }
+  });
+
+  it('composes Target, Peak, and Floor labels and inherits independent label options', () => {
+    const hass = { states: { 'sensor.power': sensor(42, { unit_of_measurement: 'kW' }) } };
+    const config = {
+      scale: { min: { fixed: 0 }, max: { fixed: 100 } },
+      formatting: { decimal: 2 },
+      target: { at: { fixed: 34.567 }, label: { show: true, text: 'Target', precision: 1 } },
+      peak: { enabled: true, label: { show: true, text: 'Max', precision: 0 } },
+      floor: { enabled: true, label: { show: true, text: 'Min', show_value: false } },
+      entities: [{ entity: 'sensor.power' }],
+    };
+    const entityConfig = createNormalizedEntity(config);
+    const row = buildRowViewModel({
+      hass,
+      entityConfig,
+      entityState: hass.states['sensor.power'],
+      extrema: { peak: { value: 80 }, floor: { value: 12 } },
+    });
+    expect(row.markers.find((marker) => marker.type === 'target').label.text).toBe('Target 34.6 kW');
+    expect(row.markers.find((marker) => marker.type === 'peak').label.text).toBe('Max 80 kW');
+    expect(row.markers.find((marker) => marker.type === 'floor').label.text).toBe('Min kW');
+
+    const inheritedConfig = createNormalizedEntity({
+      target: { at: 30, label: { show: true, text: 'Goal', show_unit: true, precision: 1 } },
+      peak: { enabled: true, label: { show: true, text: 'High', show_value: true } },
+      entities: [{ entity: 'sensor.power', target: { label: { show_value: false } }, peak: { label: { show_unit: false } } }],
+    });
+    const inheritedRow = buildRowViewModel({
+      hass,
+      entityConfig: inheritedConfig,
+      entityState: hass.states['sensor.power'],
+      extrema: { peak: { value: 80 } },
+    });
+    expect(inheritedRow.markers.find((marker) => marker.type === 'target').label.text).toBe('Goal kW');
+    expect(inheritedRow.markers.find((marker) => marker.type === 'peak').label.text).toBe('High 80');
+
+    const emptyConfig = createNormalizedEntity({
+      target: { at: 30, label: { show: true, show_value: false, show_unit: false } },
+      peak: { enabled: true, label: { show: true, show_value: false, show_unit: false } },
+      floor: { enabled: true, label: { show: true, show_value: false, show_unit: false } },
+      markers: [{ at: 15, label: { show: true, show_value: false, show_unit: false } }],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const emptyRow = buildRowViewModel({
+      hass,
+      entityConfig: emptyConfig,
+      entityState: hass.states['sensor.power'],
+      extrema: { peak: { value: 80 }, floor: { value: 12 } },
+    });
+    expect(emptyRow.markers.map((marker) => marker.labelVisible)).toEqual([false, false, false, false]);
+    expect(emptyRow.markerLabelLaneOccupancy).toEqual({ above: false, below: false });
+  });
+
+  it('does not treat the removed generic label unit key as an alias for show_unit', () => {
+    const hass = { states: { 'sensor.power': sensor(20, { unit_of_measurement: 'W' }) } };
+    const entityConfig = createNormalizedEntity({
+      markers: [{ at: 10, label: { show: true, unit: false } }],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.power'] });
+    expect(row.markers.find((marker) => marker.type === 'generic').label.text).toBe('10 W');
   });
 
   it('uses row units for dynamic values and fallbacks while clamping only off-scale positions', () => {
@@ -446,7 +535,7 @@ describe('buildRowViewModel', () => {
       scale: { min: { fixed: 0 }, max: { fixed: 100 } },
       formatting: { unit: 'W', decimal: 0 },
       markers: [
-        { at: { entity: 'sensor.dynamic', fixed: 50 }, label: { show: true, unit: false } },
+        { at: { entity: 'sensor.dynamic', fixed: 50 }, label: { show: true, show_unit: false } },
         { at: { entity: 'sensor.unresolved' }, lane: 'above', label: { show: true } },
       ],
       entities: [{ entity: 'sensor.power' }],
@@ -484,7 +573,7 @@ describe('buildRowViewModel', () => {
     expect(fallbackRow.markers.find((marker) => marker.id === 'generic-1')).toMatchObject({
       visible: false,
       value: null,
-      label: null,
+      label: { text: 'W' },
     });
 
     const recoveredRow = makeRow(72, '35');

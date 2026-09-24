@@ -925,7 +925,7 @@ target:
 
 ### Target value label
 
-Set `target.label.show: true` to render the numeric target below the marker. The label is clamped so it stays inside the track area near the edges and follows dynamic target changes smoothly. By default it inherits `formatting.decimal`; use `target.label.decimal` to override the displayed target-label precision only.
+Set `target.label.show: true` to render a target label below the marker. The label is clamped so it stays inside the track area near the edges and follows dynamic target changes smoothly. By default its numeric component inherits `formatting.decimal`; use `target.label.precision` to override precision. Existing `target.label.decimal` configurations remain supported. Target labels also support the shared text/value/unit composition options documented below.
 
 ![Target value label](images/target-value-label.png)
 
@@ -1692,7 +1692,10 @@ formatting
 | `target.shape` | `diamond` | `diamond`, `triangle` | Target marker shape. |
 | `target.color` | `#888888` | CSS color | Target marker color. |
 | `target.label.show` | `false` | boolean | Shows a numeric target value label. |
-| `target.label.decimal` | inherited | number | Overrides the displayed target-label precision only; omitted values inherit `formatting.decimal`. |
+| `target.label.text` | absent | string | Optional plain text shown before the value and unit. |
+| `target.label.show_value` | `true` | boolean | Includes or omits the formatted Target value independently of text and unit. |
+| `target.label.show_unit` | `true` | boolean | Includes or omits the effective row unit independently of text and value. |
+| `target.label.precision` | inherited | number | Overrides the numeric component's precision; omitted values inherit `formatting.decimal`. The established `target.label.decimal` spelling remains accepted for existing configurations. |
 | `target.when_exceeded.fill_color` | `null` | CSS color | Semantic fill color for the part of the fill beyond the target. |
 | `baseline.enabled` | auto | `true`, `false`, omitted | Controls baseline behavior. Omitted means automatic based on configured baseline source. |
 | `baseline.at.fixed` | `null` | number | Fixed baseline value. |
@@ -1703,12 +1706,18 @@ formatting
 | `peak.color` | `#888888` | CSS color | Peak marker color. |
 | `peak.reset` | `never` | reset value | Resets Peak using a relative duration or local calendar boundary. |
 | `peak.label.show` | `false` | boolean | Shows the formatted Peak value label. |
-| `peak.label.decimal` | inherited | number | Overrides Peak label precision; omitted values inherit `formatting.decimal`. |
+| `peak.label.text` | absent | string | Optional plain text shown before the value and unit. |
+| `peak.label.show_value` | `true` | boolean | Includes or omits the formatted Peak value independently of text and unit. |
+| `peak.label.show_unit` | `true` | boolean | Includes or omits the effective row unit independently of text and value. |
+| `peak.label.precision` | inherited | number | Overrides the numeric component's precision; omitted values inherit `formatting.decimal`. `peak.label.decimal` remains accepted for existing configurations. |
 | `floor.enabled` | `false` | boolean | Shows a session Floor marker for the lowest finite value. |
 | `floor.color` | `#888888` | CSS color | Floor marker color. |
 | `floor.reset` | `never` | reset value | Resets Floor using a relative duration or local calendar boundary. |
 | `floor.label.show` | `false` | boolean | Shows the formatted Floor value label. |
-| `floor.label.decimal` | inherited | number | Overrides Floor label precision; omitted values inherit `formatting.decimal`. |
+| `floor.label.text` | absent | string | Optional plain text shown before the value and unit. |
+| `floor.label.show_value` | `true` | boolean | Includes or omits the formatted Floor value independently of text and unit. |
+| `floor.label.show_unit` | `true` | boolean | Includes or omits the effective row unit independently of text and value. |
+| `floor.label.precision` | inherited | number | Overrides the numeric component's precision; omitted values inherit `formatting.decimal`. `floor.label.decimal` remains accepted for existing configurations. |
 | `formatting.decimal` | `null` | number | Decimal places for displayed numeric values. |
 | `formatting.unit` | entity unit | string | Display unit override. |
 
@@ -2018,7 +2027,7 @@ scale:
   max: { fixed: 100 }
 target:
   at: 50%
-  label: { show: true }
+  label: { show: true, text: Target }
 peak:
   enabled: true
 floor:
@@ -2030,7 +2039,10 @@ markers:
     color: "#4488CC"
     label:
       show: true
-      decimal: 0
+      text: Prediction
+      show_value: true
+      show_unit: true
+      precision: 0
   - at:
       entity: sensor.warning_threshold
       fixed: 75
@@ -2039,14 +2051,16 @@ markers:
     color: "#F59E0B"
     label:
       show: true
-      unit: false
+      text: Trigger
+      show_value: false
+      show_unit: true
 entities:
   - entity: sensor.grid_power
 ```
 
 `at` accepts a fixed value (`{ fixed: 75 }`), a dynamic entity (`{ entity: sensor.limit }`), an entity with fixed fallback, or a percentage string such as `35%`. Percentages are inclusive from `0%` to `100%` of the effective row scale. Their labels show the resolved scale value. Finite fixed and dynamic values outside the scale remain valid: only their graphical position is clamped, while the label keeps the original value.
 
-Markers default to the `below` lane, `circle` shape, color `#888888`, and a hidden label. The supported shapes are `circle`, `diamond`, `triangle`, `chevron`, `arrow`, and `pin`; lanes are `above` and `below`. A shown label defaults to the row's effective `formatting.decimal` and unit. Set `label.decimal: 0` for integer precision or `label.unit: false` to omit the effective row unit. Dynamic source units are ignored, and labels remain in the row unit even when a marker falls back to its fixed value.
+Markers default to the `below` lane, `circle` shape, color `#888888`, and a hidden label. The supported shapes are `circle`, `diamond`, `triangle`, `chevron`, `arrow`, and `pin`; lanes are `above` and `below`. A shown label defaults to the row's effective `formatting.decimal` and unit, and can independently compose optional `text`, `show_value` (default `true`), and `show_unit` (default `true`). Components are joined by one space. If all three components are disabled or absent, no label is rendered. Set `label.precision: 0` for integer precision; generic, Peak, and Floor labels also accept legacy `label.decimal`, and Target continues to accept its established `target.label.decimal` spelling. Use `label.show_unit: false` to omit the effective row unit. Dynamic source units are ignored, and labels remain in the row unit even when a marker falls back to its fixed value. The former marker-label `unit` option is unsupported; use `show_unit`.
 
 At card scope, `markers:` supplies the list inherited by each entity. An entity may replace the list with its own `markers: [...]`; `markers: []` explicitly clears the inherited list. Lists replace rather than merge. A valid but unresolved marker still reserves its lane and one of that lane's two slots. Malformed markers are skipped without consuming a slot; further valid markers remain in configuration but are ignored at runtime with a non-fatal warning. Target, Peak, and Floor do not count toward this limit. Nearby marker labels may overlap.
 

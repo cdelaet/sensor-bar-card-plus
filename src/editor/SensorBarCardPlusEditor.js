@@ -740,8 +740,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const nextMarker = this._cloneDeep(nextTarget.target);
     const cleanedAt = this._cleanupResolvableValueForEmit(nextMarker.at);
     const color = this._normalizeTextValue(nextMarker.color).trim();
-    const labelShow = nextMarker.label?.show === true;
-    const labelDecimal = this._normalizeDecimalValue(nextMarker.label?.decimal);
+    const label = this._cleanBuiltinMarkerLabelForEmit(nextMarker.label, scope, 'target');
     const fillColor = this._normalizeTextValue(nextMarker.when_exceeded?.fill_color).trim();
     const hasShape = Object.prototype.hasOwnProperty.call(nextMarker, 'shape');
     const shape = hasShape ? normalizeTargetMarkerShape(nextMarker.shape) : null;
@@ -767,13 +766,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextMarker.color;
     }
 
-    if (labelShow || labelDecimal !== null) {
-      nextMarker.label = {};
-      if (labelShow) nextMarker.label.show = true;
-      if (labelDecimal !== null) nextMarker.label.decimal = labelDecimal;
-      delete nextTarget.show_target_label;
+    if (Object.keys(label).length) {
+      nextMarker.label = label;
+      if (label.show === true) delete nextTarget.show_target_label;
     } else {
       delete nextMarker.label;
+      delete nextTarget.show_target_label;
     }
 
     if (fillColor) {
@@ -880,6 +878,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     } else {
       delete nextPeak.color;
     }
+    nextPeak.label = this._cleanBuiltinMarkerLabelForEmit(nextPeak.label, scope, 'peak');
+    if (!Object.keys(nextPeak.label).length) delete nextPeak.label;
 
     if (Object.keys(nextPeak).length) {
       nextTarget.peak = nextPeak;
@@ -907,10 +907,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextFloor.color;
     }
     if (this._isObject(nextFloor.label)) {
-      if (typeof nextFloor.label.show !== 'boolean') delete nextFloor.label.show;
-      if (nextFloor.label.decimal === undefined || nextFloor.label.decimal === null || nextFloor.label.decimal === '') {
-        delete nextFloor.label.decimal;
-      }
+      nextFloor.label = this._cleanBuiltinMarkerLabelForEmit(nextFloor.label, scope, 'floor');
       if (!Object.keys(nextFloor.label).length) delete nextFloor.label;
     }
     if ((scope?.type !== 'entity' && nextFloor.reset === 'never')
@@ -926,6 +923,26 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (Object.keys(nextFloor).length) nextTarget.floor = nextFloor;
     else delete nextTarget.floor;
     return nextTarget;
+  }
+
+  _cleanBuiltinMarkerLabelForEmit(rawLabel, scope, key) {
+    const label = this._isObject(rawLabel) ? this._cloneDeep(rawLabel) : {};
+    const cardLabel = scope?.type === 'entity'
+      ? (this._getScopedValue({ type: 'card' }, [key, 'label']) ?? {}) : {};
+    if (label.show === false && scope?.type !== 'entity') delete label.show;
+    if (label.show === false && scope?.type === 'entity' && cardLabel.show !== true) delete label.show;
+    if (label.show_value === true && (scope?.type !== 'entity' || cardLabel.show_value !== false)) delete label.show_value;
+    if (label.show_unit === true && (scope?.type !== 'entity' || cardLabel.show_unit !== false)) delete label.show_unit;
+    if (typeof label.text === 'string') {
+      label.text = label.text.replace(/\s+/g, ' ').trim();
+      if (!label.text && scope?.type !== 'entity') delete label.text;
+    }
+    const precision = this._normalizeDecimalValue(label.precision ?? label.decimal);
+    delete label.decimal;
+    if (precision === null) delete label.precision;
+    else if (scope?.type === 'entity' && precision === (cardLabel.precision ?? cardLabel.decimal)) delete label.precision;
+    else label.precision = precision;
+    return label;
   }
 
   _cleanupBarForEmit(target) {
@@ -2287,9 +2304,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return {
       reset: Object.prototype.hasOwnProperty.call(marker, 'reset') ? this._normalizeTextValue(marker.reset).trim().toLowerCase() : null,
       labelShow: typeof label.show === 'boolean' ? label.show : null,
-      labelDecimal: label.decimal === undefined || label.decimal === null || label.decimal === ''
+      labelText: typeof label.text === 'string' ? label.text.replace(/\s+/g, ' ').trim() : null,
+      labelShowValue: typeof label.show_value === 'boolean' ? label.show_value : null,
+      labelShowUnit: typeof label.show_unit === 'boolean' ? label.show_unit : null,
+      labelPrecision: (label.precision ?? label.decimal) === undefined || (label.precision ?? label.decimal) === null || (label.precision ?? label.decimal) === ''
         ? null
-        : this._normalizeNumberValue(label.decimal),
+        : this._normalizeNumberValue(label.precision ?? label.decimal),
     };
   }
 
@@ -2307,7 +2327,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return {
         reset: local.reset ?? 'never',
         labelShow: local.labelShow ?? false,
-        labelDecimal: local.labelDecimal,
+        labelText: local.labelText,
+        labelShowValue: local.labelShowValue ?? true,
+        labelShowUnit: local.labelShowUnit ?? true,
+        labelPrecision: local.labelPrecision,
       };
     }
     const card = this._getScopedMarkerExtras({ type: 'card' }, key);
@@ -2315,13 +2338,19 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return {
         reset: card.reset ?? 'never',
         labelShow: card.labelShow ?? false,
-        labelDecimal: card.labelDecimal,
+        labelText: card.labelText,
+        labelShowValue: card.labelShowValue ?? true,
+        labelShowUnit: card.labelShowUnit ?? true,
+        labelPrecision: card.labelPrecision,
       };
     }
     return {
       reset: local.reset ?? card.reset ?? 'never',
       labelShow: local.labelShow ?? card.labelShow ?? false,
-      labelDecimal: local.labelDecimal ?? card.labelDecimal,
+      labelText: Object.prototype.hasOwnProperty.call(this._getScopedValue(scope, [key, 'label']) ?? {}, 'text') ? local.labelText : card.labelText,
+      labelShowValue: local.labelShowValue ?? card.labelShowValue ?? true,
+      labelShowUnit: local.labelShowUnit ?? card.labelShowUnit ?? true,
+      labelPrecision: local.labelPrecision ?? card.labelPrecision,
     };
   }
 
@@ -2348,9 +2377,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return {
       mode: local.mode === 'inherit' ? card.mode : local.mode,
       color: local.color || card.color,
-      reset: extras.reset,
-      labelShow: extras.labelShow,
-      labelDecimal: extras.labelDecimal,
+      ...extras,
     };
   }
 
@@ -2467,6 +2494,96 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
       else nextTarget = this._deletePathValue(nextTarget, [key]);
       return nextTarget;
+    });
+  }
+
+  _getBuiltinMarkerLabelOptions(scope, key) {
+    const marker = this._getScopedValue(scope, [key]);
+    const label = this._isObject(marker?.label) ? marker.label : {};
+    const cardLabel = scope?.type === 'entity'
+      ? (this._getScopedValue({ type: 'card' }, [key, 'label']) ?? {})
+      : {};
+    const own = (name) => Object.prototype.hasOwnProperty.call(label, name);
+    const inheritedValue = (name, fallback) => own(name) ? label[name] : (cardLabel[name] ?? fallback);
+    const precision = inheritedValue('precision', inheritedValue('decimal', ''));
+    return {
+      show: key === 'target'
+        ? this._getEffectiveTargetLabelShowValue(scope)
+        : this._getEffectiveMarkerExtras(scope, key).labelShow,
+      text: inheritedValue('text', ''),
+      showValue: inheritedValue('show_value', true) !== false,
+      showUnit: inheritedValue('show_unit', true) !== false,
+      precision: precision === null ? '' : precision,
+    };
+  }
+
+  _renderBuiltinMarkerLabelControls(scope, key, title) {
+    const options = this._getBuiltinMarkerLabelOptions(scope, key);
+    const isEntity = scope?.type === 'entity';
+    const prefix = isEntity ? `entity-${scope.index}-${key}` : key;
+    const attr = isEntity ? `data-kind="entity-${key}-label-` : `data-field="${key}-label-`;
+    const suffix = isEntity ? `" data-index="${scope.index}"` : '"';
+    return `
+      <div class="field-row"><div class="toggle">
+        <input id="${prefix}-label-show" type="checkbox" ${attr}show${suffix}${options.show ? ' checked' : ''}>
+        <label for="${prefix}-label-show">Show ${title} label</label>
+      </div></div>
+      <div class="field-row"><label for="${prefix}-label-text">${title} label text</label>
+        <input id="${prefix}-label-text" type="text" ${attr}text${suffix} value="${this._escapeAttribute(options.text ?? '')}" placeholder="optional semantic text">
+      </div>
+      <div class="field-row"><div class="toggle">
+        <input id="${prefix}-label-show-value" type="checkbox" ${attr}show-value${suffix}${options.showValue ? ' checked' : ''}>
+        <label for="${prefix}-label-show-value">Show value</label>
+      </div></div>
+      <div class="field-row"><div class="toggle">
+        <input id="${prefix}-label-show-unit" type="checkbox" ${attr}show-unit${suffix}${options.showUnit ? ' checked' : ''}>
+        <label for="${prefix}-label-show-unit">Show unit</label>
+      </div></div>
+      <div class="field-row"><label for="${prefix}-label-precision">${title} label precision</label>
+        <input id="${prefix}-label-precision" type="number" min="0" step="1" ${attr}precision${suffix} value="${this._escapeAttribute(options.precision)}" placeholder="inherit primary precision">
+      </div>`;
+  }
+
+  _setBuiltinMarkerLabelField(scope, key, field, value) {
+    const publicField = field === 'showValue' ? 'show_value'
+      : field === 'showUnit' ? 'show_unit'
+        : field === 'precision' ? 'precision' : field;
+    const isText = field === 'text';
+    const normalized = isText
+      ? this._normalizeTextValue(value).replace(/\s+/g, ' ').trim()
+      : field === 'show' || field === 'showValue' || field === 'showUnit' ? value === true
+        : this._normalizeDecimalValue(value);
+    if (field === 'precision' && value !== '' && normalized === null) return false;
+    return this._applyScopedMutation(scope, (target) => {
+      let next = this._cloneDeep(target);
+      const marker = this._isObject(this._getPathValue(next, [key]))
+        ? this._cloneDeep(this._getPathValue(next, [key])) : {};
+      const label = this._isObject(marker.label) ? this._cloneDeep(marker.label) : {};
+      const inheritedLabel = scope?.type === 'entity'
+        ? (this._getScopedValue({ type: 'card' }, [key, 'label']) ?? {}) : {};
+      const inheritedValue = field === 'precision'
+        ? (inheritedLabel.precision ?? inheritedLabel.decimal ?? null)
+        : inheritedLabel[publicField] ?? (field === 'show' ? false : field === 'showValue' || field === 'showUnit' ? true : undefined);
+      if (normalized === null || (isText && !normalized)) {
+        if (isText && scope?.type === 'entity' && typeof inheritedLabel.text === 'string' && inheritedLabel.text.trim()) {
+          label[publicField] = '';
+        } else {
+          delete label[publicField];
+        }
+      } else if (scope?.type === 'entity' && normalized === inheritedValue) {
+        delete label[publicField];
+      } else if ((field === 'show' || field === 'showValue' || field === 'showUnit') && scope?.type !== 'entity'
+        && normalized === (field === 'show' ? false : true)) {
+        delete label[publicField];
+      } else {
+        label[publicField] = normalized;
+      }
+      if (field === 'precision') delete label.decimal;
+      if (Object.keys(label).length) marker.label = label;
+      else delete marker.label;
+      if (Object.keys(marker).length) next = this._setPathValue(next, [key], marker);
+      else next = this._deletePathValue(next, [key]);
+      return next;
     });
   }
 
@@ -3688,11 +3805,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _getTargetLabelDecimalValue(scope) {
-    return this._getScopedValue(scope, ['target', 'label', 'decimal']) ?? '';
+    return this._getScopedValue(scope, ['target', 'label', 'precision'])
+      ?? this._getScopedValue(scope, ['target', 'label', 'decimal']) ?? '';
   }
 
   _getEffectiveTargetLabelDecimalValue(scope) {
-    return this._getEffectiveScopedDisplayValue(scope, ['target', 'label', 'decimal']);
+    const local = this._getTargetLabelDecimalValue(scope);
+    return local !== '' && local !== null && local !== undefined
+      ? local : (scope?.type === 'entity' ? this._getTargetLabelDecimalValue({ type: 'card' }) : '');
   }
 
   _setTargetLabelDecimal(scope, rawValue) {
@@ -4483,21 +4603,23 @@ export class SensorBarCardPlusEditor extends HTMLElement {
               extraDataset: { 'scope-type': scopeType, 'marker-index': markerIndex },
             })}
           </div>
-          <div class="field-row">
-            <div class="toggle">
-              <input id="${rowId}-label-show" type="checkbox" data-kind="generic-marker-label-show" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.label?.show === true ? ' checked' : ''}>
-              <label for="${rowId}-label-show">Show value label</label>
-            </div>
+          <div class="field-row"><div class="toggle">
+            <input id="${rowId}-label-show" type="checkbox" data-kind="generic-marker-label-show" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.label?.show === true ? ' checked' : ''}>
+            <label for="${rowId}-label-show">Show label</label>
+          </div></div>
+          <div class="field-row"><label for="${rowId}-label-text">Label text</label>
+            <input id="${rowId}-label-text" type="text" data-kind="generic-marker-label-text" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(marker?.label?.text ?? '')}" placeholder="optional semantic text">
           </div>
-          <div class="field-row">
-            <label for="${rowId}-label-decimal">Label decimals</label>
-            <input id="${rowId}-label-decimal" type="number" min="0" step="1" data-kind="generic-marker-label-decimal" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(marker?.label?.decimal ?? '')}" placeholder="inherit row decimals">
-          </div>
-          <div class="field-row">
-            <div class="toggle">
-              <input id="${rowId}-label-unit" type="checkbox" data-kind="generic-marker-label-unit" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.label?.unit === false ? '' : ' checked'}>
-              <label for="${rowId}-label-unit">Show row unit</label>
-            </div>
+          <div class="field-row"><div class="toggle">
+            <input id="${rowId}-label-show-value" type="checkbox" data-kind="generic-marker-label-show-value" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.label?.show_value === false ? '' : ' checked'}>
+            <label for="${rowId}-label-show-value">Show value</label>
+          </div></div>
+          <div class="field-row"><div class="toggle">
+            <input id="${rowId}-label-show-unit" type="checkbox" data-kind="generic-marker-label-show-unit" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.label?.show_unit === false ? '' : ' checked'}>
+            <label for="${rowId}-label-show-unit">Show row unit</label>
+          </div></div>
+          <div class="field-row"><label for="${rowId}-label-precision">Label precision</label>
+            <input id="${rowId}-label-precision" type="number" min="0" step="1" data-kind="generic-marker-label-precision" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(marker?.label?.precision ?? marker?.label?.decimal ?? '')}" placeholder="inherit row precision">
           </div>
           <div class="generic-marker-actions">
             <button type="button" data-action="move-generic-marker-up" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${markerIndex === 0 ? ' disabled' : ''} aria-label="Move marker up">↑</button>
@@ -4607,15 +4729,26 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         return marker;
       });
     }
-    if (kind === 'generic-marker-label-show' || kind === 'generic-marker-label-unit' || kind === 'generic-marker-label-decimal') {
+    if (kind.startsWith('generic-marker-label-')) {
       return this._updateGenericMarker(scope, markerIndex, (marker) => {
         const label = this._isObject(marker.label) ? this._cloneDeep(marker.label) : {};
         if (kind === 'generic-marker-label-show') label.show = value === true;
-        if (kind === 'generic-marker-label-unit') label.unit = value === true;
-        if (kind === 'generic-marker-label-decimal') {
-          const decimal = this._normalizeDecimalValue(value);
-          if (decimal === null) delete label.decimal;
-          else label.decimal = decimal;
+        if (kind === 'generic-marker-label-text') {
+          const text = this._normalizeTextValue(value).replace(/\s+/g, ' ').trim();
+          if (text) label.text = text;
+          else delete label.text;
+        }
+        if (kind === 'generic-marker-label-show-value') label.show_value = value === true;
+        if (kind === 'generic-marker-label-show-unit') label.show_unit = value === true;
+        if (kind === 'generic-marker-label-precision') {
+          const precision = this._normalizeDecimalValue(value);
+          if (precision === null) {
+            delete label.precision;
+            delete label.decimal;
+          } else {
+            label.precision = precision;
+            delete label.decimal;
+          }
         }
         marker.label = label;
         return marker;
@@ -4648,10 +4781,17 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       if (this._isObject(marker.label)) {
         const label = this._cloneDeep(marker.label);
         if (label.show === false) delete label.show;
-        if (label.unit === true) delete label.unit;
-        const decimal = this._normalizeDecimalValue(label.decimal);
-        if (decimal === null) delete label.decimal;
-        else label.decimal = decimal;
+        if (label.show_value === true) delete label.show_value;
+        if (label.show_unit === true) delete label.show_unit;
+        if (typeof label.text === 'string') {
+          label.text = label.text.replace(/\s+/g, ' ').trim();
+          if (!label.text) delete label.text;
+        }
+        const precision = this._normalizeDecimalValue(label.precision ?? label.decimal);
+        delete label.decimal;
+        if (precision === null) delete label.precision;
+        else label.precision = precision;
+        delete label.unit;
         if (Object.keys(label).length) marker.label = label;
         else delete marker.label;
       }
@@ -5569,16 +5709,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                           <option value="outward"${this._getEffectiveMarkerDirection(scope, 'peak') === 'outward' ? ' selected' : ''}>Outward</option>
                         </select>
                       </div>
-                      <div class="field-row">
-                        <div class="toggle">
-                          <input id="entity-${index}-peak-label-show" type="checkbox" data-kind="entity-peak-label-show" data-index="${index}"${entityPeakExtras.labelShow ? ' checked' : ''}>
-                          <label for="entity-${index}-peak-label-show">Show Peak label</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-peak-label-decimal">Peak label decimals</label>
-                        <input id="entity-${index}-peak-label-decimal" type="number" min="0" step="1" data-kind="entity-peak-label-decimal" data-index="${index}" value="${this._escapeAttribute(entityPeakExtras.labelDecimal)}" placeholder="inherit primary decimals">
-                      </div>
+                      ${this._renderBuiltinMarkerLabelControls(scope, 'peak', 'Peak')}
 	                          `,
                         });
                         const floorGroup = this._renderOverrideGroup({
@@ -5623,16 +5754,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                           <option value="outward"${this._getEffectiveMarkerDirection(scope, 'floor') === 'outward' ? ' selected' : ''}>Outward</option>
                         </select>
                       </div>
-                      <div class="field-row">
-                        <div class="toggle">
-                          <input id="entity-${index}-floor-label-show" type="checkbox" data-kind="entity-floor-label-show" data-index="${index}"${entityFloor.labelShow ? ' checked' : ''}>
-                          <label for="entity-${index}-floor-label-show">Show Floor label</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-floor-label-decimal">Floor label decimals</label>
-                        <input id="entity-${index}-floor-label-decimal" type="number" min="0" step="1" data-kind="entity-floor-label-decimal" data-index="${index}" value="${this._escapeAttribute(entityFloor.labelDecimal)}" placeholder="inherit primary decimals">
-                      </div>
+                      ${this._renderBuiltinMarkerLabelControls(scope, 'floor', 'Floor')}
                           `,
                         });
 	                        const markersGroup = this._renderOverrideGroup({
@@ -5861,16 +5983,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                           placeholder: 'inherit card default',
                         })}
                       </div>
-                      <div class="field-row">
-                        <div class="toggle">
-                          <input id="entity-${index}-target-label-show" type="checkbox" data-kind="entity-target-label-show" data-index="${index}"${this._getEffectiveTargetLabelShowValue(scope) ? ' checked' : ''}>
-                          <label for="entity-${index}-target-label-show">Show target label</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-target-label-decimal">Target label decimals</label>
-                        <input id="entity-${index}-target-label-decimal" type="number" min="0" step="1" data-kind="entity-target-label-decimal" data-index="${index}" value="${this._escapeAttribute(this._getEffectiveTargetLabelDecimalValue(scope))}" placeholder="inherit primary decimals">
-                      </div>
+                      ${this._renderBuiltinMarkerLabelControls(scope, 'target', 'Target')}
 	                      <div class="field-row">
 	                        <div class="toggle">
 	                          <input id="entity-${index}-target-above-fill-enabled" type="checkbox" data-kind="entity-target-above-fill-enabled" data-index="${index}"${this._isTargetAboveFillEnabled(scope) ? ' checked' : ''}>
@@ -5984,16 +6097,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                 placeholder: '#888',
               })}
             </div>
-            <div class="field-row">
-              <div class="toggle">
-                <input id="target-label-show" type="checkbox" data-field="target-label-show"${targetLabelShow ? ' checked' : ''}>
-                <label for="target-label-show">Show target label</label>
-              </div>
-            </div>
-            <div class="field-row">
-              <label for="target-label-decimal">Target label decimals</label>
-              <input id="target-label-decimal" type="number" min="0" step="1" data-field="target-label-decimal" value="${this._escapeAttribute(targetLabelDecimal)}" placeholder="inherit primary decimals">
-            </div>
+            ${this._renderBuiltinMarkerLabelControls({ type: 'card' }, 'target', 'Target')}
             <div class="field-row">
               <div class="toggle">
                 <input id="target-above-fill-enabled" type="checkbox" data-field="target-above-fill-enabled"${this._isTargetAboveFillEnabled({ type: 'card' }) ? ' checked' : ''}>
@@ -6087,16 +6191,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                 <option value="outward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'peak') === 'outward' ? ' selected' : ''}>Outward</option>
               </select>
             </div>
-            <div class="field-row">
-              <div class="toggle">
-                <input id="peak-label-show" type="checkbox" data-field="peak-label-show"${cardPeakExtras.labelShow ? ' checked' : ''}>
-                <label for="peak-label-show">Show Peak label</label>
-              </div>
-            </div>
-            <div class="field-row">
-              <label for="peak-label-decimal">Peak label decimals</label>
-              <input id="peak-label-decimal" type="number" min="0" step="1" data-field="peak-label-decimal" value="${this._escapeAttribute(cardPeakExtras.labelDecimal)}" placeholder="inherit primary decimals">
-            </div>
+            ${this._renderBuiltinMarkerLabelControls({ type: 'card' }, 'peak', 'Peak')}
             <div class="field-row">
               <div class="toggle">
                 <input id="floor-show" type="checkbox" data-field="floor-show"${cardFloor.mode === 'enabled' ? ' checked' : ''}>
@@ -6126,16 +6221,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                 <option value="outward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'floor') === 'outward' ? ' selected' : ''}>Outward</option>
               </select>
             </div>
-            <div class="field-row">
-              <div class="toggle">
-                <input id="floor-label-show" type="checkbox" data-field="floor-label-show"${cardFloor.labelShow ? ' checked' : ''}>
-                <label for="floor-label-show">Show Floor label</label>
-              </div>
-            </div>
-            <div class="field-row">
-              <label for="floor-label-decimal">Floor label decimals</label>
-              <input id="floor-label-decimal" type="number" min="0" step="1" data-field="floor-label-decimal" value="${this._escapeAttribute(cardFloor.labelDecimal)}" placeholder="inherit primary decimals">
-            </div>
+            ${this._renderBuiltinMarkerLabelControls({ type: 'card' }, 'floor', 'Floor')}
             <div class="field-row"><h4>Generic reference markers</h4></div>
             ${this._renderGenericMarkersEditor({ type: 'card' })}
           </div>
@@ -6828,22 +6914,29 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (field === 'target-shape') return void this._setTargetShape({ type: 'card' }, value);
     if (field === 'target-direction') return void this._setMarkerDirection({ type: 'card' }, 'target', value);
     if (field === 'target-color') return void this._setTargetColor({ type: 'card' }, value);
-    if (field === 'target-label-show') return void this._setTargetLabelShow({ type: 'card' }, value);
-    if (field === 'target-label-decimal') return void this._setTargetLabelDecimal({ type: 'card' }, value);
+    if (field?.startsWith('target-label-') || field?.startsWith('peak-label-') || field?.startsWith('floor-label-')) {
+      const key = field.startsWith('target-') ? 'target' : field.startsWith('peak-') ? 'peak' : 'floor';
+      const option = field.slice(`${key}-label-`.length);
+      const scope = { type: 'card' };
+      if (option === 'show') {
+        this._setBuiltinMarkerLabelField(scope, key, 'show', value);
+      } else {
+        const labelField = option === 'show-value' ? 'showValue'
+          : option === 'show-unit' ? 'showUnit' : option;
+        this._setBuiltinMarkerLabelField(scope, key, labelField, value);
+      }
+      return;
+    }
     if (field === 'target-above-fill-enabled') return void this._setTargetAboveFillEnabled({ type: 'card' }, value);
     if (field === 'target-above-fill-color') return void this._setTargetAboveFillColor({ type: 'card' }, value);
     if (field === 'peak-show') return void this._setPeakShow(value);
     if (field === 'peak-color') return void this._setScopedPeakColor({ type: 'card' }, value);
     if (field === 'peak-direction') return void this._setMarkerDirection({ type: 'card' }, 'peak', value);
     if (field === 'peak-reset') return void this._setScopedExtremumReset({ type: 'card' }, 'peak', value);
-    if (field === 'peak-label-show') return void this._setScopedExtremumLabelShow({ type: 'card' }, 'peak', value);
-    if (field === 'peak-label-decimal') return void this._setScopedExtremumLabelDecimal({ type: 'card' }, 'peak', value);
     if (field === 'floor-show') return void this._setScopedExtremumEnabled({ type: 'card' }, 'floor', value);
     if (field === 'floor-color') return void this._setScopedExtremumColor({ type: 'card' }, 'floor', value);
     if (field === 'floor-direction') return void this._setMarkerDirection({ type: 'card' }, 'floor', value);
     if (field === 'floor-reset') return void this._setScopedExtremumReset({ type: 'card' }, 'floor', value);
-    if (field === 'floor-label-show') return void this._setScopedExtremumLabelShow({ type: 'card' }, 'floor', value);
-    if (field === 'floor-label-decimal') return void this._setScopedExtremumLabelDecimal({ type: 'card' }, 'floor', value);
 
     if (kind === 'entity-picker' || kind === 'entity-input') {
       const index = Number(target.dataset.index);
@@ -6971,12 +7064,17 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return void this._setScopedExtremumReset({ type: 'entity', index: Number(target.dataset.index) }, 'peak', value);
     }
 
-    if (kind === 'entity-peak-label-show') {
-      return void this._setScopedExtremumLabelShow({ type: 'entity', index: Number(target.dataset.index) }, 'peak', value);
-    }
-
-    if (kind === 'entity-peak-label-decimal') {
-      return void this._setScopedExtremumLabelDecimal({ type: 'entity', index: Number(target.dataset.index) }, 'peak', value);
+    const entityLabelMatch = kind?.match(/^entity-(target|peak|floor)-label-(show|text|show-value|show-unit|precision)$/);
+    if (entityLabelMatch) {
+      const [, key, option] = entityLabelMatch;
+      const scope = { type: 'entity', index: Number(target.dataset.index) };
+      if (option === 'show') {
+        this._setBuiltinMarkerLabelField(scope, key, 'show', value);
+      } else {
+        this._setBuiltinMarkerLabelField(scope, key, option === 'show-value' ? 'showValue'
+          : option === 'show-unit' ? 'showUnit' : option, value);
+      }
+      return;
     }
 
     if (kind === 'entity-floor-inherit') {
@@ -7000,13 +7098,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return void this._setScopedExtremumReset({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
     }
 
-    if (kind === 'entity-floor-label-show') {
-      return void this._setScopedExtremumLabelShow({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
-    }
-
-    if (kind === 'entity-floor-label-decimal') {
-      return void this._setScopedExtremumLabelDecimal({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
-    }
 
     if (kind === 'entity-segments-inherit') {
       if (value) {
@@ -7122,13 +7213,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return void this._setTargetColor({ type: 'entity', index: Number(target.dataset.index) }, value);
     }
 
-    if (kind === 'entity-target-label-show') {
-      return void this._setTargetLabelShow({ type: 'entity', index: Number(target.dataset.index) }, value);
-    }
-
-    if (kind === 'entity-target-label-decimal') {
-      return void this._setTargetLabelDecimal({ type: 'entity', index: Number(target.dataset.index) }, value);
-    }
 
     if (kind === 'entity-target-above-fill-enabled') {
       return void this._setTargetAboveFillEnabled({ type: 'entity', index: Number(target.dataset.index) }, value);

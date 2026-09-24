@@ -104,6 +104,31 @@ describe('validateNormalizedConfig', () => {
     ]));
   });
 
+  it('validates marker label component types and diagnoses the removed unit option', () => {
+    const normalized = normalize({
+      target: { at: 25, label: { show: true, text: 5, show_value: 'yes', show_unit: 0, precision: -1, unit: false } },
+      peak: { enabled: true, label: { show: true, text: '  Max   value  ', show_value: false } },
+      markers: [{ at: 50, label: { show: true, text: false, show_value: 1, show_unit: 'false', decimal: 1.5, unit: false } }],
+      entities: [{ entity: 'sensor.one' }],
+    });
+    const diagnostics = validateNormalizedConfig(normalized);
+
+    expect(normalized.target_marker).not.toHaveProperty('label_text');
+    expect(normalized.peak_marker.label_text).toBe('Max value');
+    expect(normalized.entities[0].generic_markers[0].label.showUnit).toBe(true);
+    expect(diagnostics.warnings.map(({ code }) => code)).toEqual(expect.arrayContaining([
+      'markers.invalid_label_text',
+      'markers.invalid_label_show_value',
+      'markers.invalid_label_show_unit',
+      'markers.invalid_label_precision',
+      'markers.unsupported_label_unit',
+    ]));
+    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
+      code: 'markers.invalid_label_precision',
+      path: 'markers[0].label.decimal',
+    }));
+  });
+
   it('warns on invalid marker directions and falls back to inward without skipping markers', () => {
     const normalized = normalize({
       target: { at: { fixed: 50 }, direction: 'sideways' },

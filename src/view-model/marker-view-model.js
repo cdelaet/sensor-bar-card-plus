@@ -39,6 +39,12 @@ export function createMarkerModel({
   };
 }
 
+export function hasMarkerLabelContent(label) {
+  return !!(typeof label?.text === 'string' && label.text.trim())
+    || label?.showValue !== false
+    || label?.showUnit !== false;
+}
+
 export function getMarkerLaneOccupancy(entityConfig) {
   const targetConfig = entityConfig?.target_marker;
   const peakConfig = entityConfig?.peak_marker;
@@ -60,11 +66,14 @@ export function getMarkerLabelLaneOccupancy(entityConfig) {
   return {
     below: (targetConfig?.enabled !== false
       && hasConfiguredSource(targetConfig?.source)
-      && targetConfig?.show_label === true)
-      || (floorConfig?.show === true && floorConfig?.show_label === true)
-      || genericMarkers.some((marker) => marker.lane === 'below' && marker.label?.show === true),
-    above: (peakConfig?.show === true && peakConfig?.show_label === true)
-      || genericMarkers.some((marker) => marker.lane === 'above' && marker.label?.show === true),
+      && targetConfig?.show_label === true
+      && hasMarkerLabelContent({ text: targetConfig.label_text, showValue: targetConfig.label_show_value, showUnit: targetConfig.label_show_unit }))
+      || (floorConfig?.show === true && floorConfig?.show_label === true
+        && hasMarkerLabelContent({ text: floorConfig.label_text, showValue: floorConfig.label_show_value, showUnit: floorConfig.label_show_unit }))
+      || genericMarkers.some((marker) => marker.lane === 'below' && marker.label?.show === true && hasMarkerLabelContent(marker.label)),
+    above: (peakConfig?.show === true && peakConfig?.show_label === true
+      && hasMarkerLabelContent({ text: peakConfig.label_text, showValue: peakConfig.label_show_value, showUnit: peakConfig.label_show_unit }))
+      || genericMarkers.some((marker) => marker.lane === 'above' && marker.label?.show === true && hasMarkerLabelContent(marker.label)),
   };
 }
 
@@ -73,14 +82,17 @@ export function buildMarkerModels({
   targetValue = null,
   targetPosition = null,
   targetPresentation = null,
+  targetLabelPresentation = null,
   targetVisible = Number.isFinite(targetPosition),
   peakValue = null,
   peakPosition = null,
   peakPresentation = null,
+  peakLabelPresentation = null,
   peakVisible = Number.isFinite(peakPosition),
   floorValue = null,
   floorPosition = null,
   floorPresentation = null,
+  floorLabelPresentation = null,
   floorVisible = Number.isFinite(floorPosition),
   genericMarkers = [],
 }) {
@@ -98,8 +110,9 @@ export function buildMarkerModels({
       lane: 'below',
       visible: targetEnabled && targetVisible,
       color: targetConfig?.color ?? null,
-      label: targetPresentation,
-      labelVisible: targetEnabled && targetConfig?.show_label === true,
+      label: targetLabelPresentation ?? targetPresentation,
+      labelVisible: targetEnabled && targetConfig?.show_label === true
+        && hasMarkerLabelContent({ text: targetConfig.label_text, showValue: targetConfig.label_show_value, showUnit: targetConfig.label_show_unit }),
       shape: targetConfig?.shape ?? 'diamond',
       direction: targetConfig?.direction ?? 'inward',
     }),
@@ -111,8 +124,9 @@ export function buildMarkerModels({
       lane: 'below',
       visible: floorConfig?.show === true && floorVisible,
       color: floorConfig?.color ?? null,
-      label: floorPresentation,
-      labelVisible: floorConfig?.show === true && floorConfig?.show_label === true,
+      label: floorLabelPresentation ?? floorPresentation,
+      labelVisible: floorConfig?.show === true && floorConfig?.show_label === true
+        && hasMarkerLabelContent({ text: floorConfig.label_text, showValue: floorConfig.label_show_value, showUnit: floorConfig.label_show_unit }),
       shape: 'triangle',
       direction: floorConfig?.direction ?? 'inward',
     }),
@@ -124,8 +138,9 @@ export function buildMarkerModels({
       lane: 'above',
       visible: peakConfig?.show === true && peakVisible,
       color: peakConfig?.color ?? null,
-      label: peakPresentation,
-      labelVisible: peakConfig?.show === true && peakConfig?.show_label === true,
+      label: peakLabelPresentation ?? peakPresentation,
+      labelVisible: peakConfig?.show === true && peakConfig?.show_label === true
+        && hasMarkerLabelContent({ text: peakConfig.label_text, showValue: peakConfig.label_show_value, showUnit: peakConfig.label_show_unit }),
       shape: 'triangle',
       direction: peakConfig?.direction ?? 'inward',
     }),
@@ -138,7 +153,7 @@ export function buildMarkerModels({
       visible: marker.visible,
       color: marker.color,
       label: marker.label,
-      labelVisible: marker.labelVisible,
+      labelVisible: marker.labelVisible && hasMarkerLabelContent(marker.label),
       shape: marker.shape,
       direction: marker.direction,
     })),

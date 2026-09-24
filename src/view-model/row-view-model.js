@@ -2,6 +2,7 @@ import { getNormalizedResolvableNumericValue } from '../config/resolve.js';
 import { getFiniteNumber } from '../config/normalize.js';
 import {
   createNumericPresentation,
+  createMarkerLabelPresentation,
   createTextPresentation,
 } from '../utils/format.js';
 import {
@@ -197,6 +198,13 @@ export function buildRowViewModel(options) {
   const targetPresentation = targetValue !== null
     ? createNumericPresentation(targetValue, targetUnit, targetDecimal)
     : null;
+  const targetLabelPresentation = targetValue !== null
+    ? createMarkerLabelPresentation(targetValue, targetUnit, entityConfig?.target_marker?.label_precision ?? targetDecimal, {
+      text: entityConfig?.target_marker?.label_text,
+      showValue: entityConfig?.target_marker?.label_show_value,
+      showUnit: entityConfig?.target_marker?.label_show_unit,
+    })
+    : null;
 
   const baselineValue = entityConfig?.baseline?.enabled === false
     ? null
@@ -225,20 +233,40 @@ export function buildRowViewModel(options) {
   );
   const peakDecimal = entityConfig?.peak_marker?.label_decimal ?? decimal;
   const floorDecimal = entityConfig?.floor_marker?.label_decimal ?? decimal;
+  const peakLabelPrecision = entityConfig?.peak_marker?.label_precision ?? peakDecimal;
+  const floorLabelPrecision = entityConfig?.floor_marker?.label_precision ?? floorDecimal;
   const peakPresentation = peakState.visible
     ? createNumericPresentation(peakState.value, targetUnit, peakDecimal)
     : null;
   const floorPresentation = floorState.visible
     ? createNumericPresentation(floorState.value, targetUnit, floorDecimal)
     : null;
+  const peakLabelPresentation = peakState.visible
+    ? createMarkerLabelPresentation(peakState.value, targetUnit, peakLabelPrecision, {
+      text: entityConfig?.peak_marker?.label_text,
+      showValue: entityConfig?.peak_marker?.label_show_value,
+      showUnit: entityConfig?.peak_marker?.label_show_unit,
+    })
+    : null;
+  const floorLabelPresentation = floorState.visible
+    ? createMarkerLabelPresentation(floorState.value, targetUnit, floorLabelPrecision, {
+      text: entityConfig?.floor_marker?.label_text,
+      showValue: entityConfig?.floor_marker?.label_show_value,
+      showUnit: entityConfig?.floor_marker?.label_show_unit,
+    })
+    : null;
   const genericMarkers = (entityConfig?.generic_markers ?? [])
     .filter((marker) => marker.accepted)
     .map((marker) => {
       const value = getNormalizedResolvableNumericValue(hass, marker.source, safeMin, safeMax);
       const visible = Number.isFinite(value);
-      const markerDecimal = marker.label.decimal ?? decimal;
-      const label = visible && marker.label.show
-        ? createNumericPresentation(value, marker.label.unit ? targetUnit : '', markerDecimal)
+      const markerPrecision = marker.label.precision ?? decimal;
+      const label = marker.label.show
+        ? createMarkerLabelPresentation(value, targetUnit, markerPrecision, {
+          text: marker.label.text,
+          showValue: marker.label.showValue,
+          showUnit: marker.label.showUnit,
+        })
         : null;
       return {
         id: marker.id,
@@ -258,14 +286,17 @@ export function buildRowViewModel(options) {
     targetValue,
     targetPosition: targetPercent,
     targetPresentation,
+    targetLabelPresentation,
     targetVisible,
     peakValue: peakState.value,
     peakPosition: peakState.percent,
     peakPresentation,
+    peakLabelPresentation,
     peakVisible: peakState.visible,
     floorValue: floorState.value,
     floorPosition: floorState.percent,
     floorPresentation,
+    floorLabelPresentation,
     floorVisible: floorState.visible,
     genericMarkers,
   });
@@ -292,6 +323,7 @@ export function buildRowViewModel(options) {
     targetPercent,
     targetDisplay: targetPresentation?.text ?? null,
     targetPresentation,
+    targetLabelPresentation,
     targetVisible,
     baseline: baselineValue,
     baselinePercent,
@@ -300,11 +332,13 @@ export function buildRowViewModel(options) {
     peakPercent: peakState.percent,
     peakDisplay: peakPresentation?.number ?? null,
     peakPresentation,
+    peakLabelPresentation,
     peakVisible: peakState.visible,
     floor: floorState.value,
     floorPercent: floorState.percent,
     floorDisplay: floorPresentation?.number ?? null,
     floorPresentation,
+    floorLabelPresentation,
     floorVisible: floorState.visible,
     markers,
     markerLaneOccupancy: getMarkerLaneOccupancy(entityConfig),

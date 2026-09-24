@@ -1013,7 +1013,7 @@ test('generic reference markers share both lanes with built-in markers', async (
         { at: '65%', lane: 'above', shape: 'arrow', color: '#4488CC', label: { show: true } },
         { at: { entity: 'sensor.reference_high' }, lane: 'above', shape: 'pin', color: '#F59E0B', label: { show: true, decimal: 1 } },
         { at: { fixed: -20 }, lane: 'below', shape: 'circle', color: '#DC2626', label: { show: true } },
-        { at: { entity: 'sensor.reference_low', fixed: 80 }, lane: 'below', shape: 'chevron', color: '#14B8A6', label: { show: true, unit: false } },
+        { at: { entity: 'sensor.reference_low', fixed: 80 }, lane: 'below', shape: 'chevron', color: '#14B8A6', label: { show: true, show_unit: false } },
       ],
       entities: [{ entity: 'sensor.reference_row' }],
     },
@@ -1050,6 +1050,68 @@ test('generic reference markers share both lanes with built-in markers', async (
   expect(result.labels).toEqual(['65 W', '85.0 W', '-20 W', '12']);
   expect(result.builtins).toEqual([true, true, true]);
   await expect(mount).toHaveScreenshot('generic-reference-markers.png');
+});
+
+test('marker semantic labels compose safely and update without changing generic association', async ({ page }) => {
+  const config = {
+    type: 'custom:sensor-bar-card-plus',
+    label_position: 'off',
+    min: 0,
+    max: 100,
+    formatting: { decimal: 1 },
+    target: { at: 25, label: { show: true, text: 'Target' } },
+    peak: { enabled: true, label: { show: true, text: 'Max' } },
+    floor: { enabled: true, label: { show: true, text: 'Min', show_value: false } },
+    markers: [
+      { at: 10, lane: 'above', label: { show: true, text: 'Prediction', precision: 0 } },
+      { at: 30, lane: 'above', label: { show: true, text: 'Previous max', show_unit: false } },
+      { at: 60, lane: 'below', label: { show: true, text: 'Trigger', show_value: false } },
+      { at: 80, lane: 'below', label: { show: true, text: 'Low', show_value: false, show_unit: false } },
+    ],
+    entities: [{ entity: 'sensor.semantic_labels' }],
+  };
+  await render(page, {
+    width: 620,
+    config,
+    states: { 'sensor.semantic_labels': sensor(42, { friendly_name: 'Semantic labels' }) },
+  });
+
+  const card = page.locator('sensor-bar-card-plus');
+  const initial = await card.evaluate((element) => {
+    const row = element.shadowRoot.querySelector('.row[data-entity="sensor.semantic_labels"]');
+    window.__semanticGenericNode = row.querySelector('.generic-marker[data-marker-id="generic-0"]');
+    return {
+      target: row.querySelector('.target-value-label').textContent.trim(),
+      peak: row.querySelector('.peak-value-label').textContent.trim(),
+      floor: row.querySelector('.floor-value-label').textContent.trim(),
+      generic: [...row.querySelectorAll('.generic-value-label')].map((label) => label.textContent.trim()),
+      genericHasMarkup: Boolean(row.querySelector('.generic-value-label b, .generic-value-label strong')),
+    };
+  });
+  expect(initial).toEqual({
+    target: 'Target 25.0 W',
+    peak: 'Max 42.0 W',
+    floor: 'Min W',
+    generic: ['Prediction 10 W', 'Previous max 30.0', 'Trigger W', 'Low'],
+    genericHasMarkup: false,
+  });
+
+  await card.evaluate((element) => {
+    element.hass = { states: { 'sensor.semantic_labels': { state: '43', attributes: { friendly_name: 'Semantic labels', unit_of_measurement: 'W' } } } };
+  });
+  const stableAfterHassUpdate = await card.evaluate((element) => {
+    const row = element.shadowRoot.querySelector('.row[data-entity="sensor.semantic_labels"]');
+    return row.querySelector('.generic-marker[data-marker-id="generic-0"]') === window.__semanticGenericNode;
+  });
+  expect(stableAfterHassUpdate).toBe(true);
+
+  await card.evaluate((element, nextConfig) => element.setConfig(nextConfig), {
+    ...config,
+    markers: [{ ...config.markers[0], label: { show: true, text: '<Forecast>', show_value: false, show_unit: false } }, ...config.markers.slice(1)],
+  });
+  await expect(card.locator('.row[data-entity="sensor.semantic_labels"] .generic-value-label').first()).toHaveText('<Forecast>');
+  const markupAfterConfigUpdate = await card.locator('.row[data-entity="sensor.semantic_labels"] .generic-value-label').first().locator('b, strong').count();
+  expect(markupAfterConfigUpdate).toBe(0);
 });
 
 test('generic marker DOM identity survives unresolved and resolved source updates', async ({ page }) => {

@@ -112,8 +112,7 @@ export function normalizeGenericMarkerList(input) {
     const label = rawMarker.label && typeof rawMarker.label === 'object' && !Array.isArray(rawMarker.label)
       ? rawMarker.label
       : {};
-    const decimal = label.decimal === undefined ? null : getFiniteNumber(label.decimal);
-    const validDecimal = decimal === null || (Number.isInteger(decimal) && decimal >= 0);
+    const labelConfig = normalizeMarkerLabelConfig(label);
 
     return {
       id: `generic-${index}`,
@@ -129,8 +128,16 @@ export function normalizeGenericMarkerList(input) {
       color: typeof rawMarker.color === 'string' && rawMarker.color.trim() ? rawMarker.color : '#888888',
       label: {
         show: label.show === true,
-        decimal: validDecimal ? decimal : null,
-        unit: label.unit !== false,
+        text: labelConfig.label_text,
+        showValue: labelConfig.label_show_value,
+        showUnit: labelConfig.label_show_unit,
+        precision: labelConfig.label_precision,
+        invalidText: labelConfig.label_invalid_text,
+        invalidShowValue: labelConfig.label_invalid_show_value,
+        invalidShowUnit: labelConfig.label_invalid_show_unit,
+        invalidPrecision: labelConfig.label_invalid_precision,
+        invalidPrecisionKey: labelConfig.label_precision_key,
+        unsupportedUnit: labelConfig.label_unsupported_unit,
       },
       valid: validSource && validLane,
       invalidSource: !validSource,
@@ -138,7 +145,6 @@ export function normalizeGenericMarkerList(input) {
       unsupportedPercentField: hasUnsupportedPercentField,
       invalidLane: !validLane,
       invalidShape: !validShape,
-      invalidDecimal: !validDecimal,
       accepted: false,
     };
   });
@@ -553,6 +559,49 @@ export function normalizeMarkerDirection(value) {
   return normalized === 'outward' ? 'outward' : 'inward';
 }
 
+function normalizeMarkerLabelConfig(rawLabel, inherited = {}) {
+  const label = rawLabel && typeof rawLabel === 'object' && !Array.isArray(rawLabel) ? rawLabel : {};
+  const hasText = Object.prototype.hasOwnProperty.call(label, 'text');
+  const textValue = hasText
+    ? (typeof label.text === 'string' ? label.text.replace(/\s+/g, ' ').trim() : inherited.label_text)
+    : inherited.label_text;
+  const hasPrecision = Object.prototype.hasOwnProperty.call(label, 'precision');
+  const hasDecimal = Object.prototype.hasOwnProperty.call(label, 'decimal');
+  const precisionValue = hasPrecision ? label.precision : label.decimal;
+  const precisionSet = hasPrecision || hasDecimal;
+  const precision = precisionSet ? getFiniteNumber(precisionValue) : inherited.label_precision ?? null;
+  const precisionInvalid = precisionSet && precisionValue !== null && precisionValue !== ''
+    && !(Number.isInteger(precision) && precision >= 0);
+
+  return {
+    label_text: textValue ?? null,
+    label_show_value: typeof label.show_value === 'boolean' ? label.show_value : inherited.label_show_value ?? true,
+    label_show_unit: typeof label.show_unit === 'boolean' ? label.show_unit : inherited.label_show_unit ?? true,
+    label_precision: precisionInvalid ? null : precision,
+    label_invalid_text: hasText && typeof label.text !== 'string',
+    label_invalid_show_value: label.show_value !== undefined && typeof label.show_value !== 'boolean',
+    label_invalid_show_unit: label.show_unit !== undefined && typeof label.show_unit !== 'boolean',
+    label_invalid_precision: precisionInvalid,
+    label_precision_key: precisionInvalid ? (hasPrecision ? 'precision' : 'decimal') : undefined,
+    label_unsupported_unit: Object.prototype.hasOwnProperty.call(label, 'unit'),
+  };
+}
+
+function builtinMarkerLabelFields(options) {
+  const fields = {};
+  if (options.label_text !== null && options.label_text !== undefined) fields.label_text = options.label_text;
+  if (options.label_show_value === false) fields.label_show_value = false;
+  if (options.label_show_unit === false) fields.label_show_unit = false;
+  if (options.label_precision !== null && options.label_precision !== undefined) fields.label_precision = options.label_precision;
+  if (options.label_invalid_text) fields.label_invalid_text = true;
+  if (options.label_invalid_show_value) fields.label_invalid_show_value = true;
+  if (options.label_invalid_show_unit) fields.label_invalid_show_unit = true;
+  if (options.label_invalid_precision) fields.label_invalid_precision = true;
+  if (options.label_invalid_precision && options.label_precision_key) fields.label_precision_key = options.label_precision_key;
+  if (options.label_unsupported_unit) fields.label_unsupported_unit = true;
+  return fields;
+}
+
 function isInvalidMarkerDirection(value) {
   return value !== undefined && !['inward', 'outward'].includes(
     typeof value === 'string' ? value.trim().toLowerCase() : ''
@@ -574,12 +623,14 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
     source: normalizeResolvableValue(null, null),
     color: cardConfig?.target_color ?? '#888',
     show_label: cardConfig?.show_target_label ?? false,
-    label_decimal: cardConfig?.target?.label?.decimal ?? null,
+    ...builtinMarkerLabelFields(normalizeMarkerLabelConfig(cardConfig?.target?.label)),
+    label_decimal: cardConfig?.target?.label?.precision ?? cardConfig?.target?.label?.decimal ?? null,
     shape: 'diamond',
     direction: 'inward',
   };
 
   if (rawTarget && typeof rawTarget === 'object' && !Array.isArray(rawTarget)) {
+    const labelOptions = normalizeMarkerLabelConfig(rawTarget.label, inheritedTarget);
     const normalizedTarget = {
       enabled: normalizeOptionalEnabled(rawTarget.enabled) ?? inheritedTarget.enabled ?? null,
       source: normalizeStructuredResolvableValue(rawTarget.at, inheritedTarget.source, null, { allowPercent: true }),
@@ -592,10 +643,12 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
         ? normalizeMarkerDirection(rawTarget.direction)
         : inheritedTarget.direction,
       ...(isInvalidMarkerDirection(rawTarget.direction) ? { direction_invalid: true } : {}),
+      ...builtinMarkerLabelFields(labelOptions),
     };
-    const labelDecimal = rawTarget.label?.decimal ?? inheritedTarget.label_decimal ?? null;
+    const labelDecimal = labelOptions.label_precision;
     if (labelDecimal !== null && labelDecimal !== undefined) {
       normalizedTarget.label_decimal = labelDecimal;
+      normalizedTarget.label_precision = labelDecimal;
     }
     return normalizedTarget;
   }
@@ -612,8 +665,9 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
     show_label: entityConfig.show_target_label ?? inheritedTarget.show_label ?? cardConfig?.show_target_label ?? false,
     shape: inheritedTarget.shape,
     direction: inheritedTarget.direction,
+    ...builtinMarkerLabelFields(inheritedTarget),
   };
-  const labelDecimal = inheritedTarget.label_decimal ?? null;
+  const labelDecimal = normalizedTarget.label_precision;
   if (labelDecimal !== null && labelDecimal !== undefined) {
     normalizedTarget.label_decimal = labelDecimal;
   }
@@ -632,13 +686,21 @@ function getRawExtremumConfig(config, key) {
 function normalizeLabelConfig(rawConfig, inheritedConfig) {
   const rawLabel = rawConfig?.label;
   const hasRawLabel = rawLabel && typeof rawLabel === 'object' && !Array.isArray(rawLabel);
+  const options = normalizeMarkerLabelConfig(rawLabel, inheritedConfig);
   return {
     show: hasRawLabel && typeof rawLabel.show === 'boolean'
       ? rawLabel.show
       : inheritedConfig.show_label ?? false,
-    decimal: hasRawLabel && rawLabel.decimal !== undefined
-      ? getFiniteNumber(rawLabel.decimal)
-      : inheritedConfig.label_decimal ?? null,
+    text: options.label_text,
+    showValue: options.label_show_value,
+    showUnit: options.label_show_unit,
+    precision: options.label_invalid_precision ? null : options.label_precision ?? inheritedConfig.label_decimal ?? null,
+    invalidText: options.label_invalid_text,
+    invalidShowValue: options.label_invalid_show_value,
+    invalidShowUnit: options.label_invalid_show_unit,
+    invalidPrecision: options.label_invalid_precision,
+    precisionKey: options.label_precision_key,
+    unsupportedUnit: options.label_unsupported_unit,
   };
 }
 
@@ -651,6 +713,10 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
     color: legacy ? cardConfig?.peak_color ?? defaultColor : defaultColor,
     show_label: false,
     label_decimal: null,
+    label_text: null,
+    label_show_value: true,
+    label_show_unit: true,
+    label_precision: null,
     reset: { kind: 'never' },
     direction: 'inward',
   };
@@ -676,6 +742,10 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
   const inheritedAdvanced = cardMarker && (
     Object.prototype.hasOwnProperty.call(cardMarker, 'show_label')
     || Object.prototype.hasOwnProperty.call(cardMarker, 'label_decimal')
+    || Object.prototype.hasOwnProperty.call(cardMarker, 'label_text')
+    || Object.prototype.hasOwnProperty.call(cardMarker, 'label_show_value')
+    || Object.prototype.hasOwnProperty.call(cardMarker, 'label_show_unit')
+    || Object.prototype.hasOwnProperty.call(cardMarker, 'label_precision')
     || Object.prototype.hasOwnProperty.call(cardMarker, 'reset')
   );
   const hasAdvancedConfig = key === 'floor'
@@ -685,9 +755,21 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
 
   if (hasAdvancedConfig) {
     normalized.show_label = label.show;
-    normalized.label_decimal = label.decimal;
+    normalized.label_decimal = label.precision;
     normalized.reset = reset;
   }
+  Object.assign(normalized, builtinMarkerLabelFields({
+    label_text: label.text,
+    label_show_value: label.showValue === true ? undefined : label.showValue,
+    label_show_unit: label.showUnit === true ? undefined : label.showUnit,
+    label_precision: label.precision,
+    label_invalid_text: label.invalidText,
+    label_invalid_show_value: label.invalidShowValue,
+    label_invalid_show_unit: label.invalidShowUnit,
+    label_invalid_precision: label.invalidPrecision,
+    label_precision_key: label.precisionKey,
+    label_unsupported_unit: label.unsupportedUnit,
+  }));
   if (hasReset && !isValidReset(rawReset)) {
     normalized.reset_invalid = true;
   }

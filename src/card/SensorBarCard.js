@@ -3601,7 +3601,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
             position: targetPct === undefined ? marker.position : targetPct,
             visible: targetPct !== null && targetPct !== undefined,
             color: targetColor || marker.color,
-            label: targetDisplay === null ? null : { text: targetDisplay },
+            label: marker.label ?? (targetDisplay === null ? null : { text: targetDisplay }),
           };
         }
         if (marker.type === 'floor') {
@@ -3613,7 +3613,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           position: peakPct === undefined ? marker.position : peakPct,
           visible: peakPct !== null && peakPct !== undefined && ecfg.peak_marker.show === true,
           color: peakColor || marker.color,
-          label: peakDisplay === null ? marker.label : { text: peakDisplay },
+          label: marker.label ?? (peakDisplay === null ? null : { text: peakDisplay }),
         };
       });
     }
@@ -3757,22 +3757,22 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     const targetMarker = this._renderMarker(targetMarkerModel);
     const floorMarker = this._renderMarker(floorMarkerModel);
     const targetValueLabel = targetMarkerModel?.labelVisible ? `
-      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;${this._getMarkerLabelColorStyle(targetMarkerModel)}">
+      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;visibility:${targetMarkerModel.visible && targetMarkerModel.label?.text ? 'visible' : 'hidden'};${this._getMarkerLabelColorStyle(targetMarkerModel)}">
         ${targetMarkerModel.label?.text ? escapeHtml(targetMarkerModel.label.text) : ''}
       </div>` : '';
     const peakValueLabel = peakMarkerModel?.labelVisible ? `
-      <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;${this._getMarkerLabelColorStyle(peakMarkerModel)}">
+      <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;visibility:${peakMarkerModel.visible && peakMarkerModel.label?.text ? 'visible' : 'hidden'};${this._getMarkerLabelColorStyle(peakMarkerModel)}">
         ${peakMarkerModel.visible && peakMarkerModel.label?.text ? escapeHtml(peakMarkerModel.label.text) : ''}
       </div>` : '';
     const floorValueLabel = floorMarkerModel?.labelVisible ? `
-      <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;${this._getMarkerLabelColorStyle(floorMarkerModel)}">
+      <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;visibility:${floorMarkerModel.visible && floorMarkerModel.label?.text ? 'visible' : 'hidden'};${this._getMarkerLabelColorStyle(floorMarkerModel)}">
         ${floorMarkerModel.visible && floorMarkerModel.label?.text ? escapeHtml(floorMarkerModel.label.text) : ''}
       </div>` : '';
     const genericMarkers = genericMarkerModels.map((marker) => this._renderMarker(marker)).join('');
     const genericValueLabels = genericMarkerModels
       .filter((marker) => marker.labelVisible)
       .map((marker) => `
-      <div class="generic-value-label" data-marker-id="${escapeHtml(marker.id)}" data-lane="${marker.lane}" style="left:${Number.isFinite(marker.position) ? marker.position : 0}%;${this._getMarkerLabelColorStyle(marker)}">
+      <div class="generic-value-label" data-marker-id="${escapeHtml(marker.id)}" data-lane="${marker.lane}" style="left:${Number.isFinite(marker.position) ? marker.position : 0}%;visibility:${marker.visible && marker.label?.text ? 'visible' : 'hidden'};${this._getMarkerLabelColorStyle(marker)}">
         ${marker.visible && marker.label?.text ? escapeHtml(marker.label.text) : ''}
       </div>`)
       .join('');
@@ -3962,7 +3962,7 @@ ${paintLayers}
         .find((label) => label.dataset.markerId === markerId);
       if (!labelEl) return;
       this._patchMarkerLabelAppearance(labelEl, marker);
-      if (marker?.labelVisible && marker.visible) {
+      if (marker?.labelVisible && marker.visible && marker.label?.text) {
         this._setTextIfChanged(labelEl, marker.label?.text ?? null);
         this._setStyleIfChanged(labelEl, 'visibility', 'visible');
         this._setStyleIfChanged(labelEl, 'left', `${Number.isFinite(marker.position) ? marker.position : 0}%`);
@@ -3973,7 +3973,7 @@ ${paintLayers}
     const targetMarkerModel = this._getMarkerModel(markerModels, 'target');
     this._patchMarkerLabelAppearance(targetLabelEl, targetMarkerModel);
     if (targetLabelEl) {
-      if (targetMarkerModel?.labelVisible && targetMarkerModel.visible) {
+      if (targetMarkerModel?.labelVisible && targetMarkerModel.visible && targetMarkerModel.label?.text) {
         this._setTextIfChanged(targetLabelEl, targetMarkerModel.label?.text ?? null);
       } else {
         this._setStyleIfChanged(targetLabelEl, 'visibility', 'hidden');
@@ -3983,7 +3983,7 @@ ${paintLayers}
       if (!labelEl) return;
       const marker = this._getMarkerModel(markerModels, markerType);
       this._patchMarkerLabelAppearance(labelEl, marker);
-      if (marker?.labelVisible && marker.visible) {
+      if (marker?.labelVisible && marker.visible && marker.label?.text) {
         this._setTextIfChanged(labelEl, marker.label?.text ?? null);
         this._setStyleIfChanged(labelEl, 'visibility', 'visible');
         this._setStyleIfChanged(labelEl, 'left', `${Number.isFinite(marker.position) ? marker.position : 0}%`);
