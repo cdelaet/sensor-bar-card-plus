@@ -2552,6 +2552,38 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(target.custom).toEqual({ keep: true });
   });
 
+  it('edits marker directions and preserves an explicit inward entity override', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({
+      target: { at: { fixed: 65 }, direction: 'outward' },
+      peak: { enabled: true, direction: 'outward' },
+      floor: { enabled: true, direction: 'outward' },
+      markers: [{ at: { fixed: 20 }, direction: 'outward' }],
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    expect(editor.shadowRoot.querySelector('#target-direction').value).toBe('outward');
+    expect(editor.shadowRoot.querySelector('#peak-direction').value).toBe('outward');
+    expect(editor.shadowRoot.querySelector('#floor-direction').value).toBe('outward');
+    expect(editor.shadowRoot.querySelector('#card-card-generic-marker-0-direction').value).toBe('outward');
+    expect(editor.shadowRoot.querySelector('#entity-0-target-direction').value).toBe('outward');
+
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-target-direction'), 'inward');
+    expect(events.at(-1).detail.config.entities[0].target.direction).toBe('inward');
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-peak-direction'), 'inward');
+    expect(events.at(-1).detail.config.entities[0].peak.direction).toBe('inward');
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-floor-direction'), 'inward');
+    expect(events.at(-1).detail.config.entities[0].floor.direction).toBe('inward');
+
+    const genericDirection = editor.shadowRoot.querySelector('#card-card-generic-marker-0-direction');
+    dispatchChange(genericDirection, 'inward');
+    expect(events.at(-1).detail.config.markers[0].direction).toBeUndefined();
+
+    dispatchChange(editor.shadowRoot.querySelector('#target-direction'), 'inward');
+    expect(events.at(-1).detail.config.target.direction).toBeUndefined();
+  });
+
   it('distinguishes absent entity shape from explicit invalid shape values', () => {
     const absentEditor = createEditor();
     absentEditor.setConfig({

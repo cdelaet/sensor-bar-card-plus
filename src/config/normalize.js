@@ -105,6 +105,10 @@ export function normalizeGenericMarkerList(input) {
     const validLane = lane === 'above' || lane === 'below';
     const supportedShapes = ['circle', 'diamond', 'triangle', 'chevron', 'arrow', 'pin'];
     const validShape = rawMarker.shape === undefined || supportedShapes.includes(rawMarker.shape);
+    const direction = normalizeMarkerDirection(rawMarker.direction);
+    const invalidDirection = rawMarker.direction !== undefined && !['inward', 'outward'].includes(
+      typeof rawMarker.direction === 'string' ? rawMarker.direction.trim().toLowerCase() : ''
+    );
     const label = rawMarker.label && typeof rawMarker.label === 'object' && !Array.isArray(rawMarker.label)
       ? rawMarker.label
       : {};
@@ -120,6 +124,8 @@ export function normalizeGenericMarkerList(input) {
       },
       lane: validLane ? lane : null,
       shape: validShape ? (rawMarker.shape ?? 'circle') : 'circle',
+      direction,
+      invalidDirection,
       color: typeof rawMarker.color === 'string' && rawMarker.color.trim() ? rawMarker.color : '#888888',
       label: {
         show: label.show === true,
@@ -542,6 +548,17 @@ export function normalizeTargetMarkerShape(value) {
   return normalized === 'triangle' || normalized === 'diamond' ? normalized : 'diamond';
 }
 
+export function normalizeMarkerDirection(value) {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return normalized === 'outward' ? 'outward' : 'inward';
+}
+
+function isInvalidMarkerDirection(value) {
+  return value !== undefined && !['inward', 'outward'].includes(
+    typeof value === 'string' ? value.trim().toLowerCase() : ''
+  );
+}
+
 export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
   const cardTarget = cardConfig?.target_marker;
   const rawTarget = entityConfig?.target;
@@ -551,6 +568,7 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
   const inheritedTarget = cardTarget ? {
     ...cardTarget,
     shape: normalizeTargetMarkerShape(cardTarget.shape),
+    direction: normalizeMarkerDirection(cardTarget.direction),
   } : {
     enabled: null,
     source: normalizeResolvableValue(null, null),
@@ -558,6 +576,7 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
     show_label: cardConfig?.show_target_label ?? false,
     label_decimal: cardConfig?.target?.label?.decimal ?? null,
     shape: 'diamond',
+    direction: 'inward',
   };
 
   if (rawTarget && typeof rawTarget === 'object' && !Array.isArray(rawTarget)) {
@@ -569,6 +588,10 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
       shape: Object.prototype.hasOwnProperty.call(rawTarget, 'shape')
         ? normalizeTargetMarkerShape(rawTarget.shape)
         : inheritedTarget.shape,
+      direction: Object.prototype.hasOwnProperty.call(rawTarget, 'direction')
+        ? normalizeMarkerDirection(rawTarget.direction)
+        : inheritedTarget.direction,
+      ...(isInvalidMarkerDirection(rawTarget.direction) ? { direction_invalid: true } : {}),
     };
     const labelDecimal = rawTarget.label?.decimal ?? inheritedTarget.label_decimal ?? null;
     if (labelDecimal !== null && labelDecimal !== undefined) {
@@ -588,6 +611,7 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
     color: entityConfig.target_color ?? inheritedTarget.color ?? cardConfig?.target_color ?? '#888',
     show_label: entityConfig.show_target_label ?? inheritedTarget.show_label ?? cardConfig?.show_target_label ?? false,
     shape: inheritedTarget.shape,
+    direction: inheritedTarget.direction,
   };
   const labelDecimal = inheritedTarget.label_decimal ?? null;
   if (labelDecimal !== null && labelDecimal !== undefined) {
@@ -628,6 +652,7 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
     show_label: false,
     label_decimal: null,
     reset: { kind: 'never' },
+    direction: 'inward',
   };
   const hasReset = rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, 'reset');
   const rawReset = hasReset ? rawMarker.reset : undefined;
@@ -643,6 +668,10 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
       ?? (legacy ? entityConfig.peak_color : undefined)
       ?? inherited.color
       ?? defaultColor,
+    direction: rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, 'direction')
+      ? normalizeMarkerDirection(rawMarker.direction)
+      : normalizeMarkerDirection(inherited.direction),
+    ...(isInvalidMarkerDirection(rawMarker?.direction) ? { direction_invalid: true } : {}),
   };
   const inheritedAdvanced = cardMarker && (
     Object.prototype.hasOwnProperty.call(cardMarker, 'show_label')

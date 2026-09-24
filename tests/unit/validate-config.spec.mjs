@@ -104,6 +104,33 @@ describe('validateNormalizedConfig', () => {
     ]));
   });
 
+  it('warns on invalid marker directions and falls back to inward without skipping markers', () => {
+    const normalized = normalize({
+      target: { at: { fixed: 50 }, direction: 'sideways' },
+      peak: { enabled: true, direction: 12 },
+      floor: { enabled: true, direction: null },
+      markers: [{ at: { fixed: 42 }, direction: 'outside' }],
+      entities: [{ entity: 'sensor.one' }],
+    });
+    const diagnostics = validateNormalizedConfig(normalized);
+
+    expect(normalized.target_marker.direction).toBe('inward');
+    expect(normalized.peak_marker.direction).toBe('inward');
+    expect(normalized.floor_marker.direction).toBe('inward');
+    expect(normalized.entities[0].generic_markers[0]).toMatchObject({
+      direction: 'inward',
+      valid: true,
+      accepted: true,
+    });
+    expect(diagnostics.errors).toEqual([]);
+    expect(diagnostics.warnings.map(({ code }) => code)).toEqual(expect.arrayContaining([
+      'target_marker.invalid_direction',
+      'peak_marker.invalid_direction',
+      'floor_marker.invalid_direction',
+      'markers.invalid_direction',
+    ]));
+  });
+
   it('warns on a malformed marker list and skips invalid items without consuming capacity', () => {
     const normalized = normalize({
       markers: [

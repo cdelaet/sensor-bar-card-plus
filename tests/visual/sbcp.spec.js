@@ -1293,11 +1293,12 @@ test('marker shapes preserve inward direction, numeric anchoring, and lane fit',
       const values = transform.match(/^matrix\(([^)]+)\)$/)?.[1].split(',').map(Number);
       return values?.[3] ?? 1;
     };
-    const read = (marker, type, lane, shape) => {
+    const read = (marker, type, lane, shape, direction = 'inward') => {
       card._patchMarker(marker, {
         type,
         lane,
         shape,
+        direction,
         visible: true,
         position: 60,
         color: '#123456',
@@ -1308,6 +1309,7 @@ test('marker shapes preserve inward direction, numeric anchoring, and lane fit',
       const insetStyle = getComputedStyle(inset);
       const trackRect = marker.closest('.bar-track').getBoundingClientRect();
       const svgRect = svg.getBoundingClientRect();
+      const insetRect = inset.getBoundingClientRect();
       const transform = svgStyle.transform === 'none'
         ? [1, 0, 0, 1, 0, 0]
         : svgStyle.transform.match(/^matrix\(([^)]+)\)$/)[1].split(',').map(Number);
@@ -1319,8 +1321,13 @@ test('marker shapes preserve inward direction, numeric anchoring, and lane fit',
       const chevronBox = chevronPath?.getBBox();
       const shapePath = svg.querySelector(`path[data-shape="${shape}"]`);
       const shapePathRect = shapePath?.getBoundingClientRect();
+      const tipY = shape === 'arrow' ? 15 : shape === 'pin' ? 15.5 : shape === 'chevron' ? 14 : null;
+      const tipPoint = tipY === null ? null : Object.assign(svg.createSVGPoint(), { x: 8, y: tipY })
+        .matrixTransform(shapePath.getScreenCTM());
       return {
         shape,
+        lane,
+        direction,
         left: marker.getBoundingClientRect().left,
         leftStyle: marker.style.left,
         scaleX: transform[0],
@@ -1330,12 +1337,18 @@ test('marker shapes preserve inward direction, numeric anchoring, and lane fit',
         svgDisplay: svgStyle.display,
         svgFilter: svgStyle.filter,
         svgHeight: svg.getBoundingClientRect().height,
-        edgeDelta: lane === 'above' ? svgRect.top - trackRect.top : trackRect.bottom - svgRect.bottom,
+        edgeDelta: shape === 'triangle'
+          ? (lane === 'above' ? insetRect.top - trackRect.top : trackRect.bottom - insetRect.bottom)
+          : (lane === 'above' ? svgRect.top - trackRect.top : trackRect.bottom - svgRect.bottom),
         chevronBox: chevronBox ? { x: chevronBox.x, y: chevronBox.y, width: chevronBox.width, height: chevronBox.height } : null,
         shapeWidth: shapePathRect?.width ?? null,
         shapeHeight: shapePathRect?.height ?? null,
+        tipOffsetFromCenter: tipPoint ? tipPoint.y - (svgRect.top + svgRect.height / 2) : null,
         borderTop: insetStyle.borderTopWidth,
         borderBottom: insetStyle.borderBottomWidth,
+        borderTopColor: insetStyle.borderTopColor,
+        borderBottomColor: insetStyle.borderBottomColor,
+        insetHeight: inset.getBoundingClientRect().height,
         insetFilter: insetStyle.filter,
       };
     };
@@ -1343,6 +1356,17 @@ test('marker shapes preserve inward direction, numeric anchoring, and lane fit',
     return {
       below: shapes.map((shape) => read(target, 'target', 'below', shape)),
       above: shapes.map((shape) => read(peak, 'peak', 'above', shape)),
+      directions: ['above', 'below'].flatMap((lane) => (
+        ['triangle', 'chevron', 'arrow', 'pin'].flatMap((shape) => (
+          ['inward', 'outward'].map((direction) => read(
+            lane === 'above' ? peak : target,
+            lane === 'above' ? 'peak' : 'target',
+            lane,
+            shape,
+            direction
+          ))
+        ))
+      )),
     };
   });
 
@@ -1400,6 +1424,104 @@ test('marker shapes preserve inward direction, numeric anchoring, and lane fit',
   }));
   expect(geometry.below.find((entry) => entry.shape === 'triangle').insetFilter).toContain('drop-shadow');
   expect(geometry.above.find((entry) => entry.shape === 'triangle').insetFilter).toContain('drop-shadow');
+
+  for (const entry of geometry.directions) {
+    const flipped = (entry.lane === 'above' && entry.direction === 'outward')
+      || (entry.lane === 'below' && entry.direction === 'inward');
+    expect(entry.leftStyle).toBe('60%');
+    expect(entry.edgeDelta).toBeCloseTo(0, 2);
+    if (entry.shape === 'triangle') {
+      expect(entry.insetHeight).toBeCloseTo(11, 1);
+      expect(entry.borderTop).toBe(flipped ? '0px' : '11px');
+      expect(entry.borderBottom).toBe(flipped ? '11px' : '0px');
+      expect(flipped ? entry.borderBottomColor : entry.borderTopColor).toBe('rgb(18, 52, 86)');
+    } else {
+      expect(entry.pathScaleY).toBe(flipped ? -1 : 1);
+      const expectedHeight = entry.shape === 'chevron' || entry.shape === 'arrow' ? 9 : 10.875;
+      expect(entry.shapeHeight).toBeCloseTo(expectedHeight, 1);
+      if (entry.shape === 'arrow') expect(entry.shapeWidth).toBeCloseTo(7.5, 1);
+      expect(Math.sign(entry.tipOffsetFromCenter)).toBe(flipped ? -1 : 1);
+    }
+  }
+});
+
+test('outward Arrow and Pin hit testing follows painted shapes and leaves the Pin hole inactive', async ({ page }) => {
+  await render(page, {
+    width: 720,
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      min: 0,
+      max: 100,
+      markers: [
+        { at: '50%', lane: 'above', shape: 'pin', direction: 'outward', label: { show: true } },
+        { at: '75%', lane: 'above', shape: 'arrow', direction: 'outward', label: { show: true } },
+      ],
+      entities: [{ entity: 'sensor.pin_hit_test' }],
+    },
+    states: { 'sensor.pin_hit_test': sensor(40, { friendly_name: 'Pin hit test' }) },
+  });
+
+  const points = await page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    const row = card.shadowRoot.querySelector('.row[data-entity="sensor.pin_hit_test"]');
+    const marker = row.querySelector('.generic-marker[data-marker-id="generic-0"]');
+    const svg = marker.querySelector('.marker-shape-svg');
+    const rect = svg.getBoundingClientRect();
+    const scale = rect.width / 16;
+    return {
+      body: { x: rect.left + 8 * scale, y: rect.top + 14 * scale },
+      hole: { x: rect.left + 8 * scale, y: rect.top + 10 * scale },
+      transform: getComputedStyle(svg.querySelector('.marker-shape-paths')).transform,
+      position: marker.style.left,
+      edgeDelta: rect.top - row.querySelector('.bar-track').getBoundingClientRect().top,
+    };
+  });
+  expect(points.position).toBe('50%');
+  expect(points.transform).not.toBe('none');
+  expect(points.edgeDelta).toBeCloseTo(0, 2);
+
+  await page.mouse.move(points.body.x, points.body.y);
+  await expect.poll(() => page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    const row = card.shadowRoot.querySelector('.row[data-entity="sensor.pin_hit_test"]');
+    const label = row.querySelector('.generic-value-label[data-marker-id="generic-0"]');
+    return {
+      active: card._markerHover?.marker?.dataset.markerId ?? null,
+      promoted: label.dataset.markerHovered ?? null,
+      cursor: getComputedStyle(row.querySelector('.generic-marker[data-marker-id="generic-0"] path[data-shape="pin"]')).cursor,
+    };
+  })).toEqual({ active: 'generic-0', promoted: 'true', cursor: 'none' });
+
+  await page.mouse.move(points.hole.x, points.hole.y);
+  await expect.poll(() => page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    const row = card.shadowRoot.querySelector('.row[data-entity="sensor.pin_hit_test"]');
+    const label = row.querySelector('.generic-value-label[data-marker-id="generic-0"]');
+    return {
+      active: card._markerHover?.marker?.dataset.markerId ?? null,
+      promoted: label.dataset.markerHovered ?? null,
+    };
+  })).toEqual({ active: null, promoted: null });
+
+  const arrowPoint = await page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    const path = card.shadowRoot.querySelector('.generic-marker[data-marker-id="generic-1"] path[data-shape="arrow"]');
+    const point = Object.assign(path.ownerSVGElement.createSVGPoint(), { x: 8, y: 12 })
+      .matrixTransform(path.getScreenCTM());
+    return { x: point.x, y: point.y };
+  });
+  await page.mouse.move(arrowPoint.x, arrowPoint.y);
+  await expect.poll(() => page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    const row = card.shadowRoot.querySelector('.row[data-entity="sensor.pin_hit_test"]');
+    const label = row.querySelector('.generic-value-label[data-marker-id="generic-1"]');
+    const path = row.querySelector('.generic-marker[data-marker-id="generic-1"] path[data-shape="arrow"]');
+    return {
+      active: card._markerHover?.marker?.dataset.markerId ?? null,
+      promoted: label.dataset.markerHovered ?? null,
+      cursor: getComputedStyle(path).cursor,
+    };
+  })).toEqual({ active: 'generic-1', promoted: 'true', cursor: 'none' });
 });
 
 test('marker endpoint clipping remains provided by the bar track', async ({ page }) => {

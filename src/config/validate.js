@@ -80,6 +80,20 @@ function validateExtremumReset(diagnostics, config, path, entity = null) {
   }
 }
 
+function validateMarkerDirections(diagnostics, config, path, entity = null) {
+  for (const marker of ['target_marker', 'peak_marker', 'floor_marker']) {
+    if (config?.[marker]?.direction_invalid) {
+      addWarning(
+        diagnostics,
+        `${marker}.invalid_direction`,
+        'Invalid marker direction; using inward.',
+        `${path}.${marker === 'target_marker' ? 'target' : marker.replace('_marker', '')}.direction`,
+        entity
+      );
+    }
+  }
+}
+
 function validateGenericMarkers(diagnostics, markers, invalidList, path, entity = null) {
   if (invalidList) {
     addWarning(diagnostics, 'markers.invalid_list', 'Markers must be a list; ignoring the malformed value.', path, entity);
@@ -105,6 +119,9 @@ function validateGenericMarkers(diagnostics, markers, invalidList, path, entity 
     }
     if (marker.invalidShape) {
       addWarning(diagnostics, 'markers.invalid_shape', 'Invalid marker shape; using circle.', `${markerPath}.shape`, entity);
+    }
+    if (marker.invalidDirection) {
+      addWarning(diagnostics, 'markers.invalid_direction', 'Invalid marker direction; using inward.', `${markerPath}.direction`, entity);
     }
     if (marker.invalidDecimal) {
       addWarning(diagnostics, 'markers.invalid_decimal', 'Marker label decimal must be a non-negative integer; inheriting row precision.', `${markerPath}.label.decimal`, entity);
@@ -196,6 +213,7 @@ function validateConfigScope(diagnostics, config, path, entity = null) {
   validateBaselineRange(diagnostics, config, scaleBounds, path, entity);
   validateBaselineSuppressesNeedle(diagnostics, config, path, entity);
   validateExtremumReset(diagnostics, config, path, entity);
+  validateMarkerDirections(diagnostics, config, path, entity);
   validateSegments(diagnostics, config?.bar?.segments, scaleBounds, `${path}.bar`, entity);
   validateGradientStops(diagnostics, config?.bar?.gradient_stops, `${path}.bar`, entity);
 }

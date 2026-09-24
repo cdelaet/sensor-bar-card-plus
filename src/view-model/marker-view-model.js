@@ -22,6 +22,7 @@ export function createMarkerModel({
   label = null,
   labelVisible = false,
   shape = 'circle',
+  direction = 'inward',
 }) {
   return {
     id,
@@ -34,6 +35,7 @@ export function createMarkerModel({
     label,
     labelVisible: labelVisible === true,
     shape: normalizeMarkerShape(shape),
+    direction,
   };
 }
 
@@ -99,6 +101,7 @@ export function buildMarkerModels({
       label: targetPresentation,
       labelVisible: targetEnabled && targetConfig?.show_label === true,
       shape: targetConfig?.shape ?? 'diamond',
+      direction: targetConfig?.direction ?? 'inward',
     }),
     createMarkerModel({
       id: 'floor',
@@ -111,6 +114,7 @@ export function buildMarkerModels({
       label: floorPresentation,
       labelVisible: floorConfig?.show === true && floorConfig?.show_label === true,
       shape: 'triangle',
+      direction: floorConfig?.direction ?? 'inward',
     }),
     createMarkerModel({
       id: 'peak',
@@ -123,6 +127,7 @@ export function buildMarkerModels({
       label: peakPresentation,
       labelVisible: peakConfig?.show === true && peakConfig?.show_label === true,
       shape: 'triangle',
+      direction: peakConfig?.direction ?? 'inward',
     }),
     ...genericMarkers.map((marker) => createMarkerModel({
       id: marker.id,
@@ -135,6 +140,7 @@ export function buildMarkerModels({
       label: marker.label,
       labelVisible: marker.labelVisible,
       shape: marker.shape,
+      direction: marker.direction,
     })),
   ];
 }

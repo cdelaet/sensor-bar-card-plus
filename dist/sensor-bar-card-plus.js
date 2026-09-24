@@ -219,6 +219,10 @@
       const validLane = lane === "above" || lane === "below";
       const supportedShapes = ["circle", "diamond", "triangle", "chevron", "arrow", "pin"];
       const validShape = rawMarker.shape === void 0 || supportedShapes.includes(rawMarker.shape);
+      const direction = normalizeMarkerDirection(rawMarker.direction);
+      const invalidDirection = rawMarker.direction !== void 0 && !["inward", "outward"].includes(
+        typeof rawMarker.direction === "string" ? rawMarker.direction.trim().toLowerCase() : ""
+      );
       const label = rawMarker.label && typeof rawMarker.label === "object" && !Array.isArray(rawMarker.label) ? rawMarker.label : {};
       const decimal = label.decimal === void 0 ? null : getFiniteNumber(label.decimal);
       const validDecimal = decimal === null || Number.isInteger(decimal) && decimal >= 0;
@@ -231,6 +235,8 @@
         },
         lane: validLane ? lane : null,
         shape: validShape ? (_a = rawMarker.shape) != null ? _a : "circle" : "circle",
+        direction,
+        invalidDirection,
         color: typeof rawMarker.color === "string" && rawMarker.color.trim() ? rawMarker.color : "#888888",
         label: {
           show: label.show === true,
@@ -598,6 +604,15 @@
     const normalized = String(value != null ? value : "").trim().toLowerCase();
     return normalized === "triangle" || normalized === "diamond" ? normalized : "diamond";
   }
+  function normalizeMarkerDirection(value) {
+    const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+    return normalized === "outward" ? "outward" : "inward";
+  }
+  function isInvalidMarkerDirection(value) {
+    return value !== void 0 && !["inward", "outward"].includes(
+      typeof value === "string" ? value.trim().toLowerCase() : ""
+    );
+  }
   function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I;
     const cardTarget = cardConfig == null ? void 0 : cardConfig.target_marker;
@@ -605,14 +620,16 @@
     const legacyCardTarget = (cardConfig == null ? void 0 : cardConfig.target) && typeof cardConfig.target === "object" && !Array.isArray(cardConfig.target) ? null : (_a = cardConfig == null ? void 0 : cardConfig.target) != null ? _a : null;
     const inheritedTarget = cardTarget ? {
       ...cardTarget,
-      shape: normalizeTargetMarkerShape(cardTarget.shape)
+      shape: normalizeTargetMarkerShape(cardTarget.shape),
+      direction: normalizeMarkerDirection(cardTarget.direction)
     } : {
       enabled: null,
       source: normalizeResolvableValue(null, null),
       color: (_b = cardConfig == null ? void 0 : cardConfig.target_color) != null ? _b : "#888",
       show_label: (_c = cardConfig == null ? void 0 : cardConfig.show_target_label) != null ? _c : false,
       label_decimal: (_f = (_e = (_d = cardConfig == null ? void 0 : cardConfig.target) == null ? void 0 : _d.label) == null ? void 0 : _e.decimal) != null ? _f : null,
-      shape: "diamond"
+      shape: "diamond",
+      direction: "inward"
     };
     if (rawTarget && typeof rawTarget === "object" && !Array.isArray(rawTarget)) {
       const normalizedTarget2 = {
@@ -620,7 +637,9 @@
         source: normalizeStructuredResolvableValue(rawTarget.at, inheritedTarget.source, null, { allowPercent: true }),
         color: (_j = (_i = rawTarget.color) != null ? _i : entityConfig.target_color) != null ? _j : inheritedTarget.color,
         show_label: (_m = (_l = (_k = rawTarget.label) == null ? void 0 : _k.show) != null ? _l : entityConfig.show_target_label) != null ? _m : inheritedTarget.show_label,
-        shape: Object.prototype.hasOwnProperty.call(rawTarget, "shape") ? normalizeTargetMarkerShape(rawTarget.shape) : inheritedTarget.shape
+        shape: Object.prototype.hasOwnProperty.call(rawTarget, "shape") ? normalizeTargetMarkerShape(rawTarget.shape) : inheritedTarget.shape,
+        direction: Object.prototype.hasOwnProperty.call(rawTarget, "direction") ? normalizeMarkerDirection(rawTarget.direction) : inheritedTarget.direction,
+        ...isInvalidMarkerDirection(rawTarget.direction) ? { direction_invalid: true } : {}
       };
       const labelDecimal2 = (_p = (_o = (_n = rawTarget.label) == null ? void 0 : _n.decimal) != null ? _o : inheritedTarget.label_decimal) != null ? _p : null;
       if (labelDecimal2 !== null && labelDecimal2 !== void 0) {
@@ -636,7 +655,8 @@
       source: normalizeResolvableValue(value, entity, percent),
       color: (_E = (_D = (_C = entityConfig.target_color) != null ? _C : inheritedTarget.color) != null ? _D : cardConfig == null ? void 0 : cardConfig.target_color) != null ? _E : "#888",
       show_label: (_H = (_G = (_F = entityConfig.show_target_label) != null ? _F : inheritedTarget.show_label) != null ? _G : cardConfig == null ? void 0 : cardConfig.show_target_label) != null ? _H : false,
-      shape: inheritedTarget.shape
+      shape: inheritedTarget.shape,
+      direction: inheritedTarget.direction
     };
     const labelDecimal = (_I = inheritedTarget.label_decimal) != null ? _I : null;
     if (labelDecimal !== null && labelDecimal !== void 0) {
@@ -669,7 +689,8 @@
       color: legacy ? (_b = cardConfig == null ? void 0 : cardConfig.peak_color) != null ? _b : defaultColor : defaultColor,
       show_label: false,
       label_decimal: null,
-      reset: { kind: "never" }
+      reset: { kind: "never" },
+      direction: "inward"
     };
     const hasReset = rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, "reset");
     const rawReset = hasReset ? rawMarker.reset : void 0;
@@ -678,7 +699,9 @@
     const label = normalizeLabelConfig(rawMarker, inherited);
     const normalized = {
       show: (_f = (_e = (_d = rawMarker == null ? void 0 : rawMarker.enabled) != null ? _d : legacy ? entityConfig.show_peak : void 0) != null ? _e : inherited.show) != null ? _f : false,
-      color: (_i = (_h = (_g = rawMarker == null ? void 0 : rawMarker.color) != null ? _g : legacy ? entityConfig.peak_color : void 0) != null ? _h : inherited.color) != null ? _i : defaultColor
+      color: (_i = (_h = (_g = rawMarker == null ? void 0 : rawMarker.color) != null ? _g : legacy ? entityConfig.peak_color : void 0) != null ? _h : inherited.color) != null ? _i : defaultColor,
+      direction: rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, "direction") ? normalizeMarkerDirection(rawMarker.direction) : normalizeMarkerDirection(inherited.direction),
+      ...isInvalidMarkerDirection(rawMarker == null ? void 0 : rawMarker.direction) ? { direction_invalid: true } : {}
     };
     const inheritedAdvanced = cardMarker && (Object.prototype.hasOwnProperty.call(cardMarker, "show_label") || Object.prototype.hasOwnProperty.call(cardMarker, "label_decimal") || Object.prototype.hasOwnProperty.call(cardMarker, "reset"));
     const hasAdvancedConfig = key === "floor" || hasReset || rawLabel !== void 0 || inheritedAdvanced;
@@ -921,6 +944,20 @@
       }
     }
   }
+  function validateMarkerDirections(diagnostics, config, path, entity = null) {
+    var _a;
+    for (const marker of ["target_marker", "peak_marker", "floor_marker"]) {
+      if ((_a = config == null ? void 0 : config[marker]) == null ? void 0 : _a.direction_invalid) {
+        addWarning(
+          diagnostics,
+          `${marker}.invalid_direction`,
+          "Invalid marker direction; using inward.",
+          `${path}.${marker === "target_marker" ? "target" : marker.replace("_marker", "")}.direction`,
+          entity
+        );
+      }
+    }
+  }
   function validateGenericMarkers(diagnostics, markers, invalidList, path, entity = null) {
     if (invalidList) {
       addWarning(diagnostics, "markers.invalid_list", "Markers must be a list; ignoring the malformed value.", path, entity);
@@ -945,6 +982,9 @@
       }
       if (marker.invalidShape) {
         addWarning(diagnostics, "markers.invalid_shape", "Invalid marker shape; using circle.", `${markerPath}.shape`, entity);
+      }
+      if (marker.invalidDirection) {
+        addWarning(diagnostics, "markers.invalid_direction", "Invalid marker direction; using inward.", `${markerPath}.direction`, entity);
       }
       if (marker.invalidDecimal) {
         addWarning(diagnostics, "markers.invalid_decimal", "Marker label decimal must be a non-negative integer; inheriting row precision.", `${markerPath}.label.decimal`, entity);
@@ -1030,6 +1070,7 @@
     validateBaselineRange(diagnostics, config, scaleBounds, path, entity);
     validateBaselineSuppressesNeedle(diagnostics, config, path, entity);
     validateExtremumReset(diagnostics, config, path, entity);
+    validateMarkerDirections(diagnostics, config, path, entity);
     validateSegments(diagnostics, (_a = config == null ? void 0 : config.bar) == null ? void 0 : _a.segments, scaleBounds, `${path}.bar`, entity);
     validateGradientStops(diagnostics, (_b = config == null ? void 0 : config.bar) == null ? void 0 : _b.gradient_stops, `${path}.bar`, entity);
   }
@@ -1139,7 +1180,8 @@
     color = null,
     label = null,
     labelVisible = false,
-    shape = "circle"
+    shape = "circle",
+    direction = "inward"
   }) {
     return {
       id,
@@ -1151,7 +1193,8 @@
       color,
       label,
       labelVisible: labelVisible === true,
-      shape: normalizeMarkerShape(shape)
+      shape: normalizeMarkerShape(shape),
+      direction
     };
   }
   function getMarkerLaneOccupancy(entityConfig) {
@@ -1198,7 +1241,7 @@
     floorVisible = Number.isFinite(floorPosition),
     genericMarkers = []
   }) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f, _g;
     const targetConfig = entityConfig == null ? void 0 : entityConfig.target_marker;
     const peakConfig = entityConfig == null ? void 0 : entityConfig.peak_marker;
     const floorConfig = entityConfig == null ? void 0 : entityConfig.floor_marker;
@@ -1214,7 +1257,8 @@
         color: (_a = targetConfig == null ? void 0 : targetConfig.color) != null ? _a : null,
         label: targetPresentation,
         labelVisible: targetEnabled && (targetConfig == null ? void 0 : targetConfig.show_label) === true,
-        shape: (_b = targetConfig == null ? void 0 : targetConfig.shape) != null ? _b : "diamond"
+        shape: (_b = targetConfig == null ? void 0 : targetConfig.shape) != null ? _b : "diamond",
+        direction: (_c = targetConfig == null ? void 0 : targetConfig.direction) != null ? _c : "inward"
       }),
       createMarkerModel({
         id: "floor",
@@ -1223,10 +1267,11 @@
         position: floorPosition,
         lane: "below",
         visible: (floorConfig == null ? void 0 : floorConfig.show) === true && floorVisible,
-        color: (_c = floorConfig == null ? void 0 : floorConfig.color) != null ? _c : null,
+        color: (_d = floorConfig == null ? void 0 : floorConfig.color) != null ? _d : null,
         label: floorPresentation,
         labelVisible: (floorConfig == null ? void 0 : floorConfig.show) === true && (floorConfig == null ? void 0 : floorConfig.show_label) === true,
-        shape: "triangle"
+        shape: "triangle",
+        direction: (_e = floorConfig == null ? void 0 : floorConfig.direction) != null ? _e : "inward"
       }),
       createMarkerModel({
         id: "peak",
@@ -1235,10 +1280,11 @@
         position: peakPosition,
         lane: "above",
         visible: (peakConfig == null ? void 0 : peakConfig.show) === true && peakVisible,
-        color: (_d = peakConfig == null ? void 0 : peakConfig.color) != null ? _d : null,
+        color: (_f = peakConfig == null ? void 0 : peakConfig.color) != null ? _f : null,
         label: peakPresentation,
         labelVisible: (peakConfig == null ? void 0 : peakConfig.show) === true && (peakConfig == null ? void 0 : peakConfig.show_label) === true,
-        shape: "triangle"
+        shape: "triangle",
+        direction: (_g = peakConfig == null ? void 0 : peakConfig.direction) != null ? _g : "inward"
       }),
       ...genericMarkers.map((marker) => createMarkerModel({
         id: marker.id,
@@ -1250,7 +1296,8 @@
         color: marker.color,
         label: marker.label,
         labelVisible: marker.labelVisible,
-        shape: marker.shape
+        shape: marker.shape,
+        direction: marker.direction
       }))
     ];
   }
@@ -1456,6 +1503,7 @@
         visible,
         color: marker.color,
         shape: marker.shape,
+        direction: marker.direction,
         label,
         labelVisible: marker.label.show
       };
@@ -3222,6 +3270,12 @@
             drop-shadow(0 0 1.2px var(--marker-contrast-color))
             drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
         }
+        .peak-marker[data-direction="outward"] .peak-inset,
+        .generic-marker[data-lane="above"][data-direction="outward"] .peak-inset {
+          border-top-width: 0;
+          border-top-color: transparent;
+          border-bottom: 11px solid var(--marker-color);
+        }
         .peak-marker .peak-outset,
         .generic-marker[data-lane="above"] .peak-outset {
           top: -4px;
@@ -3259,6 +3313,13 @@
           filter:
             drop-shadow(0 0 1.2px var(--marker-contrast-color))
             drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
+        }
+        .target-marker[data-direction="outward"] .target-inset,
+        .floor-marker[data-direction="outward"] .floor-inset,
+        .generic-marker[data-lane="below"][data-direction="outward"] .target-inset {
+          border-bottom-width: 0;
+          border-bottom-color: transparent;
+          border-top: 11px solid var(--marker-color);
         }
         .floor-marker .floor-outset {
           bottom: -4px;
@@ -3352,9 +3413,12 @@
         .marker-shape-svg[data-shape="chevron"] path[data-shape="chevron"] {
           fill: none;
         }
-        .marker-shape-svg[data-shape="chevron"][data-lane="below"] .marker-shape-paths,
-        .marker-shape-svg[data-shape="arrow"][data-lane="below"] .marker-shape-paths,
-        .marker-shape-svg[data-shape="pin"][data-lane="below"] .marker-shape-paths {
+        .marker-shape-svg[data-shape="chevron"][data-lane="below"][data-direction="inward"] .marker-shape-paths,
+        .marker-shape-svg[data-shape="arrow"][data-lane="below"][data-direction="inward"] .marker-shape-paths,
+        .marker-shape-svg[data-shape="pin"][data-lane="below"][data-direction="inward"] .marker-shape-paths,
+        .marker-shape-svg[data-shape="chevron"][data-lane="above"][data-direction="outward"] .marker-shape-paths,
+        .marker-shape-svg[data-shape="arrow"][data-lane="above"][data-direction="outward"] .marker-shape-paths,
+        .marker-shape-svg[data-shape="pin"][data-lane="above"][data-direction="outward"] .marker-shape-paths {
           transform-box: view-box;
           transform-origin: 0 0;
           transform: translateY(16px) scaleY(-1);
@@ -4644,7 +4708,7 @@
           return (_a = markers.find((marker) => marker.id === type || marker.type === type)) != null ? _a : null;
         }
         _renderMarker(marker) {
-          var _a;
+          var _a, _b, _c, _d, _e, _f, _g;
           if (!marker) return "";
           const position = Number.isFinite(marker.position) ? marker.position : 0;
           const color = this._getEffectiveMarkerColor(marker);
@@ -4657,46 +4721,48 @@
       <path data-shape="circle" d="M8 1A7 7 0 1 0 8 15A7 7 0 1 0 8 1Z"></path>
       <path data-shape="diamond" d="M8 1L15 8L8 15L1 8Z"></path>
       <path data-shape="chevron" d="M2 2L8 8L14 2 M2 8L8 14L14 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-      <path data-shape="arrow" d="M6 1H10V8H14L8 15L2 8H6Z"></path>
-      <path data-shape="pin" d="M8 15C7 13 2 10 2 6A6 6 0 1 1 14 6C14 10 9 13 8 15Z"></path>
+      <path data-shape="arrow" d="M8 15 L3 3 H6 L8 7 L10 3 H13 Z"></path>
+      <path data-shape="pin" fill-rule="evenodd" d="M8 15.5 C7.1 14 3 9.7 3 6 A5 5 0 1 1 13 6 C13 9.7 8.9 14 8 15.5 Z M8 4.2 A1.8 1.8 0 1 0 8 7.8 A1.8 1.8 0 1 0 8 4.2 Z"></path>
     </g>`;
           if (marker.type === "generic") {
             const triangleClasses = lane === "above" ? ["peak-inset", "peak-outset"] : ["target-inset", "target-outset"];
             return `
-      <div class="generic-marker" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+      <div class="generic-marker" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" data-direction="${(_b = marker.direction) != null ? _b : "inward"}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
         <div class="${triangleClasses[0]}"></div>
         <div class="${triangleClasses[1]}"></div>
-        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
+        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${(_c = marker.direction) != null ? _c : "inward"}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
       </div>`;
           }
           if (marker.type === "target" || marker.type === "floor") {
             const markerClass = `${marker.type}-marker`;
             return `
-      <div class="${markerClass}" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+      <div class="${markerClass}" data-shape="${shape}" data-lane="${lane}" data-direction="${(_d = marker.direction) != null ? _d : "inward"}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
         <div class="${marker.type}-inset"></div>
         <div class="${marker.type}-outset"></div>
-        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
+        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${(_e = marker.direction) != null ? _e : "inward"}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
       </div>`;
           }
           return `
-      <div class="peak-marker" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+      <div class="peak-marker" data-shape="${shape}" data-lane="${lane}" data-direction="${(_f = marker.direction) != null ? _f : "inward"}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
         <div class="peak-outset"></div>
         <div class="peak-inset"></div>
-        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
+        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${(_g = marker.direction) != null ? _g : "inward"}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
       </div>`;
         }
         _patchMarker(markerEl, marker) {
-          var _a, _b, _c;
+          var _a, _b, _c, _d, _e;
           if (!markerEl || !marker) return;
           if (!marker.visible) this._clearMarkerHover(markerEl);
           const defaultShape = marker.type === "generic" ? "circle" : marker.type === "peak" || marker.type === "floor" ? "triangle" : "diamond";
           const shape = normalizeMarkerShape(marker.shape, defaultShape);
           this._setDatasetIfChanged(markerEl, "shape", shape);
           this._setDatasetIfChanged(markerEl, "lane", (_a = marker.lane) != null ? _a : marker.type === "peak" ? "above" : "below");
-          const shapeSvg = (_b = markerEl.querySelector) == null ? void 0 : _b.call(markerEl, ".marker-shape-svg");
+          this._setDatasetIfChanged(markerEl, "direction", (_b = marker.direction) != null ? _b : "inward");
+          const shapeSvg = (_c = markerEl.querySelector) == null ? void 0 : _c.call(markerEl, ".marker-shape-svg");
           if (shapeSvg) {
             this._setDatasetIfChanged(shapeSvg, "shape", shape);
-            this._setDatasetIfChanged(shapeSvg, "lane", (_c = marker.lane) != null ? _c : marker.type === "peak" ? "above" : "below");
+            this._setDatasetIfChanged(shapeSvg, "lane", (_d = marker.lane) != null ? _d : marker.type === "peak" ? "above" : "below");
+            this._setDatasetIfChanged(shapeSvg, "direction", (_e = marker.direction) != null ? _e : "inward");
           }
           this._setStyleIfChanged(markerEl, "display", marker.visible ? "" : "none");
           if (marker.visible && Number.isFinite(marker.position)) {
@@ -5711,6 +5777,7 @@ ${paintLayers}
           const fillColor = this._normalizeTextValue((_c = nextMarker.when_exceeded) == null ? void 0 : _c.fill_color).trim();
           const hasShape = Object.prototype.hasOwnProperty.call(nextMarker, "shape");
           const shape = hasShape ? normalizeTargetMarkerShape(nextMarker.shape) : null;
+          const direction = Object.prototype.hasOwnProperty.call(nextMarker, "direction") ? normalizeMarkerDirection(nextMarker.direction) : null;
           if (typeof nextMarker.enabled !== "boolean") {
             delete nextMarker.enabled;
           }
@@ -5749,6 +5816,11 @@ ${paintLayers}
             nextMarker.shape = shape;
           } else {
             delete nextMarker.shape;
+          }
+          if (direction === "inward" && ((scope == null ? void 0 : scope.type) !== "entity" || direction === this._getEffectiveMarkerDirection({ type: "card" }, "target"))) {
+            delete nextMarker.direction;
+          } else if (direction) {
+            nextMarker.direction = direction;
           }
           if (Object.keys(nextMarker).length) {
             nextTarget.target = nextMarker;
@@ -5798,11 +5870,17 @@ ${paintLayers}
           const nextTarget = this._cloneDeep(target);
           const nextPeak = this._cloneDeep(nextTarget.peak);
           const color = this._normalizeTextValue(nextPeak.color).trim();
+          const direction = Object.prototype.hasOwnProperty.call(nextPeak, "direction") ? normalizeMarkerDirection(nextPeak.direction) : null;
           if (typeof nextPeak.enabled !== "boolean") {
             delete nextPeak.enabled;
           }
           if ((scope == null ? void 0 : scope.type) !== "entity" && nextPeak.reset === "never") {
             delete nextPeak.reset;
+          }
+          if (direction === "inward" && ((scope == null ? void 0 : scope.type) !== "entity" || direction === this._getEffectiveMarkerDirection({ type: "card" }, "peak"))) {
+            delete nextPeak.direction;
+          } else if (direction) {
+            nextPeak.direction = direction;
           }
           if (color && this._normalizeColorComparisonValue(color) !== this._normalizeColorComparisonValue("#888")) {
             nextPeak.color = color;
@@ -5824,6 +5902,7 @@ ${paintLayers}
           const nextTarget = this._cloneDeep(target);
           const nextFloor = this._cloneDeep(nextTarget.floor);
           const color = this._normalizeTextValue(nextFloor.color).trim();
+          const direction = Object.prototype.hasOwnProperty.call(nextFloor, "direction") ? normalizeMarkerDirection(nextFloor.direction) : null;
           if (typeof nextFloor.enabled !== "boolean") delete nextFloor.enabled;
           if (color && this._normalizeColorComparisonValue(color) !== this._normalizeColorComparisonValue("#888888")) {
             nextFloor.color = color;
@@ -5839,6 +5918,11 @@ ${paintLayers}
           }
           if ((scope == null ? void 0 : scope.type) !== "entity" && nextFloor.reset === "never" || nextFloor.reset === void 0 || nextFloor.reset === null || nextFloor.reset === "") {
             delete nextFloor.reset;
+          }
+          if (direction === "inward" && ((scope == null ? void 0 : scope.type) !== "entity" || direction === this._getEffectiveMarkerDirection({ type: "card" }, "floor"))) {
+            delete nextFloor.direction;
+          } else if (direction) {
+            nextFloor.direction = direction;
           }
           if (Object.keys(nextFloor).length) nextTarget.floor = nextFloor;
           else delete nextTarget.floor;
@@ -6923,11 +7007,11 @@ ${paintLayers}
         _hasPeakOverride(scope) {
           var _a, _b;
           const peakValue = (_a = this._getScopedValue(scope, ["peak"])) != null ? _a : {};
-          if (this._isObject(peakValue) && (Object.prototype.hasOwnProperty.call(peakValue, "enabled") || Object.prototype.hasOwnProperty.call(peakValue, "color") || Object.prototype.hasOwnProperty.call(peakValue, "reset") || Object.prototype.hasOwnProperty.call(peakValue, "label"))) {
+          if (this._isObject(peakValue) && (Object.prototype.hasOwnProperty.call(peakValue, "enabled") || Object.prototype.hasOwnProperty.call(peakValue, "color") || Object.prototype.hasOwnProperty.call(peakValue, "reset") || Object.prototype.hasOwnProperty.call(peakValue, "label") || Object.prototype.hasOwnProperty.call(peakValue, "direction"))) {
             return true;
           }
           const peakMarkerValue = (_b = this._getScopedValue(scope, ["peak_marker"])) != null ? _b : {};
-          if (this._isObject(peakMarkerValue) && (Object.prototype.hasOwnProperty.call(peakMarkerValue, "show") || Object.prototype.hasOwnProperty.call(peakMarkerValue, "color"))) {
+          if (this._isObject(peakMarkerValue) && (Object.prototype.hasOwnProperty.call(peakMarkerValue, "show") || Object.prototype.hasOwnProperty.call(peakMarkerValue, "color") || Object.prototype.hasOwnProperty.call(peakMarkerValue, "direction"))) {
             return true;
           }
           return this._getScopedValue(scope, ["show_peak"]) !== void 0 || this._getScopedValue(scope, ["peak_color"]) !== void 0;
@@ -6946,6 +7030,7 @@ ${paintLayers}
             nextTarget = this._deletePathValue(nextTarget, ["peak", "color"]);
             nextTarget = this._deletePathValue(nextTarget, ["peak", "reset"]);
             nextTarget = this._deletePathValue(nextTarget, ["peak", "label"]);
+            nextTarget = this._deletePathValue(nextTarget, ["peak", "direction"]);
             nextTarget = this._deletePathValue(nextTarget, ["show_peak"]);
             nextTarget = this._deletePathValue(nextTarget, ["peak_color"]);
             nextTarget = this._deletePathValue(nextTarget, ["peak_marker"]);
@@ -7025,7 +7110,7 @@ ${paintLayers}
         _hasExtremumOverride(scope, key) {
           const marker = this._getScopedValue(scope, [key]);
           if (!this._isObject(marker)) return false;
-          return ["enabled", "color", "reset", "label"].some((field) => Object.prototype.hasOwnProperty.call(marker, field));
+          return ["enabled", "color", "reset", "label", "direction"].some((field) => Object.prototype.hasOwnProperty.call(marker, field));
         }
         _getEffectiveMarkerExtras(scope, key) {
           var _a, _b, _c, _d, _e, _f, _g, _h, _i;
@@ -7181,7 +7266,7 @@ ${paintLayers}
           return this._applyScopedMutation(scope, (target) => {
             let nextTarget = this._cloneDeep(target);
             const floor = this._isObject(this._getPathValue(nextTarget, ["floor"])) ? this._cloneDeep(this._getPathValue(nextTarget, ["floor"])) : {};
-            ["enabled", "color", "reset", "label"].forEach((key) => delete floor[key]);
+            ["enabled", "color", "reset", "label", "direction"].forEach((key) => delete floor[key]);
             if (Object.keys(floor).length) nextTarget = this._setPathValue(nextTarget, ["floor"], floor);
             else nextTarget = this._deletePathValue(nextTarget, ["floor"]);
             nextTarget = this._deletePathValue(nextTarget, ["floor_marker"]);
@@ -8110,6 +8195,26 @@ ${paintLayers}
           var _a;
           return (_a = this._getScopedValue(scope, ["target", "shape"])) != null ? _a : "";
         }
+        _getEffectiveMarkerDirection(scope, key) {
+          const canonical = this._getScopedValue(scope, [key, "direction"]);
+          const local = canonical !== void 0 ? canonical : this._getScopedValue(scope, [`${key}_marker`, "direction"]);
+          if ((scope == null ? void 0 : scope.type) === "entity" && local === void 0) {
+            return this._getEffectiveMarkerDirection({ type: "card" }, key);
+          }
+          return normalizeMarkerDirection(local);
+        }
+        _setMarkerDirection(scope, key, rawValue) {
+          const direction = normalizeMarkerDirection(rawValue);
+          const cardDirection = this._getEffectiveMarkerDirection({ type: "card" }, key);
+          if ((scope == null ? void 0 : scope.type) !== "entity" && direction === "inward" || (scope == null ? void 0 : scope.type) === "entity" && direction === cardDirection) {
+            return this._removeCanonicalScopedValue(scope, [key, "direction"], {
+              prunePaths: [[key]]
+            });
+          }
+          return this._setCanonicalScopedTextOverride(scope, [key, "direction"], direction, {
+            prunePaths: [[key]]
+          });
+        }
         _hasTargetShape(scope) {
           const target = this._getScopedValue(scope, ["target"]);
           return this._isObject(target) && Object.prototype.hasOwnProperty.call(target, "shape");
@@ -8172,6 +8277,7 @@ ${paintLayers}
               nextTarget = this._deletePathValue(nextTarget, ["target", "at"]);
               nextTarget = this._deletePathValue(nextTarget, ["target", "color"]);
               nextTarget = this._deletePathValue(nextTarget, ["target", "shape"]);
+              nextTarget = this._deletePathValue(nextTarget, ["target", "direction"]);
               nextTarget = this._deletePathValue(nextTarget, ["target", "label", "show"]);
               nextTarget = this._deletePathValue(nextTarget, ["target", "label", "decimal"]);
               nextTarget = this._deletePathValue(nextTarget, ["target", "when_exceeded", "fill_color"]);
@@ -8882,7 +8988,7 @@ ${paintLayers}
           const markers = this._getGenericMarkers(scope);
           const override = this._hasMarkersOverride(scope);
           const rows = markers.map((marker, markerIndex) => {
-            var _a, _b, _c, _d, _e, _f;
+            var _a, _b, _c, _d, _e, _f, _g;
             const source = this._getGenericMarkerSource(marker);
             const rowId = `${scopeType}-${scopeIndex}-generic-marker-${markerIndex}`;
             const dataset = { "scope-type": scopeType, index: scopeIndex, "marker-index": markerIndex };
@@ -8938,12 +9044,19 @@ ${paintLayers}
             </select>
           </div>
           <div class="field-row">
+            <label for="${rowId}-direction">Direction</label>
+            <select id="${rowId}-direction" data-kind="generic-marker-direction" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${normalizeMarkerDirection(marker == null ? void 0 : marker.direction)}">
+              <option value="inward"${((_b = marker == null ? void 0 : marker.direction) != null ? _b : "inward") === "inward" ? " selected" : ""}>Inward</option>
+              <option value="outward"${(marker == null ? void 0 : marker.direction) === "outward" ? " selected" : ""}>Outward</option>
+            </select>
+          </div>
+          <div class="field-row">
             <label for="${rowId}-color">Color</label>
             ${this._renderColorInput({
               id: `${rowId}-color`,
               kind: "generic-marker-color",
               index: scopeIndex,
-              value: (_b = marker == null ? void 0 : marker.color) != null ? _b : "#888888",
+              value: (_c = marker == null ? void 0 : marker.color) != null ? _c : "#888888",
               fallbackHex: "#888888",
               placeholder: "#888888",
               extraDataset: { "scope-type": scopeType, "marker-index": markerIndex }
@@ -8951,17 +9064,17 @@ ${paintLayers}
           </div>
           <div class="field-row">
             <div class="toggle">
-              <input id="${rowId}-label-show" type="checkbox" data-kind="generic-marker-label-show" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_c = marker == null ? void 0 : marker.label) == null ? void 0 : _c.show) === true ? " checked" : ""}>
+              <input id="${rowId}-label-show" type="checkbox" data-kind="generic-marker-label-show" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_d = marker == null ? void 0 : marker.label) == null ? void 0 : _d.show) === true ? " checked" : ""}>
               <label for="${rowId}-label-show">Show value label</label>
             </div>
           </div>
           <div class="field-row">
             <label for="${rowId}-label-decimal">Label decimals</label>
-            <input id="${rowId}-label-decimal" type="number" min="0" step="1" data-kind="generic-marker-label-decimal" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute((_e = (_d = marker == null ? void 0 : marker.label) == null ? void 0 : _d.decimal) != null ? _e : "")}" placeholder="inherit row decimals">
+            <input id="${rowId}-label-decimal" type="number" min="0" step="1" data-kind="generic-marker-label-decimal" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute((_f = (_e = marker == null ? void 0 : marker.label) == null ? void 0 : _e.decimal) != null ? _f : "")}" placeholder="inherit row decimals">
           </div>
           <div class="field-row">
             <div class="toggle">
-              <input id="${rowId}-label-unit" type="checkbox" data-kind="generic-marker-label-unit" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_f = marker == null ? void 0 : marker.label) == null ? void 0 : _f.unit) === false ? "" : " checked"}>
+              <input id="${rowId}-label-unit" type="checkbox" data-kind="generic-marker-label-unit" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_g = marker == null ? void 0 : marker.label) == null ? void 0 : _g.unit) === false ? "" : " checked"}>
               <label for="${rowId}-label-unit">Show row unit</label>
             </div>
           </div>
@@ -9052,9 +9165,10 @@ ${paintLayers}
               return marker;
             });
           }
-          if (kind === "generic-marker-lane" || kind === "generic-marker-shape") {
+          if (kind === "generic-marker-lane" || kind === "generic-marker-shape" || kind === "generic-marker-direction") {
             return this._updateGenericMarker(scope, markerIndex, (marker) => {
-              marker[kind === "generic-marker-lane" ? "lane" : "shape"] = value;
+              const key = kind === "generic-marker-lane" ? "lane" : kind === "generic-marker-shape" ? "shape" : "direction";
+              marker[key] = key === "direction" ? normalizeMarkerDirection(value) : value;
               return marker;
             });
           }
@@ -9099,6 +9213,7 @@ ${paintLayers}
             }
             if (marker.lane === "below") delete marker.lane;
             if (marker.shape === "circle") delete marker.shape;
+            if (marker.direction === "inward") delete marker.direction;
             if (this._normalizeColorComparisonValue(marker.color) === this._normalizeColorComparisonValue("#888888")) delete marker.color;
             if (this._isObject(marker.label)) {
               const label = this._cloneDeep(marker.label);
@@ -9199,6 +9314,7 @@ ${paintLayers}
             const target = this._getTargetResolvableValue({ type: "card" });
             const targetMode = this._getTargetMode({ type: "card" });
             const targetShape = this._getEffectiveTargetShapeValue({ type: "card" });
+            const targetDirection = this._getEffectiveMarkerDirection({ type: "card" }, "target");
             const targetColor = this._getTargetColorValue({ type: "card" });
             const targetLabelShow = this._getTargetLabelShowValue({ type: "card" });
             const targetLabelDecimal = this._getTargetLabelDecimalValue({ type: "card" });
@@ -9779,6 +9895,7 @@ ${paintLayers}
                 const targetParts = this._getEffectiveTargetResolvableValue(scope);
                 const targetMode2 = this._getEffectiveTargetMode(scope);
                 const targetShape2 = this._getEffectiveTargetShapeValue(scope);
+                const targetDirection2 = this._getEffectiveMarkerDirection(scope, "target");
                 const formattingInherited = !this._hasFormattingOverride(scope);
                 const layoutInherited = !this._hasLayoutOverride(scope);
                 const peakInherited = !this._hasPeakOverride(scope);
@@ -10003,6 +10120,13 @@ ${paintLayers}
                         </select>
                       </div>
                       <div class="field-row">
+                        <label for="entity-${index}-peak-direction">Direction</label>
+                        <select id="entity-${index}-peak-direction" data-kind="entity-peak-direction" data-index="${index}" value="${this._getEffectiveMarkerDirection(scope, "peak")}">
+                          <option value="inward"${this._getEffectiveMarkerDirection(scope, "peak") === "inward" ? " selected" : ""}>Inward</option>
+                          <option value="outward"${this._getEffectiveMarkerDirection(scope, "peak") === "outward" ? " selected" : ""}>Outward</option>
+                        </select>
+                      </div>
+                      <div class="field-row">
                         <div class="toggle">
                           <input id="entity-${index}-peak-label-show" type="checkbox" data-kind="entity-peak-label-show" data-index="${index}"${entityPeakExtras.labelShow ? " checked" : ""}>
                           <label for="entity-${index}-peak-label-show">Show Peak label</label>
@@ -10047,6 +10171,13 @@ ${paintLayers}
                         <label for="entity-${index}-floor-reset">Floor reset</label>
                         <select id="entity-${index}-floor-reset" data-kind="entity-floor-reset" data-index="${index}" value="${this._escapeAttribute(entityFloor.reset)}">
                           ${this._renderResetOptions(entityFloor.reset)}
+                        </select>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-floor-direction">Direction</label>
+                        <select id="entity-${index}-floor-direction" data-kind="entity-floor-direction" data-index="${index}" value="${this._getEffectiveMarkerDirection(scope, "floor")}">
+                          <option value="inward"${this._getEffectiveMarkerDirection(scope, "floor") === "inward" ? " selected" : ""}>Inward</option>
+                          <option value="outward"${this._getEffectiveMarkerDirection(scope, "floor") === "outward" ? " selected" : ""}>Outward</option>
                         </select>
                       </div>
                       <div class="field-row">
@@ -10263,6 +10394,13 @@ ${paintLayers}
                         </select>
                       </div>
                       <div class="field-row">
+                        <label for="entity-${index}-target-direction">Direction</label>
+                        <select id="entity-${index}-target-direction" data-kind="entity-target-direction" data-index="${index}" value="${targetDirection2}">
+                          <option value="inward"${targetDirection2 === "inward" ? " selected" : ""}>Inward</option>
+                          <option value="outward"${targetDirection2 === "outward" ? " selected" : ""}>Outward</option>
+                        </select>
+                      </div>
+                      <div class="field-row">
                         <label>Target entity</label>
                         ${this._renderEntitySourceInput("entity-target-entity-source", index, targetParts.entity, "inherit card default")}
                       </div>
@@ -10381,6 +10519,13 @@ ${paintLayers}
               </select>
             </div>
             <div class="field-row">
+              <label for="target-direction">Direction</label>
+              <select id="target-direction" data-field="target-direction" value="${targetDirection}">
+                <option value="inward"${targetDirection === "inward" ? " selected" : ""}>Inward</option>
+                <option value="outward"${targetDirection === "outward" ? " selected" : ""}>Outward</option>
+              </select>
+            </div>
+            <div class="field-row">
               <label>Target entity</label>
               ${this._renderEntitySourceInput("target-entity-source", "card", target.entity)}
             </div>
@@ -10491,6 +10636,13 @@ ${paintLayers}
               </select>
             </div>
             <div class="field-row">
+              <label for="peak-direction">Direction</label>
+              <select id="peak-direction" data-field="peak-direction" value="${this._getEffectiveMarkerDirection({ type: "card" }, "peak")}">
+                <option value="inward"${this._getEffectiveMarkerDirection({ type: "card" }, "peak") === "inward" ? " selected" : ""}>Inward</option>
+                <option value="outward"${this._getEffectiveMarkerDirection({ type: "card" }, "peak") === "outward" ? " selected" : ""}>Outward</option>
+              </select>
+            </div>
+            <div class="field-row">
               <div class="toggle">
                 <input id="peak-label-show" type="checkbox" data-field="peak-label-show"${cardPeakExtras.labelShow ? " checked" : ""}>
                 <label for="peak-label-show">Show Peak label</label>
@@ -10520,6 +10672,13 @@ ${paintLayers}
               <label for="floor-reset">Floor reset</label>
               <select id="floor-reset" data-field="floor-reset" value="${this._escapeAttribute(cardFloor.reset)}">
                 ${this._renderResetOptions(cardFloor.reset)}
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="floor-direction">Direction</label>
+              <select id="floor-direction" data-field="floor-direction" value="${this._getEffectiveMarkerDirection({ type: "card" }, "floor")}">
+                <option value="inward"${this._getEffectiveMarkerDirection({ type: "card" }, "floor") === "inward" ? " selected" : ""}>Inward</option>
+                <option value="outward"${this._getEffectiveMarkerDirection({ type: "card" }, "floor") === "outward" ? " selected" : ""}>Outward</option>
               </select>
             </div>
             <div class="field-row">
@@ -11185,6 +11344,7 @@ ${paintLayers}
             return void this._setTargetResolvablePart({ type: "card" }, "fixed", value);
           }
           if (field === "target-shape") return void this._setTargetShape({ type: "card" }, value);
+          if (field === "target-direction") return void this._setMarkerDirection({ type: "card" }, "target", value);
           if (field === "target-color") return void this._setTargetColor({ type: "card" }, value);
           if (field === "target-label-show") return void this._setTargetLabelShow({ type: "card" }, value);
           if (field === "target-label-decimal") return void this._setTargetLabelDecimal({ type: "card" }, value);
@@ -11192,11 +11352,13 @@ ${paintLayers}
           if (field === "target-above-fill-color") return void this._setTargetAboveFillColor({ type: "card" }, value);
           if (field === "peak-show") return void this._setPeakShow(value);
           if (field === "peak-color") return void this._setScopedPeakColor({ type: "card" }, value);
+          if (field === "peak-direction") return void this._setMarkerDirection({ type: "card" }, "peak", value);
           if (field === "peak-reset") return void this._setScopedExtremumReset({ type: "card" }, "peak", value);
           if (field === "peak-label-show") return void this._setScopedExtremumLabelShow({ type: "card" }, "peak", value);
           if (field === "peak-label-decimal") return void this._setScopedExtremumLabelDecimal({ type: "card" }, "peak", value);
           if (field === "floor-show") return void this._setScopedExtremumEnabled({ type: "card" }, "floor", value);
           if (field === "floor-color") return void this._setScopedExtremumColor({ type: "card" }, "floor", value);
+          if (field === "floor-direction") return void this._setMarkerDirection({ type: "card" }, "floor", value);
           if (field === "floor-reset") return void this._setScopedExtremumReset({ type: "card" }, "floor", value);
           if (field === "floor-label-show") return void this._setScopedExtremumLabelShow({ type: "card" }, "floor", value);
           if (field === "floor-label-decimal") return void this._setScopedExtremumLabelDecimal({ type: "card" }, "floor", value);
@@ -11292,6 +11454,9 @@ ${paintLayers}
           if (kind === "entity-peak-color") {
             return void this._setScopedPeakColor({ type: "entity", index: Number(target.dataset.index) }, value);
           }
+          if (kind === "entity-peak-direction") {
+            return void this._setMarkerDirection({ type: "entity", index: Number(target.dataset.index) }, "peak", value);
+          }
           if (kind === "entity-peak-reset") {
             return void this._setScopedExtremumReset({ type: "entity", index: Number(target.dataset.index) }, "peak", value);
           }
@@ -11310,6 +11475,9 @@ ${paintLayers}
           }
           if (kind === "entity-floor-color") {
             return void this._setScopedExtremumColor({ type: "entity", index: Number(target.dataset.index) }, "floor", value);
+          }
+          if (kind === "entity-floor-direction") {
+            return void this._setMarkerDirection({ type: "entity", index: Number(target.dataset.index) }, "floor", value);
           }
           if (kind === "entity-floor-reset") {
             return void this._setScopedExtremumReset({ type: "entity", index: Number(target.dataset.index) }, "floor", value);
@@ -11400,6 +11568,9 @@ ${paintLayers}
           }
           if (kind === "entity-target-shape") {
             return void this._setTargetShape({ type: "entity", index: Number(target.dataset.index) }, value);
+          }
+          if (kind === "entity-target-direction") {
+            return void this._setMarkerDirection({ type: "entity", index: Number(target.dataset.index) }, "target", value);
           }
           if (kind === "entity-target-entity-source") {
             return void this._setTargetResolvablePart({ type: "entity", index: Number(target.dataset.index) }, "entity", value);

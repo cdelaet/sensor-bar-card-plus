@@ -248,6 +248,7 @@ export function buildRowViewModel(options) {
         visible,
         color: marker.color,
         shape: marker.shape,
+        direction: marker.direction,
         label,
         labelVisible: marker.label.show,
       };

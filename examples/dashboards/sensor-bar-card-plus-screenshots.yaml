@@ -9202,7 +9202,7 @@ views:
       content: |
         # Sensor Bar Card Plus — Marker Showcase
 
-        Five capture-ready marker examples using stable screenshot entities. These cards demonstrate restrained, practical marker combinations rather than validation or collision cases.
+        Six capture-ready marker examples using stable screenshot entities, including one clean Needle/Target composition. These cards demonstrate restrained, practical marker combinations rather than validation or collision cases.
 
     - type: markdown
       content: |
@@ -9249,6 +9249,57 @@ views:
         lane: below
         shape: circle
         color: '#FDE047'
+
+    - type: markdown
+      content: |
+        ## Solar tracking
+
+        A clean Needle/Target/reference composition for the current operating point, with comfortable spacing and no intentional label collision.
+
+    - type: custom:sensor-bar-card-plus
+      title: Solar Tracking
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Rooftop solar production
+        icon: mdi:solar-power
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      layout:
+        label:
+          position: left
+          width: 170
+      target:
+        at:
+          fixed: 6.5
+        color: '#F8FAFC'
+        label:
+          show: true
+      markers:
+      - at: 35%
+        lane: above
+        shape: diamond
+        color: '#38BDF8'
+      - at: 82%
+        lane: below
+        shape: pin
+        color: '#FDE047'
+      bar:
+        fill_style: gradient
+        needle:
+          show: true
+          color: '#F8FAFC'
+        gradient_stops:
+        - pos: 0
+          color: '#14532D'
+        - pos: 55
+          color: '#22C55E'
+        - pos: 100
+          color: '#FDE047'
 
     - type: markdown
       content: |

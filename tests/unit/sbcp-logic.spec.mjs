@@ -481,6 +481,7 @@ describe('Sensor Bar Card Plus logic', () => {
       color: '#888888',
       show_label: true,
       shape: 'diamond',
+      direction: 'inward',
     });
   });
 
@@ -511,6 +512,54 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(triangleCfg.target_marker.shape).toBe('triangle');
     expect(triangleCfg.entities[0].target_marker.shape).toBe('triangle');
     expect(triangleCfg.entities[1].target_marker.shape).toBe('diamond');
+  });
+
+  it('normalizes marker directions with card inheritance and explicit entity overrides', () => {
+    const card = createCard();
+    const cfg = card.normalizeCardConfig({
+      target: { at: { fixed: 65 }, direction: 'outward' },
+      peak: { enabled: true, direction: 'outward' },
+      floor: { enabled: true, direction: 'outward' },
+      markers: [{ at: { fixed: 20 }, shape: 'circle', direction: 'outward' }],
+      entities: [
+        { entity: 'sensor.inherited' },
+        {
+          entity: 'sensor.overrides',
+          target: { direction: 'inward' },
+          peak: { direction: 'inward' },
+          floor: { direction: 'inward' },
+          markers: [{ at: { fixed: 25 }, shape: 'diamond', direction: 'outward' }],
+        },
+      ],
+    });
+
+    expect(cfg.target_marker.direction).toBe('outward');
+    expect(cfg.peak_marker.direction).toBe('outward');
+    expect(cfg.floor_marker.direction).toBe('outward');
+    expect(cfg.entities[0]).toMatchObject({
+      target_marker: { direction: 'outward' },
+      peak_marker: { direction: 'outward' },
+      floor_marker: { direction: 'outward' },
+      generic_markers: [{ direction: 'outward' }],
+    });
+    expect(cfg.entities[1]).toMatchObject({
+      target_marker: { direction: 'inward' },
+      peak_marker: { direction: 'inward' },
+      floor_marker: { direction: 'inward' },
+      generic_markers: [{ shape: 'diamond', direction: 'outward' }],
+    });
+
+    const defaults = card.normalizeCardConfig({
+      target: { at: { fixed: 65 } },
+      peak: { enabled: true },
+      floor: { enabled: true },
+      markers: [{ at: { fixed: 20 }, shape: 'diamond' }],
+      entities: [{ entity: 'sensor.default' }],
+    });
+    expect(defaults.target_marker.direction).toBe('inward');
+    expect(defaults.peak_marker.direction).toBe('inward');
+    expect(defaults.floor_marker.direction).toBe('inward');
+    expect(defaults.entities[0].generic_markers[0].direction).toBe('inward');
   });
 
   it('renders all shared marker shapes while preserving canonical lanes', () => {
@@ -595,6 +644,7 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(cfg.peak_marker).toEqual({
       show: true,
       color: '#888888',
+      direction: 'inward',
     });
   });
 
@@ -2431,10 +2481,12 @@ describe('Sensor Bar Card Plus logic', () => {
       color: '#ff00ff',
       show_label: false,
       shape: 'diamond',
+      direction: 'inward',
     });
     expect(row.peak_marker).toEqual({
       show: false,
       color: '#00ffff',
+      direction: 'inward',
     });
     expect(row.bar.color_mode).toBe('gradient');
     expect(row.bar.animated).toBe(false);
@@ -2511,10 +2563,12 @@ describe('Sensor Bar Card Plus logic', () => {
       color: '#ff0000',
       show_label: true,
       shape: 'diamond',
+      direction: 'inward',
     });
     expect(row.peak_marker).toEqual({
       show: true,
       color: '#00ff00',
+      direction: 'inward',
     });
     expect(row.bar.color_mode).toBe('single');
     expect(row.bar.animated).toBe(true);
@@ -2591,10 +2645,12 @@ describe('Sensor Bar Card Plus logic', () => {
       color: '#ff00ff',
       show_label: true,
       shape: 'diamond',
+      direction: 'inward',
     });
     expect(row.peak_marker).toEqual({
       show: true,
       color: '#00ffff',
+      direction: 'inward',
     });
     expect(row.bar.color_mode).toBe('gradient');
     expect(row.bar.animated).toBe(false);

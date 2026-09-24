@@ -1,4 +1,4 @@
-import { normalizeTargetMarkerShape } from '../config/normalize.js';
+import { normalizeMarkerDirection, normalizeTargetMarkerShape } from '../config/normalize.js';
 
 export class SensorBarCardPlusEditor extends HTMLElement {
   constructor() {
@@ -745,6 +745,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const fillColor = this._normalizeTextValue(nextMarker.when_exceeded?.fill_color).trim();
     const hasShape = Object.prototype.hasOwnProperty.call(nextMarker, 'shape');
     const shape = hasShape ? normalizeTargetMarkerShape(nextMarker.shape) : null;
+    const direction = Object.prototype.hasOwnProperty.call(nextMarker, 'direction')
+      ? normalizeMarkerDirection(nextMarker.direction)
+      : null;
 
     if (typeof nextMarker.enabled !== 'boolean') {
       delete nextMarker.enabled;
@@ -789,6 +792,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       nextMarker.shape = shape;
     } else {
       delete nextMarker.shape;
+    }
+
+    if (direction === 'inward' && (scope?.type !== 'entity'
+      || direction === this._getEffectiveMarkerDirection({ type: 'card' }, 'target'))) {
+      delete nextMarker.direction;
+    } else if (direction) {
+      nextMarker.direction = direction;
     }
 
     if (Object.keys(nextMarker).length) {
@@ -847,12 +857,21 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const nextTarget = this._cloneDeep(target);
     const nextPeak = this._cloneDeep(nextTarget.peak);
     const color = this._normalizeTextValue(nextPeak.color).trim();
+    const direction = Object.prototype.hasOwnProperty.call(nextPeak, 'direction')
+      ? normalizeMarkerDirection(nextPeak.direction)
+      : null;
 
     if (typeof nextPeak.enabled !== 'boolean') {
       delete nextPeak.enabled;
     }
     if (scope?.type !== 'entity' && nextPeak.reset === 'never') {
       delete nextPeak.reset;
+    }
+    if (direction === 'inward' && (scope?.type !== 'entity'
+      || direction === this._getEffectiveMarkerDirection({ type: 'card' }, 'peak'))) {
+      delete nextPeak.direction;
+    } else if (direction) {
+      nextPeak.direction = direction;
     }
 
     if (color && this._normalizeColorComparisonValue(color) !== this._normalizeColorComparisonValue('#888')) {
@@ -878,6 +897,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const nextTarget = this._cloneDeep(target);
     const nextFloor = this._cloneDeep(nextTarget.floor);
     const color = this._normalizeTextValue(nextFloor.color).trim();
+    const direction = Object.prototype.hasOwnProperty.call(nextFloor, 'direction')
+      ? normalizeMarkerDirection(nextFloor.direction)
+      : null;
     if (typeof nextFloor.enabled !== 'boolean') delete nextFloor.enabled;
     if (color && this._normalizeColorComparisonValue(color) !== this._normalizeColorComparisonValue('#888888')) {
       nextFloor.color = color;
@@ -894,6 +916,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if ((scope?.type !== 'entity' && nextFloor.reset === 'never')
       || nextFloor.reset === undefined || nextFloor.reset === null || nextFloor.reset === '') {
       delete nextFloor.reset;
+    }
+    if (direction === 'inward' && (scope?.type !== 'entity'
+      || direction === this._getEffectiveMarkerDirection({ type: 'card' }, 'floor'))) {
+      delete nextFloor.direction;
+    } else if (direction) {
+      nextFloor.direction = direction;
     }
     if (Object.keys(nextFloor).length) nextTarget.floor = nextFloor;
     else delete nextTarget.floor;
@@ -2135,6 +2163,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       || Object.prototype.hasOwnProperty.call(peakValue, 'color')
       || Object.prototype.hasOwnProperty.call(peakValue, 'reset')
       || Object.prototype.hasOwnProperty.call(peakValue, 'label')
+      || Object.prototype.hasOwnProperty.call(peakValue, 'direction')
     )) {
       return true;
     }
@@ -2143,6 +2172,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (this._isObject(peakMarkerValue) && (
       Object.prototype.hasOwnProperty.call(peakMarkerValue, 'show')
       || Object.prototype.hasOwnProperty.call(peakMarkerValue, 'color')
+      || Object.prototype.hasOwnProperty.call(peakMarkerValue, 'direction')
     )) {
       return true;
     }
@@ -2166,6 +2196,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       nextTarget = this._deletePathValue(nextTarget, ['peak', 'color']);
       nextTarget = this._deletePathValue(nextTarget, ['peak', 'reset']);
       nextTarget = this._deletePathValue(nextTarget, ['peak', 'label']);
+      nextTarget = this._deletePathValue(nextTarget, ['peak', 'direction']);
       nextTarget = this._deletePathValue(nextTarget, ['show_peak']);
       nextTarget = this._deletePathValue(nextTarget, ['peak_color']);
       nextTarget = this._deletePathValue(nextTarget, ['peak_marker']);
@@ -2265,7 +2296,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   _hasExtremumOverride(scope, key) {
     const marker = this._getScopedValue(scope, [key]);
     if (!this._isObject(marker)) return false;
-    return ['enabled', 'color', 'reset', 'label'].some((field) => (
+    return ['enabled', 'color', 'reset', 'label', 'direction'].some((field) => (
       Object.prototype.hasOwnProperty.call(marker, field)
     ));
   }
@@ -2445,7 +2476,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       const floor = this._isObject(this._getPathValue(nextTarget, ['floor']))
         ? this._cloneDeep(this._getPathValue(nextTarget, ['floor']))
         : {};
-      ['enabled', 'color', 'reset', 'label'].forEach((key) => delete floor[key]);
+      ['enabled', 'color', 'reset', 'label', 'direction'].forEach((key) => delete floor[key]);
       if (Object.keys(floor).length) nextTarget = this._setPathValue(nextTarget, ['floor'], floor);
       else nextTarget = this._deletePathValue(nextTarget, ['floor']);
       nextTarget = this._deletePathValue(nextTarget, ['floor_marker']);
@@ -3475,6 +3506,31 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return this._getScopedValue(scope, ['target', 'shape']) ?? '';
   }
 
+  _getEffectiveMarkerDirection(scope, key) {
+    const canonical = this._getScopedValue(scope, [key, 'direction']);
+    const local = canonical !== undefined
+      ? canonical
+      : this._getScopedValue(scope, [`${key}_marker`, 'direction']);
+    if (scope?.type === 'entity' && local === undefined) {
+      return this._getEffectiveMarkerDirection({ type: 'card' }, key);
+    }
+    return normalizeMarkerDirection(local);
+  }
+
+  _setMarkerDirection(scope, key, rawValue) {
+    const direction = normalizeMarkerDirection(rawValue);
+    const cardDirection = this._getEffectiveMarkerDirection({ type: 'card' }, key);
+    if ((scope?.type !== 'entity' && direction === 'inward')
+      || (scope?.type === 'entity' && direction === cardDirection)) {
+      return this._removeCanonicalScopedValue(scope, [key, 'direction'], {
+        prunePaths: [[key]],
+      });
+    }
+    return this._setCanonicalScopedTextOverride(scope, [key, 'direction'], direction, {
+      prunePaths: [[key]],
+    });
+  }
+
   _hasTargetShape(scope) {
     const target = this._getScopedValue(scope, ['target']);
     return this._isObject(target) && Object.prototype.hasOwnProperty.call(target, 'shape');
@@ -3548,6 +3604,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         nextTarget = this._deletePathValue(nextTarget, ['target', 'at']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'color']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'shape']);
+        nextTarget = this._deletePathValue(nextTarget, ['target', 'direction']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'label', 'show']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'label', 'decimal']);
         nextTarget = this._deletePathValue(nextTarget, ['target', 'when_exceeded', 'fill_color']);
@@ -4408,6 +4465,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
             </select>
           </div>
           <div class="field-row">
+            <label for="${rowId}-direction">Direction</label>
+            <select id="${rowId}-direction" data-kind="generic-marker-direction" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${normalizeMarkerDirection(marker?.direction)}">
+              <option value="inward"${(marker?.direction ?? 'inward') === 'inward' ? ' selected' : ''}>Inward</option>
+              <option value="outward"${marker?.direction === 'outward' ? ' selected' : ''}>Outward</option>
+            </select>
+          </div>
+          <div class="field-row">
             <label for="${rowId}-color">Color</label>
             ${this._renderColorInput({
               id: `${rowId}-color`,
@@ -4529,9 +4593,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         return marker;
       });
     }
-    if (kind === 'generic-marker-lane' || kind === 'generic-marker-shape') {
+    if (kind === 'generic-marker-lane' || kind === 'generic-marker-shape' || kind === 'generic-marker-direction') {
       return this._updateGenericMarker(scope, markerIndex, (marker) => {
-        marker[kind === 'generic-marker-lane' ? 'lane' : 'shape'] = value;
+        const key = kind === 'generic-marker-lane' ? 'lane'
+          : kind === 'generic-marker-shape' ? 'shape' : 'direction';
+        marker[key] = key === 'direction' ? normalizeMarkerDirection(value) : value;
         return marker;
       });
     }
@@ -4577,6 +4643,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       }
       if (marker.lane === 'below') delete marker.lane;
       if (marker.shape === 'circle') delete marker.shape;
+      if (marker.direction === 'inward') delete marker.direction;
       if (this._normalizeColorComparisonValue(marker.color) === this._normalizeColorComparisonValue('#888888')) delete marker.color;
       if (this._isObject(marker.label)) {
         const label = this._cloneDeep(marker.label);
@@ -4691,6 +4758,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       const target = this._getTargetResolvableValue({ type: 'card' });
       const targetMode = this._getTargetMode({ type: 'card' });
       const targetShape = this._getEffectiveTargetShapeValue({ type: 'card' });
+      const targetDirection = this._getEffectiveMarkerDirection({ type: 'card' }, 'target');
       const targetColor = this._getTargetColorValue({ type: 'card' });
       const targetLabelShow = this._getTargetLabelShowValue({ type: 'card' });
       const targetLabelDecimal = this._getTargetLabelDecimalValue({ type: 'card' });
@@ -5269,6 +5337,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                         const targetParts = this._getEffectiveTargetResolvableValue(scope);
                         const targetMode = this._getEffectiveTargetMode(scope);
                         const targetShape = this._getEffectiveTargetShapeValue(scope);
+                        const targetDirection = this._getEffectiveMarkerDirection(scope, 'target');
 	                        const formattingInherited = !this._hasFormattingOverride(scope);
 	                        const layoutInherited = !this._hasLayoutOverride(scope);
 	                        const peakInherited = !this._hasPeakOverride(scope);
@@ -5494,6 +5563,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                         </select>
                       </div>
                       <div class="field-row">
+                        <label for="entity-${index}-peak-direction">Direction</label>
+                        <select id="entity-${index}-peak-direction" data-kind="entity-peak-direction" data-index="${index}" value="${this._getEffectiveMarkerDirection(scope, 'peak')}">
+                          <option value="inward"${this._getEffectiveMarkerDirection(scope, 'peak') === 'inward' ? ' selected' : ''}>Inward</option>
+                          <option value="outward"${this._getEffectiveMarkerDirection(scope, 'peak') === 'outward' ? ' selected' : ''}>Outward</option>
+                        </select>
+                      </div>
+                      <div class="field-row">
                         <div class="toggle">
                           <input id="entity-${index}-peak-label-show" type="checkbox" data-kind="entity-peak-label-show" data-index="${index}"${entityPeakExtras.labelShow ? ' checked' : ''}>
                           <label for="entity-${index}-peak-label-show">Show Peak label</label>
@@ -5538,6 +5614,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                         <label for="entity-${index}-floor-reset">Floor reset</label>
                         <select id="entity-${index}-floor-reset" data-kind="entity-floor-reset" data-index="${index}" value="${this._escapeAttribute(entityFloor.reset)}">
                           ${this._renderResetOptions(entityFloor.reset)}
+                        </select>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-floor-direction">Direction</label>
+                        <select id="entity-${index}-floor-direction" data-kind="entity-floor-direction" data-index="${index}" value="${this._getEffectiveMarkerDirection(scope, 'floor')}">
+                          <option value="inward"${this._getEffectiveMarkerDirection(scope, 'floor') === 'inward' ? ' selected' : ''}>Inward</option>
+                          <option value="outward"${this._getEffectiveMarkerDirection(scope, 'floor') === 'outward' ? ' selected' : ''}>Outward</option>
                         </select>
                       </div>
                       <div class="field-row">
@@ -5757,6 +5840,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                         </select>
                       </div>
                       <div class="field-row">
+                        <label for="entity-${index}-target-direction">Direction</label>
+                        <select id="entity-${index}-target-direction" data-kind="entity-target-direction" data-index="${index}" value="${targetDirection}">
+                          <option value="inward"${targetDirection === 'inward' ? ' selected' : ''}>Inward</option>
+                          <option value="outward"${targetDirection === 'outward' ? ' selected' : ''}>Outward</option>
+                        </select>
+                      </div>
+                      <div class="field-row">
                         <label>Target entity</label>
                         ${this._renderEntitySourceInput('entity-target-entity-source', index, targetParts.entity, 'inherit card default')}
                       </div>
@@ -5874,6 +5964,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
               </select>
             </div>
             <div class="field-row">
+              <label for="target-direction">Direction</label>
+              <select id="target-direction" data-field="target-direction" value="${targetDirection}">
+                <option value="inward"${targetDirection === 'inward' ? ' selected' : ''}>Inward</option>
+                <option value="outward"${targetDirection === 'outward' ? ' selected' : ''}>Outward</option>
+              </select>
+            </div>
+            <div class="field-row">
               <label>Target entity</label>
               ${this._renderEntitySourceInput('target-entity-source', 'card', target.entity)}
             </div>
@@ -5984,6 +6081,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
               </select>
             </div>
             <div class="field-row">
+              <label for="peak-direction">Direction</label>
+              <select id="peak-direction" data-field="peak-direction" value="${this._getEffectiveMarkerDirection({ type: 'card' }, 'peak')}">
+                <option value="inward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'peak') === 'inward' ? ' selected' : ''}>Inward</option>
+                <option value="outward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'peak') === 'outward' ? ' selected' : ''}>Outward</option>
+              </select>
+            </div>
+            <div class="field-row">
               <div class="toggle">
                 <input id="peak-label-show" type="checkbox" data-field="peak-label-show"${cardPeakExtras.labelShow ? ' checked' : ''}>
                 <label for="peak-label-show">Show Peak label</label>
@@ -6013,6 +6117,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
               <label for="floor-reset">Floor reset</label>
               <select id="floor-reset" data-field="floor-reset" value="${this._escapeAttribute(cardFloor.reset)}">
                 ${this._renderResetOptions(cardFloor.reset)}
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="floor-direction">Direction</label>
+              <select id="floor-direction" data-field="floor-direction" value="${this._getEffectiveMarkerDirection({ type: 'card' }, 'floor')}">
+                <option value="inward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'floor') === 'inward' ? ' selected' : ''}>Inward</option>
+                <option value="outward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'floor') === 'outward' ? ' selected' : ''}>Outward</option>
               </select>
             </div>
             <div class="field-row">
@@ -6715,6 +6826,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return void this._setTargetResolvablePart({ type: 'card' }, 'fixed', value);
     }
     if (field === 'target-shape') return void this._setTargetShape({ type: 'card' }, value);
+    if (field === 'target-direction') return void this._setMarkerDirection({ type: 'card' }, 'target', value);
     if (field === 'target-color') return void this._setTargetColor({ type: 'card' }, value);
     if (field === 'target-label-show') return void this._setTargetLabelShow({ type: 'card' }, value);
     if (field === 'target-label-decimal') return void this._setTargetLabelDecimal({ type: 'card' }, value);
@@ -6722,11 +6834,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (field === 'target-above-fill-color') return void this._setTargetAboveFillColor({ type: 'card' }, value);
     if (field === 'peak-show') return void this._setPeakShow(value);
     if (field === 'peak-color') return void this._setScopedPeakColor({ type: 'card' }, value);
+    if (field === 'peak-direction') return void this._setMarkerDirection({ type: 'card' }, 'peak', value);
     if (field === 'peak-reset') return void this._setScopedExtremumReset({ type: 'card' }, 'peak', value);
     if (field === 'peak-label-show') return void this._setScopedExtremumLabelShow({ type: 'card' }, 'peak', value);
     if (field === 'peak-label-decimal') return void this._setScopedExtremumLabelDecimal({ type: 'card' }, 'peak', value);
     if (field === 'floor-show') return void this._setScopedExtremumEnabled({ type: 'card' }, 'floor', value);
     if (field === 'floor-color') return void this._setScopedExtremumColor({ type: 'card' }, 'floor', value);
+    if (field === 'floor-direction') return void this._setMarkerDirection({ type: 'card' }, 'floor', value);
     if (field === 'floor-reset') return void this._setScopedExtremumReset({ type: 'card' }, 'floor', value);
     if (field === 'floor-label-show') return void this._setScopedExtremumLabelShow({ type: 'card' }, 'floor', value);
     if (field === 'floor-label-decimal') return void this._setScopedExtremumLabelDecimal({ type: 'card' }, 'floor', value);
@@ -6849,6 +6963,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return void this._setScopedPeakColor({ type: 'entity', index: Number(target.dataset.index) }, value);
     }
 
+    if (kind === 'entity-peak-direction') {
+      return void this._setMarkerDirection({ type: 'entity', index: Number(target.dataset.index) }, 'peak', value);
+    }
+
     if (kind === 'entity-peak-reset') {
       return void this._setScopedExtremumReset({ type: 'entity', index: Number(target.dataset.index) }, 'peak', value);
     }
@@ -6872,6 +6990,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
     if (kind === 'entity-floor-color') {
       return void this._setScopedExtremumColor({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
+    }
+
+    if (kind === 'entity-floor-direction') {
+      return void this._setMarkerDirection({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
     }
 
     if (kind === 'entity-floor-reset') {
@@ -6986,6 +7108,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
     if (kind === 'entity-target-shape') {
       return void this._setTargetShape({ type: 'entity', index: Number(target.dataset.index) }, value);
+    }
+
+    if (kind === 'entity-target-direction') {
+      return void this._setMarkerDirection({ type: 'entity', index: Number(target.dataset.index) }, 'target', value);
     }
 
     if (kind === 'entity-target-entity-source') {

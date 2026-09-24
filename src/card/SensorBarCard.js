@@ -1999,6 +1999,12 @@ _getAboveTargetLayerGeometry(targetPct = null) {
             drop-shadow(0 0 1.2px var(--marker-contrast-color))
             drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
         }
+        .peak-marker[data-direction="outward"] .peak-inset,
+        .generic-marker[data-lane="above"][data-direction="outward"] .peak-inset {
+          border-top-width: 0;
+          border-top-color: transparent;
+          border-bottom: 11px solid var(--marker-color);
+        }
         .peak-marker .peak-outset,
         .generic-marker[data-lane="above"] .peak-outset {
           top: -4px;
@@ -2036,6 +2042,13 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           filter:
             drop-shadow(0 0 1.2px var(--marker-contrast-color))
             drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
+        }
+        .target-marker[data-direction="outward"] .target-inset,
+        .floor-marker[data-direction="outward"] .floor-inset,
+        .generic-marker[data-lane="below"][data-direction="outward"] .target-inset {
+          border-bottom-width: 0;
+          border-bottom-color: transparent;
+          border-top: 11px solid var(--marker-color);
         }
         .floor-marker .floor-outset {
           bottom: -4px;
@@ -2129,9 +2142,12 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         .marker-shape-svg[data-shape="chevron"] path[data-shape="chevron"] {
           fill: none;
         }
-        .marker-shape-svg[data-shape="chevron"][data-lane="below"] .marker-shape-paths,
-        .marker-shape-svg[data-shape="arrow"][data-lane="below"] .marker-shape-paths,
-        .marker-shape-svg[data-shape="pin"][data-lane="below"] .marker-shape-paths {
+        .marker-shape-svg[data-shape="chevron"][data-lane="below"][data-direction="inward"] .marker-shape-paths,
+        .marker-shape-svg[data-shape="arrow"][data-lane="below"][data-direction="inward"] .marker-shape-paths,
+        .marker-shape-svg[data-shape="pin"][data-lane="below"][data-direction="inward"] .marker-shape-paths,
+        .marker-shape-svg[data-shape="chevron"][data-lane="above"][data-direction="outward"] .marker-shape-paths,
+        .marker-shape-svg[data-shape="arrow"][data-lane="above"][data-direction="outward"] .marker-shape-paths,
+        .marker-shape-svg[data-shape="pin"][data-lane="above"][data-direction="outward"] .marker-shape-paths {
           transform-box: view-box;
           transform-origin: 0 0;
           transform: translateY(16px) scaleY(-1);
@@ -3634,8 +3650,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       <path data-shape="circle" d="M8 1A7 7 0 1 0 8 15A7 7 0 1 0 8 1Z"></path>
       <path data-shape="diamond" d="M8 1L15 8L8 15L1 8Z"></path>
       <path data-shape="chevron" d="M2 2L8 8L14 2 M2 8L8 14L14 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-      <path data-shape="arrow" d="M6 1H10V8H14L8 15L2 8H6Z"></path>
-      <path data-shape="pin" d="M8 15C7 13 2 10 2 6A6 6 0 1 1 14 6C14 10 9 13 8 15Z"></path>
+      <path data-shape="arrow" d="M8 15 L3 3 H6 L8 7 L10 3 H13 Z"></path>
+      <path data-shape="pin" fill-rule="evenodd" d="M8 15.5 C7.1 14 3 9.7 3 6 A5 5 0 1 1 13 6 C13 9.7 8.9 14 8 15.5 Z M8 4.2 A1.8 1.8 0 1 0 8 7.8 A1.8 1.8 0 1 0 8 4.2 Z"></path>
     </g>`;
 
     if (marker.type === 'generic') {
@@ -3643,28 +3659,28 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         ? ['peak-inset', 'peak-outset']
         : ['target-inset', 'target-outset'];
       return `
-      <div class="generic-marker" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+      <div class="generic-marker" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
         <div class="${triangleClasses[0]}"></div>
         <div class="${triangleClasses[1]}"></div>
-        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
+        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
       </div>`;
     }
 
     if (marker.type === 'target' || marker.type === 'floor') {
       const markerClass = `${marker.type}-marker`;
       return `
-      <div class="${markerClass}" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+      <div class="${markerClass}" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
         <div class="${marker.type}-inset"></div>
         <div class="${marker.type}-outset"></div>
-        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
+        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
       </div>`;
     }
 
     return `
-      <div class="peak-marker" data-shape="${shape}" data-lane="${lane}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+      <div class="peak-marker" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
         <div class="peak-outset"></div>
         <div class="peak-inset"></div>
-        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
+        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
       </div>`;
   }
 
@@ -3676,10 +3692,12 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     const shape = normalizeMarkerShape(marker.shape, defaultShape);
     this._setDatasetIfChanged(markerEl, 'shape', shape);
     this._setDatasetIfChanged(markerEl, 'lane', marker.lane ?? (marker.type === 'peak' ? 'above' : 'below'));
+    this._setDatasetIfChanged(markerEl, 'direction', marker.direction ?? 'inward');
     const shapeSvg = markerEl.querySelector?.('.marker-shape-svg');
     if (shapeSvg) {
       this._setDatasetIfChanged(shapeSvg, 'shape', shape);
       this._setDatasetIfChanged(shapeSvg, 'lane', marker.lane ?? (marker.type === 'peak' ? 'above' : 'below'));
+      this._setDatasetIfChanged(shapeSvg, 'direction', marker.direction ?? 'inward');
     }
 
     this._setStyleIfChanged(markerEl, 'display', marker.visible ? '' : 'none');
