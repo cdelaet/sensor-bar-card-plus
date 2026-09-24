@@ -2547,6 +2547,10 @@
         .row[data-marker-label-lane-below="true"]:not(:last-child) {
           margin-bottom: calc(10px + max(0px, var(--sbcp-marker-label-lane-size) - 12px));
         }
+        /* Facing configured lanes overlap by 9px at the approved offsets; 10px leaves a 1px gap. */
+        .row[data-marker-label-lane-below="true"]:has(+ .row[data-marker-label-lane-above="true"]) {
+          margin-bottom: calc(10px + max(0px, var(--sbcp-marker-label-lane-size) - 12px) + 10px);
+        }
         .row-stack {
           --sbcp-row-height: 38px;
           display: flex;
@@ -2855,7 +2859,10 @@
           margin-top: 2px;
           font-size: var(--sbcp-target-label-font-size);
           line-height: 1;
-          color: var(--secondary-text-color, #888);
+          color: var(--marker-color, var(--secondary-text-color, #888));
+          text-shadow:
+            0 0 0.6px var(--marker-contrast-color),
+            0 0 1.2px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent);
           background-color: var(--card-background-color, #fff);
           padding: 0 2px;
           border: 0;
@@ -2876,7 +2883,10 @@
           position: absolute;
           font-size: var(--sbcp-target-label-font-size);
           line-height: 1;
-          color: var(--secondary-text-color, #888);
+          color: var(--marker-color, var(--secondary-text-color, #888));
+          text-shadow:
+            0 0 0.6px var(--marker-contrast-color),
+            0 0 1.2px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent);
           background-color: var(--card-background-color, #fff);
           padding: 0 2px;
           border: 0;
@@ -2893,7 +2903,7 @@
         }
         .peak-value-label {
           bottom: 100%;
-          margin-bottom: 2px;
+          margin-bottom: 0;
         }
         .floor-value-label {
           top: 100%;
@@ -2901,7 +2911,7 @@
         }
         .generic-value-label[data-lane="above"] {
           bottom: 100%;
-          margin-bottom: 2px;
+          margin-bottom: 0;
         }
         .generic-value-label[data-lane="below"] {
           top: 100%;
@@ -2911,7 +2921,7 @@
         .peak-value-label[data-marker-hovered="true"],
         .floor-value-label[data-marker-hovered="true"],
         .generic-value-label[data-marker-hovered="true"] {
-          z-index: 9;
+          z-index: 11;
         }
         .above-line {
           display: grid;
@@ -3126,6 +3136,19 @@
         .generic-marker .target-outset {
           pointer-events: auto;
         }
+        .peak-marker .peak-inset:hover,
+        .peak-marker .peak-outset:hover,
+        .target-marker .target-inset:hover,
+        .target-marker .target-outset:hover,
+        .floor-marker .floor-inset:hover,
+        .floor-marker .floor-outset:hover,
+        .generic-marker .peak-inset:hover,
+        .generic-marker .peak-outset:hover,
+        .generic-marker .target-inset:hover,
+        .generic-marker .target-outset:hover,
+        .marker-shape-svg path[data-shape]:hover {
+          cursor: none;
+        }
         .target-marker {
           z-index: 6;
         }
@@ -3256,6 +3279,9 @@
           pointer-events: none;
           z-index: 2;
           transform: translateX(-50%);
+          filter:
+            drop-shadow(0 0 1.2px var(--marker-contrast-color))
+            drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
         }
         .peak-marker .marker-shape-svg {
           top: 0;
@@ -4530,6 +4556,14 @@
           const contrastS = Math.max(40, Math.min(100, s));
           return `hsl(${Math.round(h)} ${Math.round(contrastS)}% ${Math.round(contrastL)}%)`;
         }
+        _getEffectiveMarkerColor(marker) {
+          var _a;
+          return (_a = marker == null ? void 0 : marker.color) != null ? _a : "#888888";
+        }
+        _getMarkerLabelColorStyle(marker) {
+          const color = this._getEffectiveMarkerColor(marker);
+          return `--marker-color:${color};--marker-contrast-color:${this._getMarkerContrastColor(color)};`;
+        }
         _getNeedleBorderColor(color) {
           const rgb = this._parseColorToRgb(color);
           if (!rgb) return "#000000";
@@ -4610,15 +4644,15 @@
           return (_a = markers.find((marker) => marker.id === type || marker.type === type)) != null ? _a : null;
         }
         _renderMarker(marker) {
-          var _a, _b;
+          var _a;
           if (!marker) return "";
           const position = Number.isFinite(marker.position) ? marker.position : 0;
-          const color = (_a = marker.color) != null ? _a : "#888888";
+          const color = this._getEffectiveMarkerColor(marker);
           const contrastColor = this._getMarkerContrastColor(color);
           const display = marker.visible ? "" : "none";
           const defaultShape = marker.type === "target" ? "diamond" : marker.type === "generic" ? "circle" : "triangle";
           const shape = normalizeMarkerShape(marker.shape, defaultShape);
-          const lane = (_b = marker.lane) != null ? _b : marker.type === "peak" ? "above" : "below";
+          const lane = (_a = marker.lane) != null ? _a : marker.type === "peak" ? "above" : "below";
           const shapePaths = `<g class="marker-shape-paths">
       <path data-shape="circle" d="M8 1A7 7 0 1 0 8 15A7 7 0 1 0 8 1Z"></path>
       <path data-shape="diamond" d="M8 1L15 8L8 15L1 8Z"></path>
@@ -4668,10 +4702,15 @@
           if (marker.visible && Number.isFinite(marker.position)) {
             this._setStyleIfChanged(markerEl, "left", `${marker.position}%`);
           }
-          if (marker.color) {
-            this._setStyleIfChanged(markerEl, "--marker-color", marker.color);
-            this._setStyleIfChanged(markerEl, "--marker-contrast-color", this._getMarkerContrastColor(marker.color));
-          }
+          const markerColor = this._getEffectiveMarkerColor(marker);
+          this._setStyleIfChanged(markerEl, "--marker-color", markerColor);
+          this._setStyleIfChanged(markerEl, "--marker-contrast-color", this._getMarkerContrastColor(markerColor));
+        }
+        _patchMarkerLabelAppearance(labelEl, marker) {
+          if (!labelEl || !marker) return;
+          const markerColor = this._getEffectiveMarkerColor(marker);
+          this._setStyleIfChanged(labelEl, "--marker-color", markerColor);
+          this._setStyleIfChanged(labelEl, "--marker-contrast-color", this._getMarkerContrastColor(markerColor));
         }
         _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
           var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A;
@@ -4709,22 +4748,22 @@
           const targetMarker = this._renderMarker(targetMarkerModel);
           const floorMarker = this._renderMarker(floorMarkerModel);
           const targetValueLabel = (targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) ? `
-      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;">
+      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;${this._getMarkerLabelColorStyle(targetMarkerModel)}">
         ${((_q = targetMarkerModel.label) == null ? void 0 : _q.text) ? escapeHtml(targetMarkerModel.label.text) : ""}
       </div>` : "";
           const peakValueLabel = (peakMarkerModel == null ? void 0 : peakMarkerModel.labelVisible) ? `
-      <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;">
+      <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;${this._getMarkerLabelColorStyle(peakMarkerModel)}">
         ${peakMarkerModel.visible && ((_r = peakMarkerModel.label) == null ? void 0 : _r.text) ? escapeHtml(peakMarkerModel.label.text) : ""}
       </div>` : "";
           const floorValueLabel = (floorMarkerModel == null ? void 0 : floorMarkerModel.labelVisible) ? `
-      <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;">
+      <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;${this._getMarkerLabelColorStyle(floorMarkerModel)}">
         ${floorMarkerModel.visible && ((_s = floorMarkerModel.label) == null ? void 0 : _s.text) ? escapeHtml(floorMarkerModel.label.text) : ""}
       </div>` : "";
           const genericMarkers = genericMarkerModels.map((marker) => this._renderMarker(marker)).join("");
           const genericValueLabels = genericMarkerModels.filter((marker) => marker.labelVisible).map((marker) => {
             var _a2;
             return `
-      <div class="generic-value-label" data-marker-id="${escapeHtml(marker.id)}" data-lane="${marker.lane}" style="left:${Number.isFinite(marker.position) ? marker.position : 0}%">
+      <div class="generic-value-label" data-marker-id="${escapeHtml(marker.id)}" data-lane="${marker.lane}" style="left:${Number.isFinite(marker.position) ? marker.position : 0}%;${this._getMarkerLabelColorStyle(marker)}">
         ${marker.visible && ((_a2 = marker.label) == null ? void 0 : _a2.text) ? escapeHtml(marker.label.text) : ""}
       </div>`;
           }).join("");
@@ -4898,6 +4937,7 @@ ${paintLayers}
             this._patchMarker(markerEl, marker);
             const labelEl = [...(_b2 = (_a2 = row.querySelectorAll) == null ? void 0 : _a2.call(row, ".generic-value-label[data-marker-id]")) != null ? _b2 : []].find((label) => label.dataset.markerId === markerId);
             if (!labelEl) return;
+            this._patchMarkerLabelAppearance(labelEl, marker);
             if ((marker == null ? void 0 : marker.labelVisible) && marker.visible) {
               this._setTextIfChanged(labelEl, (_d2 = (_c2 = marker.label) == null ? void 0 : _c2.text) != null ? _d2 : null);
               this._setStyleIfChanged(labelEl, "visibility", "visible");
@@ -4907,6 +4947,7 @@ ${paintLayers}
             }
           });
           const targetMarkerModel = this._getMarkerModel(markerModels, "target");
+          this._patchMarkerLabelAppearance(targetLabelEl, targetMarkerModel);
           if (targetLabelEl) {
             if ((targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) && targetMarkerModel.visible) {
               this._setTextIfChanged(targetLabelEl, (_g = (_f = targetMarkerModel.label) == null ? void 0 : _f.text) != null ? _g : null);
@@ -4918,6 +4959,7 @@ ${paintLayers}
             var _a2, _b2;
             if (!labelEl) return;
             const marker = this._getMarkerModel(markerModels, markerType);
+            this._patchMarkerLabelAppearance(labelEl, marker);
             if ((marker == null ? void 0 : marker.labelVisible) && marker.visible) {
               this._setTextIfChanged(labelEl, (_b2 = (_a2 = marker.label) == null ? void 0 : _a2.text) != null ? _b2 : null);
               this._setStyleIfChanged(labelEl, "visibility", "visible");

@@ -1189,6 +1189,8 @@ describe('Sensor Bar Card Plus logic', () => {
       style: {
         left: '65%',
         visibility: 'visible',
+        '--marker-color': '#888',
+        '--marker-contrast-color': card._getMarkerContrastColor('#888'),
       },
       textContent: '65 W',
     });
@@ -1227,6 +1229,8 @@ describe('Sensor Bar Card Plus logic', () => {
       style: {
         left: '123px',
         visibility: 'visible',
+        '--marker-color': '#888',
+        '--marker-contrast-color': card._getMarkerContrastColor('#888'),
       },
       textContent: '50 W',
     });
@@ -1272,6 +1276,8 @@ describe('Sensor Bar Card Plus logic', () => {
       style: {
         left: '123px',
         visibility: 'visible',
+        '--marker-color': '#888',
+        '--marker-contrast-color': card._getMarkerContrastColor('#888'),
       },
       textContent: '50 W',
     });

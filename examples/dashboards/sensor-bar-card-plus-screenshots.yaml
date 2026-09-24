@@ -9191,4 +9191,282 @@ views:
             color: '#22c55e'
           - pos: 100
             color: '#facc15'
-        
+- title: Marker Showcase
+  path: marker-showcase
+  icon: mdi:map-marker-multiple
+  badges: []
+  cards:
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: |
+        # Sensor Bar Card Plus — Marker Showcase
+
+        Five capture-ready marker examples using stable screenshot entities. These cards demonstrate restrained, practical marker combinations rather than validation or collision cases.
+
+    - type: markdown
+      content: |
+        ## Grid Flow
+
+        Bidirectional utility exchange with a centered balance Target and two subtle operating references.
+
+    - type: custom:sensor-bar-card-plus
+      title: Grid Flow
+      entities:
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Utility exchange
+        icon: mdi:transmission-tower
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+        unit: kW
+      layout:
+        label:
+          position: above
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#1D4ED8'
+        - pos: 50
+          color: '#0F766E'
+        - pos: 100
+          color: '#F59E0B'
+      target:
+        at:
+          fixed: 0
+        color: '#F8FAFC'
+      markers:
+      - at: 25%
+        lane: above
+        shape: diamond
+        color: '#38BDF8'
+      - at: 75%
+        lane: below
+        shape: circle
+        color: '#FDE047'
+
+    - type: markdown
+      content: |
+        ## Solar and Storage
+
+        A static solar production reference and battery state-of-charge gauge, each using its native row scale.
+
+    - type: custom:sensor-bar-card-plus
+      title: Solar Production
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Rooftop solar
+        icon: mdi:solar-power
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      layout:
+        label:
+          position: left
+          width: 160
+      bar:
+        fill_style: band_gradient
+        segments:
+        - from: 0%
+          to: 55%
+          color: '#0F766E'
+        - from: 55%
+          to: 100%
+          color: '#F59E0B'
+      target:
+        at:
+          fixed: 8
+      markers:
+      - at: 70%
+        lane: above
+        shape: pin
+        color: '#F8FAFC'
+
+    - type: custom:sensor-bar-card-plus
+      title: Battery State of Charge
+      entities:
+      - entity: sensor.sbcp_hero_shot_battery
+        name: Home battery
+        icon: mdi:home-battery
+        formatting:
+          decimal: 0
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 100
+      formatting:
+        decimal: 0
+      bar:
+        fill_style: bands
+        segments:
+        - from: 0%
+          to: 20%
+          color: '#DC2626'
+        - from: 20%
+          to: 80%
+          color: '#16A34A'
+        - from: 80%
+          to: 100%
+          color: '#2563EB'
+      markers:
+      - at: 25%
+        lane: below
+        shape: circle
+        color: '#F8FAFC'
+
+    - type: markdown
+      content: |
+        ## Comfort Range
+
+        A quiet temperature gauge with an ideal-point Target and two unobtrusive comfort bounds.
+
+    - type: custom:sensor-bar-card-plus
+      title: Indoor Comfort
+      entities:
+      - entity: sensor.sbcp_marker_comfort
+        name: Living area
+        icon: mdi:sofa-outline
+      scale:
+        min:
+          fixed: 14
+        max:
+          fixed: 30
+      formatting:
+        decimal: 1
+        unit: '°C'
+      bar:
+        fill_style: soft_bands
+        segments:
+        - from: 0%
+          to: 30%
+          color: '#2563EB'
+        - from: 30%
+          to: 70%
+          color: '#16A34A'
+        - from: 70%
+          to: 100%
+          color: '#F97316'
+      target:
+        at:
+          fixed: 22
+      markers:
+      - at:
+          fixed: 20
+        lane: above
+        shape: diamond
+        color: '#38BDF8'
+      - at:
+          fixed: 25
+        lane: below
+        shape: pin
+        color: '#FDE047'
+
+    - type: markdown
+      content: |
+        ## Shape Gallery
+
+        The complete shared shape set, kept to two references per lane and without labels to keep the silhouettes clear.
+
+    - type: custom:sensor-bar-card-plus
+      title: Circles, Diamonds, Triangles, and Double Chevrons
+      entities:
+      - entity: sensor.sbcp_hero_shot_home
+        name: Household energy
+        icon: mdi:home-lightning-bolt
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      markers:
+      - at: 25%
+        lane: above
+        shape: circle
+        color: '#2563EB'
+      - at: 75%
+        lane: above
+        shape: diamond
+        color: '#0891B2'
+      - at: 25%
+        lane: below
+        shape: triangle
+        color: '#7C3AED'
+      - at: 75%
+        lane: below
+        shape: chevron
+        color: '#EA5808'
+
+    - type: custom:sensor-bar-card-plus
+      title: Arrow and Pin orientation
+      entities:
+      - entity: sensor.sbcp_hero_shot_ev
+        name: EV charging
+        icon: mdi:car-electric
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 11
+      markers:
+      - at: 35%
+        lane: above
+        shape: arrow
+        color: '#16A34A'
+      - at: 65%
+        lane: below
+        shape: pin
+        color: '#D97706'
+
+    - type: markdown
+      content: |
+        ## Hero Energy
+
+        A glanceable solar gauge with one operating reference and a subtle capacity Target.
+
+    - type: custom:sensor-bar-card-plus
+      title: Solar Energy — Hero
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Solar production
+        icon: mdi:solar-power
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 10
+        layout:
+          label:
+            hero_size: large
+      layout:
+        height: 48
+        label:
+          position: hero
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#082F49'
+        - pos: 45
+          color: '#0EA5E9'
+        - pos: 100
+          color: '#FACC15'
+      target:
+        at:
+          fixed: 8.5
+      markers:
+      - at: 55%
+        lane: above
+        shape: chevron
+        color: '#F8FAFC'

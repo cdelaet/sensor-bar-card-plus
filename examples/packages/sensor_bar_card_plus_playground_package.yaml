@@ -57,6 +57,51 @@ input_number:
     initial: 65
     unit_of_measurement: W
 
+  sbcp_marker_reference_value:
+    name: SBCP Marker Reference Value
+    min: -5000
+    max: 10000
+    step: 0.1
+    mode: box
+    initial: 140
+    unit_of_measurement: kW
+
+  sbcp_marker_primary_value:
+    name: SBCP Marker Primary Value
+    min: -5000
+    max: 10000
+    step: 0.1
+    mode: box
+    initial: 185
+    unit_of_measurement: W
+
+  sbcp_marker_target_value:
+    name: SBCP Marker Target Value
+    min: -5000
+    max: 10000
+    step: 0.1
+    mode: box
+    initial: 65
+    unit_of_measurement: W
+
+  sbcp_marker_scale_min_value:
+    name: SBCP Marker Scale Minimum
+    min: -5000
+    max: 10000
+    step: 1
+    mode: box
+    initial: 100
+    unit_of_measurement: W
+
+  sbcp_marker_scale_max_value:
+    name: SBCP Marker Scale Maximum
+    min: -5000
+    max: 10000
+    step: 1
+    mode: box
+    initial: 300
+    unit_of_measurement: W
+
   sbcp_baseline_value:
     name: SBCP Baseline Value
     min: -5000
@@ -216,6 +261,30 @@ input_select:
       - baseline_value
     initial: current_value
 
+  sbcp_marker_primary_state:
+    name: SBCP Marker Primary State
+    options:
+      - finite
+      - unavailable
+      - unknown
+    initial: finite
+
+  sbcp_marker_target_state:
+    name: SBCP Marker Target State
+    options:
+      - finite
+      - unavailable
+      - unknown
+    initial: finite
+
+  sbcp_marker_reference_state:
+    name: SBCP Marker Reference State
+    options:
+      - finite
+      - unavailable
+      - unknown
+    initial: finite
+
   sbcp_baseline_semantic_mode:
     name: SBCP Baseline Semantic Mode
     options:
@@ -284,6 +353,55 @@ template:
         unit_of_measurement: W
         icon: mdi:bullseye-arrow
         state: "{{ states('input_number.sbcp_target_value') | float(0) }}"
+      # Dedicated marker acceptance entities preserve the existing playground sensors.
+      - name: SBCP Marker Acceptance Primary
+        default_entity_id: sensor.sbcp_marker_primary
+        unit_of_measurement: W
+        icon: mdi:flash
+        availability: "{{ states('input_select.sbcp_marker_primary_state') != 'unavailable' }}"
+        state: >-
+          {% if states('input_select.sbcp_marker_primary_state') == 'unknown' %}
+            {{ none }}
+          {% else %}
+            {{ states('input_number.sbcp_marker_primary_value') | float(0) }}
+          {% endif %}
+      - name: SBCP Marker Acceptance Target
+        default_entity_id: sensor.sbcp_marker_target
+        unit_of_measurement: W
+        icon: mdi:bullseye-arrow
+        availability: "{{ states('input_select.sbcp_marker_target_state') != 'unavailable' }}"
+        state: >-
+          {% if states('input_select.sbcp_marker_target_state') == 'unknown' %}
+            {{ none }}
+          {% else %}
+            {{ states('input_number.sbcp_marker_target_value') | float(0) }}
+          {% endif %}
+      - name: SBCP Marker Acceptance Reference
+        default_entity_id: sensor.sbcp_marker_reference
+        unit_of_measurement: kW
+        icon: mdi:ray-vertex
+        availability: "{{ states('input_select.sbcp_marker_reference_state') != 'unavailable' }}"
+        state: >-
+          {% if states('input_select.sbcp_marker_reference_state') == 'unknown' %}
+            {{ none }}
+          {% else %}
+            {{ states('input_number.sbcp_marker_reference_value') | float(0) }}
+          {% endif %}
+      - name: SBCP Marker Scale Minimum
+        default_entity_id: sensor.sbcp_marker_scale_min
+        unit_of_measurement: W
+        icon: mdi:arrow-expand-left
+        state: "{{ states('input_number.sbcp_marker_scale_min_value') | float(100) }}"
+      - name: SBCP Marker Scale Maximum
+        default_entity_id: sensor.sbcp_marker_scale_max
+        unit_of_measurement: W
+        icon: mdi:arrow-expand-right
+        state: "{{ states('input_number.sbcp_marker_scale_max_value') | float(300) }}"
+      - name: SBCP Marker Comfort Range
+        default_entity_id: sensor.sbcp_marker_comfort
+        unit_of_measurement: °C
+        icon: mdi:thermometer
+        state: "21.8"
       - name: SBCP Playground Bar Height
         default_entity_id: sensor.sbcp_playground_bar_height
         unit_of_measurement: px
