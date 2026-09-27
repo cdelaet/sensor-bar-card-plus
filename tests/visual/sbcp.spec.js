@@ -52,6 +52,159 @@ async function render(page, { width = 720, config, states = baseStates }) {
   return page.locator('#mount');
 }
 
+test('left responsive history survives unrelated config rebuilds per entity', async ({ page }) => {
+  const config = {
+    layout: { label: { position: 'left', width: 100 }, height: 38 },
+    scale: { min: { fixed: 0 }, max: { fixed: 300 } },
+    formatting: { decimal: 1, unit: 'W' },
+    bar: { fill_style: 'gradient' },
+    entities: [
+      { entity: 'sensor.power' },
+      { entity: 'sensor.small', layout: { label: { width: 40 } } },
+    ],
+  };
+  const states = {
+    'sensor.power': sensor(185, { friendly_name: 'Power' }),
+    'sensor.small': sensor(1, { friendly_name: 'Small' }),
+  };
+  const readRows = () => page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    return [...card.shadowRoot.querySelectorAll('.row[data-entity]')].map((row) => {
+      const entityId = row.dataset.entity;
+      const mainLine = row.querySelector('.main-line');
+      const track = row.querySelector('.bar-track');
+      const budget = card._estimateLeftModeWidthBudget(row);
+      const inlineCandidate = card._predictLeftModeBarShareForState(row, {
+        hideLabel: false,
+        topValue: false,
+        hideIcon: false,
+      }, budget);
+      return {
+        entityId,
+        top: row.querySelector('.row-stack').dataset.forceTopValue === 'true',
+        mainWidth: mainLine.getBoundingClientRect().width,
+        trackWidth: track.getBoundingClientRect().width,
+        labelWidth: budget.labelWidth,
+        iconWidth: budget.iconWidth,
+        valueWidth: budget.valueWidth,
+        gap: budget.gap,
+        inlineShare: inlineCandidate.share,
+        history: card._leftModeResponsiveHistory.get(entityId),
+      };
+    });
+  });
+
+  await render(page, { width: 440, config, states });
+  await expect.poll(async () => (await readRows()).map(({ entityId, top }) => [entityId, top]))
+    .toEqual([['sensor.power', true], ['sensor.small', false]]);
+
+  await page.evaluate(() => {
+    document.querySelector('#mount').style.width = '450px';
+  });
+  await expect.poll(async () => (await readRows()).map(({ entityId, top }) => [entityId, top]))
+    .toEqual([['sensor.power', true], ['sensor.small', false]]);
+  const beforeNeedle = await readRows();
+  expect(beforeNeedle[0].inlineShare).toBeCloseTo(0.4878, 3);
+
+  const needleOnConfig = { ...config, bar: { ...config.bar, needle: { show: true } } };
+  await page.evaluate((nextConfig) => {
+    document.querySelector('sensor-bar-card-plus').setConfig(nextConfig);
+  }, needleOnConfig);
+  await expect.poll(async () => (await readRows()).map(({ entityId, top }) => [entityId, top]))
+    .toEqual([['sensor.power', true], ['sensor.small', false]]);
+  expect((await readRows()).map(({ mainWidth, trackWidth, labelWidth, iconWidth, valueWidth, gap }) => ({
+    mainWidth, trackWidth, labelWidth, iconWidth, valueWidth, gap,
+  }))).toEqual(beforeNeedle.map(({ mainWidth, trackWidth, labelWidth, iconWidth, valueWidth, gap }) => ({
+    mainWidth, trackWidth, labelWidth, iconWidth, valueWidth, gap,
+  })));
+
+  await page.evaluate((nextConfig) => {
+    document.querySelector('sensor-bar-card-plus').setConfig(nextConfig);
+  }, config);
+  await expect.poll(async () => (await readRows()).map(({ entityId, top }) => [entityId, top]))
+    .toEqual([['sensor.power', true], ['sensor.small', false]]);
+
+  const noIconConfig = {
+    ...config,
+    entities: [
+      { entity: 'sensor.power', icon: false },
+      { entity: 'sensor.small', layout: { label: { width: 40 } } },
+    ],
+  };
+  await page.evaluate((nextConfig) => {
+    document.querySelector('sensor-bar-card-plus').setConfig(nextConfig);
+  }, noIconConfig);
+  await expect.poll(async () => (await readRows()).map(({ entityId, top }) => [entityId, top]))
+    .toEqual([['sensor.power', false], ['sensor.small', false]]);
+  const afterRelevantChange = await readRows();
+  expect(afterRelevantChange[0].iconWidth).toBe(0);
+  expect(afterRelevantChange[0].inlineShare).toBeGreaterThan(0.52);
+
+  const freshConfig = { ...config, entities: [{ entity: 'sensor.power' }] };
+  await render(page, { width: 450, config: freshConfig, states });
+  await expect.poll(async () => (await readRows())[0]?.top).toBe(false);
+  expect((await readRows())[0].inlineShare).toBeCloseTo(0.4878, 3);
+});
+
+test('marker editor keeps focused inputs mounted and disclosures usable at narrow width', async ({ page }) => {
+  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.evaluate(async () => {
+    await customElements.whenDefined('sensor-bar-card-plus-editor');
+    const editor = document.createElement('sensor-bar-card-plus-editor');
+    editor.setConfig({
+      target: { at: { fixed: 65 }, shape: 'diamond' },
+      peak: { enabled: true, reset: 'hourly' },
+      floor: { enabled: true, reset: 'daily' },
+      baseline: { at: { fixed: 0 } },
+      markers: [{ at: { fixed: 1 }, label: { show: true } }],
+    });
+    editor.addEventListener('config-changed', (event) => editor.setConfig(event.detail.config));
+    document.querySelector('#mount').append(editor);
+    document.querySelector('#mount').style.width = '280px';
+  });
+
+  const editor = page.locator('sensor-bar-card-plus-editor');
+  for (const group of ['marker-target', 'marker-peak', 'marker-floor', 'generic-markers']) {
+    await expect(editor.locator(`#card-group-${group}`)).toHaveAttribute('aria-expanded', 'false');
+  }
+  const baselineToggle = editor.locator('#card-group-baseline');
+  await expect(baselineToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(editor.locator('#card-group-baseline-summary')).toHaveText('Auto · 0');
+  await baselineToggle.click();
+  await expect(baselineToggle).toHaveAttribute('aria-expanded', 'true');
+  await editor.locator('#baseline-value').fill('5');
+  await expect(editor.locator('#card-group-baseline-summary')).toHaveText('Auto · 5');
+  await expect(baselineToggle).toHaveAttribute('aria-expanded', 'true');
+
+  await editor.locator('#card-group-generic-markers').click();
+  const markerToggle = editor.locator('.generic-marker-toggle');
+  await expect(markerToggle).toHaveAttribute('aria-expanded', 'false');
+  await markerToggle.click();
+  await expect(markerToggle).toHaveAttribute('aria-expanded', 'true');
+
+  const textInput = editor.locator('input[data-kind="generic-marker-label-text"]');
+  await textInput.pressSequentially('Prediction');
+  await expect.poll(() => editor.evaluate((element) => element.shadowRoot.activeElement?.dataset.kind)).toBe('generic-marker-label-text');
+  await expect(editor.locator('.generic-marker-summary')).toContainText('1');
+
+  const fixedInput = editor.locator('input[data-kind="generic-marker-fixed"]');
+  await fixedInput.fill('');
+  await fixedInput.pressSequentially('25');
+  await expect.poll(() => editor.evaluate((element) => element.shadowRoot.activeElement?.dataset.kind)).toBe('generic-marker-fixed');
+  await expect(editor.locator('.generic-marker-summary')).toContainText('25');
+
+  const item = editor.locator('.generic-marker-item');
+  const actions = item.locator('.generic-marker-actions');
+  const bounds = await item.evaluate((element) => ({
+    itemRight: element.getBoundingClientRect().right,
+    actionsRight: element.querySelector('.generic-marker-actions').getBoundingClientRect().right,
+  }));
+  expect(bounds.actionsRight).toBeLessThanOrEqual(bounds.itemRight + 1);
+  await expect(actions.locator('button[data-action="move-generic-marker-up"]')).toBeDisabled();
+  await expect(actions.locator('button[data-action="move-generic-marker-down"]')).toBeDisabled();
+  await expect(actions.locator('button[data-action="remove-generic-marker"]')).toBeEnabled();
+});
+
 test('glyph-only markers preserve row geometry and below labels use only needed clearance', async ({ page }) => {
   await render(page, {
     width: 720,

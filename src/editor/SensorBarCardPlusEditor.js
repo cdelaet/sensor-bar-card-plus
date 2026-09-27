@@ -15,6 +15,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._expandedEntityOverrides = new Set();
     this._expandedOverrideGroups = new Set();
     this._expandedCardGroups = new Set();
+    this._genericMarkerUiIds = new Map();
+    this._expandedGenericMarkerUiIds = new Set();
+    this._nextGenericMarkerUiId = 0;
     this._gradientStopsDrafts = new Map();
     this._gradientStopsUiRows = new Map();
     this._gradientStopPosTexts = new Map();
@@ -47,6 +50,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return;
     }
 
+    if (this._getEmittedConfigJson(nextConfig) === this._getEmittedConfigJson(this._draftConfig)) {
+      this._config = nextConfig;
+      return;
+    }
+
     const shouldRender = !this.shadowRoot?.innerHTML || nextConfigJson !== this._lastRenderedConfigJson;
     this._config = nextConfig;
     this._draftConfig = this._cloneDeep(nextConfig);
@@ -59,6 +67,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._segmentBoundaryTexts = new Map();
     this._targetAboveFillDrafts = new Map();
     this._baselineColorDrafts = new Map();
+    this._genericMarkerUiIds.clear();
+    this._expandedGenericMarkerUiIds.clear();
 
     if (shouldRender) {
       this._render();
@@ -107,6 +117,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     };
 
     return JSON.stringify(normalize(value ?? null));
+  }
+
+  _getEmittedConfigJson(config) {
+    return this._serializeConfig(this._cleanupEditorEmittedConfig(this._cloneDeep(config)));
   }
 
   _isObject(value) {
@@ -413,6 +427,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _refreshCardDerivedUi() {
+    this._setElementText('card-group-marker-target-summary', this._getCardTargetMarkerSummary());
+    this._setElementText('card-group-marker-peak-summary', this._getMarkerResetSummary('peak'));
+    this._setElementText('card-group-marker-floor-summary', this._getMarkerResetSummary('floor'));
+    this._setElementText('card-group-baseline-summary', this._getCardBaselineSummary());
+    this._setElementText('card-group-generic-markers-summary', this._getGenericMarkersSummary({ type: 'card' }));
     this._setElementText('card-group-segments-summary', this._getSegmentsSummary({ type: 'card' }));
     this._setElementText('card-group-gradient-stops-summary', this._getGradientStopsSummary({ type: 'card' }));
     this._setElementChecked('target-above-fill-enabled', this._isTargetAboveFillEnabled({ type: 'card' }));
@@ -2389,6 +2408,31 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return 'Disabled';
   }
 
+  _getMarkerResetSummary(key) {
+    const scope = { type: 'card' };
+    const marker = key === 'peak'
+      ? this._getScopedPeakConfig(scope)
+      : this._getEffectiveScopedFloorConfig(scope);
+    const enabled = marker.mode === 'enabled';
+    const reset = this._getEffectiveMarkerExtras(scope, key).reset ?? 'never';
+    return `${enabled ? 'Enabled' : 'Disabled'} · ${reset === 'never' ? 'no reset' : `${reset} reset`}`;
+  }
+
+  _getCardTargetMarkerSummary() {
+    const mode = this._getTargetMode({ type: 'card' });
+    if (mode === 'disabled') return 'Disabled';
+    const target = this._getTargetResolvableValue({ type: 'card' });
+    const parts = [];
+    if (mode === 'enabled') parts.push('Enabled');
+    const hasTargetValue = (target.fixed !== '' && target.fixed !== undefined) || !!target.entity;
+    if (target.fixed !== '' && target.fixed !== undefined) parts.push(String(target.fixed));
+    if (target.entity) parts.push(target.entity);
+    if (hasTargetValue || this._hasTargetShape({ type: 'card' })) {
+      parts.push(this._getEffectiveTargetShapeValue({ type: 'card' }) === 'triangle' ? 'Triangle' : 'Diamond');
+    }
+    return parts.length ? parts.join(' · ') : 'Automatic';
+  }
+
   _setScopedExtremumEnabled(scope, key, value) {
     const boolValue = !!value;
     const defaultColor = '#888888';
@@ -4164,6 +4208,15 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._render();
   }
 
+  _toggleGenericMarkerExpanded(markerUiId) {
+    if (this._expandedGenericMarkerUiIds.has(markerUiId)) {
+      this._expandedGenericMarkerUiIds.delete(markerUiId);
+    } else {
+      this._expandedGenericMarkerUiIds.add(markerUiId);
+    }
+    this._render();
+  }
+
   _getOverrideGroupKey(index, group) {
     return `${index}:${group}`;
   }
@@ -4240,6 +4293,17 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (this._getBaselineDirectionalColorValue(scope, 'above')) parts.push('Above');
     if (this._getBaselineDirectionalColorValue(scope, 'below')) parts.push('Below');
     return parts.length ? parts.join(' • ') : 'Inherited';
+  }
+
+  _getCardBaselineSummary() {
+    const mode = this._getBaselineMode({ type: 'card' });
+    if (mode === 'disabled') return 'Disabled';
+
+    const baseline = this._getBaselineResolvableValue({ type: 'card' });
+    const origin = baseline.entity
+      || (baseline.fixed !== '' && baseline.fixed !== undefined ? baseline.fixed : '');
+    const modeLabel = mode === 'enabled' ? 'Enabled' : 'Auto';
+    return origin !== '' ? `${modeLabel} · ${origin}` : modeLabel;
   }
 
   _getBarAppearanceSummary(scope) {
@@ -4506,6 +4570,55 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return count === 0 ? 'No reference markers' : `${count} reference marker${count === 1 ? '' : 's'}`;
   }
 
+  _getGenericMarkerScopeKey(scope) {
+    return scope?.type === 'entity' ? `entity:${scope.index}` : 'card';
+  }
+
+  _getGenericMarkerUiIds(scope, count) {
+    const key = this._getGenericMarkerScopeKey(scope);
+    const ids = this._genericMarkerUiIds.get(key) ?? [];
+    while (ids.length < count) {
+      ids.push(`marker-${++this._nextGenericMarkerUiId}`);
+    }
+    ids.length = count;
+    this._genericMarkerUiIds.set(key, ids);
+    return ids;
+  }
+
+  _resetGenericMarkerUiScope(scope) {
+    const key = this._getGenericMarkerScopeKey(scope);
+    const ids = this._genericMarkerUiIds.get(key) ?? [];
+    ids.forEach((id) => this._expandedGenericMarkerUiIds.delete(id));
+    this._genericMarkerUiIds.delete(key);
+  }
+
+  _getGenericMarkerSummary(marker) {
+    const source = this._getGenericMarkerSource(marker);
+    const lane = marker?.lane === 'above' ? 'Above' : 'Below';
+    const shape = marker?.shape ?? 'circle';
+    let sourceSummary;
+    if (source.mode === 'percent') {
+      sourceSummary = source.percent === '' ? 'Percentage' : `${source.percent}%`;
+    } else if (source.mode === 'entity' || source.mode === 'entity-fallback') {
+      sourceSummary = source.entity || 'Entity';
+    } else {
+      sourceSummary = source.fixed === '' ? 'Fixed value' : String(source.fixed);
+    }
+    return `${lane} · ${shape.charAt(0).toUpperCase()}${shape.slice(1)} · ${sourceSummary}`;
+  }
+
+  _refreshGenericMarkerSummary(scope, markerIndex) {
+    const markers = this._getGenericMarkers(scope);
+    const marker = markers[markerIndex];
+    const uiId = this._getGenericMarkerUiIds(scope, markers.length)[markerIndex];
+    const summary = this._getShadowElementById(`generic-${uiId}-summary`);
+    if (marker && summary) {
+      const text = this._getGenericMarkerSummary(marker);
+      summary.textContent = text;
+      summary.setAttribute('title', text);
+    }
+  }
+
   _getGenericMarkerSource(marker) {
     const at = marker?.at;
     if (typeof at === 'string' && /^\s*[+-]?(?:\d+(?:\.\d+)?|\.\d+)\s*%\s*$/.test(at)) {
@@ -4515,10 +4628,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return { mode: 'entity', entity: at.trim(), fixed: '' };
     }
     const source = this._isObject(at) ? at : {};
-    if (source.entity) {
+    if (Object.prototype.hasOwnProperty.call(source, 'entity')) {
       return {
         mode: source.fixed !== undefined && source.fixed !== null && source.fixed !== '' ? 'entity-fallback' : 'entity',
-        entity: source.entity,
+        entity: source.entity ?? '',
         fixed: source.fixed ?? '',
       };
     }
@@ -4529,11 +4642,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const scopeType = scope.type;
     const scopeIndex = scopeType === 'entity' ? scope.index : 'card';
     const markers = this._getGenericMarkers(scope);
+    const markerUiIds = this._getGenericMarkerUiIds(scope, markers.length);
     const override = this._hasMarkersOverride(scope);
     const rows = markers.map((marker, markerIndex) => {
       const source = this._getGenericMarkerSource(marker);
-      const rowId = `${scopeType}-${scopeIndex}-generic-marker-${markerIndex}`;
-      const dataset = { 'scope-type': scopeType, index: scopeIndex, 'marker-index': markerIndex };
+      const markerUiId = markerUiIds[markerIndex];
+      const rowId = `${scopeType}-${scopeIndex}-generic-${markerUiId}`;
+      const expanded = this._expandedGenericMarkerUiIds.has(markerUiId);
       const entitySource = (source.mode === 'entity' || source.mode === 'entity-fallback')
         ? this._renderEntitySourceInput('generic-marker-entity', scopeIndex, source.entity, 'sensor.reference', {
           'scope-type': scopeType,
@@ -4541,24 +4656,36 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         })
         : '';
       return `
-        <div class="list-row generic-marker-row">
-          <div class="field-row">
-            <label for="${rowId}-source-mode">Source</label>
-            <select id="${rowId}-source-mode" data-kind="generic-marker-source-mode" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
+        <div class="generic-marker-item" data-marker-ui-id="${markerUiId}" data-expanded="${expanded ? 'true' : 'false'}">
+          <div class="generic-marker-header">
+            <button type="button" class="generic-marker-toggle" data-action="toggle-generic-marker" data-marker-ui-id="${markerUiId}" aria-expanded="${expanded ? 'true' : 'false'}">
+              <span class="generic-marker-title">Reference marker ${markerIndex + 1}</span>
+              <span id="generic-${markerUiId}-summary" class="generic-marker-summary" title="${this._escapeAttribute(this._getGenericMarkerSummary(marker))}">${this._escapeAttribute(this._getGenericMarkerSummary(marker))}</span>
+            </button>
+            <div class="generic-marker-actions">
+              <button type="button" data-action="move-generic-marker-up" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${markerIndex === 0 ? ' disabled' : ''} aria-label="Move marker up">↑</button>
+              <button type="button" data-action="move-generic-marker-down" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${markerIndex === markers.length - 1 ? ' disabled' : ''} aria-label="Move marker down">↓</button>
+              <button type="button" data-action="remove-generic-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" aria-label="Remove marker">Remove</button>
+            </div>
+          </div>
+          <div class="generic-marker-body" style="display:${expanded ? 'grid' : 'none'};">
+            <div class="field-row">
+              <label for="${rowId}-source-mode">Source</label>
+              <select id="${rowId}-source-mode" data-kind="generic-marker-source-mode" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
               <option value="fixed"${source.mode === 'fixed' ? ' selected' : ''}>Fixed</option>
               <option value="entity"${source.mode === 'entity' ? ' selected' : ''}>Entity</option>
               <option value="entity-fallback"${source.mode === 'entity-fallback' ? ' selected' : ''}>Entity with fixed fallback</option>
               <option value="percent"${source.mode === 'percent' ? ' selected' : ''}>Percentage</option>
-            </select>
-          </div>
-          ${source.mode === 'fixed' ? `
-            <div class="field-row">
-              <label for="${rowId}-fixed">Fixed value</label>
-              <input id="${rowId}-fixed" type="number" step="any" data-kind="generic-marker-fixed" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(source.fixed)}">
-            </div>` : ''}
+              </select>
+            </div>
+            ${source.mode === 'fixed' ? `
+              <div class="field-row">
+                <label for="${rowId}-fixed">Fixed value</label>
+                <input id="${rowId}-fixed" type="number" step="any" data-kind="generic-marker-fixed" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(source.fixed)}">
+              </div>` : ''}
           ${source.mode === 'entity' || source.mode === 'entity-fallback' ? `
             <div class="field-row">
-              <label>Entity</label>
+              <label>Reference marker entity</label>
               ${entitySource}
             </div>` : ''}
           ${source.mode === 'entity-fallback' ? `
@@ -4571,24 +4698,26 @@ export class SensorBarCardPlusEditor extends HTMLElement {
               <label for="${rowId}-percent">Scale percentage</label>
               <input id="${rowId}-percent" type="number" min="0" max="100" step="any" data-kind="generic-marker-percent" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(source.percent)}">%
             </div>` : ''}
-          <div class="field-row">
-            <label for="${rowId}-lane">Lane</label>
-            <select id="${rowId}-lane" data-kind="generic-marker-lane" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
-              <option value="above"${marker?.lane === 'above' ? ' selected' : ''}>Above</option>
-              <option value="below"${(marker?.lane ?? 'below') === 'below' ? ' selected' : ''}>Below</option>
-            </select>
+          <div class="inline-row generic-marker-pair">
+            <div class="field-row">
+              <label for="${rowId}-lane">Lane</label>
+              <select id="${rowId}-lane" data-kind="generic-marker-lane" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
+                <option value="above"${marker?.lane === 'above' ? ' selected' : ''}>Above</option>
+                <option value="below"${(marker?.lane ?? 'below') === 'below' ? ' selected' : ''}>Below</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="${rowId}-direction">Direction</label>
+              <select id="${rowId}-direction" data-kind="generic-marker-direction" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${normalizeMarkerDirection(marker?.direction)}">
+                <option value="inward"${(marker?.direction ?? 'inward') === 'inward' ? ' selected' : ''}>Inward</option>
+                <option value="outward"${marker?.direction === 'outward' ? ' selected' : ''}>Outward</option>
+              </select>
+            </div>
           </div>
           <div class="field-row">
             <label for="${rowId}-shape">Shape</label>
             <select id="${rowId}-shape" data-kind="generic-marker-shape" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
               ${['circle', 'diamond', 'triangle', 'chevron', 'arrow', 'pin'].map((shape) => `<option value="${shape}"${(marker?.shape ?? 'circle') === shape ? ' selected' : ''}>${shape}</option>`).join('')}
-            </select>
-          </div>
-          <div class="field-row">
-            <label for="${rowId}-direction">Direction</label>
-            <select id="${rowId}-direction" data-kind="generic-marker-direction" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${normalizeMarkerDirection(marker?.direction)}">
-              <option value="inward"${(marker?.direction ?? 'inward') === 'inward' ? ' selected' : ''}>Inward</option>
-              <option value="outward"${marker?.direction === 'outward' ? ' selected' : ''}>Outward</option>
             </select>
           </div>
           <div class="field-row">
@@ -4610,21 +4739,19 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           <div class="field-row"><label for="${rowId}-label-text">Label text</label>
             <input id="${rowId}-label-text" type="text" data-kind="generic-marker-label-text" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(marker?.label?.text ?? '')}" placeholder="optional semantic text">
           </div>
-          <div class="field-row"><div class="toggle">
-            <input id="${rowId}-label-show-value" type="checkbox" data-kind="generic-marker-label-show-value" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.label?.show_value === false ? '' : ' checked'}>
-            <label for="${rowId}-label-show-value">Show value</label>
-          </div></div>
-          <div class="field-row"><div class="toggle">
-            <input id="${rowId}-label-show-unit" type="checkbox" data-kind="generic-marker-label-show-unit" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.label?.show_unit === false ? '' : ' checked'}>
-            <label for="${rowId}-label-show-unit">Show row unit</label>
-          </div></div>
-          <div class="field-row"><label for="${rowId}-label-precision">Label precision</label>
-            <input id="${rowId}-label-precision" type="number" min="0" step="1" data-kind="generic-marker-label-precision" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(marker?.label?.precision ?? marker?.label?.decimal ?? '')}" placeholder="inherit row precision">
+          <div class="inline-row generic-marker-options">
+            <div class="field-row"><div class="toggle">
+              <input id="${rowId}-label-show-value" type="checkbox" data-kind="generic-marker-label-show-value" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.label?.show_value === false ? '' : ' checked'}>
+              <label for="${rowId}-label-show-value">Show value</label>
+            </div></div>
+            <div class="field-row"><div class="toggle">
+              <input id="${rowId}-label-show-unit" type="checkbox" data-kind="generic-marker-label-show-unit" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.label?.show_unit === false ? '' : ' checked'}>
+              <label for="${rowId}-label-show-unit">Show raw unit</label>
+            </div></div>
+            <div class="field-row generic-marker-precision"><label for="${rowId}-label-precision">Label precision</label>
+              <input id="${rowId}-label-precision" type="number" min="0" step="1" data-kind="generic-marker-label-precision" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(marker?.label?.precision ?? marker?.label?.decimal ?? '')}" placeholder="inherit">
+            </div>
           </div>
-          <div class="generic-marker-actions">
-            <button type="button" data-action="move-generic-marker-up" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${markerIndex === 0 ? ' disabled' : ''} aria-label="Move marker up">↑</button>
-            <button type="button" data-action="move-generic-marker-down" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${markerIndex === markers.length - 1 ? ' disabled' : ''} aria-label="Move marker down">↓</button>
-            <button type="button" data-action="remove-generic-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" aria-label="Remove marker">Remove</button>
           </div>
         </div>`;
     }).join('');
@@ -4656,7 +4783,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _setGenericMarkerList(scope, markers, options = {}) {
-    return this._setScopedValue(scope, ['markers'], markers, { rerender: true, ...options });
+    return this._setScopedValue(scope, ['markers'], markers, { rerender: false, ...options });
   }
 
   _updateGenericMarker(scope, markerIndex, update, options = {}) {
@@ -4665,7 +4792,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const marker = this._isObject(markers[markerIndex]) ? this._cloneDeep(markers[markerIndex]) : {};
     const nextMarker = update(marker) ?? marker;
     markers[markerIndex] = nextMarker;
-    return this._setGenericMarkerList(scope, markers, options);
+    const changed = this._setGenericMarkerList(scope, markers, options);
+    if (changed) this._refreshGenericMarkerSummary(scope, markerIndex);
+    return changed;
   }
 
   _setGenericMarkerSourceMode(scope, markerIndex, mode) {
@@ -5024,16 +5153,79 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	          align-items: end;
 	          min-width: 0;
 	        }
-	        .generic-marker-row {
-	          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-	          padding: 10px 0;
-	          border-bottom: 1px solid var(--divider-color, rgba(127, 127, 127, 0.2));
-	        }
-	        .generic-marker-actions {
-	          display: flex;
-	          gap: 8px;
-	          align-items: center;
-	        }
+        .generic-marker-list {
+          gap: 8px;
+        }
+        .generic-marker-item {
+          min-width: 0;
+          overflow: hidden;
+          border: 1px solid color-mix(in srgb, var(--divider-color, #888) 32%, transparent);
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--card-background-color, #fff) 82%, transparent);
+        }
+        .generic-marker-item[data-expanded="true"] {
+          border-color: color-mix(in srgb, var(--accent-color, var(--primary-color, #03a9f4)) 38%, var(--divider-color, #888));
+        }
+        .generic-marker-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+          padding: 6px 8px;
+        }
+        .generic-marker-toggle {
+          display: grid;
+          grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+          align-items: center;
+          gap: 4px 10px;
+          flex: 1 1 auto;
+          min-width: 0;
+          min-height: 40px;
+          padding: 4px 6px;
+          border: 0;
+          background: transparent;
+          text-align: left;
+        }
+        .generic-marker-toggle:hover,
+        .generic-marker-toggle:focus {
+          background: color-mix(in srgb, var(--secondary-background-color, var(--card-background-color, #fff)) 72%, transparent);
+        }
+        .generic-marker-title {
+          font-weight: 700;
+          white-space: nowrap;
+        }
+        .generic-marker-summary {
+          min-width: 0;
+          overflow: hidden;
+          color: var(--secondary-text-color, #666);
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .generic-marker-actions {
+          display: flex;
+          flex: 0 0 auto;
+          gap: 4px;
+          align-items: center;
+        }
+        .generic-marker-actions button {
+          min-width: 38px;
+          min-height: 38px;
+          padding: 6px;
+        }
+        .generic-marker-body {
+          gap: 12px;
+          padding: 12px;
+          border-top: 1px solid color-mix(in srgb, var(--divider-color, #888) 25%, transparent);
+          background: color-mix(in srgb, var(--secondary-background-color, var(--card-background-color, #fff)) 78%, transparent);
+        }
+        .generic-marker-pair,
+        .generic-marker-options {
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          align-items: end;
+        }
+        .generic-marker-precision {
+          max-width: 220px;
+        }
 	        .list-row.triple {
 	          grid-template-columns: repeat(3, minmax(120px, 1fr)) auto;
 	        }
@@ -5396,7 +5588,20 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	          .list-row {
 	            grid-template-columns: minmax(0, 1fr);
 	          }
-	          .generic-marker-row {
+	          .generic-marker-header {
+	            flex-wrap: wrap;
+	          }
+	          .generic-marker-toggle {
+	            flex-basis: 100%;
+	          }
+	          .generic-marker-actions {
+	            width: 100%;
+	          }
+	          .generic-marker-actions button {
+	            flex: 1 1 auto;
+	          }
+	          .generic-marker-pair,
+	          .generic-marker-options {
 	            grid-template-columns: minmax(0, 1fr);
 	          }
 	          .list-row.triple,
@@ -6052,11 +6257,17 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	        </div>
 
 	        <div class="section">
-	          <div class="section-head">
+          <div class="section-head">
 	            <h3>Markers</h3>
-	            <div class="section-note">Target, baseline, and peak markers help compare the current value against reference points.</div>
+	            <div class="section-note">Configure Target, Peak, Floor, and custom reference markers.</div>
 	          </div>
 	          <div class="field-grid">
+            ${this._renderCardGroup({
+              group: 'marker-target',
+              title: 'Target',
+              summary: this._getCardTargetMarkerSummary(),
+              content: `
+            <div class="field-grid">
             <div class="field-row">
               <label for="target-mode">Target mode</label>
               <select id="target-mode" data-field="target-mode" value="${this._escapeAttribute(targetMode)}">
@@ -6113,6 +6324,132 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                 fallbackHex: '#000000',
               })}
             </div>
+            </div>`,
+            })}
+            ${this._renderCardGroup({
+              group: 'marker-peak',
+              title: 'Peak',
+              summary: this._getMarkerResetSummary('peak'),
+              content: `
+            <div class="field-grid">
+            <div class="field-row">
+              <div class="toggle">
+                <input id="peak-show" type="checkbox" data-field="peak-show"${cardPeak.mode === 'enabled' ? ' checked' : ''}>
+                <label for="peak-show">Peak enabled</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="peak-color">Peak color</label>
+              ${this._renderColorInput({
+                id: 'peak-color',
+                field: 'peak-color',
+                value: cardPeak.color,
+                fallbackHex: '#888',
+                placeholder: '#888',
+              })}
+            </div>
+            <div class="field-row">
+              <label for="peak-reset">Peak reset</label>
+              <select id="peak-reset" data-field="peak-reset" value="${this._escapeAttribute(cardPeakExtras.reset)}">
+                ${this._renderResetOptions(cardPeakExtras.reset)}
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="peak-direction">Direction</label>
+              <select id="peak-direction" data-field="peak-direction" value="${this._getEffectiveMarkerDirection({ type: 'card' }, 'peak')}">
+                <option value="inward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'peak') === 'inward' ? ' selected' : ''}>Inward</option>
+                <option value="outward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'peak') === 'outward' ? ' selected' : ''}>Outward</option>
+              </select>
+            </div>
+            ${this._renderBuiltinMarkerLabelControls({ type: 'card' }, 'peak', 'Peak')}
+            </div>`,
+            })}
+            ${this._renderCardGroup({
+              group: 'marker-floor',
+              title: 'Floor',
+              summary: this._getMarkerResetSummary('floor'),
+              content: `
+            <div class="field-grid">
+            <div class="field-row">
+              <div class="toggle">
+                <input id="floor-show" type="checkbox" data-field="floor-show"${cardFloor.mode === 'enabled' ? ' checked' : ''}>
+                <label for="floor-show">Floor enabled</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="floor-color">Floor color</label>
+              ${this._renderColorInput({
+                id: 'floor-color',
+                field: 'floor-color',
+                value: cardFloor.color,
+                fallbackHex: '#888888',
+                placeholder: '#888888',
+              })}
+            </div>
+            <div class="field-row">
+              <label for="floor-reset">Floor reset</label>
+              <select id="floor-reset" data-field="floor-reset" value="${this._escapeAttribute(cardFloor.reset)}">
+                ${this._renderResetOptions(cardFloor.reset)}
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="floor-direction">Direction</label>
+              <select id="floor-direction" data-field="floor-direction" value="${this._getEffectiveMarkerDirection({ type: 'card' }, 'floor')}">
+                <option value="inward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'floor') === 'inward' ? ' selected' : ''}>Inward</option>
+                <option value="outward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'floor') === 'outward' ? ' selected' : ''}>Outward</option>
+              </select>
+            </div>
+            ${this._renderBuiltinMarkerLabelControls({ type: 'card' }, 'floor', 'Floor')}
+            </div>`,
+            })}
+            ${this._renderCardGroup({
+              group: 'generic-markers',
+              title: 'Generic Reference Markers',
+              summary: this._getGenericMarkersSummary({ type: 'card' }),
+              content: this._renderGenericMarkersEditor({ type: 'card' }),
+            })}
+          </div>
+	        </div>
+
+	        <div class="section">
+	          <div class="section-head">
+	            <h3>Bar Appearance</h3>
+	            <div class="section-note">Choose the bar rendering mode and base bar colors.</div>
+	          </div>
+          <div class="inline-row editor-grid">
+            <div class="field-row">
+              <label for="bar-fill-style">Fill style</label>
+              <select id="bar-fill-style" data-field="bar-fill-style" value="${this._escapeAttribute(fillStyle)}">
+                <option value="solid"${fillStyle === 'solid' ? ' selected' : ''}>solid</option>
+                <option value="gradient"${fillStyle === 'gradient' ? ' selected' : ''}>gradient</option>
+                <option value="bands"${fillStyle === 'bands' ? ' selected' : ''}>bands</option>
+                <option value="band_gradient"${fillStyle === 'band_gradient' ? ' selected' : ''}>band_gradient</option>
+                <option value="soft_bands"${fillStyle === 'soft_bands' ? ' selected' : ''}>soft_bands</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <div class="toggle">
+                <input id="bar-solid-fill" type="checkbox" data-field="bar-solid-fill"${barSolidFill ? ' checked' : ''}>
+                <label for="bar-solid-fill">Solid fill</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="bar-color">Bar color</label>
+              ${this._renderColorInput({
+                id: 'bar-color',
+                field: 'bar-color',
+                value: barColor,
+                fallbackHex: '#4a9eff',
+                placeholder: '#4a9eff',
+              })}
+            </div>
+          </div>
+          ${this._renderCardGroup({
+            group: 'baseline',
+            title: 'Baseline',
+            summary: this._getCardBaselineSummary(),
+            content: `
+          <div class="field-grid">
             <div class="field-row">
               <label for="baseline-mode">Baseline mode</label>
               <select id="baseline-mode" data-field="baseline-mode" value="${this._escapeAttribute(baselineMode)}">
@@ -6162,103 +6499,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                 fallbackHex: '#000000',
               })}
             </div>
-            <div class="field-row">
-              <div class="toggle">
-                <input id="peak-show" type="checkbox" data-field="peak-show"${cardPeak.mode === 'enabled' ? ' checked' : ''}>
-                <label for="peak-show">Peak enabled</label>
-              </div>
-            </div>
-            <div class="field-row">
-              <label for="peak-color">Peak color</label>
-              ${this._renderColorInput({
-                id: 'peak-color',
-                field: 'peak-color',
-                value: cardPeak.color,
-                fallbackHex: '#888',
-                placeholder: '#888',
-              })}
-            </div>
-            <div class="field-row">
-              <label for="peak-reset">Peak reset</label>
-              <select id="peak-reset" data-field="peak-reset" value="${this._escapeAttribute(cardPeakExtras.reset)}">
-                ${this._renderResetOptions(cardPeakExtras.reset)}
-              </select>
-            </div>
-            <div class="field-row">
-              <label for="peak-direction">Direction</label>
-              <select id="peak-direction" data-field="peak-direction" value="${this._getEffectiveMarkerDirection({ type: 'card' }, 'peak')}">
-                <option value="inward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'peak') === 'inward' ? ' selected' : ''}>Inward</option>
-                <option value="outward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'peak') === 'outward' ? ' selected' : ''}>Outward</option>
-              </select>
-            </div>
-            ${this._renderBuiltinMarkerLabelControls({ type: 'card' }, 'peak', 'Peak')}
-            <div class="field-row">
-              <div class="toggle">
-                <input id="floor-show" type="checkbox" data-field="floor-show"${cardFloor.mode === 'enabled' ? ' checked' : ''}>
-                <label for="floor-show">Floor enabled</label>
-              </div>
-            </div>
-            <div class="field-row">
-              <label for="floor-color">Floor color</label>
-              ${this._renderColorInput({
-                id: 'floor-color',
-                field: 'floor-color',
-                value: cardFloor.color,
-                fallbackHex: '#888888',
-                placeholder: '#888888',
-              })}
-            </div>
-            <div class="field-row">
-              <label for="floor-reset">Floor reset</label>
-              <select id="floor-reset" data-field="floor-reset" value="${this._escapeAttribute(cardFloor.reset)}">
-                ${this._renderResetOptions(cardFloor.reset)}
-              </select>
-            </div>
-            <div class="field-row">
-              <label for="floor-direction">Direction</label>
-              <select id="floor-direction" data-field="floor-direction" value="${this._getEffectiveMarkerDirection({ type: 'card' }, 'floor')}">
-                <option value="inward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'floor') === 'inward' ? ' selected' : ''}>Inward</option>
-                <option value="outward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'floor') === 'outward' ? ' selected' : ''}>Outward</option>
-              </select>
-            </div>
-            ${this._renderBuiltinMarkerLabelControls({ type: 'card' }, 'floor', 'Floor')}
-            <div class="field-row"><h4>Generic reference markers</h4></div>
-            ${this._renderGenericMarkersEditor({ type: 'card' })}
-          </div>
-	        </div>
-
-	        <div class="section">
-	          <div class="section-head">
-	            <h3>Bar Appearance</h3>
-	            <div class="section-note">Choose the bar rendering mode and base bar colors.</div>
-	          </div>
-	          <div class="inline-row editor-grid">
-            <div class="field-row">
-              <label for="bar-fill-style">Fill style</label>
-              <select id="bar-fill-style" data-field="bar-fill-style" value="${this._escapeAttribute(fillStyle)}">
-                <option value="solid"${fillStyle === 'solid' ? ' selected' : ''}>solid</option>
-                <option value="gradient"${fillStyle === 'gradient' ? ' selected' : ''}>gradient</option>
-                <option value="bands"${fillStyle === 'bands' ? ' selected' : ''}>bands</option>
-                <option value="band_gradient"${fillStyle === 'band_gradient' ? ' selected' : ''}>band_gradient</option>
-                <option value="soft_bands"${fillStyle === 'soft_bands' ? ' selected' : ''}>soft_bands</option>
-              </select>
-            </div>
-            <div class="field-row">
-              <div class="toggle">
-                <input id="bar-solid-fill" type="checkbox" data-field="bar-solid-fill"${barSolidFill ? ' checked' : ''}>
-                <label for="bar-solid-fill">Solid fill</label>
-              </div>
-            </div>
-            <div class="field-row">
-              <label for="bar-color">Bar color</label>
-              ${this._renderColorInput({
-                id: 'bar-color',
-                field: 'bar-color',
-                value: barColor,
-                fallbackHex: '#4a9eff',
-                placeholder: '#4a9eff',
-              })}
-            </div>
+          </div>`,
+          })}
+          <div class="inline-row editor-grid">
             <div class="field-row">
               <label for="bar-needle-mode">Needle enabled</label>
               <select id="bar-needle-mode" data-field="bar-needle-mode" value="${this._escapeAttribute(cardNeedle.mode)}">
@@ -6633,6 +6876,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return;
     }
 
+    if (action === 'toggle-generic-marker') {
+      this._toggleGenericMarkerExpanded(target.dataset.markerUiId);
+      return;
+    }
+
     if (action === 'remove-entity') {
       this._removeEntityRow(Number(target.dataset.index));
       return;
@@ -6641,8 +6889,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (action === 'add-generic-marker') {
       const scope = this._getGenericMarkerScope(target);
       const markers = this._getGenericMarkers(scope);
+      const markerUiIds = this._getGenericMarkerUiIds(scope, markers.length);
       markers.push({ at: { fixed: 50 } });
-      this._setGenericMarkerList(scope, markers);
+      const markerUiId = `marker-${++this._nextGenericMarkerUiId}`;
+      markerUiIds.push(markerUiId);
+      this._expandedGenericMarkerUiIds.add(markerUiId);
+      this._setGenericMarkerList(scope, markers, { rerender: true });
       return;
     }
 
@@ -6650,14 +6902,18 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       const scope = this._getGenericMarkerScope(target);
       const markerIndex = Number(target.dataset.markerIndex);
       const markers = this._getGenericMarkers(scope);
+      const markerUiIds = this._getGenericMarkerUiIds(scope, markers.length);
       if (action === 'remove-generic-marker') {
         markers.splice(markerIndex, 1);
+        this._expandedGenericMarkerUiIds.delete(markerUiIds[markerIndex]);
+        markerUiIds.splice(markerIndex, 1);
       } else {
         const nextIndex = markerIndex + (action === 'move-generic-marker-up' ? -1 : 1);
         if (nextIndex < 0 || nextIndex >= markers.length) return;
         [markers[markerIndex], markers[nextIndex]] = [markers[nextIndex], markers[markerIndex]];
+        [markerUiIds[markerIndex], markerUiIds[nextIndex]] = [markerUiIds[nextIndex], markerUiIds[markerIndex]];
       }
-      this._setGenericMarkerList(scope, markers);
+      this._setGenericMarkerList(scope, markers, { rerender: true });
       return;
     }
 
@@ -6870,8 +7126,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
     if (kind === 'entity-markers-inherit') {
       const scope = { type: 'entity', index: Number(target.dataset.index) };
+      this._resetGenericMarkerUiScope(scope);
       if (value) this._removeScopedValue(scope, ['markers'], { rerender: true });
-      else this._setGenericMarkerList(scope, this._getGenericMarkers(scope));
+      else this._setGenericMarkerList(scope, this._getGenericMarkers(scope), { rerender: true });
       return;
     }
     if (kind?.startsWith('generic-marker-')) {
