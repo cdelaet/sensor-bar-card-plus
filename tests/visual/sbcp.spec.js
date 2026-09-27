@@ -376,6 +376,10 @@ test('adjacent configured label lanes clear only facing rows and preserve compac
         aboveBarGap: aboveTrack.top - above.bottom,
         aboveLineHeight: getComputedStyle(current.querySelector('.peak-value-label')).lineHeight,
         rowHeights: rows.map((row) => row.getBoundingClientRect().height),
+        heroHeaderMargins: rows.map((row) => {
+          const header = row.querySelector('.hero-header');
+          return header ? getComputedStyle(header).marginBottom : null;
+        }),
         trackHeights: rows.map((row) => row.querySelector('.bar-track').getBoundingClientRect().height),
         trackWidths: rows.map((row) => row.querySelector('.bar-track').getBoundingClientRect().width),
         topValueActive: current.querySelector('.top-right-value')?.dataset.active ?? null,
@@ -385,14 +389,21 @@ test('adjacent configured label lanes clear only facing rows and preserve compac
     expect(layoutMetrics.facingLabelGap).toBeGreaterThanOrEqual(1);
     expect(layoutMetrics.belowBarGap).toBe(2);
     expect(layoutMetrics.aboveBarGap).toBe(1);
-    expect(layoutMetrics.rowHeights[1] - layoutMetrics.rowHeights[0])
-      .toBe(scenario.position === 'hero' ? 0 : Number.parseFloat(layoutMetrics.aboveLineHeight));
+    if (scenario.position === 'hero') {
+      expect(layoutMetrics.heroHeaderMargins[0]).toBe('0px');
+      expect(layoutMetrics.heroHeaderMargins[1]).not.toBe('0px');
+      expect(layoutMetrics.rowHeights[1] - layoutMetrics.rowHeights[0])
+        .toBeCloseTo(Number.parseFloat(layoutMetrics.heroHeaderMargins[1]), 1);
+    } else {
+      expect(layoutMetrics.rowHeights[1] - layoutMetrics.rowHeights[0])
+        .toBe(Number.parseFloat(layoutMetrics.aboveLineHeight));
+    }
     expect(layoutMetrics.trackHeights[0]).toBe(layoutMetrics.trackHeights[1]);
     expect(layoutMetrics.trackWidths[0]).toBe(layoutMetrics.trackWidths[1]);
   }
 });
 
-test('above marker labels reserve only their responsive text envelope in non-Hero layouts', async ({ page }) => {
+test('above marker labels reserve responsive space while Hero spacing follows label occupancy', async ({ page }) => {
   const observedLabelFontSizes = new Set();
   for (const scenario of [
     { position: null, width: 720, selectors: ['.label-left', '.value-right'] },
@@ -401,6 +412,10 @@ test('above marker labels reserve only their responsive text envelope in non-Her
     { position: 'inside', width: 720, selectors: ['.bar-inner-label'] },
     { position: 'above', width: 720, selectors: ['.above-line'], contentSelector: '.above-bar-label' },
     { position: 'hero', width: 720, selectors: ['.hero-line'] },
+    { position: 'hero', width: 300, selectors: ['.hero-line'] },
+    { position: 'hero', width: 240, selectors: ['.hero-line'] },
+    { position: 'hero', width: 200, selectors: ['.hero-line'] },
+    { position: 'hero', width: 160, selectors: ['.hero-line'] },
     { position: 'left', width: 320, selectors: ['.top-right-value'], forceTopValue: true },
     { position: 'left', width: 220, selectors: ['.top-right-value'], forceTopValue: true },
     { position: 'left', width: 150, selectors: ['.top-right-value'], forceTopValue: true },
@@ -464,6 +479,7 @@ test('above marker labels reserve only their responsive text envelope in non-Her
         const barTrack = row.querySelector('.bar-track');
         const label = row.querySelector('.peak-value-label');
         const contentRect = content?.getBoundingClientRect();
+        const heroHeaderRect = row.querySelector('.hero-header')?.getBoundingClientRect();
         const barRect = barTrack.getBoundingClientRect();
         const labelRect = label?.getBoundingClientRect();
         const rowRect = row.getBoundingClientRect();
@@ -473,6 +489,8 @@ test('above marker labels reserve only their responsive text envelope in non-Her
         return {
           contentTop: contentRect ? contentRect.top - rowRect.top : null,
           contentBottom: contentRect ? contentRect.bottom - rowRect.top : null,
+          heroHeaderBottom: heroHeaderRect ? heroHeaderRect.bottom - rowRect.top : null,
+          heroContentTrackGap: heroHeaderRect ? barRect.top - heroHeaderRect.bottom : null,
           barTop: barRect.top - rowRect.top,
           mainTop: mainLine.getBoundingClientRect().top - rowRect.top,
           rowHeight: rowRect.height,
@@ -495,6 +513,13 @@ test('above marker labels reserve only their responsive text envelope in non-Her
             : null,
           contentLabelGap: contentRect && labelRect ? labelRect.top - contentRect.bottom : null,
           mainMarginTop: getComputedStyle(mainLine).marginTop,
+          heroHeaderMargin: row.querySelector('.hero-header')
+            ? getComputedStyle(row.querySelector('.hero-header')).marginBottom
+            : null,
+          heroDensity: row.querySelector('.hero-line')?.dataset.heroDensity ?? null,
+          heroValueFontSize: row.querySelector('.hero-value')
+            ? getComputedStyle(row.querySelector('.hero-value')).fontSize
+            : null,
           aboveLabelCount: [...row.querySelectorAll('.peak-value-label, .generic-value-label[data-lane="above"]')]
             .filter((element) => getComputedStyle(element).visibility === 'visible').length,
           belowLabelCount: [...row.querySelectorAll('.target-value-label, .floor-value-label, .generic-value-label[data-lane="below"]')]
@@ -544,13 +569,24 @@ test('above marker labels reserve only their responsive text envelope in non-Her
     const isHero = scenario.position === 'hero';
     if (!isHero) observedLabelFontSizes.add(Number.parseFloat(labeled.lineHeight));
     if (isHero) {
+      const retainedHeroMargin = Number.parseFloat(labeled.heroHeaderMargin);
       expect(labeled).toMatchObject({
-        barTop: plain.barTop,
-        mainTop: plain.mainTop,
-        rowHeight: plain.rowHeight,
+        contentTop: plain.contentTop,
+        heroHeaderBottom: plain.heroHeaderBottom,
         laneCount: 0,
         mainMarginTop: '0px',
       });
+      expect(plain.heroHeaderMargin).toBe('0px');
+      expect(plain.heroContentTrackGap).toBeCloseTo(2, 1);
+      expect(labeled.heroHeaderMargin).not.toBe('0px');
+      expect(labeled.heroContentTrackGap).toBeCloseTo(2 + retainedHeroMargin, 1);
+      expect(labeled.barTop - plain.barTop).toBeCloseTo(retainedHeroMargin, 1);
+      expect(labeled.mainTop - plain.mainTop).toBeCloseTo(retainedHeroMargin, 1);
+      expect(labeled.rowHeight - plain.rowHeight).toBeCloseTo(retainedHeroMargin, 1);
+      expect(labeled.trackWidth).toBe(plain.trackWidth);
+      expect(labeled.trackHeight).toBe(plain.trackHeight);
+      expect(labeled.heroDensity).toBe(plain.heroDensity);
+      expect(labeled.heroValueFontSize).toBe(plain.heroValueFontSize);
       expect(labeled.labelTrackGap).toBe(1);
       expect(labeled.allAboveLabelTrackGaps.every((gap) => gap === 1)).toBe(true);
     } else {
@@ -613,7 +649,52 @@ test('above marker labels reserve only their responsive text envelope in non-Her
       }
     }
 
-    if (isHero) continue;
+    if (isHero) {
+      if (scenario.width === 720) {
+        const dynamicHeroGeometry = () => page.evaluate(() => {
+          const row = document.querySelector('sensor-bar-card-plus').shadowRoot
+            .querySelector('.row[data-entity="sensor.with_above_label"]');
+          const rowRect = row.getBoundingClientRect();
+          const trackRect = row.querySelector('.bar-track').getBoundingClientRect();
+          const rect = (element) => {
+            const box = element.getBoundingClientRect();
+            return [box.left - trackRect.left, box.top - trackRect.top, box.width, box.height];
+          };
+          return {
+            occupancy: row.dataset.markerLabelLaneAbove,
+            headerMargin: getComputedStyle(row.querySelector('.hero-header')).marginBottom,
+            rowHeight: rowRect.height,
+            track: [trackRect.top - rowRect.top, trackRect.width, trackRect.height],
+            peakLabel: rect(row.querySelector('.peak-value-label')),
+            peakGlyph: rect(row.querySelector('.peak-marker .peak-inset')),
+            genericLabel: rect(row.querySelector('.generic-value-label[data-marker-id="generic-0"]')),
+          };
+        });
+        const resolvedGeometry = await dynamicHeroGeometry();
+        for (const value of ['unavailable', '75']) {
+          await page.evaluate((nextValue) => {
+            const element = document.querySelector('sensor-bar-card-plus');
+            element.hass = { states: {
+              ...element._hass.states,
+              'sensor.above_dynamic_source': {
+                state: nextValue,
+                attributes: { friendly_name: 'Dynamic label reference', unit_of_measurement: 'W' },
+              },
+            } };
+          }, value);
+          await expect.poll(dynamicHeroGeometry).toMatchObject({
+            occupancy: 'true',
+            headerMargin: resolvedGeometry.headerMargin,
+            rowHeight: resolvedGeometry.rowHeight,
+            track: resolvedGeometry.track,
+            peakLabel: resolvedGeometry.peakLabel,
+            peakGlyph: resolvedGeometry.peakGlyph,
+            genericLabel: resolvedGeometry.genericLabel,
+          });
+        }
+      }
+      continue;
+    }
     const marker = page.locator('sensor-bar-card-plus .row[data-entity="sensor.with_above_label"] .peak-marker .peak-inset');
     await marker.hover();
     const hoverState = await page.evaluate(({ selectors }) => {

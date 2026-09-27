@@ -1789,6 +1789,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           overflow: hidden;
           margin-bottom: clamp(2px, calc(var(--sbcp-row-height) * 0.08), 4px);
         }
+        .row[data-marker-label-lane-above="false"] .hero-header {
+          margin-bottom: 0;
+        }
         .hero-header[data-hide-name="true"] .hero-label,
         .hero-header[data-priority-hide-name="true"] .hero-label {
           display: none;
