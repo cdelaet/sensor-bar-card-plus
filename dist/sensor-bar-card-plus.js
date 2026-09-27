@@ -2842,6 +2842,9 @@
           gap: var(--sbcp-main-gap);
           min-width: 0;
         }
+        .row[data-marker-label-lane-above="true"] .main-line:not(.hero-mode) {
+          margin-top: var(--sbcp-target-label-font-size);
+        }
         .main-line[data-row-density="tight"] {
           gap: calc(var(--sbcp-main-gap) - 1px);
         }
@@ -3154,7 +3157,7 @@
         }
         .peak-value-label {
           bottom: 100%;
-          margin-bottom: 0;
+          margin-bottom: 1px;
         }
         .floor-value-label {
           top: 100%;
@@ -3162,7 +3165,7 @@
         }
         .generic-value-label[data-lane="above"] {
           bottom: 100%;
-          margin-bottom: 0;
+          margin-bottom: 1px;
         }
         .generic-value-label[data-lane="below"] {
           top: 100%;

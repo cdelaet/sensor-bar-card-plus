@@ -684,6 +684,32 @@ describe('buildRowViewModel', () => {
     expect(malformedRow.markerLabelLaneOccupancy).toEqual({ above: false, below: false });
   });
 
+  it('reserves one above label lane only when an accepted above marker has label content', () => {
+    const hass = { states: { 'sensor.power': sensor(42) } };
+    const makeRow = (markers) => {
+      const entityConfig = createNormalizedEntity({
+        markers,
+        entities: [{ entity: 'sensor.power' }],
+      });
+      return buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.power'] });
+    };
+
+    expect(makeRow([
+      { at: 20, lane: 'above' },
+      { at: 30, lane: 'below', label: { show: true } },
+    ]).markerLabelLaneOccupancy).toEqual({ above: false, below: true });
+
+    expect(makeRow([
+      { at: 20, lane: 'above', label: { show: true } },
+      { at: 30, lane: 'above', label: { show: true, text: 'Peak', show_value: false, show_unit: false } },
+      { at: 40, lane: 'below', label: { show: true } },
+    ]).markerLabelLaneOccupancy).toEqual({ above: true, below: true });
+
+    expect(makeRow([
+      { at: 20, lane: 'above', label: { show: true, show_value: false, show_unit: false } },
+    ]).markerLabelLaneOccupancy).toEqual({ above: false, below: false });
+  });
+
   it('keeps configured generic label-lane occupancy when its source is unresolved', () => {
     const hass = { states: { 'sensor.power': sensor(42), 'sensor.limit': sensor('unavailable') } };
     const entityConfig = createNormalizedEntity({
