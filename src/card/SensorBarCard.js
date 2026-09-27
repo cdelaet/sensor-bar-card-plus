@@ -189,6 +189,7 @@ export class SensorBarCard extends HTMLElement {
     this._lastDiagnosticsSignature = null;
     this._hass = null;
     this._extrema = {};
+    this._leftModeResponsiveHistory = new Map();
     this._rendered = false;
     this._resizeObserver = null;
     this._densityPassScheduled = false;
@@ -226,6 +227,18 @@ export class SensorBarCard extends HTMLElement {
     this._rendered = false; // force full rebuild on config change
     const previousConfig = this._config;
     this._config = this.normalizeCardConfig(config);
+    // Keep hysteresis history for surviving left-mode rows; every layout pass
+    // reevaluates it against current geometry, while removed/non-left rows reset.
+    const activeLeftEntityIds = new Set(
+      (this._config.entities || [])
+        .filter((entityConfig) => entityConfig.layout?.label?.position === 'left')
+        .map((entityConfig) => entityConfig.entity)
+    );
+    for (const entityId of this._leftModeResponsiveHistory.keys()) {
+      if (!activeLeftEntityIds.has(entityId)) {
+        this._leftModeResponsiveHistory.delete(entityId);
+      }
+    }
     const activeEntityIds = new Set(
       (this._config.entities || []).map((entityConfig) => entityConfig.entity)
     );
@@ -1368,6 +1381,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           gap: var(--sbcp-main-gap);
           min-width: 0;
         }
+        .row[data-marker-label-lane-above="true"] .main-line:not(.hero-mode) {
+          margin-top: var(--sbcp-target-label-font-size);
+        }
         .main-line[data-row-density="tight"] {
           gap: calc(var(--sbcp-main-gap) - 1px);
         }
@@ -1680,7 +1696,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         }
         .peak-value-label {
           bottom: 100%;
-          margin-bottom: 0;
+          margin-bottom: 1px;
         }
         .floor-value-label {
           top: 100%;
@@ -1688,7 +1704,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         }
         .generic-value-label[data-lane="above"] {
           bottom: 100%;
-          margin-bottom: 0;
+          margin-bottom: 1px;
         }
         .generic-value-label[data-lane="below"] {
           top: 100%;
@@ -1785,6 +1801,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           min-width: 0;
           overflow: hidden;
           margin-bottom: clamp(2px, calc(var(--sbcp-row-height) * 0.08), 4px);
+        }
+        .row[data-marker-label-lane-above="false"] .hero-header {
+          margin-bottom: 0;
         }
         .hero-header[data-hide-name="true"] .hero-label,
         .hero-header[data-priority-hide-name="true"] .hero-label {
@@ -3130,7 +3149,10 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     if (!budget) return null;
     const minimumBarShare = this._getMinimumBarShare();
     const states = this._getLeftModeCandidateStates(budget);
-    const previousTopValue = budget.rowStack?.dataset?.forceTopValue === 'true';
+    const entityId = row?.dataset?.entity;
+    const previousTopValue = entityId && this._leftModeResponsiveHistory.has(entityId)
+      ? this._leftModeResponsiveHistory.get(entityId)
+      : budget.rowStack?.dataset?.forceTopValue === 'true';
     const inlineStates = states.filter(state => !state.topValue);
     const topStates = states.filter(state => state.topValue);
     const enableShare = this._getTopValueEnableShare();
@@ -3153,6 +3175,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     const leftLabel = row?.querySelector('.label-left');
     if (!mainLine || !rowStack) return;
 
+    const entityId = row?.dataset?.entity;
+    if (entityId) this._leftModeResponsiveHistory.set(entityId, state?.topValue === true);
     delete rowStack.dataset.forceTopValue;
     delete mainLine.dataset.hideLeftIcon;
     if (leftLabel) delete leftLabel.dataset.priorityHidden;

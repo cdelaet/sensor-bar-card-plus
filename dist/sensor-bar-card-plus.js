@@ -1823,6 +1823,7 @@
           this._lastDiagnosticsSignature = null;
           this._hass = null;
           this._extrema = {};
+          this._leftModeResponsiveHistory = /* @__PURE__ */ new Map();
           this._rendered = false;
           this._resizeObserver = null;
           this._densityPassScheduled = false;
@@ -1858,6 +1859,17 @@
           this._rendered = false;
           const previousConfig = this._config;
           this._config = this.normalizeCardConfig(config);
+          const activeLeftEntityIds = new Set(
+            (this._config.entities || []).filter((entityConfig) => {
+              var _a2, _b2;
+              return ((_b2 = (_a2 = entityConfig.layout) == null ? void 0 : _a2.label) == null ? void 0 : _b2.position) === "left";
+            }).map((entityConfig) => entityConfig.entity)
+          );
+          for (const entityId of this._leftModeResponsiveHistory.keys()) {
+            if (!activeLeftEntityIds.has(entityId)) {
+              this._leftModeResponsiveHistory.delete(entityId);
+            }
+          }
           const activeEntityIds = new Set(
             (this._config.entities || []).map((entityConfig) => entityConfig.entity)
           );
@@ -2842,6 +2854,9 @@
           gap: var(--sbcp-main-gap);
           min-width: 0;
         }
+        .row[data-marker-label-lane-above="true"] .main-line:not(.hero-mode) {
+          margin-top: var(--sbcp-target-label-font-size);
+        }
         .main-line[data-row-density="tight"] {
           gap: calc(var(--sbcp-main-gap) - 1px);
         }
@@ -3154,7 +3169,7 @@
         }
         .peak-value-label {
           bottom: 100%;
-          margin-bottom: 0;
+          margin-bottom: 1px;
         }
         .floor-value-label {
           top: 100%;
@@ -3162,7 +3177,7 @@
         }
         .generic-value-label[data-lane="above"] {
           bottom: 100%;
-          margin-bottom: 0;
+          margin-bottom: 1px;
         }
         .generic-value-label[data-lane="below"] {
           top: 100%;
@@ -3259,6 +3274,9 @@
           min-width: 0;
           overflow: hidden;
           margin-bottom: clamp(2px, calc(var(--sbcp-row-height) * 0.08), 4px);
+        }
+        .row[data-marker-label-lane-above="false"] .hero-header {
+          margin-bottom: 0;
         }
         .hero-header[data-hide-name="true"] .hero-label,
         .hero-header[data-priority-hide-name="true"] .hero-label {
@@ -4470,12 +4488,13 @@
           return fallback;
         }
         _chooseLeftModeResponsiveState(row) {
-          var _a, _b;
+          var _a, _b, _c;
           const budget = this._estimateLeftModeWidthBudget(row);
           if (!budget) return null;
           const minimumBarShare = this._getMinimumBarShare();
           const states = this._getLeftModeCandidateStates(budget);
-          const previousTopValue = ((_b = (_a = budget.rowStack) == null ? void 0 : _a.dataset) == null ? void 0 : _b.forceTopValue) === "true";
+          const entityId = (_a = row == null ? void 0 : row.dataset) == null ? void 0 : _a.entity;
+          const previousTopValue = entityId && this._leftModeResponsiveHistory.has(entityId) ? this._leftModeResponsiveHistory.get(entityId) : ((_c = (_b = budget.rowStack) == null ? void 0 : _b.dataset) == null ? void 0 : _c.forceTopValue) === "true";
           const inlineStates = states.filter((state) => !state.topValue);
           const topStates = states.filter((state) => state.topValue);
           const enableShare = this._getTopValueEnableShare();
@@ -4486,10 +4505,13 @@
           return topChoice;
         }
         _applyLeftModeResponsiveState(row, state) {
+          var _a;
           const mainLine = row == null ? void 0 : row.querySelector(".main-line");
           const rowStack = row == null ? void 0 : row.querySelector(".row-stack");
           const leftLabel = row == null ? void 0 : row.querySelector(".label-left");
           if (!mainLine || !rowStack) return;
+          const entityId = (_a = row == null ? void 0 : row.dataset) == null ? void 0 : _a.entity;
+          if (entityId) this._leftModeResponsiveHistory.set(entityId, (state == null ? void 0 : state.topValue) === true);
           delete rowStack.dataset.forceTopValue;
           delete mainLine.dataset.hideLeftIcon;
           if (leftLabel) delete leftLabel.dataset.priorityHidden;
@@ -5340,6 +5362,9 @@ ${paintLayers}
           this._expandedEntityOverrides = /* @__PURE__ */ new Set();
           this._expandedOverrideGroups = /* @__PURE__ */ new Set();
           this._expandedCardGroups = /* @__PURE__ */ new Set();
+          this._genericMarkerUiIds = /* @__PURE__ */ new Map();
+          this._expandedGenericMarkerUiIds = /* @__PURE__ */ new Set();
+          this._nextGenericMarkerUiId = 0;
           this._gradientStopsDrafts = /* @__PURE__ */ new Map();
           this._gradientStopsUiRows = /* @__PURE__ */ new Map();
           this._gradientStopPosTexts = /* @__PURE__ */ new Map();
@@ -5369,6 +5394,10 @@ ${paintLayers}
             this._config = nextConfig;
             return;
           }
+          if (this._getEmittedConfigJson(nextConfig) === this._getEmittedConfigJson(this._draftConfig)) {
+            this._config = nextConfig;
+            return;
+          }
           const shouldRender = !((_a = this.shadowRoot) == null ? void 0 : _a.innerHTML) || nextConfigJson !== this._lastRenderedConfigJson;
           this._config = nextConfig;
           this._draftConfig = this._cloneDeep(nextConfig);
@@ -5381,6 +5410,8 @@ ${paintLayers}
           this._segmentBoundaryTexts = /* @__PURE__ */ new Map();
           this._targetAboveFillDrafts = /* @__PURE__ */ new Map();
           this._baselineColorDrafts = /* @__PURE__ */ new Map();
+          this._genericMarkerUiIds.clear();
+          this._expandedGenericMarkerUiIds.clear();
           if (shouldRender) {
             this._render();
           }
@@ -5424,6 +5455,9 @@ ${paintLayers}
             return input;
           };
           return JSON.stringify(normalize(value != null ? value : null));
+        }
+        _getEmittedConfigJson(config) {
+          return this._serializeConfig(this._cleanupEditorEmittedConfig(this._cloneDeep(config)));
         }
         _isObject(value) {
           return !!value && typeof value === "object" && !Array.isArray(value);
@@ -5684,6 +5718,11 @@ ${paintLayers}
           this._refreshEntityDerivedUi();
         }
         _refreshCardDerivedUi() {
+          this._setElementText("card-group-marker-target-summary", this._getCardTargetMarkerSummary());
+          this._setElementText("card-group-marker-peak-summary", this._getMarkerResetSummary("peak"));
+          this._setElementText("card-group-marker-floor-summary", this._getMarkerResetSummary("floor"));
+          this._setElementText("card-group-baseline-summary", this._getCardBaselineSummary());
+          this._setElementText("card-group-generic-markers-summary", this._getGenericMarkersSummary({ type: "card" }));
           this._setElementText("card-group-segments-summary", this._getSegmentsSummary({ type: "card" }));
           this._setElementText("card-group-gradient-stops-summary", this._getGradientStopsSummary({ type: "card" }));
           this._setElementChecked("target-above-fill-enabled", this._isTargetAboveFillEnabled({ type: "card" }));
@@ -7399,6 +7438,28 @@ ${paintLayers}
           if (floor.color) return "Disabled \u2022 Custom color";
           return "Disabled";
         }
+        _getMarkerResetSummary(key) {
+          var _a;
+          const scope = { type: "card" };
+          const marker = key === "peak" ? this._getScopedPeakConfig(scope) : this._getEffectiveScopedFloorConfig(scope);
+          const enabled = marker.mode === "enabled";
+          const reset = (_a = this._getEffectiveMarkerExtras(scope, key).reset) != null ? _a : "never";
+          return `${enabled ? "Enabled" : "Disabled"} \xB7 ${reset === "never" ? "no reset" : `${reset} reset`}`;
+        }
+        _getCardTargetMarkerSummary() {
+          const mode = this._getTargetMode({ type: "card" });
+          if (mode === "disabled") return "Disabled";
+          const target = this._getTargetResolvableValue({ type: "card" });
+          const parts = [];
+          if (mode === "enabled") parts.push("Enabled");
+          const hasTargetValue = target.fixed !== "" && target.fixed !== void 0 || !!target.entity;
+          if (target.fixed !== "" && target.fixed !== void 0) parts.push(String(target.fixed));
+          if (target.entity) parts.push(target.entity);
+          if (hasTargetValue || this._hasTargetShape({ type: "card" })) {
+            parts.push(this._getEffectiveTargetShapeValue({ type: "card" }) === "triangle" ? "Triangle" : "Diamond");
+          }
+          return parts.length ? parts.join(" \xB7 ") : "Automatic";
+        }
         _setScopedExtremumEnabled(scope, key, value) {
           const boolValue = !!value;
           const defaultColor = "#888888";
@@ -8970,6 +9031,14 @@ ${paintLayers}
           }
           this._render();
         }
+        _toggleGenericMarkerExpanded(markerUiId) {
+          if (this._expandedGenericMarkerUiIds.has(markerUiId)) {
+            this._expandedGenericMarkerUiIds.delete(markerUiId);
+          } else {
+            this._expandedGenericMarkerUiIds.add(markerUiId);
+          }
+          this._render();
+        }
         _getOverrideGroupKey(index, group) {
           return `${index}:${group}`;
         }
@@ -9038,6 +9107,14 @@ ${paintLayers}
           if (this._getBaselineDirectionalColorValue(scope, "above")) parts.push("Above");
           if (this._getBaselineDirectionalColorValue(scope, "below")) parts.push("Below");
           return parts.length ? parts.join(" \u2022 ") : "Inherited";
+        }
+        _getCardBaselineSummary() {
+          const mode = this._getBaselineMode({ type: "card" });
+          if (mode === "disabled") return "Disabled";
+          const baseline = this._getBaselineResolvableValue({ type: "card" });
+          const origin = baseline.entity || (baseline.fixed !== "" && baseline.fixed !== void 0 ? baseline.fixed : "");
+          const modeLabel = mode === "enabled" ? "Enabled" : "Auto";
+          return origin !== "" ? `${modeLabel} \xB7 ${origin}` : modeLabel;
         }
         _getBarAppearanceSummary(scope) {
           var _a;
@@ -9274,8 +9351,55 @@ ${paintLayers}
           const count = this._getGenericMarkers(scope, false).length;
           return count === 0 ? "No reference markers" : `${count} reference marker${count === 1 ? "" : "s"}`;
         }
+        _getGenericMarkerScopeKey(scope) {
+          return (scope == null ? void 0 : scope.type) === "entity" ? `entity:${scope.index}` : "card";
+        }
+        _getGenericMarkerUiIds(scope, count) {
+          var _a;
+          const key = this._getGenericMarkerScopeKey(scope);
+          const ids = (_a = this._genericMarkerUiIds.get(key)) != null ? _a : [];
+          while (ids.length < count) {
+            ids.push(`marker-${++this._nextGenericMarkerUiId}`);
+          }
+          ids.length = count;
+          this._genericMarkerUiIds.set(key, ids);
+          return ids;
+        }
+        _resetGenericMarkerUiScope(scope) {
+          var _a;
+          const key = this._getGenericMarkerScopeKey(scope);
+          const ids = (_a = this._genericMarkerUiIds.get(key)) != null ? _a : [];
+          ids.forEach((id) => this._expandedGenericMarkerUiIds.delete(id));
+          this._genericMarkerUiIds.delete(key);
+        }
+        _getGenericMarkerSummary(marker) {
+          var _a;
+          const source = this._getGenericMarkerSource(marker);
+          const lane = (marker == null ? void 0 : marker.lane) === "above" ? "Above" : "Below";
+          const shape = (_a = marker == null ? void 0 : marker.shape) != null ? _a : "circle";
+          let sourceSummary;
+          if (source.mode === "percent") {
+            sourceSummary = source.percent === "" ? "Percentage" : `${source.percent}%`;
+          } else if (source.mode === "entity" || source.mode === "entity-fallback") {
+            sourceSummary = source.entity || "Entity";
+          } else {
+            sourceSummary = source.fixed === "" ? "Fixed value" : String(source.fixed);
+          }
+          return `${lane} \xB7 ${shape.charAt(0).toUpperCase()}${shape.slice(1)} \xB7 ${sourceSummary}`;
+        }
+        _refreshGenericMarkerSummary(scope, markerIndex) {
+          const markers = this._getGenericMarkers(scope);
+          const marker = markers[markerIndex];
+          const uiId = this._getGenericMarkerUiIds(scope, markers.length)[markerIndex];
+          const summary = this._getShadowElementById(`generic-${uiId}-summary`);
+          if (marker && summary) {
+            const text = this._getGenericMarkerSummary(marker);
+            summary.textContent = text;
+            summary.setAttribute("title", text);
+          }
+        }
         _getGenericMarkerSource(marker) {
-          var _a, _b;
+          var _a, _b, _c;
           const at = marker == null ? void 0 : marker.at;
           if (typeof at === "string" && /^\s*[+-]?(?:\d+(?:\.\d+)?|\.\d+)\s*%\s*$/.test(at)) {
             return { mode: "percent", percent: at.replace(/%/g, "").trim() };
@@ -9284,48 +9408,62 @@ ${paintLayers}
             return { mode: "entity", entity: at.trim(), fixed: "" };
           }
           const source = this._isObject(at) ? at : {};
-          if (source.entity) {
+          if (Object.prototype.hasOwnProperty.call(source, "entity")) {
             return {
               mode: source.fixed !== void 0 && source.fixed !== null && source.fixed !== "" ? "entity-fallback" : "entity",
-              entity: source.entity,
-              fixed: (_a = source.fixed) != null ? _a : ""
+              entity: (_a = source.entity) != null ? _a : "",
+              fixed: (_b = source.fixed) != null ? _b : ""
             };
           }
-          return { mode: "fixed", fixed: (_b = source.fixed) != null ? _b : "" };
+          return { mode: "fixed", fixed: (_c = source.fixed) != null ? _c : "" };
         }
         _renderGenericMarkersEditor(scope) {
           const scopeType = scope.type;
           const scopeIndex = scopeType === "entity" ? scope.index : "card";
           const markers = this._getGenericMarkers(scope);
+          const markerUiIds = this._getGenericMarkerUiIds(scope, markers.length);
           const override = this._hasMarkersOverride(scope);
           const rows = markers.map((marker, markerIndex) => {
             var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
             const source = this._getGenericMarkerSource(marker);
-            const rowId = `${scopeType}-${scopeIndex}-generic-marker-${markerIndex}`;
-            const dataset = { "scope-type": scopeType, index: scopeIndex, "marker-index": markerIndex };
+            const markerUiId = markerUiIds[markerIndex];
+            const rowId = `${scopeType}-${scopeIndex}-generic-${markerUiId}`;
+            const expanded = this._expandedGenericMarkerUiIds.has(markerUiId);
             const entitySource = source.mode === "entity" || source.mode === "entity-fallback" ? this._renderEntitySourceInput("generic-marker-entity", scopeIndex, source.entity, "sensor.reference", {
               "scope-type": scopeType,
               "marker-index": markerIndex
             }) : "";
             return `
-        <div class="list-row generic-marker-row">
-          <div class="field-row">
-            <label for="${rowId}-source-mode">Source</label>
-            <select id="${rowId}-source-mode" data-kind="generic-marker-source-mode" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
+        <div class="generic-marker-item" data-marker-ui-id="${markerUiId}" data-expanded="${expanded ? "true" : "false"}">
+          <div class="generic-marker-header">
+            <button type="button" class="generic-marker-toggle" data-action="toggle-generic-marker" data-marker-ui-id="${markerUiId}" aria-expanded="${expanded ? "true" : "false"}">
+              <span class="generic-marker-title">Reference marker ${markerIndex + 1}</span>
+              <span id="generic-${markerUiId}-summary" class="generic-marker-summary" title="${this._escapeAttribute(this._getGenericMarkerSummary(marker))}">${this._escapeAttribute(this._getGenericMarkerSummary(marker))}</span>
+            </button>
+            <div class="generic-marker-actions">
+              <button type="button" data-action="move-generic-marker-up" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${markerIndex === 0 ? " disabled" : ""} aria-label="Move marker up">\u2191</button>
+              <button type="button" data-action="move-generic-marker-down" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${markerIndex === markers.length - 1 ? " disabled" : ""} aria-label="Move marker down">\u2193</button>
+              <button type="button" data-action="remove-generic-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" aria-label="Remove marker">Remove</button>
+            </div>
+          </div>
+          <div class="generic-marker-body" style="display:${expanded ? "grid" : "none"};">
+            <div class="field-row">
+              <label for="${rowId}-source-mode">Source</label>
+              <select id="${rowId}-source-mode" data-kind="generic-marker-source-mode" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
               <option value="fixed"${source.mode === "fixed" ? " selected" : ""}>Fixed</option>
               <option value="entity"${source.mode === "entity" ? " selected" : ""}>Entity</option>
               <option value="entity-fallback"${source.mode === "entity-fallback" ? " selected" : ""}>Entity with fixed fallback</option>
               <option value="percent"${source.mode === "percent" ? " selected" : ""}>Percentage</option>
-            </select>
-          </div>
-          ${source.mode === "fixed" ? `
-            <div class="field-row">
-              <label for="${rowId}-fixed">Fixed value</label>
-              <input id="${rowId}-fixed" type="number" step="any" data-kind="generic-marker-fixed" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(source.fixed)}">
-            </div>` : ""}
+              </select>
+            </div>
+            ${source.mode === "fixed" ? `
+              <div class="field-row">
+                <label for="${rowId}-fixed">Fixed value</label>
+                <input id="${rowId}-fixed" type="number" step="any" data-kind="generic-marker-fixed" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(source.fixed)}">
+              </div>` : ""}
           ${source.mode === "entity" || source.mode === "entity-fallback" ? `
             <div class="field-row">
-              <label>Entity</label>
+              <label>Reference marker entity</label>
               ${entitySource}
             </div>` : ""}
           ${source.mode === "entity-fallback" ? `
@@ -9338,12 +9476,21 @@ ${paintLayers}
               <label for="${rowId}-percent">Scale percentage</label>
               <input id="${rowId}-percent" type="number" min="0" max="100" step="any" data-kind="generic-marker-percent" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(source.percent)}">%
             </div>` : ""}
-          <div class="field-row">
-            <label for="${rowId}-lane">Lane</label>
-            <select id="${rowId}-lane" data-kind="generic-marker-lane" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
-              <option value="above"${(marker == null ? void 0 : marker.lane) === "above" ? " selected" : ""}>Above</option>
-              <option value="below"${((_a = marker == null ? void 0 : marker.lane) != null ? _a : "below") === "below" ? " selected" : ""}>Below</option>
-            </select>
+          <div class="inline-row generic-marker-pair">
+            <div class="field-row">
+              <label for="${rowId}-lane">Lane</label>
+              <select id="${rowId}-lane" data-kind="generic-marker-lane" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
+                <option value="above"${(marker == null ? void 0 : marker.lane) === "above" ? " selected" : ""}>Above</option>
+                <option value="below"${((_a = marker == null ? void 0 : marker.lane) != null ? _a : "below") === "below" ? " selected" : ""}>Below</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="${rowId}-direction">Direction</label>
+              <select id="${rowId}-direction" data-kind="generic-marker-direction" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${normalizeMarkerDirection(marker == null ? void 0 : marker.direction)}">
+                <option value="inward"${((_b = marker == null ? void 0 : marker.direction) != null ? _b : "inward") === "inward" ? " selected" : ""}>Inward</option>
+                <option value="outward"${(marker == null ? void 0 : marker.direction) === "outward" ? " selected" : ""}>Outward</option>
+              </select>
+            </div>
           </div>
           <div class="field-row">
             <label for="${rowId}-shape">Shape</label>
@@ -9352,13 +9499,6 @@ ${paintLayers}
               var _a2;
               return `<option value="${shape}"${((_a2 = marker == null ? void 0 : marker.shape) != null ? _a2 : "circle") === shape ? " selected" : ""}>${shape}</option>`;
             }).join("")}
-            </select>
-          </div>
-          <div class="field-row">
-            <label for="${rowId}-direction">Direction</label>
-            <select id="${rowId}-direction" data-kind="generic-marker-direction" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${normalizeMarkerDirection(marker == null ? void 0 : marker.direction)}">
-              <option value="inward"${((_b = marker == null ? void 0 : marker.direction) != null ? _b : "inward") === "inward" ? " selected" : ""}>Inward</option>
-              <option value="outward"${(marker == null ? void 0 : marker.direction) === "outward" ? " selected" : ""}>Outward</option>
             </select>
           </div>
           <div class="field-row">
@@ -9380,21 +9520,19 @@ ${paintLayers}
           <div class="field-row"><label for="${rowId}-label-text">Label text</label>
             <input id="${rowId}-label-text" type="text" data-kind="generic-marker-label-text" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute((_f = (_e = marker == null ? void 0 : marker.label) == null ? void 0 : _e.text) != null ? _f : "")}" placeholder="optional semantic text">
           </div>
-          <div class="field-row"><div class="toggle">
-            <input id="${rowId}-label-show-value" type="checkbox" data-kind="generic-marker-label-show-value" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_g = marker == null ? void 0 : marker.label) == null ? void 0 : _g.show_value) === false ? "" : " checked"}>
-            <label for="${rowId}-label-show-value">Show value</label>
-          </div></div>
-          <div class="field-row"><div class="toggle">
-            <input id="${rowId}-label-show-unit" type="checkbox" data-kind="generic-marker-label-show-unit" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_h = marker == null ? void 0 : marker.label) == null ? void 0 : _h.show_unit) === false ? "" : " checked"}>
-            <label for="${rowId}-label-show-unit">Show row unit</label>
-          </div></div>
-          <div class="field-row"><label for="${rowId}-label-precision">Label precision</label>
-            <input id="${rowId}-label-precision" type="number" min="0" step="1" data-kind="generic-marker-label-precision" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute((_l = (_k = (_i = marker == null ? void 0 : marker.label) == null ? void 0 : _i.precision) != null ? _k : (_j = marker == null ? void 0 : marker.label) == null ? void 0 : _j.decimal) != null ? _l : "")}" placeholder="inherit row precision">
+          <div class="inline-row generic-marker-options">
+            <div class="field-row"><div class="toggle">
+              <input id="${rowId}-label-show-value" type="checkbox" data-kind="generic-marker-label-show-value" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_g = marker == null ? void 0 : marker.label) == null ? void 0 : _g.show_value) === false ? "" : " checked"}>
+              <label for="${rowId}-label-show-value">Show value</label>
+            </div></div>
+            <div class="field-row"><div class="toggle">
+              <input id="${rowId}-label-show-unit" type="checkbox" data-kind="generic-marker-label-show-unit" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_h = marker == null ? void 0 : marker.label) == null ? void 0 : _h.show_unit) === false ? "" : " checked"}>
+              <label for="${rowId}-label-show-unit">Show raw unit</label>
+            </div></div>
+            <div class="field-row generic-marker-precision"><label for="${rowId}-label-precision">Label precision</label>
+              <input id="${rowId}-label-precision" type="number" min="0" step="1" data-kind="generic-marker-label-precision" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute((_l = (_k = (_i = marker == null ? void 0 : marker.label) == null ? void 0 : _i.precision) != null ? _k : (_j = marker == null ? void 0 : marker.label) == null ? void 0 : _j.decimal) != null ? _l : "")}" placeholder="inherit">
+            </div>
           </div>
-          <div class="generic-marker-actions">
-            <button type="button" data-action="move-generic-marker-up" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${markerIndex === 0 ? " disabled" : ""} aria-label="Move marker up">\u2191</button>
-            <button type="button" data-action="move-generic-marker-down" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${markerIndex === markers.length - 1 ? " disabled" : ""} aria-label="Move marker down">\u2193</button>
-            <button type="button" data-action="remove-generic-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" aria-label="Remove marker">Remove</button>
           </div>
         </div>`;
           }).join("");
@@ -9420,7 +9558,7 @@ ${paintLayers}
           return ((_a = target == null ? void 0 : target.dataset) == null ? void 0 : _a.scopeType) === "entity" ? { type: "entity", index: Number(target.dataset.index) } : { type: "card" };
         }
         _setGenericMarkerList(scope, markers, options = {}) {
-          return this._setScopedValue(scope, ["markers"], markers, { rerender: true, ...options });
+          return this._setScopedValue(scope, ["markers"], markers, { rerender: false, ...options });
         }
         _updateGenericMarker(scope, markerIndex, update, options = {}) {
           var _a;
@@ -9429,7 +9567,9 @@ ${paintLayers}
           const marker = this._isObject(markers[markerIndex]) ? this._cloneDeep(markers[markerIndex]) : {};
           const nextMarker = (_a = update(marker)) != null ? _a : marker;
           markers[markerIndex] = nextMarker;
-          return this._setGenericMarkerList(scope, markers, options);
+          const changed = this._setGenericMarkerList(scope, markers, options);
+          if (changed) this._refreshGenericMarkerSummary(scope, markerIndex);
+          return changed;
         }
         _setGenericMarkerSourceMode(scope, markerIndex, mode) {
           return this._updateGenericMarker(scope, markerIndex, (marker) => {
@@ -9771,16 +9911,79 @@ ${paintLayers}
 	          align-items: end;
 	          min-width: 0;
 	        }
-	        .generic-marker-row {
-	          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-	          padding: 10px 0;
-	          border-bottom: 1px solid var(--divider-color, rgba(127, 127, 127, 0.2));
-	        }
-	        .generic-marker-actions {
-	          display: flex;
-	          gap: 8px;
-	          align-items: center;
-	        }
+        .generic-marker-list {
+          gap: 8px;
+        }
+        .generic-marker-item {
+          min-width: 0;
+          overflow: hidden;
+          border: 1px solid color-mix(in srgb, var(--divider-color, #888) 32%, transparent);
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--card-background-color, #fff) 82%, transparent);
+        }
+        .generic-marker-item[data-expanded="true"] {
+          border-color: color-mix(in srgb, var(--accent-color, var(--primary-color, #03a9f4)) 38%, var(--divider-color, #888));
+        }
+        .generic-marker-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+          padding: 6px 8px;
+        }
+        .generic-marker-toggle {
+          display: grid;
+          grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+          align-items: center;
+          gap: 4px 10px;
+          flex: 1 1 auto;
+          min-width: 0;
+          min-height: 40px;
+          padding: 4px 6px;
+          border: 0;
+          background: transparent;
+          text-align: left;
+        }
+        .generic-marker-toggle:hover,
+        .generic-marker-toggle:focus {
+          background: color-mix(in srgb, var(--secondary-background-color, var(--card-background-color, #fff)) 72%, transparent);
+        }
+        .generic-marker-title {
+          font-weight: 700;
+          white-space: nowrap;
+        }
+        .generic-marker-summary {
+          min-width: 0;
+          overflow: hidden;
+          color: var(--secondary-text-color, #666);
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .generic-marker-actions {
+          display: flex;
+          flex: 0 0 auto;
+          gap: 4px;
+          align-items: center;
+        }
+        .generic-marker-actions button {
+          min-width: 38px;
+          min-height: 38px;
+          padding: 6px;
+        }
+        .generic-marker-body {
+          gap: 12px;
+          padding: 12px;
+          border-top: 1px solid color-mix(in srgb, var(--divider-color, #888) 25%, transparent);
+          background: color-mix(in srgb, var(--secondary-background-color, var(--card-background-color, #fff)) 78%, transparent);
+        }
+        .generic-marker-pair,
+        .generic-marker-options {
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          align-items: end;
+        }
+        .generic-marker-precision {
+          max-width: 220px;
+        }
 	        .list-row.triple {
 	          grid-template-columns: repeat(3, minmax(120px, 1fr)) auto;
 	        }
@@ -10143,7 +10346,20 @@ ${paintLayers}
 	          .list-row {
 	            grid-template-columns: minmax(0, 1fr);
 	          }
-	          .generic-marker-row {
+	          .generic-marker-header {
+	            flex-wrap: wrap;
+	          }
+	          .generic-marker-toggle {
+	            flex-basis: 100%;
+	          }
+	          .generic-marker-actions {
+	            width: 100%;
+	          }
+	          .generic-marker-actions button {
+	            flex: 1 1 auto;
+	          }
+	          .generic-marker-pair,
+	          .generic-marker-options {
 	            grid-template-columns: minmax(0, 1fr);
 	          }
 	          .list-row.triple,
@@ -10799,11 +11015,17 @@ ${paintLayers}
 	        </div>
 
 	        <div class="section">
-	          <div class="section-head">
+          <div class="section-head">
 	            <h3>Markers</h3>
-	            <div class="section-note">Target, baseline, and peak markers help compare the current value against reference points.</div>
+	            <div class="section-note">Configure Target, Peak, Floor, and custom reference markers.</div>
 	          </div>
 	          <div class="field-grid">
+            ${this._renderCardGroup({
+              group: "marker-target",
+              title: "Target",
+              summary: this._getCardTargetMarkerSummary(),
+              content: `
+            <div class="field-grid">
             <div class="field-row">
               <label for="target-mode">Target mode</label>
               <select id="target-mode" data-field="target-mode" value="${this._escapeAttribute(targetMode)}">
@@ -10837,12 +11059,12 @@ ${paintLayers}
             <div class="field-row">
               <label for="target-color">Target color</label>
               ${this._renderColorInput({
-              id: "target-color",
-              field: "target-color",
-              value: targetColor,
-              fallbackHex: "#888",
-              placeholder: "#888"
-            })}
+                id: "target-color",
+                field: "target-color",
+                value: targetColor,
+                fallbackHex: "#888",
+                placeholder: "#888"
+              })}
             </div>
             ${this._renderBuiltinMarkerLabelControls({ type: "card" }, "target", "Target")}
             <div class="field-row">
@@ -10854,12 +11076,138 @@ ${paintLayers}
             <div class="field-row">
               <label for="target-above-fill-color">Above-target color</label>
               ${this._renderColorInput({
-              id: "target-above-fill-color",
-              field: "target-above-fill-color",
-              value: targetAboveFillColor,
-              fallbackHex: "#000000"
+                id: "target-above-fill-color",
+                field: "target-above-fill-color",
+                value: targetAboveFillColor,
+                fallbackHex: "#000000"
+              })}
+            </div>
+            </div>`
+            })}
+            ${this._renderCardGroup({
+              group: "marker-peak",
+              title: "Peak",
+              summary: this._getMarkerResetSummary("peak"),
+              content: `
+            <div class="field-grid">
+            <div class="field-row">
+              <div class="toggle">
+                <input id="peak-show" type="checkbox" data-field="peak-show"${cardPeak.mode === "enabled" ? " checked" : ""}>
+                <label for="peak-show">Peak enabled</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="peak-color">Peak color</label>
+              ${this._renderColorInput({
+                id: "peak-color",
+                field: "peak-color",
+                value: cardPeak.color,
+                fallbackHex: "#888",
+                placeholder: "#888"
+              })}
+            </div>
+            <div class="field-row">
+              <label for="peak-reset">Peak reset</label>
+              <select id="peak-reset" data-field="peak-reset" value="${this._escapeAttribute(cardPeakExtras.reset)}">
+                ${this._renderResetOptions(cardPeakExtras.reset)}
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="peak-direction">Direction</label>
+              <select id="peak-direction" data-field="peak-direction" value="${this._getEffectiveMarkerDirection({ type: "card" }, "peak")}">
+                <option value="inward"${this._getEffectiveMarkerDirection({ type: "card" }, "peak") === "inward" ? " selected" : ""}>Inward</option>
+                <option value="outward"${this._getEffectiveMarkerDirection({ type: "card" }, "peak") === "outward" ? " selected" : ""}>Outward</option>
+              </select>
+            </div>
+            ${this._renderBuiltinMarkerLabelControls({ type: "card" }, "peak", "Peak")}
+            </div>`
+            })}
+            ${this._renderCardGroup({
+              group: "marker-floor",
+              title: "Floor",
+              summary: this._getMarkerResetSummary("floor"),
+              content: `
+            <div class="field-grid">
+            <div class="field-row">
+              <div class="toggle">
+                <input id="floor-show" type="checkbox" data-field="floor-show"${cardFloor.mode === "enabled" ? " checked" : ""}>
+                <label for="floor-show">Floor enabled</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="floor-color">Floor color</label>
+              ${this._renderColorInput({
+                id: "floor-color",
+                field: "floor-color",
+                value: cardFloor.color,
+                fallbackHex: "#888888",
+                placeholder: "#888888"
+              })}
+            </div>
+            <div class="field-row">
+              <label for="floor-reset">Floor reset</label>
+              <select id="floor-reset" data-field="floor-reset" value="${this._escapeAttribute(cardFloor.reset)}">
+                ${this._renderResetOptions(cardFloor.reset)}
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="floor-direction">Direction</label>
+              <select id="floor-direction" data-field="floor-direction" value="${this._getEffectiveMarkerDirection({ type: "card" }, "floor")}">
+                <option value="inward"${this._getEffectiveMarkerDirection({ type: "card" }, "floor") === "inward" ? " selected" : ""}>Inward</option>
+                <option value="outward"${this._getEffectiveMarkerDirection({ type: "card" }, "floor") === "outward" ? " selected" : ""}>Outward</option>
+              </select>
+            </div>
+            ${this._renderBuiltinMarkerLabelControls({ type: "card" }, "floor", "Floor")}
+            </div>`
+            })}
+            ${this._renderCardGroup({
+              group: "generic-markers",
+              title: "Generic Reference Markers",
+              summary: this._getGenericMarkersSummary({ type: "card" }),
+              content: this._renderGenericMarkersEditor({ type: "card" })
+            })}
+          </div>
+	        </div>
+
+	        <div class="section">
+	          <div class="section-head">
+	            <h3>Bar Appearance</h3>
+	            <div class="section-note">Choose the bar rendering mode and base bar colors.</div>
+	          </div>
+          <div class="inline-row editor-grid">
+            <div class="field-row">
+              <label for="bar-fill-style">Fill style</label>
+              <select id="bar-fill-style" data-field="bar-fill-style" value="${this._escapeAttribute(fillStyle)}">
+                <option value="solid"${fillStyle === "solid" ? " selected" : ""}>solid</option>
+                <option value="gradient"${fillStyle === "gradient" ? " selected" : ""}>gradient</option>
+                <option value="bands"${fillStyle === "bands" ? " selected" : ""}>bands</option>
+                <option value="band_gradient"${fillStyle === "band_gradient" ? " selected" : ""}>band_gradient</option>
+                <option value="soft_bands"${fillStyle === "soft_bands" ? " selected" : ""}>soft_bands</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <div class="toggle">
+                <input id="bar-solid-fill" type="checkbox" data-field="bar-solid-fill"${barSolidFill ? " checked" : ""}>
+                <label for="bar-solid-fill">Solid fill</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="bar-color">Bar color</label>
+              ${this._renderColorInput({
+              id: "bar-color",
+              field: "bar-color",
+              value: barColor,
+              fallbackHex: "#4a9eff",
+              placeholder: "#4a9eff"
             })}
             </div>
+          </div>
+          ${this._renderCardGroup({
+              group: "baseline",
+              title: "Baseline",
+              summary: this._getCardBaselineSummary(),
+              content: `
+          <div class="field-grid">
             <div class="field-row">
               <label for="baseline-mode">Baseline mode</label>
               <select id="baseline-mode" data-field="baseline-mode" value="${this._escapeAttribute(baselineMode)}">
@@ -10888,11 +11236,11 @@ ${paintLayers}
             <div class="field-row">
               <label for="baseline-above-color">Above-baseline color</label>
               ${this._renderColorInput({
-              id: "baseline-above-color",
-              field: "baseline-above-color",
-              value: baselineAboveColor,
-              fallbackHex: "#000000"
-            })}
+                id: "baseline-above-color",
+                field: "baseline-above-color",
+                value: baselineAboveColor,
+                fallbackHex: "#000000"
+              })}
             </div>
             <div class="field-row">
               <div class="toggle">
@@ -10903,109 +11251,15 @@ ${paintLayers}
             <div class="field-row">
               <label for="baseline-below-color">Below-baseline color</label>
               ${this._renderColorInput({
-              id: "baseline-below-color",
-              field: "baseline-below-color",
-              value: baselineBelowColor,
-              fallbackHex: "#000000"
+                id: "baseline-below-color",
+                field: "baseline-below-color",
+                value: baselineBelowColor,
+                fallbackHex: "#000000"
+              })}
+            </div>
+          </div>`
             })}
-            </div>
-            <div class="field-row">
-              <div class="toggle">
-                <input id="peak-show" type="checkbox" data-field="peak-show"${cardPeak.mode === "enabled" ? " checked" : ""}>
-                <label for="peak-show">Peak enabled</label>
-              </div>
-            </div>
-            <div class="field-row">
-              <label for="peak-color">Peak color</label>
-              ${this._renderColorInput({
-              id: "peak-color",
-              field: "peak-color",
-              value: cardPeak.color,
-              fallbackHex: "#888",
-              placeholder: "#888"
-            })}
-            </div>
-            <div class="field-row">
-              <label for="peak-reset">Peak reset</label>
-              <select id="peak-reset" data-field="peak-reset" value="${this._escapeAttribute(cardPeakExtras.reset)}">
-                ${this._renderResetOptions(cardPeakExtras.reset)}
-              </select>
-            </div>
-            <div class="field-row">
-              <label for="peak-direction">Direction</label>
-              <select id="peak-direction" data-field="peak-direction" value="${this._getEffectiveMarkerDirection({ type: "card" }, "peak")}">
-                <option value="inward"${this._getEffectiveMarkerDirection({ type: "card" }, "peak") === "inward" ? " selected" : ""}>Inward</option>
-                <option value="outward"${this._getEffectiveMarkerDirection({ type: "card" }, "peak") === "outward" ? " selected" : ""}>Outward</option>
-              </select>
-            </div>
-            ${this._renderBuiltinMarkerLabelControls({ type: "card" }, "peak", "Peak")}
-            <div class="field-row">
-              <div class="toggle">
-                <input id="floor-show" type="checkbox" data-field="floor-show"${cardFloor.mode === "enabled" ? " checked" : ""}>
-                <label for="floor-show">Floor enabled</label>
-              </div>
-            </div>
-            <div class="field-row">
-              <label for="floor-color">Floor color</label>
-              ${this._renderColorInput({
-              id: "floor-color",
-              field: "floor-color",
-              value: cardFloor.color,
-              fallbackHex: "#888888",
-              placeholder: "#888888"
-            })}
-            </div>
-            <div class="field-row">
-              <label for="floor-reset">Floor reset</label>
-              <select id="floor-reset" data-field="floor-reset" value="${this._escapeAttribute(cardFloor.reset)}">
-                ${this._renderResetOptions(cardFloor.reset)}
-              </select>
-            </div>
-            <div class="field-row">
-              <label for="floor-direction">Direction</label>
-              <select id="floor-direction" data-field="floor-direction" value="${this._getEffectiveMarkerDirection({ type: "card" }, "floor")}">
-                <option value="inward"${this._getEffectiveMarkerDirection({ type: "card" }, "floor") === "inward" ? " selected" : ""}>Inward</option>
-                <option value="outward"${this._getEffectiveMarkerDirection({ type: "card" }, "floor") === "outward" ? " selected" : ""}>Outward</option>
-              </select>
-            </div>
-            ${this._renderBuiltinMarkerLabelControls({ type: "card" }, "floor", "Floor")}
-            <div class="field-row"><h4>Generic reference markers</h4></div>
-            ${this._renderGenericMarkersEditor({ type: "card" })}
-          </div>
-	        </div>
-
-	        <div class="section">
-	          <div class="section-head">
-	            <h3>Bar Appearance</h3>
-	            <div class="section-note">Choose the bar rendering mode and base bar colors.</div>
-	          </div>
-	          <div class="inline-row editor-grid">
-            <div class="field-row">
-              <label for="bar-fill-style">Fill style</label>
-              <select id="bar-fill-style" data-field="bar-fill-style" value="${this._escapeAttribute(fillStyle)}">
-                <option value="solid"${fillStyle === "solid" ? " selected" : ""}>solid</option>
-                <option value="gradient"${fillStyle === "gradient" ? " selected" : ""}>gradient</option>
-                <option value="bands"${fillStyle === "bands" ? " selected" : ""}>bands</option>
-                <option value="band_gradient"${fillStyle === "band_gradient" ? " selected" : ""}>band_gradient</option>
-                <option value="soft_bands"${fillStyle === "soft_bands" ? " selected" : ""}>soft_bands</option>
-              </select>
-            </div>
-            <div class="field-row">
-              <div class="toggle">
-                <input id="bar-solid-fill" type="checkbox" data-field="bar-solid-fill"${barSolidFill ? " checked" : ""}>
-                <label for="bar-solid-fill">Solid fill</label>
-              </div>
-            </div>
-            <div class="field-row">
-              <label for="bar-color">Bar color</label>
-              ${this._renderColorInput({
-              id: "bar-color",
-              field: "bar-color",
-              value: barColor,
-              fallbackHex: "#4a9eff",
-              placeholder: "#4a9eff"
-            })}
-            </div>
+          <div class="inline-row editor-grid">
             <div class="field-row">
               <label for="bar-needle-mode">Needle enabled</label>
               <select id="bar-needle-mode" data-field="bar-needle-mode" value="${this._escapeAttribute(cardNeedle.mode)}">
@@ -11355,6 +11609,10 @@ ${paintLayers}
             this._toggleCardGroupExpanded(target.dataset.group);
             return;
           }
+          if (action === "toggle-generic-marker") {
+            this._toggleGenericMarkerExpanded(target.dataset.markerUiId);
+            return;
+          }
           if (action === "remove-entity") {
             this._removeEntityRow(Number(target.dataset.index));
             return;
@@ -11362,22 +11620,30 @@ ${paintLayers}
           if (action === "add-generic-marker") {
             const scope = this._getGenericMarkerScope(target);
             const markers = this._getGenericMarkers(scope);
+            const markerUiIds = this._getGenericMarkerUiIds(scope, markers.length);
             markers.push({ at: { fixed: 50 } });
-            this._setGenericMarkerList(scope, markers);
+            const markerUiId = `marker-${++this._nextGenericMarkerUiId}`;
+            markerUiIds.push(markerUiId);
+            this._expandedGenericMarkerUiIds.add(markerUiId);
+            this._setGenericMarkerList(scope, markers, { rerender: true });
             return;
           }
           if (action === "remove-generic-marker" || action === "move-generic-marker-up" || action === "move-generic-marker-down") {
             const scope = this._getGenericMarkerScope(target);
             const markerIndex = Number(target.dataset.markerIndex);
             const markers = this._getGenericMarkers(scope);
+            const markerUiIds = this._getGenericMarkerUiIds(scope, markers.length);
             if (action === "remove-generic-marker") {
               markers.splice(markerIndex, 1);
+              this._expandedGenericMarkerUiIds.delete(markerUiIds[markerIndex]);
+              markerUiIds.splice(markerIndex, 1);
             } else {
               const nextIndex = markerIndex + (action === "move-generic-marker-up" ? -1 : 1);
               if (nextIndex < 0 || nextIndex >= markers.length) return;
               [markers[markerIndex], markers[nextIndex]] = [markers[nextIndex], markers[markerIndex]];
+              [markerUiIds[markerIndex], markerUiIds[nextIndex]] = [markerUiIds[nextIndex], markerUiIds[markerIndex]];
             }
-            this._setGenericMarkerList(scope, markers);
+            this._setGenericMarkerList(scope, markers, { rerender: true });
             return;
           }
           if (action === "add-gradient-stop") {
@@ -11581,8 +11847,9 @@ ${paintLayers}
           const value = detailValue != null ? detailValue : (target == null ? void 0 : target.type) === "checkbox" ? target.checked : target == null ? void 0 : target.value;
           if (kind === "entity-markers-inherit") {
             const scope = { type: "entity", index: Number(target.dataset.index) };
+            this._resetGenericMarkerUiScope(scope);
             if (value) this._removeScopedValue(scope, ["markers"], { rerender: true });
-            else this._setGenericMarkerList(scope, this._getGenericMarkers(scope));
+            else this._setGenericMarkerList(scope, this._getGenericMarkers(scope), { rerender: true });
             return;
           }
           if (kind == null ? void 0 : kind.startsWith("generic-marker-")) {

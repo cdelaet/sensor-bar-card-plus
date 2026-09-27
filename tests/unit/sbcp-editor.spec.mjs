@@ -2566,7 +2566,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#target-direction').value).toBe('outward');
     expect(editor.shadowRoot.querySelector('#peak-direction').value).toBe('outward');
     expect(editor.shadowRoot.querySelector('#floor-direction').value).toBe('outward');
-    expect(editor.shadowRoot.querySelector('#card-card-generic-marker-0-direction').value).toBe('outward');
+    const genericDirectionId = `card-card-generic-${editor._getGenericMarkerUiIds({ type: 'card' }, 1)[0]}-direction`;
+    expect(editor.shadowRoot.querySelector(`#${genericDirectionId}`).value).toBe('outward');
     expect(editor.shadowRoot.querySelector('#entity-0-target-direction').value).toBe('outward');
 
     dispatchChange(editor.shadowRoot.querySelector('#entity-0-target-direction'), 'inward');
@@ -2576,7 +2577,7 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchChange(editor.shadowRoot.querySelector('#entity-0-floor-direction'), 'inward');
     expect(events.at(-1).detail.config.entities[0].floor.direction).toBe('inward');
 
-    const genericDirection = editor.shadowRoot.querySelector('#card-card-generic-marker-0-direction');
+    const genericDirection = editor.shadowRoot.querySelector(`#${genericDirectionId}`);
     dispatchChange(genericDirection, 'inward');
     expect(events.at(-1).detail.config.markers[0].direction).toBeUndefined();
 
@@ -3513,6 +3514,84 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(events.at(-1).detail.config.baseline).toEqual({
       at: { fixed: 0 },
     });
+  });
+
+  it('card-level Baseline is a collapsed Bar Appearance group with a mode and origin summary', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      baseline: { at: { fixed: 0 } },
+    });
+
+    const baselineGroup = editor.shadowRoot.querySelector('#card-group-baseline');
+    const markup = editor.shadowRoot.innerHTML;
+    const markersStart = markup.indexOf('<h3>Markers</h3>');
+    const barAppearanceStart = markup.indexOf('<h3>Bar Appearance</h3>');
+    expect(baselineGroup).not.toBeNull();
+    expect(baselineGroup.getAttribute('aria-expanded')).toBe('false');
+    expect(markup).toContain('id="card-group-baseline-summary" class="override-group-summary">Auto · 0</span>');
+    expect(markersStart).toBeGreaterThanOrEqual(0);
+    expect(barAppearanceStart).toBeGreaterThan(markersStart);
+    expect(markup.indexOf('id="card-group-baseline"')).toBeGreaterThan(barAppearanceStart);
+    expect(markup.slice(markersStart, barAppearanceStart)).not.toContain('baseline-mode');
+    expect(markup.slice(markersStart, barAppearanceStart)).not.toContain('baseline-value');
+    expect(markup.slice(markersStart, barAppearanceStart)).not.toContain('card-group-baseline');
+    expect(markup).toContain('Configure Target, Peak, Floor, and custom reference markers.');
+    expect(events).toHaveLength(0);
+
+    dispatchClick(baselineGroup);
+    expect(editor.shadowRoot.querySelector('#card-group-baseline').getAttribute('aria-expanded')).toBe('true');
+    expect(editor.shadowRoot.querySelector('#baseline-mode')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#baseline-value')).not.toBeNull();
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="baseline-entity-source"]')).toHaveLength(1);
+    expect(editor.shadowRoot.querySelector('#baseline-above-color-enabled')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#baseline-above-color')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#baseline-below-color-enabled')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#baseline-below-color')).not.toBeNull();
+
+    dispatchInput(editor.shadowRoot.querySelector('#baseline-value'), '5');
+    expect(editor.shadowRoot.querySelector('#card-group-baseline').getAttribute('aria-expanded')).toBe('true');
+    expect(editor.shadowRoot.querySelector('#card-group-baseline-summary').textContent).toBe('Auto · 5');
+    expect(events.at(-1).detail.config.baseline).toEqual({ at: { fixed: 5 } });
+    expect(JSON.stringify(events.at(-1).detail.config)).not.toContain('expandedCardGroups');
+
+    editor._render();
+    expect(editor.shadowRoot.querySelector('#card-group-baseline').getAttribute('aria-expanded')).toBe('true');
+    expect(editor.shadowRoot.innerHTML).toContain('id="card-group-baseline-summary" class="override-group-summary">Auto · 5</span>');
+  });
+
+  it('card-level Baseline summary reflects enabled, entity, and disabled configurations', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      baseline: { enabled: true, at: { fixed: 0, entity: 'sensor.foo' } },
+    });
+    expect(editor.shadowRoot.innerHTML).toContain('id="card-group-baseline-summary" class="override-group-summary">Enabled · sensor.foo</span>');
+
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-baseline'));
+    dispatchChange(editor.shadowRoot.querySelector('#baseline-mode'), 'disabled');
+    expect(editor.shadowRoot.querySelector('#card-group-baseline-summary').textContent).toBe('Disabled');
+    expect(events.at(-1).detail.config.baseline).toEqual({ enabled: false, at: { fixed: 0, entity: 'sensor.foo' } });
+  });
+
+  it('per-entity Baseline remains in Entity Overrides', () => {
+    const editor = createEditor();
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      entities: [{ entity: 'sensor.two', baseline: { at: { fixed: 10 } } }],
+    });
+
+    const entityBaseline = editor.shadowRoot.querySelector('#entity-0-group-baseline');
+    const markup = editor.shadowRoot.innerHTML;
+    expect(entityBaseline).not.toBeNull();
+    expect(markup.indexOf('<h3>Entities</h3>')).toBeLessThan(markup.indexOf('id="entity-0-group-baseline"'));
+    expect(markup.indexOf('id="entity-0-group-baseline"')).toBeLessThan(markup.indexOf('<h3>Scale</h3>'));
+    expect(editor.shadowRoot.querySelector('#card-group-baseline')).not.toBeNull();
   });
 
   it('card-level baseline entity only writes baseline.at.entity', () => {
@@ -8381,6 +8460,166 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor._draftConfig.markers).toHaveLength(2);
   });
 
+  it('keeps generic marker text and numeric inputs mounted while typing and accepting config echoes', async () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({
+      markers: [{
+        at: { fixed: 1 },
+        lane: 'below',
+        shape: 'circle',
+        direction: 'inward',
+        color: '#888888',
+        label: { show_value: true },
+      }],
+    });
+    const markerUiId = editor._getGenericMarkerUiIds({ type: 'card' }, 1)[0];
+    editor._expandedGenericMarkerUiIds.add(markerUiId);
+    editor._render();
+
+    const originalRender = editor._render.bind(editor);
+    let renderCount = 0;
+    editor._render = () => {
+      renderCount += 1;
+      originalRender();
+    };
+    const textInput = editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-label-text`);
+    dispatchInput(textInput, 'Pred');
+    dispatchInput(textInput, 'Predict');
+
+    expect(editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-label-text`)).toBe(textInput);
+    expect(events.map((event) => event.detail.config.markers[0].label.text)).toEqual(['Pred', 'Predict']);
+    expect(renderCount).toBe(0);
+    expect(editor.shadowRoot.querySelector(`#generic-${markerUiId}-summary`).textContent).toBe('Below · Circle · 1');
+    expect(editor._expandedGenericMarkerUiIds.has(markerUiId)).toBe(true);
+
+    editor.setConfig(events.at(-1).detail.config);
+    expect(editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-label-text`)).toBe(textInput);
+    expect(renderCount).toBe(0);
+
+    const fixedInput = editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-fixed`);
+    dispatchInput(fixedInput, '2');
+    dispatchInput(fixedInput, '25');
+    await flushTimers();
+
+    expect(editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-fixed`)).toBe(fixedInput);
+    expect(events.slice(-2).map((event) => event.detail.config.markers[0].at.fixed)).toEqual([2, 25]);
+    expect(editor.shadowRoot.querySelector(`#generic-${markerUiId}-summary`).textContent).toBe('Below · Circle · 25');
+    expect(renderCount).toBe(0);
+  });
+
+  it('keeps source-mode changes structural so the matching value control appears', async () => {
+    const editor = createEditor();
+    editor.setConfig({ markers: [{ at: { fixed: 20 } }] });
+    const markerUiId = editor._getGenericMarkerUiIds({ type: 'card' }, 1)[0];
+    editor._expandedGenericMarkerUiIds.add(markerUiId);
+    editor._render();
+    const sourceMode = editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-source-mode`);
+
+    dispatchChange(sourceMode, 'percent');
+    await flushTimers();
+
+    expect(editor.shadowRoot.innerHTML).toContain(`id="card-card-generic-${markerUiId}-percent"`);
+    expect(editor._draftConfig.markers[0].at).toBe('50%');
+
+    dispatchChange(editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-source-mode`), 'entity-fallback');
+    await flushTimers();
+    expect(editor.shadowRoot.innerHTML).toContain('Reference marker entity');
+    expect(editor.shadowRoot.innerHTML).toContain(`id="card-card-generic-${markerUiId}-fallback"`);
+    expect(editor._draftConfig.markers[0].at).toEqual({ entity: '', fixed: 50 });
+
+    dispatchChange(editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-source-mode`), 'entity');
+    await flushTimers();
+    expect(editor.shadowRoot.innerHTML).toContain('generic-marker-entity');
+    expect(editor.shadowRoot.innerHTML).not.toContain(`id="card-card-generic-${markerUiId}-fallback"`);
+  });
+
+  it('collapses marker groups by default and keeps generic marker expansion attached through reorder and removal', () => {
+    const editor = createEditor();
+    editor.setConfig({
+      entity: 'sensor.one',
+      target: { at: { fixed: 65 }, shape: 'diamond' },
+      peak: { enabled: true, reset: 'hourly' },
+      floor: { enabled: true, reset: 'daily' },
+      markers: [
+        { at: '35%', lane: 'above', shape: 'diamond' },
+        { at: { entity: 'sensor.foo' }, lane: 'below', shape: 'arrow' },
+        { at: { fixed: 75 }, lane: 'above' },
+      ],
+    });
+
+    for (const group of ['marker-target', 'marker-peak', 'marker-floor', 'generic-markers']) {
+      expect(editor.shadowRoot.innerHTML).toContain(`id="card-group-${group}"`);
+      expect(editor.shadowRoot.innerHTML).toContain(`id="card-group-${group}-title" class="override-group-title">▸`);
+    }
+    expect(editor.shadowRoot.innerHTML).toContain('65 · Diamond');
+    expect(editor.shadowRoot.innerHTML).toContain('Enabled · hourly reset');
+    expect(editor.shadowRoot.innerHTML).toContain('Enabled · daily reset');
+
+    editor._toggleCardGroupExpanded('marker-peak');
+    expect(editor.shadowRoot.innerHTML).toContain('id="card-group-marker-peak-title" class="override-group-title">▾ Peak');
+    editor._toggleCardGroupExpanded('marker-floor');
+    expect(editor.shadowRoot.innerHTML).toContain('id="card-group-marker-floor-title" class="override-group-title">▾ Floor');
+    editor._toggleCardGroupExpanded('marker-target');
+    expect(editor.shadowRoot.innerHTML).toContain('id="card-group-marker-target-title" class="override-group-title">▾ Target');
+
+    const ids = editor._getGenericMarkerUiIds({ type: 'card' }, 3).slice();
+    editor._toggleGenericMarkerExpanded(ids[0]);
+    expect(editor._renderGenericMarkersEditor({ type: 'card' })).toContain(`data-marker-ui-id="${ids[0]}" data-expanded="true"`);
+    editor._toggleGenericMarkerExpanded(ids[0]);
+    editor._expandedGenericMarkerUiIds.add(ids[1]);
+    editor._render();
+    expect(editor._renderGenericMarkersEditor({ type: 'card' })).toContain(`data-marker-ui-id="${ids[1]}" data-expanded="true"`);
+    expect(editor._renderGenericMarkersEditor({ type: 'card' })).toContain('Above · Diamond · 35%');
+    expect(editor._renderGenericMarkersEditor({ type: 'card' })).toContain('Below · Arrow · sensor.foo');
+
+    const clickAction = (action, markerIndex) => editor._handleClick({
+      target: {
+        dataset: { action, scopeType: 'card', index: 'card', markerIndex: String(markerIndex) },
+        closest() { return this; },
+      },
+    });
+    clickAction('move-generic-marker-up', 1);
+    expect(editor._getGenericMarkerUiIds({ type: 'card' }, 3)).toEqual([ids[1], ids[0], ids[2]]);
+    expect(editor._expandedGenericMarkerUiIds.has(ids[1])).toBe(true);
+    expect(editor._renderGenericMarkersEditor({ type: 'card' })).toContain('Reference marker 1</span>');
+    expect(editor._renderGenericMarkersEditor({ type: 'card' })).toContain('Above · Diamond · 35%');
+    expect(editor._renderGenericMarkersEditor({ type: 'card' })).toContain('disabled aria-label="Move marker up"');
+    expect(editor._renderGenericMarkersEditor({ type: 'card' })).toContain('disabled aria-label="Move marker down"');
+
+    clickAction('remove-generic-marker', 1);
+    expect(editor._getGenericMarkerUiIds({ type: 'card' }, 2)).toEqual([ids[1], ids[2]]);
+    expect(editor._expandedGenericMarkerUiIds.has(ids[1])).toBe(true);
+    expect(editor._draftConfig.markers.some((marker) => Object.hasOwn(marker, 'markerUiId'))).toBe(false);
+  });
+
+  it('expands only a newly added generic marker and resets local identities on external replacement', () => {
+    const editor = createEditor();
+    editor.setConfig({ markers: [{ at: { fixed: 10 } }, { at: { fixed: 20 } }] });
+    const ids = editor._getGenericMarkerUiIds({ type: 'card' }, 2);
+    editor._expandedGenericMarkerUiIds.add(ids[0]);
+    const clickAction = (action) => editor._handleClick({
+      target: {
+        dataset: { action, scopeType: 'card', index: 'card', markerIndex: '0' },
+        closest() { return this; },
+      },
+    });
+
+    clickAction('add-generic-marker');
+    const expandedIds = editor._getGenericMarkerUiIds({ type: 'card' }, 3);
+    expect(editor._expandedGenericMarkerUiIds.has(ids[0])).toBe(true);
+    expect(editor._expandedGenericMarkerUiIds.has(expandedIds[2])).toBe(true);
+    expect(editor._expandedGenericMarkerUiIds.has(expandedIds[1])).toBe(false);
+    expect(editor._draftConfig.markers.at(-1)).toEqual({ at: { fixed: 50 } });
+
+    editor.setConfig({ markers: [{ at: '40%', vendor_key: { keep: true } }] });
+    const replacementIds = editor._getGenericMarkerUiIds({ type: 'card' }, 1);
+    expect(replacementIds[0]).not.toBe(ids[0]);
+    expect(editor._expandedGenericMarkerUiIds.has(ids[0])).toBe(false);
+    expect(editor._expandedGenericMarkerUiIds.size).toBe(0);
+    expect(editor._draftConfig.markers[0].vendor_key).toEqual({ keep: true });
+  });
+
   it('deep-copies inherited generic markers on entity override and preserves explicit empty lists', () => {
     const editor = createEditor();
     editor.setConfig({
@@ -8435,7 +8674,7 @@ describe('Sensor Bar Card Plus editor', () => {
     const markup = editor._renderGenericMarkersEditor({ type: 'card' });
     const emitted = editor._cleanupEditorEmittedConfig(editor._cloneDeep(editor._draftConfig));
 
-    expect((markup.match(/class="list-row generic-marker-row"/g) ?? [])).toHaveLength(3);
+    expect((markup.match(/class="generic-marker-item"/g) ?? [])).toHaveLength(3);
     expect(emitted.markers).toHaveLength(3);
     expect(emitted.markers[0].label).toEqual({ show: true });
     expect(emitted.markers[2]).toEqual({

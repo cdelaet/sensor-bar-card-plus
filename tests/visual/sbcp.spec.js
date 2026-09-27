@@ -52,6 +52,159 @@ async function render(page, { width = 720, config, states = baseStates }) {
   return page.locator('#mount');
 }
 
+test('left responsive history survives unrelated config rebuilds per entity', async ({ page }) => {
+  const config = {
+    layout: { label: { position: 'left', width: 100 }, height: 38 },
+    scale: { min: { fixed: 0 }, max: { fixed: 300 } },
+    formatting: { decimal: 1, unit: 'W' },
+    bar: { fill_style: 'gradient' },
+    entities: [
+      { entity: 'sensor.power' },
+      { entity: 'sensor.small', layout: { label: { width: 40 } } },
+    ],
+  };
+  const states = {
+    'sensor.power': sensor(185, { friendly_name: 'Power' }),
+    'sensor.small': sensor(1, { friendly_name: 'Small' }),
+  };
+  const readRows = () => page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    return [...card.shadowRoot.querySelectorAll('.row[data-entity]')].map((row) => {
+      const entityId = row.dataset.entity;
+      const mainLine = row.querySelector('.main-line');
+      const track = row.querySelector('.bar-track');
+      const budget = card._estimateLeftModeWidthBudget(row);
+      const inlineCandidate = card._predictLeftModeBarShareForState(row, {
+        hideLabel: false,
+        topValue: false,
+        hideIcon: false,
+      }, budget);
+      return {
+        entityId,
+        top: row.querySelector('.row-stack').dataset.forceTopValue === 'true',
+        mainWidth: mainLine.getBoundingClientRect().width,
+        trackWidth: track.getBoundingClientRect().width,
+        labelWidth: budget.labelWidth,
+        iconWidth: budget.iconWidth,
+        valueWidth: budget.valueWidth,
+        gap: budget.gap,
+        inlineShare: inlineCandidate.share,
+        history: card._leftModeResponsiveHistory.get(entityId),
+      };
+    });
+  });
+
+  await render(page, { width: 440, config, states });
+  await expect.poll(async () => (await readRows()).map(({ entityId, top }) => [entityId, top]))
+    .toEqual([['sensor.power', true], ['sensor.small', false]]);
+
+  await page.evaluate(() => {
+    document.querySelector('#mount').style.width = '450px';
+  });
+  await expect.poll(async () => (await readRows()).map(({ entityId, top }) => [entityId, top]))
+    .toEqual([['sensor.power', true], ['sensor.small', false]]);
+  const beforeNeedle = await readRows();
+  expect(beforeNeedle[0].inlineShare).toBeCloseTo(0.4878, 3);
+
+  const needleOnConfig = { ...config, bar: { ...config.bar, needle: { show: true } } };
+  await page.evaluate((nextConfig) => {
+    document.querySelector('sensor-bar-card-plus').setConfig(nextConfig);
+  }, needleOnConfig);
+  await expect.poll(async () => (await readRows()).map(({ entityId, top }) => [entityId, top]))
+    .toEqual([['sensor.power', true], ['sensor.small', false]]);
+  expect((await readRows()).map(({ mainWidth, trackWidth, labelWidth, iconWidth, valueWidth, gap }) => ({
+    mainWidth, trackWidth, labelWidth, iconWidth, valueWidth, gap,
+  }))).toEqual(beforeNeedle.map(({ mainWidth, trackWidth, labelWidth, iconWidth, valueWidth, gap }) => ({
+    mainWidth, trackWidth, labelWidth, iconWidth, valueWidth, gap,
+  })));
+
+  await page.evaluate((nextConfig) => {
+    document.querySelector('sensor-bar-card-plus').setConfig(nextConfig);
+  }, config);
+  await expect.poll(async () => (await readRows()).map(({ entityId, top }) => [entityId, top]))
+    .toEqual([['sensor.power', true], ['sensor.small', false]]);
+
+  const noIconConfig = {
+    ...config,
+    entities: [
+      { entity: 'sensor.power', icon: false },
+      { entity: 'sensor.small', layout: { label: { width: 40 } } },
+    ],
+  };
+  await page.evaluate((nextConfig) => {
+    document.querySelector('sensor-bar-card-plus').setConfig(nextConfig);
+  }, noIconConfig);
+  await expect.poll(async () => (await readRows()).map(({ entityId, top }) => [entityId, top]))
+    .toEqual([['sensor.power', false], ['sensor.small', false]]);
+  const afterRelevantChange = await readRows();
+  expect(afterRelevantChange[0].iconWidth).toBe(0);
+  expect(afterRelevantChange[0].inlineShare).toBeGreaterThan(0.52);
+
+  const freshConfig = { ...config, entities: [{ entity: 'sensor.power' }] };
+  await render(page, { width: 450, config: freshConfig, states });
+  await expect.poll(async () => (await readRows())[0]?.top).toBe(false);
+  expect((await readRows())[0].inlineShare).toBeCloseTo(0.4878, 3);
+});
+
+test('marker editor keeps focused inputs mounted and disclosures usable at narrow width', async ({ page }) => {
+  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.evaluate(async () => {
+    await customElements.whenDefined('sensor-bar-card-plus-editor');
+    const editor = document.createElement('sensor-bar-card-plus-editor');
+    editor.setConfig({
+      target: { at: { fixed: 65 }, shape: 'diamond' },
+      peak: { enabled: true, reset: 'hourly' },
+      floor: { enabled: true, reset: 'daily' },
+      baseline: { at: { fixed: 0 } },
+      markers: [{ at: { fixed: 1 }, label: { show: true } }],
+    });
+    editor.addEventListener('config-changed', (event) => editor.setConfig(event.detail.config));
+    document.querySelector('#mount').append(editor);
+    document.querySelector('#mount').style.width = '280px';
+  });
+
+  const editor = page.locator('sensor-bar-card-plus-editor');
+  for (const group of ['marker-target', 'marker-peak', 'marker-floor', 'generic-markers']) {
+    await expect(editor.locator(`#card-group-${group}`)).toHaveAttribute('aria-expanded', 'false');
+  }
+  const baselineToggle = editor.locator('#card-group-baseline');
+  await expect(baselineToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(editor.locator('#card-group-baseline-summary')).toHaveText('Auto · 0');
+  await baselineToggle.click();
+  await expect(baselineToggle).toHaveAttribute('aria-expanded', 'true');
+  await editor.locator('#baseline-value').fill('5');
+  await expect(editor.locator('#card-group-baseline-summary')).toHaveText('Auto · 5');
+  await expect(baselineToggle).toHaveAttribute('aria-expanded', 'true');
+
+  await editor.locator('#card-group-generic-markers').click();
+  const markerToggle = editor.locator('.generic-marker-toggle');
+  await expect(markerToggle).toHaveAttribute('aria-expanded', 'false');
+  await markerToggle.click();
+  await expect(markerToggle).toHaveAttribute('aria-expanded', 'true');
+
+  const textInput = editor.locator('input[data-kind="generic-marker-label-text"]');
+  await textInput.pressSequentially('Prediction');
+  await expect.poll(() => editor.evaluate((element) => element.shadowRoot.activeElement?.dataset.kind)).toBe('generic-marker-label-text');
+  await expect(editor.locator('.generic-marker-summary')).toContainText('1');
+
+  const fixedInput = editor.locator('input[data-kind="generic-marker-fixed"]');
+  await fixedInput.fill('');
+  await fixedInput.pressSequentially('25');
+  await expect.poll(() => editor.evaluate((element) => element.shadowRoot.activeElement?.dataset.kind)).toBe('generic-marker-fixed');
+  await expect(editor.locator('.generic-marker-summary')).toContainText('25');
+
+  const item = editor.locator('.generic-marker-item');
+  const actions = item.locator('.generic-marker-actions');
+  const bounds = await item.evaluate((element) => ({
+    itemRight: element.getBoundingClientRect().right,
+    actionsRight: element.querySelector('.generic-marker-actions').getBoundingClientRect().right,
+  }));
+  expect(bounds.actionsRight).toBeLessThanOrEqual(bounds.itemRight + 1);
+  await expect(actions.locator('button[data-action="move-generic-marker-up"]')).toBeDisabled();
+  await expect(actions.locator('button[data-action="move-generic-marker-down"]')).toBeDisabled();
+  await expect(actions.locator('button[data-action="remove-generic-marker"]')).toBeEnabled();
+});
+
 test('glyph-only markers preserve row geometry and below labels use only needed clearance', async ({ page }) => {
   await render(page, {
     width: 720,
@@ -122,6 +275,7 @@ test('glyph-only markers preserve row geometry and below labels use only needed 
         below: mainLine.dataset.markerLaneBelow,
         labelAbove: row.dataset.markerLabelLaneAbove,
         labelBelow: row.dataset.markerLabelLaneBelow,
+        aboveSpacerCount: row.querySelectorAll('.marker-label-lane-above').length,
         marginBottom: getComputedStyle(row).marginBottom,
         rowHeight: rowRect.height,
         mainHeight: mainRect.height,
@@ -146,6 +300,7 @@ test('glyph-only markers preserve row geometry and below labels use only needed 
   expect(result[2].below).toBe('true');
   expect(result[3].above).toBe('true');
   expect(result[3].below).toBe('true');
+  for (const row of result) expect(row.aboveSpacerCount).toBe(0);
 
   expect(result[4].labelBelow).toBe('true');
   expect(result[4].marginBottom).toBe('13px');
@@ -156,7 +311,8 @@ test('glyph-only markers preserve row geometry and below labels use only needed 
   expect(result[6].marginBottom).toBe('13px');
   expect(result[4].mainOffset).toBe(baseline.mainOffset);
   expect(result[5].mainOffset).toBe(baseline.mainOffset);
-  expect(result[6].mainOffset).toBe(baseline.mainOffset);
+  expect(result[6].mainOffset - baseline.mainOffset).toBe(12);
+  expect(result[6].rowHeight - baseline.rowHeight).toBe(12);
   expect(result[4].lastLabelBottom).toBeLessThanOrEqual(result[5].rowTop + 0.5);
   expect(result[5].lastLabelBottom).toBeLessThanOrEqual(result[6].rowTop + 0.5);
   expect(result[6].lastLabelBottom).toBeLessThanOrEqual(result[7].rowTop + 0.5);
@@ -233,6 +389,8 @@ test('adjacent configured label lanes clear only facing rows and preserve compac
         above: above.map((label) => label.getBoundingClientRect().toJSON()),
         below: below.map((label) => label.getBoundingClientRect().toJSON()),
         occupancy: [row.dataset.markerLabelLaneAbove, row.dataset.markerLabelLaneBelow],
+        responsiveLabelLineHeight: Number.parseFloat(getComputedStyle(card.shadowRoot.querySelector('.card'))
+          .getPropertyValue('--sbcp-target-label-font-size')),
       };
     };
     const readPair = (previousIndex, currentIndex) => {
@@ -269,15 +427,15 @@ test('adjacent configured label lanes clear only facing rows and preserve compac
   expect(metrics.pairs.belowThenPlain.rowGap).toBe(13);
   expect(metrics.pairs.plainThenAbove.rowGap).toBe(10);
   expect(metrics.pairs.facingMultiple.rowGap).toBe(23);
-  expect(metrics.pairs.facingMultiple.facingLabelGap).toBe(1);
+  expect(metrics.pairs.facingMultiple.facingLabelGap).toBe(12);
   expect(metrics.pairs.glyphOnlyThenAbove.rowGap).toBe(10);
   expect(metrics.pairs.unresolvedFacing.rowGap).toBe(23);
   expect(metrics.pairs.unresolvedFacing.previous.occupancy[1]).toBe('true');
   expect(metrics.pairs.unresolvedFacing.previous.below).toHaveLength(0);
   expect(metrics.pairs.belowThenPlain.belowBarGap).toBe(2);
   expect(metrics.pairs.facingMultiple.belowBarGap).toBe(2);
-  expect(metrics.pairs.plainThenAbove.aboveBarGap).toBe(0);
-  expect(metrics.pairs.facingMultiple.aboveBarGap).toBe(0);
+  expect(metrics.pairs.plainThenAbove.aboveBarGap).toBe(1);
+  expect(metrics.pairs.facingMultiple.aboveBarGap).toBe(1);
   expect(metrics.sameRowBelowLabels).toHaveLength(3);
   expect(metrics.sameRowBelowLabels[0].left).toBeLessThan(metrics.sameRowBelowLabels[1].right);
   expect(metrics.sameRowBelowLabels[0].right).toBeGreaterThan(metrics.sameRowBelowLabels[1].left);
@@ -287,13 +445,14 @@ test('adjacent configured label lanes clear only facing rows and preserve compac
   const baseline = metrics.pairs.noLabels.previous;
   for (const pair of Object.values(metrics.pairs)) {
     for (const row of [pair.previous, pair.current]) {
-      expect(row.rowHeight).toBe(baseline.rowHeight);
+      const laneHeight = row.occupancy[0] === 'true' ? row.responsiveLabelLineHeight : 0;
+      expect(row.rowHeight).toBe(baseline.rowHeight + laneHeight);
       expect(row.main.width).toBe(baseline.main.width);
       expect(row.main.height).toBe(baseline.main.height);
       expect(row.track.width).toBe(baseline.track.width);
       expect(row.track.height).toBe(baseline.track.height);
-      expect(row.mainOffset).toBe(baseline.mainOffset);
-      expect(row.trackOffset).toBe(baseline.trackOffset);
+      expect(row.mainOffset).toBe(baseline.mainOffset + laneHeight);
+      expect(row.trackOffset).toBe(baseline.trackOffset + laneHeight);
     }
   }
 
@@ -323,7 +482,7 @@ test('adjacent configured label lanes clear only facing rows and preserve compac
     await expect.poll(dynamicPairGeometry).toMatchObject({ rowGap: 23 });
     if (state === '60') {
       await expect.poll(() => card.locator('.row[data-entity="sensor.adjacent_dynamic_below"] .generic-value-label').evaluate((label) => getComputedStyle(label).visibility)).toBe('visible');
-      await expect.poll(dynamicPairGeometry).toMatchObject({ rowGap: 23, facingLabelGap: 1 });
+      await expect.poll(dynamicPairGeometry).toMatchObject({ rowGap: 23, facingLabelGap: 12 });
     } else {
       await expect.poll(() => card.locator('.row[data-entity="sensor.adjacent_dynamic_below"] .generic-value-label').evaluate((label) => getComputedStyle(label).visibility)).toBe('hidden');
     }
@@ -368,7 +527,12 @@ test('adjacent configured label lanes clear only facing rows and preserve compac
         facingLabelGap: above.top - below.bottom,
         belowBarGap: below.top - belowTrack.bottom,
         aboveBarGap: aboveTrack.top - above.bottom,
+        aboveLineHeight: getComputedStyle(current.querySelector('.peak-value-label')).lineHeight,
         rowHeights: rows.map((row) => row.getBoundingClientRect().height),
+        heroHeaderMargins: rows.map((row) => {
+          const header = row.querySelector('.hero-header');
+          return header ? getComputedStyle(header).marginBottom : null;
+        }),
         trackHeights: rows.map((row) => row.querySelector('.bar-track').getBoundingClientRect().height),
         trackWidths: rows.map((row) => row.querySelector('.bar-track').getBoundingClientRect().width),
         topValueActive: current.querySelector('.top-right-value')?.dataset.active ?? null,
@@ -377,42 +541,84 @@ test('adjacent configured label lanes clear only facing rows and preserve compac
     expect(layoutMetrics.rowGap).toBeGreaterThanOrEqual(23);
     expect(layoutMetrics.facingLabelGap).toBeGreaterThanOrEqual(1);
     expect(layoutMetrics.belowBarGap).toBe(2);
-    expect(layoutMetrics.aboveBarGap).toBe(0);
-    expect(layoutMetrics.rowHeights[0]).toBe(layoutMetrics.rowHeights[1]);
+    expect(layoutMetrics.aboveBarGap).toBe(1);
+    if (scenario.position === 'hero') {
+      expect(layoutMetrics.heroHeaderMargins[0]).toBe('0px');
+      expect(layoutMetrics.heroHeaderMargins[1]).not.toBe('0px');
+      expect(layoutMetrics.rowHeights[1] - layoutMetrics.rowHeights[0])
+        .toBeCloseTo(Number.parseFloat(layoutMetrics.heroHeaderMargins[1]), 1);
+    } else {
+      expect(layoutMetrics.rowHeights[1] - layoutMetrics.rowHeights[0])
+        .toBe(Number.parseFloat(layoutMetrics.aboveLineHeight));
+    }
     expect(layoutMetrics.trackHeights[0]).toBe(layoutMetrics.trackHeights[1]);
     expect(layoutMetrics.trackWidths[0]).toBe(layoutMetrics.trackWidths[1]);
   }
 });
 
-test('above marker labels overlay without moving above, Hero, or narrow top-value content', async ({ page }) => {
+test('above marker labels reserve responsive space while Hero spacing follows label occupancy', async ({ page }) => {
+  const observedLabelFontSizes = new Set();
   for (const scenario of [
     { position: null, width: 720, selectors: ['.label-left', '.value-right'] },
+    { position: 'left', width: 720, selectors: ['.label-left', '.value-right'] },
+    { position: 'off', width: 720, selectors: ['.value-right'] },
     { position: 'inside', width: 720, selectors: ['.bar-inner-label'] },
-    { position: 'above', width: 720, selectors: ['.above-line'] },
+    { position: 'above', width: 720, selectors: ['.above-line'], contentSelector: '.above-bar-label' },
     { position: 'hero', width: 720, selectors: ['.hero-line'] },
+    { position: 'hero', width: 300, selectors: ['.hero-line'] },
+    { position: 'hero', width: 240, selectors: ['.hero-line'] },
+    { position: 'hero', width: 200, selectors: ['.hero-line'] },
+    { position: 'hero', width: 160, selectors: ['.hero-line'] },
     { position: 'left', width: 320, selectors: ['.top-right-value'], forceTopValue: true },
+    { position: 'left', width: 220, selectors: ['.top-right-value'], forceTopValue: true },
+    { position: 'left', width: 150, selectors: ['.top-right-value'], forceTopValue: true },
+    { position: 'inside', width: 320, selectors: ['.bar-inner-label'] },
+    { position: 'above', width: 220, selectors: ['.above-line'], contentSelector: '.above-bar-label' },
+    { position: 'off', width: 150, selectors: ['.value-right'] },
+    { position: 'hero', width: 220, selectors: ['.hero-line'] },
   ]) {
     await render(page, {
       width: scenario.width,
       config: {
         type: 'custom:sensor-bar-card-plus',
-        title: 'Above marker overlay',
+        title: 'Above marker label lane',
         label_width: 180,
         min: 0,
         max: 100,
         ...(scenario.position ? { label_position: scenario.position } : {}),
         entities: [
           { entity: 'sensor.no_marker' },
-          { entity: 'sensor.with_above_label', peak: { enabled: true, label: { show: true } } },
+          { entity: 'sensor.unlabeled_above', peak: { enabled: true } },
+          {
+            entity: 'sensor.with_above_label',
+            peak: { enabled: true, label: { show: true } },
+            markers: [
+              { at: '25%', lane: 'above', label: { show: true, text: 'Low', show_value: false, show_unit: false } },
+              { at: { entity: 'sensor.above_dynamic_source' }, lane: 'above', label: { show: true, text: 'High', show_value: false, show_unit: false } },
+              { at: '50%', lane: 'below', label: { show: true, text: 'Below', show_value: false, show_unit: false } },
+            ],
+          },
+          {
+            entity: 'sensor.empty_above_label',
+            peak: { enabled: true, label: { show: true, text: '', show_value: false, show_unit: false } },
+          },
+          {
+            entity: 'sensor.below_only_label',
+            target: { at: { fixed: 50 }, label: { show: true } },
+          },
         ],
       },
       states: {
         'sensor.no_marker': sensor(42, { friendly_name: 'Production sensor content' }),
+        'sensor.unlabeled_above': sensor(42, { friendly_name: 'Production sensor content' }),
         'sensor.with_above_label': sensor(42, { friendly_name: 'Production sensor content' }),
+        'sensor.empty_above_label': sensor(42, { friendly_name: 'Production sensor content' }),
+        'sensor.below_only_label': sensor(42, { friendly_name: 'Production sensor content' }),
+        'sensor.above_dynamic_source': sensor(75, { friendly_name: 'Dynamic label reference' }),
       },
     });
 
-    const result = await page.evaluate(({ selectors, forceTopValue }) => {
+    const result = await page.evaluate(({ selectors, contentSelector, forceTopValue }) => {
       const card = document.querySelector('sensor-bar-card-plus');
       const rows = [...card.shadowRoot.querySelectorAll('.row[data-entity]')];
       if (forceTopValue) {
@@ -421,20 +627,56 @@ test('above marker labels overlay without moving above, Hero, or narrow top-valu
       }
       return rows.map((row) => {
         const contents = selectors.map((selector) => row.querySelector(selector)).filter(Boolean);
-        const content = contents[0];
+        const content = row.querySelector(contentSelector) ?? contents[0];
         const mainLine = row.querySelector('.main-line');
         const barTrack = row.querySelector('.bar-track');
         const label = row.querySelector('.peak-value-label');
         const contentRect = content?.getBoundingClientRect();
+        const heroHeaderRect = row.querySelector('.hero-header')?.getBoundingClientRect();
         const barRect = barTrack.getBoundingClientRect();
         const labelRect = label?.getBoundingClientRect();
         const rowRect = row.getBoundingClientRect();
+        const topValue = row.querySelector('.top-right-value');
+        const marker = row.querySelector('.peak-marker');
+        const markerRect = marker?.getBoundingClientRect();
         return {
           contentTop: contentRect ? contentRect.top - rowRect.top : null,
           contentBottom: contentRect ? contentRect.bottom - rowRect.top : null,
+          heroHeaderBottom: heroHeaderRect ? heroHeaderRect.bottom - rowRect.top : null,
+          heroContentTrackGap: heroHeaderRect ? barRect.top - heroHeaderRect.bottom : null,
           barTop: barRect.top - rowRect.top,
           mainTop: mainLine.getBoundingClientRect().top - rowRect.top,
           rowHeight: rowRect.height,
+          trackWidth: barRect.width,
+          trackHeight: barRect.height,
+          markerTrackOffset: markerRect ? {
+            left: markerRect.left - barRect.left,
+            top: markerRect.top - barRect.top,
+          } : null,
+          laneCount: row.querySelectorAll('.marker-label-lane-above').length,
+          lineHeight: label
+            ? getComputedStyle(label).lineHeight
+            : `${getComputedStyle(card.shadowRoot.querySelector('.card')).getPropertyValue('--sbcp-target-label-font-size').trim()}`,
+          labelTrackGap: labelRect ? barRect.top - labelRect.bottom : null,
+          allAboveLabelTrackGaps: [...row.querySelectorAll('.peak-value-label, .generic-value-label[data-lane="above"]')]
+            .filter((element) => getComputedStyle(element).visibility === 'visible')
+            .map((element) => barRect.top - element.getBoundingClientRect().bottom),
+          topValueLabelGap: topValue?.dataset.active === 'true' && labelRect
+            ? labelRect.top - topValue.getBoundingClientRect().bottom
+            : null,
+          contentLabelGap: contentRect && labelRect ? labelRect.top - contentRect.bottom : null,
+          mainMarginTop: getComputedStyle(mainLine).marginTop,
+          heroHeaderMargin: row.querySelector('.hero-header')
+            ? getComputedStyle(row.querySelector('.hero-header')).marginBottom
+            : null,
+          heroDensity: row.querySelector('.hero-line')?.dataset.heroDensity ?? null,
+          heroValueFontSize: row.querySelector('.hero-value')
+            ? getComputedStyle(row.querySelector('.hero-value')).fontSize
+            : null,
+          aboveLabelCount: [...row.querySelectorAll('.peak-value-label, .generic-value-label[data-lane="above"]')]
+            .filter((element) => getComputedStyle(element).visibility === 'visible').length,
+          belowLabelCount: [...row.querySelectorAll('.target-value-label, .floor-value-label, .generic-value-label[data-lane="below"]')]
+            .filter((element) => getComputedStyle(element).visibility === 'visible').length,
           contentZIndexes: contents.map((element) => getComputedStyle(element).zIndex),
           labelZIndex: label ? getComputedStyle(label).zIndex : null,
           labelVisibility: label ? getComputedStyle(label).visibility : null,
@@ -442,26 +684,170 @@ test('above marker labels overlay without moving above, Hero, or narrow top-valu
           topValueActive: row.querySelector('.top-right-value')?.dataset.active ?? null,
         };
       });
-    }, { selectors: scenario.selectors, forceTopValue: scenario.forceTopValue === true });
+    }, {
+      selectors: scenario.selectors,
+      contentSelector: scenario.contentSelector ?? null,
+      forceTopValue: scenario.forceTopValue === true,
+    });
 
-    expect(result[0].contentTop).not.toBeNull();
-    expect(result[1].contentTop).toBe(result[0].contentTop);
-    expect(result[1].contentBottom).toBe(result[0].contentBottom);
-    expect(result[1].barTop).toBe(result[0].barTop);
-    expect(result[1].mainTop).toBe(result[0].mainTop);
-    expect(result[1].rowHeight).toBe(result[0].rowHeight);
-    expect(result[1].contentZIndexes.length).toBeGreaterThan(0);
-    expect(result[1].contentZIndexes.every((zIndex) => zIndex === '10')).toBe(true);
-    expect(result[1].labelZIndex).toBe('8');
-    expect(result[1].labelVisibility).toBe('visible');
-    if (!scenario.forceTopValue && scenario.position !== null && scenario.position !== 'inside') {
-      expect(result[1].labelOverlapsContent).toBe(true);
+    const [plain, unlabeled, labeled, emptyComposition, belowOnly] = result;
+    expect(plain.contentTop).not.toBeNull();
+    expect(unlabeled).toMatchObject({
+      contentTop: plain.contentTop,
+      contentBottom: plain.contentBottom,
+      barTop: plain.barTop,
+      mainTop: plain.mainTop,
+      rowHeight: plain.rowHeight,
+      trackWidth: plain.trackWidth,
+      trackHeight: plain.trackHeight,
+      laneCount: 0,
+      mainMarginTop: '0px',
+    });
+    expect(labeled.markerTrackOffset).toEqual(unlabeled.markerTrackOffset);
+    for (const noAboveLabel of [emptyComposition, belowOnly]) {
+      expect(noAboveLabel).toMatchObject({
+        contentTop: plain.contentTop,
+        contentBottom: plain.contentBottom,
+        barTop: plain.barTop,
+        mainTop: plain.mainTop,
+        rowHeight: plain.rowHeight,
+        trackWidth: plain.trackWidth,
+        trackHeight: plain.trackHeight,
+        laneCount: 0,
+        mainMarginTop: '0px',
+      });
     }
+    expect(emptyComposition.aboveLabelCount).toBe(0);
+    expect(belowOnly.belowLabelCount).toBe(1);
+    const isHero = scenario.position === 'hero';
+    if (!isHero) observedLabelFontSizes.add(Number.parseFloat(labeled.lineHeight));
+    if (isHero) {
+      const retainedHeroMargin = Number.parseFloat(labeled.heroHeaderMargin);
+      expect(labeled).toMatchObject({
+        contentTop: plain.contentTop,
+        heroHeaderBottom: plain.heroHeaderBottom,
+        laneCount: 0,
+        mainMarginTop: '0px',
+      });
+      expect(plain.heroHeaderMargin).toBe('0px');
+      expect(plain.heroContentTrackGap).toBeCloseTo(2, 1);
+      expect(labeled.heroHeaderMargin).not.toBe('0px');
+      expect(labeled.heroContentTrackGap).toBeCloseTo(2 + retainedHeroMargin, 1);
+      expect(labeled.barTop - plain.barTop).toBeCloseTo(retainedHeroMargin, 1);
+      expect(labeled.mainTop - plain.mainTop).toBeCloseTo(retainedHeroMargin, 1);
+      expect(labeled.rowHeight - plain.rowHeight).toBeCloseTo(retainedHeroMargin, 1);
+      expect(labeled.trackWidth).toBe(plain.trackWidth);
+      expect(labeled.trackHeight).toBe(plain.trackHeight);
+      expect(labeled.heroDensity).toBe(plain.heroDensity);
+      expect(labeled.heroValueFontSize).toBe(plain.heroValueFontSize);
+      expect(labeled.labelTrackGap).toBe(1);
+      expect(labeled.allAboveLabelTrackGaps.every((gap) => gap === 1)).toBe(true);
+    } else {
+      const lineHeight = Number.parseFloat(labeled.lineHeight);
+      expect(labeled.laneCount).toBe(0);
+      expect(labeled.mainMarginTop).toBe(`${lineHeight}px`);
+      expect(labeled.rowHeight - plain.rowHeight).toBe(lineHeight);
+      expect(labeled.barTop - plain.barTop).toBe(lineHeight);
+      expect(labeled.mainTop - plain.mainTop).toBe(lineHeight);
+      expect(labeled.labelTrackGap).toBe(1);
+      expect(labeled.trackHeight).toBe(plain.trackHeight);
+      expect(labeled.labelOverlapsContent).toBe(false);
+      if (scenario.position === 'above') expect(labeled.contentLabelGap).toBeGreaterThanOrEqual(2);
+      if (scenario.forceTopValue) expect(labeled.topValueLabelGap).toBeCloseTo(2, 0);
+    }
+    expect(labeled.contentZIndexes.length).toBeGreaterThan(0);
+    expect(labeled.contentZIndexes.every((zIndex) => zIndex === '10')).toBe(true);
+    expect(labeled.labelZIndex).toBe('8');
+    expect(labeled.labelVisibility).toBe('visible');
+    expect(labeled.laneCount).toBe(0);
+    expect(labeled.aboveLabelCount).toBe(3);
+    expect(labeled.belowLabelCount).toBe(1);
     if (scenario.forceTopValue) {
-      expect(result[0].topValueActive).toBe('true');
-      expect(result[1].topValueActive).toBe('true');
+      expect(plain.topValueActive).toBe('true');
+      expect(unlabeled.topValueActive).toBe('true');
+      expect(labeled.topValueActive).toBe('true');
     }
 
+    if (!scenario.position && scenario.width === 720) {
+      const card = page.locator('sensor-bar-card-plus');
+      const dynamicRowGeometry = () => page.evaluate(() => {
+        const row = document.querySelector('sensor-bar-card-plus').shadowRoot
+          .querySelector('.row[data-entity="sensor.with_above_label"]');
+        return {
+          rowHeight: row.getBoundingClientRect().height,
+          trackTop: row.querySelector('.bar-track').getBoundingClientRect().top,
+          marginTop: getComputedStyle(row.querySelector('.main-line')).marginTop,
+          visibility: getComputedStyle(row.querySelector('.generic-value-label[data-marker-id="generic-1"]')).visibility,
+        };
+      });
+      const beforeDynamicUpdate = await dynamicRowGeometry();
+      for (const value of ['unavailable', '55', 'unavailable']) {
+        await page.evaluate((nextValue) => {
+          const element = document.querySelector('sensor-bar-card-plus');
+          element.hass = { states: {
+            ...element._hass.states,
+            'sensor.above_dynamic_source': {
+              state: nextValue,
+              attributes: { friendly_name: 'Dynamic label reference', unit_of_measurement: 'W' },
+            },
+          } };
+        }, value);
+        const expectedVisibility = value === 'unavailable' ? 'hidden' : 'visible';
+        await expect.poll(async () => (await dynamicRowGeometry()).visibility).toBe(expectedVisibility);
+        expect(await dynamicRowGeometry()).toMatchObject({
+          rowHeight: beforeDynamicUpdate.rowHeight,
+          trackTop: beforeDynamicUpdate.trackTop,
+          marginTop: beforeDynamicUpdate.marginTop,
+        });
+      }
+    }
+
+    if (isHero) {
+      if (scenario.width === 720) {
+        const dynamicHeroGeometry = () => page.evaluate(() => {
+          const row = document.querySelector('sensor-bar-card-plus').shadowRoot
+            .querySelector('.row[data-entity="sensor.with_above_label"]');
+          const rowRect = row.getBoundingClientRect();
+          const trackRect = row.querySelector('.bar-track').getBoundingClientRect();
+          const rect = (element) => {
+            const box = element.getBoundingClientRect();
+            return [box.left - trackRect.left, box.top - trackRect.top, box.width, box.height];
+          };
+          return {
+            occupancy: row.dataset.markerLabelLaneAbove,
+            headerMargin: getComputedStyle(row.querySelector('.hero-header')).marginBottom,
+            rowHeight: rowRect.height,
+            track: [trackRect.top - rowRect.top, trackRect.width, trackRect.height],
+            peakLabel: rect(row.querySelector('.peak-value-label')),
+            peakGlyph: rect(row.querySelector('.peak-marker .peak-inset')),
+            genericLabel: rect(row.querySelector('.generic-value-label[data-marker-id="generic-0"]')),
+          };
+        });
+        const resolvedGeometry = await dynamicHeroGeometry();
+        for (const value of ['unavailable', '75']) {
+          await page.evaluate((nextValue) => {
+            const element = document.querySelector('sensor-bar-card-plus');
+            element.hass = { states: {
+              ...element._hass.states,
+              'sensor.above_dynamic_source': {
+                state: nextValue,
+                attributes: { friendly_name: 'Dynamic label reference', unit_of_measurement: 'W' },
+              },
+            } };
+          }, value);
+          await expect.poll(dynamicHeroGeometry).toMatchObject({
+            occupancy: 'true',
+            headerMargin: resolvedGeometry.headerMargin,
+            rowHeight: resolvedGeometry.rowHeight,
+            track: resolvedGeometry.track,
+            peakLabel: resolvedGeometry.peakLabel,
+            peakGlyph: resolvedGeometry.peakGlyph,
+            genericLabel: resolvedGeometry.genericLabel,
+          });
+        }
+      }
+      continue;
+    }
     const marker = page.locator('sensor-bar-card-plus .row[data-entity="sensor.with_above_label"] .peak-marker .peak-inset');
     await marker.hover();
     const hoverState = await page.evaluate(({ selectors }) => {
@@ -486,6 +872,7 @@ test('above marker labels overlay without moving above, Hero, or narrow top-valu
       return row.querySelector('.peak-value-label').dataset.markerHovered ?? null;
     })).toBeNull();
   }
+  expect([...observedLabelFontSizes].sort((a, b) => a - b)).toEqual([10, 11, 12]);
 });
 
 test('marker labels use a compact card surface with asymmetric offsets and unchanged row geometry', async ({ page }) => {
@@ -557,15 +944,21 @@ test('marker labels use a compact card surface with asymmetric offsets and uncha
     };
   });
 
-  expect(metrics.geometry[1]).toEqual(metrics.geometry[0]);
-  expect(metrics.geometry[2]).toEqual(metrics.geometry[0]);
+  expect(metrics.geometry[1]).toEqual({
+    ...metrics.geometry[0],
+    rowHeight: metrics.geometry[0].rowHeight + 12,
+  });
+  expect(metrics.geometry[2]).toEqual({
+    ...metrics.geometry[0],
+    rowHeight: metrics.geometry[0].rowHeight + 12,
+  });
   expect(metrics.geometry[3]).toEqual(metrics.geometry[0]);
-  expect(metrics.aboveGap).toBe(0);
-  expect(metrics.genericAboveGap).toBe(0);
+  expect(metrics.aboveGap).toBe(1);
+  expect(metrics.genericAboveGap).toBe(1);
   expect(metrics.belowGap).toBe(2);
   expect(metrics.floorGap).toBe(2);
-  expect(metrics.aboveMargin).toBe('0px');
-  expect(metrics.genericAboveMargin).toBe('0px');
+  expect(metrics.aboveMargin).toBe('1px');
+  expect(metrics.genericAboveMargin).toBe('1px');
   expect(metrics.belowMargin).toBe('2px');
   expect(metrics.floorMargin).toBe('2px');
   expect(metrics.background).toBe('rgb(255, 255, 255)');
