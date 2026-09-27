@@ -140,6 +140,20 @@ test('left responsive history survives unrelated config rebuilds per entity', as
   expect(afterRelevantChange[0].iconWidth).toBe(0);
   expect(afterRelevantChange[0].inlineShare).toBeGreaterThan(0.52);
 
+  const onlyPowerConfig = { ...noIconConfig, entities: [noIconConfig.entities[0]] };
+  await page.evaluate((nextConfig) => {
+    document.querySelector('sensor-bar-card-plus').setConfig(nextConfig);
+  }, onlyPowerConfig);
+  await expect.poll(() => page.locator('sensor-bar-card-plus').evaluate((card) => [...card._leftModeResponsiveHistory.keys()]))
+    .toEqual(['sensor.power']);
+
+  const abovePowerConfig = { ...onlyPowerConfig, layout: { label: { position: 'above' } } };
+  await page.evaluate((nextConfig) => {
+    document.querySelector('sensor-bar-card-plus').setConfig(nextConfig);
+  }, abovePowerConfig);
+  await expect.poll(() => page.locator('sensor-bar-card-plus').evaluate((card) => [...card._leftModeResponsiveHistory.keys()]))
+    .toEqual([]);
+
   const freshConfig = { ...config, entities: [{ entity: 'sensor.power' }] };
   await render(page, { width: 450, config: freshConfig, states });
   await expect.poll(async () => (await readRows())[0]?.top).toBe(false);
@@ -3109,6 +3123,296 @@ test('off mode keeps narrow long values inside the row before hiding the unit', 
   }
 
   await expect(mount).toHaveScreenshot('off-mode-narrow-long-unit.png');
+});
+
+test('left responsive presentation is stable through stateful shrink and grow traversals', async ({ page }) => {
+  const mount = await render(page, {
+    width: 500,
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      min: 0,
+      max: 100,
+      entities: [{ entity: 'sensor.temperature' }],
+    },
+    states: {
+      'sensor.temperature': {
+        state: '42',
+        attributes: {
+          friendly_name: 'Temperature',
+          unit_of_measurement: '°C',
+          device_class: 'temperature',
+        },
+      },
+    },
+  });
+
+  const settleAtWidth = async (width) => {
+    await page.evaluate(async (nextWidth) => {
+      document.getElementById('mount').style.width = `${nextWidth}px`;
+      const card = document.querySelector('sensor-bar-card-plus');
+      card._runPostLayoutPasses();
+      await new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 10))));
+      });
+    }, width);
+    return page.evaluate(() => {
+      const card = document.querySelector('sensor-bar-card-plus');
+      const row = card.shadowRoot.querySelector('.row[data-entity="sensor.temperature"]');
+      const mainLine = row.querySelector('.main-line');
+      const label = row.querySelector('.label-left');
+      const icon = mainLine.querySelector('.icon-wrap');
+      const track = row.querySelector('.bar-track');
+      const predicted = card._chooseLeftModeResponsiveState(row)?.predicted;
+      return {
+        state: [
+          getComputedStyle(icon).display !== 'none',
+          getComputedStyle(label).display !== 'none',
+          row.querySelector('.row-stack').dataset.forceTopValue === 'true',
+        ].map((value) => value ? '1' : '0').join(''),
+        density: mainLine.dataset.leftDensity,
+        predictedShare: predicted?.share ?? null,
+        predictedShowIcon: predicted?.showIcon ?? false,
+        renderedIcon: !!icon && getComputedStyle(icon).display !== 'none',
+        renderedShare: track.getBoundingClientRect().width / mainLine.getBoundingClientRect().width,
+      };
+    });
+  };
+
+  const stateRank = { '110': 0, '111': 1, '100': 2, '000': 3, '001': 4 };
+  const shrink = [];
+  for (let width = 500; width >= 150; width -= 5) {
+    shrink.push({ width, ...(await settleAtWidth(width)) });
+  }
+  const shrinkStates = [...new Set(shrink.map(({ state }) => state))];
+  expect(shrinkStates.map((state) => stateRank[state])).toEqual(
+    [...shrinkStates.map((state) => stateRank[state])].sort((a, b) => a - b),
+  );
+  expect(shrinkStates[0]).toBe('110');
+  expect(['000', '001']).toContain(shrinkStates.at(-1));
+  if (shrinkStates.at(-1) === '000') {
+    expect(shrink.at(-1).predictedShare).toBeGreaterThan(0.52);
+  }
+
+  const grow = [];
+  for (let width = 150; width <= 500; width += 5) {
+    grow.push({ width, ...(await settleAtWidth(width)) });
+  }
+  const growStates = [...new Set(grow.map(({ state }) => state))];
+  const densityAt = (path, width) => path.find((entry) => entry.width === width)?.density;
+  for (let width = 320; width <= 370; width += 5) {
+    expect(densityAt(shrink, width)).toBe(densityAt(grow, width));
+  }
+  expect(growStates.map((state) => stateRank[state])).toEqual(
+    [...growStates.map((state) => stateRank[state])].sort((a, b) => b - a),
+  );
+  expect(growStates[0]).toBe(shrinkStates.at(-1));
+  expect(growStates.at(-1)).toBe('110');
+
+  const fixedWidthSamples = [];
+  for (const width of [280, 286, 294, 305]) {
+    const repeated = [];
+    for (let pass = 0; pass < 4; pass += 1) {
+      repeated.push(await settleAtWidth(width));
+    }
+    expect(new Set(repeated.map(({ state, density }) => `${state}:${density}`)).size).toBe(1);
+    fixedWidthSamples.push(repeated[0]);
+  }
+  for (let width = 320; width <= 370; width += 5) {
+    const repeated = [];
+    for (let pass = 0; pass < 3; pass += 1) repeated.push(await settleAtWidth(width));
+    expect(new Set(repeated.map(({ density }) => density)).size).toBe(1);
+  }
+
+  for (const { predictedShare, renderedShare } of [...shrink, ...grow]) {
+    expect(predictedShare).not.toBeNull();
+    expect(Math.abs(predictedShare - renderedShare)).toBeLessThan(0.04);
+  }
+  for (const { predictedShowIcon, renderedIcon } of [...shrink, ...grow]) {
+    expect(predictedShowIcon).toBe(renderedIcon);
+  }
+  expect(fixedWidthSamples.length).toBe(4);
+
+  await expect(mount).toBeVisible();
+});
+
+test('left responsive decisions stay row-local across label/value variants and layout updates', async ({ page }) => {
+  const mount = await render(page, {
+    width: 300,
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      min: 0,
+      max: 100,
+      entities: [
+        { entity: 'sensor.long_label' },
+        { entity: 'sensor.short_label', icon: false },
+        { entity: 'sensor.long_value', icon: false },
+      ],
+    },
+    states: {
+      'sensor.long_label': {
+        state: '42',
+        attributes: { friendly_name: 'Living room temperature sensor', device_class: 'temperature', unit_of_measurement: '°C' },
+      },
+      'sensor.short_label': {
+        state: '42',
+        attributes: { friendly_name: 'EV', unit_of_measurement: '°C' },
+      },
+      'sensor.long_value': {
+        state: '123456789',
+        attributes: { friendly_name: 'Energy', unit_of_measurement: 'kilowatt-hours equivalent' },
+      },
+    },
+  });
+
+  const sampleRows = async (width) => {
+    await page.evaluate(async (nextWidth) => {
+      document.getElementById('mount').style.width = `${nextWidth}px`;
+      const card = document.querySelector('sensor-bar-card-plus');
+      card._runPostLayoutPasses();
+      await new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 30))));
+      });
+    }, width);
+    return page.evaluate(() => {
+      const card = document.querySelector('sensor-bar-card-plus');
+      return [...card.shadowRoot.querySelectorAll('.row[data-entity]')].map((row) => {
+        const line = row.querySelector('.main-line');
+        const track = row.querySelector('.bar-track');
+        const predicted = card._chooseLeftModeResponsiveState(row)?.predicted;
+        const icon = line.querySelector('.icon-wrap');
+        const iconVisible = !!icon && getComputedStyle(icon).display !== 'none';
+        return {
+          entity: row.dataset.entity,
+          rowWidth: line.getBoundingClientRect().width,
+          state: [
+            iconVisible,
+            getComputedStyle(row.querySelector('.label-left')).display !== 'none',
+            row.querySelector('.row-stack').dataset.forceTopValue === 'true',
+          ].map((value) => value ? '1' : '0').join(''),
+          density: line.dataset.leftDensity,
+          predictedShare: predicted?.share ?? null,
+          predictedShowIcon: predicted?.showIcon ?? false,
+          renderedIcon: !!icon && getComputedStyle(icon).display !== 'none',
+          renderedShare: track.getBoundingClientRect().width / line.getBoundingClientRect().width,
+        };
+      });
+    });
+  };
+
+  const first = await sampleRows(300);
+  expect(first.find((row) => row.entity === 'sensor.short_label')?.state).not.toBe(
+    first.find((row) => row.entity === 'sensor.long_label')?.state,
+  );
+  expect(await page.locator('sensor-bar-card-plus .row[data-entity="sensor.short_label"] .icon-wrap').count()).toBe(0);
+  for (const width of [500, 330, 295, 180, 300]) {
+    const firstPass = await sampleRows(width);
+    const secondPass = await sampleRows(width);
+    expect(secondPass.map(({ state, density }) => `${state}:${density}`), `width ${width}: ${JSON.stringify({ firstPass, secondPass })}`)
+      .toEqual(firstPass.map(({ state, density }) => `${state}:${density}`));
+    for (const row of firstPass) {
+      expect(row.predictedShare).not.toBeNull();
+      expect(Math.abs(row.predictedShare - row.renderedShare), JSON.stringify(row)).toBeLessThan(0.04);
+      expect(row.predictedShowIcon).toBe(row.renderedIcon);
+    }
+  }
+
+  await page.locator('sensor-bar-card-plus').evaluate((card) => card.setConfig({
+    type: 'custom:sensor-bar-card-plus',
+    layout: { label: { position: 'above' } },
+    min: 0,
+    max: 100,
+    entities: [
+      { entity: 'sensor.long_label' },
+      { entity: 'sensor.short_label', icon: false },
+      { entity: 'sensor.long_value', icon: false },
+    ],
+  }));
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const switchedRows = await page.locator('sensor-bar-card-plus .row[data-entity]').evaluateAll((rows) => rows.map((row) => ({
+    mode: row.querySelector('.main-line').className,
+    leftDensity: row.querySelector('.main-line').dataset.leftDensity ?? null,
+    forceTopValue: row.querySelector('.row-stack').dataset.forceTopValue ?? null,
+    leftLabel: row.querySelector('.label-left'),
+    topValue: row.querySelector('.top-right-value'),
+  })));
+  expect(switchedRows.every((row) => row.mode.includes('above-mode'))).toBe(true);
+  expect(switchedRows.every((row) => row.leftDensity === null && row.forceTopValue === null && !row.leftLabel && !row.topValue)).toBe(true);
+
+  await expect(mount).toBeVisible();
+});
+
+test('Left responsive layout preserves marker lanes and positions against its final track', async ({ page }) => {
+  const mount = await render(page, {
+    width: 300,
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      label_position: 'left',
+      label_width: 100,
+      min: 0,
+      max: 100,
+      entities: [
+        { entity: 'sensor.left_plain' },
+        { entity: 'sensor.left_unlabeled', peak: { enabled: true } },
+        {
+          entity: 'sensor.left_marked',
+          markers: [
+            { at: '25%', lane: 'above', label: { show: true, text: 'Above', show_value: false, show_unit: false } },
+            { at: { entity: 'sensor.left_unresolved' }, lane: 'above', label: { show: true, text: 'Pending', show_value: false, show_unit: false } },
+          ],
+        },
+      ],
+    },
+    states: {
+      'sensor.left_plain': sensor(42, { friendly_name: 'Living power', unit_of_measurement: 'W' }),
+      'sensor.left_unlabeled': sensor(42, { friendly_name: 'Living power', unit_of_measurement: 'W' }),
+      'sensor.left_marked': sensor(42, { friendly_name: 'Living power', unit_of_measurement: 'W' }),
+    },
+  });
+
+  const sample = async (width) => {
+    await page.evaluate(async (nextWidth) => {
+      document.getElementById('mount').style.width = `${nextWidth}px`;
+      const card = document.querySelector('sensor-bar-card-plus');
+      card._runPostLayoutPasses();
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    }, width);
+    return page.evaluate(() => {
+      const card = document.querySelector('sensor-bar-card-plus');
+      return [...card.shadowRoot.querySelectorAll('.row[data-entity]')].map((row) => {
+        const track = row.querySelector('.bar-track');
+        const mainLine = row.querySelector('.main-line');
+        const label = row.querySelector('.generic-value-label[data-lane="above"]');
+        const marker = row.querySelector('.generic-marker[data-marker-id="generic-0"]');
+        const trackRect = track.getBoundingClientRect();
+        const markerRect = marker?.getBoundingClientRect();
+        return {
+          entity: row.dataset.entity,
+          aboveOccupancy: row.dataset.markerLabelLaneAbove,
+          topValue: row.querySelector('.row-stack').dataset.forceTopValue ?? null,
+          mainWidth: mainLine.getBoundingClientRect().width,
+          trackWidth: trackRect.width,
+          markerTrackShare: markerRect ? (markerRect.left + markerRect.width / 2 - trackRect.left) / trackRect.width : null,
+          labelTrackGap: label && getComputedStyle(label).visibility === 'visible'
+            ? trackRect.top - label.getBoundingClientRect().bottom
+            : null,
+        };
+      });
+    });
+  };
+
+  for (const width of [300, 220, 170]) {
+    const rows = await sample(width);
+    const [plain, unlabeled, marked] = rows;
+    expect(plain.aboveOccupancy).toBe('false');
+    expect(unlabeled.aboveOccupancy).toBe('false');
+    expect(marked.aboveOccupancy).toBe('true');
+    expect(marked.labelTrackGap).toBe(1);
+    expect(marked.markerTrackShare).toBeCloseTo(0.25, 2);
+    expect(marked.mainWidth).toBe(plain.mainWidth);
+    expect(marked.trackWidth).toBe(plain.trackWidth);
+  }
+
+  await expect(mount).toBeVisible();
 });
 
 test('presentation update path keeps target recovery and peak maximum intact', async ({ page }) => {

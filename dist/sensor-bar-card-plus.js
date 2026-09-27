@@ -2919,9 +2919,6 @@
           color: var(--primary-text-color, #333);
           line-height: 1;
         }
-        .main-line.left-mode[data-left-density="compressed"] .icon-wrap {
-          display: none;
-        }
         ha-icon {
           --mdc-icon-size: 20px;
           display: block;
@@ -3793,13 +3790,17 @@
           if (width < 360) return "compact";
           return "normal";
         }
-        _classifyLeftDensity(width, currentDensity = "normal") {
+        _classifyLeftDensity(width, currentDensity = "normal", naturalLabelWidth = Number.POSITIVE_INFINITY) {
           if (!this._isReliableWidth(width)) return currentDensity || "normal";
-          if (width < 170) return "compressed";
-          if (width < 210) return "dense";
-          if (width < 255) return "tight";
-          if (width < 320) return "compact";
-          return "normal";
+          const densities = ["normal", "compact", "tight", "dense", "compressed"];
+          let density = "normal";
+          if (width < 170) density = "compressed";
+          else if (width < 210) density = "dense";
+          else if (width < 255) density = "tight";
+          else if (width < 320) density = "compact";
+          const currentIndex = densities.indexOf(density);
+          const relaxBy = Number.isFinite(naturalLabelWidth) ? naturalLabelWidth <= 44 && width >= 205 ? 2 : naturalLabelWidth <= 72 && width >= 185 ? 1 : 0 : 0;
+          return densities[Math.max(0, currentIndex - relaxBy)];
         }
         _classifyRowDensity(width, currentDensity = "normal") {
           if (!this._isReliableWidth(width)) return currentDensity || "normal";
@@ -3855,7 +3856,6 @@
         }
         _applyLeftModeDensity() {
           if (!this.shadowRoot) return;
-          const densities = ["normal", "compact", "tight", "dense", "compressed"];
           this.shadowRoot.querySelectorAll(".main-line.left-mode").forEach((mainLine) => {
             const width = mainLine.getBoundingClientRect().width;
             if (!this._isReliableWidth(width)) {
@@ -3863,21 +3863,10 @@
               if (!mainLine.dataset.leftDensity) mainLine.dataset.leftDensity = "normal";
               return;
             }
-            let density = this._classifyLeftDensity(width, mainLine.dataset.leftDensity);
             const labelText = mainLine.querySelector(".label-left-text");
-            const fullLabelWidth = labelText ? labelText.scrollWidth : Number.POSITIVE_INFINITY;
-            const visibleLabelWidth = labelText ? labelText.clientWidth : Number.POSITIVE_INFINITY;
-            const labelIsTruncated = labelText ? fullLabelWidth > visibleLabelWidth + 1 : false;
-            const effectiveLabelWidth = labelIsTruncated ? visibleLabelWidth : fullLabelWidth;
-            let relaxBy = 0;
-            if (Number.isFinite(effectiveLabelWidth)) {
-              if (effectiveLabelWidth <= 72 && width >= 185) relaxBy = 1;
-              if (effectiveLabelWidth <= 44 && width >= 205) relaxBy = 2;
-            }
-            const currentIndex = densities.indexOf(density);
-            if (currentIndex !== -1 && relaxBy > 0) {
-              density = densities[Math.max(0, currentIndex - relaxBy)];
-            }
+            const text = ((labelText == null ? void 0 : labelText.textContent) || "").trim();
+            const naturalLabelWidth = labelText ? this._measureTextWidthWithStyles(labelText, text) || labelText.scrollWidth : Number.POSITIVE_INFINITY;
+            const density = this._classifyLeftDensity(width, mainLine.dataset.leftDensity, naturalLabelWidth);
             mainLine.dataset.leftDensity = density;
           });
         }
@@ -4400,8 +4389,27 @@
           const fullMarkupWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, false) + 2);
           return Math.max(reservedWidth, fullMarkupWidth);
         }
+        _getStableLeftLabelMetrics(row, rowWidth = null) {
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+          const mainLine = row == null ? void 0 : row.querySelector(".main-line");
+          const labelWrap = row == null ? void 0 : row.querySelector(".label-left");
+          const labelText = row == null ? void 0 : row.querySelector(".label-left-text");
+          if (!mainLine || !labelWrap || !labelText) return null;
+          const width = (_b = rowWidth != null ? rowWidth : (_a = mainLine.getBoundingClientRect) == null ? void 0 : _a.call(mainLine).width) != null ? _b : 0;
+          const text = (labelText.textContent || "").trim();
+          const naturalWidth = this._measureTextWidthWithStyles(labelText, text) || labelText.scrollWidth || 0;
+          const density = ((_c = mainLine.dataset) == null ? void 0 : _c.leftDensity) || "normal";
+          const labelShares = { normal: 0.25, compact: 0.22, tight: 0.19, dense: 0.16, compressed: 0.14 };
+          const entityConfig = (_e = (_d = this._config) == null ? void 0 : _d.entities) == null ? void 0 : _e.find((item) => {
+            var _a2;
+            return item.entity === ((_a2 = row.dataset) == null ? void 0 : _a2.entity);
+          });
+          const configuredWidth = entityConfig ? (_i = (_h = (_g = (_f = this._resolve(entityConfig)) == null ? void 0 : _f.layout) == null ? void 0 : _g.label) == null ? void 0 : _h.width) != null ? _i : 100 : 100;
+          const maximumWidth = width > 0 ? Math.min(configuredWidth, width * ((_j = labelShares[density]) != null ? _j : labelShares.normal)) : Math.min(naturalWidth, configuredWidth);
+          return { text, naturalWidth, maximumWidth, labelWidth: maximumWidth, labelText };
+        }
         _estimateLeftModeWidthBudget(row) {
-          var _a, _b, _c, _d, _e, _f;
+          var _a, _b, _c;
           const mainLine = row == null ? void 0 : row.querySelector(".main-line");
           if (!mainLine) return null;
           const rowWidth = (_b = (_a = mainLine.getBoundingClientRect) == null ? void 0 : _a.call(mainLine).width) != null ? _b : 0;
@@ -4409,15 +4417,26 @@
           const labelWrap = row.querySelector(".label-left");
           const iconWrap = row.querySelector(".icon-wrap");
           const valueEl = row.querySelector(".value-right");
-          const labelMetrics = this._getLabelSacrificeMetrics(row, "left", { rowWidth });
-          const labelWidth = ((_c = labelWrap == null ? void 0 : labelWrap.dataset) == null ? void 0 : _c.hidden) === "true" ? 0 : (_f = (_e = (_d = labelWrap == null ? void 0 : labelWrap.getBoundingClientRect) == null ? void 0 : _d.call(labelWrap).width) != null ? _e : labelMetrics == null ? void 0 : labelMetrics.labelWidth) != null ? _f : 0;
+          const labelMetrics = this._getStableLeftLabelMetrics(row, rowWidth);
+          const labelWidth = (_c = labelMetrics == null ? void 0 : labelMetrics.labelWidth) != null ? _c : 0;
           const iconWidth = iconWrap ? this._getLeftModeIconWidth(iconWrap, mainLine) : 0;
           const valueWidth = this._getReservedInlineValueWidth(valueEl);
           const gap = this._getLeftModeGap(mainLine);
           const barMinWidth = this._getLeftModeBarMinWidth(mainLine);
-          const baseLabelVisible = !!labelWrap && labelWrap.dataset.hidden !== "true";
-          const labelSacrificial = baseLabelVisible ? this._isLabelWorthSacrificing(row, "left", { rowWidth }) : true;
+          const baseLabelVisible = !!labelWrap;
           const hasIcon = !!iconWrap;
+          const labelGapCount = hasIcon ? 2 : 1;
+          const labelAvailableWidth = Math.max(
+            0,
+            rowWidth - (hasIcon ? iconWidth : 0) - barMinWidth - labelGapCount * gap
+          );
+          const candidateLabelWidth = Math.min(labelWidth, labelAvailableWidth);
+          const labelSacrificial = !labelMetrics || this._shouldHideLeftLabel(
+            labelMetrics.text,
+            labelMetrics.naturalWidth,
+            candidateLabelWidth,
+            this._measureVisibleLabelCharacters(labelMetrics.labelText, labelMetrics.text, candidateLabelWidth)
+          );
           return {
             rowWidth,
             gap,
@@ -4429,7 +4448,6 @@
             labelSacrificial,
             hasIcon,
             mainLine,
-            labelWrap,
             iconWrap,
             valueEl,
             rowStack: row.querySelector(".row-stack")
@@ -4444,7 +4462,9 @@
           const visibleItems = 1 + (showIcon ? 1 : 0) + (showLabel ? 1 : 0) + (showInlineValue ? 1 : 0);
           const gapCount = Math.max(0, visibleItems - 1);
           const reservedWidth = (showIcon ? effectiveBudget.iconWidth : 0) + (showLabel ? effectiveBudget.labelWidth : 0) + (showInlineValue ? effectiveBudget.valueWidth : 0) + gapCount * effectiveBudget.gap;
-          const predictedBarWidth = Math.max(0, effectiveBudget.rowWidth - reservedWidth);
+          const remainingWidth = Math.max(0, effectiveBudget.rowWidth - reservedWidth);
+          const fits = remainingWidth >= effectiveBudget.barMinWidth;
+          const predictedBarWidth = fits ? remainingWidth : effectiveBudget.barMinWidth;
           return {
             rowWidth: effectiveBudget.rowWidth,
             barWidth: predictedBarWidth,
@@ -4453,30 +4473,24 @@
             showIcon,
             showInlineValue,
             reservedWidth,
-            gapCount
+            gapCount,
+            fits
           };
         }
         _getLeftModeCandidateStates(budget) {
-          const states = [
-            { hideLabel: false, topValue: false, hideIcon: false }
-          ];
-          if (budget == null ? void 0 : budget.labelSacrificial) {
-            states.push({ hideLabel: true, topValue: false, hideIcon: false });
+          const states = [];
+          if (budget && !budget.labelSacrificial) {
+            states.push(
+              { hideLabel: false, topValue: false, hideIcon: false },
+              { hideLabel: false, topValue: true, hideIcon: false }
+            );
           }
           states.push(
-            { hideLabel: false, topValue: true, hideIcon: false },
-            { hideLabel: true, topValue: true, hideIcon: false },
+            { hideLabel: true, topValue: false, hideIcon: false },
+            { hideLabel: true, topValue: false, hideIcon: true },
             { hideLabel: true, topValue: true, hideIcon: true }
           );
           return states;
-        }
-        _chooseFirstPredictedLeftModeState(row, states, threshold, budget) {
-          for (const state of states) {
-            const predicted = this._predictLeftModeBarShareForState(row, state, budget);
-            if (!predicted) continue;
-            if (predicted.share >= threshold) return { ...state, predicted };
-          }
-          return null;
         }
         _chooseFallbackPredictedLeftModeState(row, states, budget) {
           let fallback = null;
@@ -4495,14 +4509,15 @@
           const states = this._getLeftModeCandidateStates(budget);
           const entityId = (_a = row == null ? void 0 : row.dataset) == null ? void 0 : _a.entity;
           const previousTopValue = entityId && this._leftModeResponsiveHistory.has(entityId) ? this._leftModeResponsiveHistory.get(entityId) : ((_c = (_b = budget.rowStack) == null ? void 0 : _b.dataset) == null ? void 0 : _c.forceTopValue) === "true";
-          const inlineStates = states.filter((state) => !state.topValue);
           const topStates = states.filter((state) => state.topValue);
           const enableShare = this._getTopValueEnableShare();
           const disableShare = this._getTopValueDisableShare();
-          const inlineChoice = previousTopValue ? this._chooseFirstPredictedLeftModeState(row, inlineStates, disableShare, budget) : this._chooseFirstPredictedLeftModeState(row, inlineStates, enableShare, budget);
-          if (inlineChoice) return inlineChoice;
-          const topChoice = this._chooseFirstPredictedLeftModeState(row, topStates, minimumBarShare, budget) || this._chooseFallbackPredictedLeftModeState(row, topStates, budget);
-          return topChoice;
+          for (const state of states) {
+            const threshold = state.topValue ? minimumBarShare : previousTopValue ? disableShare : enableShare;
+            const predicted = this._predictLeftModeBarShareForState(row, state, budget);
+            if ((predicted == null ? void 0 : predicted.fits) && predicted.share >= threshold) return { ...state, predicted };
+          }
+          return this._chooseFallbackPredictedLeftModeState(row, topStates, budget);
         }
         _applyLeftModeResponsiveState(row, state) {
           var _a;
@@ -4732,16 +4747,23 @@
         _applyLeftLabelUsefulness() {
           if (!this.shadowRoot) return;
           this.shadowRoot.querySelectorAll(".main-line.left-mode").forEach((mainLine) => {
+            var _a;
             const labelWrap = mainLine.querySelector(".label-left");
             const labelText = mainLine.querySelector(".label-left-text");
             if (!labelWrap || !labelText) return;
-            labelWrap.dataset.hidden = "false";
-            const text = (labelText.textContent || "").trim();
-            const fullWidth = labelText.scrollWidth;
-            const visibleWidth = labelText.clientWidth;
-            const visibleChars = this._measureVisibleLabelCharacters(labelText, text, visibleWidth);
-            const shouldHide = this._shouldHideLeftLabel(text, fullWidth, visibleWidth, visibleChars);
-            labelWrap.dataset.hidden = shouldHide ? "true" : "false";
+            const row = ((_a = mainLine.closest) == null ? void 0 : _a.call(mainLine, ".row")) || {
+              dataset: {},
+              querySelector: (selector) => selector === ".main-line" ? mainLine : selector === ".label-left" ? labelWrap : selector === ".label-left-text" ? labelText : null
+            };
+            const metrics = this._getStableLeftLabelMetrics(row);
+            if (!metrics) return;
+            const visibleChars = this._measureVisibleLabelCharacters(metrics.labelText, metrics.text, metrics.labelWidth);
+            labelWrap.dataset.hidden = this._shouldHideLeftLabel(
+              metrics.text,
+              metrics.naturalWidth,
+              metrics.labelWidth,
+              visibleChars
+            ) ? "true" : "false";
           });
         }
         _runPostLayoutPasses(rows = null) {
