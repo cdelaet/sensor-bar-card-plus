@@ -90,6 +90,100 @@ function createTrackedRow(elements, dataset = {}) {
 }
 
 describe('Sensor Bar Card Plus logic', () => {
+  it('selects adaptive Reveal Fill transition durations from normalized geometry', () => {
+    const card = createCard();
+    const duration = (from, to) => card._getRevealTransitionDuration(
+      { valuePercent: from, baselinePercent: null },
+      { valuePercent: to, baselinePercent: null },
+    );
+
+    expect(duration(10, 15)).toBe(600);
+    expect(duration(10, 25)).toBe(450);
+    expect(duration(10, 35)).toBe(300);
+    expect(duration(10, 45)).toBe(150);
+  });
+
+  it('caps Reveal Fill crossings at 300 ms and allows large crossings to reach 150 ms', () => {
+    const card = createCard();
+    const duration = (from, to, baseline) => card._getRevealTransitionDuration(
+      { valuePercent: from, baselinePercent: baseline },
+      { valuePercent: to, baselinePercent: baseline },
+    );
+
+    expect(duration(35, 45, 40)).toBe(300);
+    expect(duration(10, 90, 50)).toBe(150);
+  });
+
+  it('detects crossings relative to a nonzero Baseline position', () => {
+    const card = createCard();
+
+    expect(card._getRevealTransitionDuration(
+      { valuePercent: 35, baselinePercent: 40 },
+      { valuePercent: 45, baselinePercent: 40 },
+    )).toBe(300);
+    expect(card._getRevealTransitionDuration(
+      { valuePercent: 35, baselinePercent: 40 },
+      { valuePercent: 45, baselinePercent: 50 },
+    )).toBe(525);
+  });
+
+  it('uses the largest resolved value or Baseline movement and falls back for invalid geometry', () => {
+    const card = createCard();
+
+    expect(card._getRevealTransitionDuration(
+      { valuePercent: 40, baselinePercent: 20 },
+      { valuePercent: 42, baselinePercent: 40 },
+    )).toBe(375);
+    expect(card._getRevealTransitionDuration(null, { valuePercent: 50, baselinePercent: 20 })).toBe(600);
+    expect(card._getRevealTransitionDuration(
+      { valuePercent: Number.NaN, baselinePercent: 20 },
+      { valuePercent: 50, baselinePercent: 20 },
+    )).toBe(600);
+    expect(card._getRevealTransitionDuration(
+      { valuePercent: 20, baselinePercent: 10 },
+      { valuePercent: Number.NaN, baselinePercent: 10 },
+    )).toBe(600);
+  });
+
+  it('resolves old and new dynamic scale and Baseline geometry from their hass snapshots', () => {
+    const card = createCard();
+    card._config = card.normalizeCardConfig({
+      min: 0,
+      min_entity: 'sensor.dynamic_min',
+      max: 100,
+      max_entity: 'sensor.dynamic_max',
+      baseline: { at: 'sensor.dynamic_baseline' },
+      entities: [{ entity: 'sensor.value' }],
+    });
+    const entityCfg = card._config.entities[0];
+    const previousHass = {
+      states: {
+        'sensor.value': { state: '50', attributes: {} },
+        'sensor.dynamic_min': { state: '0' },
+        'sensor.dynamic_max': { state: '100' },
+        'sensor.dynamic_baseline': { state: '25' },
+      },
+    };
+    const currentState = { state: '70', attributes: {} };
+    card._hass = {
+      states: {
+        'sensor.value': currentState,
+        'sensor.dynamic_min': { state: '0' },
+        'sensor.dynamic_max': { state: '200' },
+        'sensor.dynamic_baseline': { state: '100' },
+      },
+    };
+    const fillReveal = { style: { cssText: '' }, className: '' };
+    const row = {
+      dataset: {},
+      querySelector: (selector) => (selector === '.bar-fill-reveal' ? fillReveal : null),
+    };
+
+    card._patchRow(row, entityCfg, currentState, previousHass);
+
+    expect(fillReveal.style.cssText).toContain('--sbcp-reveal-duration:300ms');
+  });
+
   it('normalizes card defaults and single-entity shorthand', () => {
     const card = createCard();
     const cfg = card.normalizeCardConfig({
@@ -2432,7 +2526,7 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(source).toContain('.peak-marker {\n          z-index: 7;');
     expect(source).toContain('.needle-marker {\n          position: absolute;');
     expect(source).toContain('.needle-layer {\n          position: absolute;\n          inset: 0;\n          overflow: hidden;\n          border-radius: inherit;\n          pointer-events: none;\n          z-index: 5;');
-    expect(source).toContain('.bar-fill-reveal {\n          position: absolute;\n          inset: 0;\n          pointer-events: none;\n          transition: clip-path 0.6s cubic-bezier(0.4,0,0.2,1);\n          z-index: 1;');
+    expect(source).toContain('.bar-fill-reveal {\n          position: absolute;\n          inset: 0;\n          pointer-events: none;\n          transition: clip-path var(--sbcp-reveal-duration, 600ms) cubic-bezier(0.4,0,0.2,1);\n          z-index: 1;');
     expect(source).toContain('.bar-paint-layer {\n          position: absolute;');
     expect(source).toContain('.bar-paint-layer {\n          position: absolute;\n          inset: 0;\n          pointer-events: none;\n          z-index: 1;');
     expect(source).toContain('.bar-paint-layer[data-layer="above-target"] {\n          z-index: 2;');

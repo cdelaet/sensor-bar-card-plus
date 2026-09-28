@@ -1799,6 +1799,20 @@
   });
 
   // src/card/SensorBarCard.js
+  function getRevealTransitionDuration(previousGeometry, nextGeometry) {
+    if (!previousGeometry || !nextGeometry || !Number.isFinite(previousGeometry.valuePercent) || !Number.isFinite(nextGeometry.valuePercent)) {
+      return 600;
+    }
+    const previousBaseline = Number.isFinite(previousGeometry.baselinePercent) ? previousGeometry.baselinePercent : 0;
+    const nextBaseline = Number.isFinite(nextGeometry.baselinePercent) ? nextGeometry.baselinePercent : 0;
+    const delta = Math.max(
+      Math.abs(nextGeometry.valuePercent - previousGeometry.valuePercent),
+      Math.abs(nextBaseline - previousBaseline)
+    );
+    const ordinaryDuration = Math.round(Math.min(600, Math.max(150, 600 - 15 * Math.max(0, delta - 5))));
+    const crossesBaseline = Number.isFinite(previousGeometry.baselinePercent) && Number.isFinite(nextGeometry.baselinePercent) && (previousGeometry.valuePercent - previousGeometry.baselinePercent) * (nextGeometry.valuePercent - nextGeometry.baselinePercent) < 0;
+    return crossesBaseline ? Math.min(ordinaryDuration, 300) : ordinaryDuration;
+  }
   var SensorBarCard;
   var init_SensorBarCard = __esm({
     "src/card/SensorBarCard.js"() {
@@ -2024,7 +2038,7 @@
             return;
           }
           if (this._shouldUpdate(oldHass, hass)) {
-            this._update();
+            this._update(oldHass);
           }
         }
         // Merge global config with per-entity overrides
@@ -2530,6 +2544,9 @@
           const range = safeMax - safeMin || 1;
           return Math.min(100, Math.max(0, (value - safeMin) / range * 100));
         }
+        _getRevealTransitionDuration(previousGeometry, nextGeometry) {
+          return getRevealTransitionDuration(previousGeometry, nextGeometry);
+        }
         _resolveBaselinePct(ecfg, safeMin, safeMax) {
           var _a, _b;
           if (((_a = ecfg.baseline) == null ? void 0 : _a.enabled) === false) return null;
@@ -2963,7 +2980,7 @@
           position: absolute;
           inset: 0;
           pointer-events: none;
-          transition: clip-path 0.6s cubic-bezier(0.4,0,0.2,1);
+          transition: clip-path var(--sbcp-reveal-duration, 600ms) cubic-bezier(0.4,0,0.2,1);
           z-index: 1;
         }
         .bar-paint-layer {
@@ -5145,8 +5162,8 @@ ${paintLayers}
         </div>
       </div>`;
         }
-        _patchRow(row, entityCfg, stateObj) {
-          var _a, _b, _c, _d, _e, _f, _g, _h;
+        _patchRow(row, entityCfg, stateObj, previousHass = null) {
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
           if (!row || !stateObj) return;
           const ecfg = this._resolve(entityCfg);
           this._updateExtrema(entityCfg, ecfg, stateObj);
@@ -5169,8 +5186,20 @@ ${paintLayers}
           const liveBaselinePct = rowViewModel.baselinePercent;
           const needleState = rowViewModel.needle;
           const fillState = this._getFillRenderState(pct, "var(--sbcp-row-height)", ecfg, color, liveTargetPct, liveBaselinePct, safeMin, safeMax, needleState.show);
+          const previousStateObj = (_c = (_b = previousHass == null ? void 0 : previousHass.states) == null ? void 0 : _b[entityCfg.entity]) != null ? _c : null;
+          const previousViewModel = previousStateObj ? buildRowViewModel({
+            hass: previousHass,
+            cardConfig: this._config,
+            entityConfig: ecfg,
+            entityState: previousStateObj,
+            extrema: (_d = this._extrema[entityCfg.entity]) != null ? _d : null
+          }) : null;
+          const revealDuration = this._getRevealTransitionDuration(
+            previousViewModel && Number.isFinite(previousViewModel.numericValue) ? { valuePercent: previousViewModel.percent, baselinePercent: previousViewModel.baselinePercent } : null,
+            Number.isFinite(rowViewModel.numericValue) ? { valuePercent: pct, baselinePercent: liveBaselinePct } : null
+          );
           if (fillReveal) {
-            this._setStyleTextIfChanged(fillReveal, fillState.revealStyle);
+            this._setStyleTextIfChanged(fillReveal, `${fillState.revealStyle};--sbcp-reveal-duration:${revealDuration}ms`);
             this._setClassNameIfChanged(fillReveal, `bar-fill-reveal${ecfg.bar.animated ? "" : " no-anim"}`);
           }
           if (paintLayer) {
@@ -5189,7 +5218,7 @@ ${paintLayers}
           const needleEl = row.querySelector(".needle-marker");
           if (needleEl) {
             this._setStyleIfChanged(needleEl, "display", needleState.show ? "block" : "none");
-            this._setStyleIfChanged(needleEl, "left", `${(_b = needleState.pct) != null ? _b : 0}%`);
+            this._setStyleIfChanged(needleEl, "left", `${(_e = needleState.pct) != null ? _e : 0}%`);
             this._setStyleIfChanged(needleEl, "--needle-color", needleState.color);
             this._setStyleIfChanged(needleEl, "--needle-border-color", needleState.borderColor);
             this._setDatasetIfChanged(needleEl, "edge", needleState.edge);
@@ -5240,11 +5269,11 @@ ${paintLayers}
           const targetLabelEl = row.querySelector(".target-value-label");
           const peakLabelEl = row.querySelector(".peak-value-label");
           const floorLabelEl = row.querySelector(".floor-value-label");
-          const markerModels = (_c = rowViewModel.markers) != null ? _c : [];
+          const markerModels = (_f = rowViewModel.markers) != null ? _f : [];
           this._patchMarker(targetEl, this._getMarkerModel(markerModels, "target"));
           this._patchMarker(row.querySelector(".peak-marker"), this._getMarkerModel(markerModels, "peak"));
           this._patchMarker(row.querySelector(".floor-marker"), this._getMarkerModel(markerModels, "floor"));
-          ((_e = (_d = row.querySelectorAll) == null ? void 0 : _d.call(row, ".generic-marker[data-marker-id]")) != null ? _e : []).forEach((markerEl) => {
+          ((_h = (_g = row.querySelectorAll) == null ? void 0 : _g.call(row, ".generic-marker[data-marker-id]")) != null ? _h : []).forEach((markerEl) => {
             var _a2, _b2, _c2, _d2, _e2;
             const markerId = markerEl.dataset.markerId;
             const marker = this._getMarkerModel(markerModels, markerId);
@@ -5263,8 +5292,8 @@ ${paintLayers}
           const targetMarkerModel = this._getMarkerModel(markerModels, "target");
           this._patchMarkerLabelAppearance(targetLabelEl, targetMarkerModel);
           if (targetLabelEl) {
-            if ((targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) && targetMarkerModel.visible && ((_f = targetMarkerModel.label) == null ? void 0 : _f.text)) {
-              this._setTextIfChanged(targetLabelEl, (_h = (_g = targetMarkerModel.label) == null ? void 0 : _g.text) != null ? _h : null);
+            if ((targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) && targetMarkerModel.visible && ((_i = targetMarkerModel.label) == null ? void 0 : _i.text)) {
+              this._setTextIfChanged(targetLabelEl, (_k = (_j = targetMarkerModel.label) == null ? void 0 : _j.text) != null ? _k : null);
             } else {
               this._setStyleIfChanged(targetLabelEl, "visibility", "hidden");
             }
@@ -5285,7 +5314,7 @@ ${paintLayers}
           patchValueLabel(peakLabelEl, "peak");
           patchValueLabel(floorLabelEl, "floor");
         }
-        _update() {
+        _update(previousHass = null) {
           var _a, _b, _c, _d, _e;
           if (!this._hass || !this._config) return;
           const rowsEl = this.shadowRoot.querySelector(".rows");
@@ -5355,7 +5384,7 @@ ${paintLayers}
               rowIdx++;
               continue;
             }
-            this._patchRow(row, entityCfg, stateObj);
+            this._patchRow(row, entityCfg, stateObj, previousHass);
             rowIdx++;
           }
           this._runPostLayoutPasses(rows);
