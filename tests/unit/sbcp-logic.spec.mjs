@@ -3197,12 +3197,15 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(card._classifyLeftDensity(0, 'dense')).toBe('dense');
   });
 
-  it('recalculates density correctly once a real width is available', () => {
+  it('classifies left density from stable natural label width', () => {
     const card = createCard();
 
     expect(card._classifyRowDensity(0, 'normal')).toBe('normal');
     expect(card._classifyRowDensity(240, 'normal')).toBe('tight');
     expect(card._classifyLeftDensity(240, 'normal')).toBe('tight');
+    expect(card._classifyLeftDensity(310, 'normal', 40)).toBe('normal');
+    expect(card._classifyLeftDensity(310, 'compressed', 40)).toBe('normal');
+    expect(card._classifyLeftDensity(310, 'normal', 100)).toBe('compact');
     expect(card._classifyCompactTier(240, 'normal')).toBe('tight');
   });
 
@@ -3212,6 +3215,25 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(card._classifyRowDensity(120, 'normal')).toBe('compressed');
     expect(card._classifyLeftDensity(120, 'normal')).toBe('compressed');
     expect(card._classifyCompactTier(120, 'normal')).toBe('compressed');
+  });
+
+  it('uses natural text width rather than rendered truncation for Left density', () => {
+    const card = createCard();
+    const labelText = { textContent: 'A long sensor label', clientWidth: 20, scrollWidth: 180 };
+    const mainLine = {
+      dataset: { leftDensity: 'normal' },
+      getBoundingClientRect: () => ({ width: 310 }),
+      querySelector: (selector) => selector === '.label-left-text' ? labelText : null,
+    };
+    card._measureTextWidthWithStyles = () => 180;
+    card.shadowRoot = { querySelectorAll: (selector) => selector === '.main-line.left-mode' ? [mainLine] : [] };
+
+    card._applyLeftModeDensity();
+
+    expect(mainLine.dataset.leftDensity).toBe('compact');
+    card._measureTextWidthWithStyles = () => 40;
+    card._applyLeftModeDensity();
+    expect(mainLine.dataset.leftDensity).toBe('normal');
   });
 
   it('keeps density scheduling state per instance', () => {
@@ -3912,10 +3934,10 @@ describe('Sensor Bar Card Plus logic', () => {
   });
 
   const makeLeftModeResponsiveFixture = ({
-    text = 'Sensor',
-    visibleChars = 6,
-    clientWidth = 60,
-    scrollWidth = 60,
+    text = 'EV',
+    visibleChars = 2,
+    clientWidth = 20,
+    scrollWidth = 20,
     labelWidth = 20,
     rowWidth = 140,
     iconWidth = 28,
@@ -3926,7 +3948,14 @@ describe('Sensor Bar Card Plus logic', () => {
     usefulnessHidden = false,
   } = {}) => {
     const card = createCard();
-    card._measureVisibleLabelCharacters = () => visibleChars;
+    card._config = card.normalizeCardConfig({
+      entities: [{ entity: 'sensor.left-fixture', label_width: labelWidth }],
+    });
+    card._measureVisibleLabelCharacters = (_el, _text, availableWidth) => (
+      availableWidth >= labelWidth
+        ? visibleChars
+        : Math.min(visibleChars, Math.max(0, Math.floor(availableWidth / 8)))
+    );
     card._measureValueMarkupWidth = () => valueWidth;
 
     const leftLabelText = {
@@ -3972,7 +4001,7 @@ describe('Sensor Bar Card Plus logic', () => {
         contains: (name) => name === 'left-mode',
       },
       getBoundingClientRect: () => ({ width: rowWidth }),
-      closest: (selector) => selector === '.row-stack' ? rowStack : null,
+      closest: (selector) => selector === '.row-stack' ? rowStack : selector === '.row' ? row : null,
       querySelector: (selector) => (
         selector === '.label-left' ? leftLabel
           : selector === '.label-left-text' ? leftLabelText
@@ -3982,6 +4011,7 @@ describe('Sensor Bar Card Plus logic', () => {
       ),
     };
     const row = {
+      dataset: { entity: 'sensor.left-fixture' },
       querySelector: (selector) => (
         selector === '.main-line' ? mainLine
           : selector === '.label-left' ? leftLabel
@@ -4047,19 +4077,20 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(rowStack.dataset.forceTopValue).toBe('true');
   });
 
-  it('hides badly truncated labels with fewer than five visible characters only when barShare is below 0.66', () => {
+  it('reclaims a badly truncated label and icon before forcing the value top', () => {
     const { card, row, leftLabel, rowStack } = makeLeftModeResponsiveFixture({
       text: 'Move current telemetry',
       visibleChars: 4,
       clientWidth: 52,
       scrollWidth: 140,
       labelWidth: 26,
-      rowWidth: 138,
+      rowWidth: 144,
     });
     card._ensureMinimumBarShare([row]);
 
     expect(leftLabel.dataset.priorityHidden).toBe('true');
-    expect(rowStack.dataset.forceTopValue).toBe('true');
+    expect(rowStack.dataset.forceTopValue).toBeUndefined();
+    expect(row.querySelector('.main-line').dataset.hideLeftIcon).toBe('true');
   });
 
   it('above-mode keeps fully visible labels and continues to icon sacrifice when needed', () => {
@@ -4344,7 +4375,7 @@ describe('Sensor Bar Card Plus logic', () => {
       clientWidth: 52,
       scrollWidth: 140,
       labelWidth: 26,
-      rowWidth: 138,
+      rowWidth: 144,
     });
     card._measureVisibleLabelCharacters = (_el, text) => text === 'Sensor' ? 6 : 4;
     card._ensureMinimumBarShare([row]);
@@ -4379,6 +4410,47 @@ describe('Sensor Bar Card Plus logic', () => {
     const stale = makeLeftModeResponsiveFixture({ rowWidth: 150, labelWidth: 28, stalePriorityHidden: true });
 
     expect(clean.card._chooseLeftModeResponsiveState(clean.row)).toEqual(stale.card._chooseLeftModeResponsiveState(stale.row));
+  });
+
+  it('uses stable natural label geometry and candidate order for left presentation', () => {
+    const { card, row, leftLabel, leftLabelText, mainLine } = makeLeftModeResponsiveFixture({
+      rowWidth: 264,
+      labelWidth: 20,
+      text: 'EV',
+      clientWidth: 20,
+      scrollWidth: 20,
+    });
+    card._measureTextWidthWithStyles = () => 20;
+    const before = card._estimateLeftModeWidthBudget(row);
+
+    leftLabel.dataset.hidden = 'true';
+    leftLabel.dataset.priorityHidden = 'true';
+    leftLabelText.clientWidth = 0;
+    const after = card._estimateLeftModeWidthBudget(row);
+
+    expect(after.labelWidth).toBe(before.labelWidth);
+    expect(after.baseLabelVisible).toBe(true);
+    expect(card._getLeftModeCandidateStates(after).slice(0, 2)).toEqual([
+      { hideLabel: false, topValue: false, hideIcon: false },
+      { hideLabel: false, topValue: true, hideIcon: false },
+    ]);
+    expect(mainLine.dataset.leftDensity).toBe('normal');
+  });
+
+  it('predicts icon visibility only from the explicit Left responsive state and requires bar fit', () => {
+    const { card, row, mainLine } = makeLeftModeResponsiveFixture({ rowWidth: 150 });
+    mainLine.dataset.leftDensity = 'compressed';
+    const budget = card._estimateLeftModeWidthBudget(row);
+    const shown = card._predictLeftModeBarShareForState(row, { hideLabel: true, topValue: true, hideIcon: false }, budget);
+    const hidden = card._predictLeftModeBarShareForState(row, { hideLabel: true, topValue: true, hideIcon: true }, budget);
+    const impossibleInline = card._predictLeftModeBarShareForState(row, { hideLabel: false, topValue: false, hideIcon: false }, budget);
+    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
+
+    expect(shown.showIcon).toBe(true);
+    expect(shown.reservedWidth - hidden.reservedWidth).toBe(budget.iconWidth + budget.gap);
+    expect(impossibleInline.fits).toBe(false);
+    expect(impossibleInline.barWidth).toBe(budget.barMinWidth);
+    expect(source).not.toContain('.main-line.left-mode[data-left-density="compressed"] .icon-wrap');
   });
 
   it('transitions predictably through left-mode states as row width shrinks', () => {
@@ -4464,6 +4536,8 @@ describe('Sensor Bar Card Plus logic', () => {
     const labelWithIcon = { textContent: 'SensorLabel', scrollWidth: 100, clientWidth: 52 };
     const labelWithoutIcon = { textContent: 'SensorLabel', scrollWidth: 100, clientWidth: 52 };
     const lineWithIcon = {
+      dataset: { leftDensity: 'normal' },
+      getBoundingClientRect: () => ({ width: 200 }),
       querySelector: (selector) => (
         selector === '.label-left' ? wrapWithIcon
           : selector === '.label-left-text' ? labelWithIcon
@@ -4472,6 +4546,8 @@ describe('Sensor Bar Card Plus logic', () => {
       ),
     };
     const lineWithoutIcon = {
+      dataset: { leftDensity: 'normal' },
+      getBoundingClientRect: () => ({ width: 200 }),
       querySelector: (selector) => (
         selector === '.label-left' ? wrapWithoutIcon
           : selector === '.label-left-text' ? labelWithoutIcon
@@ -4563,7 +4639,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
   it('applies final top-right presentation in the same post-layout pass when forceTopValue is chosen', () => {
     const card = createCard();
-    const { row, mainLine, rowStack, topValue } = makeLeftModeResponsiveFixture({ rowWidth: 140, labelWidth: 20 });
+    const { row, mainLine, rowStack, topValue } = makeLeftModeResponsiveFixture({ rowWidth: 100, labelWidth: 20 });
     const originalRaf = globalThis.requestAnimationFrame;
 
     card._applyRowDensity = () => {};
@@ -4600,7 +4676,7 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(topValue.dataset.active).toBe('true');
   });
 
-  it('hides a left label that becomes badly truncated after final responsive layout is applied', () => {
+  it('does not let final rendered truncation feed back into stable label usefulness', () => {
     const card = createCard();
     const originalRaf = globalThis.requestAnimationFrame;
     card._measureTextWidthWithStyles = (_el, text) => (text === '...' ? 12 : text.length * 10);
@@ -4680,7 +4756,7 @@ describe('Sensor Bar Card Plus logic', () => {
       globalThis.requestAnimationFrame = originalRaf;
     }
 
-    expect(leftLabel.dataset.hidden).toBe('true');
+    expect(leftLabel.dataset.hidden).toBe('false');
   });
 
   it('keeps a left label visible when final layout still shows at least five useful characters', () => {
