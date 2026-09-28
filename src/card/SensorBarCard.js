@@ -48,6 +48,32 @@ import {
 } from '../utils/format.js';
 import { updateExtremum } from '../utils/extrema.js';
 
+function getRevealTransitionDuration(previousGeometry, nextGeometry) {
+  if (!previousGeometry || !nextGeometry
+    || !Number.isFinite(previousGeometry.valuePercent)
+    || !Number.isFinite(nextGeometry.valuePercent)) {
+    return 600;
+  }
+
+  const previousBaseline = Number.isFinite(previousGeometry.baselinePercent)
+    ? previousGeometry.baselinePercent
+    : 0;
+  const nextBaseline = Number.isFinite(nextGeometry.baselinePercent)
+    ? nextGeometry.baselinePercent
+    : 0;
+  const delta = Math.max(
+    Math.abs(nextGeometry.valuePercent - previousGeometry.valuePercent),
+    Math.abs(nextBaseline - previousBaseline),
+  );
+  const ordinaryDuration = Math.round(Math.min(600, Math.max(150, 600 - 15 * Math.max(0, delta - 5))));
+  const crossesBaseline = Number.isFinite(previousGeometry.baselinePercent)
+    && Number.isFinite(nextGeometry.baselinePercent)
+    && (previousGeometry.valuePercent - previousGeometry.baselinePercent)
+      * (nextGeometry.valuePercent - nextGeometry.baselinePercent) < 0;
+
+  return crossesBaseline ? Math.min(ordinaryDuration, 300) : ordinaryDuration;
+}
+
 /**
  * sensor-bar-card-plus - A polished, configurable sensor bar card for Home Assistant
  *
@@ -428,7 +454,7 @@ export class SensorBarCard extends HTMLElement {
     }
     
     if (this._shouldUpdate(oldHass, hass)) {
-      this._update();
+      this._update(oldHass);
     }
   }
 
@@ -1026,6 +1052,10 @@ export class SensorBarCard extends HTMLElement {
     return Math.min(100, Math.max(0, ((value - safeMin) / range) * 100));
   }
 
+  _getRevealTransitionDuration(previousGeometry, nextGeometry) {
+    return getRevealTransitionDuration(previousGeometry, nextGeometry);
+  }
+
   _resolveBaselinePct(ecfg, safeMin, safeMax) {
     if (ecfg.baseline?.enabled === false) return null;
     const baselineValue = this._getNormalizedResolvableNumericValue(ecfg.baseline?.at, safeMin, safeMax);
@@ -1490,7 +1520,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           position: absolute;
           inset: 0;
           pointer-events: none;
-          transition: clip-path 0.6s cubic-bezier(0.4,0,0.2,1);
+          transition: clip-path var(--sbcp-reveal-duration, 600ms) cubic-bezier(0.4,0,0.2,1);
           z-index: 1;
         }
         .bar-paint-layer {
@@ -3885,7 +3915,7 @@ ${paintLayers}
       </div>`;
   }
 
-  _patchRow(row, entityCfg, stateObj) {
+  _patchRow(row, entityCfg, stateObj, previousHass = null) {
     if (!row || !stateObj) return;
 
     const ecfg = this._resolve(entityCfg);
@@ -3910,9 +3940,27 @@ ${paintLayers}
     const liveBaselinePct = rowViewModel.baselinePercent;
     const needleState = rowViewModel.needle;
     const fillState = this._getFillRenderState(pct, 'var(--sbcp-row-height)', ecfg, color, liveTargetPct, liveBaselinePct, safeMin, safeMax, needleState.show);
+    const previousStateObj = previousHass?.states?.[entityCfg.entity] ?? null;
+    const previousViewModel = previousStateObj
+      ? buildRowViewModel({
+        hass: previousHass,
+        cardConfig: this._config,
+        entityConfig: ecfg,
+        entityState: previousStateObj,
+        extrema: this._extrema[entityCfg.entity] ?? null,
+      })
+      : null;
+    const revealDuration = this._getRevealTransitionDuration(
+      previousViewModel && Number.isFinite(previousViewModel.numericValue)
+        ? { valuePercent: previousViewModel.percent, baselinePercent: previousViewModel.baselinePercent }
+        : null,
+      Number.isFinite(rowViewModel.numericValue)
+        ? { valuePercent: pct, baselinePercent: liveBaselinePct }
+        : null,
+    );
 
     if (fillReveal) {
-      this._setStyleTextIfChanged(fillReveal, fillState.revealStyle);
+      this._setStyleTextIfChanged(fillReveal, `${fillState.revealStyle};--sbcp-reveal-duration:${revealDuration}ms`);
       this._setClassNameIfChanged(fillReveal, `bar-fill-reveal${ecfg.bar.animated ? '' : ' no-anim'}`);
     }
     if (paintLayer) {
@@ -4029,7 +4077,7 @@ ${paintLayers}
     patchValueLabel(floorLabelEl, 'floor');
   }
 
-  _update() {
+  _update(previousHass = null) {
     if (!this._hass || !this._config) return;
     const rowsEl = this.shadowRoot.querySelector('.rows');
     if (!rowsEl) return;
@@ -4101,7 +4149,7 @@ ${paintLayers}
 
       const row = rows[rowIdx];
       if (!row) { rowIdx++; continue; }
-      this._patchRow(row, entityCfg, stateObj);
+      this._patchRow(row, entityCfg, stateObj, previousHass);
       rowIdx++;
     }
     this._runPostLayoutPasses(rows);
