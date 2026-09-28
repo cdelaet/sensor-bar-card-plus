@@ -2580,7 +2580,7 @@ for (const scenario of scenarios) {
   });
 }
 
-test('visual regression: baseline-severity-mid-transition', async ({ page }) => {
+test('Reveal Fill crossing selects adaptive timing and preserves settled Baseline geometry', async ({ page }) => {
   const config = {
     type: 'custom:sensor-bar-card-plus',
     title: 'Baseline severity transition',
@@ -2589,6 +2589,7 @@ test('visual regression: baseline-severity-mid-transition', async ({ page }) => 
     label_position: 'left',
     label_width: 170,
     animated: true,
+    show_peak: true,
     min: -120,
     max: 120,
     baseline: { at: 0 },
@@ -2602,7 +2603,7 @@ test('visual regression: baseline-severity-mid-transition', async ({ page }) => 
     },
   });
 
-  await page.evaluate(async () => {
+  const state = await page.evaluate(async () => {
     const card = document.querySelector('sensor-bar-card-plus');
     card.hass = {
       states: {
@@ -2613,10 +2614,66 @@ test('visual regression: baseline-severity-mid-transition', async ({ page }) => 
         }),
       },
     };
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    const row = card.shadowRoot.querySelector('.row[data-entity="sensor.transitioning"]');
+    return {
+      revealDuration: getComputedStyle(row.querySelector('.bar-fill-reveal')).transitionDuration,
+      revealStyle: row.querySelector('.bar-fill-reveal').getAttribute('style'),
+      markerDuration: getComputedStyle(row.querySelector('.peak-marker')).transitionDuration,
+    };
   });
 
-  await expect(mount).toHaveScreenshot('baseline-severity-mid-transition.png');
+  expect(state.revealDuration).toBe('0.15s');
+  expect(state.revealStyle).toMatch(/clip-path: inset\(0px 10\.4167% 0px 50%/);
+  expect(state.markerDuration).toBe('0.6s');
+});
+
+test('adaptive Reveal timing leaves Needle timing and disabled animation unchanged', async ({ page }) => {
+  const config = {
+    type: 'custom:sensor-bar-card-plus',
+    min: 0,
+    max: 100,
+    show_peak: true,
+    bar: { needle: { show: true } },
+    entities: [{ entity: 'sensor.animation' }],
+  };
+  await render(page, {
+    config,
+    states: { 'sensor.animation': sensor(10, { friendly_name: 'Animation' }) },
+  });
+
+  const durations = await page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    card.hass = {
+      states: {
+        'sensor.animation': window.__sbcpCreateState(90, {
+          friendly_name: 'Animation',
+          unit_of_measurement: 'W',
+        }),
+      },
+    };
+    const row = card.shadowRoot.querySelector('.row[data-entity="sensor.animation"]');
+    return {
+      reveal: getComputedStyle(row.querySelector('.bar-fill-reveal')).transitionDuration,
+      needle: getComputedStyle(row.querySelector('.needle-marker')).transitionDuration,
+      peak: getComputedStyle(row.querySelector('.peak-marker')).transitionDuration,
+    };
+  });
+  expect(durations).toEqual({ reveal: '0.15s', needle: '0.6s', peak: '0.6s' });
+
+  const noAnimationConfig = { ...config, animated: false };
+  await page.evaluate((nextConfig) => {
+    document.querySelector('sensor-bar-card-plus').setConfig(nextConfig);
+  }, noAnimationConfig);
+  const disabledDurations = await page.evaluate(() => {
+    const row = document.querySelector('sensor-bar-card-plus').shadowRoot
+      .querySelector('.row[data-entity="sensor.animation"]');
+    return {
+      reveal: getComputedStyle(row.querySelector('.bar-fill-reveal')).transitionDuration,
+      needle: getComputedStyle(row.querySelector('.needle-marker')).transitionDuration,
+      peak: getComputedStyle(row.querySelector('.peak-marker')).transitionDuration,
+    };
+  });
+  expect(disabledDurations).toEqual({ reveal: '0s', needle: '0s', peak: '0s' });
 });
 
 test('visual regression: normal-above-target-mid-transition-downward', async ({ page }) => {
