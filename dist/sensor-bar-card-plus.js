@@ -196,7 +196,23 @@
     }
     return normalizeResolvableValue(input, null);
   }
-  function normalizeGenericMarkerList(input) {
+  function hasConfiguredMarkerSource(source) {
+    var _a;
+    return !!source && (getFiniteNumber((_a = source.fixed) != null ? _a : source.value) !== null || Number.isFinite(source.percent) || !!source.entity);
+  }
+  function applyGenericMarkerCapacity(markers, config) {
+    var _a, _b, _c, _d;
+    const occupied = {
+      above: ((_a = config == null ? void 0 : config.peak_marker) == null ? void 0 : _a.show) === true ? 1 : 0,
+      below: (((_b = config == null ? void 0 : config.floor_marker) == null ? void 0 : _b.show) === true ? 1 : 0) + (((_c = config == null ? void 0 : config.target_marker) == null ? void 0 : _c.enabled) !== false && hasConfiguredMarkerSource((_d = config == null ? void 0 : config.target_marker) == null ? void 0 : _d.source) ? 1 : 0)
+    };
+    return markers.map((marker) => {
+      const accepted = marker.valid && occupied[marker.lane] < 4;
+      if (accepted) occupied[marker.lane] += 1;
+      return { ...marker, accepted };
+    });
+  }
+  function normalizeGenericMarkerList(input, capacityConfig = null) {
     if (!Array.isArray(input)) {
       return { markers: [], invalidList: input !== void 0 };
     }
@@ -225,6 +241,11 @@
       );
       const label = rawMarker.label && typeof rawMarker.label === "object" && !Array.isArray(rawMarker.label) ? rawMarker.label : {};
       const labelConfig = normalizeMarkerLabelConfig(label);
+      const labelEntityInput = label.entity;
+      const labelEntity = typeof labelEntityInput === "string" ? labelEntityInput.trim() : "";
+      const invalidLabelEntity = labelEntityInput !== void 0 && labelEntityInput !== null && labelEntityInput !== "" && !looksLikeEntityId(labelEntity);
+      const validLabelEntity = labelEntity && looksLikeEntityId(labelEntity) ? labelEntity : null;
+      const showMarker = typeof rawMarker.show_marker === "boolean" ? rawMarker.show_marker : true;
       return {
         id: `generic-${index}`,
         index,
@@ -236,10 +257,13 @@
         shape: validShape ? (_a = rawMarker.shape) != null ? _a : "circle" : "circle",
         direction,
         invalidDirection,
+        showMarker,
+        invalidShowMarker: rawMarker.show_marker !== void 0 && typeof rawMarker.show_marker !== "boolean",
         color: typeof rawMarker.color === "string" && rawMarker.color.trim() ? rawMarker.color : "#888888",
         label: {
           show: label.show === true,
           text: labelConfig.label_text,
+          entity: validLabelEntity,
           showValue: labelConfig.label_show_value,
           showUnit: labelConfig.label_show_unit,
           precision: labelConfig.label_precision,
@@ -249,7 +273,8 @@
           invalidShowUnit: labelConfig.label_invalid_show_unit,
           invalidPrecision: labelConfig.label_invalid_precision,
           invalidPrecisionKey: labelConfig.label_precision_key,
-          unsupportedUnit: labelConfig.label_unsupported_unit
+          unsupportedUnit: labelConfig.label_unsupported_unit,
+          invalidEntity: invalidLabelEntity
         },
         valid: validSource && validLane,
         invalidSource: !validSource,
@@ -260,13 +285,7 @@
         accepted: false
       };
     });
-    const laneCounts = { above: 0, below: 0 };
-    for (const marker of markers) {
-      if (!marker.valid) continue;
-      if (laneCounts[marker.lane] < 2) marker.accepted = true;
-      laneCounts[marker.lane] += 1;
-    }
-    return { markers, invalidList: false };
+    return { markers: applyGenericMarkerCapacity(markers, capacityConfig), invalidList: false };
   }
   function normalizeBaselineDirectionConfig(input, inheritedDirection = null) {
     var _a;
@@ -864,7 +883,10 @@
     normalizedEntity.target_marker = normalizeTargetMarkerConfig(entityConfig, cardConfig);
     normalizedEntity.peak_marker = normalizePeakMarkerConfig(entityConfig, cardConfig);
     normalizedEntity.floor_marker = normalizeFloorMarkerConfig(entityConfig, cardConfig);
-    const normalizedMarkers = entityConfig.markers === void 0 ? { markers: (_c = cardConfig == null ? void 0 : cardConfig.generic_markers) != null ? _c : [], invalidList: (cardConfig == null ? void 0 : cardConfig.generic_markers_invalid) === true } : normalizeGenericMarkerList(entityConfig.markers);
+    const normalizedMarkers = entityConfig.markers === void 0 ? {
+      markers: applyGenericMarkerCapacity((_c = cardConfig == null ? void 0 : cardConfig.generic_markers) != null ? _c : [], normalizedEntity),
+      invalidList: (cardConfig == null ? void 0 : cardConfig.generic_markers_invalid) === true
+    } : normalizeGenericMarkerList(entityConfig.markers, normalizedEntity);
     normalizedEntity.generic_markers = normalizedMarkers.markers;
     normalizedEntity.generic_markers_invalid = normalizedMarkers.invalidList;
     normalizedEntity.min = normalizedEntity.scale.min.fixed;
@@ -954,7 +976,7 @@
     normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);
     normalizedCard.peak_marker = normalizePeakMarkerConfig(baseConfig, null);
     normalizedCard.floor_marker = normalizeFloorMarkerConfig(baseConfig, null);
-    const normalizedMarkers = normalizeGenericMarkerList(baseConfig.markers);
+    const normalizedMarkers = normalizeGenericMarkerList(baseConfig.markers, normalizedCard);
     normalizedCard.generic_markers = normalizedMarkers.markers;
     normalizedCard.generic_markers_invalid = normalizedMarkers.invalidList;
     normalizedCard.entities = baseConfig.entities.map(
@@ -1109,7 +1131,7 @@
     }
   }
   function validateGenericMarkers(diagnostics, markers, invalidList, path, entity = null) {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     if (invalidList) {
       addWarning(diagnostics, "markers.invalid_list", "Markers must be a list; ignoring the malformed value.", path, entity);
     }
@@ -1137,14 +1159,16 @@
       if (marker.invalidDirection) {
         addWarning(diagnostics, "markers.invalid_direction", "Invalid marker direction; using inward.", `${markerPath}.direction`, entity);
       }
-      if ((_a = marker.label) == null ? void 0 : _a.invalidShow) addWarning(diagnostics, "markers.invalid_label_show", "Marker label show must be a boolean; using the existing fallback.", `${markerPath}.label.show`, entity);
-      if ((_b = marker.label) == null ? void 0 : _b.invalidText) addWarning(diagnostics, "markers.invalid_label_text", "Marker label text must be a string; ignoring it.", `${markerPath}.label.text`, entity);
-      if ((_c = marker.label) == null ? void 0 : _c.invalidShowValue) addWarning(diagnostics, "markers.invalid_label_show_value", "Marker label show_value must be a boolean; using the inherited or default value.", `${markerPath}.label.show_value`, entity);
-      if ((_d = marker.label) == null ? void 0 : _d.invalidShowUnit) addWarning(diagnostics, "markers.invalid_label_show_unit", "Marker label show_unit must be a boolean; using the inherited or default value.", `${markerPath}.label.show_unit`, entity);
-      if ((_e = marker.label) == null ? void 0 : _e.invalidPrecision) addWarning(diagnostics, "markers.invalid_label_precision", "Marker label precision must be a non-negative integer; using the inherited or row precision.", `${markerPath}.label.${(_f = marker.label.invalidPrecisionKey) != null ? _f : "precision"}`, entity);
-      if ((_g = marker.label) == null ? void 0 : _g.unsupportedUnit) addWarning(diagnostics, "markers.unsupported_label_unit", "Marker label unit is no longer supported; use show_unit instead.", `${markerPath}.label.unit`, entity);
+      if (marker.invalidShowMarker) addWarning(diagnostics, "markers.invalid_show_marker", "Marker show_marker must be a boolean; using true.", `${markerPath}.show_marker`, entity);
+      if ((_a = marker.label) == null ? void 0 : _a.invalidEntity) addWarning(diagnostics, "markers.invalid_label_entity", "Marker label entity must be a valid entity ID; ignoring it.", `${markerPath}.label.entity`, entity);
+      if ((_b = marker.label) == null ? void 0 : _b.invalidShow) addWarning(diagnostics, "markers.invalid_label_show", "Marker label show must be a boolean; using the existing fallback.", `${markerPath}.label.show`, entity);
+      if ((_c = marker.label) == null ? void 0 : _c.invalidText) addWarning(diagnostics, "markers.invalid_label_text", "Marker label text must be a string; ignoring it.", `${markerPath}.label.text`, entity);
+      if ((_d = marker.label) == null ? void 0 : _d.invalidShowValue) addWarning(diagnostics, "markers.invalid_label_show_value", "Marker label show_value must be a boolean; using the inherited or default value.", `${markerPath}.label.show_value`, entity);
+      if ((_e = marker.label) == null ? void 0 : _e.invalidShowUnit) addWarning(diagnostics, "markers.invalid_label_show_unit", "Marker label show_unit must be a boolean; using the inherited or default value.", `${markerPath}.label.show_unit`, entity);
+      if ((_f = marker.label) == null ? void 0 : _f.invalidPrecision) addWarning(diagnostics, "markers.invalid_label_precision", "Marker label precision must be a non-negative integer; using the inherited or row precision.", `${markerPath}.label.${(_g = marker.label.invalidPrecisionKey) != null ? _g : "precision"}`, entity);
+      if ((_h = marker.label) == null ? void 0 : _h.unsupportedUnit) addWarning(diagnostics, "markers.unsupported_label_unit", "Marker label unit is no longer supported; use show_unit instead.", `${markerPath}.label.unit`, entity);
       if (marker.valid && !marker.accepted) {
-        addWarning(diagnostics, "markers.excess_capacity", `Only the first two valid markers in the ${marker.lane} lane are rendered.`, markerPath, entity);
+        addWarning(diagnostics, "markers.excess_capacity", "This marker is not rendered because its lane already has four markers.", markerPath, entity);
       }
     }
   }
@@ -1230,7 +1254,7 @@
     validateGradientStops(diagnostics, (_b = config == null ? void 0 : config.bar) == null ? void 0 : _b.gradient_stops, `${path}.bar`, entity);
   }
   function validateNormalizedConfig(config) {
-    var _a;
+    var _a, _b;
     const diagnostics = {
       warnings: [],
       errors: []
@@ -1264,6 +1288,16 @@
           `${path}.markers`,
           entityId
         );
+      } else {
+        const inheritedOverflow = ((_b = entityConfig.generic_markers) != null ? _b : []).filter(
+          (marker) => {
+            var _a2, _b2;
+            return marker.valid && !marker.accepted && ((_b2 = (_a2 = config.generic_markers) == null ? void 0 : _a2[marker.index]) == null ? void 0 : _b2.accepted) === true;
+          }
+        );
+        if (inheritedOverflow.length) {
+          validateGenericMarkers(diagnostics, inheritedOverflow, false, `${path}.markers`, entityId);
+        }
       }
     }
     return diagnostics;
@@ -1305,7 +1339,7 @@
   }
   function createMarkerLabelPresentation(value, unit, precision = null, options = {}) {
     const semanticText = typeof options.text === "string" ? options.text : "";
-    const number = options.showValue === false || !Number.isFinite(value) ? "" : formatNumericDisplay(value, precision);
+    const number = options.showValue === false || value === null || value === void 0 || value === "" ? "" : Number.isFinite(value) ? formatNumericDisplay(value, precision) : String(value);
     const cleanUnit = options.showUnit === false ? "" : String(unit != null ? unit : "").trim();
     const text = [semanticText, number, cleanUnit].filter(Boolean).join(" ");
     return {
@@ -1351,7 +1385,8 @@
     label = null,
     labelVisible = false,
     shape = "circle",
-    direction = "inward"
+    direction = "inward",
+    showMarker = true
   }) {
     return {
       id,
@@ -1364,7 +1399,8 @@
       label,
       labelVisible: labelVisible === true,
       shape: normalizeMarkerShape(shape),
-      direction
+      direction,
+      showMarker: showMarker !== false
     };
   }
   function hasMarkerLabelContent(label) {
@@ -1473,7 +1509,8 @@
         label: marker.label,
         labelVisible: marker.labelVisible && hasMarkerLabelContent(marker.label),
         shape: marker.shape,
-        direction: marker.direction
+        direction: marker.direction,
+        showMarker: marker.showMarker
       }))
     ];
   }
@@ -1683,11 +1720,17 @@
       showUnit: (_L = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _L.label_show_unit
     }) : null;
     const genericMarkers = ((_M = entityConfig == null ? void 0 : entityConfig.generic_markers) != null ? _M : []).filter((marker) => marker.accepted).map((marker) => {
-      var _a2;
+      var _a2, _b2, _c2, _d2, _e2;
       const value = getNormalizedResolvableNumericValue(hass, marker.source, safeMin, safeMax);
       const visible = Number.isFinite(value);
       const markerPrecision = (_a2 = marker.label.precision) != null ? _a2 : decimal;
-      const label = marker.label.show ? createMarkerLabelPresentation(value, targetUnit, markerPrecision, {
+      const labelStateObj = marker.label.entity ? (_b2 = hass == null ? void 0 : hass.states) == null ? void 0 : _b2[marker.label.entity] : null;
+      const rawLabelState = labelStateObj == null ? void 0 : labelStateObj.state;
+      const cleanLabelState = typeof rawLabelState === "string" ? rawLabelState.trim() : "";
+      const usableLabelState = labelStateObj && cleanLabelState && !["unknown", "unavailable"].includes(cleanLabelState.toLowerCase());
+      const labelValue = marker.label.entity ? usableLabelState ? (_c2 = getFiniteNumber(cleanLabelState)) != null ? _c2 : cleanLabelState : null : value;
+      const labelUnit = marker.label.entity ? usableLabelState ? (_e2 = (_d2 = labelStateObj == null ? void 0 : labelStateObj.attributes) == null ? void 0 : _d2.unit_of_measurement) != null ? _e2 : "" : "" : targetUnit;
+      const label = marker.label.show ? createMarkerLabelPresentation(labelValue, labelUnit, markerPrecision, {
         text: marker.label.text,
         showValue: marker.label.showValue,
         showUnit: marker.label.showUnit
@@ -1701,6 +1744,7 @@
         color: marker.color,
         shape: marker.shape,
         direction: marker.direction,
+        showMarker: marker.showMarker,
         label,
         labelVisible: marker.label.show
       };
@@ -2130,9 +2174,9 @@
               (_d = (_c = ecfg.scale) == null ? void 0 : _c.max) == null ? void 0 : _d.entity,
               (_f = (_e = ecfg.baseline) == null ? void 0 : _e.at) == null ? void 0 : _f.entity,
               (_h = (_g = ecfg.target_marker) == null ? void 0 : _g.source) == null ? void 0 : _h.entity,
-              ...((_i = ecfg.generic_markers) != null ? _i : []).filter((marker) => marker.accepted).map((marker) => {
-                var _a2;
-                return (_a2 = marker.source) == null ? void 0 : _a2.entity;
+              ...((_i = ecfg.generic_markers) != null ? _i : []).filter((marker) => marker.accepted).flatMap((marker) => {
+                var _a2, _b2;
+                return [(_a2 = marker.source) == null ? void 0 : _a2.entity, (_b2 = marker.label) == null ? void 0 : _b2.entity];
               })
             ].filter(Boolean);
             for (const ent of entitiesToWatch) {
@@ -2232,6 +2276,13 @@
           const labelSelector = markerEl.matches(".target-marker") ? ".target-value-label" : markerEl.matches(".peak-marker") ? ".peak-value-label" : markerEl.matches(".floor-marker") ? ".floor-value-label" : null;
           return labelSelector ? row.querySelector(labelSelector) : null;
         }
+        _getGenericMarkerForLabel(labelEl) {
+          var _a, _b;
+          const row = labelEl == null ? void 0 : labelEl.closest(".row");
+          const markerId = (_a = labelEl == null ? void 0 : labelEl.dataset) == null ? void 0 : _a.markerId;
+          if (!row || !markerId) return null;
+          return (_b = [...row.querySelectorAll(".generic-marker[data-marker-id]")].find((marker) => marker.dataset.markerId === markerId)) != null ? _b : null;
+        }
         _setMarkerHover(markerEl) {
           var _a;
           const label = this._getMarkerLabel(markerEl);
@@ -2250,16 +2301,19 @@
           this._markerHover = null;
         }
         _handleMarkerPointerOver(event) {
-          var _a, _b;
+          var _a, _b, _c;
           if (event.pointerType === "touch") return;
-          const markerEl = (_b = (_a = event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, ".generic-marker, .target-marker, .peak-marker, .floor-marker");
+          const target = (_b = (_a = event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, '.generic-value-label[data-show-marker="false"], .generic-marker, .target-marker, .peak-marker, .floor-marker');
+          const markerEl = ((_c = target == null ? void 0 : target.matches) == null ? void 0 : _c.call(target, ".generic-value-label")) ? this._getGenericMarkerForLabel(target) : target;
           if (markerEl) this._setMarkerHover(markerEl);
         }
         _handleMarkerPointerOut(event) {
           var _a, _b;
           if (event.pointerType === "touch") return;
-          const markerEl = (_b = (_a = event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, ".generic-marker, .target-marker, .peak-marker, .floor-marker");
-          if (!markerEl || markerEl.contains(event.relatedTarget)) return;
+          const target = (_b = (_a = event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, '.generic-value-label[data-show-marker="false"], .generic-marker, .target-marker, .peak-marker, .floor-marker');
+          if (!target || target.contains(event.relatedTarget)) return;
+          const markerEl = target.matches(".generic-value-label") ? this._getGenericMarkerForLabel(target) : target;
+          if (!markerEl) return;
           this._clearMarkerHover(markerEl);
         }
         _positionMarkerValueLabel(row, labelSelector, markerSelector) {
@@ -3194,6 +3248,10 @@
           visibility: hidden;
           transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
         }
+        .generic-value-label[data-show-marker="false"] {
+          pointer-events: auto;
+          cursor: pointer;
+        }
         .peak-value-label {
           bottom: 100%;
           margin-bottom: 1px;
@@ -3643,6 +3701,13 @@
         }
         .generic-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
           display: block;
+        }
+        .generic-marker[data-show-marker="false"][data-shape] .peak-inset,
+        .generic-marker[data-show-marker="false"][data-shape] .peak-outset,
+        .generic-marker[data-show-marker="false"][data-shape] .target-inset,
+        .generic-marker[data-show-marker="false"][data-shape] .target-outset,
+        .generic-marker[data-show-marker="false"][data-shape] .marker-shape-svg {
+          display: none;
         }
         .marker-shape-svg path {
           display: none;
@@ -5005,7 +5070,7 @@
           if (marker.type === "generic") {
             const triangleClasses = lane === "above" ? ["peak-inset", "peak-outset"] : ["target-inset", "target-outset"];
             return `
-      <div class="generic-marker" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" data-direction="${(_b = marker.direction) != null ? _b : "inward"}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+      <div class="generic-marker" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" data-direction="${(_b = marker.direction) != null ? _b : "inward"}" data-show-marker="${marker.showMarker === false ? "false" : "true"}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
         <div class="${triangleClasses[0]}"></div>
         <div class="${triangleClasses[1]}"></div>
         <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${(_c = marker.direction) != null ? _c : "inward"}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
@@ -5036,6 +5101,9 @@
           this._setDatasetIfChanged(markerEl, "shape", shape);
           this._setDatasetIfChanged(markerEl, "lane", (_a = marker.lane) != null ? _a : marker.type === "peak" ? "above" : "below");
           this._setDatasetIfChanged(markerEl, "direction", (_b = marker.direction) != null ? _b : "inward");
+          if (marker.type === "generic") {
+            this._setDatasetIfChanged(markerEl, "showMarker", marker.showMarker === false ? "false" : "true");
+          }
           const shapeSvg = (_c = markerEl.querySelector) == null ? void 0 : _c.call(markerEl, ".marker-shape-svg");
           if (shapeSvg) {
             this._setDatasetIfChanged(shapeSvg, "shape", shape);
@@ -5110,7 +5178,7 @@
           const genericValueLabels = genericMarkerModels.filter((marker) => marker.labelVisible).map((marker) => {
             var _a2, _b2;
             return `
-      <div class="generic-value-label" data-marker-id="${escapeHtml(marker.id)}" data-lane="${marker.lane}" style="left:${Number.isFinite(marker.position) ? marker.position : 0}%;visibility:${marker.visible && ((_a2 = marker.label) == null ? void 0 : _a2.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(marker)}">
+      <div class="generic-value-label" data-marker-id="${escapeHtml(marker.id)}" data-lane="${marker.lane}" data-show-marker="${marker.showMarker === false ? "false" : "true"}" style="left:${Number.isFinite(marker.position) ? marker.position : 0}%;visibility:${marker.visible && ((_a2 = marker.label) == null ? void 0 : _a2.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(marker)}">
         ${marker.visible && ((_b2 = marker.label) == null ? void 0 : _b2.text) ? escapeHtml(marker.label.text) : ""}
       </div>`;
           }).join("");
@@ -5304,6 +5372,7 @@ ${paintLayers}
             this._patchMarker(markerEl, marker);
             const labelEl = [...(_b2 = (_a2 = row.querySelectorAll) == null ? void 0 : _a2.call(row, ".generic-value-label[data-marker-id]")) != null ? _b2 : []].find((label) => label.dataset.markerId === markerId);
             if (!labelEl) return;
+            this._setDatasetIfChanged(labelEl, "showMarker", (marker == null ? void 0 : marker.showMarker) === false ? "false" : "true");
             this._patchMarkerLabelAppearance(labelEl, marker);
             if ((marker == null ? void 0 : marker.labelVisible) && marker.visible && ((_c2 = marker.label) == null ? void 0 : _c2.text)) {
               this._setTextIfChanged(labelEl, (_e2 = (_d2 = marker.label) == null ? void 0 : _d2.text) != null ? _e2 : null);
@@ -9499,7 +9568,7 @@ ${paintLayers}
           const markerUiIds = this._getGenericMarkerUiIds(scope, markers.length);
           const override = this._hasMarkersOverride(scope);
           const rows = markers.map((marker, markerIndex) => {
-            var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+            var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
             const source = this._getGenericMarkerSource(marker);
             const markerUiId = markerUiIds[markerIndex];
             const rowId = `${scopeType}-${scopeIndex}-generic-${markerUiId}`;
@@ -9508,6 +9577,16 @@ ${paintLayers}
               "scope-type": scopeType,
               "marker-index": markerIndex
             }) : "";
+            const labelEntitySource = this._renderEntitySourceInput(
+              "generic-marker-label-entity",
+              scopeIndex,
+              (_b = (_a = marker == null ? void 0 : marker.label) == null ? void 0 : _a.entity) != null ? _b : "",
+              "sensor.information",
+              {
+                "scope-type": scopeType,
+                "marker-index": markerIndex
+              }
+            );
             return `
         <div class="generic-marker-item" data-marker-ui-id="${markerUiId}" data-expanded="${expanded ? "true" : "false"}">
           <div class="generic-marker-header">
@@ -9556,13 +9635,13 @@ ${paintLayers}
               <label for="${rowId}-lane">Lane</label>
               <select id="${rowId}-lane" data-kind="generic-marker-lane" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
                 <option value="above"${(marker == null ? void 0 : marker.lane) === "above" ? " selected" : ""}>Above</option>
-                <option value="below"${((_a = marker == null ? void 0 : marker.lane) != null ? _a : "below") === "below" ? " selected" : ""}>Below</option>
+                <option value="below"${((_c = marker == null ? void 0 : marker.lane) != null ? _c : "below") === "below" ? " selected" : ""}>Below</option>
               </select>
             </div>
             <div class="field-row">
               <label for="${rowId}-direction">Direction</label>
               <select id="${rowId}-direction" data-kind="generic-marker-direction" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${normalizeMarkerDirection(marker == null ? void 0 : marker.direction)}">
-                <option value="inward"${((_b = marker == null ? void 0 : marker.direction) != null ? _b : "inward") === "inward" ? " selected" : ""}>Inward</option>
+                <option value="inward"${((_d = marker == null ? void 0 : marker.direction) != null ? _d : "inward") === "inward" ? " selected" : ""}>Inward</option>
                 <option value="outward"${(marker == null ? void 0 : marker.direction) === "outward" ? " selected" : ""}>Outward</option>
               </select>
             </div>
@@ -9582,30 +9661,38 @@ ${paintLayers}
               id: `${rowId}-color`,
               kind: "generic-marker-color",
               index: scopeIndex,
-              value: (_c = marker == null ? void 0 : marker.color) != null ? _c : "#888888",
+              value: (_e = marker == null ? void 0 : marker.color) != null ? _e : "#888888",
               fallbackHex: "#888888",
               placeholder: "#888888",
               extraDataset: { "scope-type": scopeType, "marker-index": markerIndex }
             })}
           </div>
           <div class="field-row"><div class="toggle">
-            <input id="${rowId}-label-show" type="checkbox" data-kind="generic-marker-label-show" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_d = marker == null ? void 0 : marker.label) == null ? void 0 : _d.show) === true ? " checked" : ""}>
+            <input id="${rowId}-show-marker" type="checkbox" data-kind="generic-marker-show-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${(marker == null ? void 0 : marker.show_marker) === false ? "" : " checked"}>
+            <label for="${rowId}-show-marker">Show marker glyph</label>
+          </div></div>
+          <div class="field-row"><div class="toggle">
+            <input id="${rowId}-label-show" type="checkbox" data-kind="generic-marker-label-show" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_f = marker == null ? void 0 : marker.label) == null ? void 0 : _f.show) === true ? " checked" : ""}>
             <label for="${rowId}-label-show">Show label</label>
           </div></div>
           <div class="field-row"><label for="${rowId}-label-text">Label text</label>
-            <input id="${rowId}-label-text" type="text" data-kind="generic-marker-label-text" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute((_f = (_e = marker == null ? void 0 : marker.label) == null ? void 0 : _e.text) != null ? _f : "")}" placeholder="optional semantic text">
+            <input id="${rowId}-label-text" type="text" data-kind="generic-marker-label-text" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute((_h = (_g = marker == null ? void 0 : marker.label) == null ? void 0 : _g.text) != null ? _h : "")}" placeholder="optional semantic text">
+          </div>
+          <div class="field-row">
+            <label>Label content entity</label>
+            ${labelEntitySource}
           </div>
           <div class="inline-row generic-marker-options">
             <div class="field-row"><div class="toggle">
-              <input id="${rowId}-label-show-value" type="checkbox" data-kind="generic-marker-label-show-value" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_g = marker == null ? void 0 : marker.label) == null ? void 0 : _g.show_value) === false ? "" : " checked"}>
+              <input id="${rowId}-label-show-value" type="checkbox" data-kind="generic-marker-label-show-value" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_i = marker == null ? void 0 : marker.label) == null ? void 0 : _i.show_value) === false ? "" : " checked"}>
               <label for="${rowId}-label-show-value">Show value</label>
             </div></div>
             <div class="field-row"><div class="toggle">
-              <input id="${rowId}-label-show-unit" type="checkbox" data-kind="generic-marker-label-show-unit" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_h = marker == null ? void 0 : marker.label) == null ? void 0 : _h.show_unit) === false ? "" : " checked"}>
+              <input id="${rowId}-label-show-unit" type="checkbox" data-kind="generic-marker-label-show-unit" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_j = marker == null ? void 0 : marker.label) == null ? void 0 : _j.show_unit) === false ? "" : " checked"}>
               <label for="${rowId}-label-show-unit">Show raw unit</label>
             </div></div>
             <div class="field-row generic-marker-precision"><label for="${rowId}-label-precision">Label precision</label>
-              <input id="${rowId}-label-precision" type="number" min="0" step="1" data-kind="generic-marker-label-precision" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute((_l = (_k = (_i = marker == null ? void 0 : marker.label) == null ? void 0 : _i.precision) != null ? _k : (_j = marker == null ? void 0 : marker.label) == null ? void 0 : _j.decimal) != null ? _l : "")}" placeholder="inherit">
+              <input id="${rowId}-label-precision" type="number" min="0" step="1" data-kind="generic-marker-label-precision" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute((_n = (_m = (_k = marker == null ? void 0 : marker.label) == null ? void 0 : _k.precision) != null ? _m : (_l = marker == null ? void 0 : marker.label) == null ? void 0 : _l.decimal) != null ? _n : "")}" placeholder="inherit">
             </div>
           </div>
           </div>
@@ -9623,7 +9710,7 @@ ${paintLayers}
       ${inheritControl}
       ${overrideNote}
       ${scopeType === "card" || override ? `
-        <div class="section-note">First two valid markers per lane render; excess markers remain editable and show a warning. Unresolved markers still reserve a slot and lane.</div>
+        <div class="section-note">Up to four markers render in each lane, including Peak, Floor, and Target. Excess generic markers remain editable and show a warning. Unresolved markers still reserve a slot and lane.</div>
         <div class="list generic-marker-list">${rows}</div>
         <button type="button" data-action="add-generic-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}">Add reference marker</button>` : ""}
     `;
@@ -9677,6 +9764,13 @@ ${paintLayers}
             return marker;
           });
           if (kind === "generic-marker-source-mode") return this._setGenericMarkerSourceMode(scope, markerIndex, value);
+          if (kind === "generic-marker-show-marker") {
+            return this._updateGenericMarker(scope, markerIndex, (marker) => {
+              if (value === false) marker.show_marker = false;
+              else delete marker.show_marker;
+              return marker;
+            });
+          }
           if (kind === "generic-marker-fixed") {
             return atLeaf("fixed", (_a = this._normalizeNumberValue(value)) != null ? _a : void 0);
           }
@@ -9715,6 +9809,11 @@ ${paintLayers}
                 if (text) label.text = text;
                 else delete label.text;
               }
+              if (kind === "generic-marker-label-entity") {
+                const entity = this._normalizeTextValue(value).trim();
+                if (entity) label.entity = entity;
+                else delete label.entity;
+              }
               if (kind === "generic-marker-label-show-value") label.show_value = value === true;
               if (kind === "generic-marker-label-show-unit") label.show_unit = value === true;
               if (kind === "generic-marker-label-precision") {
@@ -9740,6 +9839,7 @@ ${paintLayers}
             var _a;
             if (!this._isObject(rawMarker)) return rawMarker;
             const marker = this._cloneDeep(rawMarker);
+            if (marker.show_marker === true) delete marker.show_marker;
             if (this._isObject(marker.at)) {
               const at = this._cloneDeep(marker.at);
               const fixed = this._normalizeNumberValue(at.fixed);
@@ -11537,7 +11637,7 @@ ${paintLayers}
           if (!this.shadowRoot) return;
           const entities = this._getEntitiesValue();
           const syncPicker = (picker) => {
-            var _a, _b;
+            var _a, _b, _c, _d;
             const kind = picker.dataset.kind;
             const indexValue = picker.dataset.index;
             const index = Number(indexValue);
@@ -11595,6 +11695,12 @@ ${paintLayers}
               picker.value = (_b = this._getGenericMarkerSource(marker).entity) != null ? _b : "";
               picker.label = "Reference marker entity";
             }
+            if (kind === "generic-marker-label-entity") {
+              const scope = this._getGenericMarkerScope(picker);
+              const marker = this._getGenericMarkers(scope)[Number(picker.dataset.markerIndex)];
+              picker.value = (_d = (_c = marker == null ? void 0 : marker.label) == null ? void 0 : _c.entity) != null ? _d : "";
+              picker.label = "Label content entity";
+            }
           };
           [
             'ha-entity-picker[data-kind="entity-picker"]',
@@ -11606,7 +11712,8 @@ ${paintLayers}
             'ha-entity-picker[data-kind="entity-override-max-entity-source"]',
             'ha-entity-picker[data-kind="entity-baseline-entity-source"]',
             'ha-entity-picker[data-kind="entity-target-entity-source"]',
-            'ha-entity-picker[data-kind="generic-marker-entity"]'
+            'ha-entity-picker[data-kind="generic-marker-entity"]',
+            'ha-entity-picker[data-kind="generic-marker-label-entity"]'
           ].forEach((selector) => {
             this.shadowRoot.querySelectorAll(selector).forEach(syncPicker);
           });
@@ -11622,7 +11729,8 @@ ${paintLayers}
                 'ha-entity-picker[data-kind="entity-override-max-entity-source"]',
                 'ha-entity-picker[data-kind="entity-baseline-entity-source"]',
                 'ha-entity-picker[data-kind="entity-target-entity-source"]',
-                'ha-entity-picker[data-kind="generic-marker-entity"]'
+                'ha-entity-picker[data-kind="generic-marker-entity"]',
+                'ha-entity-picker[data-kind="generic-marker-label-entity"]'
               ].forEach((selector) => {
                 var _a;
                 (_a = this.shadowRoot) == null ? void 0 : _a.querySelectorAll(selector).forEach(syncPicker);

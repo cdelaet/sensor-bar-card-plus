@@ -1,0 +1,43 @@
+# Battery power stays anchored to the bar scale while label-only generic
+# markers show related state and energy information at the track endpoints.
+type: custom:sensor-bar-card-plus
+title: Battery Information
+
+entities:
+  - entity: sensor.sbcp_showcase_battery_power
+    name: Battery power
+    icon: mdi:battery
+
+scale:
+  min:
+    fixed: -5000
+  max:
+    fixed: 5000
+
+baseline:
+  fixed: 0
+
+markers:
+  - at: 0%
+    show_marker: false
+    lane: above
+    label:
+      show: true
+      text: Charge
+      entity: sensor.sbcp_docs_battery_soc
+      precision: 1
+
+  - at: 100%
+    show_marker: false
+    lane: above
+    label:
+      show: true
+      text: Session energy
+      entity: sensor.sbcp_showcase_session_energy
+      precision: 1
+
+layout:
+  height: 34
+  label:
+    position: left
+    width: 120

@@ -261,8 +261,19 @@ export function buildRowViewModel(options) {
       const value = getNormalizedResolvableNumericValue(hass, marker.source, safeMin, safeMax);
       const visible = Number.isFinite(value);
       const markerPrecision = marker.label.precision ?? decimal;
+      const labelStateObj = marker.label.entity ? hass?.states?.[marker.label.entity] : null;
+      const rawLabelState = labelStateObj?.state;
+      const cleanLabelState = typeof rawLabelState === 'string' ? rawLabelState.trim() : '';
+      const usableLabelState = labelStateObj && cleanLabelState
+        && !['unknown', 'unavailable'].includes(cleanLabelState.toLowerCase());
+      const labelValue = marker.label.entity
+        ? usableLabelState ? getFiniteNumber(cleanLabelState) ?? cleanLabelState : null
+        : value;
+      const labelUnit = marker.label.entity
+        ? (usableLabelState ? labelStateObj?.attributes?.unit_of_measurement ?? '' : '')
+        : targetUnit;
       const label = marker.label.show
-        ? createMarkerLabelPresentation(value, targetUnit, markerPrecision, {
+        ? createMarkerLabelPresentation(labelValue, labelUnit, markerPrecision, {
           text: marker.label.text,
           showValue: marker.label.showValue,
           showUnit: marker.label.showUnit,
@@ -277,6 +288,7 @@ export function buildRowViewModel(options) {
         color: marker.color,
         shape: marker.shape,
         direction: marker.direction,
+        showMarker: marker.showMarker,
         label,
         labelVisible: marker.label.show,
       };

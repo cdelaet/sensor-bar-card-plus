@@ -240,7 +240,11 @@ Use this overview to find a field by YAML path. Exact scope and behavior are des
 
 | Path | Default | Values | Description |
 |---|---:|---|---|
-| `markers[]` | `[]` | list | Generic reference markers. The card-level list is inherited; an entity-level list replaces it, and `markers: []` clears it. Each item supports `at`, `lane`, `shape`, `direction`, `color`, and the shared `label` fields. Direction defaults to `inward`; Circle and Diamond are visually unaffected. |
+| `markers[]` | `[]` | list | Generic reference markers. The card-level list is inherited; an entity-level list replaces it, and `markers: []` clears it. Each item supports `at`, `show_marker`, `lane`, `shape`, `direction`, `color`, and `label`; `label.entity` independently supplies dynamic label content. Direction defaults to `inward`; Circle and Diamond are visually unaffected. |
+| `markers[].show_marker` | `true` | boolean | Hides only the marker glyph when false. The anchor position, lane, and label remain active. |
+| `markers[].label.show` | `false` | boolean | Enables the generic marker label. `label.entity` does not implicitly enable it. |
+| `markers[].label.entity` | absent | entity ID | Optional independent content source. It supplies label state and its own unit without affecting `at`. |
+| `markers[].label.precision` | inherited | number | Numeric label precision; defaults to the row's `formatting.decimal`. |
 
 ### Formatting
 
@@ -1391,11 +1395,11 @@ The Floor marker tracks the lowest finite value observed for the current card se
 
 A generic marker source can be a finite fixed number, a percentage string from 0% through 100%, an entity ID, or an entity with an optional fixed fallback. Percentage positions map to the effective row scale. If both an entity and fixed fallback are configured, a finite entity value takes precedence; the fallback is used when the entity is missing or non-finite. Marker source entity units are not converted to the row unit.
 
-The first two valid generic markers in each lane, in configuration order, are accepted. Malformed entries are skipped without consuming a slot. An accepted marker that is temporarily unresolved stays in its configured lane and reserves its slot; later valid markers do not move into that slot. Target, Peak, and Floor do not count toward generic marker capacity. Finite values outside the row scale keep their actual value for labels while their glyph is clamped to the nearest track endpoint. Nearby labels can overlap; the card does not automatically stack them.
+Each lane holds up to four markers. Peak occupies one `above` slot; Floor and Target each occupy one `below` slot when enabled and configured. Generic markers use only the capacity remaining in their configured lane, so there is no separate maximum for generic markers across the card. Generic markers are considered in configuration order: malformed entries do not consume capacity, and an excess marker in a full lane is skipped while later markers in the other lane are still considered. Markers are not moved between lanes. An accepted marker that is temporarily unresolved stays in its configured lane and reserves its slot. `show_marker: false` hides only the glyph; the marker still consumes a slot. Finite values outside the row scale keep their actual value for labels while their glyph is clamped to the nearest track endpoint. Nearby labels can overlap; the card does not automatically stack them.
 
 ## Generic Reference Markers
 
-Use `markers:` to add up to two reference markers in each lane. Generic markers are configured references, not trackers. They share the row's scale and effective unit; SBCP does not convert values from a dynamic source entity.
+Use `markers:` to configure generic references. Up to four markers can appear in each lane, counting Peak in `above` and Floor and Target in `below`; the accepted generic-marker count depends on the remaining lane capacity. Generic markers are configured references, not trackers. Marker position is controlled only by `at`; optional `label.entity` independently supplies the displayed label value and unit. Neither source is converted between units.
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -1437,11 +1441,34 @@ entities:
 
 `at` accepts a fixed value (`{ fixed: 75 }`), a dynamic entity (`{ entity: sensor.limit }`), an entity with fixed fallback, or a percentage string such as `35%`. Percentages are inclusive from `0%` to `100%` of the effective row scale. Their labels show the resolved scale value. Finite fixed and dynamic values outside the scale remain valid: only their graphical position is clamped, while the label keeps the original value.
 
-Markers default to the `below` lane, `circle` shape, color `#888888`, and a hidden label. The supported shapes are `circle`, `diamond`, `triangle`, `chevron`, `arrow`, and `pin`; lanes are `above` and `below`. Direction defaults to `inward`; `direction: inward | outward` controls directional shapes, while Circle and Diamond are visually unaffected. Target, Peak, and Floor inherit their card-level direction in entity rows unless overridden. Generic markers are inherited as a card-level list, or replaced as a whole by an entity-level `markers` list.
+Markers default to a visible glyph, the `below` lane, `circle` shape, color `#888888`, and a hidden label. Set `show_marker: false` to retain the marker's position and label while hiding only its glyph. The supported shapes are `circle`, `diamond`, `triangle`, `chevron`, `arrow`, and `pin`; lanes are `above` and `below`. Direction defaults to `inward`; `direction: inward | outward` controls directional shapes, while Circle and Diamond are visually unaffected. Target, Peak, and Floor inherit their card-level direction in entity rows unless overridden. Generic markers are inherited as a card-level list, or replaced as a whole by an entity-level `markers` list.
 
-A shown marker label is composed from `text`, `show_value` (default `true`), and `show_unit` (default `true`), each independently enabled; `label.show` enables the label. Components are joined by one space. If all three components are disabled or absent, no label is rendered. The numeric component defaults to the row's effective `formatting.decimal` and the unit component uses the effective row unit. Set `label.precision: 0` for integer precision. For compatibility, generic, Peak, and Floor labels also accept `label.decimal`; Target continues to accept its established `target.label.decimal` spelling. Use `label.show_unit: false` to omit the effective row unit. Dynamic source units are ignored, and labels remain in the row unit even when a marker falls back to its fixed value. The former marker-label `unit` option is unsupported; use `show_unit`.
+A shown marker label is composed from `text`, `show_value` (default `true`), and `show_unit` (default `true`), each independently enabled; `label.show: true` enables the label. Components are joined by one space. If all components are absent or suppressed, no label is rendered. Without `label.entity`, the value comes from the resolved `at` position and the unit is the row's effective unit. With `label.entity`, its state supplies the value and its own `unit_of_measurement` supplies the unit; this content entity never changes the marker position. Numeric content uses `label.precision` when set, otherwise the row's effective `formatting.decimal`. Text states are shown as text, and units are never converted. A missing, empty, `unknown`, or `unavailable` label entity omits both its value and unit; any configured `text` remains visible. Marker position and visibility continue to depend only on `at`. For compatibility, generic, Peak, and Floor labels also accept `label.decimal`; Target continues to accept its established `target.label.decimal` spelling. Use `label.show_unit: false` to omit the unit. The former marker-label `unit` option is unsupported; use `show_unit`.
 
-At card scope, `markers:` supplies the list inherited by each entity. An entity may replace the list with its own `markers: [...]`; `markers: []` explicitly clears the inherited list. Lists replace rather than merge. A valid but unresolved marker still reserves its lane and one of that lane's two slots. Malformed markers are skipped without consuming a slot; further valid markers remain in configuration but are ignored at runtime with a non-fatal warning. Target, Peak, and Floor do not count toward this limit. Nearby marker labels may overlap.
+For example, a fixed endpoint can act as an information anchor while the label follows a separate numeric or textual sensor:
+
+```yaml
+markers:
+  - at:
+      fixed: 100
+    show_marker: false
+    lane: above
+    label:
+      show: true
+      text: Daily energy
+      entity: sensor.daily_energy
+      precision: 1
+  - at: 0%
+    show_marker: false
+    lane: below
+    label:
+      show: true
+      entity: sensor.battery_status
+```
+
+The first marker could display `Daily energy 12.4 kWh`; the second can display a text state such as `Charging`. Label-only anchors still count toward their lane's four-marker capacity and retain normal lane layout and endpoint clamping.
+
+At card scope, `markers:` supplies the list inherited by each entity. An entity may replace the list with its own `markers: [...]`; `markers: []` explicitly clears the inherited list. Lists replace rather than merge. A valid but unresolved marker still reserves its configured lane. Malformed markers do not consume capacity. A generic marker assigned to a full lane remains in configuration but is not rendered and produces a non-fatal warning; later markers in the other lane are still considered. Peak, Floor, and Target count toward their respective lane limits. Nearby marker labels may overlap.
 
 ## Formatting
 

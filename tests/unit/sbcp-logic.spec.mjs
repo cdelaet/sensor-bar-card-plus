@@ -3223,6 +3223,33 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(card._shouldUpdate(card._hass, newSourceChanged)).toBe(true);
   });
 
+  it('watches accepted generic marker label entities independently from position sources', () => {
+    const card = createCard();
+    card._render = () => {};
+    card.setConfig({
+      markers: [{
+        at: { entity: 'sensor.position' },
+        label: { show: true, entity: 'sensor.label_content' },
+      }],
+      entities: [{ entity: 'sensor.row' }],
+    });
+
+    const row = { state: '20', attributes: {} };
+    const position = { state: '50', attributes: {} };
+    const label = { state: 'Charging', attributes: {} };
+    card._hass = { states: { 'sensor.row': row, 'sensor.position': position, 'sensor.label_content': label } };
+    expect(card._shouldUpdate(card._hass, { states: {
+      'sensor.row': row,
+      'sensor.position': position,
+      'sensor.label_content': { state: 'Discharging', attributes: {} },
+    } })).toBe(true);
+    expect(card._shouldUpdate(card._hass, { states: {
+      'sensor.row': row,
+      'sensor.position': { state: '65', attributes: {} },
+      'sensor.label_content': label,
+    } })).toBe(true);
+  });
+
   it('supports baseline direction color shorthand and expanded color objects', () => {
     const card = createCard();
     const shorthandCfg = card.normalizeCardConfig({

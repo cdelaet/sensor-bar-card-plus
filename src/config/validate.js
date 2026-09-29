@@ -136,6 +136,8 @@ function validateGenericMarkers(diagnostics, markers, invalidList, path, entity 
     if (marker.invalidDirection) {
       addWarning(diagnostics, 'markers.invalid_direction', 'Invalid marker direction; using inward.', `${markerPath}.direction`, entity);
     }
+    if (marker.invalidShowMarker) addWarning(diagnostics, 'markers.invalid_show_marker', 'Marker show_marker must be a boolean; using true.', `${markerPath}.show_marker`, entity);
+    if (marker.label?.invalidEntity) addWarning(diagnostics, 'markers.invalid_label_entity', 'Marker label entity must be a valid entity ID; ignoring it.', `${markerPath}.label.entity`, entity);
     if (marker.label?.invalidShow) addWarning(diagnostics, 'markers.invalid_label_show', 'Marker label show must be a boolean; using the existing fallback.', `${markerPath}.label.show`, entity);
     if (marker.label?.invalidText) addWarning(diagnostics, 'markers.invalid_label_text', 'Marker label text must be a string; ignoring it.', `${markerPath}.label.text`, entity);
     if (marker.label?.invalidShowValue) addWarning(diagnostics, 'markers.invalid_label_show_value', 'Marker label show_value must be a boolean; using the inherited or default value.', `${markerPath}.label.show_value`, entity);
@@ -143,7 +145,7 @@ function validateGenericMarkers(diagnostics, markers, invalidList, path, entity 
     if (marker.label?.invalidPrecision) addWarning(diagnostics, 'markers.invalid_label_precision', 'Marker label precision must be a non-negative integer; using the inherited or row precision.', `${markerPath}.label.${marker.label.invalidPrecisionKey ?? 'precision'}`, entity);
     if (marker.label?.unsupportedUnit) addWarning(diagnostics, 'markers.unsupported_label_unit', 'Marker label unit is no longer supported; use show_unit instead.', `${markerPath}.label.unit`, entity);
     if (marker.valid && !marker.accepted) {
-      addWarning(diagnostics, 'markers.excess_capacity', `Only the first two valid markers in the ${marker.lane} lane are rendered.`, markerPath, entity);
+      addWarning(diagnostics, 'markers.excess_capacity', 'This marker is not rendered because its lane already has four markers.', markerPath, entity);
     }
   }
 }
@@ -275,6 +277,13 @@ export function validateNormalizedConfig(config) {
         `${path}.markers`,
         entityId
       );
+    } else {
+      const inheritedOverflow = (entityConfig.generic_markers ?? []).filter((marker) =>
+        marker.valid && !marker.accepted && config.generic_markers?.[marker.index]?.accepted === true
+      );
+      if (inheritedOverflow.length) {
+        validateGenericMarkers(diagnostics, inheritedOverflow, false, `${path}.markers`, entityId);
+      }
     }
   }
 

@@ -4655,6 +4655,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           'marker-index': markerIndex,
         })
         : '';
+      const labelEntitySource = this._renderEntitySourceInput(
+        'generic-marker-label-entity', scopeIndex, marker?.label?.entity ?? '', 'sensor.information', {
+          'scope-type': scopeType,
+          'marker-index': markerIndex,
+        }
+      );
       return `
         <div class="generic-marker-item" data-marker-ui-id="${markerUiId}" data-expanded="${expanded ? 'true' : 'false'}">
           <div class="generic-marker-header">
@@ -4733,11 +4739,19 @@ export class SensorBarCardPlusEditor extends HTMLElement {
             })}
           </div>
           <div class="field-row"><div class="toggle">
+            <input id="${rowId}-show-marker" type="checkbox" data-kind="generic-marker-show-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.show_marker === false ? '' : ' checked'}>
+            <label for="${rowId}-show-marker">Show marker glyph</label>
+          </div></div>
+          <div class="field-row"><div class="toggle">
             <input id="${rowId}-label-show" type="checkbox" data-kind="generic-marker-label-show" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.label?.show === true ? ' checked' : ''}>
             <label for="${rowId}-label-show">Show label</label>
           </div></div>
           <div class="field-row"><label for="${rowId}-label-text">Label text</label>
             <input id="${rowId}-label-text" type="text" data-kind="generic-marker-label-text" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(marker?.label?.text ?? '')}" placeholder="optional semantic text">
+          </div>
+          <div class="field-row">
+            <label>Label content entity</label>
+            ${labelEntitySource}
           </div>
           <div class="inline-row generic-marker-options">
             <div class="field-row"><div class="toggle">
@@ -4770,7 +4784,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       ${inheritControl}
       ${overrideNote}
       ${scopeType === 'card' || override ? `
-        <div class="section-note">First two valid markers per lane render; excess markers remain editable and show a warning. Unresolved markers still reserve a slot and lane.</div>
+        <div class="section-note">Up to four markers render in each lane, including Peak, Floor, and Target. Excess generic markers remain editable and show a warning. Unresolved markers still reserve a slot and lane.</div>
         <div class="list generic-marker-list">${rows}</div>
         <button type="button" data-action="add-generic-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}">Add reference marker</button>` : ''}
     `;
@@ -4828,6 +4842,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return marker;
     });
     if (kind === 'generic-marker-source-mode') return this._setGenericMarkerSourceMode(scope, markerIndex, value);
+    if (kind === 'generic-marker-show-marker') {
+      return this._updateGenericMarker(scope, markerIndex, (marker) => {
+        if (value === false) marker.show_marker = false;
+        else delete marker.show_marker;
+        return marker;
+      });
+    }
     if (kind === 'generic-marker-fixed') {
       return atLeaf('fixed', this._normalizeNumberValue(value) ?? undefined);
     }
@@ -4867,6 +4888,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           if (text) label.text = text;
           else delete label.text;
         }
+        if (kind === 'generic-marker-label-entity') {
+          const entity = this._normalizeTextValue(value).trim();
+          if (entity) label.entity = entity;
+          else delete label.entity;
+        }
         if (kind === 'generic-marker-label-show-value') label.show_value = value === true;
         if (kind === 'generic-marker-label-show-unit') label.show_unit = value === true;
         if (kind === 'generic-marker-label-precision') {
@@ -4892,6 +4918,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     nextTarget.markers = nextTarget.markers.map((rawMarker) => {
       if (!this._isObject(rawMarker)) return rawMarker;
       const marker = this._cloneDeep(rawMarker);
+      if (marker.show_marker === true) delete marker.show_marker;
       if (this._isObject(marker.at)) {
         const at = this._cloneDeep(marker.at);
         const fixed = this._normalizeNumberValue(at.fixed);
@@ -6780,6 +6807,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         picker.value = this._getGenericMarkerSource(marker).entity ?? '';
         picker.label = 'Reference marker entity';
       }
+      if (kind === 'generic-marker-label-entity') {
+        const scope = this._getGenericMarkerScope(picker);
+        const marker = this._getGenericMarkers(scope)[Number(picker.dataset.markerIndex)];
+        picker.value = marker?.label?.entity ?? '';
+        picker.label = 'Label content entity';
+      }
     };
 
     [
@@ -6793,6 +6826,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       'ha-entity-picker[data-kind="entity-baseline-entity-source"]',
       'ha-entity-picker[data-kind="entity-target-entity-source"]',
       'ha-entity-picker[data-kind="generic-marker-entity"]',
+      'ha-entity-picker[data-kind="generic-marker-label-entity"]',
     ].forEach((selector) => {
       this.shadowRoot.querySelectorAll(selector).forEach(syncPicker);
     });
@@ -6809,6 +6843,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           'ha-entity-picker[data-kind="entity-baseline-entity-source"]',
           'ha-entity-picker[data-kind="entity-target-entity-source"]',
           'ha-entity-picker[data-kind="generic-marker-entity"]',
+          'ha-entity-picker[data-kind="generic-marker-label-entity"]',
         ].forEach((selector) => {
           this.shadowRoot?.querySelectorAll(selector).forEach(syncPicker);
         });
