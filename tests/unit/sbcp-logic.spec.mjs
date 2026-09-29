@@ -5237,6 +5237,72 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(card._getNormalizedPercent(50, 50)).toMatchObject({ start: 50, end: 50, hidden: true });
   });
 
+  it('renders a structural Baseline indicator at the resolved fixed or percentage position', () => {
+    const render = ({ baseline, min, max, value }) => {
+      const card = createCard();
+      card._hass.states['sensor.row'] = { state: String(value), attributes: {} };
+      card._config = card.normalizeCardConfig({
+        min,
+        max,
+        ...(baseline === undefined ? {} : { baseline }),
+        entities: [{ entity: 'sensor.row' }],
+      });
+      const entity = card._config.entities[0];
+      return card._buildRow(entity, String(value), '', 50, '#22c55e', null, null, null, null, '#888', '#888', min, max);
+    };
+
+    const nonzeroBaseline = render({ baseline: { at: 100 }, min: 0, max: 400, value: 100 });
+    const percentageBaseline = render({ baseline: { at: '25%' }, min: -100, max: 300, value: 0 });
+    const noBaseline = render({ min: 0, max: 100, value: 50 });
+
+    expect(nonzeroBaseline).toContain('class="baseline-indicator" aria-hidden="true" style="left:25%;display:block;"');
+    expect(percentageBaseline).toContain('class="baseline-indicator" aria-hidden="true" style="left:25%;display:block;"');
+    expect(noBaseline).not.toContain('baseline-indicator');
+    expect(nonzeroBaseline).toContain('data-marker-lane-above="false" data-marker-lane-below="false"');
+  });
+
+  it('hides an unresolved dynamic Baseline safely and moves its indicator when it resolves', () => {
+    const card = createCard();
+    card._config = card.normalizeCardConfig({
+      min: 0,
+      max: 400,
+      entities: [{ entity: 'sensor.row', baseline: { at: 'sensor.dynamic_baseline' } }],
+    });
+    const entity = card._config.entities[0];
+    const rowState = { state: '100', attributes: {} };
+    card._hass.states['sensor.row'] = rowState;
+    const html = card._buildRow(entity, '100', 'W', 25, '#22c55e', null, null, null, null, '#888', '#888', 0, 400);
+    const indicator = { style: { left: '', display: '' } };
+    const row = {
+      dataset: {},
+      querySelector: (selector) => selector === '.baseline-indicator' ? indicator : null,
+    };
+
+    expect(html).toContain('class="baseline-indicator" aria-hidden="true" style="display:none;"');
+    card._patchRow(row, entity, rowState);
+    expect(indicator.style.display).toBe('none');
+
+    card._hass.states['sensor.dynamic_baseline'] = { state: '100', attributes: {} };
+    card._patchRow(row, entity, rowState);
+    expect(indicator.style).toMatchObject({ left: '25%', display: 'block' });
+
+    card._hass.states['sensor.dynamic_baseline'] = { state: 'unavailable', attributes: {} };
+    card._patchRow(row, entity, rowState);
+    expect(indicator.style.display).toBe('none');
+  });
+
+  it('keeps the Baseline indicator structural and separate from marker and Reveal Fill timing', () => {
+    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
+
+    expect(source).toContain('.baseline-indicator {\n          position: absolute;\n          top: 0;\n          bottom: 0;\n          width: 1px;');
+    expect(source).toContain('background-color: var(--primary-text-color, currentColor);\n          opacity: 0.6;');
+    expect(source).toContain('transition: left 0.6s cubic-bezier(0.4,0,0.2,1);\n          z-index: 3;');
+    expect(source).toContain('transition: clip-path var(--sbcp-reveal-duration, 600ms) cubic-bezier(0.4,0,0.2,1);');
+    expect(source).toContain('.target-marker {\n          z-index: 6;');
+    expect(source).toContain('.peak-marker {\n          z-index: 7;');
+    expect(source).toContain('.needle-layer {\n          position: absolute;\n          inset: 0;\n          overflow: hidden;\n          border-radius: inherit;\n          pointer-events: none;\n          z-index: 5;');
+  });
+
   it('distinguishes value endpoints from baseline endpoints', () => {
     const card = createCard();
 

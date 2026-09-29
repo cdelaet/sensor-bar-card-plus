@@ -2580,6 +2580,102 @@ for (const scenario of scenarios) {
   });
 }
 
+test('Baseline indicator follows the themed foreground and dynamic Baseline without moving markers', async ({ page }) => {
+  const config = {
+    type: 'custom:sensor-bar-card-plus',
+    min: 0,
+    max: 100,
+    target: 60,
+    entities: [{
+      entity: 'sensor.baseline_row',
+      baseline: { at: 'sensor.dynamic_baseline' },
+      peak: { enabled: true, reset: 'never' },
+      floor: { enabled: true, reset: 'never' },
+      markers: [
+        { at: { fixed: 20 }, lane: 'below', shape: 'circle' },
+        { at: { fixed: 80 }, lane: 'above', shape: 'circle' },
+      ],
+    }],
+  };
+  await render(page, {
+    config,
+    states: {
+      'sensor.baseline_row': sensor(25, { friendly_name: 'Baseline row' }),
+      'sensor.dynamic_baseline': sensor(25, { friendly_name: 'Dynamic baseline' }),
+    },
+  });
+
+  const result = await page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    const row = card.shadowRoot.querySelector('.row[data-entity="sensor.baseline_row"]');
+    const track = row.querySelector('.bar-track');
+    const indicator = row.querySelector('.baseline-indicator');
+    const readMarkerPositions = () => [
+      row.querySelector('.target-marker')?.style.left,
+      row.querySelector('.peak-marker')?.style.left,
+      row.querySelector('.floor-marker')?.style.left,
+      ...[...row.querySelectorAll('.generic-marker')].map((marker) => marker.style.left),
+    ];
+
+    card.style.setProperty('--primary-text-color', 'rgb(248, 250, 252)');
+    const darkColor = getComputedStyle(indicator).backgroundColor;
+    card.style.setProperty('--primary-text-color', 'rgb(31, 41, 55)');
+    const lightColor = getComputedStyle(indicator).backgroundColor;
+    const beforeMarkers = readMarkerPositions();
+    const before = {
+      display: getComputedStyle(indicator).display,
+      left: indicator.style.left,
+      width: getComputedStyle(indicator).width,
+      height: indicator.getBoundingClientRect().height,
+      trackHeight: track.getBoundingClientRect().height,
+      opacity: getComputedStyle(indicator).opacity,
+      transitionDuration: getComputedStyle(indicator).transitionDuration,
+      zIndex: getComputedStyle(indicator).zIndex,
+      fillDuration: getComputedStyle(row.querySelector('.bar-fill-reveal')).transitionDuration,
+      markerLaneAbove: row.querySelector('.main-line').dataset.markerLaneAbove,
+      markerLaneBelow: row.querySelector('.main-line').dataset.markerLaneBelow,
+      markerPositions: beforeMarkers,
+      markerLaneAttribute: indicator.hasAttribute('data-lane'),
+    };
+
+    card.hass = {
+      states: {
+        'sensor.baseline_row': window.__sbcpCreateState(25, { friendly_name: 'Baseline row', unit_of_measurement: 'W' }),
+        'sensor.dynamic_baseline': window.__sbcpCreateState(75, { friendly_name: 'Dynamic baseline', unit_of_measurement: 'W' }),
+      },
+    };
+    return {
+      darkColor,
+      lightColor,
+      before,
+      afterLeft: indicator.style.left,
+      afterDisplay: getComputedStyle(indicator).display,
+      afterMarkerPositions: readMarkerPositions(),
+      afterFillDuration: getComputedStyle(row.querySelector('.bar-fill-reveal')).transitionDuration,
+    };
+  });
+
+  expect(result.darkColor).toBe('rgb(248, 250, 252)');
+  expect(result.lightColor).toBe('rgb(31, 41, 55)');
+  expect(result.before).toMatchObject({
+    display: 'block',
+    left: '25%',
+    width: '1px',
+    opacity: '0.6',
+    transitionDuration: '0.6s',
+    zIndex: '3',
+    fillDuration: '0.6s',
+    markerLaneAbove: 'true',
+    markerLaneBelow: 'true',
+    markerLaneAttribute: false,
+  });
+  expect(result.before.height).toBeCloseTo(result.before.trackHeight, 1);
+  expect(result.afterLeft).toBe('75%');
+  expect(result.afterDisplay).toBe('block');
+  expect(result.afterMarkerPositions).toEqual(result.before.markerPositions);
+  expect(result.afterFillDuration).toBe('0.15s');
+});
+
 test('Reveal Fill crossing selects adaptive timing and preserves settled Baseline geometry', async ({ page }) => {
   const config = {
     type: 'custom:sensor-bar-card-plus',

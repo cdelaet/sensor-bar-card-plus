@@ -2995,12 +2995,25 @@
         .bar-fill-reveal.no-anim {
           transition: none;
         }
+        .baseline-indicator {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 1px;
+          transform: translateX(-50%);
+          background-color: var(--primary-text-color, currentColor);
+          opacity: 0.6;
+          pointer-events: none;
+          transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
+          z-index: 3;
+        }
         .row[data-bar-animated="false"] .bar-fill-reveal,
         .row[data-bar-animated="false"] .needle-marker,
         .row[data-bar-animated="false"] .target-marker,
         .row[data-bar-animated="false"] .peak-marker,
         .row[data-bar-animated="false"] .floor-marker,
         .row[data-bar-animated="false"] .generic-marker,
+        .row[data-bar-animated="false"] .baseline-indicator,
         .row[data-bar-animated="false"] .target-value-label,
         .row[data-bar-animated="false"] .peak-value-label,
         .row[data-bar-animated="false"] .floor-value-label,
@@ -5044,7 +5057,7 @@
           this._setStyleIfChanged(labelEl, "--marker-contrast-color", this._getMarkerContrastColor(markerColor));
         }
         _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
-          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F;
           const ecfg = this._resolve(entityCfg);
           const stateObj = (_c = (_b = (_a = this._hass) == null ? void 0 : _a.states) == null ? void 0 : _b[entityCfg.entity]) != null ? _c : null;
           if (stateObj) this._updateExtrema(entityCfg, ecfg, stateObj);
@@ -5075,20 +5088,23 @@
           const rawValue = (_o = rowViewModel == null ? void 0 : rowViewModel.numericValue) != null ? _o : this._getFiniteNumber(stateDisplay);
           const needleState = (_p = rowViewModel == null ? void 0 : rowViewModel.needle) != null ? _p : this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
           const fillState = this._getFillRenderState(pct, "var(--sbcp-row-height)", ecfg, color, targetPct, baselinePct, safeMin, safeMax, needleState.show);
+          const baselineAt = (_q = ecfg.baseline) == null ? void 0 : _q.at;
+          const baselineConfigured = ((_r = ecfg.baseline) == null ? void 0 : _r.enabled) !== false && (Number.isFinite(baselinePct) || Boolean(baselineAt == null ? void 0 : baselineAt.entity) || (baselineAt == null ? void 0 : baselineAt.fixed) !== null && (baselineAt == null ? void 0 : baselineAt.fixed) !== void 0 || Number.isFinite(baselineAt == null ? void 0 : baselineAt.percent));
+          const baselineIndicator = baselineConfigured ? `<div class="baseline-indicator" aria-hidden="true" style="${Number.isFinite(baselinePct) ? `left:${baselinePct}%;display:block;` : "display:none;"}"></div>` : "";
           const peakMarker = this._renderMarker(peakMarkerModel);
           const targetMarker = this._renderMarker(targetMarkerModel);
           const floorMarker = this._renderMarker(floorMarkerModel);
           const targetValueLabel = (targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) ? `
-      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;visibility:${targetMarkerModel.visible && ((_q = targetMarkerModel.label) == null ? void 0 : _q.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(targetMarkerModel)}">
-        ${((_r = targetMarkerModel.label) == null ? void 0 : _r.text) ? escapeHtml(targetMarkerModel.label.text) : ""}
+      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;visibility:${targetMarkerModel.visible && ((_s = targetMarkerModel.label) == null ? void 0 : _s.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(targetMarkerModel)}">
+        ${((_t = targetMarkerModel.label) == null ? void 0 : _t.text) ? escapeHtml(targetMarkerModel.label.text) : ""}
       </div>` : "";
           const peakValueLabel = (peakMarkerModel == null ? void 0 : peakMarkerModel.labelVisible) ? `
-      <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;visibility:${peakMarkerModel.visible && ((_s = peakMarkerModel.label) == null ? void 0 : _s.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(peakMarkerModel)}">
-        ${peakMarkerModel.visible && ((_t = peakMarkerModel.label) == null ? void 0 : _t.text) ? escapeHtml(peakMarkerModel.label.text) : ""}
+      <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;visibility:${peakMarkerModel.visible && ((_u = peakMarkerModel.label) == null ? void 0 : _u.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(peakMarkerModel)}">
+        ${peakMarkerModel.visible && ((_v = peakMarkerModel.label) == null ? void 0 : _v.text) ? escapeHtml(peakMarkerModel.label.text) : ""}
       </div>` : "";
           const floorValueLabel = (floorMarkerModel == null ? void 0 : floorMarkerModel.labelVisible) ? `
-      <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;visibility:${floorMarkerModel.visible && ((_u = floorMarkerModel.label) == null ? void 0 : _u.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(floorMarkerModel)}">
-        ${floorMarkerModel.visible && ((_v = floorMarkerModel.label) == null ? void 0 : _v.text) ? escapeHtml(floorMarkerModel.label.text) : ""}
+      <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;visibility:${floorMarkerModel.visible && ((_w = floorMarkerModel.label) == null ? void 0 : _w.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(floorMarkerModel)}">
+        ${floorMarkerModel.visible && ((_x = floorMarkerModel.label) == null ? void 0 : _x.text) ? escapeHtml(floorMarkerModel.label.text) : ""}
       </div>` : "";
           const genericMarkers = genericMarkerModels.map((marker) => this._renderMarker(marker)).join("");
           const genericValueLabels = genericMarkerModels.filter((marker) => marker.labelVisible).map((marker) => {
@@ -5098,9 +5114,9 @@
         ${marker.visible && ((_b2 = marker.label) == null ? void 0 : _b2.text) ? escapeHtml(marker.label.text) : ""}
       </div>`;
           }).join("");
-          const needleMarker = ((_x = (_w = ecfg.bar) == null ? void 0 : _w.needle) == null ? void 0 : _x.show) && !Number.isFinite(baselinePct) ? `
+          const needleMarker = ((_z = (_y = ecfg.bar) == null ? void 0 : _y.needle) == null ? void 0 : _z.show) && !Number.isFinite(baselinePct) ? `
       <div class="needle-layer">
-        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_y = needleState.pct) != null ? _y : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
+        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_A = needleState.pct) != null ? _A : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
       </div>` : "";
           const paintLayers = fillState.paintLayers.map((layer) => `
                   <div class="bar-paint-layer" data-layer="${layer.id}" style="z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}"></div>`).join("");
@@ -5112,7 +5128,7 @@
           ${this._formatAboveValueMarkup(stateDisplay, unit, false)}
         </div>
       </div>` : "";
-          const heroSize = (_z = layout.hero.size) != null ? _z : "small";
+          const heroSize = (_B = layout.hero.size) != null ? _B : "small";
           const heroFontSize = layout.hero.value_size;
           const heroHeader = lp === "hero" ? `
       <div class="hero-line" data-hero-size="${heroSize}"${Number.isFinite(heroFontSize) ? ` style="--sbcp-hero-base-size:${heroFontSize}px"` : ""}>
@@ -5132,7 +5148,7 @@
           const escapedIcon = ecfg.icon && ecfg.icon !== false ? escapeHtml(ecfg.icon) : "";
           const mainIcon = escapedIcon && lp !== "hero" ? `<div class="icon-wrap"><ha-icon icon="${escapedIcon}"></ha-icon></div>` : "";
           return `
-      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${((_B = (_A = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _A.heightExplicit) != null ? _B : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_D = (_C = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _C.barAnimated) != null ? _D : bar.animated) ? "true" : "false"}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? "true" : "false"}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? "true" : "false"}">
+      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${((_D = (_C = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _C.heightExplicit) != null ? _D : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_F = (_E = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _E.barAnimated) != null ? _F : bar.animated) ? "true" : "false"}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? "true" : "false"}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? "true" : "false"}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${heroHeader}
@@ -5145,6 +5161,7 @@
                 <div class="bar-fill-reveal${bar.animated ? "" : " no-anim"}" style="${fillState.revealStyle}">
 ${paintLayers}
                 </div>
+                ${baselineIndicator}
                 ${innerLabel}
                 ${peakMarker}
                 ${targetMarker}
@@ -5181,6 +5198,7 @@ ${paintLayers}
           const display = rowViewModel.primaryPresentation.number;
           const displayUnit = rowViewModel.primaryPresentation.unit;
           const fillReveal = row.querySelector(".bar-fill-reveal");
+          const baselineIndicator = row.querySelector(".baseline-indicator");
           const paintLayer = row.querySelector('.bar-paint-layer[data-layer="base"]');
           const liveTargetPct = rowViewModel.targetPercent;
           const liveBaselinePct = rowViewModel.baselinePercent;
@@ -5201,6 +5219,12 @@ ${paintLayers}
           if (fillReveal) {
             this._setStyleTextIfChanged(fillReveal, `${fillState.revealStyle};--sbcp-reveal-duration:${revealDuration}ms`);
             this._setClassNameIfChanged(fillReveal, `bar-fill-reveal${ecfg.bar.animated ? "" : " no-anim"}`);
+          }
+          if (baselineIndicator) {
+            this._setStyleIfChanged(baselineIndicator, "display", Number.isFinite(liveBaselinePct) ? "block" : "none");
+            if (Number.isFinite(liveBaselinePct)) {
+              this._setStyleIfChanged(baselineIndicator, "left", `${liveBaselinePct}%`);
+            }
           }
           if (paintLayer) {
             const baseLayerState = fillState.paintLayers.find((layer) => layer.id === "base");
