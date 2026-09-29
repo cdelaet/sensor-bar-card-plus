@@ -1535,12 +1535,25 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         .bar-fill-reveal.no-anim {
           transition: none;
         }
+        .baseline-indicator {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 1px;
+          transform: translateX(-50%);
+          background-color: var(--primary-text-color, currentColor);
+          opacity: 0.6;
+          pointer-events: none;
+          transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
+          z-index: 3;
+        }
         .row[data-bar-animated="false"] .bar-fill-reveal,
         .row[data-bar-animated="false"] .needle-marker,
         .row[data-bar-animated="false"] .target-marker,
         .row[data-bar-animated="false"] .peak-marker,
         .row[data-bar-animated="false"] .floor-marker,
         .row[data-bar-animated="false"] .generic-marker,
+        .row[data-bar-animated="false"] .baseline-indicator,
         .row[data-bar-animated="false"] .target-value-label,
         .row[data-bar-animated="false"] .peak-value-label,
         .row[data-bar-animated="false"] .floor-value-label,
@@ -3816,6 +3829,16 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     const rawValue = rowViewModel?.numericValue ?? this._getFiniteNumber(stateDisplay);
     const needleState = rowViewModel?.needle ?? this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
     const fillState = this._getFillRenderState(pct, 'var(--sbcp-row-height)', ecfg, color, targetPct, baselinePct, safeMin, safeMax, needleState.show);
+    const baselineAt = ecfg.baseline?.at;
+    const baselineConfigured = ecfg.baseline?.enabled !== false && (
+      Number.isFinite(baselinePct)
+      || Boolean(baselineAt?.entity)
+      || baselineAt?.fixed !== null && baselineAt?.fixed !== undefined
+      || Number.isFinite(baselineAt?.percent)
+    );
+    const baselineIndicator = baselineConfigured
+      ? `<div class="baseline-indicator" aria-hidden="true" style="${Number.isFinite(baselinePct) ? `left:${baselinePct}%;display:block;` : 'display:none;'}"></div>`
+      : '';
 
     const peakMarker = this._renderMarker(peakMarkerModel);
     const targetMarker = this._renderMarker(targetMarkerModel);
@@ -3897,6 +3920,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
                 <div class="bar-fill-reveal${bar.animated ? '' : ' no-anim'}" style="${fillState.revealStyle}">
 ${paintLayers}
                 </div>
+                ${baselineIndicator}
                 ${innerLabel}
                 ${peakMarker}
                 ${targetMarker}
@@ -3935,6 +3959,7 @@ ${paintLayers}
     const displayUnit = rowViewModel.primaryPresentation.unit;
 
     const fillReveal = row.querySelector('.bar-fill-reveal');
+    const baselineIndicator = row.querySelector('.baseline-indicator');
     const paintLayer = row.querySelector('.bar-paint-layer[data-layer="base"]');
     const liveTargetPct = rowViewModel.targetPercent;
     const liveBaselinePct = rowViewModel.baselinePercent;
@@ -3962,6 +3987,12 @@ ${paintLayers}
     if (fillReveal) {
       this._setStyleTextIfChanged(fillReveal, `${fillState.revealStyle};--sbcp-reveal-duration:${revealDuration}ms`);
       this._setClassNameIfChanged(fillReveal, `bar-fill-reveal${ecfg.bar.animated ? '' : ' no-anim'}`);
+    }
+    if (baselineIndicator) {
+      this._setStyleIfChanged(baselineIndicator, 'display', Number.isFinite(liveBaselinePct) ? 'block' : 'none');
+      if (Number.isFinite(liveBaselinePct)) {
+        this._setStyleIfChanged(baselineIndicator, 'left', `${liveBaselinePct}%`);
+      }
     }
     if (paintLayer) {
       const baseLayerState = fillState.paintLayers.find(layer => layer.id === 'base');
