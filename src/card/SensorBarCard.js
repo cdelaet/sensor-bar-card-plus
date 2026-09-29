@@ -553,7 +553,7 @@ export class SensorBarCard extends HTMLElement {
         ecfg.target_marker?.source?.entity,
         ...(ecfg.generic_markers ?? [])
           .filter((marker) => marker.accepted)
-          .map((marker) => marker.source?.entity)
+          .flatMap((marker) => [marker.source?.entity, marker.label?.entity])
       ].filter(Boolean);
       
       for (const ent of entitiesToWatch) {
@@ -664,6 +664,14 @@ export class SensorBarCard extends HTMLElement {
     return labelSelector ? row.querySelector(labelSelector) : null;
   }
 
+  _getGenericMarkerForLabel(labelEl) {
+    const row = labelEl?.closest('.row');
+    const markerId = labelEl?.dataset?.markerId;
+    if (!row || !markerId) return null;
+    return [...row.querySelectorAll('.generic-marker[data-marker-id]')]
+      .find((marker) => marker.dataset.markerId === markerId) ?? null;
+  }
+
   _setMarkerHover(markerEl) {
     const label = this._getMarkerLabel(markerEl);
     if (!label || markerEl.style.display === 'none' || getComputedStyle(label).visibility !== 'visible') {
@@ -684,14 +692,17 @@ export class SensorBarCard extends HTMLElement {
 
   _handleMarkerPointerOver(event) {
     if (event.pointerType === 'touch') return;
-    const markerEl = event.target?.closest?.('.generic-marker, .target-marker, .peak-marker, .floor-marker');
+    const target = event.target?.closest?.('.generic-value-label[data-show-marker="false"], .generic-marker, .target-marker, .peak-marker, .floor-marker');
+    const markerEl = target?.matches?.('.generic-value-label') ? this._getGenericMarkerForLabel(target) : target;
     if (markerEl) this._setMarkerHover(markerEl);
   }
 
   _handleMarkerPointerOut(event) {
     if (event.pointerType === 'touch') return;
-    const markerEl = event.target?.closest?.('.generic-marker, .target-marker, .peak-marker, .floor-marker');
-    if (!markerEl || markerEl.contains(event.relatedTarget)) return;
+    const target = event.target?.closest?.('.generic-value-label[data-show-marker="false"], .generic-marker, .target-marker, .peak-marker, .floor-marker');
+    if (!target || target.contains(event.relatedTarget)) return;
+    const markerEl = target.matches('.generic-value-label') ? this._getGenericMarkerForLabel(target) : target;
+    if (!markerEl) return;
     this._clearMarkerHover(markerEl);
   }
 
@@ -1734,6 +1745,10 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           visibility: hidden;
           transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
         }
+        .generic-value-label[data-show-marker="false"] {
+          pointer-events: auto;
+          cursor: pointer;
+        }
         .peak-value-label {
           bottom: 100%;
           margin-bottom: 1px;
@@ -2183,6 +2198,13 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         }
         .generic-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
           display: block;
+        }
+        .generic-marker[data-show-marker="false"][data-shape] .peak-inset,
+        .generic-marker[data-show-marker="false"][data-shape] .peak-outset,
+        .generic-marker[data-show-marker="false"][data-shape] .target-inset,
+        .generic-marker[data-show-marker="false"][data-shape] .target-outset,
+        .generic-marker[data-show-marker="false"][data-shape] .marker-shape-svg {
+          display: none;
         }
         .marker-shape-svg path {
           display: none;
@@ -3736,7 +3758,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         ? ['peak-inset', 'peak-outset']
         : ['target-inset', 'target-outset'];
       return `
-      <div class="generic-marker" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+      <div class="generic-marker" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" data-show-marker="${marker.showMarker === false ? 'false' : 'true'}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
         <div class="${triangleClasses[0]}"></div>
         <div class="${triangleClasses[1]}"></div>
         <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
@@ -3770,6 +3792,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     this._setDatasetIfChanged(markerEl, 'shape', shape);
     this._setDatasetIfChanged(markerEl, 'lane', marker.lane ?? (marker.type === 'peak' ? 'above' : 'below'));
     this._setDatasetIfChanged(markerEl, 'direction', marker.direction ?? 'inward');
+    if (marker.type === 'generic') {
+      this._setDatasetIfChanged(markerEl, 'showMarker', marker.showMarker === false ? 'false' : 'true');
+    }
     const shapeSvg = markerEl.querySelector?.('.marker-shape-svg');
     if (shapeSvg) {
       this._setDatasetIfChanged(shapeSvg, 'shape', shape);
@@ -3859,7 +3884,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     const genericValueLabels = genericMarkerModels
       .filter((marker) => marker.labelVisible)
       .map((marker) => `
-      <div class="generic-value-label" data-marker-id="${escapeHtml(marker.id)}" data-lane="${marker.lane}" style="left:${Number.isFinite(marker.position) ? marker.position : 0}%;visibility:${marker.visible && marker.label?.text ? 'visible' : 'hidden'};${this._getMarkerLabelColorStyle(marker)}">
+      <div class="generic-value-label" data-marker-id="${escapeHtml(marker.id)}" data-lane="${marker.lane}" data-show-marker="${marker.showMarker === false ? 'false' : 'true'}" style="left:${Number.isFinite(marker.position) ? marker.position : 0}%;visibility:${marker.visible && marker.label?.text ? 'visible' : 'hidden'};${this._getMarkerLabelColorStyle(marker)}">
         ${marker.visible && marker.label?.text ? escapeHtml(marker.label.text) : ''}
       </div>`)
       .join('');
@@ -4074,6 +4099,7 @@ ${paintLayers}
       const labelEl = [...(row.querySelectorAll?.('.generic-value-label[data-marker-id]') ?? [])]
         .find((label) => label.dataset.markerId === markerId);
       if (!labelEl) return;
+      this._setDatasetIfChanged(labelEl, 'showMarker', marker?.showMarker === false ? 'false' : 'true');
       this._patchMarkerLabelAppearance(labelEl, marker);
       if (marker?.labelVisible && marker.visible && marker.label?.text) {
         this._setTextIfChanged(labelEl, marker.label?.text ?? null);

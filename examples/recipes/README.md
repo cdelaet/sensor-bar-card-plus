@@ -29,6 +29,7 @@ Practical energy and power-flow dashboards.
 | Recipe | Description |
 |---|---|
 | `energy/battery-flow.yaml` | Battery charge/discharge telemetry with baseline-centered flows |
+| `energy/battery-information-anchors.yaml` | Battery power with independent, label-only energy and charge references |
 | `energy/grid-import-export.yaml` | Grid import/export visualization with per-phase telemetry |
 | `energy/solar-production.yaml` | Solar production monitoring with semantic operating ranges |
 | `energy/ev-charging.yaml` | EV charging telemetry and household load monitoring |

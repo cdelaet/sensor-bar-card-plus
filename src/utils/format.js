@@ -32,9 +32,9 @@ export function createNumericPresentation(value, unit, decimal = null) {
 
 export function createMarkerLabelPresentation(value, unit, precision = null, options = {}) {
   const semanticText = typeof options.text === 'string' ? options.text : '';
-  const number = options.showValue === false || !Number.isFinite(value)
+  const number = options.showValue === false || value === null || value === undefined || value === ''
     ? ''
-    : formatNumericDisplay(value, precision);
+    : Number.isFinite(value) ? formatNumericDisplay(value, precision) : String(value);
   const cleanUnit = options.showUnit === false ? '' : String(unit ?? '').trim();
   const text = [semanticText, number, cleanUnit].filter(Boolean).join(' ');
   return {

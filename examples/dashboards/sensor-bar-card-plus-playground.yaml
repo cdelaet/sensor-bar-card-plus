@@ -8146,7 +8146,7 @@ views:
     content: |
       ### Five-card marker stress — 5 cards across
 
-      This is intentionally dense, not a showcase. Compare Target, Peak/Floor, above-only, both-lane generic markers, and coincident labels at one card width. Keep the resulting responsive and collision behavior visible; each generic lane stays within its two-marker capacity.
+      This is intentionally dense, not a showcase. Compare Target, Peak/Floor, above-only, both-lane generic markers, and coincident labels at one card width. Keep the resulting responsive and collision behavior visible; each lane accepts up to four markers, including Peak above and Target/Floor below. Generic markers fill the remaining slots in configuration order.
 
   - type: grid
     columns: 5
@@ -8266,7 +8266,7 @@ views:
     content: |
       ## Coexistence and capacity
 
-      A full stack can show seven glyphs: Peak plus two generic references above, Target plus Floor plus two generic references below. In the capacity examples, the first two valid generic markers in each lane are accepted; an unresolved accepted marker still occupies its slot, while malformed markers are skipped. Excess valid markers remain configured and produce a non-fatal warning.
+      Each lane can show up to four markers, including built-in references: Peak occupies one above slot, and Target plus Floor occupy below slots. Generic markers fill remaining slots in configuration order. A full lane skips later markers assigned to it but processing continues for the other lane; markers are not redistributed. Unresolved accepted markers and label-only markers still occupy slots, while malformed markers do not. Excess valid markers remain configured and produce a non-fatal warning.
 
   - type: entities
     title: Full-stack sample controls

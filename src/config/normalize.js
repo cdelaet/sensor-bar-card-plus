@@ -67,7 +67,29 @@ export function normalizeStructuredResolvableValue(input, inheritedResolvable = 
   return normalizeResolvableValue(input, null);
 }
 
-export function normalizeGenericMarkerList(input) {
+function hasConfiguredMarkerSource(source) {
+  return !!source && (
+    getFiniteNumber(source.fixed ?? source.value) !== null
+    || Number.isFinite(source.percent)
+    || !!source.entity
+  );
+}
+
+function applyGenericMarkerCapacity(markers, config) {
+  const occupied = {
+    above: config?.peak_marker?.show === true ? 1 : 0,
+    below: (config?.floor_marker?.show === true ? 1 : 0)
+      + (config?.target_marker?.enabled !== false && hasConfiguredMarkerSource(config?.target_marker?.source) ? 1 : 0),
+  };
+
+  return markers.map((marker) => {
+    const accepted = marker.valid && occupied[marker.lane] < 4;
+    if (accepted) occupied[marker.lane] += 1;
+    return { ...marker, accepted };
+  });
+}
+
+export function normalizeGenericMarkerList(input, capacityConfig = null) {
   if (!Array.isArray(input)) {
     return { markers: [], invalidList: input !== undefined };
   }
@@ -113,6 +135,12 @@ export function normalizeGenericMarkerList(input) {
       ? rawMarker.label
       : {};
     const labelConfig = normalizeMarkerLabelConfig(label);
+    const labelEntityInput = label.entity;
+    const labelEntity = typeof labelEntityInput === 'string' ? labelEntityInput.trim() : '';
+    const invalidLabelEntity = labelEntityInput !== undefined && labelEntityInput !== null && labelEntityInput !== ''
+      && !looksLikeEntityId(labelEntity);
+    const validLabelEntity = labelEntity && looksLikeEntityId(labelEntity) ? labelEntity : null;
+    const showMarker = typeof rawMarker.show_marker === 'boolean' ? rawMarker.show_marker : true;
 
     return {
       id: `generic-${index}`,
@@ -125,10 +153,13 @@ export function normalizeGenericMarkerList(input) {
       shape: validShape ? (rawMarker.shape ?? 'circle') : 'circle',
       direction,
       invalidDirection,
+      showMarker,
+      invalidShowMarker: rawMarker.show_marker !== undefined && typeof rawMarker.show_marker !== 'boolean',
       color: typeof rawMarker.color === 'string' && rawMarker.color.trim() ? rawMarker.color : '#888888',
       label: {
         show: label.show === true,
         text: labelConfig.label_text,
+        entity: validLabelEntity,
         showValue: labelConfig.label_show_value,
         showUnit: labelConfig.label_show_unit,
         precision: labelConfig.label_precision,
@@ -139,6 +170,7 @@ export function normalizeGenericMarkerList(input) {
         invalidPrecision: labelConfig.label_invalid_precision,
         invalidPrecisionKey: labelConfig.label_precision_key,
         unsupportedUnit: labelConfig.label_unsupported_unit,
+        invalidEntity: invalidLabelEntity,
       },
       valid: validSource && validLane,
       invalidSource: !validSource,
@@ -150,14 +182,7 @@ export function normalizeGenericMarkerList(input) {
     };
   });
 
-  const laneCounts = { above: 0, below: 0 };
-  for (const marker of markers) {
-    if (!marker.valid) continue;
-    if (laneCounts[marker.lane] < 2) marker.accepted = true;
-    laneCounts[marker.lane] += 1;
-  }
-
-  return { markers, invalidList: false };
+  return { markers: applyGenericMarkerCapacity(markers, capacityConfig), invalidList: false };
 }
 
 export function normalizeBaselineDirectionConfig(input, inheritedDirection = null) {
@@ -869,8 +894,11 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
   normalizedEntity.peak_marker = normalizePeakMarkerConfig(entityConfig, cardConfig);
   normalizedEntity.floor_marker = normalizeFloorMarkerConfig(entityConfig, cardConfig);
   const normalizedMarkers = entityConfig.markers === undefined
-    ? { markers: cardConfig?.generic_markers ?? [], invalidList: cardConfig?.generic_markers_invalid === true }
-    : normalizeGenericMarkerList(entityConfig.markers);
+    ? {
+      markers: applyGenericMarkerCapacity(cardConfig?.generic_markers ?? [], normalizedEntity),
+      invalidList: cardConfig?.generic_markers_invalid === true,
+    }
+    : normalizeGenericMarkerList(entityConfig.markers, normalizedEntity);
   normalizedEntity.generic_markers = normalizedMarkers.markers;
   normalizedEntity.generic_markers_invalid = normalizedMarkers.invalidList;
 
@@ -965,7 +993,7 @@ export function normalizeCardConfig(rawConfig) {
   normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);
   normalizedCard.peak_marker = normalizePeakMarkerConfig(baseConfig, null);
   normalizedCard.floor_marker = normalizeFloorMarkerConfig(baseConfig, null);
-  const normalizedMarkers = normalizeGenericMarkerList(baseConfig.markers);
+  const normalizedMarkers = normalizeGenericMarkerList(baseConfig.markers, normalizedCard);
   normalizedCard.generic_markers = normalizedMarkers.markers;
   normalizedCard.generic_markers_invalid = normalizedMarkers.invalidList;
   normalizedCard.entities = baseConfig.entities.map((entityCfg) =>

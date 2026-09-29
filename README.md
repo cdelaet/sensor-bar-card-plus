@@ -178,7 +178,7 @@ entities:
 
 Markers can occupy the `above` or `below` lane. Their shapes are Circle, Diamond, Triangle, Chevron, Arrow, and Pin. Direction (`inward` or `outward`) affects directional shapes; Circle and Diamond do not change with direction. Marker color and labels can distinguish a forecast, reserve, comfort bound, or other reference.
 
-There are two valid generic marker slots per lane; Target, Peak, and Floor do not use those slots. Nearby labels can overlap. Dynamic marker source units are not converted: labels use the row’s effective unit. A marker with an unresolved entity source may be hidden until it resolves; a configured fixed fallback is used when the source entity has no finite value. For ordering, inheritance, clamping, and full field syntax, see [Generic Reference Markers](docs/configuration.md#generic-reference-markers).
+Up to four markers can appear above the bar and four below it. Peak uses an above slot; Floor and Target use below slots. A marker label can display a different entity with `label.entity`, and `show_marker: false` makes it a label-only information anchor that still uses a slot. Nearby labels can overlap. For units, unavailable states, inheritance, clamping, and full syntax, see [Generic Reference Markers](docs/configuration.md#generic-reference-markers).
 
 ## Practical examples
 

@@ -8414,17 +8414,23 @@ describe('Sensor Bar Card Plus editor', () => {
   it('renders generic marker controls and preserves order, capacity feedback, and supported shapes', () => {
     const editor = createEditor();
     editor.setConfig({
-      markers: [{ at: { entity: 'sensor.limit', fixed: 50 } }, { at: '35%', lane: 'above' }, { at: { fixed: 75 }, lane: 'above' }],
+      markers: [
+        { at: { entity: 'sensor.limit', fixed: 50 }, show_marker: false, label: { show: true, entity: 'sensor.information' } },
+        { at: '35%', lane: 'above' },
+        { at: { fixed: 75 }, lane: 'above' },
+      ],
       entities: [{ entity: 'sensor.one' }],
     });
 
     const markup = editor._renderGenericMarkersEditor({ type: 'card' });
-    expect(markup).toContain('First two valid markers per lane render');
+    expect(markup).toContain('Up to four markers render in each lane');
     expect(markup).toContain('move-generic-marker-up');
     expect(markup).toContain('move-generic-marker-down');
     expect(markup).toContain('generic-marker-entity');
     expect(markup).toContain('generic-marker-percent');
     expect(markup).toContain('generic-marker-label-text');
+    expect(markup).toContain('generic-marker-label-entity');
+    expect(markup).toContain('generic-marker-show-marker');
     expect(markup).toContain('generic-marker-label-show-value');
     expect(markup).toContain('generic-marker-label-show-unit');
     expect(markup).toContain('generic-marker-label-precision');
@@ -8433,6 +8439,38 @@ describe('Sensor Bar Card Plus editor', () => {
       expect(markup).toContain(`<option value="${shape}"`);
     }
     expect(markup).toContain('#888888');
+  });
+
+  it('edits the independent label entity and show-marker option', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({ markers: [{ at: { fixed: 50 }, label: { show: true } }] });
+    editor._setGenericMarkerField({ type: 'card' }, 0, 'generic-marker-label-entity', 'sensor.daily_energy');
+    editor._setGenericMarkerField({ type: 'card' }, 0, 'generic-marker-show-marker', false);
+
+    expect(events.at(-2).detail.config.markers[0].label.entity).toBe('sensor.daily_energy');
+    expect(events.at(-1).detail.config.markers[0].show_marker).toBe(false);
+  });
+
+  it('removes cleared label entities and default show-marker values during serialization', () => {
+    const editor = createEditor();
+    editor.setConfig({ markers: [{
+      at: { fixed: 50 },
+      show_marker: false,
+      extension: { keep: true },
+      label: { show: true, text: 'Power', entity: 'sensor.daily_energy', show_unit: false },
+    }] });
+
+    editor._setGenericMarkerField({ type: 'card' }, 0, 'generic-marker-label-entity', 'sensor.other_energy');
+    editor._setGenericMarkerField({ type: 'card' }, 0, 'generic-marker-label-entity', '');
+    editor._setGenericMarkerField({ type: 'card' }, 0, 'generic-marker-show-marker', true);
+    const emitted = editor._cleanupEditorEmittedConfig(editor._cloneDeep(editor._draftConfig));
+
+    expect(emitted.markers[0]).toEqual({
+      at: { fixed: 50 },
+      extension: { keep: true },
+      label: { show: true, text: 'Power', show_unit: false },
+    });
   });
 
   it('adds, removes, and reorders generic markers without losing item data', () => {

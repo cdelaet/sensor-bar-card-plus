@@ -1650,6 +1650,137 @@ test('generic marker DOM identity survives unresolved and resolved source update
   });
 });
 
+test('generic marker label entities update independently and hidden glyph labels remain interactive', async ({ page }) => {
+  await render(page, {
+    width: 420,
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      label_position: 'off',
+      min: 0,
+      max: 100,
+      markers: [
+        { at: { fixed: 100 }, show_marker: false, lane: 'above', label: { show: true, entity: 'sensor.daily_energy', precision: 1 } },
+        { at: { entity: 'sensor.reference_position' }, lane: 'above', label: { show: true, text: 'Mode', entity: 'sensor.battery_status' } },
+        { at: { fixed: 50 }, show_marker: false, lane: 'above', label: { show: true, text: 'Anchor A', entity: 'sensor.anchor_a' } },
+        { at: { fixed: 55 }, show_marker: false, lane: 'above', label: { show: true, text: 'Anchor B', entity: 'sensor.anchor_b' } },
+        { at: { fixed: 15 }, lane: 'below' },
+        { at: { fixed: 25 }, lane: 'below' },
+        { at: { fixed: 35 }, lane: 'below' },
+        { at: { fixed: 45 }, lane: 'below' },
+      ],
+      entities: [{ entity: 'sensor.information_row' }],
+    },
+    states: {
+      'sensor.information_row': sensor(20, { friendly_name: 'Battery power', unit_of_measurement: 'W' }),
+      'sensor.daily_energy': sensor(12.37, { unit_of_measurement: 'kWh' }),
+      'sensor.reference_position': sensor(75, { unit_of_measurement: 'W' }),
+      'sensor.battery_status': sensor('Charging', { unit_of_measurement: '' }),
+      'sensor.anchor_a': sensor('Ready', { unit_of_measurement: '' }),
+      'sensor.anchor_b': sensor('Waiting', { unit_of_measurement: '' }),
+    },
+  });
+
+  const card = page.locator('sensor-bar-card-plus');
+  const row = card.locator('.row[data-entity="sensor.information_row"]');
+  await expect(row.locator('.generic-marker')).toHaveCount(8);
+  await expect(row.locator('.generic-value-label')).toHaveCount(4);
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-0"]')).toHaveText('12.4 kWh');
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-1"]')).toHaveText('Mode Charging');
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-2"]')).toHaveText('Anchor A Ready');
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-3"]')).toHaveText('Anchor B Waiting');
+
+  await expect.poll(() => row.evaluate((element) => {
+    const track = element.querySelector('.bar-track').getBoundingClientRect();
+    const label = element.querySelector('.generic-value-label[data-marker-id="generic-0"]').getBoundingClientRect();
+    return label.left >= track.left - 1 && label.right <= track.right + 1;
+  })).toBe(true);
+
+  const initialGeometry = await row.evaluate((element) => {
+    const track = element.querySelector('.bar-track').getBoundingClientRect();
+    const endpointLabel = element.querySelector('.generic-value-label[data-marker-id="generic-0"]');
+    const labelRect = endpointLabel.getBoundingClientRect();
+    return {
+      position: element.querySelector('.generic-marker[data-marker-id="generic-0"]').style.left,
+      glyphDisplay: getComputedStyle(element.querySelector('.generic-marker[data-marker-id="generic-0"] .marker-shape-svg')).display,
+      withinTrack: labelRect.left >= track.left - 1 && labelRect.right <= track.right + 1,
+      dynamicPosition: element.querySelector('.generic-marker[data-marker-id="generic-1"]').style.left,
+      labelLanes: [...element.querySelectorAll('.generic-value-label')].map((label) => label.dataset.lane),
+    };
+  });
+  expect(initialGeometry).toEqual({
+    position: '100%',
+    glyphDisplay: 'none',
+    withinTrack: true,
+    dynamicPosition: '75%',
+    labelLanes: ['above', 'above', 'above', 'above'],
+  });
+
+  const themePresentation = await card.evaluate((element) => {
+    const label = element.shadowRoot.querySelector('.generic-value-label[data-marker-id="generic-0"]');
+    const themes = [
+      ['#1c1c1c', '#f5f5f5'],
+      ['#ffffff', '#202020'],
+    ];
+    const result = themes.map(([background, foreground]) => {
+      element.style.setProperty('--card-background-color', background);
+      element.style.setProperty('--primary-text-color', foreground);
+      const style = getComputedStyle(label);
+      return [style.backgroundColor, style.visibility, style.pointerEvents];
+    });
+    element.style.removeProperty('--card-background-color');
+    element.style.removeProperty('--primary-text-color');
+    return result;
+  });
+  expect(themePresentation).toEqual([
+    ['rgb(28, 28, 28)', 'visible', 'auto'],
+    ['rgb(255, 255, 255)', 'visible', 'auto'],
+  ]);
+
+  await card.evaluate((element) => {
+    element.hass = { states: {
+      ...element._hass.states,
+      'sensor.daily_energy': { state: '15.88', attributes: { unit_of_measurement: 'kWh' } },
+    } };
+  });
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-0"]')).toHaveText('15.9 kWh');
+  expect(await row.locator('.generic-marker[data-marker-id="generic-0"]').evaluate((marker) => marker.style.left)).toBe('100%');
+
+  await card.evaluate((element) => {
+    element.hass = { states: {
+      ...element._hass.states,
+      'sensor.reference_position': { state: '25', attributes: { unit_of_measurement: 'W' } },
+    } };
+  });
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-1"]')).toHaveText('Mode Charging');
+  expect(await row.locator('.generic-marker[data-marker-id="generic-1"]').evaluate((marker) => marker.style.left)).toBe('25%');
+
+  await card.evaluate((element) => {
+    element.hass = { states: {
+      ...element._hass.states,
+      'sensor.battery_status': { state: 'unavailable', attributes: { unit_of_measurement: 'W' } },
+    } };
+  });
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-1"]')).toHaveText('Mode');
+  expect(await row.locator('.generic-marker[data-marker-id="generic-1"]').evaluate((marker) => marker.style.display)).toBe('');
+  await card.evaluate((element) => {
+    element.hass = { states: {
+      ...element._hass.states,
+      'sensor.battery_status': { state: 'Charging', attributes: { unit_of_measurement: '' } },
+    } };
+  });
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-1"]')).toHaveText('Mode Charging');
+
+  const anchorA = row.locator('.generic-value-label[data-marker-id="generic-2"]');
+  const anchorB = row.locator('.generic-value-label[data-marker-id="generic-3"]');
+  await anchorA.hover({ position: { x: 2, y: 2 } });
+  await expect(anchorA).toHaveAttribute('data-marker-hovered', 'true');
+  await expect(anchorA).toHaveCSS('z-index', '11');
+  await anchorB.hover({ position: { x: (await anchorB.boundingBox()).width - 2, y: 2 } });
+  await expect(anchorB).toHaveAttribute('data-marker-hovered', 'true');
+  await expect(anchorB).toHaveCSS('z-index', '11');
+  await expect(anchorA).not.toHaveAttribute('data-marker-hovered', 'true');
+});
+
 test('target marker defaults to diamond and supports explicit triangle overrides', async ({ page }) => {
   const mount = await render(page, {
     width: 720,
