@@ -10393,190 +10393,211 @@ views:
     title: Home energy
     cards:
     - type: custom:sensor-bar-card-plus
-      entity: sensor.sbcp_docs_solar
-      name: Rooftop solar
-      icon: mdi:solar-power
       scale:
         min:
           fixed: 0
         max:
           fixed: 7000
       layout:
+        height: 32
         label:
           position: above
-        height: 32
       formatting:
-        decimal: 0
         unit: W
+        decimal: 0
       bar:
         fill_style: gradient
         gradient_stops:
-        - pos: 0
-          color: '#0F766E'
-        - pos: 65
-          color: '#34D399'
-        - pos: 100
-          color: '#FDE68A'
+          - pos: 0
+            color: '#9929bd'
+          - pos: 30
+            color: '#e392fe'
+          - pos: 65
+            color: '#ffc677'
+          - pos: 100
+            color: '#ffd9a8'
+      entity: sensor.sbcp_docs_solar
+      name: Rooftop solar
+      icon: mdi:solar-power
       markers:
-      - at:
-          entity: sensor.sbcp_docs_solar_forecast
-        lane: below
-        shape: pin
-        direction: inward
-        color: '#FDE68A'
-        label:
-          show: true
-          text: Forecast
-          show_value: false
-          show_unit: false
+        - at:
+            entity: sensor.sbcp_docs_solar_forecast
+          shape: pin
+          color: '#FDE68A'
+          label:
+            show: true
+            text: Forecast
+            show_value: false
+            show_unit: false
+
     - type: custom:sensor-bar-card-plus
-      entity: sensor.sbcp_docs_grid_flow
-      name: Grid · export / import
-      icon: mdi:transmission-tower
       scale:
         min:
           fixed: -5000
         max:
           fixed: 5000
-      layout:
+      target:
+        at:
+          fixed: 3000
+        color: '#ff905b'
         label:
-          position: above
-        height: 32
-      formatting:
-        decimal: 0
-        unit: W
+          show: true
+          show_value: false
+          show_unit: false
+          text: Grid Import Limit
+        when_exceeded:
+          fill_color: '#b51a00'
       baseline:
         at:
           fixed: 0
         above:
-          color: '#FBBF24'
+          color: '#ffb380'
         below:
-          color: '#34D399'
+          color: '#06c2b5'
+      layout:
+        height: 32
+        label:
+          position: above
+      formatting:
+        unit: W
+        decimal: 0
       bar:
         fill_style: solid
         color: '#34D399'
-      markers:
-      - at:
-          fixed: 4000
-        lane: below
-        shape: chevron
-        direction: inward
-        color: '#FBBF24'
-        label:
-          show: true
-          text: Import budget
-          show_value: false
-          show_unit: false
+      entity: sensor.sbcp_docs_grid_flow
+      name: Grid · export / import
+      icon: mdi:transmission-tower
+      markers: []
+
     - type: custom:sensor-bar-card-plus
       entities:
-      - entity: sensor.sbcp_docs_home_load
-        name: Home
-        icon: mdi:home-lightning-bolt
-        bar:
-          fill_style: gradient
-          gradient_stops:
-          - pos: 0
-            color: '#1D4ED8'
-          - pos: 100
+        - entity: sensor.sbcp_docs_home_load
+          name: Home
+          icon: mdi:home-lightning-bolt
+          bar:
+            fill_style: gradient
+            gradient_stops:
+              - pos: 0
+                color: '#8997ff'
+              - pos: 100
+                color: '#ced4ff'
+
+        - entity: sensor.sbcp_docs_ev_charge
+          name: EV charging
+          icon: mdi:car-electric
+          bar:
+            fill_style: gradient
             color: '#7DD3FC'
-      - entity: sensor.sbcp_docs_ev_charge
-        name: EV charging
-        icon: mdi:car-electric
-        bar:
-          fill_style: solid
-          color: '#7DD3FC'
+            gradient_stops:
+              - pos: 0
+                color: '#0897f4'
+              - pos: 50
+                color: '#068fcf'
+              - pos: 100
+                color: '#04829e'
       scale:
         min:
           fixed: 0
         max:
           fixed: 5000
       layout:
+        height: 24
         label:
           position: above
-        height: 24
       formatting:
-        decimal: 0
         unit: W
+        decimal: 0
+
     - type: custom:sensor-bar-card-plus
       entities:
-      - entity: sensor.sbcp_docs_battery_power
-        name: Battery · discharge / charge
-        icon: mdi:battery-sync
-        scale:
-          min:
-            fixed: -2500
-          max:
-            fixed: 2500
-        baseline:
-          at:
-            fixed: 0
-          above:
+        - entity: sensor.sbcp_docs_battery_power
+          name: Battery · discharge / charge
+          icon: mdi:battery-sync
+          scale:
+            min:
+              fixed: -2500
+            max:
+              fixed: 2500
+          baseline:
+            at:
+              fixed: 0
+            above:
+              color: '#34fcec'
+            below:
+              color: '#6ec4ff'
+          peak:
+            enabled: true
+            reset: never
+            label:
+              show: true
+              text: Max
+              show_value: false
+              show_unit: false
+            color: '#34fcec'
+          floor:
+            enabled: true
+            reset: never
+            label:
+              show: true
+              text: Min
+              show_value: false
+              show_unit: false
+            color: '#6ec4ff'
+          bar:
+            fill_style: solid
             color: '#34D399'
-          below:
-            color: '#7DD3FC'
-        bar:
-          fill_style: solid
-          color: '#34D399'
-        peak:
-          enabled: true
-          reset: never
-          color: '#34D399'
-          label:
-            show: true
-            text: Max
-            show_value: false
-            show_unit: false
-        floor:
-          enabled: true
-          reset: never
-          color: '#7DD3FC'
-          label:
-            show: true
-            text: Min
-            show_value: false
-            show_unit: false
-      - entity: sensor.sbcp_docs_battery_soc
-        name: Battery reserve
-        icon: mdi:home-battery
-        scale:
-          min:
-            fixed: 0
-          max:
-            fixed: 100
-        layout:
-          label:
-            position: inside
-        formatting:
-          unit: '%'
-        bar:
-          fill_style: soft_bands
-          needle:
-            show: true
-            color: '#F8FAFC'
-          segments:
-          - from: 0%
-            to: 20%
-            color: '#92400E'
-          - from: 20%
-            to: 80%
-            color: '#0F766E'
-          - from: 80%
-            to: 100%
-            color: '#34D399'
-        target:
-          at:
-            fixed: 80
-          color: '#FDE68A'
-          label:
-            show: true
-            text: Goal
+
+        - entity: sensor.sbcp_docs_battery_soc
+          name: Battery reserve
+          icon: mdi:home-battery
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 100
+          target:
+            at:
+              fixed: 80
+            color: '#FDE68A'
+            label:
+              show: true
+              text: Goal
+            enabled: false
+          layout:
+            label:
+              position: inside
+          formatting:
+            unit: '%'
+          bar:
+            fill_style: soft_bands
+            needle:
+              show: true
+              color: '#F8FAFC'
+            segments:
+              - from: 0%
+                to: 12%
+                color: '#8997ff'
+              - from: 12%
+                to: 80%
+                color: '#ffd668'
+              - from: 80%
+                to: 100%
+                color: '#ff97aa'
+          markers:
+            - at:
+                fixed: 80
+              shape: chevron
+              color: '#fde68a'
+              label:
+                show: true
+                text: Target
       layout:
+        height: 28
         label:
           position: above
-        height: 28
       formatting:
-        decimal: 0
         unit: W
+        decimal: 0
   - type: entities
     title: Capture controls
     show_header_toggle: false
@@ -10607,3 +10628,242 @@ views:
       name: Hold at keyframes
     - entity: input_number.sbcp_docs_night_hold
       name: Hold at Night before looping
+
+- title: README Hero Still v1.7
+  path: sensor-bar-card-plus-readme-hero-still-v17
+  icon: mdi:image
+  badges: []
+  cards:
+  - type: vertical-stack
+    title: Home energy
+    cards:
+    - type: custom:sensor-bar-card-plus
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 7000
+      layout:
+        height: 32
+        label:
+          position: above
+      formatting:
+        unit: W
+        decimal: 0
+      bar:
+        fill_style: gradient
+        gradient_stops:
+          - pos: 0
+            color: '#9929bd'
+          - pos: 30
+            color: '#e392fe'
+          - pos: 65
+            color: '#ffc677'
+          - pos: 100
+            color: '#ffd9a8'
+      entity: sensor.sbcp_docs_static_hero_solar
+      name: Rooftop solar
+      icon: mdi:solar-power
+      markers:
+        - at:
+            entity: sensor.sbcp_docs_static_hero_solar_forecast
+          shape: pin
+          color: '#FDE68A'
+          label:
+            show: true
+            text: Forecast
+            show_value: false
+            show_unit: false
+
+    - type: custom:sensor-bar-card-plus
+      scale:
+        min:
+          fixed: -5000
+        max:
+          fixed: 5000
+      target:
+        at:
+          fixed: 3000
+        color: '#ff905b'
+        label:
+          show: true
+          show_value: false
+          show_unit: false
+          text: Grid Import Limit
+        when_exceeded:
+          fill_color: '#b51a00'
+      baseline:
+        at:
+          fixed: 0
+        above:
+          color: '#ffb380'
+        below:
+          color: '#06c2b5'
+      layout:
+        height: 32
+        label:
+          position: above
+      formatting:
+        unit: W
+        decimal: 0
+      bar:
+        fill_style: solid
+        color: '#34D399'
+      entity: sensor.sbcp_docs_static_hero_grid_flow
+      name: Grid · export / import
+      icon: mdi:transmission-tower
+      markers: []
+
+    - type: custom:sensor-bar-card-plus
+      entities:
+        - entity: sensor.sbcp_docs_static_hero_home_load
+          name: Home
+          icon: mdi:home-lightning-bolt
+          bar:
+            fill_style: gradient
+            gradient_stops:
+              - pos: 0
+                color: '#8997ff'
+              - pos: 100
+                color: '#ced4ff'
+
+        - entity: sensor.sbcp_docs_static_hero_ev_charge
+          name: EV charging
+          icon: mdi:car-electric
+          bar:
+            fill_style: gradient
+            color: '#7DD3FC'
+            gradient_stops:
+              - pos: 0
+                color: '#0897f4'
+              - pos: 50
+                color: '#068fcf'
+              - pos: 100
+                color: '#04829e'
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 5000
+      layout:
+        height: 24
+        label:
+          position: above
+      formatting:
+        unit: W
+        decimal: 0
+
+    - type: custom:sensor-bar-card-plus
+      entities:
+        - entity: sensor.sbcp_docs_static_hero_battery_power
+          name: Battery · discharge / charge
+          icon: mdi:battery-sync
+          scale:
+            min:
+              fixed: -2500
+            max:
+              fixed: 2500
+          baseline:
+            at:
+              fixed: 0
+            above:
+              color: '#34fcec'
+            below:
+              color: '#6ec4ff'
+          peak:
+            enabled: true
+            reset: never
+            label:
+              show: true
+              text: Max
+              show_value: false
+              show_unit: false
+            color: '#34fcec'
+          floor:
+            enabled: true
+            reset: never
+            label:
+              show: true
+              text: Min
+              show_value: false
+              show_unit: false
+            color: '#6ec4ff'
+          bar:
+            fill_style: solid
+            color: '#34D399'
+
+        - entity: sensor.sbcp_docs_static_hero_battery_soc
+          name: Battery reserve
+          icon: mdi:home-battery
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 100
+          target:
+            at:
+              fixed: 80
+            color: '#FDE68A'
+            label:
+              show: true
+              text: Goal
+            enabled: false
+          layout:
+            label:
+              position: inside
+          formatting:
+            unit: '%'
+          bar:
+            fill_style: soft_bands
+            needle:
+              show: true
+              color: '#F8FAFC'
+            segments:
+              - from: 0%
+                to: 12%
+                color: '#8997ff'
+              - from: 12%
+                to: 80%
+                color: '#ffd668'
+              - from: 80%
+                to: 100%
+                color: '#ff97aa'
+          markers:
+            - at:
+                fixed: 80
+              shape: chevron
+              color: '#fde68a'
+              label:
+                show: true
+                text: Target
+      layout:
+        height: 28
+        label:
+          position: above
+      formatting:
+        unit: W
+        decimal: 0
+  - type: entities
+    title: Static Capture Controls
+    show_header_toggle: false
+    entities:
+      - entity: input_number.sbcp_docs_static_hero_solar
+        name: Solar (W)
+      - entity: input_number.sbcp_docs_static_hero_solar_forecast
+        name: Solar Forecast (W)
+      - entity: input_number.sbcp_docs_static_hero_home_load
+        name: Home load (W)
+      - entity: input_number.sbcp_docs_static_hero_ev_charge
+        name: EV charging (W)
+      - entity: input_number.sbcp_docs_static_hero_battery_power
+        name: Battery current (W)
+      - entity: input_number.sbcp_docs_static_hero_battery_reserve
+        name: Battery reserve (%)
+      - entity: input_number.sbcp_docs_static_hero_peak_setup
+        name: Peak setup (W)
+      - entity: input_number.sbcp_docs_static_hero_floor_setup
+        name: Floor setup (W)
+      - entity: script.sbcp_docs_static_hero_prepare_peak_floor
+        name: Prepare extrema
+      - entity: script.sbcp_docs_static_hero_reset_recommended_values
+        name: Reset recommended values

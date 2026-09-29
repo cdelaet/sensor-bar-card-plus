@@ -1,6 +1,6 @@
 # Screenshot capture manifest — v1.7.0
 
-All captures use the `sensor-bar-card-plus-screenshots` dashboard. The existing views remain intact. The new still-image material lives in **README Captures v1.7.0**; the new promotional sequence lives in **Hero Showcase v1.7**. Configure the [playground package](../packages/sensor_bar_card_plus_playground_package.yaml) in Home Assistant to provide its synthetic entities.
+All captures use the `sensor-bar-card-plus-screenshots` dashboard. The existing views remain intact. Still-image material lives in **README Captures v1.7.0** and **README Hero Still v1.7**; the promotional sequence lives in **Hero Showcase v1.7**. Configure the [playground package](../packages/sensor_bar_card_plus_playground_package.yaml) in Home Assistant to provide its synthetic entities.
 
 | Capture ID | View and card(s) | Helper state / setup | Intended output | Capture type |
 |---|---|---|---|---|
@@ -14,17 +14,18 @@ All captures use the `sensor-bar-card-plus-screenshots` dashboard. The existing 
 | `visual-editor-markers` | README Captures v1.7.0 · EDITOR PREP — Marker controls | Open that card in the Home Assistant Visual Editor | `images/visual-editor-markers.png` | Manual editor capture |
 | `responsive-hero` (optional) | README Captures v1.7.0 · Responsive Hero | Use a narrow/mobile viewport | `images/responsive-hero.png` | Static at narrow width |
 | Hero Showcase v1.7 | Hero Showcase v1.7 · **Home energy** vertical stack: Rooftop solar, Grid, Home / EV, Battery power / reserve | Follow the reset and nine-phase procedure below; exclude Capture controls from the crop. | `images/hero-170.gif` | Later animated capture; not created in this phase |
+| `readme-hero-still` | README Hero Still v1.7 · **Home energy** vertical stack: Rooftop solar, Grid, Home / EV, Battery power / reserve | Reload the view to reset session extrema, then run **Prepare extrema** in Static Capture Controls below the stack. | `images/readme-hero-still.png` | Static capture |
 
 ## Hero composition
 
 One normal Home Assistant vertical stack, headed **Home energy**, contains four SBCP cards:
 
-1. **Rooftop solar** — full-width 32 px Reveal Fill gradient, teal through mint to warm sunlight; the moving forecast pin sits below the track.
-2. **Grid · export / import** — full-width 32 px zero-baseline track. Export grows left in mint; import grows right in amber. A fixed chevron marks the preferred import budget.
-3. **Home / EV charging** — two 24 px Above rows on the same 0–5000 W scale. Blue gradient household demand and pale-blue solid EV demand form a compact load comparison.
-4. **Battery** — 28 px Above power row with a zero baseline, mint charging / blue discharging, Max above and Min below. The paired Inside reserve gauge uses Needle mode over soft bands and an 80% Target.
+1. **Rooftop solar** — full-width 32 px Reveal Fill gradient from purple through pink to peach; the moving pale-yellow Forecast pin sits below the track.
+2. **Grid · export / import** — full-width 32 px zero-baseline track. Export grows left in cyan; import grows right in the solid mint fill. The built-in Target marks the 3000 W Grid Import Limit in coral.
+3. **Home / EV charging** — two 24 px Above rows on the same 0–5000 W scale. Periwinkle-gradient household demand and a blue-gradient EV load form a compact comparison.
+4. **Battery** — 28 px Above power row with a zero Baseline, cyan charging / light-blue discharging, and genuine observed Max above / Min below. The paired Inside reserve gauge uses Needle mode over purple, yellow and pink bands, with an 80% Goal chevron.
 
-Short Above labels leave the bar width available for data. The only Inside row is the reserve gauge. All numbers use the card's locale-aware formatting. The palette consistently separates solar/storage (teal/mint), consumption/discharge (blue), and grid import/references (amber). There is no oversized Hero number or explanatory dashboard prose. The Capture controls card is separate from the image area. No custom layout plugin, card-mod, YAML anchors, or runtime changes are required; each SBCP card remains editable normally.
+Short Above labels leave the bar width available for data. The only Inside row is the reserve gauge. All numbers use the card's locale-aware formatting. The palette distinguishes solar (purple/pink/peach), home load (periwinkle), EV load (blue), battery direction (cyan/light blue), and reserve (purple/yellow/pink). There is no oversized Hero number or explanatory dashboard prose. Capture controls remain separate from the image area. No custom layout plugin, card-mod, YAML anchors, or runtime changes are required; each SBCP card remains editable normally.
 
 ## Energy story values
 
@@ -56,12 +57,12 @@ Solar wakes up, covers the home, charges storage and exports the surplus. EV cha
 | Row / marker | Source and meaning | Appearance |
 |---|---|---|
 | Solar **Forecast** | Dynamic generic reference: `sensor.sbcp_docs_solar_forecast`, an expected instantaneous production profile, not daily energy. It is 150 W at Dawn, peaks at 5800 W, and returns to 0 W at Night; during Cloud passing it exceeds actual production by 700 W. Its independent keyframes allow actual solar to exceed it at Solar surplus and Peak sun. | Pale amber inward pin, below; text-only label. At Night it coincides with zero; at Dawn it remains above actual solar. |
-| Grid **Import budget** | Static generic reference: fixed **4000 W**, a preferred import ceiling, not a protective cutoff or an enforced tariff limit. Actual evening import exceeds it by 250 W. | Amber inward chevron, below; text-only label. |
-| Reserve **Goal 80%** | Built-in Target: fixed **80%**, the preferred battery charge goal. Soft bands distinguish low reserve (0–20), normal reserve (20–80), and the goal region (80–100). | Pale amber diamond below, with value/unit label; white Needle shows current reserve. |
+| Grid **Import Limit** | Built-in Target: fixed **3000 W**, a visual reference, not a protective cutoff or an enforced tariff limit. | Coral marker with the “Grid Import Limit” label; exceedance fill is deep red. |
+| Reserve **Goal 80%** | Generic chevron reference at fixed **80%**. The Target configuration is disabled on this row; the card still shows the white Needle over 0–12% purple, 12–80% yellow, and 80–100% pink segments. | Pale-yellow chevron below with the text-only “Target” label. |
 | Battery **Max** | Built-in Peak: greatest signed battery power observed by this card since initialization. | Mint built-in marker above, text-only label. |
 | Battery **Min** | Built-in Floor: least signed battery power observed by this card since initialization. | Blue built-in marker below, text-only label. |
 
-The two zero baselines are fill origins, not Target markers. There are exactly two generic markers in this Hero, on separate tracks. The existing Phase 2 helper `sensor.sbcp_docs_grid_plan` is retained but is not used by this Hero. The solar forecast pin is visually distinct from the battery charge-goal diamond.
+The two zero baselines are fill origins, not Target markers. The Hero uses two generic markers on separate tracks: the solar Forecast pin and the reserve Goal chevron. The grid import limit is the built-in Target marker. The existing Phase 2 helper `sensor.sbcp_docs_grid_plan` is retained but is not used by this Hero.
 
 Max/Min are **in-memory card-session extrema**, not historical statistics. `reset: never` preserves them only while the card instance survives. Refreshing the page or recreating the card clears them; changing phases alone does not. The values in the last table column assume the exact Dawn-to-Night sequence below. At Dawn both values are zero, with their labels on separate lanes. Min remains zero until Cloud passing; the final range is **Max 1800 W / Min -1200 W**.
 
@@ -89,9 +90,35 @@ Looping Night→Dawn resets only the story position and selector. It deliberatel
 
 This phase only prepares the fixture. No final screenshots or GIF are produced here. A local browser preview used the actual current SBCP source with synthetic states and a simulated HA shell; HA icons were not rendered. That preview does not replace the final manual HA check.
 
+## README Hero Still v1.7
+
+The `sensor-bar-card-plus-readme-hero-still-v17` view provides a deterministic still capture using the same **Home energy** visual card stack as Hero Showcase v1.7. It uses dedicated `sensor.sbcp_docs_static_hero_*` entities. The **Static Capture Controls** card is below the intended screenshot area; capture only the Home energy title and four SBCP cards.
+
+The eight adjustable controls start at these recommended values:
+
+| Control | Default |
+|---|---:|
+| Solar | 5500 W |
+| Solar Forecast | 5900 W |
+| Home load | 2300 W |
+| EV charging | 3600 W |
+| Battery current | -1000 W |
+| Battery reserve | 65% |
+| Peak setup | +1800 W |
+| Floor setup | -1200 W |
+
+Solar, forecast, home, and EV are independent inputs. Grid is not adjustable; it continuously calculates `home + EV + battery - solar` from the controls, so the defaults give `2300 + 3600 - 1000 - 5500 = -600 W`. Positive grid is import and negative grid is export; positive battery power is charging and negative battery power is discharging. Forecast changes independently of actual Solar.
+
+The Battery current control is the desired final value. The displayed `sensor.sbcp_docs_static_hero_battery_power` reads a separate internal driven helper during preparation. The Prepare extrema script reads Peak setup, Floor setup, and Battery current, then drives the sensor through those three values in order, waiting 2 seconds between Peak and Floor and between Floor and the final current. The desired-current control itself stays at its configured value while the sensor is temporarily driven. Peak and Floor remain genuine SBCP session-observed extrema with `reset: never`; they are not generic markers.
+
+**Reset recommended values** restores all eight controls to the defaults above and returns the driven battery sensor to -1000 W. It does not clear Peak/Floor already observed by the card. To prepare a capture, open the static view and refresh the browser page to create a fresh card session, then adjust controls as desired and run **Prepare extrema** below the capture stack. Confirm the displayed Peak/Floor and settled Battery current before capturing.
+
+Moving Peak farther outward (higher) or Floor farther outward (lower) can be done by changing its setup value and running **Prepare extrema** again. To reduce an already-observed Peak or raise an already-observed Floor, refresh/recreate the card first, then run **Prepare extrema** again; the card retains session extrema until recreated. Use **Reset recommended values** separately when you want to restore the eight controls, since it cannot clear that card-local history.
+
 ## Fixture validation
 
-- Both changed YAML files parse with duplicate-key rejection. All 168 fixture helper/entity IDs and 14 view paths are unique; all 18 Hero entity references resolve.
+- The dashboard and package YAML parse with duplicate-key rejection. All 186 declared fixture helper/entity IDs and 15 view paths are unique. Animated and static Hero sensor references resolve to package entities, and the static preparation script is defined in the package.
+- Static Hero defaults, continuously calculated Grid, independent Forecast, separate desired/driven Battery helpers, configured Peak/Floor preparation sequence, and recommended-values reset were checked against the package and dashboard controls.
 - All nine keyframes and interpolated positions were evaluated with Jinja2 and checked against the energy equation, displayed scales, forecast values and expected extrema. Playback timing, speed multipliers, phase-step wrapping, manual seeking, and EV ramp math were simulated from the configured controls.
 - Current HEAD's SBCP normalizer/validator accepts all four cards and six rows with zero warnings/errors; both generic markers are accepted. Source extrema checks confirm that phase changes preserve the range and a new Dawn card resets it.
 - Browser inspection of the actual SBCP component covered Dawn, settled Peak sun at 440 px, settled Evening import at 400 px, and Night/fresh-Dawn extrema. Labels remained readable, the stack height stayed 527 px, and the final range was 1800 / -1200 W. The new HA controls/automations were statically inspected and simulated; no connected Home Assistant instance was used. HA's template update scheduling may add some latency beyond the 100 ms script cadence. Final in-HA control inspection remains manual.

@@ -215,6 +215,87 @@ input_number:
     initial: 3
     unit_of_measurement: s
 
+  sbcp_docs_static_hero_solar:
+    name: SBCP Static Hero Solar
+    min: 0
+    max: 7000
+    step: 100
+    mode: box
+    initial: 5500
+    unit_of_measurement: W
+
+  sbcp_docs_static_hero_solar_forecast:
+    name: SBCP Static Hero Solar Forecast
+    min: 0
+    max: 7000
+    step: 100
+    mode: box
+    initial: 5900
+    unit_of_measurement: W
+
+  sbcp_docs_static_hero_home_load:
+    name: SBCP Static Hero Home Load
+    min: 0
+    max: 5000
+    step: 100
+    mode: box
+    initial: 2300
+    unit_of_measurement: W
+
+  sbcp_docs_static_hero_ev_charge:
+    name: SBCP Static Hero EV Charge
+    min: 0
+    max: 5000
+    step: 100
+    mode: box
+    initial: 3600
+    unit_of_measurement: W
+
+  sbcp_docs_static_hero_battery_power:
+    name: SBCP Static Hero Desired Battery Power
+    min: -2500
+    max: 2500
+    step: 50
+    mode: box
+    initial: -1000
+    unit_of_measurement: W
+
+  sbcp_docs_static_hero_battery_power_driven:
+    name: SBCP Static Hero Driven Battery Power
+    min: -2500
+    max: 2500
+    step: 50
+    mode: box
+    initial: -1000
+    unit_of_measurement: W
+
+  sbcp_docs_static_hero_battery_reserve:
+    name: SBCP Static Hero Battery Reserve
+    min: 0
+    max: 100
+    step: 1
+    mode: box
+    initial: 65
+    unit_of_measurement: '%'
+
+  sbcp_docs_static_hero_peak_setup:
+    name: SBCP Static Hero Peak Setup
+    min: 0
+    max: 2500
+    step: 50
+    mode: box
+    initial: 1800
+    unit_of_measurement: W
+
+  sbcp_docs_static_hero_floor_setup:
+    name: SBCP Static Hero Floor Setup
+    min: -2500
+    max: 0
+    step: 50
+    mode: box
+    initial: -1200
+    unit_of_measurement: W
+
 input_boolean:
   sbcp_animated:
     name: SBCP Animated
@@ -1239,7 +1320,123 @@ template:
           {% set t = states('sensor.sbcp_docs_energy_phase_fraction') | float(0) %}
           {{ (values[i] + (values[i + 1] - values[i]) * t) | round(1) }}
 
+  - sensor:
+      - name: SBCP Static Hero Rooftop Solar
+        default_entity_id: sensor.sbcp_docs_static_hero_solar
+        unit_of_measurement: W
+        icon: mdi:solar-power
+        state: "{{ states('input_number.sbcp_docs_static_hero_solar') | float(5500) }}"
+      - name: SBCP Static Hero Solar Forecast
+        default_entity_id: sensor.sbcp_docs_static_hero_solar_forecast
+        unit_of_measurement: W
+        icon: mdi:weather-sunny
+        state: "{{ states('input_number.sbcp_docs_static_hero_solar_forecast') | float(5900) }}"
+      - name: SBCP Static Hero Grid Exchange
+        default_entity_id: sensor.sbcp_docs_static_hero_grid_flow
+        unit_of_measurement: W
+        icon: mdi:transmission-tower
+        state: >-
+          {% set home = states('input_number.sbcp_docs_static_hero_home_load') | float(2300) %}
+          {% set ev = states('input_number.sbcp_docs_static_hero_ev_charge') | float(3600) %}
+          {% set battery = states('input_number.sbcp_docs_static_hero_battery_power') | float(-1000) %}
+          {% set solar = states('input_number.sbcp_docs_static_hero_solar') | float(5500) %}
+          {{ home + ev + battery - solar }}
+      - name: SBCP Static Hero Home Load
+        default_entity_id: sensor.sbcp_docs_static_hero_home_load
+        unit_of_measurement: W
+        icon: mdi:home-lightning-bolt
+        state: "{{ states('input_number.sbcp_docs_static_hero_home_load') | float(2300) }}"
+      - name: SBCP Static Hero EV Charge
+        default_entity_id: sensor.sbcp_docs_static_hero_ev_charge
+        unit_of_measurement: W
+        icon: mdi:car-electric
+        state: "{{ states('input_number.sbcp_docs_static_hero_ev_charge') | float(3600) }}"
+      - name: SBCP Static Hero Battery Power
+        default_entity_id: sensor.sbcp_docs_static_hero_battery_power
+        unit_of_measurement: W
+        icon: mdi:battery-sync
+        state: "{{ states('input_number.sbcp_docs_static_hero_battery_power_driven') | float(-1000) }}"
+      - name: SBCP Static Hero Battery Reserve
+        default_entity_id: sensor.sbcp_docs_static_hero_battery_soc
+        unit_of_measurement: '%'
+        icon: mdi:home-battery
+        state: "{{ states('input_number.sbcp_docs_static_hero_battery_reserve') | float(65) }}"
+
 script:
+  sbcp_docs_static_hero_reset_recommended_values:
+    alias: Reset SBCP Static Hero Recommended Values
+    mode: single
+    sequence:
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_solar
+        data:
+          value: 5500
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_solar_forecast
+        data:
+          value: 5900
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_home_load
+        data:
+          value: 2300
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_ev_charge
+        data:
+          value: 3600
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_battery_power
+        data:
+          value: -1000
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_battery_reserve
+        data:
+          value: 65
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_peak_setup
+        data:
+          value: 1800
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_floor_setup
+        data:
+          value: -1200
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_battery_power_driven
+        data:
+          value: -1000
+
+  sbcp_docs_static_hero_prepare_peak_floor:
+    alias: Prepare SBCP Static Hero Peak and Floor
+    mode: single
+    sequence:
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_battery_power_driven
+        data:
+          value: "{{ states('input_number.sbcp_docs_static_hero_peak_setup') | float(1800) }}"
+      - delay:
+          seconds: 2
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_battery_power_driven
+        data:
+          value: "{{ states('input_number.sbcp_docs_static_hero_floor_setup') | float(-1200) }}"
+      - delay:
+          seconds: 2
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_battery_power_driven
+        data:
+          value: "{{ states('input_number.sbcp_docs_static_hero_battery_power') | float(-1000) }}"
+
   sbcp_hero_phase_back_1h:
     alias: SBCP Hero Phase Back 1h
     sequence:
