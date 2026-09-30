@@ -9762,3 +9762,125 @@ views:
       ## Visual editor handoff
 
       Use a disposable card in an editable Home Assistant dashboard to check add/remove/reorder, source modes, lane/shape/color/label options, card-level inheritance, entity list replacement, explicit markers: [], and save/reopen preservation of excess configured markers. This YAML playground demonstrates runtime acceptance and does not replace the editor round-trip check.
+
+- title: Dynamic Marker Labels
+  path: dynamic-marker-labels
+  icon: mdi:map-marker-path
+  badges: []
+  cards:
+  - type: vertical-stack
+    cards:
+    - type: custom:sensor-bar-card-plus
+      title: Eight markers with dynamic labels
+      entities:
+      - entity: sensor.sbcp_showcase_daylight
+        name: Daylight progress
+        icon: mdi:white-balance-sunny
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 100
+        formatting:
+          decimal: 0
+        layout:
+          height: 42
+          label:
+            position: above
+        bar:
+          fill_style: band_gradient
+          segments:
+            - from: 0%
+              to: 33%
+              color: '#7b219f'
+            - from: 33%
+              to: 75%
+              color: '#d58400'
+            - from: 75%
+              to: 100%
+              color: '#f5ec00'
+
+        markers:
+          - at: 0%
+            lane: above
+            color: '#ff8647'
+            show_marker: false
+            label:
+              show: true
+              entity: sensor.sbcp_showcase_solar_east
+              precision: 0
+              text: Solar
+          - at: 33%
+            lane: above
+            shape: diamond
+            color: '#ff8647'
+            label:
+              show: true
+              entity: sensor.sbcp_showcase_ev_current
+              precision: 1
+              text: EV
+            show_marker: false
+          - at: 33%
+            lane: below
+            shape: triangle
+            color: '#96d35f'
+            label:
+              show: true
+              entity: sensor.sbcp_showcase_outdoor_temp
+              precision: 1
+            show_marker: false
+          - at: 100%
+            lane: below
+            shape: pin
+            color: '#96d35f'
+            label:
+              show: true
+              entity: sensor.sbcp_marker_label_mode
+              text: Mode
+            show_marker: false
+          - at: 66%
+            lane: above
+            shape: chevron
+            color: '#ff8647'
+            show_marker: false
+            label:
+              show: true
+              entity: sensor.sbcp_showcase_session_energy
+              precision: 2
+              text: Total
+          - at: 100%
+            lane: above
+            shape: arrow
+            color: '#ff8647'
+            label:
+              show: true
+              text: Anti-feed
+              show_value: false
+              show_unit: false
+            show_marker: false
+          - at: 66%
+            color: '#96d35f'
+            label:
+              show: true
+              entity: sensor.sbcp_showcase_humidity
+              precision: 0
+              text: Humidity
+            show_marker: false
+          - at: 0%
+            shape: triangle
+            color: '#96d35f'
+            label:
+              show: true
+              entity: sensor.sbcp_marker_label_relay
+              text: Relay
+            show_marker: false
+    - type: entities
+      title: Manual text-label controls
+      show_header_toggle: false
+      entities:
+      - entity: input_boolean.sbcp_showcase_enabled
+        name: Automatic phase generator (turn off to hold selections)
+      - entity: input_select.sbcp_marker_label_mode
+        name: Operating mode
+      - entity: input_select.sbcp_marker_label_relay
+        name: Relay state

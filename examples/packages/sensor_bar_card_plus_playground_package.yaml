@@ -355,6 +355,22 @@ input_button:
     icon: mdi:cursor-default-click
 
 input_select:
+  sbcp_marker_label_mode:
+    name: SBCP Marker Label Operating Mode
+    options:
+      - Eco
+      - Normal
+      - Boost
+      - Smart
+    initial: Eco
+
+  sbcp_marker_label_relay:
+    name: SBCP Marker Label Relay State
+    options:
+      - "On"
+      - "Off"
+    initial: "On"
+
   sbcp_color_mode:
     name: SBCP Color Mode
     options:
@@ -874,6 +890,17 @@ template:
         state: >-
           {% set p = states('input_number.sbcp_showcase_phase') | float(0) %}
           {{ (18 + 22 * ((sin((p - 45) * pi / 180) + 1) / 2)) | round(1) }}
+      # Text sources for the dynamic marker-label Playground example. They
+      # share the existing 250 ms showcase phase driver instead of adding a
+      # second animation loop.
+      - name: Marker Label Operating Mode
+        default_entity_id: sensor.sbcp_marker_label_mode
+        icon: mdi:autorenew
+        state: "{{ states('input_select.sbcp_marker_label_mode') }}"
+      - name: Marker Label Relay State
+        default_entity_id: sensor.sbcp_marker_label_relay
+        icon: mdi:toggle-switch
+        state: "{{ states('input_select.sbcp_marker_label_relay') }}"
       - name: Recipe Home Load
         default_entity_id: sensor.sbcp_showcase_home_load
         unit_of_measurement: W
@@ -1733,6 +1760,21 @@ automation:
                 entity_id: input_number.sbcp_showcase_phase
               data:
                 value: "{{ next_phase }}"
+            - service: input_select.select_option
+              target:
+                entity_id: input_select.sbcp_marker_label_mode
+              data:
+                option: >-
+                  {% set options = ['Eco', 'Normal', 'Boost', 'Smart'] %}
+                  {% set phase = next_phase | int(0) %}
+                  {{ options[(phase // 90) % 4] }}
+            - service: input_select.select_option
+              target:
+                entity_id: input_select.sbcp_marker_label_relay
+              data:
+                option: >-
+                  {% set phase = next_phase | int(0) %}
+                  {{ 'On' if (phase // 180) % 2 == 0 else 'Off' }}
             - delay:
                 milliseconds: 250
     mode: restart
