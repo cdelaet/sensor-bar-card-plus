@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createEditor, loadElementClass } from '../support/load-card-class.cjs';
+import { normalizeCardConfig } from '../../src/config/normalize.js';
 
 function trackConfigEvents(editor) {
   const events = [];
@@ -342,10 +343,12 @@ describe('Sensor Bar Card Plus editor', () => {
     const groups = [
       'entity-0-group-scale',
       'entity-0-group-target',
+      'entity-0-group-peak',
+      'entity-0-group-floor',
+      'entity-0-group-markers',
+      'entity-0-group-bar',
       'entity-0-group-baseline',
       'entity-0-group-needle',
-      'entity-0-group-peak',
-      'entity-0-group-bar',
       'entity-0-group-segments',
       'entity-0-group-gradient-stops',
       'entity-0-group-layout',
@@ -355,6 +358,39 @@ describe('Sensor Bar Card Plus editor', () => {
 
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect([...positions].sort((left, right) => left - right)).toEqual(positions);
+  });
+
+  it('uses marker shape wording in the generic marker editor', () => {
+    const editor = createEditor();
+    editor.setConfig({ markers: [{ at: { fixed: 50 } }] });
+
+    const markup = editor._renderGenericMarkersEditor({ type: 'card' });
+    expect(markup).toContain('Show marker shape');
+    expect(markup).not.toContain('Show marker glyph');
+  });
+
+  it('keeps marker configuration unchanged through editor serialization and round trip', () => {
+    const config = {
+      markers: [{
+        at: { fixed: 50 },
+        lane: 'above',
+        shape: 'triangle',
+        show_marker: false,
+        label: { show: true, text: 'Power', entity: 'sensor.information', precision: 1 },
+      }],
+    };
+    const editor = createEditor();
+    editor.setConfig(config);
+
+    const serialized = editor._cleanupEditorEmittedConfig(editor._cloneDeep(editor._draftConfig));
+    const reopenedEditor = createEditor();
+    reopenedEditor.setConfig(serialized);
+    const roundTripped = reopenedEditor._cleanupEditorEmittedConfig(
+      reopenedEditor._cloneDeep(reopenedEditor._draftConfig)
+    );
+
+    expect(serialized.markers).toEqual(config.markers);
+    expect(roundTripped.markers).toEqual(config.markers);
   });
 
   it('standardized labels render for top-level and entity override fields', () => {
@@ -3806,6 +3842,113 @@ describe('Sensor Bar Card Plus editor', () => {
     });
   });
 
+  it('card-level Baseline disable and re-enable preserve position and directional colors', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    const baseline = {
+      enabled: true,
+      at: { fixed: 0 },
+      above: { color: '#ffb380' },
+      below: { color: '#06c2b5' },
+    };
+
+    editor.setConfig({ entity: 'sensor.one', baseline });
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-baseline'));
+    dispatchChange(editor.shadowRoot.querySelector('#baseline-mode'), 'disabled');
+    expect(events.at(-1).detail.config.baseline).toEqual({ ...baseline, enabled: false });
+
+    dispatchChange(editor.shadowRoot.querySelector('#baseline-mode'), 'enabled');
+    expect(events.at(-1).detail.config.baseline).toEqual(baseline);
+  });
+
+  it('card-level Remove Baseline deletes only the Baseline block', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    const config = {
+      entity: 'sensor.one',
+      scale: { min: { fixed: -10 }, max: { fixed: 100 } },
+      target: { at: { fixed: 80 }, color: '#ff0000' },
+      baseline: {
+        enabled: true,
+        at: { fixed: 0 },
+        above: { color: '#ffb380' },
+        below: { color: '#06c2b5' },
+        extension: 'remove with Baseline',
+      },
+      peak: { enabled: true, color: '#123456', reset: 'daily' },
+      floor: { enabled: true, color: '#654321', reset: 'hourly' },
+      markers: [{ at: { fixed: 50 }, label: { show: true, text: 'Reference' } }],
+      bar: {
+        fill_style: 'gradient',
+        color: '#96d35f',
+        solid_fill: true,
+        needle: { show: true, color: '#abcdef' },
+        segments: [{ from: '0%', to: '100%', color: '#112233' }],
+        gradient_stops: [{ pos: 0, color: '#112233' }, { pos: 100, color: '#aabbcc' }],
+      },
+      layout: { height: 42, label: { position: 'left', width: 140 } },
+      formatting: { unit: 'W', decimal: 1 },
+    };
+
+    editor.setConfig(config);
+    const expected = editor._cleanupEditorEmittedConfig(editor._cloneDeep(editor._draftConfig));
+    delete expected.baseline;
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-baseline'));
+    const removeButton = editor.shadowRoot.querySelectorAll('button[data-action="remove-baseline"]')
+      .find((button) => button.dataset.scopeType === 'card');
+    expect(removeButton.getAttribute('aria-label')).toBe('Remove Baseline');
+    expect(removeButton.getAttribute('title')).toBe('Remove Baseline');
+
+    dispatchClick(removeButton);
+
+    expect(events.at(-1).detail.config).toEqual(expected);
+    expect(events.at(-1).detail.config.baseline).toBeUndefined();
+  });
+
+  it('entity-level Remove Baseline removes the override and restores inheritance', async () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({
+      baseline: {
+        enabled: true,
+        at: { fixed: 25 },
+        above: { color: '#00aa00' },
+        below: { color: '#aa0000' },
+      },
+      entities: [{
+        entity: 'sensor.one',
+        name: 'One',
+        baseline: {
+          enabled: false,
+          at: { fixed: 10 },
+          above: { color: '#ffb380' },
+          below: { color: '#06c2b5' },
+          extension: 'remove with Baseline',
+        },
+        target: { at: { fixed: 80 } },
+        bar: { color: '#96d35f' },
+      }],
+    });
+
+    const expected = editor._cleanupEditorEmittedConfig(editor._cloneDeep(editor._draftConfig));
+    delete expected.entities[0].baseline;
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-baseline'));
+    const removeButton = editor.shadowRoot.querySelectorAll('button[data-action="remove-baseline"]')
+      .find((button) => button.dataset.scopeType === 'entity');
+    expect(removeButton).not.toBeUndefined();
+    dispatchClick(removeButton);
+    await flushTimers();
+
+    expect(events.at(-1).detail.config).toEqual(expected);
+    expect(events.at(-1).detail.config.entities[0].baseline).toBeUndefined();
+    expect(editor.shadowRoot.querySelector('#entity-0-baseline-inherit').checked).toBe(true);
+    expect(editor.shadowRoot.querySelector('#entity-0-baseline-mode').value).toBe('enabled');
+    expect(editor.shadowRoot.querySelector('#entity-0-baseline-value').value).toBe('25');
+    expect(editor.shadowRoot.querySelector('#entity-0-baseline-above-color').value.toLowerCase()).toBe('#00aa00');
+    expect(editor.shadowRoot.querySelector('#entity-0-baseline-below-color').value.toLowerCase()).toBe('#aa0000');
+  });
+
   it('clearing above-baseline color removes baseline.above', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
@@ -4333,6 +4476,32 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(events.at(-1).detail.config.bar).toEqual({
       fill_style: 'soft_bands',
     });
+  });
+
+  it('card Fill Style selection preserves effective style and unrelated bar settings', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    const barColor = '#96d35f';
+    const needle = { show: true, color: '#abcdef' };
+
+    editor.setConfig({
+      entity: 'sensor.one',
+      bar: { color: barColor, needle },
+    });
+
+    expect(editor.shadowRoot.querySelector('#bar-fill-style').value).toBe('solid');
+    expect(normalizeCardConfig({ entity: 'sensor.one' }).entities[0].bar.fill_style).toBe('bands');
+    expect(normalizeCardConfig({ entity: 'sensor.one', bar: { color: barColor } }).entities[0].bar.fill_style).toBe('solid');
+
+    for (const fillStyle of ['solid', 'bands', 'gradient', 'soft_bands', 'band_gradient']) {
+      dispatchChange(editor.shadowRoot.querySelector('#bar-fill-style'), fillStyle);
+      const emitted = events.at(-1).detail.config;
+
+      expect(emitted.bar.fill_style).toBe(fillStyle);
+      expect(normalizeCardConfig(emitted).entities[0].bar.fill_style).toBe(fillStyle);
+      expect(emitted.bar.color).toBe(barColor);
+      expect(emitted.bar.needle).toEqual(needle);
+    }
   });
 
   it('card-level color writes bar.color', () => {

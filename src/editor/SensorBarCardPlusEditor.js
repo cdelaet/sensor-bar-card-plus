@@ -1,4 +1,4 @@
-import { normalizeMarkerDirection, normalizeTargetMarkerShape } from '../config/normalize.js';
+import { normalizeBarConfig, normalizeMarkerDirection, normalizeTargetMarkerShape } from '../config/normalize.js';
 
 export class SensorBarCardPlusEditor extends HTMLElement {
   constructor() {
@@ -964,7 +964,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return label;
   }
 
-  _cleanupBarForEmit(target) {
+  _cleanupBarForEmit(target, scope = { type: 'card' }, cardConfig = null) {
     if (!this._isObject(target) || !this._isObject(target.bar)) {
       return target;
     }
@@ -975,8 +975,16 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const segments = Array.isArray(nextBar.segments) ? nextBar.segments : null;
     const gradientStops = Array.isArray(nextBar.gradient_stops) ? nextBar.gradient_stops : null;
 
-    if (fillStyle && fillStyle !== 'bands') {
-      nextBar.fill_style = fillStyle;
+    if (fillStyle) {
+      const withoutLocalFillStyle = this._cloneDeep(nextTarget);
+      delete withoutLocalFillStyle.bar.fill_style;
+      const inheritedStyle = normalizeBarConfig(
+        withoutLocalFillStyle,
+        scope?.type === 'entity' ? cardConfig : null,
+        { isCardScope: scope?.type !== 'entity' }
+      ).fill_style;
+      if (fillStyle === 'bands' && inheritedStyle === 'bands') delete nextBar.fill_style;
+      else nextBar.fill_style = fillStyle;
       delete nextTarget.color_mode;
     } else {
       delete nextBar.fill_style;
@@ -1113,7 +1121,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     nextConfig = this._cleanupLayoutForEmit(nextConfig);
     nextConfig = this._cleanupFormattingForEmit(nextConfig);
     nextConfig = this._cleanupNeedleForEmit(nextConfig, { type: 'card' });
-    nextConfig = this._cleanupBarForEmit(nextConfig);
+    nextConfig = this._cleanupBarForEmit(nextConfig, { type: 'card' });
 
     if (Array.isArray(nextConfig.entities)) {
       nextConfig.entities = nextConfig.entities.map((entry, index) => {
@@ -1130,7 +1138,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         cleanedEntry = this._cleanupLayoutForEmit(cleanedEntry);
         cleanedEntry = this._cleanupFormattingForEmit(cleanedEntry);
         cleanedEntry = this._cleanupNeedleForEmit(cleanedEntry, { type: 'entity' });
-        cleanedEntry = this._cleanupBarForEmit(cleanedEntry);
+        cleanedEntry = this._cleanupBarForEmit(cleanedEntry, { type: 'entity', index }, nextConfig);
         return cleanedEntry;
       });
     }
@@ -3374,7 +3382,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _getFillStyleValue() {
-    return this._getScopedFillStyleValue({ type: 'card' });
+    return this._getEffectiveFillStyleValue({ type: 'card' });
   }
 
   _getFillStyleFromColorMode(colorMode) {
@@ -3395,15 +3403,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _getEffectiveScopedFillStyleValue(scope) {
-    if (scope?.type !== 'entity') {
-      return this._getScopedFillStyleValue(scope);
-    }
     return this._getEffectiveFillStyleValue(scope);
   }
 
   _setScopedBarFillStyle(scope, rawValue) {
     const normalizedValue = this._normalizeTextValue(rawValue).trim();
-    if (!normalizedValue || normalizedValue === 'bands') {
+    if (!normalizedValue) {
       return this._removeCanonicalScopedValue(scope, ['bar', 'fill_style'], {
         deprecatedKeys: [['color_mode']],
         prunePaths: [['bar']],
@@ -4157,6 +4162,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     }, { rerender: true });
   }
 
+  _removeBaseline(scope) {
+    return this._removeScopedValue(scope, ['baseline'], { rerender: true });
+  }
+
   _hasBaselineOverride(scope) {
     const baselineValue = this._getScopedValue(scope, ['baseline']);
     if (this._isObject(baselineValue) && Object.keys(baselineValue).length) {
@@ -4346,16 +4355,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _getEffectiveFillStyleValue(scope) {
     if (scope?.type === 'entity') {
-      const hasEntityFillStyle =
-        this._getScopedValue(scope, ['bar', 'fill_style']) !== undefined
-        || this._getScopedValue(scope, ['bar', 'color_mode']) !== undefined
-        || this._getScopedValue(scope, ['color_mode']) !== undefined;
-      if (hasEntityFillStyle) {
-        return this._getScopedFillStyleValue(scope);
-      }
-      return this._getFillStyleValue();
+      return normalizeBarConfig(
+        this._getEntityRawEntries()[scope.index],
+        this._draftConfig,
+        { isCardScope: false }
+      ).fill_style;
     }
-    return this._getScopedFillStyleValue(scope);
+    return normalizeBarConfig(this._draftConfig, null, { isCardScope: true }).fill_style;
   }
 
   _getScopedGradientStopsValue(scope) {
@@ -4740,7 +4746,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           </div>
           <div class="field-row"><div class="toggle">
             <input id="${rowId}-show-marker" type="checkbox" data-kind="generic-marker-show-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.show_marker === false ? '' : ' checked'}>
-            <label for="${rowId}-show-marker">Show marker glyph</label>
+            <label for="${rowId}-show-marker">Show marker shape</label>
           </div></div>
           <div class="field-row"><div class="toggle">
             <input id="${rowId}-label-show" type="checkbox" data-kind="generic-marker-label-show" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.label?.show === true ? ' checked' : ''}>
@@ -6109,8 +6115,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                      <div class="field-row">
 	                        <div class="toggle">
 	                          <input id="entity-${index}-baseline-inherit" type="checkbox" data-kind="entity-baseline-inherit" data-index="${index}"${baselineInherited ? ' checked' : ''}>
-                          <label for="entity-${index}-baseline-inherit">Inherit card settings</label>
+	                          <label for="entity-${index}-baseline-inherit">Inherit card settings</label>
                         </div>
+                      </div>
+                      <div class="field-row">
+                        <button type="button" data-action="remove-baseline" data-scope-type="entity" data-index="${index}" aria-label="Remove Baseline" title="Remove Baseline">🗑</button>
                       </div>
                       <div class="field-row">
                         <label for="entity-${index}-baseline-mode">Baseline mode</label>
@@ -6236,14 +6245,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                          `,
 	                        });
 	                        return `
-	                          ${scaleGroup}
-	                          ${targetGroup}
-	                          ${baselineGroup}
-                          ${needleGroup}
+                          ${scaleGroup}
+                          ${targetGroup}
                           ${peakGroup}
                           ${floorGroup}
-	                          ${markersGroup}
-	                          ${barGroup}
+                          ${markersGroup}
+                          ${barGroup}
+                          ${baselineGroup}
+                          ${needleGroup}
 	                          ${segmentsGroup}
 	                          ${gradientStopsGroup}
 	                          ${layoutGroup}
@@ -6475,8 +6484,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
             group: 'baseline',
             title: 'Baseline',
             summary: this._getCardBaselineSummary(),
-            content: `
+          content: `
           <div class="field-grid">
+            <div class="field-row">
+              <button type="button" data-action="remove-baseline" data-scope-type="card" aria-label="Remove Baseline" title="Remove Baseline">🗑</button>
+            </div>
             <div class="field-row">
               <label for="baseline-mode">Baseline mode</label>
               <select id="baseline-mode" data-field="baseline-mode" value="${this._escapeAttribute(baselineMode)}">
@@ -6918,6 +6930,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
     if (action === 'remove-entity') {
       this._removeEntityRow(Number(target.dataset.index));
+      return;
+    }
+
+    if (action === 'remove-baseline') {
+      const scope = target.dataset.scopeType === 'entity'
+        ? { type: 'entity', index: Number(target.dataset.index) }
+        : { type: 'card' };
+      this._removeBaseline(scope);
       return;
     }
 

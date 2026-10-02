@@ -6331,7 +6331,7 @@ ${paintLayers}
           else label.precision = precision;
           return label;
         }
-        _cleanupBarForEmit(target) {
+        _cleanupBarForEmit(target, scope = { type: "card" }, cardConfig = null) {
           if (!this._isObject(target) || !this._isObject(target.bar)) {
             return target;
           }
@@ -6341,8 +6341,16 @@ ${paintLayers}
           const color = this._normalizeTextValue(nextBar.color).trim();
           const segments = Array.isArray(nextBar.segments) ? nextBar.segments : null;
           const gradientStops = Array.isArray(nextBar.gradient_stops) ? nextBar.gradient_stops : null;
-          if (fillStyle && fillStyle !== "bands") {
-            nextBar.fill_style = fillStyle;
+          if (fillStyle) {
+            const withoutLocalFillStyle = this._cloneDeep(nextTarget);
+            delete withoutLocalFillStyle.bar.fill_style;
+            const inheritedStyle = normalizeBarConfig(
+              withoutLocalFillStyle,
+              (scope == null ? void 0 : scope.type) === "entity" ? cardConfig : null,
+              { isCardScope: (scope == null ? void 0 : scope.type) !== "entity" }
+            ).fill_style;
+            if (fillStyle === "bands" && inheritedStyle === "bands") delete nextBar.fill_style;
+            else nextBar.fill_style = fillStyle;
             delete nextTarget.color_mode;
           } else {
             delete nextBar.fill_style;
@@ -6467,7 +6475,7 @@ ${paintLayers}
           nextConfig = this._cleanupLayoutForEmit(nextConfig);
           nextConfig = this._cleanupFormattingForEmit(nextConfig);
           nextConfig = this._cleanupNeedleForEmit(nextConfig, { type: "card" });
-          nextConfig = this._cleanupBarForEmit(nextConfig);
+          nextConfig = this._cleanupBarForEmit(nextConfig, { type: "card" });
           if (Array.isArray(nextConfig.entities)) {
             nextConfig.entities = nextConfig.entities.map((entry, index) => {
               if (!this._isObject(entry)) {
@@ -6483,7 +6491,7 @@ ${paintLayers}
               cleanedEntry = this._cleanupLayoutForEmit(cleanedEntry);
               cleanedEntry = this._cleanupFormattingForEmit(cleanedEntry);
               cleanedEntry = this._cleanupNeedleForEmit(cleanedEntry, { type: "entity" });
-              cleanedEntry = this._cleanupBarForEmit(cleanedEntry);
+              cleanedEntry = this._cleanupBarForEmit(cleanedEntry, { type: "entity", index }, nextConfig);
               return cleanedEntry;
             });
           }
@@ -8458,7 +8466,7 @@ ${paintLayers}
           return this._setScopedGradientStops(scope, nextStops, { rerender: true });
         }
         _getFillStyleValue() {
-          return this._getScopedFillStyleValue({ type: "card" });
+          return this._getEffectiveFillStyleValue({ type: "card" });
         }
         _getFillStyleFromColorMode(colorMode) {
           switch (colorMode) {
@@ -8482,14 +8490,11 @@ ${paintLayers}
           return this._getFillStyleFromColorMode(colorMode);
         }
         _getEffectiveScopedFillStyleValue(scope) {
-          if ((scope == null ? void 0 : scope.type) !== "entity") {
-            return this._getScopedFillStyleValue(scope);
-          }
           return this._getEffectiveFillStyleValue(scope);
         }
         _setScopedBarFillStyle(scope, rawValue) {
           const normalizedValue = this._normalizeTextValue(rawValue).trim();
-          if (!normalizedValue || normalizedValue === "bands") {
+          if (!normalizedValue) {
             return this._removeCanonicalScopedValue(scope, ["bar", "fill_style"], {
               deprecatedKeys: [["color_mode"]],
               prunePaths: [["bar"]]
@@ -9130,6 +9135,9 @@ ${paintLayers}
             return nextTarget;
           }, { rerender: true });
         }
+        _removeBaseline(scope) {
+          return this._removeScopedValue(scope, ["baseline"], { rerender: true });
+        }
         _hasBaselineOverride(scope) {
           const baselineValue = this._getScopedValue(scope, ["baseline"]);
           if (this._isObject(baselineValue) && Object.keys(baselineValue).length) {
@@ -9297,13 +9305,13 @@ ${paintLayers}
         }
         _getEffectiveFillStyleValue(scope) {
           if ((scope == null ? void 0 : scope.type) === "entity") {
-            const hasEntityFillStyle = this._getScopedValue(scope, ["bar", "fill_style"]) !== void 0 || this._getScopedValue(scope, ["bar", "color_mode"]) !== void 0 || this._getScopedValue(scope, ["color_mode"]) !== void 0;
-            if (hasEntityFillStyle) {
-              return this._getScopedFillStyleValue(scope);
-            }
-            return this._getFillStyleValue();
+            return normalizeBarConfig(
+              this._getEntityRawEntries()[scope.index],
+              this._draftConfig,
+              { isCardScope: false }
+            ).fill_style;
           }
-          return this._getScopedFillStyleValue(scope);
+          return normalizeBarConfig(this._draftConfig, null, { isCardScope: true }).fill_style;
         }
         _getScopedGradientStopsValue(scope) {
           const localRows = this._getGradientStopsUiRows(scope);
@@ -9669,7 +9677,7 @@ ${paintLayers}
           </div>
           <div class="field-row"><div class="toggle">
             <input id="${rowId}-show-marker" type="checkbox" data-kind="generic-marker-show-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${(marker == null ? void 0 : marker.show_marker) === false ? "" : " checked"}>
-            <label for="${rowId}-show-marker">Show marker glyph</label>
+            <label for="${rowId}-show-marker">Show marker shape</label>
           </div></div>
           <div class="field-row"><div class="toggle">
             <input id="${rowId}-label-show" type="checkbox" data-kind="generic-marker-label-show" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_f = marker == null ? void 0 : marker.label) == null ? void 0 : _f.show) === true ? " checked" : ""}>
@@ -11014,8 +11022,11 @@ ${paintLayers}
 	                      <div class="field-row">
 	                        <div class="toggle">
 	                          <input id="entity-${index}-baseline-inherit" type="checkbox" data-kind="entity-baseline-inherit" data-index="${index}"${baselineInherited ? " checked" : ""}>
-                          <label for="entity-${index}-baseline-inherit">Inherit card settings</label>
+	                          <label for="entity-${index}-baseline-inherit">Inherit card settings</label>
                         </div>
+                      </div>
+                      <div class="field-row">
+                        <button type="button" data-action="remove-baseline" data-scope-type="entity" data-index="${index}" aria-label="Remove Baseline" title="Remove Baseline">\u{1F5D1}</button>
                       </div>
                       <div class="field-row">
                         <label for="entity-${index}-baseline-mode">Baseline mode</label>
@@ -11141,14 +11152,14 @@ ${paintLayers}
 	                          `
                 });
                 return `
-	                          ${scaleGroup}
-	                          ${targetGroup}
-	                          ${baselineGroup}
-                          ${needleGroup}
+                          ${scaleGroup}
+                          ${targetGroup}
                           ${peakGroup}
                           ${floorGroup}
-	                          ${markersGroup}
-	                          ${barGroup}
+                          ${markersGroup}
+                          ${barGroup}
+                          ${baselineGroup}
+                          ${needleGroup}
 	                          ${segmentsGroup}
 	                          ${gradientStopsGroup}
 	                          ${layoutGroup}
@@ -11383,6 +11394,9 @@ ${paintLayers}
               summary: this._getCardBaselineSummary(),
               content: `
           <div class="field-grid">
+            <div class="field-row">
+              <button type="button" data-action="remove-baseline" data-scope-type="card" aria-label="Remove Baseline" title="Remove Baseline">\u{1F5D1}</button>
+            </div>
             <div class="field-row">
               <label for="baseline-mode">Baseline mode</label>
               <select id="baseline-mode" data-field="baseline-mode" value="${this._escapeAttribute(baselineMode)}">
@@ -11798,6 +11812,11 @@ ${paintLayers}
           }
           if (action === "remove-entity") {
             this._removeEntityRow(Number(target.dataset.index));
+            return;
+          }
+          if (action === "remove-baseline") {
+            const scope = target.dataset.scopeType === "entity" ? { type: "entity", index: Number(target.dataset.index) } : { type: "card" };
+            this._removeBaseline(scope);
             return;
           }
           if (action === "add-generic-marker") {
