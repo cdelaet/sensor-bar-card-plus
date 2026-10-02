@@ -13,7 +13,7 @@ Sensor Bar Card Plus (SBCP) is a Home Assistant dashboard card for presenting nu
 
 SBCP supports multiple entities, structured YAML, animated reveal fills, Needle gauges, semantic fill styles, five label layouts including Hero, dynamic scales, Baseline fill origins, Target/Peak/Floor markers, generic reference markers, per-entity overrides, and a Visual Editor. Its responsive layout adapts labels and supporting details to the available card width.
 
-Now you have no excuse not to build that pretty dashboard. Go forth and look cool. -Chris
+Now you have no excuse not to build that pretty dashboard. Go forth and dash those boards. -Chris (with unapologetic dadhumor)
 
 ## Install
 
@@ -92,7 +92,7 @@ The fill style controls how the track is colored:
 - `soft_bands` blends across short transitions between segments.
 - `band_gradient` creates a continuous gradient from segment colors.
 
-`solid_fill` samples the active color at the current value and uses it uniformly across the revealed fill, which is useful when the active band or gradient color should remain consistent behind the reading.
+`solid_fill` samples the active color at the current value and uses it uniformly across the revealed fill, which is useful if you want the fill color to change based on the current value.
 
 Segment boundaries can describe percentages of the track or values on the configured scale. The [configuration reference](docs/configuration.md#fill-styles-reference) has the detailed options and defaults.
 
@@ -112,16 +112,16 @@ The card can adapt supporting labels and icons as width changes. Hero gives the 
 
 ## Baseline: fill from a reference point
 
-**Baseline controls where the fill begins. It is not a marker glyph.**
+**Baseline controls where the fill begins. It is not a marker type.**
 
-For a bidirectional quantity such as grid import/export, set a zero Baseline on a scale that includes both negative and positive values. The reveal fill then grows away from zero toward the current reading. The same pattern works for battery charge/discharge or a measurement that moves above and below a neutral point. Optional above/below colors can distinguish the two sides.
+A baseline can be placed anywhere on the scale. The bar fills outward from that value rather than from scale.min, making it useful for any measurement with a meaningful reference point, such as zero for import/export power or 32 °F for freezing/thawing temperatures.
 
 ~~~yaml
 scale:
   min:
-    fixed: -5000
+    fixed: -3000
   max:
-    fixed: 5000
+    fixed: 3000
 baseline:
   at:
     fixed: 0
@@ -142,7 +142,7 @@ Markers add values worth seeing against a row’s scale. They do not set the fil
 
 ### Target
 
-Target is a configured threshold or reference. It supports fixed, percentage, and entity-driven values, including existing dynamic behavior. Target predates v1.7.0; its default glyph is now Diamond. Set `target.shape: triangle` to keep the former triangle appearance. Target labels and above-target fill color are optional.
+Target is a configured threshold or reference. It supports fixed, percentage, and entity-driven values, including existing dynamic behavior. Target predates v1.7.0; its default shape is now Diamond. Set `target.shape: triangle` to keep the former triangle appearance. Target labels and above-target fill color are optional.
 
 ### Peak and Floor
 
@@ -152,19 +152,18 @@ Peak tracks the highest finite value observed for the card row; Floor tracks the
 
 Use `markers` for configured references that are not Target thresholds or observed extrema. A marker can use a fixed value, a percentage of the effective scale, an entity value, or an entity with a fixed fallback. For example, the following row shows a forecast reference and an entity-driven trigger:
 
-~~~yaml
+```yaml
 markers:
-  - at: 35%
+  - at: 65%
     lane: above
-    shape: diamond
+    shape: arrow
     color: '#38bdf8'
     label:
       show: true
       text: Forecast
   - at:
       entity: sensor.warning_threshold
-      fixed: 75
-    lane: below
+      fixed: 2400
     shape: pin
     direction: outward
     color: '#f59e0b'
@@ -174,11 +173,11 @@ markers:
 entities:
   - entity: sensor.grid_power
     name: Grid
-~~~
+```
 
 Markers can occupy the `above` or `below` lane. Their shapes are Circle, Diamond, Triangle, Chevron, Arrow, and Pin. Direction (`inward` or `outward`) affects directional shapes; Circle and Diamond do not change with direction. Marker color and labels can distinguish a forecast, reserve, comfort bound, or other reference.
 
-Up to four markers can appear above the bar and four below it. Peak uses an above slot; Floor and Target use below slots. A marker label can display a different entity with `label.entity`, and `show_marker: false` makes it a label-only information anchor that still uses a slot. Nearby labels can overlap. For units, unavailable states, inheritance, clamping, and full syntax, see [Generic Reference Markers](docs/configuration.md#generic-reference-markers).
+Up to four markers can appear above the bar and four below it. Peak uses an above slot; Floor and Target use below slots. A marker label can display a different entity with `label.entity`, and `show_marker: false` makes it a label-only information anchor that still uses a slot. Nearby labels can overlap. On pointer-based devices, hovering a marker brings its label to the front when labels overlap. For units, unavailable states, inheritance, clamping, and full syntax, see [Generic Reference Markers](docs/configuration.md#generic-reference-markers).
 
 ## Practical examples
 
@@ -189,7 +188,7 @@ The [recipe catalogue](examples/recipes/README.md) contains copyable dashboard p
 - **Server health**, **network latency**, and **dense telemetry** demonstrate compact operational dashboards: [server health](examples/recipes/telemetry/server-health.yaml), [network latency](examples/recipes/telemetry/network-latency.yaml), and [dense AV telemetry](examples/recipes/telemetry/dense-av-telemetry.yaml).
 - [Needle basics](examples/recipes/gauges/needle-gauge-basics.yaml) and [Needle with soft bands](examples/recipes/gauges/needle-soft-bands.yaml) keep the whole scale in view.
 
-The [example dashboards](examples/dashboards/) serve different purposes: interactive exploration, curated screenshots, practical recipes, and legacy/structured compatibility demonstrations.
+The interactive Playground brings feature combinations together in larger working examples; the Heritage dashboard compares legacy and structured configurations.
 
 ## Visual Editor
 
@@ -211,9 +210,9 @@ Existing dashboards do not require a configuration migration for v1.7.0. Target�
 
 ## Documentation and examples
 
-- [Complete configuration reference](docs/configuration.md)
-- [Practical recipe catalogue](examples/recipes/README.md)
-- [Example dashboards](examples/dashboards/)
+- [Configuration Reference](docs/configuration.md) — complete syntax, options, and defaults.
+- [Recipe Catalogue](examples/recipes/README.md) — practical, copyable configurations for common use cases.
+- [Example Dashboards](examples/dashboards/sensor-bar-card-plus-playground.yaml) — larger working configurations and feature demonstrations in the interactive Playground.
 - [Contributor and development guide](CONTRIBUTING.md)
 
 ## About, support and license
