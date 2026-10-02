@@ -10495,6 +10495,32 @@ views:
                 color: '#068fcf'
               - pos: 100
                 color: '#04829e'
+          markers:
+            - at: 0%
+              lane: below
+              color: '#7DD3FC'
+              show_marker: false
+              label:
+                show: true
+                text: SoC
+                entity: sensor.sbcp_docs_ev_soc
+                precision: 0
+            - at: 50%
+              lane: below
+              color: '#7DD3FC'
+              show_marker: false
+              label:
+                show: true
+                text: Charging
+                entity: sensor.sbcp_docs_ev_charging_state
+            - at: 100%
+              lane: below
+              color: '#7DD3FC'
+              show_marker: false
+              label:
+                show: true
+                entity: sensor.sbcp_docs_ev_current
+                precision: 1
       scale:
         min:
           fixed: 0
@@ -10740,6 +10766,32 @@ views:
                 color: '#068fcf'
               - pos: 100
                 color: '#04829e'
+          markers:
+            - at: 0%
+              lane: below
+              color: '#7DD3FC'
+              show_marker: false
+              label:
+                show: true
+                text: SoC
+                entity: sensor.sbcp_docs_static_hero_ev_soc
+                precision: 0
+            - at: 50%
+              lane: below
+              color: '#7DD3FC'
+              show_marker: false
+              label:
+                show: true
+                text: Charging
+                entity: sensor.sbcp_docs_static_hero_ev_charging_state
+            - at: 100%
+              lane: below
+              color: '#7DD3FC'
+              show_marker: false
+              label:
+                show: true
+                entity: sensor.sbcp_docs_static_hero_ev_current
+                precision: 1
       scale:
         min:
           fixed: 0
@@ -10855,6 +10907,8 @@ views:
         name: Home load (W)
       - entity: input_number.sbcp_docs_static_hero_ev_charge
         name: EV charging (W)
+      - entity: input_number.sbcp_docs_static_hero_ev_soc
+        name: EV state of charge (%)
       - entity: input_number.sbcp_docs_static_hero_battery_power
         name: Battery current (W)
       - entity: input_number.sbcp_docs_static_hero_battery_reserve

@@ -251,6 +251,15 @@ input_number:
     initial: 3600
     unit_of_measurement: W
 
+  sbcp_docs_static_hero_ev_soc:
+    name: SBCP Static Hero EV State of Charge
+    min: 0
+    max: 100
+    step: 1
+    mode: box
+    initial: 67
+    unit_of_measurement: '%'
+
   sbcp_docs_static_hero_battery_power:
     name: SBCP Static Hero Desired Battery Power
     min: -2500
@@ -1295,6 +1304,24 @@ template:
           {% else %}
             {{ (values[i] + (values[i + 1] - values[i]) * t) | round(1) }}
           {% endif %}
+      - name: SBCP Documentation EV Current
+        default_entity_id: sensor.sbcp_docs_ev_current
+        unit_of_measurement: A
+        icon: mdi:current-ac
+        state: >-
+          {% set power = states('sensor.sbcp_docs_ev_charge') | float(0) %}
+          {{ (power / (sqrt(3) * 400)) | round(1) }}
+      - name: SBCP Documentation EV Charging State
+        default_entity_id: sensor.sbcp_docs_ev_charging_state
+        icon: mdi:ev-station
+        state: >-
+          {% set power = states('sensor.sbcp_docs_ev_charge') | float(0) %}
+          {{ 'On' if power > 0 else 'Off' }}
+      - name: SBCP Documentation EV State of Charge
+        default_entity_id: sensor.sbcp_docs_ev_soc
+        unit_of_measurement: '%'
+        icon: mdi:car-battery
+        state: '67'
       - name: SBCP Documentation Battery Power
         default_entity_id: sensor.sbcp_docs_battery_power
         unit_of_measurement: W
@@ -1378,6 +1405,24 @@ template:
         unit_of_measurement: W
         icon: mdi:car-electric
         state: "{{ states('input_number.sbcp_docs_static_hero_ev_charge') | float(3600) }}"
+      - name: SBCP Static Hero EV Current
+        default_entity_id: sensor.sbcp_docs_static_hero_ev_current
+        unit_of_measurement: A
+        icon: mdi:current-ac
+        state: >-
+          {% set power = states('sensor.sbcp_docs_static_hero_ev_charge') | float(0) %}
+          {{ (power / (sqrt(3) * 400)) | round(1) }}
+      - name: SBCP Static Hero EV Charging State
+        default_entity_id: sensor.sbcp_docs_static_hero_ev_charging_state
+        icon: mdi:ev-station
+        state: >-
+          {% set power = states('sensor.sbcp_docs_static_hero_ev_charge') | float(0) %}
+          {{ 'On' if power > 0 else 'Off' }}
+      - name: SBCP Static Hero EV State of Charge
+        default_entity_id: sensor.sbcp_docs_static_hero_ev_soc
+        unit_of_measurement: '%'
+        icon: mdi:car-battery
+        state: "{{ states('input_number.sbcp_docs_static_hero_ev_soc') | float(67) }}"
       - name: SBCP Static Hero Battery Power
         default_entity_id: sensor.sbcp_docs_static_hero_battery_power
         unit_of_measurement: W
@@ -1414,6 +1459,11 @@ script:
           entity_id: input_number.sbcp_docs_static_hero_ev_charge
         data:
           value: 3600
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_ev_soc
+        data:
+          value: 67
       - service: input_number.set_value
         target:
           entity_id: input_number.sbcp_docs_static_hero_battery_power
