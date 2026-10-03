@@ -287,34 +287,82 @@ export function hasResolvableMagnitude(resolvable) {
   );
 }
 
-export function normalizeGaugeSegments(input) {
+function normalizeSegmentBoundary(input, legacySegmentSpace = null) {
+  if (input === undefined) return { value: null, issue: null };
+  if (input === null) return { value: null, issue: 'malformed' };
+
+  if (input && typeof input === 'object' && !Array.isArray(input)) {
+    if (input.entity !== undefined && input.entity !== null && input.entity !== '') {
+      return { value: null, issue: 'entity' };
+    }
+    if (Object.prototype.hasOwnProperty.call(input, 'percent')) {
+      const percent = getFiniteNumber(input.percent);
+      return Number.isFinite(percent)
+        ? { value: normalizeResolvableValue(null, null, percent), issue: null }
+        : { value: null, issue: 'malformed' };
+    }
+    const fixed = getFiniteNumber(input.fixed ?? input.value);
+    return Number.isFinite(fixed)
+      ? { value: normalizeResolvableValue(fixed, null), issue: null }
+      : { value: null, issue: 'malformed' };
+  }
+
+  if (typeof input === 'string') {
+    const trimmed = input.trim();
+    if (looksLikeEntityId(trimmed)) return { value: null, issue: 'entity' };
+    if (trimmed.includes('%')) {
+      const percent = parsePercentLiteral(trimmed);
+      return Number.isFinite(percent)
+        ? { value: normalizeResolvableValue(null, null, percent), issue: null }
+        : { value: null, issue: 'malformed_percent' };
+    }
+  }
+
+  const numeric = getFiniteNumber(input);
+  if (!Number.isFinite(numeric)) return { value: null, issue: 'malformed' };
+  return legacySegmentSpace === 'percent'
+    ? { value: normalizeResolvableValue(null, null, numeric), issue: null }
+    : { value: normalizeResolvableValue(numeric, null), issue: null };
+}
+
+export function normalizeGaugeSegments(input, options = {}) {
   if (!Array.isArray(input)) return null;
+  const { legacySegmentSpace = null } = options;
   const segments = input
     .map((segment) => {
-      const from = normalizeStructuredResolvableValue(segment?.from, null, null, { allowPercent: true });
+      const from = segment?.from === undefined
+        ? { value: null, issue: 'malformed' }
+        : normalizeSegmentBoundary(segment.from, legacySegmentSpace);
       const to = segment?.to === undefined
-        ? null
-        : normalizeStructuredResolvableValue(segment.to, null, null, { allowPercent: true });
+        ? { value: null, issue: null }
+        : segment.to === null
+          ? { value: null, issue: null }
+          : normalizeSegmentBoundary(segment.to, legacySegmentSpace);
 
-      if (!hasResolvableMagnitude(from) || !segment?.color) {
+      if (!segment?.color) {
         return null;
       }
 
       return {
-        from,
-        to,
+        from: from.value,
+        to: to.value,
+        invalidBoundary: from.issue ?? to.issue,
         color: segment.color,
         label: segment.label ?? null,
       };
     })
     .filter(Boolean);
 
-  return segments.map((segment, index) => ({
-    from: { ...segment.from },
-    to: segment.to ? { ...segment.to } : (index < segments.length - 1 ? { ...segments[index + 1].from } : null),
-    color: segment.color,
-    label: segment.label ?? null,
-  }));
+  return segments.map((segment, index) => {
+    const nextValid = segments.slice(index + 1).find((candidate) => !candidate.invalidBoundary);
+    return {
+      from: segment.from ? { ...segment.from } : null,
+      to: segment.to ? { ...segment.to } : (nextValid?.from ? { ...nextValid.from } : null),
+      ...(segment.invalidBoundary ? { invalidBoundary: segment.invalidBoundary } : {}),
+      color: segment.color,
+      label: segment.label ?? null,
+    };
+  });
 }
 
 export function normalizeScaleBound(entityConfig, cardConfig, key, defaultValue) {
@@ -509,23 +557,24 @@ export function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
   const cardTopLevelSegments = cardConfig?.segments ?? null;
   const cardLegacySeverity = cardConfig?.severity ?? null;
   let segments = null;
-  let segment_space = cardBar?.segment_space ?? 'percent';
+  let segment_space = cardBar?.segment_space === 'percent' || cardBar?.segment_space === 'scale'
+    ? cardBar.segment_space
+    : null;
 
   if (entityStructuredSegments !== undefined && entityStructuredSegments !== null) {
-    segments = normalizeGaugeSegments(entityStructuredSegments);
-    segment_space = 'scale';
+    segment_space = entityBar?.segment_space === 'percent' || entityBar?.segment_space === 'scale'
+      ? entityBar.segment_space
+      : segment_space;
+    segments = normalizeGaugeSegments(entityStructuredSegments, { legacySegmentSpace: segment_space });
   } else if (entityTopLevelSegments !== undefined && entityTopLevelSegments !== null) {
     segments = normalizeGaugeSegments(entityTopLevelSegments);
-    segment_space = 'scale';
   } else if (entityLegacySeverity !== undefined && entityLegacySeverity !== null) {
     segments = normalizeSeverityToSegments(entityLegacySeverity);
     segment_space = 'percent';
   } else if (cardStructuredSegments !== null && cardStructuredSegments !== undefined) {
     segments = cardStructuredSegments.map((segment) => ({ ...segment }));
-    segment_space = cardBar?.segment_space ?? 'percent';
   } else if (cardTopLevelSegments !== null && cardTopLevelSegments !== undefined) {
     segments = normalizeGaugeSegments(cardTopLevelSegments);
-    segment_space = 'scale';
   } else if (cardLegacySeverity !== null && cardLegacySeverity !== undefined) {
     segments = normalizeSeverityToSegments(cardLegacySeverity);
     segment_space = 'percent';

@@ -166,6 +166,19 @@ function validateSegments(diagnostics, segments, scaleBounds, path, entity = nul
     const to = getStaticSegmentBound(segment?.to);
     const segmentPath = `${path}.segments[${index}]`;
 
+    if (segment?.invalidBoundary === 'entity') {
+      addWarning(diagnostics, 'segments.unsupported_entity_boundary', 'Entity-backed segment boundaries are not supported; ignoring this segment.', segmentPath, entity);
+      continue;
+    }
+    if (segment?.invalidBoundary === 'malformed_percent') {
+      addWarning(diagnostics, 'segments.invalid_percentage', 'Malformed percentage segment boundary; ignoring this segment.', segmentPath, entity);
+      continue;
+    }
+    if (segment?.invalidBoundary) {
+      addWarning(diagnostics, 'segments.invalid_boundary', 'Segment boundary must be a numeric value or a percentage such as "35%"; ignoring this segment.', segmentPath, entity);
+      continue;
+    }
+
     if (Number.isFinite(from) && Number.isFinite(to) && from > to) {
       addWarning(diagnostics, 'segments.from_gt_to', 'Segment start is greater than segment end.', segmentPath, entity);
     }

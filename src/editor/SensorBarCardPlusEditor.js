@@ -964,12 +964,31 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return label;
   }
 
-  _cleanupBarForEmit(target, scope = { type: 'card' }, cardConfig = null) {
+  _cleanupBarForEmit(target, scope = { type: 'card' }, cardConfig = null, inheritedSegmentSpace = null) {
     if (!this._isObject(target) || !this._isObject(target.bar)) {
       return target;
     }
     const nextTarget = this._cloneDeep(target);
     const nextBar = this._cloneDeep(nextTarget.bar);
+    const scopedSegmentSpace = ['percent', 'scale'].includes(nextBar.segment_space)
+      ? nextBar.segment_space
+      : (scope?.type === 'entity' && ['percent', 'scale'].includes(inheritedSegmentSpace) ? inheritedSegmentSpace : null);
+    const legacySegmentSpace = scopedSegmentSpace;
+    if (legacySegmentSpace === 'percent' && Array.isArray(nextBar.segments)) {
+      const asLegacyPercent = (boundary) => {
+        if (typeof boundary === 'number' && Number.isFinite(boundary)) return `${boundary}%`;
+        if (typeof boundary === 'string' && boundary.trim() !== '' && !boundary.includes('%') && Number.isFinite(Number(boundary.trim()))) {
+          return `${Number(boundary.trim())}%`;
+        }
+        return boundary;
+      };
+      nextBar.segments = nextBar.segments.map((segment) => ({
+        ...segment,
+        from: asLegacyPercent(segment?.from),
+        ...(Object.prototype.hasOwnProperty.call(segment ?? {}, 'to') ? { to: asLegacyPercent(segment.to) } : {}),
+      }));
+    }
+    delete nextBar.segment_space;
     const fillStyle = this._normalizeTextValue(nextBar.fill_style).trim();
     const color = this._normalizeTextValue(nextBar.color).trim();
     const segments = Array.isArray(nextBar.segments) ? nextBar.segments : null;
@@ -1003,7 +1022,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextBar.solid_fill;
     }
 
-    if (segments && segments.length && !this._segmentsEqualForEditor(segments, this._getDefaultSegments())) {
+    if (segments && segments.length && (legacySegmentSpace || !this._segmentsEqualForEditor(segments, this._getDefaultSegments()))) {
       nextBar.segments = segments;
       delete nextTarget.segments;
       delete nextTarget.severity;
@@ -1111,6 +1130,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (!this._isObject(config)) {
       return config;
     }
+    const inheritedSegmentSpace = config.bar?.segment_space;
     let nextConfig = this._cleanupEntityIdentityForEmit(config);
     nextConfig = this._cleanupScaleForEmit(nextConfig);
     nextConfig = this._cleanupTargetForEmit(nextConfig, { type: 'card' });
@@ -1138,7 +1158,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         cleanedEntry = this._cleanupLayoutForEmit(cleanedEntry);
         cleanedEntry = this._cleanupFormattingForEmit(cleanedEntry);
         cleanedEntry = this._cleanupNeedleForEmit(cleanedEntry, { type: 'entity' });
-        cleanedEntry = this._cleanupBarForEmit(cleanedEntry, { type: 'entity', index }, nextConfig);
+        cleanedEntry = this._cleanupBarForEmit(cleanedEntry, { type: 'entity', index }, nextConfig, inheritedSegmentSpace);
         return cleanedEntry;
       });
     }

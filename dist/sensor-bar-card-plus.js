@@ -376,30 +376,58 @@
     });
     return inferSegmentEndValues(segments, 100);
   }
-  function hasResolvableMagnitude(resolvable) {
-    return !!resolvable && (Number.isFinite(getFiniteNumber(resolvable.fixed)) || Number.isFinite(resolvable.percent));
+  function normalizeSegmentBoundary(input, legacySegmentSpace = null) {
+    var _a;
+    if (input === void 0) return { value: null, issue: null };
+    if (input === null) return { value: null, issue: "malformed" };
+    if (input && typeof input === "object" && !Array.isArray(input)) {
+      if (input.entity !== void 0 && input.entity !== null && input.entity !== "") {
+        return { value: null, issue: "entity" };
+      }
+      if (Object.prototype.hasOwnProperty.call(input, "percent")) {
+        const percent = getFiniteNumber(input.percent);
+        return Number.isFinite(percent) ? { value: normalizeResolvableValue(null, null, percent), issue: null } : { value: null, issue: "malformed" };
+      }
+      const fixed = getFiniteNumber((_a = input.fixed) != null ? _a : input.value);
+      return Number.isFinite(fixed) ? { value: normalizeResolvableValue(fixed, null), issue: null } : { value: null, issue: "malformed" };
+    }
+    if (typeof input === "string") {
+      const trimmed = input.trim();
+      if (looksLikeEntityId(trimmed)) return { value: null, issue: "entity" };
+      if (trimmed.includes("%")) {
+        const percent = parsePercentLiteral(trimmed);
+        return Number.isFinite(percent) ? { value: normalizeResolvableValue(null, null, percent), issue: null } : { value: null, issue: "malformed_percent" };
+      }
+    }
+    const numeric = getFiniteNumber(input);
+    if (!Number.isFinite(numeric)) return { value: null, issue: "malformed" };
+    return legacySegmentSpace === "percent" ? { value: normalizeResolvableValue(null, null, numeric), issue: null } : { value: normalizeResolvableValue(numeric, null), issue: null };
   }
-  function normalizeGaugeSegments(input) {
+  function normalizeGaugeSegments(input, options = {}) {
     if (!Array.isArray(input)) return null;
+    const { legacySegmentSpace = null } = options;
     const segments = input.map((segment) => {
-      var _a;
-      const from = normalizeStructuredResolvableValue(segment == null ? void 0 : segment.from, null, null, { allowPercent: true });
-      const to = (segment == null ? void 0 : segment.to) === void 0 ? null : normalizeStructuredResolvableValue(segment.to, null, null, { allowPercent: true });
-      if (!hasResolvableMagnitude(from) || !(segment == null ? void 0 : segment.color)) {
+      var _a, _b;
+      const from = (segment == null ? void 0 : segment.from) === void 0 ? { value: null, issue: "malformed" } : normalizeSegmentBoundary(segment.from, legacySegmentSpace);
+      const to = (segment == null ? void 0 : segment.to) === void 0 ? { value: null, issue: null } : segment.to === null ? { value: null, issue: null } : normalizeSegmentBoundary(segment.to, legacySegmentSpace);
+      if (!(segment == null ? void 0 : segment.color)) {
         return null;
       }
       return {
-        from,
-        to,
+        from: from.value,
+        to: to.value,
+        invalidBoundary: (_a = from.issue) != null ? _a : to.issue,
         color: segment.color,
-        label: (_a = segment.label) != null ? _a : null
+        label: (_b = segment.label) != null ? _b : null
       };
     }).filter(Boolean);
     return segments.map((segment, index) => {
       var _a;
+      const nextValid = segments.slice(index + 1).find((candidate) => !candidate.invalidBoundary);
       return {
-        from: { ...segment.from },
-        to: segment.to ? { ...segment.to } : index < segments.length - 1 ? { ...segments[index + 1].from } : null,
+        from: segment.from ? { ...segment.from } : null,
+        to: segment.to ? { ...segment.to } : (nextValid == null ? void 0 : nextValid.from) ? { ...nextValid.from } : null,
+        ...segment.invalidBoundary ? { invalidBoundary: segment.invalidBoundary } : {},
         color: segment.color,
         label: (_a = segment.label) != null ? _a : null
       };
@@ -554,7 +582,7 @@
     return { ...base };
   }
   function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A;
     const scopeExplicitness = (_a = options.scopeExplicitness) != null ? _a : getPaintExplicitness(entityConfig);
     const inheritedExplicitness = (_c = (_b = options.inheritedExplicitness) != null ? _b : cardConfig == null ? void 0 : cardConfig[PAINT_EXPLICITNESS]) != null ? _c : getPaintExplicitness(cardConfig);
     const isCardScope = (_d = options.isCardScope) != null ? _d : cardConfig == null;
@@ -567,28 +595,25 @@
     const cardTopLevelSegments = (_f = cardConfig == null ? void 0 : cardConfig.segments) != null ? _f : null;
     const cardLegacySeverity = (_g = cardConfig == null ? void 0 : cardConfig.severity) != null ? _g : null;
     let segments = null;
-    let segment_space = (_h = cardBar == null ? void 0 : cardBar.segment_space) != null ? _h : "percent";
+    let segment_space = (cardBar == null ? void 0 : cardBar.segment_space) === "percent" || (cardBar == null ? void 0 : cardBar.segment_space) === "scale" ? cardBar.segment_space : null;
     if (entityStructuredSegments !== void 0 && entityStructuredSegments !== null) {
-      segments = normalizeGaugeSegments(entityStructuredSegments);
-      segment_space = "scale";
+      segment_space = (entityBar == null ? void 0 : entityBar.segment_space) === "percent" || (entityBar == null ? void 0 : entityBar.segment_space) === "scale" ? entityBar.segment_space : segment_space;
+      segments = normalizeGaugeSegments(entityStructuredSegments, { legacySegmentSpace: segment_space });
     } else if (entityTopLevelSegments !== void 0 && entityTopLevelSegments !== null) {
       segments = normalizeGaugeSegments(entityTopLevelSegments);
-      segment_space = "scale";
     } else if (entityLegacySeverity !== void 0 && entityLegacySeverity !== null) {
       segments = normalizeSeverityToSegments(entityLegacySeverity);
       segment_space = "percent";
     } else if (cardStructuredSegments !== null && cardStructuredSegments !== void 0) {
       segments = cardStructuredSegments.map((segment) => ({ ...segment }));
-      segment_space = (_i = cardBar == null ? void 0 : cardBar.segment_space) != null ? _i : "percent";
     } else if (cardTopLevelSegments !== null && cardTopLevelSegments !== void 0) {
       segments = normalizeGaugeSegments(cardTopLevelSegments);
-      segment_space = "scale";
     } else if (cardLegacySeverity !== null && cardLegacySeverity !== void 0) {
       segments = normalizeSeverityToSegments(cardLegacySeverity);
       segment_space = "percent";
     }
-    const structuredAboveTargetColor = (entityConfig == null ? void 0 : entityConfig.target) && typeof entityConfig.target === "object" && !Array.isArray(entityConfig.target) ? (_j = entityConfig.target.when_exceeded) == null ? void 0 : _j.fill_color : void 0;
-    const inheritedStructuredAboveTargetColor = (cardConfig == null ? void 0 : cardConfig.target) && typeof cardConfig.target === "object" && !Array.isArray(cardConfig.target) ? (_k = cardConfig.target.when_exceeded) == null ? void 0 : _k.fill_color : void 0;
+    const structuredAboveTargetColor = (entityConfig == null ? void 0 : entityConfig.target) && typeof entityConfig.target === "object" && !Array.isArray(entityConfig.target) ? (_h = entityConfig.target.when_exceeded) == null ? void 0 : _h.fill_color : void 0;
+    const inheritedStructuredAboveTargetColor = (cardConfig == null ? void 0 : cardConfig.target) && typeof cardConfig.target === "object" && !Array.isArray(cardConfig.target) ? (_i = cardConfig.target.when_exceeded) == null ? void 0 : _i.fill_color : void 0;
     const normalizedMode = resolveNormalizedBarMode(
       entityBar,
       entityConfig,
@@ -600,16 +625,16 @@
       fill_style: normalizedMode.fill_style,
       color_mode: normalizedMode.color_mode,
       needle: normalizeNeedleConfig(entityBar == null ? void 0 : entityBar.needle, cardBar == null ? void 0 : cardBar.needle),
-      solid_fill: (_m = (_l = entityBar == null ? void 0 : entityBar.solid_fill) != null ? _l : cardBar == null ? void 0 : cardBar.solid_fill) != null ? _m : false,
-      color: (_q = (_p = (_o = (_n = entityBar == null ? void 0 : entityBar.color) != null ? _n : entityConfig.color) != null ? _o : cardBar == null ? void 0 : cardBar.color) != null ? _p : cardConfig == null ? void 0 : cardConfig.color) != null ? _q : "#4a9eff",
+      solid_fill: (_k = (_j = entityBar == null ? void 0 : entityBar.solid_fill) != null ? _j : cardBar == null ? void 0 : cardBar.solid_fill) != null ? _k : false,
+      color: (_o = (_n = (_m = (_l = entityBar == null ? void 0 : entityBar.color) != null ? _l : entityConfig.color) != null ? _m : cardBar == null ? void 0 : cardBar.color) != null ? _n : cardConfig == null ? void 0 : cardConfig.color) != null ? _o : "#4a9eff",
       gradient_stops: normalizeGradientStops(
-        (_u = (_t = (_s = (_r = entityBar == null ? void 0 : entityBar.gradient_stops) != null ? _r : entityConfig.gradient_stops) != null ? _s : cardBar == null ? void 0 : cardBar.gradient_stops) != null ? _t : cardConfig == null ? void 0 : cardConfig.gradient_stops) != null ? _u : null
+        (_s = (_r = (_q = (_p = entityBar == null ? void 0 : entityBar.gradient_stops) != null ? _p : entityConfig.gradient_stops) != null ? _q : cardBar == null ? void 0 : cardBar.gradient_stops) != null ? _r : cardConfig == null ? void 0 : cardConfig.gradient_stops) != null ? _s : null
       ),
       severity: segments,
       segments,
       segment_space,
-      animated: (_y = (_x = (_w = (_v = entityBar == null ? void 0 : entityBar.animated) != null ? _v : entityConfig.animated) != null ? _w : cardBar == null ? void 0 : cardBar.animated) != null ? _x : cardConfig == null ? void 0 : cardConfig.animated) != null ? _y : true,
-      above_target_color: (_C = (_B = (_A = (_z = structuredAboveTargetColor != null ? structuredAboveTargetColor : entityConfig.above_target_color) != null ? _z : cardBar == null ? void 0 : cardBar.above_target_color) != null ? _A : inheritedStructuredAboveTargetColor) != null ? _B : cardConfig == null ? void 0 : cardConfig.above_target_color) != null ? _C : null
+      animated: (_w = (_v = (_u = (_t = entityBar == null ? void 0 : entityBar.animated) != null ? _t : entityConfig.animated) != null ? _u : cardBar == null ? void 0 : cardBar.animated) != null ? _v : cardConfig == null ? void 0 : cardConfig.animated) != null ? _w : true,
+      above_target_color: (_A = (_z = (_y = (_x = structuredAboveTargetColor != null ? structuredAboveTargetColor : entityConfig.above_target_color) != null ? _x : cardBar == null ? void 0 : cardBar.above_target_color) != null ? _y : inheritedStructuredAboveTargetColor) != null ? _z : cardConfig == null ? void 0 : cardConfig.above_target_color) != null ? _A : null
     };
   }
   function clampSupportedRowHeight(height) {
@@ -1186,6 +1211,18 @@
       const from = getStaticSegmentBound(segment == null ? void 0 : segment.from);
       const to = getStaticSegmentBound(segment == null ? void 0 : segment.to);
       const segmentPath = `${path}.segments[${index}]`;
+      if ((segment == null ? void 0 : segment.invalidBoundary) === "entity") {
+        addWarning(diagnostics, "segments.unsupported_entity_boundary", "Entity-backed segment boundaries are not supported; ignoring this segment.", segmentPath, entity);
+        continue;
+      }
+      if ((segment == null ? void 0 : segment.invalidBoundary) === "malformed_percent") {
+        addWarning(diagnostics, "segments.invalid_percentage", "Malformed percentage segment boundary; ignoring this segment.", segmentPath, entity);
+        continue;
+      }
+      if (segment == null ? void 0 : segment.invalidBoundary) {
+        addWarning(diagnostics, "segments.invalid_boundary", 'Segment boundary must be a numeric value or a percentage such as "35%"; ignoring this segment.', segmentPath, entity);
+        continue;
+      }
       if (Number.isFinite(from) && Number.isFinite(to) && from > to) {
         addWarning(diagnostics, "segments.from_gt_to", "Segment start is greater than segment end.", segmentPath, entity);
       }
@@ -2468,7 +2505,7 @@
           var _a, _b;
           const safeMin = Number.isFinite(minValue) ? minValue : 0;
           const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
-          const rawSegments = Array.isArray((_a = ecfg.bar) == null ? void 0 : _a.segments) ? ecfg.bar.segments : [];
+          const rawSegments = (Array.isArray((_a = ecfg.bar) == null ? void 0 : _a.segments) ? ecfg.bar.segments : []).filter((segment) => !(segment == null ? void 0 : segment.invalidBoundary));
           if (((_b = ecfg.bar) == null ? void 0 : _b.segment_space) === "scale" || this._segmentsNeedBoundaryResolution(rawSegments)) {
             const resolvedSegments = rawSegments.map((segment) => {
               var _a2;
@@ -6331,12 +6368,29 @@ ${paintLayers}
           else label.precision = precision;
           return label;
         }
-        _cleanupBarForEmit(target, scope = { type: "card" }, cardConfig = null) {
+        _cleanupBarForEmit(target, scope = { type: "card" }, cardConfig = null, inheritedSegmentSpace = null) {
           if (!this._isObject(target) || !this._isObject(target.bar)) {
             return target;
           }
           const nextTarget = this._cloneDeep(target);
           const nextBar = this._cloneDeep(nextTarget.bar);
+          const scopedSegmentSpace = ["percent", "scale"].includes(nextBar.segment_space) ? nextBar.segment_space : (scope == null ? void 0 : scope.type) === "entity" && ["percent", "scale"].includes(inheritedSegmentSpace) ? inheritedSegmentSpace : null;
+          const legacySegmentSpace = scopedSegmentSpace;
+          if (legacySegmentSpace === "percent" && Array.isArray(nextBar.segments)) {
+            const asLegacyPercent = (boundary) => {
+              if (typeof boundary === "number" && Number.isFinite(boundary)) return `${boundary}%`;
+              if (typeof boundary === "string" && boundary.trim() !== "" && !boundary.includes("%") && Number.isFinite(Number(boundary.trim()))) {
+                return `${Number(boundary.trim())}%`;
+              }
+              return boundary;
+            };
+            nextBar.segments = nextBar.segments.map((segment) => ({
+              ...segment,
+              from: asLegacyPercent(segment == null ? void 0 : segment.from),
+              ...Object.prototype.hasOwnProperty.call(segment != null ? segment : {}, "to") ? { to: asLegacyPercent(segment.to) } : {}
+            }));
+          }
+          delete nextBar.segment_space;
           const fillStyle = this._normalizeTextValue(nextBar.fill_style).trim();
           const color = this._normalizeTextValue(nextBar.color).trim();
           const segments = Array.isArray(nextBar.segments) ? nextBar.segments : null;
@@ -6366,7 +6420,7 @@ ${paintLayers}
           } else {
             delete nextBar.solid_fill;
           }
-          if (segments && segments.length && !this._segmentsEqualForEditor(segments, this._getDefaultSegments())) {
+          if (segments && segments.length && (legacySegmentSpace || !this._segmentsEqualForEditor(segments, this._getDefaultSegments()))) {
             nextBar.segments = segments;
             delete nextTarget.segments;
             delete nextTarget.severity;
@@ -6462,9 +6516,11 @@ ${paintLayers}
           return orderedValue;
         }
         _cleanupEditorEmittedConfig(config) {
+          var _a;
           if (!this._isObject(config)) {
             return config;
           }
+          const inheritedSegmentSpace = (_a = config.bar) == null ? void 0 : _a.segment_space;
           let nextConfig = this._cleanupEntityIdentityForEmit(config);
           nextConfig = this._cleanupScaleForEmit(nextConfig);
           nextConfig = this._cleanupTargetForEmit(nextConfig, { type: "card" });
@@ -6491,7 +6547,7 @@ ${paintLayers}
               cleanedEntry = this._cleanupLayoutForEmit(cleanedEntry);
               cleanedEntry = this._cleanupFormattingForEmit(cleanedEntry);
               cleanedEntry = this._cleanupNeedleForEmit(cleanedEntry, { type: "entity" });
-              cleanedEntry = this._cleanupBarForEmit(cleanedEntry, { type: "entity", index }, nextConfig);
+              cleanedEntry = this._cleanupBarForEmit(cleanedEntry, { type: "entity", index }, nextConfig, inheritedSegmentSpace);
               return cleanedEntry;
             });
           }

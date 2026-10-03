@@ -469,6 +469,43 @@ describe('validateNormalizedConfig', () => {
     }));
   });
 
+  it('warns and ignores malformed percentage segment boundaries', () => {
+    const normalized = normalize({
+      entities: [{ entity: 'sensor.one' }],
+      bar: { segments: [{ from: 'twenty%', to: '80%', color: '#ff0000' }] },
+    });
+    const diagnostics = validateNormalizedConfig(normalized);
+    const card = createCard();
+
+    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
+      code: 'segments.invalid_percentage',
+      path: 'card.bar.segments[0]',
+    }));
+    expect(card._getSegmentsForRendering(normalized.entities[0], 0, 100)).toEqual([]);
+  });
+
+  it('warns and ignores unsupported entity-backed segment boundaries', () => {
+    const normalized = normalize({
+      entities: [{ entity: 'sensor.one' }],
+      bar: { segments: [
+        { from: 'sensor.limit', to: '80%', color: '#ff0000' },
+        { from: { fixed: 20, entity: 'sensor.other_limit' }, to: '80%', color: '#00ff00' },
+      ] },
+    });
+    const diagnostics = validateNormalizedConfig(normalized);
+    const card = createCard();
+
+    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
+      code: 'segments.unsupported_entity_boundary',
+      path: 'card.bar.segments[0]',
+    }));
+    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
+      code: 'segments.unsupported_entity_boundary',
+      path: 'card.bar.segments[1]',
+    }));
+    expect(card._getSegmentsForRendering(normalized.entities[0], 0, 100)).toEqual([]);
+  });
+
   it('warns when multiple gradient stops share the same position', () => {
     const diagnostics = validateNormalizedConfig(normalize({
       entities: [{ entity: 'sensor.one' }],

@@ -905,7 +905,8 @@ export class SensorBarCard extends HTMLElement {
   _getSegmentsForRendering(ecfg, minValue = 0, maxValue = 100) {
     const safeMin = Number.isFinite(minValue) ? minValue : 0;
     const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
-    const rawSegments = Array.isArray(ecfg.bar?.segments) ? ecfg.bar.segments : [];
+    const rawSegments = (Array.isArray(ecfg.bar?.segments) ? ecfg.bar.segments : [])
+      .filter((segment) => !segment?.invalidBoundary);
     if (ecfg.bar?.segment_space === 'scale' || this._segmentsNeedBoundaryResolution(rawSegments)) {
       const resolvedSegments = rawSegments
         .map((segment) => ({

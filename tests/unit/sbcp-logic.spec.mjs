@@ -1048,7 +1048,7 @@ describe('Sensor Bar Card Plus logic', () => {
       { from: { fixed: 50, entity: null }, to: { fixed: 80, entity: null }, color: '#FF9800', label: null },
       { from: { fixed: 80, entity: null }, to: null, color: '#F44336', label: 'High' },
     ]);
-    expect(cfg.bar.segment_space).toBe('scale');
+    expect(cfg.bar.segment_space).toBeNull();
   });
 
   it('accepts structured bar.segments', () => {
@@ -1067,7 +1067,7 @@ describe('Sensor Bar Card Plus logic', () => {
       { from: { fixed: 0, entity: null }, to: { fixed: 60, entity: null }, color: '#4CAF50', label: null },
       { from: { fixed: 60, entity: null }, to: null, color: '#F44336', label: null },
     ]);
-    expect(cfg.bar.segment_space).toBe('scale');
+    expect(cfg.bar.segment_space).toBeNull();
   });
 
   it('parses percent literals with optional whitespace and decimals', () => {
@@ -1095,6 +1095,49 @@ describe('Sensor Bar Card Plus logic', () => {
       { from: { fixed: null, entity: null, percent: 0 }, to: { fixed: null, entity: null, percent: 50 }, color: '#22c55e', label: null },
       { from: { fixed: null, entity: null, percent: 50 }, to: { fixed: null, entity: null, percent: 100 }, color: '#ef4444', label: null },
     ]);
+  });
+
+  it('interprets modern segment boundaries independently as scale values or visible-scale percentages', () => {
+    const card = createCard();
+    const rowFor = (segments) => card.normalizeCardConfig({
+      scale: { min: { fixed: -100 }, max: { fixed: 300 } },
+      bar: { segments },
+      entities: [{ entity: 'sensor.row' }],
+    }).entities[0];
+
+    expect(card._getSegmentsForRendering(rowFor([{ from: 40, to: 200, color: '#111111' }]), -100, 300)[0])
+      .toMatchObject({ from: 35, to: 75 });
+    expect(card._getSegmentsForRendering(rowFor([{ from: '25%', to: '75%', color: '#111111' }]), -100, 300)[0])
+      .toMatchObject({ from: 25, to: 75 });
+    expect(card._getSegmentsForRendering(rowFor([{ from: 40, to: '75%', color: '#111111' }]), -100, 300)[0])
+      .toMatchObject({ from: 35, to: 75 });
+    expect(card._getSegmentsForRendering(rowFor([
+      { from: 40, to: '50%', color: '#111111' },
+      { from: '50%', to: 200, color: '#222222' },
+    ]), -100, 300)).toEqual([
+      { from: 35, to: 50, color: '#111111', label: null },
+      { from: 50, to: 75, color: '#222222', label: null },
+    ]);
+  });
+
+  it('keeps legacy segment_space for bare numbers while explicit percentages remain percentages', () => {
+    const card = createCard();
+    const render = (segmentSpace, segment) => {
+      const row = card.normalizeCardConfig({
+        scale: { min: { fixed: 0 }, max: { fixed: 200 } },
+        bar: {
+          segment_space: segmentSpace,
+          segments: [{ ...segment, color: '#111111' }],
+        },
+        entities: [{ entity: 'sensor.row' }],
+      }).entities[0];
+      return card._getSegmentsForRendering(row, 0, 200);
+    };
+
+    expect(render('percent', { from: 25, to: 75 })).toEqual([{ from: 25, to: 75, color: '#111111', label: null }]);
+    expect(render('scale', { from: 25, to: 75 })).toEqual([{ from: 12.5, to: 37.5, color: '#111111', label: null }]);
+    expect(render('percent', { from: 25, to: '75%' })).toEqual([{ from: 25, to: 75, color: '#111111', label: null }]);
+    expect(render('scale', { from: 25, to: '75%' })).toEqual([{ from: 12.5, to: 75, color: '#111111', label: null }]);
   });
 
   it('accepts top-level segments with percentage-string boundaries', () => {
@@ -2648,7 +2691,7 @@ describe('Sensor Bar Card Plus logic', () => {
       { from: { fixed: 0, entity: null }, to: { fixed: 80, entity: null }, color: '#2563eb', label: null },
       { from: { fixed: 80, entity: null }, to: null, color: '#ef4444', label: null },
     ]);
-    expect(cfg.bar.segment_space).toBe('scale');
+    expect(cfg.bar.segment_space).toBeNull();
   });
 
   it('inherits card-level segments and lets entity-level segments override them', () => {
@@ -5732,7 +5775,7 @@ describe('Sensor Bar Card Plus logic', () => {
     ]);
   });
 
-  it('keeps numeric structured bar.segments in scale-space', () => {
+  it('interprets numeric structured bar.segments as active-scale values', () => {
     const card = createCard();
     const cfg = card.normalizeCardConfig({
       scale: {

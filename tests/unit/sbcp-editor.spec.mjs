@@ -4877,6 +4877,64 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="segment-from"]')[2].value).toBe('75%');
   });
 
+  it('omits deprecated segment_space from the editor and preserves legacy percent semantics on emit', () => {
+    const editor = createEditor();
+    const source = {
+      entity: 'sensor.one',
+      bar: {
+        segment_space: 'percent',
+        fill_style: 'soft_bands',
+        solid_fill: true,
+        segments: [{ from: 10, to: 60, color: '#ff0000', label: 'Warm' }],
+      },
+    };
+    editor.setConfig(source);
+
+    const emitted = editor._cleanupEditorEmittedConfig(editor._cloneDeep(source));
+
+    expect(editor.shadowRoot.innerHTML).not.toContain('segment_space');
+    expect(emitted.bar.segment_space).toBeUndefined();
+    expect(emitted.bar).toMatchObject({
+      fill_style: 'soft_bands',
+      solid_fill: true,
+      segments: [{ from: '10%', to: '60%', color: '#ff0000', label: 'Warm' }],
+    });
+  });
+
+  it('omits legacy scale segment_space without changing bare scale-value boundaries', () => {
+    const editor = createEditor();
+    const emitted = editor._cleanupEditorEmittedConfig({
+      entity: 'sensor.one',
+      bar: {
+        segment_space: 'scale',
+        fill_style: 'soft_bands',
+        segments: [{ from: 20, to: 80, color: '#00ff00' }],
+      },
+    });
+
+    expect(emitted.bar.segment_space).toBeUndefined();
+    expect(emitted.bar.segments).toEqual([{ from: 20, to: 80, color: '#00ff00' }]);
+    expect(emitted.bar.fill_style).toBe('soft_bands');
+  });
+
+  it('preserves inherited legacy percent semantics for entity segment overrides', () => {
+    const editor = createEditor();
+    const emitted = editor._cleanupEditorEmittedConfig({
+      bar: {
+        segment_space: 'percent',
+        segments: [{ from: 0, to: 100, color: '#111111' }],
+      },
+      entities: [{
+        entity: 'sensor.one',
+        bar: { segments: [{ from: 20, to: 80, color: '#00ff00' }] },
+      }],
+    });
+
+    expect(emitted.bar.segment_space).toBeUndefined();
+    expect(emitted.bar.segments).toEqual([{ from: '0%', to: '100%', color: '#111111' }]);
+    expect(emitted.entities[0].bar.segments).toEqual([{ from: '20%', to: '80%', color: '#00ff00' }]);
+  });
+
   it('card-level draft segment row is local only and not emitted while typing', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
