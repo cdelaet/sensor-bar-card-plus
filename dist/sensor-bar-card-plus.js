@@ -434,7 +434,7 @@
     });
   }
   function normalizeScaleBound(entityConfig, cardConfig, key, defaultValue) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
     const cardScale = cardConfig == null ? void 0 : cardConfig.scale;
     const entityScale = entityConfig == null ? void 0 : entityConfig.scale;
     const entityKey = `${key}_entity`;
@@ -446,18 +446,28 @@
       (_d = cardConfig == null ? void 0 : cardConfig[key]) != null ? _d : defaultValue,
       (_e = cardConfig == null ? void 0 : cardConfig[entityKey]) != null ? _e : null
     );
+    const inheritedFixedExplicit = cardBound ? cardBound.fixed_explicit !== false && cardBound.fixed !== null && cardBound.fixed !== void 0 : (cardConfig == null ? void 0 : cardConfig[key]) !== null && (cardConfig == null ? void 0 : cardConfig[key]) !== void 0;
+    const withFixedExplicit = (bound, explicit) => {
+      Object.defineProperty(bound, "fixed_explicit", { value: explicit });
+      return bound;
+    };
     if ((entityScale == null ? void 0 : entityScale[key]) !== void 0) {
-      return normalizeStructuredResolvableValue(
+      const input = entityScale[key];
+      const fixedExplicit = looksLikeEntityId(input) ? inheritedFixedExplicit : typeof input === "object" && input !== null ? ((_f = input.fixed) != null ? _f : input.value) !== null && ((_g = input.fixed) != null ? _g : input.value) !== void 0 : input !== null;
+      return withFixedExplicit(normalizeStructuredResolvableValue(
         entityScale[key],
         inherited,
         defaultValue
-      );
+      ), fixedExplicit);
     }
     const entityOverride = entityConfig[entityKey];
     const hasEntityOverride = entityOverride !== void 0 && entityOverride !== null;
-    const value = (_g = (_f = entityConfig[key]) != null ? _f : hasEntityOverride ? null : inherited.fixed) != null ? _g : inherited.entity ? null : defaultValue;
-    const entity = (_h = entityOverride != null ? entityOverride : inherited.entity) != null ? _h : null;
-    return normalizeResolvableValue(value, entity);
+    const value = (_i = (_h = entityConfig[key]) != null ? _h : hasEntityOverride ? null : inherited.fixed) != null ? _i : inherited.entity ? null : defaultValue;
+    const entity = (_j = entityOverride != null ? entityOverride : inherited.entity) != null ? _j : null;
+    return withFixedExplicit(
+      normalizeResolvableValue(value, entity),
+      entityConfig[key] !== null && entityConfig[key] !== void 0 || !hasEntityOverride && inheritedFixedExplicit
+    );
   }
   function normalizeScaleConfig(entityConfig, cardConfig) {
     return {
@@ -990,7 +1000,7 @@
       enumerable: false
     });
     normalizedCard.layout = normalizeLayoutConfig(baseConfig, null);
-    normalizedCard.scale = normalizeScaleConfig(baseConfig, null);
+    normalizedCard.scale = normalizeScaleConfig(rawConfig, null);
     normalizedCard.bar = normalizeBarConfig(baseConfig, null, {
       scopeExplicitness: cardPaintExplicitness,
       inheritedExplicitness: null,
@@ -1050,6 +1060,35 @@
     }
     return null;
   }
+  function getResolvedScale(hass, scale, previousScale = null) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+    const isValid = (bounds) => Number.isFinite(bounds == null ? void 0 : bounds.min) && Number.isFinite(bounds == null ? void 0 : bounds.max) && bounds.min < bounds.max;
+    const fixed = {
+      min: getNumericValue(null, (_c = (_a = scale == null ? void 0 : scale.min) == null ? void 0 : _a.fixed) != null ? _c : (_b = scale == null ? void 0 : scale.min) == null ? void 0 : _b.value),
+      max: getNumericValue(null, (_f = (_d = scale == null ? void 0 : scale.max) == null ? void 0 : _d.fixed) != null ? _f : (_e = scale == null ? void 0 : scale.max) == null ? void 0 : _e.value)
+    };
+    if (((_g = scale == null ? void 0 : scale.min) == null ? void 0 : _g.entity) && ((_h = scale == null ? void 0 : scale.max) == null ? void 0 : _h.entity)) {
+      const dynamic = {
+        min: getEntityNumericValue(hass, scale.min.entity),
+        max: getEntityNumericValue(hass, scale.max.entity)
+      };
+      if (isValid(dynamic)) return dynamic;
+      if (Number.isFinite(dynamic.min) && Number.isFinite(dynamic.max) && isValid(previousScale)) {
+        return previousScale;
+      }
+      return scale.min.fixed_explicit !== false && scale.max.fixed_explicit !== false && isValid(fixed) ? fixed : { min: 0, max: 100 };
+    }
+    const resolved = {
+      min: (_i = getNormalizedResolvableNumericValue(hass, scale == null ? void 0 : scale.min)) != null ? _i : 0,
+      max: (_j = getNormalizedResolvableNumericValue(hass, scale == null ? void 0 : scale.max)) != null ? _j : 100
+    };
+    if (isValid(resolved)) return resolved;
+    const fallback = {
+      min: (_k = fixed.min) != null ? _k : 0,
+      max: (_l = fixed.max) != null ? _l : 100
+    };
+    return isValid(fallback) ? fallback : { min: 0, max: 100 };
+  }
   var init_resolve = __esm({
     "src/config/resolve.js"() {
       init_normalize();
@@ -1071,6 +1110,22 @@
     diagnostics.warnings.push(createDiagnostic(code, message, path, entity));
   }
   function validateScaleBounds(diagnostics, scale, path, entity = null) {
+    var _a, _b;
+    if (((_a = scale == null ? void 0 : scale.min) == null ? void 0 : _a.entity) && ((_b = scale == null ? void 0 : scale.max) == null ? void 0 : _b.entity)) {
+      const hasFixed = (bound) => {
+        var _a2, _b2;
+        return bound.fixed_explicit !== false && ((_a2 = bound.fixed) != null ? _a2 : bound.value) !== null && ((_b2 = bound.fixed) != null ? _b2 : bound.value) !== void 0;
+      };
+      if (hasFixed(scale.min) !== hasFixed(scale.max)) {
+        addWarning(
+          diagnostics,
+          "scale.orphan_fixed_fallback",
+          "Both dynamic scale bounds require a complete fixed fallback pair. The single fixed fallback will not be used if the dynamic pair becomes unavailable.",
+          `${path}.scale`,
+          entity
+        );
+      }
+    }
     const min = getStaticFixedValue(scale == null ? void 0 : scale.min);
     const max = getStaticFixedValue(scale == null ? void 0 : scale.max);
     if (Number.isFinite(min) && Number.isFinite(max) && min > max) {
@@ -1686,14 +1741,15 @@
     };
   }
   function buildRowViewModel(options) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W, _X, _Y, _Z, __, _$, _aa, _ba, _ca, _da, _ea, _fa, _ga, _ha, _ia, _ja;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W, _X, _Y, _Z, __, _$, _aa, _ba, _ca, _da, _ea, _fa, _ga, _ha;
     const {
       hass,
       cardConfig,
       entityConfig,
       entityState,
       peaks,
-      extrema
+      extrema,
+      previousScale
     } = options;
     void cardConfig;
     const entityId = (_a = entityConfig == null ? void 0 : entityConfig.entity) != null ? _a : null;
@@ -1703,24 +1759,21 @@
     const configuredUnit = (_e = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _e.unit;
     const targetUnit = (_f = configuredUnit != null ? configuredUnit : rawUnit) != null ? _f : "";
     const displayUnit = numericValue !== null ? targetUnit : "";
-    const min = getNormalizedResolvableNumericValue(hass, (_g = entityConfig == null ? void 0 : entityConfig.scale) == null ? void 0 : _g.min);
-    const max = getNormalizedResolvableNumericValue(hass, (_h = entityConfig == null ? void 0 : entityConfig.scale) == null ? void 0 : _h.max);
-    const safeMin = Number.isFinite(min) ? min : 0;
-    const safeMax = Number.isFinite(max) ? max : 100;
+    const { min: safeMin, max: safeMax } = getResolvedScale(hass, entityConfig == null ? void 0 : entityConfig.scale, previousScale);
     const percent = numericValue !== null ? toScalePct(numericValue, safeMin, safeMax) : 0;
-    const decimal = (_j = (_i = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _i.decimal) != null ? _j : null;
+    const decimal = (_h = (_g = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _g.decimal) != null ? _h : null;
     const primaryPresentation = numericValue === null ? createTextPresentation(rawState) : createNumericPresentation(numericValue, displayUnit, decimal);
-    const targetValue = ((_k = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _k.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_l = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _l.source, safeMin, safeMax);
+    const targetValue = ((_i = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _i.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_j = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _j.source, safeMin, safeMax);
     const targetPercent = targetValue !== null ? toScalePct(targetValue, safeMin, safeMax) : null;
     const targetVisible = targetValue !== null;
-    const targetDecimal = (_n = (_m = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _m.label_decimal) != null ? _n : decimal;
+    const targetDecimal = (_l = (_k = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _k.label_decimal) != null ? _l : decimal;
     const targetPresentation = targetValue !== null ? createNumericPresentation(targetValue, targetUnit, targetDecimal) : null;
-    const targetLabelPresentation = targetValue !== null ? createMarkerLabelPresentation(targetValue, targetUnit, (_p = (_o = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _o.label_precision) != null ? _p : targetDecimal, {
-      text: (_q = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _q.label_text,
-      showValue: (_r = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _r.label_show_value,
-      showUnit: (_s = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _s.label_show_unit
+    const targetLabelPresentation = targetValue !== null ? createMarkerLabelPresentation(targetValue, targetUnit, (_n = (_m = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _m.label_precision) != null ? _n : targetDecimal, {
+      text: (_o = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _o.label_text,
+      showValue: (_p = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _p.label_show_value,
+      showUnit: (_q = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _q.label_show_unit
     }) : null;
-    const baselineValue = ((_t = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _t.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_u = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _u.at, safeMin, safeMax);
+    const baselineValue = ((_r = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _r.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_s = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _s.at, safeMin, safeMax);
     const baselinePercent = Number.isFinite(baselineValue) ? toScalePct(baselineValue, safeMin, safeMax) : null;
     const baselineVisible = Number.isFinite(baselineValue);
     const legacyPeak = Number.isFinite(getFiniteNumber(peaks == null ? void 0 : peaks[entityId])) ? { value: getFiniteNumber(peaks == null ? void 0 : peaks[entityId]) } : null;
@@ -1728,9 +1781,9 @@
       numericValue,
       safeMin,
       safeMax,
-      (_v = extrema == null ? void 0 : extrema.peak) != null ? _v : legacyPeak,
+      (_t = extrema == null ? void 0 : extrema.peak) != null ? _t : legacyPeak,
       "max",
-      ((_w = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _w.show) === true
+      ((_u = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _u.show) === true
     );
     const floorState = getExtremumState(
       numericValue,
@@ -1738,25 +1791,25 @@
       safeMax,
       extrema == null ? void 0 : extrema.floor,
       "min",
-      ((_x = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _x.show) === true
+      ((_v = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _v.show) === true
     );
-    const peakDecimal = (_z = (_y = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _y.label_decimal) != null ? _z : decimal;
-    const floorDecimal = (_B = (_A = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _A.label_decimal) != null ? _B : decimal;
-    const peakLabelPrecision = (_D = (_C = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _C.label_precision) != null ? _D : peakDecimal;
-    const floorLabelPrecision = (_F = (_E = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _E.label_precision) != null ? _F : floorDecimal;
+    const peakDecimal = (_x = (_w = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _w.label_decimal) != null ? _x : decimal;
+    const floorDecimal = (_z = (_y = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _y.label_decimal) != null ? _z : decimal;
+    const peakLabelPrecision = (_B = (_A = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _A.label_precision) != null ? _B : peakDecimal;
+    const floorLabelPrecision = (_D = (_C = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _C.label_precision) != null ? _D : floorDecimal;
     const peakPresentation = peakState.visible ? createNumericPresentation(peakState.value, targetUnit, peakDecimal) : null;
     const floorPresentation = floorState.visible ? createNumericPresentation(floorState.value, targetUnit, floorDecimal) : null;
     const peakLabelPresentation = peakState.visible ? createMarkerLabelPresentation(peakState.value, targetUnit, peakLabelPrecision, {
-      text: (_G = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _G.label_text,
-      showValue: (_H = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _H.label_show_value,
-      showUnit: (_I = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _I.label_show_unit
+      text: (_E = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _E.label_text,
+      showValue: (_F = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _F.label_show_value,
+      showUnit: (_G = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _G.label_show_unit
     }) : null;
     const floorLabelPresentation = floorState.visible ? createMarkerLabelPresentation(floorState.value, targetUnit, floorLabelPrecision, {
-      text: (_J = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _J.label_text,
-      showValue: (_K = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _K.label_show_value,
-      showUnit: (_L = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _L.label_show_unit
+      text: (_H = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _H.label_text,
+      showValue: (_I = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _I.label_show_value,
+      showUnit: (_J = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _J.label_show_unit
     }) : null;
-    const genericMarkers = ((_M = entityConfig == null ? void 0 : entityConfig.generic_markers) != null ? _M : []).filter((marker) => marker.accepted).map((marker) => {
+    const genericMarkers = ((_K = entityConfig == null ? void 0 : entityConfig.generic_markers) != null ? _K : []).filter((marker) => marker.accepted).map((marker) => {
       var _a2, _b2, _c2, _d2, _e2;
       const value = getNormalizedResolvableNumericValue(hass, marker.source, safeMin, safeMax);
       const visible = Number.isFinite(value);
@@ -1807,8 +1860,8 @@
     });
     return {
       entityId,
-      name: (_P = (_O = entityConfig == null ? void 0 : entityConfig.name) != null ? _O : (_N = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _N.friendly_name) != null ? _P : entityId,
-      icon: (entityConfig == null ? void 0 : entityConfig.icon) === false ? false : (_S = (_R = entityConfig == null ? void 0 : entityConfig.icon) != null ? _R : (_Q = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _Q.icon) != null ? _S : getDefaultEntityIcon(entityState, entityId),
+      name: (_N = (_M = entityConfig == null ? void 0 : entityConfig.name) != null ? _M : (_L = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _L.friendly_name) != null ? _N : entityId,
+      icon: (entityConfig == null ? void 0 : entityConfig.icon) === false ? false : (_Q = (_P = entityConfig == null ? void 0 : entityConfig.icon) != null ? _P : (_O = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _O.icon) != null ? _Q : getDefaultEntityIcon(entityState, entityId),
       state: rawState,
       numericValue,
       rawUnit,
@@ -1819,11 +1872,11 @@
       displayUnit: primaryPresentation.unit,
       primaryPresentation,
       unit: primaryPresentation.unit,
-      barColor: (_U = (_T = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _T.color) != null ? _U : null,
-      fillStyle: (_W = (_V = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _V.fill_style) != null ? _W : null,
+      barColor: (_S = (_R = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _R.color) != null ? _S : null,
+      fillStyle: (_U = (_T = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _T.fill_style) != null ? _U : null,
       target: targetValue,
       targetPercent,
-      targetDisplay: (_X = targetPresentation == null ? void 0 : targetPresentation.text) != null ? _X : null,
+      targetDisplay: (_V = targetPresentation == null ? void 0 : targetPresentation.text) != null ? _V : null,
       targetPresentation,
       targetLabelPresentation,
       targetVisible,
@@ -1832,31 +1885,31 @@
       baselineVisible,
       peak: peakState.value,
       peakPercent: peakState.percent,
-      peakDisplay: (_Y = peakPresentation == null ? void 0 : peakPresentation.number) != null ? _Y : null,
+      peakDisplay: (_W = peakPresentation == null ? void 0 : peakPresentation.number) != null ? _W : null,
       peakPresentation,
       peakLabelPresentation,
       peakVisible: peakState.visible,
       floor: floorState.value,
       floorPercent: floorState.percent,
-      floorDisplay: (_Z = floorPresentation == null ? void 0 : floorPresentation.number) != null ? _Z : null,
+      floorDisplay: (_X = floorPresentation == null ? void 0 : floorPresentation.number) != null ? _X : null,
       floorPresentation,
       floorLabelPresentation,
       floorVisible: floorState.visible,
       markers,
       markerLaneOccupancy: getMarkerLaneOccupancy(entityConfig),
       markerLabelLaneOccupancy: getMarkerLabelLaneOccupancy(entityConfig),
-      segments: (_$ = (__ = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : __.segments) != null ? _$ : null,
-      gradientStops: (_ba = (_aa = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _aa.gradient_stops) != null ? _ba : null,
+      segments: (_Z = (_Y = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _Y.segments) != null ? _Z : null,
+      gradientStops: (_$ = (__ = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : __.gradient_stops) != null ? _$ : null,
       needle: getNeedleState(entityConfig, numericValue, safeMin, safeMax, baselinePercent),
       classes: {
-        labelPosition: (_ea = (_da = (_ca = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _ca.label) == null ? void 0 : _da.position) != null ? _ea : "left",
-        animated: ((_fa = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _fa.animated) !== false
+        labelPosition: (_ca = (_ba = (_aa = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _aa.label) == null ? void 0 : _ba.position) != null ? _ca : "left",
+        animated: ((_da = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _da.animated) !== false
       },
       attributes: {
         entity: entityId,
-        baseHeight: (_ha = (_ga = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _ga.height) != null ? _ha : 38,
-        heightExplicit: ((_ia = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _ia.height_explicit) === true,
-        barAnimated: ((_ja = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _ja.animated) !== false
+        baseHeight: (_fa = (_ea = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _ea.height) != null ? _fa : 38,
+        heightExplicit: ((_ga = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _ga.height_explicit) === true,
+        barAnimated: ((_ha = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _ha.animated) !== false
       }
     };
   }
@@ -1918,6 +1971,7 @@
           this._lastDiagnosticsSignature = null;
           this._hass = null;
           this._extrema = {};
+          this._rowScales = /* @__PURE__ */ new WeakMap();
           this._leftModeResponsiveHistory = /* @__PURE__ */ new Map();
           this._rendered = false;
           this._resizeObserver = null;
@@ -1954,6 +2008,7 @@
           this._rendered = false;
           const previousConfig = this._config;
           this._config = this.normalizeCardConfig(config);
+          this._rowScales = /* @__PURE__ */ new WeakMap();
           const activeLeftEntityIds = new Set(
             (this._config.entities || []).filter((entityConfig) => {
               var _a2, _b2;
@@ -5161,55 +5216,62 @@
           this._setStyleIfChanged(labelEl, "--marker-color", markerColor);
           this._setStyleIfChanged(labelEl, "--marker-contrast-color", this._getMarkerContrastColor(markerColor));
         }
-        _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
-          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F;
-          const ecfg = this._resolve(entityCfg);
-          const stateObj = (_c = (_b = (_a = this._hass) == null ? void 0 : _a.states) == null ? void 0 : _b[entityCfg.entity]) != null ? _c : null;
-          if (stateObj) this._updateExtrema(entityCfg, ecfg, stateObj);
-          const rowViewModel = stateObj ? buildRowViewModel({
+        _buildRowViewModel(entityCfg, ecfg, stateObj) {
+          var _a;
+          const rowViewModel = buildRowViewModel({
             hass: this._hass,
             cardConfig: this._config,
             entityConfig: ecfg,
             entityState: stateObj,
-            extrema: (_d = this._extrema[entityCfg.entity]) != null ? _d : null
-          }) : null;
+            extrema: (_a = this._extrema[entityCfg.entity]) != null ? _a : null,
+            previousScale: this._rowScales.get(entityCfg)
+          });
+          this._rowScales.set(entityCfg, { min: rowViewModel.min, max: rowViewModel.max });
+          return rowViewModel;
+        }
+        _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E;
+          const ecfg = this._resolve(entityCfg);
+          const stateObj = (_c = (_b = (_a = this._hass) == null ? void 0 : _a.states) == null ? void 0 : _b[entityCfg.entity]) != null ? _c : null;
+          if (stateObj) this._updateExtrema(entityCfg, ecfg, stateObj);
+          const rowViewModel = stateObj ? this._buildRowViewModel(entityCfg, ecfg, stateObj) : null;
           const layout = ecfg.layout;
           const bar = ecfg.bar;
           const safeMin = Number.isFinite(minValue) ? minValue : 0;
           const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
-          const baselinePct = (_e = rowViewModel == null ? void 0 : rowViewModel.baselinePercent) != null ? _e : this._resolveBaselinePct(ecfg, safeMin, safeMax);
+          const baselinePct = (_d = rowViewModel == null ? void 0 : rowViewModel.baselinePercent) != null ? _d : this._resolveBaselinePct(ecfg, safeMin, safeMax);
           const lp = layout.label.position;
-          const h = (_g = (_f = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _f.baseHeight) != null ? _g : layout.height;
-          const name = (_k = (_j = (_h = rowViewModel == null ? void 0 : rowViewModel.name) != null ? _h : ecfg.name) != null ? _j : (_i = stateObj == null ? void 0 : stateObj.attributes) == null ? void 0 : _i.friendly_name) != null ? _k : entityCfg.entity;
-          const escapedEntityId = escapeHtml((_l = rowViewModel == null ? void 0 : rowViewModel.entityId) != null ? _l : entityCfg.entity);
+          const h = (_f = (_e = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _e.baseHeight) != null ? _f : layout.height;
+          const name = (_j = (_i = (_g = rowViewModel == null ? void 0 : rowViewModel.name) != null ? _g : ecfg.name) != null ? _i : (_h = stateObj == null ? void 0 : stateObj.attributes) == null ? void 0 : _h.friendly_name) != null ? _j : entityCfg.entity;
+          const escapedEntityId = escapeHtml((_k = rowViewModel == null ? void 0 : rowViewModel.entityId) != null ? _k : entityCfg.entity);
           const escapedName = escapeHtml(name);
           const markerModels = this._getRowMarkerModels(rowViewModel, ecfg, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor);
           const targetMarkerModel = this._getMarkerModel(markerModels, "target");
           const peakMarkerModel = this._getMarkerModel(markerModels, "peak");
           const floorMarkerModel = this._getMarkerModel(markerModels, "floor");
           const genericMarkerModels = markerModels.filter((marker) => marker.type === "generic");
-          const markerLaneOccupancy = (_m = rowViewModel == null ? void 0 : rowViewModel.markerLaneOccupancy) != null ? _m : getMarkerLaneOccupancy(ecfg);
-          const markerLabelLaneOccupancy = (_n = rowViewModel == null ? void 0 : rowViewModel.markerLabelLaneOccupancy) != null ? _n : getMarkerLabelLaneOccupancy(ecfg);
-          const rawValue = (_o = rowViewModel == null ? void 0 : rowViewModel.numericValue) != null ? _o : this._getFiniteNumber(stateDisplay);
-          const needleState = (_p = rowViewModel == null ? void 0 : rowViewModel.needle) != null ? _p : this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
+          const markerLaneOccupancy = (_l = rowViewModel == null ? void 0 : rowViewModel.markerLaneOccupancy) != null ? _l : getMarkerLaneOccupancy(ecfg);
+          const markerLabelLaneOccupancy = (_m = rowViewModel == null ? void 0 : rowViewModel.markerLabelLaneOccupancy) != null ? _m : getMarkerLabelLaneOccupancy(ecfg);
+          const rawValue = (_n = rowViewModel == null ? void 0 : rowViewModel.numericValue) != null ? _n : this._getFiniteNumber(stateDisplay);
+          const needleState = (_o = rowViewModel == null ? void 0 : rowViewModel.needle) != null ? _o : this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
           const fillState = this._getFillRenderState(pct, "var(--sbcp-row-height)", ecfg, color, targetPct, baselinePct, safeMin, safeMax, needleState.show);
-          const baselineAt = (_q = ecfg.baseline) == null ? void 0 : _q.at;
-          const baselineConfigured = ((_r = ecfg.baseline) == null ? void 0 : _r.enabled) !== false && (Number.isFinite(baselinePct) || Boolean(baselineAt == null ? void 0 : baselineAt.entity) || (baselineAt == null ? void 0 : baselineAt.fixed) !== null && (baselineAt == null ? void 0 : baselineAt.fixed) !== void 0 || Number.isFinite(baselineAt == null ? void 0 : baselineAt.percent));
+          const baselineAt = (_p = ecfg.baseline) == null ? void 0 : _p.at;
+          const baselineConfigured = ((_q = ecfg.baseline) == null ? void 0 : _q.enabled) !== false && (Number.isFinite(baselinePct) || Boolean(baselineAt == null ? void 0 : baselineAt.entity) || (baselineAt == null ? void 0 : baselineAt.fixed) !== null && (baselineAt == null ? void 0 : baselineAt.fixed) !== void 0 || Number.isFinite(baselineAt == null ? void 0 : baselineAt.percent));
           const baselineIndicator = baselineConfigured ? `<div class="baseline-indicator" aria-hidden="true" style="${Number.isFinite(baselinePct) ? `left:${baselinePct}%;display:block;` : "display:none;"}"></div>` : "";
           const peakMarker = this._renderMarker(peakMarkerModel);
           const targetMarker = this._renderMarker(targetMarkerModel);
           const floorMarker = this._renderMarker(floorMarkerModel);
           const targetValueLabel = (targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) ? `
-      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;visibility:${targetMarkerModel.visible && ((_s = targetMarkerModel.label) == null ? void 0 : _s.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(targetMarkerModel)}">
-        ${((_t = targetMarkerModel.label) == null ? void 0 : _t.text) ? escapeHtml(targetMarkerModel.label.text) : ""}
+      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;visibility:${targetMarkerModel.visible && ((_r = targetMarkerModel.label) == null ? void 0 : _r.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(targetMarkerModel)}">
+        ${((_s = targetMarkerModel.label) == null ? void 0 : _s.text) ? escapeHtml(targetMarkerModel.label.text) : ""}
       </div>` : "";
           const peakValueLabel = (peakMarkerModel == null ? void 0 : peakMarkerModel.labelVisible) ? `
-      <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;visibility:${peakMarkerModel.visible && ((_u = peakMarkerModel.label) == null ? void 0 : _u.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(peakMarkerModel)}">
-        ${peakMarkerModel.visible && ((_v = peakMarkerModel.label) == null ? void 0 : _v.text) ? escapeHtml(peakMarkerModel.label.text) : ""}
+      <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;visibility:${peakMarkerModel.visible && ((_t = peakMarkerModel.label) == null ? void 0 : _t.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(peakMarkerModel)}">
+        ${peakMarkerModel.visible && ((_u = peakMarkerModel.label) == null ? void 0 : _u.text) ? escapeHtml(peakMarkerModel.label.text) : ""}
       </div>` : "";
           const floorValueLabel = (floorMarkerModel == null ? void 0 : floorMarkerModel.labelVisible) ? `
-      <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;visibility:${floorMarkerModel.visible && ((_w = floorMarkerModel.label) == null ? void 0 : _w.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(floorMarkerModel)}">
-        ${floorMarkerModel.visible && ((_x = floorMarkerModel.label) == null ? void 0 : _x.text) ? escapeHtml(floorMarkerModel.label.text) : ""}
+      <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;visibility:${floorMarkerModel.visible && ((_v = floorMarkerModel.label) == null ? void 0 : _v.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(floorMarkerModel)}">
+        ${floorMarkerModel.visible && ((_w = floorMarkerModel.label) == null ? void 0 : _w.text) ? escapeHtml(floorMarkerModel.label.text) : ""}
       </div>` : "";
           const genericMarkers = genericMarkerModels.map((marker) => this._renderMarker(marker)).join("");
           const genericValueLabels = genericMarkerModels.filter((marker) => marker.labelVisible).map((marker) => {
@@ -5219,9 +5281,9 @@
         ${marker.visible && ((_b2 = marker.label) == null ? void 0 : _b2.text) ? escapeHtml(marker.label.text) : ""}
       </div>`;
           }).join("");
-          const needleMarker = ((_z = (_y = ecfg.bar) == null ? void 0 : _y.needle) == null ? void 0 : _z.show) && !Number.isFinite(baselinePct) ? `
+          const needleMarker = ((_y = (_x = ecfg.bar) == null ? void 0 : _x.needle) == null ? void 0 : _y.show) && !Number.isFinite(baselinePct) ? `
       <div class="needle-layer">
-        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_A = needleState.pct) != null ? _A : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
+        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_z = needleState.pct) != null ? _z : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
       </div>` : "";
           const paintLayers = fillState.paintLayers.map((layer) => `
                   <div class="bar-paint-layer" data-layer="${layer.id}" style="z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}"></div>`).join("");
@@ -5233,7 +5295,7 @@
           ${this._formatAboveValueMarkup(stateDisplay, unit, false)}
         </div>
       </div>` : "";
-          const heroSize = (_B = layout.hero.size) != null ? _B : "small";
+          const heroSize = (_A = layout.hero.size) != null ? _A : "small";
           const heroFontSize = layout.hero.value_size;
           const heroHeader = lp === "hero" ? `
       <div class="hero-line" data-hero-size="${heroSize}"${Number.isFinite(heroFontSize) ? ` style="--sbcp-hero-base-size:${heroFontSize}px"` : ""}>
@@ -5253,7 +5315,7 @@
           const escapedIcon = ecfg.icon && ecfg.icon !== false ? escapeHtml(ecfg.icon) : "";
           const mainIcon = escapedIcon && lp !== "hero" ? `<div class="icon-wrap"><ha-icon icon="${escapedIcon}"></ha-icon></div>` : "";
           return `
-      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${((_D = (_C = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _C.heightExplicit) != null ? _D : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_F = (_E = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _E.barAnimated) != null ? _F : bar.animated) ? "true" : "false"}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? "true" : "false"}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? "true" : "false"}">
+      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${((_C = (_B = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _B.heightExplicit) != null ? _C : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_E = (_D = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _D.barAnimated) != null ? _E : bar.animated) ? "true" : "false"}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? "true" : "false"}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? "true" : "false"}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${heroHeader}
@@ -5285,17 +5347,12 @@ ${paintLayers}
       </div>`;
         }
         _patchRow(row, entityCfg, stateObj, previousHass = null) {
-          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
           if (!row || !stateObj) return;
           const ecfg = this._resolve(entityCfg);
           this._updateExtrema(entityCfg, ecfg, stateObj);
-          const rowViewModel = buildRowViewModel({
-            hass: this._hass,
-            cardConfig: this._config,
-            entityConfig: ecfg,
-            entityState: stateObj,
-            extrema: (_a = this._extrema[entityCfg.entity]) != null ? _a : null
-          });
+          const previousScale = this._rowScales.get(entityCfg);
+          const rowViewModel = this._buildRowViewModel(entityCfg, ecfg, stateObj);
           const safeMin = rowViewModel.min;
           const safeMax = rowViewModel.max;
           const pct = rowViewModel.percent;
@@ -5309,13 +5366,14 @@ ${paintLayers}
           const liveBaselinePct = rowViewModel.baselinePercent;
           const needleState = rowViewModel.needle;
           const fillState = this._getFillRenderState(pct, "var(--sbcp-row-height)", ecfg, color, liveTargetPct, liveBaselinePct, safeMin, safeMax, needleState.show);
-          const previousStateObj = (_c = (_b = previousHass == null ? void 0 : previousHass.states) == null ? void 0 : _b[entityCfg.entity]) != null ? _c : null;
+          const previousStateObj = (_b = (_a = previousHass == null ? void 0 : previousHass.states) == null ? void 0 : _a[entityCfg.entity]) != null ? _b : null;
           const previousViewModel = previousStateObj ? buildRowViewModel({
             hass: previousHass,
             cardConfig: this._config,
             entityConfig: ecfg,
             entityState: previousStateObj,
-            extrema: (_d = this._extrema[entityCfg.entity]) != null ? _d : null
+            extrema: (_c = this._extrema[entityCfg.entity]) != null ? _c : null,
+            previousScale
           }) : null;
           const revealDuration = this._getRevealTransitionDuration(
             previousViewModel && Number.isFinite(previousViewModel.numericValue) ? { valuePercent: previousViewModel.percent, baselinePercent: previousViewModel.baselinePercent } : null,
@@ -5347,7 +5405,7 @@ ${paintLayers}
           const needleEl = row.querySelector(".needle-marker");
           if (needleEl) {
             this._setStyleIfChanged(needleEl, "display", needleState.show ? "block" : "none");
-            this._setStyleIfChanged(needleEl, "left", `${(_e = needleState.pct) != null ? _e : 0}%`);
+            this._setStyleIfChanged(needleEl, "left", `${(_d = needleState.pct) != null ? _d : 0}%`);
             this._setStyleIfChanged(needleEl, "--needle-color", needleState.color);
             this._setStyleIfChanged(needleEl, "--needle-border-color", needleState.borderColor);
             this._setDatasetIfChanged(needleEl, "edge", needleState.edge);
@@ -5398,11 +5456,11 @@ ${paintLayers}
           const targetLabelEl = row.querySelector(".target-value-label");
           const peakLabelEl = row.querySelector(".peak-value-label");
           const floorLabelEl = row.querySelector(".floor-value-label");
-          const markerModels = (_f = rowViewModel.markers) != null ? _f : [];
+          const markerModels = (_e = rowViewModel.markers) != null ? _e : [];
           this._patchMarker(targetEl, this._getMarkerModel(markerModels, "target"));
           this._patchMarker(row.querySelector(".peak-marker"), this._getMarkerModel(markerModels, "peak"));
           this._patchMarker(row.querySelector(".floor-marker"), this._getMarkerModel(markerModels, "floor"));
-          ((_h = (_g = row.querySelectorAll) == null ? void 0 : _g.call(row, ".generic-marker[data-marker-id]")) != null ? _h : []).forEach((markerEl) => {
+          ((_g = (_f = row.querySelectorAll) == null ? void 0 : _f.call(row, ".generic-marker[data-marker-id]")) != null ? _g : []).forEach((markerEl) => {
             var _a2, _b2, _c2, _d2, _e2;
             const markerId = markerEl.dataset.markerId;
             const marker = this._getMarkerModel(markerModels, markerId);
@@ -5422,8 +5480,8 @@ ${paintLayers}
           const targetMarkerModel = this._getMarkerModel(markerModels, "target");
           this._patchMarkerLabelAppearance(targetLabelEl, targetMarkerModel);
           if (targetLabelEl) {
-            if ((targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) && targetMarkerModel.visible && ((_i = targetMarkerModel.label) == null ? void 0 : _i.text)) {
-              this._setTextIfChanged(targetLabelEl, (_k = (_j = targetMarkerModel.label) == null ? void 0 : _j.text) != null ? _k : null);
+            if ((targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) && targetMarkerModel.visible && ((_h = targetMarkerModel.label) == null ? void 0 : _h.text)) {
+              this._setTextIfChanged(targetLabelEl, (_j = (_i = targetMarkerModel.label) == null ? void 0 : _i.text) != null ? _j : null);
             } else {
               this._setStyleIfChanged(targetLabelEl, "visibility", "hidden");
             }
@@ -5445,7 +5503,7 @@ ${paintLayers}
           patchValueLabel(floorLabelEl, "floor");
         }
         _update(previousHass = null) {
-          var _a, _b, _c, _d, _e;
+          var _a, _b, _c, _d;
           if (!this._hass || !this._config) return;
           const rowsEl = this.shadowRoot.querySelector(".rows");
           if (!rowsEl) return;
@@ -5461,13 +5519,7 @@ ${paintLayers}
               }
               const ecfg = this._resolve(entityCfg);
               this._updateExtrema(entityCfg, ecfg, stateObj);
-              const rowViewModel = buildRowViewModel({
-                hass: this._hass,
-                cardConfig: this._config,
-                entityConfig: ecfg,
-                entityState: stateObj,
-                extrema: (_a = this._extrema[entityCfg.entity]) != null ? _a : null
-              });
+              const rowViewModel = this._buildRowViewModel(entityCfg, ecfg, stateObj);
               const safeMin = rowViewModel.min;
               const safeMax = rowViewModel.max;
               const pct = rowViewModel.percent;
@@ -5475,9 +5527,9 @@ ${paintLayers}
               const display = rowViewModel.primaryPresentation.number;
               const displayUnit = rowViewModel.primaryPresentation.unit;
               const targetPct = rowViewModel.targetPercent;
-              const targetDisplay = (_c = (_b = rowViewModel.targetPresentation) == null ? void 0 : _b.text) != null ? _c : null;
+              const targetDisplay = (_b = (_a = rowViewModel.targetPresentation) == null ? void 0 : _a.text) != null ? _b : null;
               const peakPct = rowViewModel.peakPercent;
-              const peakDisplay = (_e = (_d = rowViewModel.peakPresentation) == null ? void 0 : _d.number) != null ? _e : null;
+              const peakDisplay = (_d = (_c = rowViewModel.peakPresentation) == null ? void 0 : _c.number) != null ? _d : null;
               html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_marker.color, ecfg.target_marker.color, safeMin, safeMax);
             }
             this._clearMarkerHover();

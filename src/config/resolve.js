@@ -39,4 +39,40 @@ export function getNormalizedResolvableNumericValue(hass, resolvable, minValue =
   return null;
 }
 
+export function getResolvedScale(hass, scale, previousScale = null) {
+  const isValid = (bounds) => Number.isFinite(bounds?.min)
+    && Number.isFinite(bounds?.max) && bounds.min < bounds.max;
+  const fixed = {
+    min: getNumericValue(null, scale?.min?.fixed ?? scale?.min?.value),
+    max: getNumericValue(null, scale?.max?.fixed ?? scale?.max?.value),
+  };
+
+  if (scale?.min?.entity && scale?.max?.entity) {
+    const dynamic = {
+      min: getEntityNumericValue(hass, scale.min.entity),
+      max: getEntityNumericValue(hass, scale.max.entity),
+    };
+    if (isValid(dynamic)) return dynamic;
+    // History protects numeric transient inversions, never missing sources.
+    if (Number.isFinite(dynamic.min) && Number.isFinite(dynamic.max) && isValid(previousScale)) {
+      return previousScale;
+    }
+    return scale.min.fixed_explicit !== false && scale.max.fixed_explicit !== false && isValid(fixed)
+      ? fixed : { min: 0, max: 100 };
+  }
+
+  const resolved = {
+    min: getNormalizedResolvableNumericValue(hass, scale?.min) ?? 0,
+    max: getNormalizedResolvableNumericValue(hass, scale?.max) ?? 100,
+  };
+  if (isValid(resolved)) return resolved;
+
+  // Mixed/fixed bounds use their fixed/default pair when resolution is invalid.
+  const fallback = {
+    min: fixed.min ?? 0,
+    max: fixed.max ?? 100,
+  };
+  return isValid(fallback) ? fallback : { min: 0, max: 100 };
+}
+
 export { getFiniteNumber };

@@ -215,6 +215,7 @@ export class SensorBarCard extends HTMLElement {
     this._lastDiagnosticsSignature = null;
     this._hass = null;
     this._extrema = {};
+    this._rowScales = new WeakMap();
     this._leftModeResponsiveHistory = new Map();
     this._rendered = false;
     this._resizeObserver = null;
@@ -253,6 +254,7 @@ export class SensorBarCard extends HTMLElement {
     this._rendered = false; // force full rebuild on config change
     const previousConfig = this._config;
     this._config = this.normalizeCardConfig(config);
+    this._rowScales = new WeakMap();
     // Keep hysteresis history for surviving left-mode rows; every layout pass
     // reevaluates it against current geometry, while removed/non-left rows reset.
     const activeLeftEntityIds = new Set(
@@ -3819,18 +3821,25 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     this._setStyleIfChanged(labelEl, '--marker-contrast-color', this._getMarkerContrastColor(markerColor));
   }
 
+  _buildRowViewModel(entityCfg, ecfg, stateObj) {
+    const rowViewModel = buildRowViewModel({
+      hass: this._hass,
+      cardConfig: this._config,
+      entityConfig: ecfg,
+      entityState: stateObj,
+      extrema: this._extrema[entityCfg.entity] ?? null,
+      previousScale: this._rowScales.get(entityCfg),
+    });
+    this._rowScales.set(entityCfg, { min: rowViewModel.min, max: rowViewModel.max });
+    return rowViewModel;
+  }
+
   _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
     const ecfg = this._resolve(entityCfg);
     const stateObj = this._hass?.states?.[entityCfg.entity] ?? null;
     if (stateObj) this._updateExtrema(entityCfg, ecfg, stateObj);
     const rowViewModel = stateObj
-      ? buildRowViewModel({
-        hass: this._hass,
-        cardConfig: this._config,
-        entityConfig: ecfg,
-        entityState: stateObj,
-        extrema: this._extrema[entityCfg.entity] ?? null,
-      })
+      ? this._buildRowViewModel(entityCfg, ecfg, stateObj)
       : null;
     const layout = ecfg.layout;
     const bar = ecfg.bar;
@@ -3970,13 +3979,8 @@ ${paintLayers}
 
     const ecfg = this._resolve(entityCfg);
     this._updateExtrema(entityCfg, ecfg, stateObj);
-    const rowViewModel = buildRowViewModel({
-      hass: this._hass,
-      cardConfig: this._config,
-      entityConfig: ecfg,
-      entityState: stateObj,
-      extrema: this._extrema[entityCfg.entity] ?? null,
-    });
+    const previousScale = this._rowScales.get(entityCfg);
+    const rowViewModel = this._buildRowViewModel(entityCfg, ecfg, stateObj);
     const safeMin = rowViewModel.min;
     const safeMax = rowViewModel.max;
     const pct = rowViewModel.percent;
@@ -3999,6 +4003,7 @@ ${paintLayers}
         entityConfig: ecfg,
         entityState: previousStateObj,
         extrema: this._extrema[entityCfg.entity] ?? null,
+        previousScale,
       })
       : null;
     const revealDuration = this._getRevealTransitionDuration(
@@ -4154,13 +4159,7 @@ ${paintLayers}
         }
         const ecfg      = this._resolve(entityCfg);
         this._updateExtrema(entityCfg, ecfg, stateObj);
-        const rowViewModel = buildRowViewModel({
-          hass: this._hass,
-          cardConfig: this._config,
-          entityConfig: ecfg,
-          entityState: stateObj,
-          extrema: this._extrema[entityCfg.entity] ?? null,
-        });
+        const rowViewModel = this._buildRowViewModel(entityCfg, ecfg, stateObj);
         const safeMin   = rowViewModel.min;
         const safeMax   = rowViewModel.max;
         const pct       = rowViewModel.percent;

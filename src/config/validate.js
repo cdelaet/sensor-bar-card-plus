@@ -16,6 +16,15 @@ function addWarning(diagnostics, code, message, path, entity = null) {
 }
 
 function validateScaleBounds(diagnostics, scale, path, entity = null) {
+  if (scale?.min?.entity && scale?.max?.entity) {
+    const hasFixed = (bound) => bound.fixed_explicit !== false
+      && (bound.fixed ?? bound.value) !== null && (bound.fixed ?? bound.value) !== undefined;
+    if (hasFixed(scale.min) !== hasFixed(scale.max)) {
+      addWarning(diagnostics, 'scale.orphan_fixed_fallback',
+        'Both dynamic scale bounds require a complete fixed fallback pair. The single fixed fallback will not be used if the dynamic pair becomes unavailable.',
+        `${path}.scale`, entity);
+    }
+  }
   const min = getStaticFixedValue(scale?.min);
   const max = getStaticFixedValue(scale?.max);
   if (Number.isFinite(min) && Number.isFinite(max) && min > max) {

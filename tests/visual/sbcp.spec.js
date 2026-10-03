@@ -52,6 +52,68 @@ async function render(page, { width = 720, config, states = baseStates }) {
   return page.locator('#mount');
 }
 
+for (const animated of [false, true]) {
+  test(`dynamic scale holds invalid bounds and settles simultaneous updates (animated=${animated})`, async ({ page }) => {
+    const states = (value, min, max, baseline) => ({
+      'sensor.value': sensor(value, { friendly_name: 'Dynamic scale' }),
+      'sensor.min': sensor(min),
+      'sensor.max': sensor(max),
+      'sensor.baseline': sensor(baseline),
+    });
+    await render(page, {
+      config: {
+        entity: 'sensor.value',
+        scale: { min: { entity: 'sensor.min' }, max: { entity: 'sensor.max' } },
+        baseline: { at: { entity: 'sensor.baseline' } },
+        target: { at: { fixed: 250 }, label: { show: true } },
+        bar: { animated },
+      },
+      states: states(50, 0, 100, 25),
+    });
+    const card = page.locator('sensor-bar-card-plus');
+    const readGeometry = () => card.evaluate((element) => {
+      const row = element.shadowRoot.querySelector('.row[data-entity]');
+      const track = row.querySelector('.bar-track');
+      const reveal = row.querySelector('.bar-fill-reveal');
+      const baseline = row.querySelector('.baseline-indicator');
+      const target = row.querySelector('.target-marker');
+      const clip = getComputedStyle(reveal).clipPath;
+      const [top, right = top, bottom = top, left = right] = clip.startsWith('inset(')
+        ? clip.slice(6).split(' round ')[0].replace(')', '').split(' ').map(parseFloat)
+        : [];
+      return {
+        clip: [top, right, bottom, left],
+        baseline: parseFloat(getComputedStyle(baseline).left) / track.getBoundingClientRect().width * 100,
+        target: target.style.left,
+        duration: parseFloat(getComputedStyle(reveal).transitionDuration),
+        value: row.querySelector('.value-right').dataset.display,
+        styles: [...row.querySelectorAll('[style]')].map((node) => node.getAttribute('style')).join(';'),
+      };
+    });
+    const update = async (nextStates, expectedClip, baseline, target, value) => {
+      await card.evaluate((element, nextStates) => { element.hass = { states: nextStates }; }, nextStates);
+      await expect.poll(async () => (await readGeometry()).clip).toEqual(expectedClip);
+      await expect.poll(async () => Math.round((await readGeometry()).baseline)).toBe(baseline);
+      const geometry = await readGeometry();
+      expect(geometry.target).toBe(`${target}%`);
+      expect(geometry.value).toBe(String(value));
+      expect(geometry.styles).not.toMatch(/NaN|Infinity/);
+      expect(Number.isFinite(geometry.duration)).toBe(true);
+      if (animated) expect(geometry.duration).toBeGreaterThan(0);
+      else expect(geometry.duration).toBe(0);
+    };
+
+    // All four sources change in one snapshot; the value crosses Baseline.
+    await update(states(140, 100, 300, 220), [0, 40, 0, 20], 60, 75, 140);
+    await update(states(180, 300, 300, 260), [0, 20, 0, 40], 80, 75, 180);
+    await update(states(220, 400, 300, 180), [0, 40, 0, 40], 40, 75, 220);
+    await update(states(500, 200, 600, 300), [0, 25, 0, 25], 25, 12.5, 500);
+    // Unavailable pair members discard dynamic history; recovery resumes it.
+    await update(states(50, 'unavailable', 600, 25), [0, 50, 0, 25], 25, 100, 50);
+    await update(states(900, 500, 1300, 700), [0, 50, 0, 25], 25, 0, 900);
+  });
+}
+
 test('left responsive history survives unrelated config rebuilds per entity', async ({ page }) => {
   const config = {
     layout: { label: { position: 'left', width: 100 }, height: 38 },

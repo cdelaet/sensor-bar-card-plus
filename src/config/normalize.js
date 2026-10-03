@@ -380,13 +380,27 @@ export function normalizeScaleBound(entityConfig, cardConfig, key, defaultValue)
       cardConfig?.[key] ?? defaultValue,
       cardConfig?.[entityKey] ?? null
     );
+  const inheritedFixedExplicit = cardBound
+    ? cardBound.fixed_explicit !== false && cardBound.fixed !== null && cardBound.fixed !== undefined
+    : cardConfig?.[key] !== null && cardConfig?.[key] !== undefined;
+  const withFixedExplicit = (bound, explicit) => {
+    // Keep default provenance internal while preserving the normalized shape.
+    Object.defineProperty(bound, 'fixed_explicit', { value: explicit });
+    return bound;
+  };
 
   if (entityScale?.[key] !== undefined) {
-    return normalizeStructuredResolvableValue(
+    const input = entityScale[key];
+    const fixedExplicit = looksLikeEntityId(input)
+      ? inheritedFixedExplicit
+      : (typeof input === 'object' && input !== null
+        ? (input.fixed ?? input.value) !== null && (input.fixed ?? input.value) !== undefined
+        : input !== null);
+    return withFixedExplicit(normalizeStructuredResolvableValue(
       entityScale[key],
       inherited,
       defaultValue
-    );
+    ), fixedExplicit);
   }
 
   const entityOverride = entityConfig[entityKey];
@@ -403,7 +417,9 @@ export function normalizeScaleBound(entityConfig, cardConfig, key, defaultValue)
     ?? inherited.entity
     ?? null;
 
-  return normalizeResolvableValue(value, entity);
+  return withFixedExplicit(normalizeResolvableValue(value, entity),
+    (entityConfig[key] !== null && entityConfig[key] !== undefined)
+      || (!hasEntityOverride && inheritedFixedExplicit));
 }
 
 export function normalizeScaleConfig(entityConfig, cardConfig) {
@@ -1031,7 +1047,7 @@ export function normalizeCardConfig(rawConfig) {
   });
 
   normalizedCard.layout = normalizeLayoutConfig(baseConfig, null);
-  normalizedCard.scale = normalizeScaleConfig(baseConfig, null);
+  normalizedCard.scale = normalizeScaleConfig(rawConfig, null);
   normalizedCard.bar = normalizeBarConfig(baseConfig, null, {
     scopeExplicitness: cardPaintExplicitness,
     inheritedExplicitness: null,

@@ -8,6 +8,58 @@ function normalize(rawConfig) {
 }
 
 describe('validateNormalizedConfig', () => {
+  it.each(['min', 'max'])('warns non-fatally for a two-dynamic-bound pair with only %s.fixed', (key) => {
+    const scale = { min: { entity: 'sensor.min' }, max: { entity: 'sensor.max' } };
+    scale[key].fixed = key === 'min' ? 0 : 1000;
+    const diagnostics = validateNormalizedConfig(normalize({ entity: 'sensor.one', scale }));
+    expect(diagnostics.errors).toEqual([]);
+    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
+      code: 'scale.orphan_fixed_fallback', path: 'card.scale', entity: null,
+      message: expect.stringContaining('will not be used'),
+    }));
+    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
+      code: 'scale.orphan_fixed_fallback', path: 'entities[0].scale', entity: 'sensor.one',
+    }));
+  });
+
+  it.each([
+    { min: { entity: 'sensor.min', fixed: 0 }, max: { entity: 'sensor.max', fixed: 1000 } },
+    { min: { entity: 'sensor.min' }, max: { entity: 'sensor.max' } },
+    { min: { fixed: 0 }, max: { entity: 'sensor.max', fixed: 1000 } },
+    { min: { entity: 'sensor.min', fixed: -500 } },
+  ])('does not warn about an orphan fallback for complete, absent, or mixed fallbacks', (scale) => {
+    const diagnostics = validateNormalizedConfig(normalize({ entity: 'sensor.one', scale }));
+    expect(diagnostics.warnings.filter(({ code }) => code === 'scale.orphan_fixed_fallback')).toEqual([]);
+  });
+
+  it('warns on a row override without treating the default max as an explicit fallback', () => {
+    const diagnostics = validateNormalizedConfig(normalize({
+      entities: [{ entity: 'sensor.one', scale: { min: 'sensor.min', max: 'sensor.max' }, min: 500 }],
+      min: 500,
+    }));
+    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
+      code: 'scale.orphan_fixed_fallback', path: 'entities[0].scale',
+    }));
+  });
+
+  it.each([
+    { scale: { min: 'sensor.min', max: 'sensor.max' } },
+    { min_entity: 'sensor.min', max_entity: 'sensor.max' },
+  ])('does not warn when shorthand dynamic bounds have only implicit defaults', (config) => {
+    const diagnostics = validateNormalizedConfig(normalize({ entity: 'sensor.one', ...config }));
+    expect(diagnostics.warnings.filter(({ code }) => code === 'scale.orphan_fixed_fallback')).toEqual([]);
+  });
+
+  it.each([
+    { scale: { min: 'sensor.min', max: { entity: 'sensor.max', fixed: 1000 } } },
+    { min_entity: 'sensor.min', max_entity: 'sensor.max', max: 1000 },
+  ])('warns for a shorthand dynamic pair with only one explicit fallback', (config) => {
+    const diagnostics = validateNormalizedConfig(normalize({ entity: 'sensor.one', ...config }));
+    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
+      code: 'scale.orphan_fixed_fallback', path: 'card.scale',
+    }));
+  });
+
   it('returns no warnings or errors for a valid config', () => {
     const diagnostics = validateNormalizedConfig(normalize({
       entities: [{ entity: 'sensor.one' }],

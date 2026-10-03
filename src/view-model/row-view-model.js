@@ -1,4 +1,4 @@
-import { getNormalizedResolvableNumericValue } from '../config/resolve.js';
+import { getNormalizedResolvableNumericValue, getResolvedScale } from '../config/resolve.js';
 import { getFiniteNumber } from '../config/normalize.js';
 import {
   createNumericPresentation,
@@ -166,6 +166,7 @@ export function buildRowViewModel(options) {
     entityState,
     peaks,
     extrema,
+    previousScale,
   } = options;
 
   void cardConfig;
@@ -179,10 +180,7 @@ export function buildRowViewModel(options) {
   const displayUnit = numericValue !== null
     ? targetUnit
     : '';
-  const min = getNormalizedResolvableNumericValue(hass, entityConfig?.scale?.min);
-  const max = getNormalizedResolvableNumericValue(hass, entityConfig?.scale?.max);
-  const safeMin = Number.isFinite(min) ? min : 0;
-  const safeMax = Number.isFinite(max) ? max : 100;
+  const { min: safeMin, max: safeMax } = getResolvedScale(hass, entityConfig?.scale, previousScale);
   const percent = numericValue !== null ? toScalePct(numericValue, safeMin, safeMax) : 0;
   const decimal = entityConfig?.formatting?.decimal ?? null;
   const primaryPresentation = numericValue === null
