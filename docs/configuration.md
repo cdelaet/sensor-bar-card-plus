@@ -452,7 +452,7 @@ layout:
     position: above
 ```
 
-The existing tests do not verify marker collision or clipping at a 24 px rail. Combined built-in and generic markers, both lanes, labels, and layouts are not covered at that height; tight arrangements may overlap.
+Representative marker combinations have been tested at a 24 px rail, including opposing above/below lanes at the same position. This does not guarantee collision-free placement for arbitrary marker labels or every configuration.
 
 ### Label Width
 
