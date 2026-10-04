@@ -6,12 +6,12 @@ This is the exhaustive reference for Sensor Bar Card Plus YAML. For the practica
 
 - [Scope, inheritance, and replacement](#scope-inheritance-and-replacement)
 - [Configuration hierarchy](#configuration-tree)
-- [Property overview](#modern-configuration-overview)
+- [Property overview](#configuration-overview)
 - [Card-level options](#top-level-card-options)
 - [Entity-level options](#top-level-entity-options)
 - [Layout](#layout-options-and-responsive-behavior)
-- [Dynamic scale and target values](#scale-and-dynamic-value-sources)
-- [Structured configuration](#structured-configuration)
+- [Scale and live sources](#scale-and-dynamic-value-sources)
+- [Complete example](#complete-example)
 - [Fill styles](#fill-styles-reference)
 - [Needle](#needle)
 - [Baseline](#baseline)
@@ -27,13 +27,13 @@ This is the exhaustive reference for Sensor Bar Card Plus YAML. For the practica
 
 ## Scope, inheritance, and replacement
 
-Card configuration supplies defaults for the supported per-row settings: `layout`, `scale`, `bar`, `baseline`, `target`, `peak`, `floor`, `markers`, and `formatting`. Entity rows can override these groups for their own row. `title` and `entities` are card-level controls, not entity overrides; `name` and `icon` are row-specific values.
+Card configuration supplies defaults for the supported per-row settings: `layout`, `scale`, `bar`, `baseline`, `target`, `peak`, `floor`, `markers`, and `formatting`. Entity rows can override these groups for their own row. `title` is a card-level control; `name` and `icon` are row-specific values. The `entities` list accepts entity ID strings or entity objects.
 
-Structured objects inherit card fields when an entity leaves those fields unspecified, as described in each feature section. Lists replace rather than merge: this applies to `markers`, `bar.segments`, and `bar.gradient_stops`. Generic markers are inherited from the card by default; an entity-level `markers` list replaces that list, and `markers: []` explicitly clears it. Legacy flat aliases listed in the entity options table are also supported at entity scope; this does not make every card-level option overridable.
+An omitted entity-level setting generally inherits the corresponding card-level setting, but inheritance is field-specific. Lists replace rather than merge: this applies to `markers`, `bar.segments`, and `bar.gradient_stops`. Generic markers are inherited from the card by default; an entity-level `markers` list replaces that list, and `markers: []` explicitly clears it. A supplied source object can replace the inherited source as a whole rather than merge its members. If a dynamic source needs a fallback, include both values explicitly, for example `{ entity: sensor.example, fixed: 10 }`. Legacy flat aliases listed in the entity options table are also accepted at entity scope where listed.
 
 ## Configuration Tree
 
-The modern configuration model is structured by feature area. Card-level settings define defaults for the supported per-row groups described above; entity-level settings override those groups for their row.
+Settings are grouped by feature. Card-level settings supply row defaults; fields inside an `entities[]` entry override settings for that row.
 
 ```text
 layout
@@ -55,7 +55,6 @@ scale
 
 bar
 ├── fill_style
-├── segment_space
 ├── color
 ├── solid_fill
 ├── animated
@@ -72,9 +71,10 @@ bar
 
 target
 ├── enabled
-├── at
+├── at (number, percentage string, or source object)
 │   ├── fixed
-│   └── entity
+│   ├── entity
+│   └── percent
 ├── color
 ├── shape
 ├── direction
@@ -90,9 +90,10 @@ target
 
 baseline
 ├── enabled
-├── at
+├── at (number, percentage string, or source object)
 │   ├── fixed
-│   └── entity
+│   ├── entity
+│   └── percent
 ├── above
 │   └── color
 └── below
@@ -125,7 +126,10 @@ floor
     └── decimal (compatibility alias)
 
 markers[]
-├── at
+├── at (number, percentage string, or source object)
+│   ├── fixed
+│   └── entity
+├── show_marker
 ├── lane
 ├── shape
 ├── direction
@@ -133,6 +137,7 @@ markers[]
 └── label
     ├── show
     ├── text
+    ├── entity
     ├── show_value
     ├── show_unit
     ├── precision
@@ -143,7 +148,7 @@ formatting
 └── unit
 ```
 
-## Modern Configuration Overview
+## Configuration Overview
 
 Use this overview to find a field by YAML path. Exact scope and behavior are described in the sections below.
 
@@ -151,62 +156,71 @@ Use this overview to find a field by YAML path. Exact scope and behavior are des
 
 | Path | Default | Values | Description |
 |---|---:|---|---|
-| `layout.height` | `38` | number | Row/bar height. Explicit values are respected; very small values normalize to a usable minimum. |
+| `layout.height` | `38` | number | Requested rail height in pixels; values below `24` are clamped. When omitted, narrow layouts may use `28` or `24`. Complete rows can be taller. |
 | `layout.label.position` | `left` | `left`, `above`, `inside`, `off`, `hero` | Label placement mode. |
+| `layout.label.width` | `100` | number | Responsive width/cap for the label in `left` mode; available card width can make the rendered column narrower. |
 | `layout.hero.size` | `medium` | `small`, `medium`, `large` | Built-in Hero typography preset. Applies only when `layout.label.position: hero`. |
-| `layout.hero.value_size` | `null` | `12–112` | Optional maximum Hero value size in pixels. Overrides `layout.hero.size` while preserving automatic responsive fitting. Applies only when `layout.label.position: hero`. |
-| `layout.label.width` | `100` | number | Shared label column width for `left` label mode. |
+| `layout.hero.value_size` | preset size | `12–112` | Optional preferred maximum Hero value size in pixels. Overrides `layout.hero.size` while retaining responsive fitting. Applies only to Hero. |
 
 ### Scale
 
 | Path | Default | Values | Description |
 |---|---:|---|---|
-| `scale.min.fixed` | `0` | number | Fixed lower bound of the active scale. |
-| `scale.min.entity` | `null` | entity id | Dynamic lower bound entity. |
-| `scale.max.fixed` | `100` | number | Fixed upper bound of the active scale. |
-| `scale.max.entity` | `null` | entity id | Dynamic upper bound entity. |
+| `scale.min.fixed` | `0` for an unspecified bound | number | Fixed lower bound or explicitly configured fallback. With two dynamic bounds, configure both fixed fallbacks together. |
+| `scale.min.entity` | absent | entity ID | Live source for the lower bound. |
+| `scale.max.fixed` | `100` for an unspecified bound | number | Fixed upper bound or explicitly configured fallback. With two dynamic bounds, configure both fixed fallbacks together. |
+| `scale.max.entity` | absent | entity ID | Live source for the upper bound. |
+
+The Scale must have a minimum below its maximum. Two dynamic bounds are resolved as a pair, rather than mixing one live bound with a fallback. See [Scale and live sources](#scale-and-dynamic-value-sources) for fallback and temporary invalid-pair behavior. Values outside the effective Scale are drawn at the nearest rail endpoint; their displayed numeric value is unchanged.
 
 ### Bar and fill
 
 | Path | Default | Values | Description |
 |---|---:|---|---|
-| `bar.fill_style` | `bands` | `solid`, `gradient`, `bands`, `soft_bands`, `band_gradient` | Fill rendering style. |
-| `bar.segment_space` | `percent` | `percent`, `scale` | Determines whether `bar.segments` are interpreted as percentages of the bar or as actual values on the configured scale. |
-| `bar.color` | `#4a9eff` | CSS color | Solid or fallback fill color. If it is the only paint setting at the applicable card or entity scope, it selects a solid bar; explicit fill modes and palettes retain their own semantics. |
+| `bar.fill_style` | `bands` | `solid`, `gradient`, `bands`, `soft_bands`, `band_gradient` | Appearance of the visible fill. |
+| `bar.color` | `#4a9eff` | CSS color | Solid or fallback fill color. A color configured alone selects a solid bar unless an explicit fill style or palette is inherited. |
 | `bar.solid_fill` | `false` | boolean | Samples the active color and renders the revealed fill as one solid color. |
 | `bar.animated` | `true` | boolean | Enables or disables value-change animations for the revealed fill and related visual elements. |
 | `bar.needle` | `false` | boolean or object | Enables needle mode using `true`, or accepts the expanded `{ show, color }` configuration. |
 | `bar.needle.show` | `false` | boolean | Explicitly enables or disables needle mode in expanded configuration. |
-| `bar.needle.color` | `#ffffff` | CSS color | Sets the needle body and glow color. |
-| `bar.segments` | default bands | list | Segment definitions for `bands`, `soft_bands`, and `band_gradient`. Each item supports `from`, `to`, and `color`. |
-| `bar.gradient_stops` | `null` | list | Gradient stop definitions for `gradient`. Each item supports `pos` and `color`. |
+| `bar.needle.color` | `#ffffff` | CSS color | Needle body and glow color; a light or dark edge is added based on that color. |
+| `bar.segments` | default bands | list | Segment definitions for `bands`, `soft_bands`, and `band_gradient`. Each item has `from`, optional `to`, and `color`; boundaries use value or percentage coordinates independently. |
+| `bar.segments[].from` / `bar.segments[].to` | — | number or percentage string | Start/end boundary. A number is an active-scale value; a `%` string is a percentage of the visible scale. `to` may be omitted to end at the next segment start or the end of the scale. |
+| `bar.segments[].color` | — | CSS color | Color assigned to the segment. |
+| `bar.gradient_stops` | `null` | list | Gradient stop definitions for `gradient`. Each item has `pos` and `color`. |
+| `bar.gradient_stops[].pos` | required | number or percentage string | Percentage across the visible rail from `0` to `100`: `50` and `50%` both mean the midpoint. Unlike Segment boundaries, bare numbers are not Scale values. |
+| `bar.gradient_stops[].color` | — | CSS color | Color at the gradient stop. |
 
 ### Baseline
 
 | Path | Default | Values | Description |
 |---|---:|---|---|
 | `baseline.enabled` | auto | `true`, `false`, omitted | Controls baseline behavior. Omitted means automatic based on configured baseline source. |
-| `baseline.at.fixed` | `null` | number | Fixed baseline value. |
-| `baseline.at.entity` | `null` | entity id | Dynamic baseline entity. |
-| `baseline.above.color` | `null` | CSS color | Optional semantic color above the baseline. |
-| `baseline.below.color` | `null` | CSS color | Optional semantic color below the baseline. |
+| `baseline.at` | absent | number, percentage string, entity ID, or source object | Baseline position as a Scale value, visible-Scale percentage, or source with `fixed`, `entity` and/or `percent`. |
+| `baseline.at.fixed` | `null` | number | Fixed baseline value; fallback when the entity does not provide a usable number. |
+| `baseline.at.entity` | `null` | entity id | Dynamic baseline entity; its usable numeric state takes precedence over `fixed`. |
+| `baseline.at.percent` | absent | number | Percentage across the visible Scale in a source object; alternatively use `baseline.at: 50%`. |
+| `baseline.above.color` | ordinary fill | CSS color | Optional color for the Scale region above Baseline. |
+| `baseline.below.color` | ordinary fill | CSS color | Optional color for the Scale region below Baseline. |
 
 ### Target
 
 | Path | Default | Values | Description |
 |---|---:|---|---|
 | `target.enabled` | auto | `true`, `false`, omitted | Controls target marker behavior. Omitted means automatic based on configured target source. |
-| `target.at.fixed` | `null` | number | Fixed target value. |
-| `target.at.entity` | `null` | entity id | Dynamic target entity. |
+| `target.at` | absent | number, percentage string, entity ID, or source object | Target position as a Scale value, visible-Scale percentage, or source with `fixed`, `entity` and/or `percent`. |
+| `target.at.fixed` | `null` | number | Fixed target value; fallback when the entity does not provide a usable number. |
+| `target.at.entity` | `null` | entity id | Dynamic target entity; its usable numeric state takes precedence over `fixed`. |
+| `target.at.percent` | absent | number | Percentage across the visible Scale in a source object; alternatively use `target.at: 50%`. |
 | `target.shape` | `diamond` | `diamond`, `triangle` | Target marker shape. |
 | `target.color` | `#888888` | CSS color | Target marker color. |
-| `target.direction` | `inward` | `inward`, `outward` | Direction for directional marker shapes; Circle and Diamond are visually unaffected. Entity-level Target direction inherits the card-level value unless overridden. |
+| `target.direction` | `inward` | `inward`, `outward` | Direction of the triangle Target; the diamond shape is not directional. Entity-level Target direction inherits the card-level value unless overridden. |
 | `target.label.show` | `false` | boolean | Enables the composed Target label; its text, value, and unit components are configured independently below. |
 | `target.label.text` | absent | string | Optional plain text shown before the value and unit. |
 | `target.label.show_value` | `true` | boolean | Includes or omits the formatted Target value independently of text and unit. |
 | `target.label.show_unit` | `true` | boolean | Includes or omits the effective row unit independently of text and value. |
 | `target.label.precision` | inherited | number | Overrides the numeric component's precision; omitted values inherit `formatting.decimal`. The established `target.label.decimal` spelling remains accepted for existing configurations. |
-| `target.when_exceeded.fill_color` | `null` | CSS color | Semantic fill color for the part of the fill beyond the target. |
+| `target.when_exceeded.fill_color` | absent | CSS color | Color over the revealed region above Target, including over Baseline-side colors. |
 
 ### Peak
 
@@ -215,7 +229,7 @@ Use this overview to find a field by YAML path. Exact scope and behavior are des
 | `peak.enabled` | `false` | boolean | Shows a session peak marker. |
 | `peak.color` | `#888888` | CSS color | Peak marker color. |
 | `peak.reset` | `never` | reset value | Resets Peak using a relative duration or local calendar boundary. |
-| `peak.direction` | `inward` | `inward`, `outward` | Direction for directional marker shapes; Circle and Diamond are visually unaffected. Entity-level Peak direction inherits the card-level value unless overridden. |
+| `peak.direction` | `inward` | `inward`, `outward` | Direction of the fixed triangle marker. Entity-level Peak direction inherits the card-level value unless overridden. |
 | `peak.label.show` | `false` | boolean | Shows the formatted Peak value label. |
 | `peak.label.text` | absent | string | Optional plain text shown before the value and unit. |
 | `peak.label.show_value` | `true` | boolean | Includes or omits the formatted Peak value independently of text and unit. |
@@ -229,7 +243,7 @@ Use this overview to find a field by YAML path. Exact scope and behavior are des
 | `floor.enabled` | `false` | boolean | Shows a session Floor marker for the lowest finite value. |
 | `floor.color` | `#888888` | CSS color | Floor marker color. |
 | `floor.reset` | `never` | reset value | Resets Floor using a relative duration or local calendar boundary. |
-| `floor.direction` | `inward` | `inward`, `outward` | Direction for directional marker shapes; Circle and Diamond are visually unaffected. Entity-level Floor direction inherits the card-level value unless overridden. |
+| `floor.direction` | `inward` | `inward`, `outward` | Direction of the fixed triangle marker. Entity-level Floor direction inherits the card-level value unless overridden. |
 | `floor.label.show` | `false` | boolean | Shows the formatted Floor value label. |
 | `floor.label.text` | absent | string | Optional plain text shown before the value and unit. |
 | `floor.label.show_value` | `true` | boolean | Includes or omits the formatted Floor value independently of text and unit. |
@@ -240,18 +254,30 @@ Use this overview to find a field by YAML path. Exact scope and behavior are des
 
 | Path | Default | Values | Description |
 |---|---:|---|---|
-| `markers[]` | `[]` | list | Generic reference markers. The card-level list is inherited; an entity-level list replaces it, and `markers: []` clears it. Each item supports `at`, `show_marker`, `lane`, `shape`, `direction`, `color`, and `label`; `label.entity` independently supplies dynamic label content. Direction defaults to `inward`; Circle and Diamond are visually unaffected. |
+| `markers[]` | `[]` | marker entries | Card-level markers are inherited; an entity-level list replaces them, and `markers: []` clears them. |
+| `markers[].at` | required | number, percentage string, entity ID, or source object | Marker position. Use a `%` string for a percentage of the visible row Scale. |
+| `markers[].at.fixed` | absent | number | Marker anchor value on the active scale; fallback for an entity source. |
+| `markers[].at.entity` | absent | entity ID | Live marker anchor; a usable entity value takes precedence over `fixed`. |
 | `markers[].show_marker` | `true` | boolean | Hides only the marker shape when false. The anchor position, lane, and label remain active. |
+| `markers[].lane` | `below` | `above`, `below` | Selects the lane immediately above or below the rail. Inward shapes point into it; labels sit outside. |
+| `markers[].shape` | `circle` | `circle`, `diamond`, `triangle`, `chevron`, `arrow`, `pin` | Marker shape. |
+| `markers[].direction` | `inward` | `inward`, `outward` | Direction for directional shapes; circle and diamond are unaffected. |
+| `markers[].color` | `#888888` | CSS color | Marker shape and label color. |
+| `markers[].label` | hidden | object | Optional text/value/unit label settings. |
 | `markers[].label.show` | `false` | boolean | Enables the generic marker label. `label.entity` does not implicitly enable it. |
+| `markers[].label.text` | absent | string | Optional text component in the label. |
 | `markers[].label.entity` | absent | entity ID | Optional independent content source. It supplies label state and its own unit without affecting `at`. |
+| `markers[].label.show_value` | `true` | boolean | Includes or omits the formatted value component. |
+| `markers[].label.show_unit` | `true` | boolean | Includes or omits the effective source/row unit. |
 | `markers[].label.precision` | inherited | number | Numeric label precision; defaults to the row's `formatting.decimal`. |
+| `markers[].label.decimal` | inherited | number | Compatibility alias for `label.precision`. |
 
 ### Formatting
 
 | Path | Default | Values | Description |
 |---|---:|---|---|
-| `formatting.decimal` | `null` | number | Decimal places for displayed numeric values. |
-| `formatting.unit` | entity unit | string | Display unit override. |
+| `formatting.decimal` | locale-aware numeric display | number | Sets an explicit number of decimal places, including trailing zeroes. |
+| `formatting.unit` | entity unit | string | Display unit text override; does not convert the numeric value. |
 
 Legacy flat options are listed separately in the Legacy Compatibility and Migration section. They remain supported, but new dashboards should prefer the structured paths above.
 
@@ -260,20 +286,20 @@ Legacy flat options are listed separately in the Legacy Compatibility and Migrat
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `title` | string | `—` | Optional Lovelace card title |
-| `entity` | string | `—` | Single-entity shorthand, normalized into `entities` |
-| `entities` | list | required | Rows to render |
+| `entity` | string | `—` | Creates one row without an `entities` list |
+| `entities` | list | required unless using `entity` shorthand | Rows to render; items may be entity ID strings or entity objects |
 | `layout` | object | see below | Default layout for all rows |
 | `scale` | object | `min: 0`, `max: 100` | Default scale for all rows |
-| `bar` | object | see below | Default fill, marker, and animation settings |
-| `baseline` | number/object | disabled | Default baseline / fill origin, including legacy fixed shorthand |
-| `target` | number/object | disabled | Default target marker, including legacy fixed shorthand |
+| `bar` | object | see below | Default fill, Needle and animation settings |
+| `baseline` | number/object | disabled | Default Baseline / fill origin; percentages go under `baseline.at` |
+| `target` | number/object | disabled | Default Target marker; percentages go under `target.at` |
 | `peak` | object | disabled | Default structured Peak marker config |
 | `floor` | object | disabled | Default structured Floor marker config |
 | `markers` | list | `[]` | Generic reference markers inherited by entity rows unless replaced |
-| `formatting` | object | `decimal: null`, `unit: null` | Default numeric formatting |
+| `formatting` | object | locale-aware numbers; entity unit | Default decimal precision and displayed unit text |
 | `label_position` | string | `left` | Legacy alias for `layout.label.position` |
 | `label_width` | number | `100` | Legacy alias for `layout.label.width` |
-| `height` | number | `38` | Legacy alias for `layout.height`; rendered minimum is `24` |
+| `height` | number | `38` | Legacy alias for `layout.height`; minimum rail height is `24` |
 | `min` | number | `0` | Legacy alias for `scale.min.fixed` |
 | `min_entity` | string | `null` | Legacy alias for `scale.min.entity` |
 | `max` | number | `100` | Legacy alias for `scale.max.fixed` |
@@ -298,43 +324,45 @@ Legacy flat options are listed separately in the Legacy Compatibility and Migrat
 
 Entity-level configuration supports the per-row groups and legacy aliases listed below. These values override inherited card defaults for that row; `entity` identifies the row rather than overriding a card setting.
 
-| Option | Type | Description |
-|---|---|---|
-| `entity` | string | Home Assistant entity id for the row |
-| `name` | string | Row label override |
-| `icon` | string | Row icon override |
-| `layout` | object | Per-row layout override |
-| `scale` | object | Per-row scale override |
-| `bar` | object | Per-row fill and needle override |
-| `target` | object/number | Per-row target override |
-| `peak` | object | Per-row Peak override |
-| `floor` | object | Per-row Floor override |
-| `markers` | list | Per-row generic marker list; replaces the inherited list |
-| `baseline` | object/number/null | Per-row baseline override or explicit disable |
-| `formatting` | object | Per-row decimal and unit override |
-| `label_position` | string | Legacy alias for `layout.label.position` |
-| `label_width` | number | Legacy alias for `layout.label.width` |
-| `height` | number | Legacy alias for `layout.height` |
-| `min` / `min_entity` | number / string | Legacy aliases for `scale.min` |
-| `max` / `max_entity` | number / string | Legacy aliases for `scale.max` |
-| `fill_style` / `color_mode` | string | Legacy flat aliases for `bar` mode selection |
-| `color` | string | Legacy flat alias for `bar.color` |
-| `gradient_stops` | list | Legacy flat alias for `bar.gradient_stops` |
-| `segments` / `severity` | list | Per-row segment definitions |
-| `animated` | boolean | Legacy flat alias for `bar.animated` |
-| `target_entity`, `target_color`, `show_target_label`, `above_target_color` | mixed | Legacy target overrides |
-| `show_peak`, `peak_color` | mixed | Legacy peak overrides |
-| `decimal`, `unit` | mixed | Legacy formatting overrides |
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `entities[].entity` | string | required | Home Assistant entity ID for the row |
+| `entities[].name` | string | HA friendly name, then entity ID | Overrides the displayed name |
+| `entities[].icon` | string or `false` | HA icon, then supported device-class/domain fallback | Overrides the icon; `false` removes it. Hero never shows an icon. |
+| `entities[].layout` | object | inherits card layout | Per-row layout override |
+| `entities[].scale` | object | inherits card Scale | Per-row Scale override |
+| `entities[].bar` | object | inherits card bar settings | Per-row fill and Needle override |
+| `entities[].target` | object/number | inherits card Target | Per-row Target override; percentages go under `at` |
+| `entities[].peak` | object | inherits card Peak | Per-row Peak override |
+| `entities[].floor` | object | inherits card Floor | Per-row Floor override |
+| `entities[].markers` | list | inherits card marker list | Replaces the inherited list; `[]` clears it |
+| `entities[].baseline` | object/number/null | inherits card Baseline | Per-row Baseline override; percentages go under `at`; `null` disables it |
+| `entities[].formatting` | object | inherits card formatting, otherwise entity unit and locale-aware numbers | Per-row decimal precision and unit text override |
+| `entities[].label_position` | string | inherits card layout | Legacy alias for `layout.label.position` |
+| `entities[].label_width` | number | inherits card layout | Legacy alias for `layout.label.width` |
+| `entities[].height` | number | inherits card height choice | Legacy alias for `layout.height`; omitted heights can adapt |
+| `entities[].min` / `entities[].min_entity` | number / string | inherits card lower bound | Legacy aliases for `scale.min` |
+| `entities[].max` / `entities[].max_entity` | number / string | inherits card upper bound | Legacy aliases for `scale.max` |
+| `entities[].fill_style` / `entities[].color_mode` | string | inherits card fill style | Legacy fill-style aliases |
+| `entities[].color` | string | inherits card color | Legacy alias for `bar.color` |
+| `entities[].gradient_stops` | list | inherits card stops | Legacy alias for `bar.gradient_stops`; replaces the list |
+| `entities[].segments` / `entities[].severity` | list | inherits card segments | Per-row segment definitions; replaces the list |
+| `entities[].animated` | boolean | inherits card animation setting | Legacy alias for `bar.animated` |
+| `entities[].target_entity`, `entities[].target_color`, `entities[].show_target_label`, `entities[].above_target_color` | mixed | inherits corresponding card Target settings | Legacy Target overrides |
+| `entities[].show_peak`, `entities[].peak_color` | mixed | inherits corresponding card Peak settings | Legacy Peak overrides |
+| `entities[].decimal`, `entities[].unit` | mixed | inherits card formatting, otherwise entity display | Legacy formatting overrides |
 
 ## Layout Options and Responsive Behavior
 
-Supported values:
+Choose the layout with `layout.label.position`. All layouts adapt to the available width and try to preserve the best achievable complete reading (value + unit), while keeping the numeric value ahead of competing name/icon content. They use different spaces, so their fallback behavior differs too. Very narrow cards can still lose units or useful numeric text.
 
-- `left`
-- `above`
-- `inside`
-- `off`
-- `hero`
+| Position | Arrangement | Useful for |
+|---|---|---|
+| `left` | Icon/name, rail, then reading; reading can move above | Familiar labeled rows and multi-metric cards |
+| `above` | Name/reading header above an icon/rail row | Giving the reading more width without overlaying the rail |
+| `inside` | Name/reading pills over the rail, optional icon outside | Compact rows where some covered rail detail is acceptable |
+| `off` | Optional icon, rail, then reading; no name | Metrics identified by surrounding dashboard context |
+| `hero` | Name and large reading above a full-width rail; no icon | A prominent metric such as solar power or battery state |
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -354,40 +382,51 @@ scale:
     fixed: 100
 entities:
   - entity: sensor.power_usage
-    name: Sensor
+    name: Power
     icon: mdi:lightning-bolt
 ```
 
-- `layout.label.position: left`
-- `layout.label.position: above`
-- `layout.label.position: inside`
-- `layout.label.position: off`
-- `layout.label.position: hero`
+### Left
 
-### Hero Label Position
+Left is the familiar labeled-row layout: icon and name on the left, rail in the middle, and value + unit on the right. It is useful for several identified metrics in one card.
 
-`layout.label.position: hero` gives each row a premium two-lane header: a small label above the bar, a large right-aligned value and unit, and the full-width bar underneath.
+Those items compete for the same row width. The name can truncate, and the complete reading can move into its own row above the rail when space is constrained. The card can also remove the icon while retaining a useful name if that improves the result. Moving the reading above can preserve both name and icon, at the cost of a taller row.
 
-Hero mode is designed for values that should be readable at a glance, such as solar production, grid import/export, battery state, temperature, or any dashboard metric that should feel like a primary gauge. It works especially well as a glanceable core gauge replacement when you want richer SBCP features such as dynamic scales, baselines, targets, semantic fills, per-entity overrides, and multi-entity cards.
+At a stable width, placement converges to the same result regardless of resize history. The reading is not always inline. An unfit unit can disappear; at extreme widths even the numeric text can ellipsize or clip.
 
-This mode is intentionally opinionated:
+### Above
 
-- the value gets priority
-- the label may hide before the value becomes cramped
-- the icon stays on the left when space allows
-- per-entity `layout.label.position: hero` overrides work the same way as the other label modes
+Above puts the name and right-aligned reading in a header above the rail. The icon belongs to the lower rail row. Choose it when you want more reading space while keeping text clear of the fill and markers.
 
-#### Hero Size
+As the header narrows, competing name text truncates or disappears before a unit is dropped when the complete reading can otherwise fit. Header alignment space can also be reclaimed. The lower icon can remain after the header name disappears because it does not consume the same reading space; it may still hide if the lower row needs more rail width.
 
-Hero labels support three built-in size presets:
+The reading stays in the header. At extreme widths the unit can disappear and numeric text can ellipsize or clip. The header adds height even with a 24 px rail.
 
-- `small`
-- `medium` (default)
-- `large`
+### Inside
 
-These presets control the base Hero typography. For finer control, see **Custom Hero Value Size** below.
+Inside puts the name and reading in contrasting pills over the rail, with an icon outside the rail when space permits. It makes compact rows, but text can obscure some fill, Needle or marker detail.
 
-The selected preset defines the base Hero typography. All responsive Hero typography is derived automatically from that base size, so the card continues to adapt cleanly as available space changes.
+The card reserves space for the reading and fits useful name text into the remainder. It can remove the icon to widen the rail, then truncate or remove the name as needed. If the complete reading still cannot fit, the unit is omitted; padding can compact to keep the number visible longer. At extreme widths the numeric reading itself can be hidden. A shorter name may remain when removing it would not make that number fit.
+
+The reading stays inside the rail. Arbitrary text and marker labels are not guaranteed to avoid overlap, so shorter names/units or a wider card may give a clearer result.
+
+### Off
+
+Off shows no name. The row contains an optional icon, the rail, and a right-hand reading. It is useful when a section title or surrounding dashboard already identifies the metric.
+
+These items share row width. The icon may disappear when reclaiming its space preserves value + unit, or otherwise keeps the numeric reading fitting while retaining a useful rail. If removing it would not improve the reading, it may remain. When a unit cannot fit, its unused extra space returns to the rail.
+
+The reading stays beside the rail; it does not move above. Very narrow cards can eventually ellipsize or clip the numeric text.
+
+### Hero
+
+Hero emphasizes a large right-aligned reading beside a smaller name in a header above a full-width rail. It has no icon. Choose it for a prominent metric that should be readable at a glance.
+
+The header name can truncate or disappear as space tightens. The card tries smaller supported typography for the complete value + unit group before dropping the unit. Typography can shrink substantially; only after complete-reading fitting is exhausted does number-only fitting take over. At extreme widths an unfit number can be hidden. The rail remains in its own region below the header.
+
+#### Hero size
+
+`layout.hero.size` selects `small`, `medium` (default) or `large` typography. For finer control, `layout.hero.value_size` sets a preferred maximum value size in pixels and takes precedence over the preset. Its accepted configuration range is 12–112; values outside that range are clamped. The rendered size still adapts to available space.
 
 ```yaml
 layout:
@@ -395,85 +434,29 @@ layout:
     position: hero
   hero:
     size: large
-```
-
-If omitted, `layout.hero.size` defaults to `medium`.
-
-> **Compatibility**: layout.label.hero_size remains supported as a legacy alias. New configurations should use `layout.hero.size`. If both are specified, `layout.hero.size` takes precedence.
-
-#### Custom Hero Value Size
-
-For finer control, Hero mode also supports an optional custom maximum Hero value size using `layout.hero.value_size`.
-
-```yaml
-layout:
-  label:
-    position: hero
-  hero:
-    size: medium
     value_size: 72
 ```
 
-`value_size` specifies the preferred maximum Hero value size in pixels. The responsive layout engine still automatically reduces the rendered size whenever necessary to fit the available space.
+Both settings apply only to Hero. The legacy `layout.label.hero_size` alias remains accepted; `layout.hero.size` takes precedence when both are supplied.
 
-When both `layout.hero.size` and `layout.hero.value_size` are specified, `value_size` takes precedence. The `size` preset remains available as the fallback if `value_size` is later removed.
+### Rail height
 
-Supported values are **12** through **112** pixels. Values outside this range are automatically clamped.
+`layout.height` requests the rail height, with a normal/default height of **38 px** and an effective minimum of **24 px**. Explicit values below 24 are clamped to 24. An explicit value of 24 or more stays at that requested height as width changes.
 
-`layout.hero.size` and `layout.hero.value_size` only apply when `layout.label.position: hero`. They're ignored for all other label positions.
+When height is omitted, responsive density may reduce the rail to **28 or 24 px**. This depends on available width and content density, not the number of rows. Headers, padding and marker-label space can make the complete row taller than its rail.
 
 ```yaml
-type: custom:sensor-bar-card-plus
-title: Energy Flow
 layout:
+  height: 24
   label:
-    position: hero
-bar:
-  fill_style: gradient
-  gradient_stops:
-    - pos: 0
-      color: '#2563eb'
-    - pos: 100
-      color: '#22c55e'
-scale:
-  min:
-    fixed: 0
-  max:
-    fixed: 10
-entities:
-  - entity: sensor.solar_power
-    name: Solar Production
-    icon: mdi:solar-power
+    position: above
 ```
 
-#### Hero Responsive Behavior
-
-Hero label mode uses a dedicated responsive layout strategy that prioritizes the value over supporting elements. When horizontal space becomes limited, Hero rows adapt in the following order:
-
-1. Keep the value at its preferred size.
-2. Truncate the label if necessary.
-3. Hide the label when truncation is no longer sufficient.
-4. Hide the unit if additional space is required.
-5. Reduce the value size only when the configured Hero size no longer fits.
-6. Hide the value only as an absolute last resort.
-
-This prioritization keeps the most important information visible while preserving a stable, premium Hero appearance across a wide range of dashboard widths.
-
-The responsive behavior described above is specific to Hero label mode. The other label positions (`left`, `above`, `inside`, and `off`) continue to use the card's standard responsive layout.
-
-| Behavior | Hero label mode | Standard label modes |
-|---|---|---|
-| Main priority | Keep the large value readable | Keep the bar readable and aligned |
-| Label behavior | Truncate, then hide when the value needs space | Adapt with the row layout and may step aside in tight spaces |
-| Unit behavior | Hide only when the value still needs more space | Stays visible as long as practical and is only hidden as a late fallback |
-| Icon behavior | Hides in the narrowest Hero layouts | May hide in tight layouts to preserve useful content |
-| Best use | Glanceable gauge-style dashboard values | Dense multi-row dashboards and detailed telemetry |
-
-Explicit `layout.height` is still respected exactly. The default row height may shrink automatically in very dense layouts.
+The existing tests do not verify marker collision or clipping at a 24 px rail. Combined built-in and generic markers, both lanes, labels, and layouts are not covered at that height; tight arrangements may overlap.
 
 ### Label Width
 
-When `layout.label.position: left` is used, all names share a fixed label column so the bars line up cleanly. The default width is `100px`, but you can override it globally or per entity.
+When `layout.label.position: left` is used, `layout.label.width` sets a responsive width cap for the name area so bars can line up cleanly. The default cap is `100px`, but you can override it globally or per entity; when the card is narrow, the rendered label area may be smaller.
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -508,7 +491,9 @@ Each row resolves its icon in this order:
 
 1. `icon: false` hides the icon and removes its reserved space
 2. `icon: mdi:something` uses that explicit icon
-3. otherwise the card uses the entity's own Home Assistant icon
+3. otherwise use the entity's Home Assistant icon, then a supported device-class or domain fallback if available
+
+Responsive layouts may hide an otherwise configured icon when space is limited. Hero never displays one.
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -532,167 +517,171 @@ entities:
 
 ## Scale and dynamic value sources
 
-You can source `scale.min`, `scale.max`, and `target.at` from other entities instead of hardcoding them in the card config.
+The Scale defines which values appear at the rail's left and right ends. Use fixed bounds for a known range, or entity-backed bounds when helpers or sensors define the current range.
 
-This is especially useful when the scale and threshold are driven by other helpers, automations, or template sensors.
+Entity-backed sources are live. Home Assistant state changes recalculate the relevant row; changing a source entity does not require reloading or recreating the card. This applies to `scale.min.entity`, `scale.max.entity`, `baseline.at.entity`, `target.at.entity`, `markers[].at.entity`, and `markers[].label.entity`.
 
-Why dynamic sources matter: the card can follow real Home Assistant entities for scale and target context instead of baking those values into YAML. That makes the visualization adapt naturally to batteries, grid limits, quotas, thresholds, changing operating modes, and dashboards where the meaning of "full", "safe", or "on target" changes over time.
+Source units are not converted. Use entities whose numeric values already match the row's Scale/unit; an independent marker-label source can display its own unit.
 
 ### Dynamic `scale.min` and `scale.max`
 
+When **both bounds are dynamic**, they are resolved together:
+
+| Live sources | Effective Scale |
+|---|---|
+| Both usable numbers, minimum below maximum | Use the live pair |
+| Either source missing, unavailable or non-numeric | Use a complete, explicitly configured valid fixed fallback pair; otherwise `0..100` |
+| Both numeric, but minimum equal to or above maximum | Keep the previous valid effective Scale if available; otherwise use the complete valid fixed fallback pair, then `0..100` |
+
+The card never combines one surviving live bound with an unrelated fallback/default bound in this two-source case. Fixed fallbacks must include **both** bounds and have minimum below maximum. Supplying only one produces a configuration warning: that single fallback cannot supply the complete pair.
+
 ```yaml
 type: custom:sensor-bar-card-plus
-title: Dynamic min and max
-bar:
-  fill_style: gradient
+title: Dynamic Scale
 scale:
   min:
     entity: sensor.dynamic_min
+    fixed: 0
   max:
     entity: sensor.dynamic_max
-entities:
-  - entity: sensor.live_value
-    name: Fully dynamic scale
-```
-
-This makes the full bar scale adaptive. The current value stays the same entity, but the visible scale can expand or contract around it.
-
-### Dynamic `target.at.entity`
-
-For a moving threshold, use `target.at.entity`. This is useful for projected limits, tariff boundaries, ramping goals, or automation-driven targets.
-
-```yaml
-type: custom:sensor-bar-card-plus
-title: Dynamic target
+    fixed: 100
 bar:
   fill_style: gradient
-target:
-  at:
-    entity: sensor.power_target
-  label:
-    show: true
 entities:
-  - entity: sensor.power_usage
-    name: Sensor
+  - entity: sensor.live_value
+    name: Live value
 ```
 
-### Percentage target
+Here, missing live bounds use `0..100` as an explicitly configured fallback. You can choose a different complete fallback range. The Scale is not expanded automatically to include the current value.
+
+When **only one bound is dynamic**, a usable entity value takes precedence over that bound's configured fixed fallback. An unspecified minimum defaults to 0; an unspecified maximum defaults to 100. If the resulting pair is invalid, the card uses a valid fixed/default pair, otherwise `0..100`.
 
 ```yaml
-type: custom:sensor-bar-card-plus
-title: Percentage target
-scale:
-  min:
-    fixed: -100
-  max:
-    fixed: 100
-target:
-  at: 50%
-entities:
-  - entity: sensor.power_usage
-    name: Sensor
-```
-
-If both a fixed value and an entity are configured, the entity takes precedence. If the entity is unavailable or non-numeric, the fixed value is used as fallback.
-
-## Structured Configuration
-
-```yaml
-layout:
-  label:
-    position: left
-    width: 160
-  hero:
-    # Used when label.position is hero
-    size: medium
-    # Optional maximum Hero value size
-    value_size: 72
-  height: 38
-
 scale:
   min:
     fixed: 0
   max:
-    entity: sensor.dynamic_max
+    entity: sensor.current_limit
+    fixed: 3000
+```
 
+Animated transitions smooth changes in the displayed geometry. They do not represent real intermediate sensor readings; the final positions use the current resolved Scale.
+
+### Dynamic Target and fixed fallback
+
+For a moving threshold, use `target.at.entity`, for example a helper controlling a power limit. Its usable numeric value takes precedence over `fixed`; the fixed value is used when the entity is unavailable or non-numeric.
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Dynamic Target
+target:
+  at:
+    entity: sensor.power_target
+    fixed: 65
+  label:
+    show: true
+entities:
+  - entity: sensor.power_usage
+    name: Power
+```
+
+The same fixed/entity source forms apply to `baseline.at`. A supplied source object replaces that source as a whole: include the fallback in the object if you need it.
+
+### Target values and percentage positions
+
+A number is a value on the active Scale:
+
+```yaml
+target:
+  at: 50
+```
+
+A `%` suffix means a position across the visible Scale:
+
+```yaml
+target:
+  at: 50%
+```
+
+For a Scale from −100 to 100, `at: 50` places Target at value 50 (three-quarters across the rail), while `at: 50%` places it at the midpoint, value 0. A percentage Target label displays the corresponding Scale value.
+
+The structured fixed form `at: { fixed: 50 }` also means value 50. For Target and Baseline, `at: { percent: 50 }` is another percentage form. If a source object includes several supported sources, resolution tries a usable entity value, then a fixed fallback, then the percentage. Use `at: 50%` for a simple percentage position; **do not put `50%` inside `at.fixed`**. Generic markers use percentage strings and do not accept `at.percent`.
+
+With `target.enabled` omitted, a configured and resolved source shows Target automatically. `enabled: false` disables it; `enabled: true` cannot create a position if no source resolves. A configured Target reserves one below-lane slot while enabled, including while its dynamic position is temporarily unavailable.
+
+## Complete example
+
+This card shows power in watts with a live upper limit and fixed fallback. Soft color bands indicate load ranges, Target follows a helper with a fallback, and Peak marks the highest observed value. The second row overrides only its name and displayed decimal precision.
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Power Usage
+layout:
+  label:
+    position: above
+scale:
+  min:
+    fixed: 0
+  max:
+    entity: sensor.power_limit
+    fixed: 3000
 bar:
   fill_style: soft_bands
-  segment_space: percent
-  color: '#2563eb'
-  solid_fill: false
-  animated: true
-  gradient_stops:
-    - pos: 0
-      color: '#2563eb'
-    - pos: 100%
-      color: '#ef4444'
   segments:
     - from: 0%
       to: 50%
       color: '#22c55e'
     - from: 50%
+      to: 80%
+      color: '#facc15'
+    - from: 80%
       to: 100%
       color: '#ef4444'
-  needle:
-    show: true
-    color: '#ffffff'
-
-baseline:
-  at:
-    fixed: 0
-  above:
-    color: '#34d399'
-  below:
-    color: '#ef4444'
-
 target:
   at:
     entity: sensor.power_target
-    fixed: 2000
-  color: '#dbe4ee'
+    fixed: 2400
   label:
     show: true
+    text: Limit
   when_exceeded:
-    fill_color: '#ef4444'
-
+    fill_color: '#dc2626'
 peak:
   enabled: true
-  color: '#fde68a'
-
 formatting:
-  decimal: 1
-  unit: kW
+  decimal: 0
+entities:
+  - entity: sensor.house_power
+    name: House
+  - entity: sensor.workshop_power
+    name: Workshop
+    formatting:
+      decimal: 1
 ```
 
-Notes:
-
-- `bar.segment_space` supports `percent` and `scale`
-- `bar.gradient_stops[].pos` accepts both numeric values like `50` and percentage strings like `50%`
+Both power sensors and the limit/Target sources should report compatible watt values. The displayed units come from the power sensors; no unit conversion is performed.
 
 ## Fill Styles Reference
 
 | `fill_style` | Description |
 |---|---|
 | `solid` | One solid fill color; best for simple status or branded accents |
-| `gradient` | Continuous gradient from `bar.gradient_stops`. ⚠️ Note: Gradient stops are always defined on a normalized 0-100 scale, where 0 represents the start of the bar and 100 the end. To keep gradients working consistently, they cannot be set by absolute values. If you want to use absolute values, use a `band_gradient` instead. |
-| `bands` | Hard segment transitions using `bar.segments` |
-| `soft_bands` | Segment-based colors with short blended transitions at eligible boundaries |
-| `band_gradient` | Continuous interpolation of segment colors on the active scale |
+| `gradient` | Smooth color transition across the whole visible rail, using `bar.gradient_stops` |
+| `bands` | Distinct Segment colors with hard boundaries |
+| `soft_bands` | Mostly distinct bands, with short smooth blends where neighboring bands have enough room |
+| `band_gradient` | The Segment color sequence becomes one continuous gradient |
 
-`bands` remains the implicit default when no fill style is configured. This preserves backwards compatibility with the original Sensor Bar Card and ensures older dashboards continue to render identically. New dashboards may specify `bar.fill_style` explicitly, but this is not required.
+`bands` is the default when no fill style, palette or color-only configuration selects another style, retaining the original card's band-based behavior. A color configured alone selects a solid bar unless an explicit fill style or palette is inherited. With an explicit style/palette, `bar.color` supplies its solid/fallback color. Set `bar.fill_style` explicitly if you want a particular style.
 
 ### Fill style details
 
-Current `color_mode` compatibility names map directly to these fill styles.
-
-If no fill model or palette is specified, Sensor Bar Card Plus defaults to `bands`. This preserves visual compatibility with the original Sensor Bar Card, ensuring that existing dashboards continue to render as expected. An explicitly supplied `color` or `bar.color` by itself selects a solid bar; the implicit default bands do not override that simple color. When a fill mode or palette is explicitly configured, that paint model remains authoritative and `bar.color` remains its solid/fallback color.
-
-Sensor Bar Card Plus separates semantic fill composition from animated reveal geometry. That is what allows gradients, bands, above-target colors, markers, and animations to stay visually coherent while the bar updates.
+The colors are laid out across the full Scale. Normal fill reveals the part from the minimum to the current value; Baseline changes that interval to the span between Baseline and value. The color positions stay tied to the Scale as the visible fill grows or shrinks. Needle shows the full colored rail instead. Legacy `color_mode` aliases are listed under [compatibility](#legacy-compatibility-and-migration).
 
 #### `gradient`
 
-`gradient` paints a true full-bar gradient across the configured scale.
+`gradient` blends smoothly between colors positioned across the visible rail. Without custom stops it uses the built-in green/orange/red gradient.
 
+`bar.gradient_stops[].pos` is always a percentage from 0 to 100 across that rail. A bare `pos: 50` and `pos: 50%` both mean the midpoint, regardless of Scale values. **This differs from Segment boundaries**, where a bare number is a Scale value. To place colors using Scale values, use Segments with `band_gradient` instead.
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -718,7 +707,6 @@ entities:
 
 Needle variant:
 
-
 ```yaml
 bar:
   fill_style: gradient
@@ -729,8 +717,7 @@ bar:
 
 Compatibility name: `severity`
 
-`bands` paints hard bands from `bar.segments`.
-
+`bands` gives each configured range its own color, with an abrupt change at the next range.
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -771,8 +758,6 @@ entities:
 
 Needle variant:
 
-
-
 ```yaml
 bar:
   fill_style: bands
@@ -781,14 +766,7 @@ bar:
 
 #### `soft_bands`
 
-`soft_bands` uses the same `bar.segments` configuration as `bands`, but blends each eligible boundary over a short transition zone instead of switching colors abruptly.
-
-It sits between the other segment-based styles:
-
-- `bands`: hard transitions
-- `soft_bands`: short blended transitions
-- `band_gradient`: continuous gradient derived from segment colors
-
+`soft_bands` uses the same ranges as `bands`. Colors stay mostly distinct, with a short smooth blend between neighboring ranges when both are wide enough. Narrow ranges retain a hard boundary rather than being swallowed by the blend.
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -820,7 +798,6 @@ entities:
 
 Needle variant:
 
-
 ```yaml
 bar:
   fill_style: soft_bands
@@ -831,16 +808,7 @@ bar:
 
 Compatibility name: `severity_gradient`
 
-`band_gradient` uses the same segment definitions, but renders a continuous gradient derived from those colors instead of painting hard bands.
-
-Anchor model:
-
-- first band color is exact at the first band `from`
-- last band color is exact at the last band `to`
-- intermediate band colors are exact at the midpoint of their band
-
-This makes the mode feel intuitive while still respecting the configured severity ranges.
-
+`band_gradient` turns the Segment color sequence into one smooth gradient rather than keeping separate bands. For a list of two or more ranges, the first color starts at the first range's `from`, the last color reaches the last range's `to`, and intermediate colors sit at their range midpoints. Segment boundaries can use Scale values or percentages, as explained below.
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -878,8 +846,6 @@ entities:
 
 Needle variant:
 
-
-
 ```yaml
 bar:
   fill_style: band_gradient
@@ -888,11 +854,9 @@ bar:
 
 #### `solid_fill`
 
-`bar.solid_fill: true` samples the theoretical fill color at the current value, then renders the visible fill as one solid color.
+`bar.solid_fill: true` uses the color at the current value to color the whole visible fill.
 
-This is most useful with `bands`, `band_gradient`, and `gradient` when you want the active color logic without rendering the full multicolor fill across the revealed area.
-
-
+Use it with a multicolor style when you want the fill to change color as the value changes, rather than showing several colors at once. Baseline-side colors and Target's exceeded color still apply over that sampled ordinary color.
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -917,12 +881,9 @@ entities:
     name: Sensor
 ```
 
-With `fill_style: bands`, the active band color is used directly. With `band_gradient` or `gradient`, the color is sampled from the interpolated gradient at the current value. If `solid_fill` is omitted, normal multicolor rendering is unchanged.
-
+With `bands`, this uses the current band color; with gradient styles it uses the blended color at the value's position. Leave `solid_fill` off to show the normal multicolor fill.
 
 Needle variant:
-
-
 
 ```yaml
 bar:
@@ -931,29 +892,23 @@ bar:
   needle: true
 ```
 
-#### Segment Space: `percent` vs `scale`
+#### Segment boundaries
 
-`bar.segment_space` controls how `bar.segments` positions are interpreted.
-Use `percent` when segment boundaries should describe fixed positions across the visible bar. Use `scale` when segment boundaries should describe real values on the configured `scale.min` to `scale.max` range.
-
-##### Percent-space segments
-
-This is the default and the best choice for simple progress-style bars.
+Each `bar.segments[]` boundary has its own coordinate meaning. A plain number is a value on the active scale; a string with a `%` suffix is a percentage of the visible scale. You can mix the two forms within one segment or across a list. Percentage positions map from the resolved scale minimum to its maximum.
 
 ```yaml
 type: custom:sensor-bar-card-plus
-title: Percent Segments
+title: Mixed Segment Coordinates
 bar:
   fill_style: bands
-  segment_space: percent
   segments:
-    - from: 0%
-      to: 50%
+    - from: 0
+      to: 1000
       color: '#22c55e'
-    - from: 50%
-      to: 80%
+    - from: 1000
+      to: 75%
       color: '#facc15'
-    - from: 80%
+    - from: 75%
       to: 100%
       color: '#ef4444'
 scale:
@@ -966,55 +921,46 @@ entities:
     name: Power
 ```
 
-Here, the yellow band always starts halfway across the bar, regardless of whether the active scale is `0-100`, `0-3000`, or dynamically supplied by entities.
+Here, the first segment ends at value `1000`; the next ends at 75% of the visible Scale (value `2250`). The coordinate choice is independent for each `from` and `to`. A range such as `from: 20%` to `to: 70` is also valid when the chosen Scale makes those endpoints ordered.
 
-##### Scale-space segments
+Practical range rules:
 
-Use `scale` when segment boundaries are meaningful real values.
+- Supply `from` and `color` for every Segment. An omitted `to` ends at the next valid Segment's configured `from`, or the visible Scale maximum for the last Segment.
+- Use ordered, non-overlapping ranges within the visible Scale. Contiguous ranges can meet at a shared boundary.
+- Gaps are not transparent holes: depending on the fill style, fallback color or a color blend can appear there.
+- Overlaps have no supported winner/precedence rule. Avoid reversed ranges rather than relying on incidental output.
+- Entity-backed boundaries are unsupported, including entity sources with fixed fallbacks. Use numbers or percentage strings.
+- Malformed percentages cause the affected Segment to be ignored with a warning. Do not rely on out-of-range percentages or malformed ranges for special paint effects.
+
+#### Backward compatibility: `bar.segment_space` (deprecated)
+
+`bar.segment_space` remains accepted for configurations written against older versions, but it is deprecated and is not the recommended way to write new segments. It controls the interpretation of bare numeric boundaries only:
+
+- `segment_space: percent` keeps bare numbers as percentages of the visible bar.
+- `segment_space: scale` keeps bare numbers as values on the active scale.
+- An explicit `%` suffix always means a percentage, with either legacy setting.
+
+New YAML should omit `segment_space` and add `%` wherever a percentage boundary is intended. The Visual Editor no longer emits `segment_space`. Legacy `severity` values remain percentage-based.
+
+For example, this older form retains percentage semantics for its bare numbers:
 
 ```yaml
-type: custom:sensor-bar-card-plus
-title: Scale Segments
 bar:
-  fill_style: bands
-  segment_space: scale
+  segment_space: percent
   segments:
     - from: 0
-      to: 1000
+      to: 50
       color: '#22c55e'
-    - from: 1000
-      to: 2000
-      color: '#facc15'
-    - from: 2000
-      to: 3000
+    - from: 50
+      to: 100
       color: '#ef4444'
-scale:
-  min:
-    fixed: 0
-  max:
-    fixed: 3000
-entities:
-  - entity: sensor.power_usage
-    name: Power
 ```
-
-Here, the yellow band begins at the real value `1000` on the configured scale. If the scale later changes, the segment positions are recalculated so the colors still represent the same real-world thresholds.
-
-##### When to use which
-
-|Mode|Best for|Segment values mean|
-|---|---|---|
-|`percent`|progress bars, quotas, generic utilization|positions from 0% to 100% across the bar|
-|`scale`|temperatures, power thresholds, CO₂ ranges, real sensor limits|actual values on the configured scale|
-
-For legacy severity migrations, `percent` is usually the correct choice because older severity bands were interpreted as percentages of the visible bar.
 
 #### `solid`
 
 Compatibility name: `single`
 
 `solid` uses one fixed fill color regardless of value.
-
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -1054,23 +1000,22 @@ Notes:
 
 - `bar.needle: true` is the preferred simple syntax
 - `bar.needle.show` explicitly enables or disables the needle in structured form
-- `bar.needle.color` sets the needle body and glow color
+- `bar.needle.color` sets the body and glow color; the card adds a light or dark edge chosen from that color to help distinguish it from the fill, without guaranteeing perfect contrast against every fill
 - the bar switches to full-scale paint mode when the needle is shown
 - the current value is represented by the needle position
 - the needle works with `solid`, `gradient`, `bands`, `soft_bands`, `band_gradient`, and `solid_fill`
-- the needle is disabled automatically when a baseline is active
+- the needle is suppressed while a Baseline successfully resolves
+- an unresolved dynamic Baseline without a usable fixed fallback does not suppress the Needle
 
 ## Baseline
 
 Use `baseline` when the fill should start from a neutral point instead of always starting at `min`.
 
-- `baseline` defines the fill origin on the configured `min` to `max` scale
-- gradients and severity modes still represent the full global scale
-- baseline changes fill geometry, not the meaning of the scale
-- `baseline.above` and `baseline.below` are optional semantic overlays when you want each side to read differently
-- `baseline.at` can use either an absolute scale value or a percentage string such as `50%`
+The visible fill spans Baseline to the current value, extending left or right as needed. At equality there is no visible fill interval. Colors and markers still use the full Scale; Baseline does not restart a gradient or change what a Scale value means. This is useful for import/export, charge/discharge and other bidirectional values.
 
-This is useful for batteries, charge and discharge, import and export, neutral operating points, and any bidirectional flow where movement on either side of a reference value should read clearly at a glance.
+An active resolved Baseline also has a thin persistent line at its position, including when value equals Baseline and the fill has zero width. The line uses theme-derived coloring; its visibility depends on the surrounding colors. There is no separate indicator configuration.
+
+With `baseline.enabled` omitted, a resolved configured source activates Baseline automatically. `false` disables it. If neither an entity nor its fallback provides a usable value, normal fill starts at the Scale minimum and the indicator disappears; a configured Needle can then appear.
 
 ### Structured baseline configuration
 
@@ -1090,7 +1035,7 @@ baseline:
     entity: sensor.dynamic_baseline
 ```
 
-Advanced baseline behavior is grouped under `baseline:` so related options stay together, the config remains extensible, and the YAML does not drift into flat one-off parameters over time. Legacy shorthand remains supported and is covered in the migration and legacy reference sections.
+Use `at: { entity: sensor.dynamic_baseline, fixed: 0 }` when you want a fixed fallback. A numeric `baseline.at` is a Scale value; a percentage string such as `50%` is a position across the Scale. Use percentage strings directly under `at`, not inside `fixed`. Legacy numeric shorthand remains accepted; see [compatibility](#legacy-compatibility-and-migration).
 
 ### Centered zero baseline
 
@@ -1144,6 +1089,8 @@ entities:
 
 ### Percentage baseline
 
+On the −100 to 100 Scale below, `50%` is the midpoint, value 0. A percentage Baseline follows that relative position if the Scale changes.
+
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Midpoint Baseline
@@ -1163,7 +1110,9 @@ entities:
 
 ### Baseline colors and overrides
 
-The base semantic scale still spans the full bar. Optional above and below colors sit on top of that scale when you want the two directions to carry distinct meaning.
+`baseline.below.color` colors the full Scale region below Baseline; `baseline.above.color` colors the region above it. If a side is not configured, the ordinary fill style remains on that side. Only the part between Baseline and the current value is revealed.
+
+These colors stay tied to their side of the Scale. With `bar.solid_fill: true`, they still appear over the sampled ordinary fill color rather than being replaced by it.
 
 #### Above-baseline color only
 
@@ -1213,7 +1162,7 @@ entities:
 
 ### Target and baseline interaction
 
-Targets stay on the same global scale, so threshold markers, `target.when_exceeded.fill_color`, and baseline geometry remain easy to read together. Marker position does not move the fill origin.
+Target uses the same Scale and does not move the fill origin. `target.when_exceeded.fill_color` appears over the revealed region above Target, on top of both ordinary fill and Baseline-side colors. It does not replace the entire bar. If a Baseline-to-value interval includes positions above Target, that portion receives the exceeded color, whichever direction the fill extends from Baseline.
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -1251,13 +1200,9 @@ entities:
         fixed: 28
 ```
 
-### Animated semantic baseline
-
-Animated baseline rows keep the semantic color scale stable while the visible interval moves. That makes baseline crossing, threshold transitions, and bidirectional motion much easier to read.
-
 ### Dynamic baseline
 
-If both an `entity` and a `fixed` value are set under `baseline.at`, the entity takes precedence. If that entity is unavailable or non-numeric, the `fixed` value is used as fallback.
+An entity-backed Baseline moves live when its Home Assistant state changes. The fill origin and persistent indicator move with it; no reload is needed. A usable `entity` value takes precedence over `fixed`, which is the fallback. If neither resolves, the inactive behavior described above applies. `bar.animated` controls visual transitions as it does for other value changes; there is no separate animated-Baseline option.
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -1278,11 +1223,9 @@ entities:
     name: Grid
 ```
 
-### Compact baseline layouts
-
-Baseline also works well in denser dashboard layouts where you still want bidirectional meaning without giving up readability.
-
 ## Target Marker
+
+Target marks a fixed value, a live entity-backed threshold, or a percentage position on the Scale. See [Target values and percentage positions](#target-values-and-percentage-positions) for the difference between `at: 50` and `at: 50%`, and supported source/fallback forms.
 
 Simple fixed target:
 
@@ -1332,7 +1275,7 @@ Supported target features:
 - entity-backed target values
 - percentage targets on the active scale
 - optional marker color
-- diamond target marker by default; set `target.shape: triangle` to retain the previous triangle
+- diamond by default, or `target.shape: triangle`; no other Target shapes are supported
 - optional target value label
 - optional `target.when_exceeded.fill_color`
 
@@ -1354,7 +1297,7 @@ target:
     precision: 1
 ~~~
 
-`target.when_exceeded.fill_color` gives the revealed fill beyond the Target a semantic color. The configured Target and Baseline remain on the same scale.
+`target.when_exceeded.fill_color` colors the revealed portion above Target. It appears over ordinary fill and any Baseline-side color there, including with `solid_fill`; it does not recolor the whole bar. See [Target and Baseline interaction](#target-and-baseline-interaction) for a combined example.
 
 ~~~yaml
 target:
@@ -1375,7 +1318,7 @@ peak:
     show: false
 ```
 
-The Peak marker tracks the highest finite value observed for the current card session. `reset: never` is the default. See [Peak and Floor reset behavior](#peak-and-floor-reset-behavior) for relative duration and local calendar resets.
+The Peak marker tracks the highest finite value observed for the current card session. Its shape is a fixed triangle; configure its direction, not its shape. `reset: never` is the default. See [Peak and Floor reset behavior](#peak-and-floor-reset-behavior) for relative duration and local calendar resets.
 
 ## Floor Marker
 
@@ -1389,17 +1332,35 @@ floor:
     decimal: 1
 ```
 
-The Floor marker tracks the lowest finite value observed for the current card session. It uses the shared below marker lane with Target and does not allocate another vertical lane.
-
-## Generic marker source resolution and limits
-
-A generic marker source can be a finite fixed number, a percentage string from 0% through 100%, an entity ID, or an entity with an optional fixed fallback. Percentage positions map to the effective row scale. If both an entity and fixed fallback are configured, a finite entity value takes precedence; the fallback is used when the entity is missing or non-finite. Marker source entity units are not converted to the row unit.
-
-Each lane holds up to four markers. Peak occupies one `above` slot; Floor and Target each occupy one `below` slot when enabled and configured. Generic markers use only the capacity remaining in their configured lane, so there is no separate maximum for generic markers across the card. Generic markers are considered in configuration order: malformed entries do not consume capacity, and an excess marker in a full lane is skipped while later markers in the other lane are still considered. Markers are not moved between lanes. An accepted marker that is temporarily unresolved stays in its configured lane and reserves its slot. `show_marker: false` hides only the marker shape; the marker still consumes a slot. Finite values outside the row scale keep their actual value for labels while their marker shape is clamped to the nearest track endpoint. Nearby labels can overlap; the card does not automatically stack them.
+The Floor marker tracks the lowest finite value observed for the current card session. Its shape is a fixed triangle; configure its direction, not its shape. It shares the below marker lane with Target. See [Peak and Floor reset behavior](#peak-and-floor-reset-behavior) for reset options.
 
 ## Generic Reference Markers
 
-Use `markers:` to configure generic references. Up to four markers can appear in each lane, counting Peak in `above` and Floor and Target in `below`; the accepted generic-marker count depends on the remaining lane capacity. Generic markers are configured references, not trackers. Marker position is controlled only by `at`; optional `label.entity` independently supplies the displayed label value and unit. Neither source is converted between units.
+Use `markers:` for configured reference points rather than tracked highs/lows. A marker's `at` controls its position; optional `label.entity` supplies independent numeric or textual label content. Neither source converts values between units.
+
+### Position sources
+
+`at` accepts a finite Scale value (`75` or `{ fixed: 75 }`), a percentage string such as `35%`, an entity ID, or `{ entity: sensor.limit, fixed: 75 }`. A usable entity value takes precedence over the fixed fallback. Generic percentages must be strings from `0%` through `100%`; `at.percent` is unsupported.
+
+Percentage labels show the corresponding value on the effective Scale. Finite fixed/live values outside the Scale remain valid: the shape clamps to the nearest rail endpoint while its label retains the actual value. If no position resolves, the shape and label hide until recovery; an accepted marker still reserves its lane slot.
+
+### Lanes, shapes and visibility
+
+`lane: above` selects the lane immediately above the rail; `lane: below` selects the lane immediately below it. Inward directional shapes point into the rail; outward shapes point away. Labels occupy space outside the rail. Circle and diamond look the same in either direction.
+
+Generic markers support `circle`, `diamond`, `triangle`, `chevron`, `arrow` and `pin`. Defaults are a visible circle in the below lane, inward direction, color `#888888`, and a hidden label. Target supports diamond/triangle only; Peak and Floor are triangles with configurable direction.
+
+`show_marker: false` hides only the glyph. A configured label can remain at the same anchor, and lane capacity/label space remain reserved. Use this for an information label without a visible shape.
+
+Each lane holds **four markers total**, including participating built-ins: Peak uses one above slot; Floor and configured/enabled Target each use one below slot. Without built-ins, up to four generic markers fit in each lane. There is no separate global generic-marker limit.
+
+Generic markers are considered in list order. A full lane skips excess markers without moving them to the other lane; later markers in the other lane are still considered. Skipped entries remain editable and produce a capacity warning. Malformed entries do not consume capacity. Accepted markers keep their slot while a source is temporarily unresolved or their glyph is hidden.
+
+At card scope, the list is inherited by each row. `entities[].markers` replaces that list rather than merging; `markers: []` clears it for that row.
+
+### Example
+
+This combines built-in and generic references in both lanes:
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -1439,13 +1400,21 @@ entities:
   - entity: sensor.grid_power
 ```
 
-`at` accepts a fixed value (`{ fixed: 75 }`), a dynamic entity (`{ entity: sensor.limit }`), an entity with fixed fallback, or a percentage string such as `35%`. Percentages are inclusive from `0%` to `100%` of the effective row scale. Their labels show the resolved scale value. Finite fixed and dynamic values outside the scale remain valid: only their graphical position is clamped, while the label keeps the original value.
+### Labels
 
-Markers default to a visible marker shape, the `below` lane, `circle` shape, color `#888888`, and a hidden label. Set `show_marker: false` to retain the marker's position and label while hiding only its shape. The supported shapes are `circle`, `diamond`, `triangle`, `chevron`, `arrow`, and `pin`; lanes are `above` and `below`. Direction defaults to `inward`; `direction: inward | outward` controls directional shapes, while Circle and Diamond are visually unaffected. Target, Peak, and Floor inherit their card-level direction in entity rows unless overridden. Generic markers are inherited as a card-level list, or replaced as a whole by an entity-level `markers` list.
+`label.show: true` enables a label; `label.entity` alone does not. The label combines optional `text`, a value (`show_value`, default true), and a unit (`show_unit`, default true). If no component has displayable content, no label is shown.
 
-A shown marker label is composed from `text`, `show_value` (default `true`), and `show_unit` (default `true`), each independently enabled; `label.show: true` enables the label. Components are joined by one space. If all components are absent or suppressed, no label is rendered. Without `label.entity`, the value comes from the resolved `at` position and the unit is the row's effective unit. With `label.entity`, its state supplies the value and its own `unit_of_measurement` supplies the unit; this content entity never changes the marker position. Numeric content uses `label.precision` when set, otherwise the row's effective `formatting.decimal`. Text states are shown as text, and units are never converted. A missing, empty, `unknown`, or `unavailable` label entity omits both its value and unit; any configured `text` remains visible. Marker position and visibility continue to depend only on `at`. For compatibility, generic, Peak, and Floor labels also accept `label.decimal`; Target continues to accept its established `target.label.decimal` spelling. Use `label.show_unit: false` to omit the unit. The former marker-label `unit` option is unsupported; use `show_unit`.
+Without a valid `label.entity`, the label uses the resolved marker-position value and row unit. With a valid independent entity, it uses that entity's state and `unit_of_measurement`; the entity never changes marker position. Numeric content uses `label.precision`, otherwise the row's `formatting.decimal`. Ordinary text states such as `Charging` are displayed as text.
 
-For example, a fixed endpoint can act as an information anchor while the label follows a separate numeric or textual sensor:
+If the label entity is missing, empty, `unknown` or `unavailable`, its value and unit are omitted; configured static text may remain. An invalid label entity is ignored with a warning, falling back to the normal position value and row unit. Source changes update live.
+
+Generic, Peak and Floor labels also accept `label.decimal`; Target retains `target.label.decimal`. Prefer `precision` in new configurations. Use `show_unit: false` to omit units; the former generic label `unit` option is unsupported.
+
+Nearby labels may overlap and are not automatically stacked. Where pointer hover is available, hovering a marker or its label raises the associated label above other labels. Shorter labels or more widely spaced reference points can improve readability.
+
+### Independent information labels
+
+A fixed endpoint can anchor a label that follows a separate numeric or textual sensor:
 
 ```yaml
 markers:
@@ -1466,9 +1435,7 @@ markers:
       entity: sensor.battery_status
 ```
 
-The first marker could display `Daily energy 12.4 kWh`; the second can display a text state such as `Charging`. Label-only anchors still count toward their lane's four-marker capacity and retain normal lane layout and endpoint clamping.
-
-At card scope, `markers:` supplies the list inherited by each entity. An entity may replace the list with its own `markers: [...]`; `markers: []` explicitly clears the inherited list. Lists replace rather than merge. A valid but unresolved marker still reserves its configured lane. Malformed markers do not consume capacity. A generic marker assigned to a full lane remains in configuration but is not rendered and produces a non-fatal warning; later markers in the other lane are still considered. Peak, Floor, and Target count toward their respective lane limits. Nearby marker labels may overlap.
+The first label could display `Daily energy 12.4 kWh`; the second could display `Charging`. Both still count toward their lane capacity and retain normal label placement and endpoint clamping.
 
 ## Formatting
 
@@ -1516,7 +1483,7 @@ entities:
 
 ### Unit Override
 
-By default the card displays the entity's unit of measurement. Use `formatting.unit` to override that when you want a shorter, normalized, or more readable display unit.
+By default the card displays the entity's unit of measurement. Use `formatting.unit` to override the displayed unit text when you want a shorter or more readable label. This does not convert the numeric value: choose a sensor whose value is already expressed in the unit you want to display. For example, setting the unit to `kW` on a sensor reporting `1200` watts displays `1200 kW`, not `1.2 kW`. The example below only changes unit text; its source entities are assumed to already report values in their respective displayed units.
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -1555,7 +1522,7 @@ entities:
 
 ### Text States
 
-Non-numeric current states are handled as first-class display states rather than treated like broken numeric rows.
+Non-numeric states, including `unknown`, `unavailable` and custom text, are displayed as text without a leftover numeric unit.
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -1579,18 +1546,11 @@ entities:
     name: Unavailable
 ```
 
-## Behavior Notes
-
-- Peak and Floor values are stored in memory and reset when the card or browser is recreated.
-- Responsive fallbacks prioritize the bar and keep value and unit readable. In tight spaces, labels and icons may step aside automatically.
-
 ## Interaction and error behavior
 
 Clicking a row opens Home Assistant's native more-info dialog for that entity. No extra configuration is required.
 
-If an entity is missing, unavailable to the card, or misconfigured, the card renders an inline row-level error instead of crashing the whole card. Other rows continue to render normally.
-
-Textual states such as unknown or unavailable are displayed as text rather than formatted numeric values, and do not show a leftover unit. Time units h, m, and s render without an extra space, for example 43s and 4h.
+If the row's entity cannot be found, the card shows an error in that row; other rows continue to render. An existing entity whose state is `unknown` or `unavailable` is displayed as text, as described under [Formatting](#formatting).
 
 ## Peak and Floor reset behavior
 
@@ -1600,13 +1560,13 @@ Calendar reset policies use local time boundaries: `quarterly` means quarter-hou
 
 ## Invalid and unsupported configuration
 
-Invalid configuration is reported through non-fatal diagnostics where applicable. Unsupported or malformed generic marker entries are skipped; valid excess entries remain in configuration but do not render and produce a capacity warning. Invalid reset syntax falls back to `never`. Percentage generic sources use percentage strings; an `at.percent` object field is unsupported. See the feature-specific sections for normalization and compatibility details.
+Invalid configuration is reported through non-fatal diagnostics where applicable. A generic marker with an unusable source, lane, or structure is skipped. Recoverable invalid fields, such as shape, direction, visibility, or label options, fall back to supported defaults or inherited values, with a warning where applicable. Valid excess markers remain in configuration but do not render and produce a capacity warning. Invalid reset syntax falls back to `never`. Generic percentage positions use strings such as `35%`; an `at.percent` object field is unsupported. Entity-backed segment boundaries are unsupported and ignored with a configuration warning. See the feature-specific sections for details.
 
 ## Legacy Compatibility and Migration
 
-Legacy syntax remains fully supported for backward compatibility.
+The listed legacy aliases and compatibility forms remain accepted. Unlisted or accidental parser behavior is not part of the public configuration contract.
 
-| Legacy | Modern Equivalent |
+| Legacy | Structured equivalent |
 |---|---|
 | `color_mode: single` | `bar.fill_style: solid` |
 | `color_mode: gradient` | `bar.fill_style: gradient` |
@@ -1617,13 +1577,21 @@ Legacy syntax remains fully supported for backward compatibility.
 | `height` | `layout.height` |
 | `min` / `min_entity` | `scale.min.fixed` / `scale.min.entity` |
 | `max` / `max_entity` | `scale.max.fixed` / `scale.max.entity` |
-| `target` / `target_entity` | `target.at.fixed` / `target.at.entity` |
+| `target` (number) / `target_entity` | `target.at.fixed` / `target.at.entity` |
 | `target_color` | `target.color` |
 | `show_target_label` | `target.label.show` |
 | `above_target_color` | `target.when_exceeded.fill_color` |
 | `show_peak` / `peak_color` | `peak.enabled` / `peak.color` |
 | `decimal` / `unit` | `formatting.decimal` / `formatting.unit` |
 | `severity` | `bar.segments` using `%` values when migrating legacy bands |
+| `fill_style` | `bar.fill_style` |
+| `color` | `bar.color` |
+| `gradient_stops` | `bar.gradient_stops` |
+| `segments` | `bar.segments` |
+| `animated` | `bar.animated` |
+| `baseline` (number) | `baseline.at.fixed` |
+| `layout.label.hero_size` | `layout.hero.size` |
+| `bar.segment_space: percent` / `scale` | Deprecated compatibility input: bare segment numbers remain percentages / active-scale values respectively; new YAML should use `%` suffixes for percentage boundaries |
 
 ### Migrating From The Original Card
 
@@ -1634,35 +1602,7 @@ Install this card side by side, then update:
 
 ### Migrating From Legacy Flat YAML
 
-You do not need to migrate existing dashboards immediately. For new dashboards, the structured model is recommended because related options stay grouped and the configuration scales better as cards become more advanced.
-
-| Legacy flat key | Structured equivalent |
-|---|---|
-| `label_position` | `layout.label.position` |
-| `label_width` | `layout.label.width` |
-| `height` | `layout.height` |
-| `min` | `scale.min.fixed` |
-| `min_entity` | `scale.min.entity` |
-| `max` | `scale.max.fixed` |
-| `max_entity` | `scale.max.entity` |
-| `decimal` | `formatting.decimal` |
-| `unit` | `formatting.unit` |
-| `target` | `target.at.fixed` or `target.at: 50%` |
-| `target_entity` | `target.at.entity` |
-| `target_color` | `target.color` |
-| `show_target_label` | `target.label.show` |
-| `above_target_color` | `target.when_exceeded.fill_color` |
-| `show_peak` | `peak.enabled` |
-| `peak_color` | `peak.color` |
-| `color_mode` | `bar.color_mode` (compatibility) |
-| `fill_style` | `bar.fill_style` (preferred structured syntax) |
-| `color` | `bar.color` |
-| `gradient_stops` | `bar.gradient_stops` |
-| `severity` | `bar.segments` with percentage values, for example `from: 50%` |
-| `segments` | `bar.segments` |
-| `animated` | `bar.animated` |
-| `baseline` | `baseline.at.fixed`, `baseline.at.entity`, or `baseline.at: 50%` |
-| `layout.label.hero_size` | `layout.hero.size` |
+You do not need to migrate existing dashboards immediately. For new configurations, use the grouped options documented above.
 
 Legacy:
 
@@ -1721,15 +1661,15 @@ entities:
     name: Power
 ```
 
-When migrating legacy `severity`, remember that legacy band numbers are percentages of the active scale. Structured `bar.segments` should therefore usually use `%` values during migration. Plain numeric segment boundaries are actual scale values.
+When migrating legacy `severity`, remember that legacy band numbers are percentages of the active scale. Use explicit `%` boundaries in structured `bar.segments` to retain that placement. Plain numeric segment boundaries now mean values on the active scale.
 
-`bar.fill_style` is now the preferred structured syntax for new dashboards. Existing `bar.color_mode` remains fully supported for compatibility and renders identically.
+`bar.fill_style` is the preferred structured syntax for new dashboards. The recognized `bar.color_mode` compatibility alias remains accepted and renders the corresponding fill style.
 
-For a full visual comparison, see `examples/dashboards/sensor-bar-card-plus-heritage.yaml`.
+For a visual comparison, see the [Heritage Dashboard](../examples/dashboards/sensor-bar-card-plus-heritage.yaml).
 
 ### Automatic Dashboard Migration
 
-Existing dashboards do not need to be migrated. Legacy flat YAML remains fully supported. This utility is available if you want to adopt the structured configuration model for an existing Lovelace dashboard.
+Existing dashboards do not need to be migrated. The recognized legacy aliases listed above remain available. This utility is available if you want to adopt the structured configuration model for an existing Lovelace dashboard.
 
 ```bash
 python tools/convert-legacy-config.py dashboard.yaml > dashboard-structured.yaml
