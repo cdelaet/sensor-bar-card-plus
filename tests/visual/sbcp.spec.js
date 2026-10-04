@@ -114,7 +114,7 @@ for (const animated of [false, true]) {
   });
 }
 
-test('left responsive history survives unrelated config rebuilds per entity', async ({ page }) => {
+test('left responsive layout converges across config rebuilds and fresh rendering per entity', async ({ page }) => {
   const config = {
     layout: { label: { position: 'left', width: 100 }, height: 38 },
     scale: { min: { fixed: 0 }, max: { fixed: 300 } },
@@ -218,8 +218,9 @@ test('left responsive history survives unrelated config rebuilds per entity', as
 
   const freshConfig = { ...config, entities: [{ entity: 'sensor.power' }] };
   await render(page, { width: 450, config: freshConfig, states });
-  await expect.poll(async () => (await readRows())[0]?.top).toBe(false);
+  await expect.poll(async () => (await readRows())[0]?.top).toBe(beforeNeedle[0].top);
   expect((await readRows())[0].inlineShare).toBeCloseTo(0.4878, 3);
+  expect((await readRows())[0]).toEqual(beforeNeedle[0]);
 });
 
 test('marker editor keeps focused inputs mounted and disclosures usable at narrow width', async ({ page }) => {

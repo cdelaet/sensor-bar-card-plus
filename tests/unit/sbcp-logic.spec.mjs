@@ -3660,7 +3660,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
   it('inside mode hides the icon before hiding the name when icon space resolves value pressure', () => {
     const card = createCard();
-    card._measureInsideValueMarkupWidth = () => 90;
+    card._measureInsideValueMarkupWidth = (_el, _display, _unit, hideUnit) => hideUnit ? 90 : 170;
     const iconWrap = { getBoundingClientRect: () => ({ width: 28 }) };
     const mainLine = {
       dataset: { rowDensity: 'tight' },
@@ -3676,7 +3676,7 @@ describe('Sensor Bar Card Plus logic', () => {
           : null
       ),
       querySelector: (selector) => (
-        selector === '.inside-name' ? {}
+        selector === '.inside-name' ? { textContent: 'EV', scrollWidth: 12 }
           : selector === '.inside-value' ? valueEl
           : null
       ),
@@ -3688,12 +3688,12 @@ describe('Sensor Bar Card Plus logic', () => {
 
     card._applyInsideLabelDensity();
 
-    expect(innerLabel.dataset.insideDensity).toBe('compact');
+    expect(innerLabel.dataset.insideDensity).toBe('dense');
     expect(innerLabel.dataset.hideName).toBe('false');
     expect(mainLine.dataset.hideInsideIcon).toBe('true');
   });
 
-  it('inside mode hides the name only when icon sacrifice still leaves no room', () => {
+  it('inside mode retains the icon when removal cannot restore the unit or useful name', () => {
     const card = createCard();
     // Full value+unit does not fit, but numeric value alone still fits.
     // This keeps the test focused on name hiding, not value-pill hiding.
@@ -3728,7 +3728,7 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(innerLabel.dataset.insideDensity).toBe('compressed');
     expect(innerLabel.dataset.hideName).toBe('true');
     expect(valueEl.dataset.hideUnit).toBe('true');
-    expect(mainLine.dataset.hideInsideIcon).toBe('true');
+    expect(mainLine.dataset.hideInsideIcon).toBe('false');
   });
 
   it('inside mode keeps compressed emergency collapse even if icon reclamation would relax density', () => {
@@ -3801,7 +3801,9 @@ describe('Sensor Bar Card Plus logic', () => {
 
     card._applyInsideLabelDensity();
 
-    expect(mainLine.dataset.hideInsideIcon).toBe('true');
+    expect(mainLine.dataset.hideInsideIcon).toBe('false');
+    expect(valueEl.dataset.hideUnit).toBe('false');
+    expect(valueEl.dataset.hideValue).toBe('false');
     expect(innerLabel.dataset.hideName).toBe('false');
   });
 
@@ -4043,6 +4045,29 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(source).toContain('.hero-header[data-hide-name=\"true\"] .hero-value,');
   });
 
+  it.each([
+    { completeMinimum: 170, expectedUnitHidden: 'false', expectedFit: 'minimum' },
+    { completeMinimum: 240, expectedUnitHidden: 'true', expectedFit: 'tight' },
+  ])('Hero exhausts complete-reading sizes before number-only fitting: $expectedUnitHidden', ({
+    completeMinimum, expectedUnitHidden, expectedFit,
+  }) => {
+    const card = createCard();
+    const header = { dataset: { hideName: 'true' }, getBoundingClientRect: () => ({ width: 200 }) };
+    const value = {};
+    const line = { dataset: {}, querySelector: (selector) => ({
+      '.hero-header': header, '.hero-value': value, '.unit-group': { textContent: 'kWh/m²/year' },
+    })[selector] ?? null };
+    card.shadowRoot = { querySelectorAll: () => [line] };
+    card._measureHeroValueWidth = (_line, _value, fit, hideUnit) => hideUnit
+      ? fit === 'normal' ? 220 : 100
+      : fit === 'minimum' ? completeMinimum : 300;
+
+    card._applyHeroValueFit();
+
+    expect(line.dataset.hideHeroUnit).toBe(expectedUnitHidden);
+    expect(line.dataset.heroValueFit).toBe(expectedFit);
+  });
+
   it('above mode keeps name truncation and standard value-unit markup', () => {
     const card = createCard();
     card._hass.states = {
@@ -4198,6 +4223,16 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(leftLabel.dataset.priorityHidden).toBeUndefined();
     expect(rowStack.dataset.forceTopValue).toBe('true');
     expect(mainLine.dataset.hideLeftIcon).toBeUndefined();
+  });
+
+  it('Left removes icon before useful identification when top reading alone is not enough', () => {
+    const { card, row } = makeLeftModeResponsiveFixture({
+      text: 'X', clientWidth: 6, scrollWidth: 6, labelWidth: 12, rowWidth: 105,
+    });
+
+    expect(card._chooseLeftModeResponsiveState(row)).toMatchObject({
+      hideLabel: false, topValue: true, hideIcon: true,
+    });
   });
 
   it('keeps fully visible Active labels visible on wide rows', () => {
@@ -4638,44 +4673,70 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(wide.card._chooseLeftModeResponsiveState(wide.row)).toMatchObject({ hideLabel: false, topValue: false, hideIcon: false });
   });
 
-  it('keeps inline when previous state was inline and predicted share is 0.49 or 0.50', () => {
+  it('during changing widths, keeps inline when previous state was inline and predicted share is 0.49 or 0.50', () => {
     const at049 = makeLeftModeResponsiveFixture({ rowWidth: 255, labelWidth: 20 });
     const at050 = makeLeftModeResponsiveFixture({ rowWidth: 260, labelWidth: 20 });
 
-    expect(at049.card._chooseLeftModeResponsiveState(at049.row)).toMatchObject({ topValue: false });
-    expect(at050.card._chooseLeftModeResponsiveState(at050.row)).toMatchObject({ topValue: false });
+    expect(at049.card._chooseLeftModeResponsiveState(at049.row, false)).toMatchObject({ topValue: false });
+    expect(at050.card._chooseLeftModeResponsiveState(at050.row, false)).toMatchObject({ topValue: false });
   });
 
-  it('switches to top-right when previous state was inline and predicted share falls below 0.48', () => {
+  it('during changing widths, switches to top-right when previous state was inline and predicted share falls below 0.48', () => {
     const below048 = makeLeftModeResponsiveFixture({ rowWidth: 248, labelWidth: 20 });
 
-    expect(below048.card._chooseLeftModeResponsiveState(below048.row)).toMatchObject({ topValue: true });
+    expect(below048.card._chooseLeftModeResponsiveState(below048.row, false)).toMatchObject({ topValue: true });
   });
 
-  it('keeps top-right when previous state was top-right and predicted share is 0.50 or 0.51', () => {
+  it('during changing widths, keeps top-right when previous state was top-right and predicted share is 0.50 or 0.51', () => {
     const at050 = makeLeftModeResponsiveFixture({ rowWidth: 260, labelWidth: 20, previousForceTopValue: true });
     const at051 = makeLeftModeResponsiveFixture({ rowWidth: 266, labelWidth: 20, previousForceTopValue: true });
 
-    expect(at050.card._chooseLeftModeResponsiveState(at050.row)).toMatchObject({ topValue: true });
-    expect(at051.card._chooseLeftModeResponsiveState(at051.row)).toMatchObject({ topValue: true });
+    expect(at050.card._chooseLeftModeResponsiveState(at050.row, false)).toMatchObject({ topValue: true });
+    expect(at051.card._chooseLeftModeResponsiveState(at051.row, false)).toMatchObject({ topValue: true });
   });
 
-  it('switches back inline when previous state was top-right and predicted share is above 0.52', () => {
+  it('during changing widths, switches back inline when previous state was top-right and predicted share is above 0.52', () => {
     const above052 = makeLeftModeResponsiveFixture({ rowWidth: 276, labelWidth: 20, previousForceTopValue: true });
 
-    expect(above052.card._chooseLeftModeResponsiveState(above052.row)).toMatchObject({ topValue: false });
+    expect(above052.card._chooseLeftModeResponsiveState(above052.row, false)).toMatchObject({ topValue: false });
   });
 
-  it('does not oscillate when predicted share bounces around 0.50', () => {
+  it('during changing widths, does not oscillate when predicted share bounces around 0.50', () => {
     const keepInline = makeLeftModeResponsiveFixture({ rowWidth: 255, labelWidth: 20 });
     const switchTop = makeLeftModeResponsiveFixture({ rowWidth: 248, labelWidth: 20 });
     const keepTop = makeLeftModeResponsiveFixture({ rowWidth: 266, labelWidth: 20, previousForceTopValue: true });
     const switchBackInline = makeLeftModeResponsiveFixture({ rowWidth: 276, labelWidth: 20, previousForceTopValue: true });
 
-    expect(keepInline.card._chooseLeftModeResponsiveState(keepInline.row)).toMatchObject({ topValue: false });
-    expect(switchTop.card._chooseLeftModeResponsiveState(switchTop.row)).toMatchObject({ topValue: true });
-    expect(keepTop.card._chooseLeftModeResponsiveState(keepTop.row)).toMatchObject({ topValue: true });
-    expect(switchBackInline.card._chooseLeftModeResponsiveState(switchBackInline.row)).toMatchObject({ topValue: false });
+    expect(keepInline.card._chooseLeftModeResponsiveState(keepInline.row, false)).toMatchObject({ topValue: false });
+    expect(switchTop.card._chooseLeftModeResponsiveState(switchTop.row, false)).toMatchObject({ topValue: true });
+    expect(keepTop.card._chooseLeftModeResponsiveState(keepTop.row, false)).toMatchObject({ topValue: true });
+    expect(switchBackInline.card._chooseLeftModeResponsiveState(switchBackInline.row, false)).toMatchObject({ topValue: false });
+  });
+
+  it.each([255, 264, 266])('settles identically at row width %s with opposite prior placements', (rowWidth) => {
+    const fromInline = makeLeftModeResponsiveFixture({ rowWidth, labelWidth: 20 });
+    const fromTop = makeLeftModeResponsiveFixture({ rowWidth, labelWidth: 20, previousForceTopValue: true });
+    const inlineState = fromInline.card._chooseLeftModeResponsiveState(fromInline.row);
+    const topState = fromTop.card._chooseLeftModeResponsiveState(fromTop.row);
+
+    expect(topState).toEqual(inlineState);
+    expect(topState.topValue).toBe(rowWidth < 264);
+  });
+
+  it('reconsiders a changing-width hysteresis decision once the row width is stable', () => {
+    const { card, row, mainLine, rowStack } = makeLeftModeResponsiveFixture({
+      rowWidth: 266, labelWidth: 20, previousForceTopValue: true,
+    });
+    let scheduled = 0;
+    card._schedulePostLayoutDensityPass = () => { scheduled += 1; };
+
+    card._ensureMinimumBarShare([row], new Map([[mainLine, 255]]));
+    expect(rowStack.dataset.forceTopValue).toBe('true');
+    expect(scheduled).toBe(1);
+
+    card._ensureMinimumBarShare([row], new Map([[mainLine, 266]]));
+    expect(rowStack.dataset.forceTopValue).toBeUndefined();
+    expect(scheduled).toBe(1);
   });
 
   it('keeps short complete left labels visible', () => {
@@ -4869,6 +4930,7 @@ describe('Sensor Bar Card Plus logic', () => {
     const mainLine = {
       classList: { contains: (name) => name === 'left-mode' },
       dataset: { leftDensity: 'normal', rowDensity: 'normal' },
+      getBoundingClientRect: () => ({ width: 400 }),
       closest: (selector) => selector === '.row-stack' ? rowStack : null,
       querySelector: (selector) => (
         selector === '.label-left' ? leftLabel
@@ -4952,6 +5014,7 @@ describe('Sensor Bar Card Plus logic', () => {
     const mainLine = {
       classList: { contains: (name) => name === 'left-mode' },
       dataset: { leftDensity: 'normal', rowDensity: 'normal' },
+      getBoundingClientRect: () => ({ width: 400 }),
       closest: (selector) => selector === '.row-stack' ? rowStack : null,
       querySelector: (selector) => (
         selector === '.label-left' ? leftLabel

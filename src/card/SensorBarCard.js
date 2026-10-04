@@ -1456,7 +1456,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         .main-line.left-mode[data-hide-left-icon="true"] .icon-wrap,
         .main-line.above-mode[data-hide-above-icon="true"] .icon-wrap,
         .main-line.inside-mode[data-hide-inside-icon="true"] .icon-wrap,
-        .main-line.inside-mode[data-priority-hide-inside-icon="true"] .icon-wrap {
+        .main-line.inside-mode[data-priority-hide-inside-icon="true"] .icon-wrap,
+        .main-line.off-mode[data-hide-off-icon="true"] .icon-wrap {
           display: none;
         }
         .main-line.left-mode[data-left-density="normal"] {
@@ -1641,12 +1642,19 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         .bar-inner-label .inside-value {
           flex: 0 0 auto;
           min-width: 0;
-          max-width: 56%;
+          max-width: 100%;
           display: inline-flex;
           align-items: baseline;
         }
         .bar-inner-label .inside-value[data-hide-value="true"] {
           display: none;
+        }
+        .bar-inner-label[data-value-fit="compact"] {
+          padding: 0 2px;
+        }
+        .bar-inner-label .inside-value[data-value-fit="compact"] {
+          padding-left: 2px;
+          padding-right: 2px;
         }
         .main-line.inside-mode[data-hide-inside-icon="true"] .bar-inner-label .inside-value,
         .main-line.inside-mode[data-priority-hide-inside-icon="true"] .bar-inner-label .inside-value,
@@ -2504,100 +2512,85 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       const valueEl = innerLabel.querySelector('.inside-value');
       if (!track || !nameEl || !valueEl) return;
 
-      const renderedTrackWidth = track.getBoundingClientRect().width;
-      const valueDisplay = this._decodeDataAttr(valueEl.dataset.display || valueEl.textContent || '');
-      const valueUnit = this._decodeDataAttr(valueEl.dataset.unit || valueEl.querySelector('.inside-unit')?.textContent || '');
-      const valueWidth = this._measureInsideValueMarkupWidth(valueEl, valueDisplay, valueUnit, false);
-      const valueOnlyWidth = this._measureInsideValueMarkupWidth(valueEl, valueDisplay, valueUnit, true);
-
-      const rowWidth = typeof mainLine?.getBoundingClientRect === 'function'
-        ? mainLine.getBoundingClientRect().width
-        : 0;
+      const display = this._decodeDataAttr(valueEl.dataset.display || valueEl.textContent || '');
+      const unit = this._decodeDataAttr(valueEl.dataset.unit || '');
+      valueEl.dataset.valueFit = 'normal';
+      innerLabel.dataset.valueFit = 'normal';
+      const fullWidth = this._measureInsideValueMarkupWidth(valueEl, display, unit, false);
+      const numberWidth = this._measureInsideValueMarkupWidth(valueEl, display, unit, true);
+      const rowWidth = mainLine?.getBoundingClientRect?.().width ?? 0;
       const rowDensity = this._isReliableWidth(rowWidth)
-        ? this._classifyRowDensity(rowWidth, mainLine?.dataset?.rowDensity || 'normal')
+        ? this._classifyRowDensity(rowWidth, mainLine?.dataset?.rowDensity)
         : (mainLine?.dataset?.rowDensity || 'normal');
       const iconWrap = mainLine?.querySelector?.('.icon-wrap') ?? null;
-      let hideIcon = rowDensity === 'dense' || rowDensity === 'compressed';
-      const reclaimedWidth = iconWrap
+      const iconReserve = iconWrap
         ? this._getLeftModeIconWidth(iconWrap, mainLine) + this._getLeftModeGap(mainLine)
         : 0;
-      const barMinWidth = this._getLeftModeBarMinWidth(mainLine);
-      // Start from the icon-present budget, independent of the previous hidden state.
-      const trackWidth = this._isReliableWidth(rowWidth)
-        ? Math.max(barMinWidth, rowWidth - reclaimedWidth)
-        : renderedTrackWidth;
-      let density = this._classifyInsideDensity(trackWidth, valueWidth);
+      const minimum = this._getLeftModeBarMinWidth(mainLine);
+      const withIconWidth = this._isReliableWidth(rowWidth)
+        ? Math.max(minimum, rowWidth - iconReserve)
+        : track.getBoundingClientRect().width;
+      const withoutIconWidth = this._isReliableWidth(rowWidth)
+        ? Math.max(minimum, rowWidth)
+        : withIconWidth + iconReserve;
+      const nameText = (nameEl.textContent || '').trim();
+      const nameWidth = this._measureTextWidthWithStyles(nameEl, nameText) || nameEl.scrollWidth;
 
-      if (!hideIcon && valueWidth > this._getInsideValueVisibleCap(trackWidth, density)) {
-        hideIcon = true;
-      }
-
-      const effectiveTrackWidth = this._isReliableWidth(rowWidth)
-        ? Math.max(barMinWidth, rowWidth - (hideIcon ? 0 : reclaimedWidth))
-        : trackWidth + (hideIcon ? reclaimedWidth : 0);
-      if (iconWrap && hideIcon) {
-        density = this._classifyInsideDensity(effectiveTrackWidth, valueWidth);
-      }
-      let hideName = false;
-
-      if (rowDensity === 'compressed') {
-        density = 'compressed';
-        hideIcon = true;
-      }
-
-      // CSS allows the value the full rail after icon sacrifice; use the same budget.
-      const rawValueCap = hideIcon
-        ? effectiveTrackWidth
-        : this._getInsideValueVisibleCap(effectiveTrackWidth, density);
-      const innerPadding =
-        this._getNumericStyleValue(innerLabel, 'padding-left', 0)
-        + this._getNumericStyleValue(innerLabel, 'padding-right', 0);
-
-      const valueCap = Math.max(0, rawValueCap - innerPadding);
-      const hideUnit = !!valueUnit && valueWidth > valueCap;
-      const hideValue = valueOnlyWidth > valueCap;
-      const reservedValueWidth = hideValue ? 0 : Math.ceil(hideUnit ? valueOnlyWidth : valueWidth);
-      const labelGap = !hideValue ? this._getNumericStyleValue(innerLabel, 'gap', 0) : 0;
-
-      if (!hideValue) {
-        const nameText = (nameEl.textContent || '').trim();
-        const nameFullWidth = nameEl.scrollWidth
-          || nameEl.getBoundingClientRect?.().width
-          || this._measureTextWidthWithStyles(nameEl, nameText);
-        if (!nameText || !Number.isFinite(nameFullWidth) || nameFullWidth <= 0) {
-          hideName = density === 'dense' || density === 'compressed';
-        } else {
-          const usefulNameWidth = this._getInsideUsefulNameWidth(nameEl, nameText, nameFullWidth);
-          const availableNameWidth = Math.max(
-            0,
-            effectiveTrackWidth - innerPadding - reservedValueWidth - labelGap,
-          );
+      const candidate = (trackWidth) => {
+        const density = rowDensity === 'compressed' ? 'compressed'
+          : this._classifyInsideDensity(trackWidth, fullWidth);
+        innerLabel.dataset.insideDensity = density;
+        innerLabel.dataset.valueFit = 'normal';
+        valueEl.dataset.valueFit = 'normal';
+        const padding = this._getNumericStyleValue(innerLabel, 'padding-left', 0)
+          + this._getNumericStyleValue(innerLabel, 'padding-right', 0);
+        let cap = Math.max(0, trackWidth - padding);
+        const hideUnit = !!unit && fullWidth > cap;
+        let readingWidth = hideUnit ? numberWidth : fullWidth;
+        let valueFit = 'normal';
+        if (readingWidth > cap) {
+          // Compact existing pill padding before giving up a physically fitting number.
+          valueFit = 'compact';
+          innerLabel.dataset.valueFit = valueFit;
+          valueEl.dataset.valueFit = valueFit;
+          cap = Math.max(0, trackWidth - this._getNumericStyleValue(innerLabel, 'padding-left', 0)
+            - this._getNumericStyleValue(innerLabel, 'padding-right', 0));
+          readingWidth = this._measureInsideValueMarkupWidth(valueEl, display, unit, true);
+        }
+        const hideValue = readingWidth > cap;
+        const gap = hideValue ? 0 : this._getNumericStyleValue(innerLabel, 'gap', 0);
+        const nameShare = density === 'compact' ? 0.56 : density === 'tight' ? 0.48 : 0.6;
+        const availableNameWidth = Math.max(0,
+          Math.min(cap * nameShare, cap - (hideValue ? 0 : Math.ceil(readingWidth)) - gap));
+        let hideName = density === 'dense' || density === 'compressed';
+        if (nameText && nameWidth > 0) {
+          const usefulWidth = this._getInsideUsefulNameWidth(nameEl, nameText, nameWidth);
           const visibleChars = this._measureVisibleLabelCharacters(nameEl, nameText, availableNameWidth);
-          const minUsefulChars = Math.min(4, nameText.length);
-          const nameNeedsTruncation = nameFullWidth > availableNameWidth + 1;
-          const hasUsefulRoom = availableNameWidth >= usefulNameWidth
-            && (!nameNeedsTruncation || visibleChars >= minUsefulChars);
-          hideName = !hasUsefulRoom;
+          hideName = availableNameWidth < usefulWidth
+            || (nameWidth > availableNameWidth + 1 && visibleChars < Math.min(4, nameText.length));
+        }
+        return { density, valueFit, hideUnit, hideValue, hideName,
+          rank: hideValue ? 3 : valueFit === 'compact' ? 2 : hideUnit ? 1 : 0 };
+      };
+
+      let hideIcon = rowDensity === 'dense' || rowDensity === 'compressed';
+      let chosen = candidate(hideIcon ? withoutIconWidth : withIconWidth);
+      if (iconWrap && !hideIcon) {
+        const withoutIcon = candidate(withoutIconWidth);
+        if (withoutIcon.rank < chosen.rank
+          || (withoutIcon.rank === chosen.rank && chosen.hideName && !withoutIcon.hideName)) {
+          hideIcon = true;
+          chosen = withoutIcon;
         }
       }
-
-      if (hideName && density === 'normal') density = 'dense';
-
-      innerLabel.dataset.insideDensity = density;
-      innerLabel.dataset.hideName = hideName ? 'true' : 'false';
-      valueEl.dataset.hideUnit = hideUnit ? 'true' : 'false';
-      valueEl.dataset.hideValue = hideValue ? 'true' : 'false';
-      if (mainLine) {
-        mainLine.dataset.hideInsideIcon = hideIcon ? 'true' : 'false';
-      }
+      innerLabel.dataset.insideDensity = chosen.density;
+      innerLabel.dataset.valueFit = chosen.valueFit;
+      innerLabel.dataset.hideName = chosen.hideName ? 'true' : 'false';
+      valueEl.dataset.valueFit = chosen.valueFit;
+      valueEl.dataset.hideUnit = chosen.hideUnit ? 'true' : 'false';
+      valueEl.dataset.hideValue = chosen.hideValue ? 'true' : 'false';
+      if (mainLine) mainLine.dataset.hideInsideIcon = hideIcon ? 'true' : 'false';
     });
-  }
-
-  _getInsideValueVisibleCap(trackWidth, density) {
-    if (density === 'dense' || density === 'compressed') {
-      return trackWidth;
-    }
-    return trackWidth * 0.56;
   }
 
   _classifyInsideDensity(trackWidth, valueWidth) {
@@ -2678,8 +2671,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         const spacerReserve = mainIconVisible && spacerWidth > 0 ? spacerWidth + lineGap : 0;
         const nameWidth = this._measureTextWidthWithStyles(labelText, text) || labelText.scrollWidth || 0;
         const withNameBudget = Math.max(0, lineWidth - spacerReserve - labelGap);
-        const fitsWithName = (valueWidth) => {
-          const visibleWidth = Math.max(0, withNameBudget - valueWidth);
+        const fitsWithName = (valueWidth, budget = withNameBudget) => {
+          const visibleWidth = Math.max(0, budget - valueWidth);
           const visibleChars = this._measureVisibleLabelCharacters(labelText, text, visibleWidth);
           return !this._shouldHideLeftLabel(text, nameWidth, visibleWidth, visibleChars);
         };
@@ -2689,10 +2682,18 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         if (fullValueWidth <= withNameBudget && fitsWithName(fullValueWidth)) {
           hideName = false;
           hideSpacer = !mainIconVisible;
+        } else if (fullValueWidth <= availableValueOnly) {
+          // Header alignment and name yield before a unit that fits the full header.
+          hideName = !fitsWithName(fullValueWidth, lineWidth - labelGap);
+          hideSpacer = true;
         } else if (valueOnlyWidth <= withNameBudget && fitsWithName(valueOnlyWidth)) {
           hideName = false;
           hideUnit = !!unit;
           hideSpacer = !mainIconVisible;
+        } else if (fitsWithName(valueOnlyWidth, lineWidth - labelGap)) {
+          hideName = false;
+          hideSpacer = true;
+          hideUnit = !!unit;
         } else {
           hideName = true;
           hideSpacer = true;
@@ -2844,6 +2845,23 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       }
 
       if (hasUnit) {
+        // Keep the complete reading through the existing readable fitting sizes.
+        for (const fit of ['tight', 'minimum']) {
+          const readingWidth = valueWidth(fit, false);
+          if (readingWidth <= availableWithoutLabel) {
+            heroLine.dataset.heroValueFit = fit;
+            if (!labelHiddenByDensity && labelEl) {
+              const text = (labelEl.textContent || '').trim();
+              const nameWidth = this._measureTextWidthWithStyles(labelEl, text);
+              const availableName = Math.max(0, availableWithLabel - readingWidth);
+              if (!this._shouldHideLeftLabel(text, nameWidth, availableName,
+                this._measureVisibleLabelCharacters(labelEl, text, availableName))) {
+                delete headerEl.dataset.priorityHideName;
+              }
+            }
+            return;
+          }
+        }
         heroLine.dataset.hideHeroUnit = 'true';
         if (valueWidth('normal', true) <= availableWithoutLabel) return;
       }
@@ -2885,19 +2903,14 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     clone.style.textOverflow = 'clip';
     clone.style.whiteSpace = 'nowrap';
     clone.innerHTML = this._formatInsideValueMarkup(display, unit, hideUnit);
-    layer.replaceChildren(clone);
-    let extraWidth = 0;
-
-    try {
-      const style = getComputedStyle(valueEl);
-      extraWidth += parseFloat(style.paddingLeft || '0') || 0;
-      extraWidth += parseFloat(style.paddingRight || '0') || 0;
-      extraWidth += parseFloat(style.borderLeftWidth || '0') || 0;
-      extraWidth += parseFloat(style.borderRightWidth || '0') || 0;
-    } catch (_err) {
-      // Ignore computed-style lookup failures in non-browser test shims.
-    }
-    return clone.getBoundingClientRect().width + extraWidth;
+    // Reproduce the actual Inside typography and pill padding in the measuring layer.
+    clone.removeAttribute('data-hide-value');
+    const wrapper = document.createElement('div');
+    wrapper.className = 'bar-inner-label';
+    wrapper.style.cssText = 'position:static;display:block;padding:0';
+    wrapper.appendChild(clone);
+    layer.replaceChildren(wrapper);
+    return clone.getBoundingClientRect().width;
   }
 
   _measureTextWidthWithStyles(sourceEl, text) {
@@ -2978,24 +2991,24 @@ _getAboveTargetLayerGeometry(targetPct = null) {
 
       if (mainLine?.classList.contains('off-mode')) {
         const barWrap = mainLine.querySelector('.bar-wrap');
-        const mainStyle = getStyle(mainLine);
-        const gap = parseFloat(mainStyle.getPropertyValue('gap')) || 0;
+        const iconWrap = mainLine.querySelector('.icon-wrap');
+        mainLine.dataset.hideOffIcon = 'false';
+        const gap = parseFloat(getStyle(mainLine).gap) || 0;
         const rowWidth = mainLine.getBoundingClientRect?.().width ?? 0;
-        const fixedWidth = [...mainLine.children].reduce((total, child) => {
-          if (child === valueEl) return total;
-          if (child === barWrap) {
-            const barStyle = getStyle(child);
-            return total + (parseFloat(barStyle.minWidth) || child.getBoundingClientRect?.().width || 0);
-          }
-          return total + (child.getBoundingClientRect?.().width || 0);
-        }, 0);
-        const gapCount = Math.max(0, mainLine.children.length - 1);
-        const availableWidth = rowWidth - fixedWidth - (gap * gapCount);
+        const minimumRail = parseFloat(getStyle(barWrap).minWidth) || 0;
+        const iconVisible = iconWrap && getStyle(iconWrap).display !== 'none';
+        const iconWidth = iconVisible ? this._getLeftModeIconWidth(iconWrap, mainLine) : 0;
+        const withoutIcon = Math.max(0, rowWidth - minimumRail - gap);
+        const withIcon = withoutIcon - (iconVisible ? iconWidth + gap : 0);
+        const numberWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, true) + 2);
+        const hideIcon = iconVisible && (
+          (fullWidth > withIcon && fullWidth <= withoutIcon)
+          || (numberWidth > withIcon && numberWidth <= withoutIcon)
+        );
+        mainLine.dataset.hideOffIcon = hideIcon ? 'true' : 'false';
+        const availableWidth = hideIcon ? withoutIcon : withIcon;
         if (availableWidth > 0) {
-          // A unit that cannot fit is hidden below; return its unused width to the rail.
-          const readableWidth = fullWidth <= availableWidth
-            ? fullWidth
-            : Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, true) + 2);
+          const readableWidth = fullWidth <= availableWidth ? fullWidth : numberWidth;
           desiredWidth = Math.min(readableWidth, availableWidth);
         }
       }
@@ -3163,10 +3176,17 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       this._measureVisibleLabelCharacters(labelMetrics.labelText, labelMetrics.text, candidateLabelWidth),
     );
 
+    const withoutIconLabelWidth = Math.min(labelWidth, Math.max(0, rowWidth - barMinWidth - gap));
+    const labelSacrificialWithoutIcon = !labelMetrics || this._shouldHideLeftLabel(
+      labelMetrics.text, labelMetrics.naturalWidth, withoutIconLabelWidth,
+      this._measureVisibleLabelCharacters(labelMetrics.labelText, labelMetrics.text, withoutIconLabelWidth),
+    );
+
     return {
       rowWidth,
       gap,
       barMinWidth,
+      labelSacrificialWithoutIcon,
       labelWidth: this._isReliableWidth(labelWidth, 0) ? labelWidth : 0,
       iconWidth: this._isReliableWidth(iconWidth, 0) ? iconWidth : 0,
       valueWidth: this._isReliableWidth(valueWidth, 0) ? valueWidth : 0,
@@ -3219,6 +3239,12 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         { hideLabel: false, topValue: true, hideIcon: false },
       );
     }
+    if (budget && !budget.labelSacrificialWithoutIcon) {
+      states.push(
+        { hideLabel: false, topValue: false, hideIcon: true },
+        { hideLabel: false, topValue: true, hideIcon: true },
+      );
+    }
     states.push(
       { hideLabel: true, topValue: false, hideIcon: false },
       { hideLabel: true, topValue: false, hideIcon: true },
@@ -3237,7 +3263,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     return fallback;
   }
 
-  _chooseLeftModeResponsiveState(row) {
+  _chooseLeftModeResponsiveState(row, settled = true) {
     const budget = this._estimateLeftModeWidthBudget(row);
     if (!budget) return null;
     const minimumBarShare = this._getMinimumBarShare();
@@ -3250,7 +3276,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     const enableShare = this._getTopValueEnableShare();
     const disableShare = this._getTopValueDisableShare();
     for (const state of states) {
-      const threshold = state.topValue
+      const threshold = state.topValue || settled
         ? minimumBarShare
         : previousTopValue ? disableShare : enableShare;
       const predicted = this._predictLeftModeBarShareForState(row, state, budget);
@@ -3397,7 +3423,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     return this._shouldHideLeftLabel(metrics.text, metrics.fullWidth, metrics.visibleWidth, metrics.visibleChars);
   }
 
-  _ensureMinimumBarShare(rows = null) {
+  _ensureMinimumBarShare(rows = null, leftWidths = null) {
     if (!this.shadowRoot) return;
     const targetRows = rows || this.shadowRoot.querySelectorAll('.row[data-entity]');
     const minimumBarShare = this._getMinimumBarShare();
@@ -3414,8 +3440,10 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       if (mode === 'other') return;
 
       if (mode === 'left') {
-        const state = this._chooseLeftModeResponsiveState(row);
+        const settled = !leftWidths || leftWidths.get(mainLine) === mainLine.getBoundingClientRect().width;
+        const state = this._chooseLeftModeResponsiveState(row, settled);
         if (state) this._applyLeftModeResponsiveState(row, state);
+        if (!settled) this._schedulePostLayoutDensityPass();
         return;
       }
 
@@ -3551,12 +3579,19 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       this._applyInsideLabelDensity();
       this._applyValueWidthReservation();
 
+      // Hysteresis smooths changing widths, but a stable width must select the
+      // same candidate regardless of the row's previous inline/top placement.
+      const leftWidths = new Map(
+        [...(this.shadowRoot?.querySelectorAll('.main-line.left-mode') || [])]
+          .map(mainLine => [mainLine, mainLine.getBoundingClientRect().width])
+      );
+
       requestAnimationFrame(() => {
         this._applyAdaptiveRowHeight();
         this._applyValueVisibility();
         this._applyLeftLabelUsefulness();
         this._applyTopRightValueLayout();
-        this._ensureMinimumBarShare(rows);
+        this._ensureMinimumBarShare(rows, leftWidths);
         this._applyTopRightValueLayout();
         this._applyLeftLabelUsefulness();
         const targetRows = rows || this.shadowRoot?.querySelectorAll('.row[data-entity]') || [];
