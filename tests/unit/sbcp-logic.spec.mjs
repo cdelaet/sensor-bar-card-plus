@@ -3552,7 +3552,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
   it('inside mode hides the unit before hiding the value pill when the number still fits', () => {
     const card = createCard();
-    card._measureInsideValueMarkupWidth = (_el, _display, _unit, hideUnit) => hideUnit ? 60 : 100;
+    card._measureInsideValueMarkupWidth = (_el, _display, _unit, hideUnit) => hideUnit ? 60 : 180;
     const mainLine = {
       dataset: { rowDensity: 'normal' },
       querySelector: () => null,
@@ -3697,7 +3697,8 @@ describe('Sensor Bar Card Plus logic', () => {
     const card = createCard();
     // Full value+unit does not fit, but numeric value alone still fits.
     // This keeps the test focused on name hiding, not value-pill hiding.
-    card._measureInsideValueMarkupWidth = (_valueEl, _display, _unit, hideUnit) => hideUnit ? 20 : 52;    const iconWrap = { getBoundingClientRect: () => ({ width: 28 }) };
+    card._measureInsideValueMarkupWidth = (_valueEl, _display, _unit, hideUnit) => hideUnit ? 20 : 80;
+    const iconWrap = { getBoundingClientRect: () => ({ width: 28 }) };
     const mainLine = {
       dataset: { rowDensity: 'tight' },
       querySelector: (selector) => selector === '.icon-wrap' ? iconWrap : null,
@@ -3870,7 +3871,7 @@ describe('Sensor Bar Card Plus logic', () => {
   it('above mode hides the label when it interferes with the numeric value width', () => {
     const card = createCard();
     card._measureValueMarkupWidth = (_el, _display, _unit, hideUnit) => hideUnit ? 44 : 58;
-    card._measureVisibleLabelCharacters = () => 6;
+    card._measureVisibleLabelCharacters = (_el, _text, width) => width >= 38 ? 6 : 4;
     const labelText = {
       textContent: 'Very long label',
       clientWidth: 38,

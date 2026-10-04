@@ -1639,7 +1639,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           display: none;
         }
         .bar-inner-label .inside-value {
-          flex: 0 1 auto;
+          flex: 0 0 auto;
           min-width: 0;
           max-width: 56%;
           display: inline-flex;
@@ -1806,6 +1806,10 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           gap: var(--sbcp-main-gap);
           margin-bottom: 2px;
           min-height: 16px;
+        }
+        .above-bar-label[data-hide-name="true"],
+        .above-bar-label[data-priority-hide-name="true"] {
+          gap: 0;
         }
         .above-bar-label-name {
           flex: 1 1 auto;
@@ -2270,6 +2274,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           overflow: hidden;
           white-space: nowrap;
         }
+        .main-line.off-mode .value-right {
+          flex-shrink: 1;
+        }
         .value-right-text.has-unit {
           gap: 2px;
         }
@@ -2497,13 +2504,12 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       const valueEl = innerLabel.querySelector('.inside-value');
       if (!track || !nameEl || !valueEl) return;
 
-      const trackWidth = track.getBoundingClientRect().width;
+      const renderedTrackWidth = track.getBoundingClientRect().width;
       const valueDisplay = this._decodeDataAttr(valueEl.dataset.display || valueEl.textContent || '');
       const valueUnit = this._decodeDataAttr(valueEl.dataset.unit || valueEl.querySelector('.inside-unit')?.textContent || '');
       const valueWidth = this._measureInsideValueMarkupWidth(valueEl, valueDisplay, valueUnit, false);
       const valueOnlyWidth = this._measureInsideValueMarkupWidth(valueEl, valueDisplay, valueUnit, true);
 
-      let density = this._classifyInsideDensity(trackWidth, valueWidth);
       const rowWidth = typeof mainLine?.getBoundingClientRect === 'function'
         ? mainLine.getBoundingClientRect().width
         : 0;
@@ -2515,16 +2521,23 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       const reclaimedWidth = iconWrap
         ? this._getLeftModeIconWidth(iconWrap, mainLine) + this._getLeftModeGap(mainLine)
         : 0;
+      const barMinWidth = this._getLeftModeBarMinWidth(mainLine);
+      // Start from the icon-present budget, independent of the previous hidden state.
+      const trackWidth = this._isReliableWidth(rowWidth)
+        ? Math.max(barMinWidth, rowWidth - reclaimedWidth)
+        : renderedTrackWidth;
+      let density = this._classifyInsideDensity(trackWidth, valueWidth);
 
       if (!hideIcon && valueWidth > this._getInsideValueVisibleCap(trackWidth, density)) {
         hideIcon = true;
       }
 
+      const effectiveTrackWidth = this._isReliableWidth(rowWidth)
+        ? Math.max(barMinWidth, rowWidth - (hideIcon ? 0 : reclaimedWidth))
+        : trackWidth + (hideIcon ? reclaimedWidth : 0);
       if (iconWrap && hideIcon) {
-        density = this._classifyInsideDensity(trackWidth + reclaimedWidth, valueWidth);
+        density = this._classifyInsideDensity(effectiveTrackWidth, valueWidth);
       }
-
-      const effectiveTrackWidth = trackWidth + (hideIcon ? reclaimedWidth : 0);
       let hideName = false;
 
       if (rowDensity === 'compressed') {
@@ -2532,7 +2545,10 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         hideIcon = true;
       }
 
-      const rawValueCap = this._getInsideValueVisibleCap(trackWidth, density);
+      // CSS allows the value the full rail after icon sacrifice; use the same budget.
+      const rawValueCap = hideIcon
+        ? effectiveTrackWidth
+        : this._getInsideValueVisibleCap(effectiveTrackWidth, density);
       const innerPadding =
         this._getNumericStyleValue(innerLabel, 'padding-left', 0)
         + this._getNumericStyleValue(innerLabel, 'padding-right', 0);
@@ -2554,7 +2570,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           const usefulNameWidth = this._getInsideUsefulNameWidth(nameEl, nameText, nameFullWidth);
           const availableNameWidth = Math.max(
             0,
-            trackWidth - innerPadding - reservedValueWidth - labelGap,
+            effectiveTrackWidth - innerPadding - reservedValueWidth - labelGap,
           );
           const visibleChars = this._measureVisibleLabelCharacters(nameEl, nameText, availableNameWidth);
           const minUsefulChars = Math.min(4, nameText.length);
@@ -2653,37 +2669,36 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           ?? aboveLine.getBoundingClientRect?.().width
           ?? width;
         const spacerEl = typeof aboveLine.querySelector === 'function' ? aboveLine.querySelector('.above-icon-spacer') : null;
-        const spacerWidth = spacerEl?.getBoundingClientRect?.().width ?? 0;
+        const spacerWidth = mainIconVisible ? iconRect.width : 0;
         const lineGap = spacerEl ? this._getNumericStyleValue(aboveLine, 'gap', 0) : 0;
-        const nameWidth = labelText.getBoundingClientRect?.().width ?? labelText.clientWidth ?? 0;
-        const labelGap = this._getNumericStyleValue(label, 'gap', this._getLeftModeGap(aboveLine));
+        const labelGap = this._getNumericStyleValue(aboveLine, '--sbcp-main-gap', this._getLeftModeGap(aboveLine));
         const fullValueWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, false) + 2);
         const valueOnlyWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, true) + 2);
         const text = (labelText.textContent || '').trim();
-        const visibleWidth = labelText.clientWidth;
-        const fullWidth = labelText.scrollWidth;
-        const visibleChars = this._measureVisibleLabelCharacters(labelText, text, visibleWidth);
-        const labelIsUnhelpful = this._shouldHideLeftLabel(text, fullWidth, visibleWidth, visibleChars);
-
         const spacerReserve = mainIconVisible && spacerWidth > 0 ? spacerWidth + lineGap : 0;
-        const availableWithName = Math.max(0, lineWidth - spacerReserve - nameWidth - labelGap);
+        const nameWidth = this._measureTextWidthWithStyles(labelText, text) || labelText.scrollWidth || 0;
+        const withNameBudget = Math.max(0, lineWidth - spacerReserve - labelGap);
+        const fitsWithName = (valueWidth) => {
+          const visibleWidth = Math.max(0, withNameBudget - valueWidth);
+          const visibleChars = this._measureVisibleLabelCharacters(labelText, text, visibleWidth);
+          return !this._shouldHideLeftLabel(text, nameWidth, visibleWidth, visibleChars);
+        };
         const availableValueOnly = Math.max(0, lineWidth);
 
-        hideName = labelIsUnhelpful;
-
-        if (!hideName && fullValueWidth <= availableWithName) {
+        let hideUnit = false;
+        if (fullValueWidth <= withNameBudget && fitsWithName(fullValueWidth)) {
+          hideName = false;
           hideSpacer = !mainIconVisible;
-        } else if (!hideName && valueOnlyWidth <= availableWithName) {
+        } else if (valueOnlyWidth <= withNameBudget && fitsWithName(valueOnlyWidth)) {
+          hideName = false;
+          hideUnit = !!unit;
           hideSpacer = !mainIconVisible;
         } else {
           hideName = true;
           hideSpacer = true;
+          hideUnit = !!unit && fullValueWidth > availableValueOnly;
         }
 
-        const availableWidth = hideName
-          ? availableValueOnly
-          : availableWithName;
-        const hideUnit = !!unit && fullValueWidth > availableWidth;
         valueEl.dataset.hideUnit = hideUnit ? 'true' : 'false';
       } else if (valueEl) {
         valueEl.dataset.hideUnit = 'false';
@@ -2977,7 +2992,11 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         const gapCount = Math.max(0, mainLine.children.length - 1);
         const availableWidth = rowWidth - fixedWidth - (gap * gapCount);
         if (availableWidth > 0) {
-          desiredWidth = Math.min(fullWidth, availableWidth);
+          // A unit that cannot fit is hidden below; return its unused width to the rail.
+          const readableWidth = fullWidth <= availableWidth
+            ? fullWidth
+            : Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, true) + 2);
+          desiredWidth = Math.min(readableWidth, availableWidth);
         }
       }
 

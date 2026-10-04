@@ -3231,7 +3231,7 @@
           display: none;
         }
         .bar-inner-label .inside-value {
-          flex: 0 1 auto;
+          flex: 0 0 auto;
           min-width: 0;
           max-width: 56%;
           display: inline-flex;
@@ -3398,6 +3398,10 @@
           gap: var(--sbcp-main-gap);
           margin-bottom: 2px;
           min-height: 16px;
+        }
+        .above-bar-label[data-hide-name="true"],
+        .above-bar-label[data-priority-hide-name="true"] {
+          gap: 0;
         }
         .above-bar-label-name {
           flex: 1 1 auto;
@@ -3862,6 +3866,9 @@
           overflow: hidden;
           white-space: nowrap;
         }
+        .main-line.off-mode .value-right {
+          flex-shrink: 1;
+        }
         .value-right-text.has-unit {
           gap: 2px;
         }
@@ -4066,30 +4073,32 @@
             const nameEl = innerLabel.querySelector(".inside-name");
             const valueEl = innerLabel.querySelector(".inside-value");
             if (!track || !nameEl || !valueEl) return;
-            const trackWidth = track.getBoundingClientRect().width;
+            const renderedTrackWidth = track.getBoundingClientRect().width;
             const valueDisplay = this._decodeDataAttr(valueEl.dataset.display || valueEl.textContent || "");
             const valueUnit = this._decodeDataAttr(valueEl.dataset.unit || ((_a = valueEl.querySelector(".inside-unit")) == null ? void 0 : _a.textContent) || "");
             const valueWidth = this._measureInsideValueMarkupWidth(valueEl, valueDisplay, valueUnit, false);
             const valueOnlyWidth = this._measureInsideValueMarkupWidth(valueEl, valueDisplay, valueUnit, true);
-            let density = this._classifyInsideDensity(trackWidth, valueWidth);
             const rowWidth = typeof (mainLine == null ? void 0 : mainLine.getBoundingClientRect) === "function" ? mainLine.getBoundingClientRect().width : 0;
             const rowDensity = this._isReliableWidth(rowWidth) ? this._classifyRowDensity(rowWidth, ((_b = mainLine == null ? void 0 : mainLine.dataset) == null ? void 0 : _b.rowDensity) || "normal") : ((_c = mainLine == null ? void 0 : mainLine.dataset) == null ? void 0 : _c.rowDensity) || "normal";
             const iconWrap = (_e = (_d = mainLine == null ? void 0 : mainLine.querySelector) == null ? void 0 : _d.call(mainLine, ".icon-wrap")) != null ? _e : null;
             let hideIcon = rowDensity === "dense" || rowDensity === "compressed";
             const reclaimedWidth = iconWrap ? this._getLeftModeIconWidth(iconWrap, mainLine) + this._getLeftModeGap(mainLine) : 0;
+            const barMinWidth = this._getLeftModeBarMinWidth(mainLine);
+            const trackWidth = this._isReliableWidth(rowWidth) ? Math.max(barMinWidth, rowWidth - reclaimedWidth) : renderedTrackWidth;
+            let density = this._classifyInsideDensity(trackWidth, valueWidth);
             if (!hideIcon && valueWidth > this._getInsideValueVisibleCap(trackWidth, density)) {
               hideIcon = true;
             }
+            const effectiveTrackWidth = this._isReliableWidth(rowWidth) ? Math.max(barMinWidth, rowWidth - (hideIcon ? 0 : reclaimedWidth)) : trackWidth + (hideIcon ? reclaimedWidth : 0);
             if (iconWrap && hideIcon) {
-              density = this._classifyInsideDensity(trackWidth + reclaimedWidth, valueWidth);
+              density = this._classifyInsideDensity(effectiveTrackWidth, valueWidth);
             }
-            const effectiveTrackWidth = trackWidth + (hideIcon ? reclaimedWidth : 0);
             let hideName = false;
             if (rowDensity === "compressed") {
               density = "compressed";
               hideIcon = true;
             }
-            const rawValueCap = this._getInsideValueVisibleCap(trackWidth, density);
+            const rawValueCap = hideIcon ? effectiveTrackWidth : this._getInsideValueVisibleCap(effectiveTrackWidth, density);
             const innerPadding = this._getNumericStyleValue(innerLabel, "padding-left", 0) + this._getNumericStyleValue(innerLabel, "padding-right", 0);
             const valueCap = Math.max(0, rawValueCap - innerPadding);
             const hideUnit = !!valueUnit && valueWidth > valueCap;
@@ -4105,7 +4114,7 @@
                 const usefulNameWidth = this._getInsideUsefulNameWidth(nameEl, nameText, nameFullWidth);
                 const availableNameWidth = Math.max(
                   0,
-                  trackWidth - innerPadding - reservedValueWidth - labelGap
+                  effectiveTrackWidth - innerPadding - reservedValueWidth - labelGap
                 );
                 const visibleChars = this._measureVisibleLabelCharacters(nameEl, nameText, availableNameWidth);
                 const minUsefulChars = Math.min(4, nameText.length);
@@ -4152,7 +4161,7 @@
         _applyAboveLabelDensity() {
           if (!this.shadowRoot) return;
           this.shadowRoot.querySelectorAll(".above-line, .hero-line").forEach((aboveLine) => {
-            var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t;
+            var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
             const label = aboveLine.querySelector(".above-bar-label, .hero-header");
             if (!label) return;
             const isHeroLine = aboveLine.classList.contains("hero-line");
@@ -4187,31 +4196,34 @@
               const rowStack = (_k = aboveLine.closest) == null ? void 0 : _k.call(aboveLine, ".row-stack");
               const lineWidth = (_o = (_n = (_l = rowStack == null ? void 0 : rowStack.getBoundingClientRect) == null ? void 0 : _l.call(rowStack).width) != null ? _n : (_m = aboveLine.getBoundingClientRect) == null ? void 0 : _m.call(aboveLine).width) != null ? _o : width;
               const spacerEl = typeof aboveLine.querySelector === "function" ? aboveLine.querySelector(".above-icon-spacer") : null;
-              const spacerWidth = (_q = (_p = spacerEl == null ? void 0 : spacerEl.getBoundingClientRect) == null ? void 0 : _p.call(spacerEl).width) != null ? _q : 0;
+              const spacerWidth = mainIconVisible ? iconRect.width : 0;
               const lineGap = spacerEl ? this._getNumericStyleValue(aboveLine, "gap", 0) : 0;
-              const nameWidth = (_t = (_s = (_r = labelText.getBoundingClientRect) == null ? void 0 : _r.call(labelText).width) != null ? _s : labelText.clientWidth) != null ? _t : 0;
-              const labelGap = this._getNumericStyleValue(label, "gap", this._getLeftModeGap(aboveLine));
+              const labelGap = this._getNumericStyleValue(aboveLine, "--sbcp-main-gap", this._getLeftModeGap(aboveLine));
               const fullValueWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, false) + 2);
               const valueOnlyWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, true) + 2);
               const text = (labelText.textContent || "").trim();
-              const visibleWidth = labelText.clientWidth;
-              const fullWidth = labelText.scrollWidth;
-              const visibleChars = this._measureVisibleLabelCharacters(labelText, text, visibleWidth);
-              const labelIsUnhelpful = this._shouldHideLeftLabel(text, fullWidth, visibleWidth, visibleChars);
               const spacerReserve = mainIconVisible && spacerWidth > 0 ? spacerWidth + lineGap : 0;
-              const availableWithName = Math.max(0, lineWidth - spacerReserve - nameWidth - labelGap);
+              const nameWidth = this._measureTextWidthWithStyles(labelText, text) || labelText.scrollWidth || 0;
+              const withNameBudget = Math.max(0, lineWidth - spacerReserve - labelGap);
+              const fitsWithName = (valueWidth) => {
+                const visibleWidth = Math.max(0, withNameBudget - valueWidth);
+                const visibleChars = this._measureVisibleLabelCharacters(labelText, text, visibleWidth);
+                return !this._shouldHideLeftLabel(text, nameWidth, visibleWidth, visibleChars);
+              };
               const availableValueOnly = Math.max(0, lineWidth);
-              hideName = labelIsUnhelpful;
-              if (!hideName && fullValueWidth <= availableWithName) {
+              let hideUnit = false;
+              if (fullValueWidth <= withNameBudget && fitsWithName(fullValueWidth)) {
+                hideName = false;
                 hideSpacer = !mainIconVisible;
-              } else if (!hideName && valueOnlyWidth <= availableWithName) {
+              } else if (valueOnlyWidth <= withNameBudget && fitsWithName(valueOnlyWidth)) {
+                hideName = false;
+                hideUnit = !!unit;
                 hideSpacer = !mainIconVisible;
               } else {
                 hideName = true;
                 hideSpacer = true;
+                hideUnit = !!unit && fullValueWidth > availableValueOnly;
               }
-              const availableWidth = hideName ? availableValueOnly : availableWithName;
-              const hideUnit = !!unit && fullValueWidth > availableWidth;
               valueEl.dataset.hideUnit = hideUnit ? "true" : "false";
             } else if (valueEl) {
               valueEl.dataset.hideUnit = "false";
@@ -4470,7 +4482,8 @@
               const gapCount = Math.max(0, mainLine.children.length - 1);
               const availableWidth = rowWidth - fixedWidth - gap * gapCount;
               if (availableWidth > 0) {
-                desiredWidth = Math.min(fullWidth, availableWidth);
+                const readableWidth = fullWidth <= availableWidth ? fullWidth : Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, true) + 2);
+                desiredWidth = Math.min(readableWidth, availableWidth);
               }
             }
             const extraWidth = Math.max(0, desiredWidth - baseWidth);
