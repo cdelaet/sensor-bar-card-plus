@@ -234,10 +234,12 @@ export class SensorBarCard extends HTMLElement {
 
   connectedCallback() {
     window.addEventListener('resize', this._boundWindowResize, { passive: true });
+    this._setupResizeObserver();
     this._schedulePostLayoutDensityPass();
   }
 
   disconnectedCallback() {
+    this._rowGeneration += 1;
     window.removeEventListener('resize', this._boundWindowResize);
     this._clearMarkerHover();
     this._disconnectResizeObserver();
@@ -483,6 +485,7 @@ export class SensorBarCard extends HTMLElement {
   set hass(hass) {
     const oldHass = this._hass;
     this._hass = hass;
+    if (!this._config.entities) return;
     
     if (!oldHass) {
       this._update();
@@ -2395,21 +2398,26 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       }
     }
 
-    this._disconnectResizeObserver();
-    this._resizeObserver = new ResizeObserver(() => {
+    this._setupResizeObserver();
+    this._update();
+    this._schedulePostLayoutDensityPass();
+  }
+
+  _setupResizeObserver() {
+    if (!this.isConnected || this._resizeObserver) return;
+    const surface = this.shadowRoot.querySelector('ha-card');
+    const card = this.shadowRoot.querySelector('.card');
+    if (!surface || !card) return;
+
+    const observer = new ResizeObserver(() => {
+      if (!this.isConnected || this._resizeObserver !== observer) return;
       this._applyCompactTier();
       this._schedulePostLayoutDensityPass();
     });
-
-    const surface = this.shadowRoot.querySelector('ha-card');
-    const card = this.shadowRoot.querySelector('.card');
-    if (surface && card) {
-      this._applyCompactTier();
-      this._resizeObserver.observe(surface);
-      this._resizeObserver.observe(this);
-    }
-    this._update();
-    this._schedulePostLayoutDensityPass();
+    this._resizeObserver = observer;
+    this._applyCompactTier();
+    observer.observe(surface);
+    observer.observe(this);
   }
 
   _disconnectResizeObserver() {
@@ -3606,7 +3614,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
   _runPostLayoutPasses(rows = null) {
     const generation = this._rowGeneration;
     requestAnimationFrame(() => {
-      if (generation !== this._rowGeneration) return;
+      if (!this.isConnected || generation !== this._rowGeneration) return;
       this._applyRowDensity();
       this._applyLeftModeDensity();
       this._applyAboveLabelDensity();
@@ -3622,7 +3630,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       );
 
       requestAnimationFrame(() => {
-        if (generation !== this._rowGeneration) return;
+        if (!this.isConnected || generation !== this._rowGeneration) return;
         this._applyAdaptiveRowHeight();
         this._applyValueVisibility();
         this._applyLeftLabelUsefulness();

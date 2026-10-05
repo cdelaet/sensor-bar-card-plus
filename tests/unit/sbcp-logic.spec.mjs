@@ -4859,6 +4859,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
   it('applies final top-right presentation in the same post-layout pass when forceTopValue is chosen', () => {
     const card = createCard();
+    card.isConnected = true;
     const { row, mainLine, rowStack, topValue } = makeLeftModeResponsiveFixture({ rowWidth: 100, labelWidth: 20 });
     const originalRaf = globalThis.requestAnimationFrame;
 
@@ -4898,6 +4899,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
   it('does not let final rendered truncation feed back into stable label usefulness', () => {
     const card = createCard();
+    card.isConnected = true;
     const originalRaf = globalThis.requestAnimationFrame;
     card._measureTextWidthWithStyles = (_el, text) => (text === '...' ? 12 : text.length * 10);
 
@@ -4982,6 +4984,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
   it('keeps a left label visible when final layout still shows at least five useful characters', () => {
     const card = createCard();
+    card.isConnected = true;
     const originalRaf = globalThis.requestAnimationFrame;
     card._measureTextWidthWithStyles = (_el, text) => (text === '...' ? 12 : text.length * 10);
 

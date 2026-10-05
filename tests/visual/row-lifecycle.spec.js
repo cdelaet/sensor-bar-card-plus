@@ -168,3 +168,153 @@ test('duplicate Left rows own hysteresis independently and keep it through reord
   });
   expect(actual).toEqual({ before: [false, true], after: [true, false] });
 });
+
+test('container-only resize works after repeated same-instance reconnects and presence recovery', async ({ page }) => {
+  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.evaluate(() => {
+    const NativeObserver = window.ResizeObserver;
+    window.__activeCardObservers = new Set();
+    window.__cardObserverCallbacks = new Map();
+    window.ResizeObserver = class extends NativeObserver {
+      constructor(callback) { super(callback); window.__cardObserverCallbacks.set(this, callback); }
+      observe(target, options) { window.__activeCardObservers.add(this); super.observe(target, options); }
+      disconnect() { window.__activeCardObservers.delete(this); super.disconnect(); }
+    };
+    window.__invokeRetiredObservers = () => {
+      const card = window.__reconnectedCard;
+      const original = card._applyCompactTier;
+      let calls = 0;
+      card._applyCompactTier = () => { calls++; };
+      window.__cardObserverCallbacks.forEach((callback, observer) => {
+        if (!window.__activeCardObservers.has(observer)) callback([]);
+      });
+      card._applyCompactTier = original;
+      return calls;
+    };
+  });
+  const states = { [ids[0]]: state(0, 90), 'sensor.min': { state: '0' }, 'sensor.max': { state: '200' } };
+  await page.evaluate(async states => {
+    window.__reconnectedCard = await window.__sbcpRenderCard({ width: 720, config: {
+      layout: { label: { position: 'left' } }, bar: { animated: false },
+      scale: { min: { entity: 'sensor.min' }, max: { entity: 'sensor.max' } },
+      entities: [{ entity: 'sensor.a', name: 'Peak owner', peak: { enabled: true } },
+        { entity: 'sensor.a', name: 'Floor owner', floor: { enabled: true } }, { entity: 'sensor.b' }],
+    }, states });
+  }, states);
+  const resize = async (width, height) => {
+    await page.evaluate(width => { document.querySelector('#mount').style.width = `${width}px`; }, width);
+    await expect.poll(() => page.locator('sensor-bar-card-plus .bar-track').first()
+      .evaluate(node => node.getBoundingClientRect().height)).toBe(height);
+    expect(await page.evaluate(() => window.__activeCardObservers.size)).toBe(1);
+  };
+  await resize(180, 24); // Prove initial observation before any reconnect.
+  await resize(720, 38);
+  for (let cycle = 0; cycle < 2; cycle++) {
+    const detached = await page.evaluate(async () => {
+      const card = window.__reconnectedCard;
+      const rows = card.shadowRoot.querySelector('.rows');
+      const html = rows.innerHTML;
+      card.remove();
+      document.querySelector('#mount').style.width = '180px';
+      for (let i = 0; i < 4; i++) await new Promise(requestAnimationFrame);
+      return { observers: window.__activeCardObservers.size, unchanged: rows.innerHTML === html,
+        retiredCalls: window.__invokeRetiredObservers() };
+    });
+    expect(detached).toEqual({ observers: 0, unchanged: true, retiredCalls: 0 });
+    await page.evaluate(async () => {
+      document.querySelector('#mount').style.width = '720px';
+      document.querySelector('#mount').appendChild(window.__reconnectedCard);
+      for (let i = 0; i < 8; i++) await new Promise(requestAnimationFrame);
+    });
+    expect(await page.evaluate(() => window.__invokeRetiredObservers())).toBe(0);
+    await resize(180, 24); // No config, HA update, or window resize.
+    await resize(720, 38);
+  }
+  const windowListenerCalls = await page.evaluate(() => {
+    const card = window.__reconnectedCard;
+    const original = card._schedulePostLayoutDensityPass;
+    let calls = 0;
+    card._schedulePostLayoutDensityPass = () => { calls++; };
+    window.dispatchEvent(new Event('resize'));
+    card._schedulePostLayoutDensityPass = original;
+    window.__reconnectedRows = card._config.entities;
+    window.__reconnectedScales = card._rowScales;
+    return calls;
+  });
+  expect(windowListenerCalls).toBe(1);
+  await update(page, { ...states, [ids[0]]: state(0, 20) });
+  await update(page, { 'sensor.min': { state: '300' }, 'sensor.max': { state: '200' } });
+  await expect(page.locator('sensor-bar-card-plus .rows')).toContainText('Entity not found: sensor.a');
+  await update(page, { [ids[0]]: state(0, 70), [ids[1]]: state(1), 'sensor.min': { state: '300' }, 'sensor.max': { state: '200' } });
+  expect(await page.locator('sensor-bar-card-plus').evaluate(card => ({
+    sameCard: card === window.__reconnectedCard,
+    sameRows: card._config.entities === window.__reconnectedRows,
+    sameScales: card._rowScales === window.__reconnectedScales,
+    indices: [...card.shadowRoot.querySelectorAll('.row')].map(row => row.dataset.rowIndex),
+    peak: card.shadowRoot.querySelector('.peak-marker').style.left,
+    floor: card.shadowRoot.querySelectorAll('.row')[1].querySelector('.floor-marker').style.left,
+  }))).toEqual({ sameCard: true, sameRows: true, sameScales: true, indices: ['0', '1', '2'], peak: '45%', floor: '10%' });
+  await resize(180, 24);
+  await resize(720, 38);
+});
+
+for (const stage of ['outer', 'inner']) for (const reconnect of [false, true]) {
+  test(`disconnect invalidates queued ${stage} layout work${reconnect ? ' even after reconnect' : ''}`, async ({ page }) => {
+    await render(page, [configRow(ids[0], 0)], { [ids[0]]: state(0) });
+    const result = await page.locator('sensor-bar-card-plus').evaluate((card, { stage, reconnect }) => {
+      const nativeRAF = window.requestAnimationFrame;
+      const pending = [];
+      const mutations = [];
+      const originals = new Map(['_applyRowDensity', '_applyAdaptiveRowHeight', '_positionGenericMarkerLabels']
+        .map(key => [key, card[key]]));
+      window.requestAnimationFrame = callback => { pending.push(callback); return pending.length; };
+      originals.forEach((method, key) => { card[key] = function(...args) { mutations.push(key); return method.apply(this, args); }; });
+      try {
+        card._runPostLayoutPasses([...card.shadowRoot.querySelectorAll('.row')]);
+        if (stage === 'inner') pending.shift()();
+        const stale = pending.shift();
+        mutations.length = 0;
+        card.remove();
+        if (reconnect) document.querySelector('#mount').appendChild(card);
+        const html = card.shadowRoot.innerHTML;
+        stale(); // Work captured before disconnect must not become valid again.
+        return { mutations, unchanged: card.shadowRoot.innerHTML === html };
+      } finally {
+        window.requestAnimationFrame = nativeRAF;
+        originals.forEach((method, key) => { card[key] = method; });
+      }
+    }, { stage, reconnect });
+    expect(result.mutations).toEqual([]);
+    expect(result.unchanged).toBe(true);
+  });
+}
+
+for (const order of ['normal', 'reverse']) {
+  test(`${order} initialization retains the latest HA state and later patches normally`, async ({ page }) => {
+    await page.goto('/tests/visual/fixtures/harness.html');
+    const rows = [configRow(ids[0], 0)];
+    const latest = { [ids[0]]: state(0, 70) };
+    const early = await page.evaluate(({ order, rows, latest }) => {
+      const card = document.createElement('sensor-bar-card-plus');
+      document.querySelector('#mount').appendChild(card);
+      const config = { layout: { label: { position: 'above' } }, bar: { animated: false }, entities: rows };
+      if (order === 'normal') card.setConfig(config);
+      card.hass = { states: {} };
+      card.hass = { states: { 'sensor.a': { ...latest['sensor.a'], state: '50' } } };
+      const hass = { states: latest };
+      card.hass = hass;
+      const inert = card.shadowRoot.querySelector('.rows').children.length === 0;
+      if (order === 'reverse') card.setConfig(config);
+      card.addEventListener('hass-more-info', e => { window.__clickedEntity = e.detail.entityId; });
+      window.__initializedRow = card.shadowRoot.querySelector('.row');
+      return { inert, retained: card._hass === hass };
+    }, { order, rows, latest });
+    expect(early.retained).toBe(true);
+    if (order === 'reverse') expect(early.inert).toBe(true);
+    await checkRows(page, rows, latest);
+    const later = { [ids[0]]: state(0, 80) };
+    await update(page, later);
+    await checkRows(page, rows, later);
+    expect(await page.locator('sensor-bar-card-plus .row').evaluate(row => row === window.__initializedRow)).toBe(true);
+  });
+}
