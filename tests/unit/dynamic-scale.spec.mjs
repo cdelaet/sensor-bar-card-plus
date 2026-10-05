@@ -28,14 +28,14 @@ function setup(config = {}, initial = snapshot(50, 0, 100)) {
     card.setConfig({ scale: dynamicScale, entity: 'sensor.value', ...overrides });
   };
   configure(config);
-  const rows = card._config.entities.map(() => {
+  const rows = card._config.entities.map((_, index) => {
     const elements = Object.fromEntries([
       '.bar-fill-reveal', '.baseline-indicator', '.target-marker', '.peak-marker',
       '.floor-marker', '.needle-marker', '.value-right', '.target-value-label',
     ].map((selector) => [selector, element()]));
     const generic = element({ markerId: 'generic-0' });
     return {
-      dataset: {},
+      dataset: { rowIndex: String(index) },
       elements,
       generic,
       querySelector: (selector) => elements[selector] ?? null,
@@ -136,14 +136,14 @@ describe('dynamic scale through the card update path', () => {
     const { card, model, rows } = setup({ peak: { enabled: true }, floor: { enabled: true } }, snapshot(80, 0, 100));
     card.hass = snapshot(20, 0, 100);
     card.hass = snapshot(50, 0, 200);
-    expect(card._extrema['sensor.value']).toMatchObject({ peak: { value: 80 }, floor: { value: 20 } });
+    expect(card._extrema.get(card._config.entities[0])).toMatchObject({ peak: { value: 80 }, floor: { value: 20 } });
     expect(model()).toMatchObject({ peak: 80, peakPercent: 40, floor: 20, floorPercent: 10 });
     expect(rows[0].elements['.peak-marker'].style.left).toBe('40%');
     expect(rows[0].elements['.floor-marker'].style.left).toBe('10%');
     card.hass = snapshot(50, 30, 70);
     expect(model()).toMatchObject({ peak: 80, peakPercent: 100, floor: 20, floorPercent: 0 });
     card.hass = snapshot(160, 0, 200);
-    expect(card._extrema['sensor.value']).toMatchObject({ peak: { value: 160 }, floor: { value: 20 } });
+    expect(card._extrema.get(card._config.entities[0])).toMatchObject({ peak: { value: 160 }, floor: { value: 20 } });
     expect(model()).toMatchObject({ peak: 160, peakPercent: 80, floor: 20, floorPercent: 10 });
     expectGeometry(model(), rows[0]);
   });

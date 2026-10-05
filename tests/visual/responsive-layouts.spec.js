@@ -517,7 +517,7 @@ for (const finalWidth of [115, 360, 450, 460, 470, 720]) {
       // also converge; this isolates history from all content measurements.
       await page.locator('sensor-bar-card-plus').evaluate((card) => {
         [...card.shadowRoot.querySelectorAll('.row')].forEach((row, index) => {
-          card._leftModeResponsiveHistory.set(row.dataset.entity, index % 2 === 0);
+          card._leftModeResponsiveHistory.set(card._config.entities[Number(row.dataset.rowIndex)], index % 2 === 0);
         });
         card._runPostLayoutPasses();
       });

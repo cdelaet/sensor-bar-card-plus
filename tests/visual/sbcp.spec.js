@@ -151,7 +151,7 @@ test('left responsive layout converges across config rebuilds and fresh renderin
         valueWidth: budget.valueWidth,
         gap: budget.gap,
         inlineShare: inlineCandidate.share,
-        history: card._leftModeResponsiveHistory.get(entityId),
+        history: card._leftModeResponsiveHistory.get(card._config.entities[Number(row.dataset.rowIndex)]),
       };
     });
   });
@@ -206,14 +206,14 @@ test('left responsive layout converges across config rebuilds and fresh renderin
   await page.evaluate((nextConfig) => {
     document.querySelector('sensor-bar-card-plus').setConfig(nextConfig);
   }, onlyPowerConfig);
-  await expect.poll(() => page.locator('sensor-bar-card-plus').evaluate((card) => [...card._leftModeResponsiveHistory.keys()]))
+  await expect.poll(() => page.locator('sensor-bar-card-plus').evaluate((card) => card._config.entities.filter(row => card._leftModeResponsiveHistory.has(row)).map(row => row.entity)))
     .toEqual(['sensor.power']);
 
   const abovePowerConfig = { ...onlyPowerConfig, layout: { label: { position: 'above' } } };
   await page.evaluate((nextConfig) => {
     document.querySelector('sensor-bar-card-plus').setConfig(nextConfig);
   }, abovePowerConfig);
-  await expect.poll(() => page.locator('sensor-bar-card-plus').evaluate((card) => [...card._leftModeResponsiveHistory.keys()]))
+  await expect.poll(() => page.locator('sensor-bar-card-plus').evaluate((card) => card._config.entities.filter(row => card._leftModeResponsiveHistory.has(row)).map(row => row.entity)))
     .toEqual([]);
 
   const freshConfig = { ...config, entities: [{ entity: 'sensor.power' }] };
@@ -1637,6 +1637,7 @@ test('generic marker DOM identity survives unresolved and resolved source update
       const card = document.querySelector('sensor-bar-card-plus');
       card.hass = {
         states: {
+          ...card._hass.states,
           'sensor.reference_row': window.__sbcpCreateState(20, {
             friendly_name: 'Reference row',
             unit_of_measurement: 'W',

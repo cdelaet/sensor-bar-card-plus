@@ -214,9 +214,11 @@ export class SensorBarCard extends HTMLElement {
     this._diagnostics = { warnings: [], errors: [] };
     this._lastDiagnosticsSignature = null;
     this._hass = null;
-    this._extrema = {};
+    this._extrema = new WeakMap();
     this._rowScales = new WeakMap();
-    this._leftModeResponsiveHistory = new Map();
+    this._rowGeneration = 0;
+    this._rowPresence = [];
+    this._leftModeResponsiveHistory = new WeakMap();
     this._rendered = false;
     this._resizeObserver = null;
     this._densityPassScheduled = false;
@@ -252,50 +254,82 @@ export class SensorBarCard extends HTMLElement {
       throw new Error('You must define entities or entity');
     }
     this._rendered = false; // force full rebuild on config change
+    this._rowGeneration += 1;
     const previousConfig = this._config;
     this._config = this.normalizeCardConfig(config);
     this._rowScales = new WeakMap();
-    // Keep hysteresis history for surviving left-mode rows; every layout pass
-    // reevaluates it against current geometry, while removed/non-left rows reset.
-    const activeLeftEntityIds = new Set(
-      (this._config.entities || [])
-        .filter((entityConfig) => entityConfig.layout?.label?.position === 'left')
-        .map((entityConfig) => entityConfig.entity)
-    );
-    for (const entityId of this._leftModeResponsiveHistory.keys()) {
-      if (!activeLeftEntityIds.has(entityId)) {
-        this._leftModeResponsiveHistory.delete(entityId);
-      }
-    }
-    const activeEntityIds = new Set(
-      (this._config.entities || []).map((entityConfig) => entityConfig.entity)
-    );
-    for (const entityId of Object.keys(this._extrema)) {
-      if (!activeEntityIds.has(entityId)) {
-        delete this._extrema[entityId];
-      }
-    }
-    const previousEntities = new Map((previousConfig?.entities ?? []).map((entity) => [entity.entity, entity]));
-    for (const entityConfig of this._config.entities ?? []) {
-      const previous = previousEntities.get(entityConfig.entity);
-      const current = entityConfig;
-      const stored = this._extrema[entityConfig.entity];
-      if (!stored) continue;
-      for (const key of ['peak', 'floor']) {
-        const previousMarker = previous?.[`${key}_marker`];
-        const currentMarker = current?.[`${key}_marker`];
-        if (previousMarker?.show === true && currentMarker?.show !== true) {
-          delete stored[key];
-        } else if (JSON.stringify(previousMarker?.reset ?? { kind: 'never' })
-          !== JSON.stringify(currentMarker?.reset ?? { kind: 'never' })) {
-          delete stored[key];
-        }
-      }
-      if (!stored.peak && !stored.floor) delete this._extrema[entityConfig.entity];
-    }
+    this._reconcileRowHistory(previousConfig?.entities ?? []);
     this._diagnostics = validateNormalizedConfig(this._config);
     this._logDiagnostics();
     this._render();
+  }
+
+  _reconcileRowHistory(previousRows) {
+    // Compare normalized behavior, not retained raw aliases. Scale provenance
+    // must be explicit here because it changes unavailable-source fallback.
+    const canonical = (value, key = '') => {
+      if (Array.isArray(value)) return value.map(canonical);
+      if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort()
+        .filter(name => !['severity', 'segment_space', 'label_precision_key'].includes(name))
+        .map(name => [name, canonical(value[name], name)]));
+      if (key === 'fixed') return getNumericValue(null, value);
+      if (/color/i.test(key) && typeof value === 'string' && /^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(value.trim())) {
+        const hex = value.trim().slice(1).toLowerCase();
+        return `#${hex.length === 3 ? hex.split('').map(char => char + char).join('') : hex}`;
+      }
+      return value;
+    };
+    const signature = row => JSON.stringify(canonical({
+      entity: row.entity, name: row.name, icon: row.icon ?? null,
+      layout: row.layout,
+      scale: Object.fromEntries(['min', 'max'].map(key => [key, {
+        ...row.scale[key], fixed_explicit: row.scale[key].fixed_explicit !== false,
+      }])),
+      bar: row.bar, baseline: row.baseline, formatting: row.formatting,
+      target_marker: row.target_marker, peak_marker: row.peak_marker,
+      floor_marker: row.floor_marker, generic_markers: row.generic_markers,
+    }));
+    // Consume unchanged rows one-to-one, then preserve only unique remaining
+    // old/new pairs for an entity. Ambiguous edited duplicates start fresh.
+    const unmatchedOld = new Set(previousRows);
+    const matches = new Map();
+    const oldSignatures = new Map(previousRows.map(row => [row, signature(row)]));
+    for (const row of this._config.entities) {
+      const key = signature(row);
+      const previous = [...unmatchedOld].find(old => oldSignatures.get(old) === key);
+      if (!previous) continue;
+      matches.set(row, previous);
+      unmatchedOld.delete(previous);
+    }
+    const unmatchedNew = this._config.entities.filter(row => !matches.has(row));
+    for (const row of unmatchedNew) {
+      const old = [...unmatchedOld].filter(previous => previous.entity === row.entity);
+      const next = unmatchedNew.filter(current => current.entity === row.entity);
+      if (old.length !== 1 || next.length !== 1) continue;
+      matches.set(row, old[0]);
+      unmatchedOld.delete(old[0]);
+    }
+    const extrema = new WeakMap();
+    const responsive = new WeakMap();
+    for (const [row, previous] of matches) {
+      const stored = this._extrema.get(previous);
+      const retained = {};
+      for (const key of ['peak', 'floor']) {
+        const before = previous[`${key}_marker`];
+        const after = row[`${key}_marker`];
+        if (stored?.[key] && before?.show === true && after?.show === true
+          && JSON.stringify(before.reset) === JSON.stringify(after.reset)) {
+          retained[key] = { ...stored[key] };
+        }
+      }
+      if (retained.peak || retained.floor) extrema.set(row, retained);
+      if (previous.layout?.label?.position === 'left' && row.layout?.label?.position === 'left'
+        && this._leftModeResponsiveHistory.has(previous)) {
+        responsive.set(row, this._leftModeResponsiveHistory.get(previous));
+      }
+    }
+    this._extrema = extrema;
+    this._leftModeResponsiveHistory = responsive;
   }
 
   _logDiagnostics() {
@@ -483,8 +517,7 @@ export class SensorBarCard extends HTMLElement {
     const sample = getFiniteNumber(stateObj?.state);
     if (!Number.isFinite(sample)) return;
 
-    const entityId = entityCfg.entity;
-    const current = this._extrema[entityId] ?? {};
+    const current = this._extrema.get(entityCfg) ?? {};
     const timestamp = this._getStateTimestamp(stateObj);
     for (const key of ['peak', 'floor']) {
       const marker = normalizedEntity?.[`${key}_marker`];
@@ -501,9 +534,9 @@ export class SensorBarCard extends HTMLElement {
       );
     }
     if (current.peak || current.floor) {
-      this._extrema[entityId] = current;
+      this._extrema.set(entityCfg, current);
     } else {
-      delete this._extrema[entityId];
+      this._extrema.delete(entityCfg);
     }
   }
 
@@ -3268,9 +3301,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     if (!budget) return null;
     const minimumBarShare = this._getMinimumBarShare();
     const states = this._getLeftModeCandidateStates(budget);
-    const entityId = row?.dataset?.entity;
-    const previousTopValue = entityId && this._leftModeResponsiveHistory.has(entityId)
-      ? this._leftModeResponsiveHistory.get(entityId)
+    const entityCfg = this._config.entities?.[Number(row?.dataset?.rowIndex)];
+    const previousTopValue = entityCfg && this._leftModeResponsiveHistory.has(entityCfg)
+      ? this._leftModeResponsiveHistory.get(entityCfg)
       : budget.rowStack?.dataset?.forceTopValue === 'true';
     const topStates = states.filter(state => state.topValue);
     const enableShare = this._getTopValueEnableShare();
@@ -3291,8 +3324,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     const leftLabel = row?.querySelector('.label-left');
     if (!mainLine || !rowStack) return;
 
-    const entityId = row?.dataset?.entity;
-    if (entityId) this._leftModeResponsiveHistory.set(entityId, state?.topValue === true);
+    const entityCfg = this._config.entities?.[Number(row?.dataset?.rowIndex)];
+    if (entityCfg) this._leftModeResponsiveHistory.set(entityCfg, state?.topValue === true);
     delete rowStack.dataset.forceTopValue;
     delete mainLine.dataset.hideLeftIcon;
     if (leftLabel) delete leftLabel.dataset.priorityHidden;
@@ -3571,7 +3604,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
   }
 
   _runPostLayoutPasses(rows = null) {
+    const generation = this._rowGeneration;
     requestAnimationFrame(() => {
+      if (generation !== this._rowGeneration) return;
       this._applyRowDensity();
       this._applyLeftModeDensity();
       this._applyAboveLabelDensity();
@@ -3587,6 +3622,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       );
 
       requestAnimationFrame(() => {
+        if (generation !== this._rowGeneration) return;
         this._applyAdaptiveRowHeight();
         this._applyValueVisibility();
         this._applyLeftLabelUsefulness();
@@ -3881,14 +3917,14 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       cardConfig: this._config,
       entityConfig: ecfg,
       entityState: stateObj,
-      extrema: this._extrema[entityCfg.entity] ?? null,
+      extrema: this._extrema.get(entityCfg) ?? null,
       previousScale: this._rowScales.get(entityCfg),
     });
     this._rowScales.set(entityCfg, { min: rowViewModel.min, max: rowViewModel.max });
     return rowViewModel;
   }
 
-  _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
+  _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue, rowIndex = this._config.entities?.indexOf(entityCfg) ?? -1) {
     const ecfg = this._resolve(entityCfg);
     const stateObj = this._hass?.states?.[entityCfg.entity] ?? null;
     if (stateObj) this._updateExtrema(entityCfg, ecfg, stateObj);
@@ -3996,7 +4032,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       ? `<div class="icon-wrap"><ha-icon icon="${escapedIcon}"></ha-icon></div>`
       : '';
     return `
-      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${(rowViewModel?.attributes?.heightExplicit ?? layout.height_explicit) ? 'true' : 'false'}" data-bar-animated="${(rowViewModel?.attributes?.barAnimated ?? bar.animated) ? 'true' : 'false'}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? 'true' : 'false'}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? 'true' : 'false'}">
+      <div class="row" data-row-index="${rowIndex}" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${(rowViewModel?.attributes?.heightExplicit ?? layout.height_explicit) ? 'true' : 'false'}" data-bar-animated="${(rowViewModel?.attributes?.barAnimated ?? bar.animated) ? 'true' : 'false'}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? 'true' : 'false'}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? 'true' : 'false'}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${heroHeader}
@@ -4056,7 +4092,7 @@ ${paintLayers}
         cardConfig: this._config,
         entityConfig: ecfg,
         entityState: previousStateObj,
-        extrema: this._extrema[entityCfg.entity] ?? null,
+        extrema: this._extrema.get(entityCfg) ?? null,
         previousScale,
       })
       : null;
@@ -4200,15 +4236,21 @@ ${paintLayers}
     if (!rowsEl) return;
 
     const entities = this._config.entities;
+    const presence = entities.map(entityCfg => !!this._hass.states[entityCfg.entity]);
+    const presenceChanged = presence.some((present, index) => present !== this._rowPresence[index]);
 
     // First render: build all rows from scratch
-    if (!this._rendered) {
+    if (!this._rendered || presenceChanged) {
+      // Reconstruct DOM association only. Configured row ownership and runtime
+      // histories survive primary-entity appearance/disappearance.
+      this._rowGeneration += 1;
+      this._rowPresence = presence;
       let html = '';
       for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
         const entityCfg = entities[entityIndex];
         const stateObj = this._hass.states[entityCfg.entity];
         if (!stateObj) {
-          html += `<div class="row"><span style="color:var(--error-color,red);font-size:12px;">Entity not found: ${escapeHtml(entityCfg.entity)}</span></div>`;
+          html += `<div class="row" data-row-index="${entityIndex}"><span style="color:var(--error-color,red);font-size:12px;">Entity not found: ${escapeHtml(entityCfg.entity)}</span></div>`;
           continue;
         }
         const ecfg      = this._resolve(entityCfg);
@@ -4224,15 +4266,15 @@ ${paintLayers}
         const targetDisplay = rowViewModel.targetPresentation?.text ?? null;
         const peakPct = rowViewModel.peakPercent;
         const peakDisplay = rowViewModel.peakPresentation?.number ?? null;
-        html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_marker.color, ecfg.target_marker.color, safeMin, safeMax);
+        html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_marker.color, ecfg.target_marker.color, safeMin, safeMax, entityIndex);
       }
       this._clearMarkerHover();
       rowsEl.innerHTML = html;
       this._rendered = true;
 
       const builtRows = rowsEl.querySelectorAll('.row[data-entity]');
-      builtRows.forEach((row, idx) => {
-        const entityCfg = entities[idx];
+      builtRows.forEach((row) => {
+        const entityCfg = entities[Number(row.dataset.rowIndex)];
         const stateObj = entityCfg ? this._hass.states[entityCfg.entity] : null;
         if (entityCfg && stateObj) {
           this._patchRow(row, entityCfg, stateObj);
@@ -4253,15 +4295,12 @@ ${paintLayers}
 
     // Subsequent renders: patch only what changed, preserving DOM for smooth transitions
     const rows = rowsEl.querySelectorAll('.row[data-entity]');
-    let rowIdx = 0;
-    for (const entityCfg of entities) {
+    for (const row of rows) {
+      const entityCfg = entities[Number(row.dataset.rowIndex)];
+      if (!entityCfg) continue;
       const stateObj = this._hass.states[entityCfg.entity];
-      if (!stateObj) { rowIdx++; continue; }
-
-      const row = rows[rowIdx];
-      if (!row) { rowIdx++; continue; }
+      if (!stateObj) continue;
       this._patchRow(row, entityCfg, stateObj, previousHass);
-      rowIdx++;
     }
     this._runPostLayoutPasses(rows);
   }

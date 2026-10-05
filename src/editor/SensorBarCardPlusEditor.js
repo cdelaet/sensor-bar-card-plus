@@ -1,4 +1,5 @@
-import { normalizeBarConfig, normalizeMarkerDirection, normalizeTargetMarkerShape } from '../config/normalize.js';
+import { normalizeBarConfig, normalizeCardConfig, normalizeStructuredResolvableValue, parsePercentLiteral, normalizeMarkerDirection, normalizeTargetMarkerShape } from '../config/normalize.js';
+import { getNumericValue } from '../config/resolve.js';
 
 export class SensorBarCardPlusEditor extends HTMLElement {
   constructor() {
@@ -50,12 +51,18 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return;
     }
 
+    if (nextConfigJson === this._lastEmittedConfigJson) {
+      this._config = nextConfig;
+      return;
+    }
+
     if (this._getEmittedConfigJson(nextConfig) === this._getEmittedConfigJson(this._draftConfig)) {
       this._config = nextConfig;
       return;
     }
 
     const shouldRender = !this.shadowRoot?.innerHTML || nextConfigJson !== this._lastRenderedConfigJson;
+    this._lastEmittedConfigJson = null;
     this._config = nextConfig;
     this._draftConfig = this._cloneDeep(nextConfig);
     this._gradientStopsDrafts = new Map();
@@ -120,7 +127,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _getEmittedConfigJson(config) {
-    return this._serializeConfig(this._cleanupEditorEmittedConfig(this._cloneDeep(config)));
+    // Equality must not collapse sources or explicit inheritance overrides.
+    return this._serializeConfig(config);
   }
 
   _isObject(value) {
@@ -605,23 +613,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _cleanupResolvableValueForEmit(value) {
-    const nextValue = {};
-    if (this._isObject(value)) {
-      const fixed = this._normalizeNumberValue(value.fixed);
-      const entity = this._normalizeTextValue(value.entity).trim();
-      if (fixed !== null) {
-        nextValue.fixed = fixed;
-      }
-      if (entity) {
-        nextValue.entity = entity;
-      }
-    } else {
-      const fixed = this._normalizeNumberValue(value);
-      if (fixed !== null) {
-        nextValue.fixed = fixed;
-      }
+    if (this._isObject(value) || value === null || typeof value === 'string' && this._normalizeNumberValue(value) === null) {
+      return this._cloneDeep(value);
     }
-    return Object.keys(nextValue).length ? nextValue : null;
+    const fixed = this._normalizeNumberValue(value);
+    return fixed === null ? null : { fixed };
   }
 
   _cleanupScaleForEmit(target) {
@@ -636,7 +632,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         return;
       }
       const cleanedValue = this._cleanupResolvableValueForEmit(nextScale[key]);
-      if (cleanedValue) {
+      if (cleanedValue || nextScale[key] === null) {
         nextScale[key] = cleanedValue;
         delete nextTarget[key];
         delete nextTarget[`${key}_entity`];
@@ -771,7 +767,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextMarker.enabled;
     }
 
-    if (cleanedAt) {
+    if (cleanedAt || nextMarker.at === null) {
       nextMarker.at = cleanedAt;
       delete nextTarget.target_entity;
     } else {
@@ -839,7 +835,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextBaseline.enabled;
     }
 
-    if (cleanedAt) {
+    if (cleanedAt || nextBaseline.at === null) {
       nextBaseline.at = cleanedAt;
     } else {
       delete nextBaseline.at;
@@ -1022,7 +1018,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextBar.solid_fill;
     }
 
-    if (segments && segments.length && (legacySegmentSpace || !this._segmentsEqualForEditor(segments, this._getDefaultSegments()))) {
+    if (segments && (!segments.length || legacySegmentSpace || !this._segmentsEqualForEditor(segments, this._getDefaultSegments()))) {
       nextBar.segments = segments;
       delete nextTarget.segments;
       delete nextTarget.severity;
@@ -1030,7 +1026,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextBar.segments;
     }
 
-    if (gradientStops && gradientStops.length >= 2 && !this._isDefaultGradientStops(gradientStops)) {
+    if (gradientStops && (!gradientStops.length || gradientStops.length >= 2 && !this._isDefaultGradientStops(gradientStops))) {
       nextBar.gradient_stops = this._sanitizeGradientStopsForEmit(gradientStops);
       delete nextTarget.gradient_stops;
     } else {
@@ -1163,6 +1159,37 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       });
     }
 
+    // Cleanup is optional. Compare normalized feature semantics at both scopes
+    // before dropping explicit input; never emit the normalized runtime object.
+    const meaning = (raw) => {
+      const normalized = normalizeCardConfig({ ...raw, ...(!raw.entities && !raw.entity ? { entities: [] } : {}) });
+      const featureKeys = ['layout', 'scale', 'bar', 'baseline', 'formatting', 'target_marker', 'peak_marker', 'floor_marker', 'generic_markers'];
+      const scope = (value) => ({
+        ...Object.fromEntries(featureKeys.map(key => [key, value[key]])),
+        scale: Object.fromEntries(['min', 'max'].map(key => [key, {
+          ...value.scale[key], fixed_explicit: value.scale[key].fixed_explicit !== false,
+        }])),
+      });
+      const canonical = (value, key = '') => {
+        if (Array.isArray(value)) return value.map(entry => canonical(entry));
+        if (this._isObject(value)) return Object.fromEntries(Object.entries(value)
+          .filter(([name]) => !['severity', 'segment_space', 'label_precision_key'].includes(name)
+            && !/invalid/i.test(name))
+          .map(([name, entry]) => [name, canonical(entry, name)]));
+        if (key === 'fixed') return getNumericValue(null, value);
+        if (/color/i.test(key) && typeof value === 'string') return this._normalizeColorComparisonValue(value);
+        return value;
+      };
+      return this._serializeConfig(canonical({ card: scope(normalized), entities: normalized.entities.map(row => ({
+        entity: row.entity, name: row.name, icon: row.icon, ...scope(row),
+      })) }));
+    };
+    try {
+      if (meaning(config) !== meaning(nextConfig)) nextConfig = this._cloneDeep(config);
+    } catch (_error) {
+      // An incomplete/unsupported draft cannot prove cleanup equivalence.
+      nextConfig = this._cloneDeep(config);
+    }
     return this._orderEditorConfigKeys(nextConfig);
   }
 
@@ -1416,15 +1443,18 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const structuredValue = this._getPathValue(target, canonicalBasePath);
     const legacyFixedValue = this._getPathValue(target, legacyFixedPath);
     const legacyEntityValue = this._getPathValue(target, legacyEntityPath);
-    const structuredFixedValue = this._isObject(structuredValue)
-      ? structuredValue?.fixed
-      : structuredValue;
-    const structuredEntityValue = this._isObject(structuredValue)
-      ? structuredValue?.entity
-      : undefined;
+    if (structuredValue !== undefined) {
+      const source = normalizeStructuredResolvableValue(structuredValue, options.inheritedSource ?? null, null, {
+        allowPercent: ['target', 'baseline'].includes(canonicalBasePath[0]),
+      });
+      return {
+        fixed: source.fixed ?? '', entity: source.entity ?? '',
+        ...(Number.isFinite(source.percent) ? { percent: source.percent } : {}),
+      };
+    }
     return {
-      fixed: structuredFixedValue ?? ((!this._isObject(legacyFixedValue) && legacyFixedValue !== undefined) ? legacyFixedValue : ''),
-      entity: structuredEntityValue ?? legacyEntityValue ?? '',
+      fixed: (!this._isObject(legacyFixedValue) && legacyFixedValue !== undefined) ? legacyFixedValue : '',
+      entity: legacyEntityValue ?? '',
     };
   }
 
@@ -1441,6 +1471,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return localValue;
     }
     const inheritedValue = this._getResolvableScopedValue({ type: 'card' }, field, options);
+    const target = this._getEntityRawEntries()[scope.index];
+    if (this._getPathValue(target, options.canonicalBasePath ?? ['scale', field]) !== undefined) {
+      return this._getResolvablePartsFromTarget(target, field, { ...options,
+        inheritedSource: { fixed: inheritedValue.fixed === '' ? null : inheritedValue.fixed, entity: inheritedValue.entity || null, percent: inheritedValue.percent ?? null },
+      });
+    }
     return {
       fixed: this._hasExplicitOverrideValue(localValue.fixed) ? localValue.fixed : inheritedValue.fixed,
       entity: this._hasExplicitOverrideValue(localValue.entity) ? localValue.entity : inheritedValue.entity,
@@ -1485,10 +1521,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
       const hasFixed = nextParts.fixed !== undefined && nextParts.fixed !== null && nextParts.fixed !== '';
       const hasEntity = nextParts.entity !== undefined && nextParts.entity !== null && nextParts.entity !== '';
-      if (hasFixed || hasEntity) {
+      const hasPercent = Number.isFinite(nextParts.percent);
+      if (hasFixed || hasEntity || hasPercent) {
         const nextValue = {};
         if (hasFixed) nextValue.fixed = nextParts.fixed;
         if (hasEntity) nextValue.entity = nextParts.entity;
+        if (hasPercent) nextValue.percent = nextParts.percent;
         nextTarget = this._setPathValue(nextTarget, canonicalBasePath, nextValue);
       }
 
@@ -1842,7 +1880,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _normalizeGradientStopPosValue(rawValue) {
-    const numericValue = this._normalizeNumberValue(rawValue);
+    const percent = parsePercentLiteral(rawValue);
+    const numericValue = Number.isFinite(percent) ? percent : this._normalizeNumberValue(rawValue);
     if (numericValue === null || !Number.isFinite(numericValue)) {
       return null;
     }
@@ -2628,6 +2667,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (field === 'precision' && value !== '' && normalized === null) return false;
     return this._applyScopedMutation(scope, (target) => {
       let next = this._cloneDeep(target);
+      if (key === 'target' && field === 'show') next = this._deletePathValue(next, ['show_target_label']);
       const marker = this._isObject(this._getPathValue(next, [key]))
         ? this._cloneDeep(this._getPathValue(next, [key])) : {};
       const label = this._isObject(marker.label) ? this._cloneDeep(marker.label) : {};

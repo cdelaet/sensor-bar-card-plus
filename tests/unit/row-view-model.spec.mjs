@@ -185,7 +185,7 @@ describe('buildRowViewModel', () => {
         cardConfig: config,
         entityConfig,
         entityState: state,
-        extrema: card._extrema['sensor.power'],
+        extrema: card._extrema.get(entityConfig),
       });
 
       expect(row.primaryPresentation.text).toBe(unavailableState);
@@ -202,7 +202,7 @@ describe('buildRowViewModel', () => {
       cardConfig: config,
       entityConfig,
       entityState: state,
-      extrema: card._extrema['sensor.power'],
+      extrema: card._extrema.get(entityConfig),
     });
     expect(recoveredRow.primaryPresentation.text).toBe('42 W');
     expect(recoveredRow.peakPresentation.text).toBe('80 W');
