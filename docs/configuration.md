@@ -2,6 +2,8 @@
 
 This is the exhaustive reference for Sensor Bar Card Plus YAML. For the practical guide and feature concepts, start with the [README](../README.md). This document describes the supported fields, defaults, scope, compatibility forms, and behavior details.
 
+For focused, copyable configurations and visual comparisons, see the [Examples Guide](examples.md).
+
 ## Contents
 
 - [Scope, inheritance, and replacement](#scope-inheritance-and-replacement)
@@ -420,7 +422,7 @@ The reading stays beside the rail; it does not move above. Very narrow cards can
 
 ### Hero
 
-Hero emphasizes a large right-aligned reading beside a smaller name in a header above a full-width rail. It has no icon. Choose it for a prominent metric that should be readable at a glance.
+Hero emphasizes a large right-aligned reading beside a smaller name in a header above a full-width rail. Hero does not display an entity icon. This is intentional at every width. Choose it for a prominent metric that should be readable at a glance.
 
 The header name can truncate or disappear as space tightens. The card tries smaller supported typography for the complete value + unit group before dropping the unit. Typography can shrink substantially; only after complete-reading fitting is exhausted does number-only fitting take over. At extreme widths an unfit number can be hidden. The rail remains in its own region below the header.
 

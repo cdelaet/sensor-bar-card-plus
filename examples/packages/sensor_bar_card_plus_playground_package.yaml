@@ -111,6 +111,63 @@ input_number:
     initial: 0
     unit_of_measurement: W
 
+  # Dedicated Visual Examples controls. Scale ranges cannot cross, and the
+  # reference ranges remain inside every allowed Scale. Other views keep
+  # their existing playground controls and defaults.
+  sbcp_examples_primary:
+    name: Visual Examples · Power
+    min: -2000
+    max: 12000
+    step: 100
+    mode: slider
+    initial: 7200
+    unit_of_measurement: W
+
+  sbcp_examples_scale_min:
+    name: Visual Examples · Scale Minimum
+    min: -2000
+    max: 0
+    step: 100
+    mode: box
+    initial: 0
+    unit_of_measurement: W
+
+  sbcp_examples_scale_max:
+    name: Visual Examples · Scale Maximum
+    min: 8000
+    max: 12000
+    step: 100
+    mode: box
+    initial: 10000
+    unit_of_measurement: W
+
+  sbcp_examples_baseline:
+    name: Visual Examples · Baseline
+    min: 0
+    max: 6000
+    step: 100
+    mode: slider
+    initial: 2000
+    unit_of_measurement: W
+
+  sbcp_examples_target:
+    name: Visual Examples · Target Limit
+    min: 4000
+    max: 8000
+    step: 100
+    mode: slider
+    initial: 6500
+    unit_of_measurement: W
+
+  sbcp_examples_reference:
+    name: Visual Examples · Generic Reference
+    min: 1000
+    max: 7000
+    step: 100
+    mode: slider
+    initial: 3500
+    unit_of_measurement: W
+
   sbcp_current_quick:
     name: SBCP Current Quick Slider
     min: -100
@@ -306,6 +363,16 @@ input_number:
     unit_of_measurement: W
 
 input_boolean:
+  sbcp_examples_sweep_enabled:
+    name: Visual Examples · GIF Sweep
+    icon: mdi:play-pause
+    initial: false
+
+  # Internal direction memory for the Visual Examples triangle wave.
+  sbcp_examples_sweep_up:
+    name: Visual Examples · Sweep Rising
+    initial: true
+
   sbcp_animated:
     name: SBCP Animated
     initial: true
@@ -502,6 +569,11 @@ input_text:
 
 template:
   - sensor:
+      - name: Visual Examples Primary Value
+        default_entity_id: sensor.sbcp_examples_primary
+        unit_of_measurement: W
+        icon: mdi:flash
+        state: "{{ states('input_number.sbcp_examples_primary') | float(0) }}"
       # Primary playground sensor. This is the entity most demo cards consume.
       - name: Playground Sensor
         default_entity_id: sensor.sbcp_playground_sensor
@@ -1614,6 +1686,46 @@ script:
                         option: Dawn
 
 automation:
+  - id: sbcp_examples_triangle_sweep
+    alias: SBCP Examples Triangle Sweep
+    description: Sweep Visual Examples Power by 1000 W each second, reversing at the live Scale bounds. The default 0–10000 W range takes approximately 10 seconds each way and 20 seconds per complete triangle-wave cycle.
+    trigger:
+      - platform: time_pattern
+        seconds: "/1"
+    condition:
+      - condition: state
+        entity_id: input_boolean.sbcp_examples_sweep_enabled
+        state: "on"
+    action:
+      - variables:
+          current: "{{ states('input_number.sbcp_examples_primary') | float(7200) }}"
+          minimum: "{{ states('input_number.sbcp_examples_scale_min') | float(0) }}"
+          maximum: "{{ states('input_number.sbcp_examples_scale_max') | float(10000) }}"
+          rising: "{{ is_state('input_boolean.sbcp_examples_sweep_up', 'on') }}"
+      - variables:
+          next_value: "{{ [[current + (1000 if rising else -1000), minimum] | max, maximum] | min }}"
+      # Recheck immediately before writing in case the sweep was stopped.
+      - condition: state
+        entity_id: input_boolean.sbcp_examples_sweep_enabled
+        state: "on"
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_examples_primary
+        data:
+          value: "{{ next_value }}"
+      - choose:
+          - conditions: "{{ next_value >= maximum }}"
+            sequence:
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.sbcp_examples_sweep_up
+          - conditions: "{{ next_value <= minimum }}"
+            sequence:
+              - service: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.sbcp_examples_sweep_up
+    mode: single
+
   - id: sbcp_quick_slider_sync
     alias: SBCP Quick Slider Sync
     description: Keep quick sliders and numeric helper values aligned where safe.

@@ -10921,3 +10921,386 @@ views:
         name: Prepare extrema
       - entity: script.sbcp_docs_static_hero_reset_recommended_values
         name: Reset recommended values
+- title: Visual Examples
+  path: sensor-bar-card-plus-visual-examples
+  icon: mdi:palette-swatch-variant
+  badges: []
+  cards:
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: |
+        # Visual Examples
+        Copyable comparisons using the same power reading and palette. Load the playground package first, then use the controls below. Resize the dashboard or open it on a phone to see the layouts adapt.
+    - type: entities
+      title: Visual Example Controls
+      show_header_toggle: false
+      entities:
+      - entity: input_number.sbcp_examples_primary
+        name: Power (W)
+      - entity: input_number.sbcp_examples_scale_min
+        name: Scale minimum (W)
+      - entity: input_number.sbcp_examples_scale_max
+        name: Scale maximum (W)
+      - entity: input_number.sbcp_examples_baseline
+        name: Baseline (W)
+      - entity: input_number.sbcp_examples_target
+        name: Target limit (W)
+      - entity: input_number.sbcp_examples_reference
+        name: Generic reference (W)
+      - entity: input_boolean.sbcp_examples_sweep_enabled
+        name: GIF sweep · start / stop
+    - type: markdown
+      content: |
+        Start with Power **7200**, Scale **0–10000**, Baseline **2000**, Target **6500** and Reference **3500** W. These controls are separate from the other playground views. Keep Power within the chosen Scale for unclamped comparisons.
+
+        Scale, Baseline, Target and reference positions update live. The Scale controls stay ordered; if either Scale source is unavailable, the complete fixed fallback is **0–10000 W**. Fallbacks are for unavailable sources, not extra slider modes.
+
+        Turn on **GIF sweep** to move Power by **1000 W every second**, starting from its current value and reversing at the Scale minimum and maximum. The default **0–10000 W** Scale takes approximately **10 seconds from minimum to maximum**, **10 seconds back**, and **20 seconds for a complete triangle-wave cycle**. Turn it off to stop at the current value and use the sliders manually. It starts disabled.
+    - type: markdown
+      content: |
+        ## Layouts
+        The five rows use the same reading and icon; the name identifies the layout. The fourth row is **Off** and deliberately has no name. Hero has no icon. Heights are implicit so normal responsive density can adapt; headers and pills differ by layout.
+    - type: custom:sensor-bar-card-plus
+      title: Five Label Layouts
+      layout:
+        label:
+          position: left
+          width: 150
+      scale:
+        min:
+          entity: input_number.sbcp_examples_scale_min
+          fixed: 0
+        max:
+          entity: input_number.sbcp_examples_scale_max
+          fixed: 10000
+      formatting:
+        decimal: 0
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: "#00F5D4"
+        - pos: 70
+          color: "#FFF200"
+        - pos: 100
+          color: "#FF007F"
+      entities:
+      - entity: sensor.sbcp_examples_primary
+        name: House load · Left
+      - entity: sensor.sbcp_examples_primary
+        name: House load · Above
+        layout:
+          label:
+            position: above
+      - entity: sensor.sbcp_examples_primary
+        name: House load · Inside
+        layout:
+          label:
+            position: inside
+      - entity: sensor.sbcp_examples_primary
+        layout:
+          label:
+            position: 'off'
+      - entity: sensor.sbcp_examples_primary
+        name: House load · Hero
+        layout:
+          label:
+            position: hero
+          hero:
+            size: small
+    - type: markdown
+      content: |
+        ## Fill styles
+        Needle keeps the entire rail painted and marks Power (**72%** at the initial **7200 W / 0–10000 W** Scale). Compare vivid **cyan / yellow / magenta** across the complete rail, or turn on **GIF sweep** to animate the comparison.
+
+        Solid stays cyan. Gradient uses rail-percentage stops; Bands keeps hard boundaries; Soft Bands blends briefly at eligible boundaries; Band Gradient blends the Segment color sequence continuously. The last row uses **solid_fill**, a modifier that paints the whole rail with the Band Gradient color sampled at Power; that single color changes as the Needle moves.
+    - type: custom:sensor-bar-card-plus
+      title: Fill Styles
+      layout:
+        label:
+          position: above
+      scale:
+        min:
+          entity: input_number.sbcp_examples_scale_min
+          fixed: 0
+        max:
+          entity: input_number.sbcp_examples_scale_max
+          fixed: 10000
+      formatting:
+        decimal: 0
+      bar:
+        color: "#00F5D4"
+        needle:
+          show: true
+          color: "#F8FAFC"
+        gradient_stops:
+        - pos: 0
+          color: "#00F5D4"
+        - pos: 70
+          color: "#FFF200"
+        - pos: 100
+          color: "#FF007F"
+        segments:
+        - from: 0%
+          to: 40%
+          color: "#00F5D4"
+        - from: 40%
+          to: 80%
+          color: "#FFF200"
+        - from: 80%
+          to: 100%
+          color: "#FF007F"
+      entities:
+      - entity: sensor.sbcp_examples_primary
+        name: Solid
+        bar:
+          fill_style: solid
+      - entity: sensor.sbcp_examples_primary
+        name: Gradient
+        bar:
+          fill_style: gradient
+      - entity: sensor.sbcp_examples_primary
+        name: Bands
+        bar:
+          fill_style: bands
+      - entity: sensor.sbcp_examples_primary
+        name: Soft Bands
+        bar:
+          fill_style: soft_bands
+      - entity: sensor.sbcp_examples_primary
+        name: Band Gradient
+        bar:
+          fill_style: band_gradient
+      - entity: sensor.sbcp_examples_primary
+        name: Band Gradient + Solid Fill
+        bar:
+          fill_style: band_gradient
+          solid_fill: true
+    - type: markdown
+      content: |
+        ## Segment coordinates
+        The Bands row above uses **40% / 80%** boundaries. Here, numeric boundaries mean **2000 / 6000 W**; the mixed row combines **2000 W / 75%**. Change Scale maximum to see value thresholds move relative to the rail while percentage thresholds stay at their fractions. Gradient stops remain rail percentages too: bare `pos: 70` means **70%**, not 70 W.
+    - type: custom:sensor-bar-card-plus
+      title: Value and Mixed Segment Coordinates
+      layout:
+        label:
+          position: above
+      scale:
+        min:
+          entity: input_number.sbcp_examples_scale_min
+          fixed: 0
+        max:
+          entity: input_number.sbcp_examples_scale_max
+          fixed: 10000
+      formatting:
+        decimal: 0
+      bar:
+        fill_style: bands
+        segments:
+        - from: 0%
+          to: 2000
+          color: "#00F5D4"
+        - from: 2000
+          to: 6000
+          color: "#FFF200"
+        - from: 6000
+          to: 100%
+          color: "#FF007F"
+      entities:
+      - entity: sensor.sbcp_examples_primary
+        name: Values · 2000 / 6000 W
+      - entity: sensor.sbcp_examples_primary
+        name: Mixed · 2000 W / 75%
+        bar:
+          segments:
+          - from: 0%
+            to: 2000
+            color: "#00F5D4"
+          - from: 2000
+            to: 75%
+            color: "#FFF200"
+          - from: 75%
+            to: 100%
+            color: "#FF007F"
+    - type: markdown
+      content: |
+        ## Compact Needle
+        Needle shows the whole colored rail and marks the current value, instead of revealing a growing fill. These two rows use an explicit **24 px rail** as a useful compact option; their complete rows are taller because of the headers. Compare smooth Gradient with hard Bands, then move Power.
+    - type: custom:sensor-bar-card-plus
+      title: Compact Needle · 24 px Rail
+      layout:
+        height: 24
+        label:
+          position: above
+      scale:
+        min:
+          entity: input_number.sbcp_examples_scale_min
+          fixed: 0
+        max:
+          entity: input_number.sbcp_examples_scale_max
+          fixed: 10000
+      formatting:
+        decimal: 0
+      bar:
+        needle:
+          show: true
+          color: "#F8FAFC"
+        gradient_stops:
+        - pos: 0
+          color: "#00F5D4"
+        - pos: 70
+          color: "#FFF200"
+        - pos: 100
+          color: "#FF007F"
+        segments:
+        - from: 0%
+          to: 40%
+          color: "#00F5D4"
+        - from: 40%
+          to: 80%
+          color: "#FFF200"
+        - from: 80%
+          to: 100%
+          color: "#FF007F"
+      entities:
+      - entity: sensor.sbcp_examples_primary
+        name: Gradient
+        bar:
+          fill_style: gradient
+      - entity: sensor.sbcp_examples_primary
+        name: Bands
+        bar:
+          fill_style: bands
+    - type: markdown
+      content: |
+        ## Baseline origins and side colors
+        Fill spans Baseline to Power in either direction, with a persistent indicator at Baseline. **0 W** is a Scale value; **50%** is the visible midpoint (5000 W on the initial Scale). Change Scale minimum to **−2000 W** to make that distinction clearer. The third row follows the Baseline control and deliberately replaces the two sides with blue/green paint. Move Power below, equal to, and above Baseline. These examples use Reveal Fill; an active Baseline suppresses Needle.
+    - type: custom:sensor-bar-card-plus
+      title: Baseline Origins and Side Colors
+      layout:
+        label:
+          position: above
+      scale:
+        min:
+          entity: input_number.sbcp_examples_scale_min
+          fixed: 0
+        max:
+          entity: input_number.sbcp_examples_scale_max
+          fixed: 10000
+      formatting:
+        decimal: 0
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: "#00F5D4"
+        - pos: 70
+          color: "#FFF200"
+        - pos: 100
+          color: "#FF007F"
+      entities:
+      - entity: sensor.sbcp_examples_primary
+        name: Value · 0 W
+        baseline:
+          at: 0
+      - entity: sensor.sbcp_examples_primary
+        name: Position · 50%
+        baseline:
+          at: 50%
+      - entity: sensor.sbcp_examples_primary
+        name: Live Baseline · side colors
+        baseline:
+          at:
+            entity: input_number.sbcp_examples_baseline
+            fixed: 2000
+          below:
+            color: "#60A5FA"
+          above:
+            color: "#34D399"
+    - type: markdown
+      content: |
+        ## Built-in and generic references
+        The first row has a live diamond Target, plus triangular Peak (above) and Floor (below). Move Power to **3000**, then **9000**, then back to **7200 W** to separate the session extrema. Fill above Target becomes vivid blue (**#00B2FF**), distinct from the magenta palette color. Peak/Floor history resets when the card is recreated.
+
+        The second row separates a live inward Pin (above), a fixed **75%** outward Chevron (below), and a label-only endpoint. **Now** reads the primary sensor independently of its fixed endpoint position. Move Reference or change the Scale to compare value and percentage anchors. Labels can overlap at narrow widths; hover where available to raise a label.
+    - type: custom:sensor-bar-card-plus
+      title: Built-in and Generic References
+      layout:
+        height: 38
+        label:
+          position: above
+      scale:
+        min:
+          entity: input_number.sbcp_examples_scale_min
+          fixed: 0
+        max:
+          entity: input_number.sbcp_examples_scale_max
+          fixed: 10000
+      formatting:
+        decimal: 0
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: "#00F5D4"
+        - pos: 70
+          color: "#FFF200"
+        - pos: 100
+          color: "#FF007F"
+      entities:
+      - entity: sensor.sbcp_examples_primary
+        name: Target + Peak / Floor
+        target:
+          at:
+            entity: input_number.sbcp_examples_target
+            fixed: 6500
+          color: "#FDE68A"
+          label:
+            show: true
+            text: Limit
+            show_value: false
+            show_unit: false
+          when_exceeded:
+            fill_color: "#00B2FF"
+        peak:
+          enabled: true
+          color: "#F8FAFC"
+        floor:
+          enabled: true
+          color: "#60A5FA"
+      - entity: sensor.sbcp_examples_primary
+        name: Generic references
+        markers:
+        - at:
+            entity: input_number.sbcp_examples_reference
+            fixed: 3500
+          lane: above
+          shape: pin
+          direction: inward
+          color: "#60A5FA"
+          label:
+            show: true
+            text: Reference
+            show_value: false
+            show_unit: false
+        - at: 75%
+          lane: below
+          shape: chevron
+          direction: outward
+          color: "#FDE68A"
+          label:
+            show: true
+            text: 75%
+            show_value: false
+            show_unit: false
+        - at: 100%
+          lane: above
+          show_marker: false
+          color: "#34D399"
+          label:
+            show: true
+            text: Now
+            entity: sensor.sbcp_examples_primary
+            show_unit: false
+            precision: 0

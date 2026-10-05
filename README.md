@@ -108,7 +108,7 @@ Choose a label position to suit the dashboard:
 - **Off** leaves the bar without a name label.
 - **Hero** gives the value more prominence for a glanceable gauge or KPI.
 
-The card can adapt supporting labels and icons as width changes. Hero gives the value priority; standard layouts preserve useful room for the track and may hide supporting details in tight spaces. Explicit row height remains respected, and very dense or narrow layouts can still have edge cases. Exact sizing and responsive configuration are in [Layout](docs/configuration.md#structured-configuration).
+The card can adapt supporting labels and icons as width changes. Hero gives the value priority; standard layouts preserve useful room for the track and may hide supporting details in tight spaces. Explicit row height remains respected, and very dense or narrow layouts can still have edge cases. Exact sizing and responsive configuration are in [Layout](docs/configuration.md#layout-options-and-responsive-behavior).
 
 ## Baseline: fill from a reference point
 
@@ -202,7 +202,7 @@ Target, Peak, Floor, Generic Reference Markers, and individual generic markers h
 
 SBCP adapts label and icon placement to available width, while keeping the bar and value useful where possible. Click or tap an entity row to open Home Assistant’s standard more-info dialog. If an entity is missing, its row shows an error while other rows remain available. Dynamic scales and reference values update as their source entities change. When a primary reading is unknown or unavailable, the card cannot place a new numeric value; Peak and Floor retain the last finite sample until reset or reconfiguration.
 
-Peak and Floor are session state rather than long-term history. Marker labels can overlap when references are close together, and a dynamic marker’s source unit is not converted to the row unit. These details and other boundary behavior are covered in the [configuration reference](docs/configuration.md#behavior-notes).
+Peak and Floor are session state rather than long-term history. Marker labels can overlap when references are close together, and a dynamic marker’s source unit is not converted to the row unit. These details and other boundary behavior are covered in the [configuration reference](docs/configuration.md).
 
 ## Compatibility
 
@@ -211,6 +211,7 @@ Existing dashboards do not require a configuration migration for v1.7.0. Target�
 ## Documentation and examples
 
 - [Configuration Reference](docs/configuration.md) — complete syntax, options, and defaults.
+- [Examples Guide](docs/examples.md) — compare layouts, fills, and references with focused, copyable YAML.
 - [Recipe Catalogue](examples/recipes/README.md) — practical, copyable configurations for common use cases.
 - [Example Dashboards](examples/dashboards/sensor-bar-card-plus-playground.yaml) — larger working configurations and feature demonstrations in the interactive Playground.
 - [Contributor and development guide](CONTRIBUTING.md)
