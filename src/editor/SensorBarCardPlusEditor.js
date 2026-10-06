@@ -1,4 +1,5 @@
-import { normalizeMarkerDirection, normalizeTargetMarkerShape } from '../config/normalize.js';
+import { normalizeBarConfig, normalizeCardConfig, normalizeStructuredResolvableValue, parsePercentLiteral, normalizeMarkerDirection, normalizeTargetMarkerShape } from '../config/normalize.js';
+import { getNumericValue } from '../config/resolve.js';
 
 export class SensorBarCardPlusEditor extends HTMLElement {
   constructor() {
@@ -50,12 +51,18 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return;
     }
 
+    if (nextConfigJson === this._lastEmittedConfigJson) {
+      this._config = nextConfig;
+      return;
+    }
+
     if (this._getEmittedConfigJson(nextConfig) === this._getEmittedConfigJson(this._draftConfig)) {
       this._config = nextConfig;
       return;
     }
 
     const shouldRender = !this.shadowRoot?.innerHTML || nextConfigJson !== this._lastRenderedConfigJson;
+    this._lastEmittedConfigJson = null;
     this._config = nextConfig;
     this._draftConfig = this._cloneDeep(nextConfig);
     this._gradientStopsDrafts = new Map();
@@ -120,7 +127,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _getEmittedConfigJson(config) {
-    return this._serializeConfig(this._cleanupEditorEmittedConfig(this._cloneDeep(config)));
+    // Equality must not collapse sources or explicit inheritance overrides.
+    return this._serializeConfig(config);
   }
 
   _isObject(value) {
@@ -605,23 +613,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _cleanupResolvableValueForEmit(value) {
-    const nextValue = {};
-    if (this._isObject(value)) {
-      const fixed = this._normalizeNumberValue(value.fixed);
-      const entity = this._normalizeTextValue(value.entity).trim();
-      if (fixed !== null) {
-        nextValue.fixed = fixed;
-      }
-      if (entity) {
-        nextValue.entity = entity;
-      }
-    } else {
-      const fixed = this._normalizeNumberValue(value);
-      if (fixed !== null) {
-        nextValue.fixed = fixed;
-      }
+    if (this._isObject(value) || value === null || typeof value === 'string' && this._normalizeNumberValue(value) === null) {
+      return this._cloneDeep(value);
     }
-    return Object.keys(nextValue).length ? nextValue : null;
+    const fixed = this._normalizeNumberValue(value);
+    return fixed === null ? null : { fixed };
   }
 
   _cleanupScaleForEmit(target) {
@@ -636,7 +632,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         return;
       }
       const cleanedValue = this._cleanupResolvableValueForEmit(nextScale[key]);
-      if (cleanedValue) {
+      if (cleanedValue || nextScale[key] === null) {
         nextScale[key] = cleanedValue;
         delete nextTarget[key];
         delete nextTarget[`${key}_entity`];
@@ -771,7 +767,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextMarker.enabled;
     }
 
-    if (cleanedAt) {
+    if (cleanedAt || nextMarker.at === null) {
       nextMarker.at = cleanedAt;
       delete nextTarget.target_entity;
     } else {
@@ -839,7 +835,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextBaseline.enabled;
     }
 
-    if (cleanedAt) {
+    if (cleanedAt || nextBaseline.at === null) {
       nextBaseline.at = cleanedAt;
     } else {
       delete nextBaseline.at;
@@ -964,19 +960,46 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return label;
   }
 
-  _cleanupBarForEmit(target) {
+  _cleanupBarForEmit(target, scope = { type: 'card' }, cardConfig = null, inheritedSegmentSpace = null) {
     if (!this._isObject(target) || !this._isObject(target.bar)) {
       return target;
     }
     const nextTarget = this._cloneDeep(target);
     const nextBar = this._cloneDeep(nextTarget.bar);
+    const scopedSegmentSpace = ['percent', 'scale'].includes(nextBar.segment_space)
+      ? nextBar.segment_space
+      : (scope?.type === 'entity' && ['percent', 'scale'].includes(inheritedSegmentSpace) ? inheritedSegmentSpace : null);
+    const legacySegmentSpace = scopedSegmentSpace;
+    if (legacySegmentSpace === 'percent' && Array.isArray(nextBar.segments)) {
+      const asLegacyPercent = (boundary) => {
+        if (typeof boundary === 'number' && Number.isFinite(boundary)) return `${boundary}%`;
+        if (typeof boundary === 'string' && boundary.trim() !== '' && !boundary.includes('%') && Number.isFinite(Number(boundary.trim()))) {
+          return `${Number(boundary.trim())}%`;
+        }
+        return boundary;
+      };
+      nextBar.segments = nextBar.segments.map((segment) => ({
+        ...segment,
+        from: asLegacyPercent(segment?.from),
+        ...(Object.prototype.hasOwnProperty.call(segment ?? {}, 'to') ? { to: asLegacyPercent(segment.to) } : {}),
+      }));
+    }
+    delete nextBar.segment_space;
     const fillStyle = this._normalizeTextValue(nextBar.fill_style).trim();
     const color = this._normalizeTextValue(nextBar.color).trim();
     const segments = Array.isArray(nextBar.segments) ? nextBar.segments : null;
     const gradientStops = Array.isArray(nextBar.gradient_stops) ? nextBar.gradient_stops : null;
 
-    if (fillStyle && fillStyle !== 'bands') {
-      nextBar.fill_style = fillStyle;
+    if (fillStyle) {
+      const withoutLocalFillStyle = this._cloneDeep(nextTarget);
+      delete withoutLocalFillStyle.bar.fill_style;
+      const inheritedStyle = normalizeBarConfig(
+        withoutLocalFillStyle,
+        scope?.type === 'entity' ? cardConfig : null,
+        { isCardScope: scope?.type !== 'entity' }
+      ).fill_style;
+      if (fillStyle === 'bands' && inheritedStyle === 'bands') delete nextBar.fill_style;
+      else nextBar.fill_style = fillStyle;
       delete nextTarget.color_mode;
     } else {
       delete nextBar.fill_style;
@@ -995,7 +1018,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextBar.solid_fill;
     }
 
-    if (segments && segments.length && !this._segmentsEqualForEditor(segments, this._getDefaultSegments())) {
+    if (segments && (!segments.length || legacySegmentSpace || !this._segmentsEqualForEditor(segments, this._getDefaultSegments()))) {
       nextBar.segments = segments;
       delete nextTarget.segments;
       delete nextTarget.severity;
@@ -1003,7 +1026,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextBar.segments;
     }
 
-    if (gradientStops && gradientStops.length >= 2 && !this._isDefaultGradientStops(gradientStops)) {
+    if (gradientStops && (!gradientStops.length || gradientStops.length >= 2 && !this._isDefaultGradientStops(gradientStops))) {
       nextBar.gradient_stops = this._sanitizeGradientStopsForEmit(gradientStops);
       delete nextTarget.gradient_stops;
     } else {
@@ -1103,6 +1126,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (!this._isObject(config)) {
       return config;
     }
+    const inheritedSegmentSpace = config.bar?.segment_space;
     let nextConfig = this._cleanupEntityIdentityForEmit(config);
     nextConfig = this._cleanupScaleForEmit(nextConfig);
     nextConfig = this._cleanupTargetForEmit(nextConfig, { type: 'card' });
@@ -1113,7 +1137,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     nextConfig = this._cleanupLayoutForEmit(nextConfig);
     nextConfig = this._cleanupFormattingForEmit(nextConfig);
     nextConfig = this._cleanupNeedleForEmit(nextConfig, { type: 'card' });
-    nextConfig = this._cleanupBarForEmit(nextConfig);
+    nextConfig = this._cleanupBarForEmit(nextConfig, { type: 'card' });
 
     if (Array.isArray(nextConfig.entities)) {
       nextConfig.entities = nextConfig.entities.map((entry, index) => {
@@ -1130,11 +1154,42 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         cleanedEntry = this._cleanupLayoutForEmit(cleanedEntry);
         cleanedEntry = this._cleanupFormattingForEmit(cleanedEntry);
         cleanedEntry = this._cleanupNeedleForEmit(cleanedEntry, { type: 'entity' });
-        cleanedEntry = this._cleanupBarForEmit(cleanedEntry);
+        cleanedEntry = this._cleanupBarForEmit(cleanedEntry, { type: 'entity', index }, nextConfig, inheritedSegmentSpace);
         return cleanedEntry;
       });
     }
 
+    // Cleanup is optional. Compare normalized feature semantics at both scopes
+    // before dropping explicit input; never emit the normalized runtime object.
+    const meaning = (raw) => {
+      const normalized = normalizeCardConfig({ ...raw, ...(!raw.entities && !raw.entity ? { entities: [] } : {}) });
+      const featureKeys = ['layout', 'scale', 'bar', 'baseline', 'formatting', 'target_marker', 'peak_marker', 'floor_marker', 'generic_markers'];
+      const scope = (value) => ({
+        ...Object.fromEntries(featureKeys.map(key => [key, value[key]])),
+        scale: Object.fromEntries(['min', 'max'].map(key => [key, {
+          ...value.scale[key], fixed_explicit: value.scale[key].fixed_explicit !== false,
+        }])),
+      });
+      const canonical = (value, key = '') => {
+        if (Array.isArray(value)) return value.map(entry => canonical(entry));
+        if (this._isObject(value)) return Object.fromEntries(Object.entries(value)
+          .filter(([name]) => !['severity', 'segment_space', 'label_precision_key'].includes(name)
+            && !/invalid/i.test(name))
+          .map(([name, entry]) => [name, canonical(entry, name)]));
+        if (key === 'fixed') return getNumericValue(null, value);
+        if (/color/i.test(key) && typeof value === 'string') return this._normalizeColorComparisonValue(value);
+        return value;
+      };
+      return this._serializeConfig(canonical({ card: scope(normalized), entities: normalized.entities.map(row => ({
+        entity: row.entity, name: row.name, icon: row.icon, ...scope(row),
+      })) }));
+    };
+    try {
+      if (meaning(config) !== meaning(nextConfig)) nextConfig = this._cloneDeep(config);
+    } catch (_error) {
+      // An incomplete/unsupported draft cannot prove cleanup equivalence.
+      nextConfig = this._cloneDeep(config);
+    }
     return this._orderEditorConfigKeys(nextConfig);
   }
 
@@ -1388,15 +1443,18 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const structuredValue = this._getPathValue(target, canonicalBasePath);
     const legacyFixedValue = this._getPathValue(target, legacyFixedPath);
     const legacyEntityValue = this._getPathValue(target, legacyEntityPath);
-    const structuredFixedValue = this._isObject(structuredValue)
-      ? structuredValue?.fixed
-      : structuredValue;
-    const structuredEntityValue = this._isObject(structuredValue)
-      ? structuredValue?.entity
-      : undefined;
+    if (structuredValue !== undefined) {
+      const source = normalizeStructuredResolvableValue(structuredValue, options.inheritedSource ?? null, null, {
+        allowPercent: ['target', 'baseline'].includes(canonicalBasePath[0]),
+      });
+      return {
+        fixed: source.fixed ?? '', entity: source.entity ?? '',
+        ...(Number.isFinite(source.percent) ? { percent: source.percent } : {}),
+      };
+    }
     return {
-      fixed: structuredFixedValue ?? ((!this._isObject(legacyFixedValue) && legacyFixedValue !== undefined) ? legacyFixedValue : ''),
-      entity: structuredEntityValue ?? legacyEntityValue ?? '',
+      fixed: (!this._isObject(legacyFixedValue) && legacyFixedValue !== undefined) ? legacyFixedValue : '',
+      entity: legacyEntityValue ?? '',
     };
   }
 
@@ -1413,6 +1471,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return localValue;
     }
     const inheritedValue = this._getResolvableScopedValue({ type: 'card' }, field, options);
+    const target = this._getEntityRawEntries()[scope.index];
+    if (this._getPathValue(target, options.canonicalBasePath ?? ['scale', field]) !== undefined) {
+      return this._getResolvablePartsFromTarget(target, field, { ...options,
+        inheritedSource: { fixed: inheritedValue.fixed === '' ? null : inheritedValue.fixed, entity: inheritedValue.entity || null, percent: inheritedValue.percent ?? null },
+      });
+    }
     return {
       fixed: this._hasExplicitOverrideValue(localValue.fixed) ? localValue.fixed : inheritedValue.fixed,
       entity: this._hasExplicitOverrideValue(localValue.entity) ? localValue.entity : inheritedValue.entity,
@@ -1457,10 +1521,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
       const hasFixed = nextParts.fixed !== undefined && nextParts.fixed !== null && nextParts.fixed !== '';
       const hasEntity = nextParts.entity !== undefined && nextParts.entity !== null && nextParts.entity !== '';
-      if (hasFixed || hasEntity) {
+      const hasPercent = Number.isFinite(nextParts.percent);
+      if (hasFixed || hasEntity || hasPercent) {
         const nextValue = {};
         if (hasFixed) nextValue.fixed = nextParts.fixed;
         if (hasEntity) nextValue.entity = nextParts.entity;
+        if (hasPercent) nextValue.percent = nextParts.percent;
         nextTarget = this._setPathValue(nextTarget, canonicalBasePath, nextValue);
       }
 
@@ -1814,7 +1880,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _normalizeGradientStopPosValue(rawValue) {
-    const numericValue = this._normalizeNumberValue(rawValue);
+    const percent = parsePercentLiteral(rawValue);
+    const numericValue = Number.isFinite(percent) ? percent : this._normalizeNumberValue(rawValue);
     if (numericValue === null || !Number.isFinite(numericValue)) {
       return null;
     }
@@ -2600,6 +2667,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (field === 'precision' && value !== '' && normalized === null) return false;
     return this._applyScopedMutation(scope, (target) => {
       let next = this._cloneDeep(target);
+      if (key === 'target' && field === 'show') next = this._deletePathValue(next, ['show_target_label']);
       const marker = this._isObject(this._getPathValue(next, [key]))
         ? this._cloneDeep(this._getPathValue(next, [key])) : {};
       const label = this._isObject(marker.label) ? this._cloneDeep(marker.label) : {};
@@ -3374,7 +3442,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _getFillStyleValue() {
-    return this._getScopedFillStyleValue({ type: 'card' });
+    return this._getEffectiveFillStyleValue({ type: 'card' });
   }
 
   _getFillStyleFromColorMode(colorMode) {
@@ -3395,15 +3463,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _getEffectiveScopedFillStyleValue(scope) {
-    if (scope?.type !== 'entity') {
-      return this._getScopedFillStyleValue(scope);
-    }
     return this._getEffectiveFillStyleValue(scope);
   }
 
   _setScopedBarFillStyle(scope, rawValue) {
     const normalizedValue = this._normalizeTextValue(rawValue).trim();
-    if (!normalizedValue || normalizedValue === 'bands') {
+    if (!normalizedValue) {
       return this._removeCanonicalScopedValue(scope, ['bar', 'fill_style'], {
         deprecatedKeys: [['color_mode']],
         prunePaths: [['bar']],
@@ -4157,6 +4222,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     }, { rerender: true });
   }
 
+  _removeBaseline(scope) {
+    return this._removeScopedValue(scope, ['baseline'], { rerender: true });
+  }
+
   _hasBaselineOverride(scope) {
     const baselineValue = this._getScopedValue(scope, ['baseline']);
     if (this._isObject(baselineValue) && Object.keys(baselineValue).length) {
@@ -4346,16 +4415,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _getEffectiveFillStyleValue(scope) {
     if (scope?.type === 'entity') {
-      const hasEntityFillStyle =
-        this._getScopedValue(scope, ['bar', 'fill_style']) !== undefined
-        || this._getScopedValue(scope, ['bar', 'color_mode']) !== undefined
-        || this._getScopedValue(scope, ['color_mode']) !== undefined;
-      if (hasEntityFillStyle) {
-        return this._getScopedFillStyleValue(scope);
-      }
-      return this._getFillStyleValue();
+      return normalizeBarConfig(
+        this._getEntityRawEntries()[scope.index],
+        this._draftConfig,
+        { isCardScope: false }
+      ).fill_style;
     }
-    return this._getScopedFillStyleValue(scope);
+    return normalizeBarConfig(this._draftConfig, null, { isCardScope: true }).fill_style;
   }
 
   _getScopedGradientStopsValue(scope) {
@@ -4655,6 +4721,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           'marker-index': markerIndex,
         })
         : '';
+      const labelEntitySource = this._renderEntitySourceInput(
+        'generic-marker-label-entity', scopeIndex, marker?.label?.entity ?? '', 'sensor.information', {
+          'scope-type': scopeType,
+          'marker-index': markerIndex,
+        }
+      );
       return `
         <div class="generic-marker-item" data-marker-ui-id="${markerUiId}" data-expanded="${expanded ? 'true' : 'false'}">
           <div class="generic-marker-header">
@@ -4733,11 +4805,19 @@ export class SensorBarCardPlusEditor extends HTMLElement {
             })}
           </div>
           <div class="field-row"><div class="toggle">
+            <input id="${rowId}-show-marker" type="checkbox" data-kind="generic-marker-show-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.show_marker === false ? '' : ' checked'}>
+            <label for="${rowId}-show-marker">Show marker shape</label>
+          </div></div>
+          <div class="field-row"><div class="toggle">
             <input id="${rowId}-label-show" type="checkbox" data-kind="generic-marker-label-show" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${marker?.label?.show === true ? ' checked' : ''}>
             <label for="${rowId}-label-show">Show label</label>
           </div></div>
           <div class="field-row"><label for="${rowId}-label-text">Label text</label>
             <input id="${rowId}-label-text" type="text" data-kind="generic-marker-label-text" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute(marker?.label?.text ?? '')}" placeholder="optional semantic text">
+          </div>
+          <div class="field-row">
+            <label>Label content entity</label>
+            ${labelEntitySource}
           </div>
           <div class="inline-row generic-marker-options">
             <div class="field-row"><div class="toggle">
@@ -4770,7 +4850,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       ${inheritControl}
       ${overrideNote}
       ${scopeType === 'card' || override ? `
-        <div class="section-note">First two valid markers per lane render; excess markers remain editable and show a warning. Unresolved markers still reserve a slot and lane.</div>
+        <div class="section-note">Up to four markers render in each lane, including Peak, Floor, and Target. Excess generic markers remain editable and show a warning. Unresolved markers still reserve a slot and lane.</div>
         <div class="list generic-marker-list">${rows}</div>
         <button type="button" data-action="add-generic-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}">Add reference marker</button>` : ''}
     `;
@@ -4828,6 +4908,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return marker;
     });
     if (kind === 'generic-marker-source-mode') return this._setGenericMarkerSourceMode(scope, markerIndex, value);
+    if (kind === 'generic-marker-show-marker') {
+      return this._updateGenericMarker(scope, markerIndex, (marker) => {
+        if (value === false) marker.show_marker = false;
+        else delete marker.show_marker;
+        return marker;
+      });
+    }
     if (kind === 'generic-marker-fixed') {
       return atLeaf('fixed', this._normalizeNumberValue(value) ?? undefined);
     }
@@ -4867,6 +4954,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           if (text) label.text = text;
           else delete label.text;
         }
+        if (kind === 'generic-marker-label-entity') {
+          const entity = this._normalizeTextValue(value).trim();
+          if (entity) label.entity = entity;
+          else delete label.entity;
+        }
         if (kind === 'generic-marker-label-show-value') label.show_value = value === true;
         if (kind === 'generic-marker-label-show-unit') label.show_unit = value === true;
         if (kind === 'generic-marker-label-precision') {
@@ -4892,6 +4984,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     nextTarget.markers = nextTarget.markers.map((rawMarker) => {
       if (!this._isObject(rawMarker)) return rawMarker;
       const marker = this._cloneDeep(rawMarker);
+      if (marker.show_marker === true) delete marker.show_marker;
       if (this._isObject(marker.at)) {
         const at = this._cloneDeep(marker.at);
         const fixed = this._normalizeNumberValue(at.fixed);
@@ -6082,8 +6175,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                      <div class="field-row">
 	                        <div class="toggle">
 	                          <input id="entity-${index}-baseline-inherit" type="checkbox" data-kind="entity-baseline-inherit" data-index="${index}"${baselineInherited ? ' checked' : ''}>
-                          <label for="entity-${index}-baseline-inherit">Inherit card settings</label>
+	                          <label for="entity-${index}-baseline-inherit">Inherit card settings</label>
                         </div>
+                      </div>
+                      <div class="field-row">
+                        <button type="button" data-action="remove-baseline" data-scope-type="entity" data-index="${index}" aria-label="Remove Baseline" title="Remove Baseline">🗑</button>
                       </div>
                       <div class="field-row">
                         <label for="entity-${index}-baseline-mode">Baseline mode</label>
@@ -6209,14 +6305,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                          `,
 	                        });
 	                        return `
-	                          ${scaleGroup}
-	                          ${targetGroup}
-	                          ${baselineGroup}
-                          ${needleGroup}
+                          ${scaleGroup}
+                          ${targetGroup}
                           ${peakGroup}
                           ${floorGroup}
-	                          ${markersGroup}
-	                          ${barGroup}
+                          ${markersGroup}
+                          ${barGroup}
+                          ${baselineGroup}
+                          ${needleGroup}
 	                          ${segmentsGroup}
 	                          ${gradientStopsGroup}
 	                          ${layoutGroup}
@@ -6448,8 +6544,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
             group: 'baseline',
             title: 'Baseline',
             summary: this._getCardBaselineSummary(),
-            content: `
+          content: `
           <div class="field-grid">
+            <div class="field-row">
+              <button type="button" data-action="remove-baseline" data-scope-type="card" aria-label="Remove Baseline" title="Remove Baseline">🗑</button>
+            </div>
             <div class="field-row">
               <label for="baseline-mode">Baseline mode</label>
               <select id="baseline-mode" data-field="baseline-mode" value="${this._escapeAttribute(baselineMode)}">
@@ -6780,6 +6879,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         picker.value = this._getGenericMarkerSource(marker).entity ?? '';
         picker.label = 'Reference marker entity';
       }
+      if (kind === 'generic-marker-label-entity') {
+        const scope = this._getGenericMarkerScope(picker);
+        const marker = this._getGenericMarkers(scope)[Number(picker.dataset.markerIndex)];
+        picker.value = marker?.label?.entity ?? '';
+        picker.label = 'Label content entity';
+      }
     };
 
     [
@@ -6793,6 +6898,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       'ha-entity-picker[data-kind="entity-baseline-entity-source"]',
       'ha-entity-picker[data-kind="entity-target-entity-source"]',
       'ha-entity-picker[data-kind="generic-marker-entity"]',
+      'ha-entity-picker[data-kind="generic-marker-label-entity"]',
     ].forEach((selector) => {
       this.shadowRoot.querySelectorAll(selector).forEach(syncPicker);
     });
@@ -6809,6 +6915,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           'ha-entity-picker[data-kind="entity-baseline-entity-source"]',
           'ha-entity-picker[data-kind="entity-target-entity-source"]',
           'ha-entity-picker[data-kind="generic-marker-entity"]',
+          'ha-entity-picker[data-kind="generic-marker-label-entity"]',
         ].forEach((selector) => {
           this.shadowRoot?.querySelectorAll(selector).forEach(syncPicker);
         });
@@ -6883,6 +6990,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
     if (action === 'remove-entity') {
       this._removeEntityRow(Number(target.dataset.index));
+      return;
+    }
+
+    if (action === 'remove-baseline') {
+      const scope = target.dataset.scopeType === 'entity'
+        ? { type: 'entity', index: Number(target.dataset.index) }
+        : { type: 'card' };
+      this._removeBaseline(scope);
       return;
     }
 

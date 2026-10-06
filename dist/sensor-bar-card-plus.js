@@ -196,7 +196,23 @@
     }
     return normalizeResolvableValue(input, null);
   }
-  function normalizeGenericMarkerList(input) {
+  function hasConfiguredMarkerSource(source) {
+    var _a;
+    return !!source && (getFiniteNumber((_a = source.fixed) != null ? _a : source.value) !== null || Number.isFinite(source.percent) || !!source.entity);
+  }
+  function applyGenericMarkerCapacity(markers, config) {
+    var _a, _b, _c, _d;
+    const occupied = {
+      above: ((_a = config == null ? void 0 : config.peak_marker) == null ? void 0 : _a.show) === true ? 1 : 0,
+      below: (((_b = config == null ? void 0 : config.floor_marker) == null ? void 0 : _b.show) === true ? 1 : 0) + (((_c = config == null ? void 0 : config.target_marker) == null ? void 0 : _c.enabled) !== false && hasConfiguredMarkerSource((_d = config == null ? void 0 : config.target_marker) == null ? void 0 : _d.source) ? 1 : 0)
+    };
+    return markers.map((marker) => {
+      const accepted = marker.valid && occupied[marker.lane] < 4;
+      if (accepted) occupied[marker.lane] += 1;
+      return { ...marker, accepted };
+    });
+  }
+  function normalizeGenericMarkerList(input, capacityConfig = null) {
     if (!Array.isArray(input)) {
       return { markers: [], invalidList: input !== void 0 };
     }
@@ -225,6 +241,11 @@
       );
       const label = rawMarker.label && typeof rawMarker.label === "object" && !Array.isArray(rawMarker.label) ? rawMarker.label : {};
       const labelConfig = normalizeMarkerLabelConfig(label);
+      const labelEntityInput = label.entity;
+      const labelEntity = typeof labelEntityInput === "string" ? labelEntityInput.trim() : "";
+      const invalidLabelEntity = labelEntityInput !== void 0 && labelEntityInput !== null && labelEntityInput !== "" && !looksLikeEntityId(labelEntity);
+      const validLabelEntity = labelEntity && looksLikeEntityId(labelEntity) ? labelEntity : null;
+      const showMarker = typeof rawMarker.show_marker === "boolean" ? rawMarker.show_marker : true;
       return {
         id: `generic-${index}`,
         index,
@@ -236,10 +257,13 @@
         shape: validShape ? (_a = rawMarker.shape) != null ? _a : "circle" : "circle",
         direction,
         invalidDirection,
+        showMarker,
+        invalidShowMarker: rawMarker.show_marker !== void 0 && typeof rawMarker.show_marker !== "boolean",
         color: typeof rawMarker.color === "string" && rawMarker.color.trim() ? rawMarker.color : "#888888",
         label: {
           show: label.show === true,
           text: labelConfig.label_text,
+          entity: validLabelEntity,
           showValue: labelConfig.label_show_value,
           showUnit: labelConfig.label_show_unit,
           precision: labelConfig.label_precision,
@@ -249,7 +273,8 @@
           invalidShowUnit: labelConfig.label_invalid_show_unit,
           invalidPrecision: labelConfig.label_invalid_precision,
           invalidPrecisionKey: labelConfig.label_precision_key,
-          unsupportedUnit: labelConfig.label_unsupported_unit
+          unsupportedUnit: labelConfig.label_unsupported_unit,
+          invalidEntity: invalidLabelEntity
         },
         valid: validSource && validLane,
         invalidSource: !validSource,
@@ -260,13 +285,7 @@
         accepted: false
       };
     });
-    const laneCounts = { above: 0, below: 0 };
-    for (const marker of markers) {
-      if (!marker.valid) continue;
-      if (laneCounts[marker.lane] < 2) marker.accepted = true;
-      laneCounts[marker.lane] += 1;
-    }
-    return { markers, invalidList: false };
+    return { markers: applyGenericMarkerCapacity(markers, capacityConfig), invalidList: false };
   }
   function normalizeBaselineDirectionConfig(input, inheritedDirection = null) {
     var _a;
@@ -357,37 +376,65 @@
     });
     return inferSegmentEndValues(segments, 100);
   }
-  function hasResolvableMagnitude(resolvable) {
-    return !!resolvable && (Number.isFinite(getFiniteNumber(resolvable.fixed)) || Number.isFinite(resolvable.percent));
+  function normalizeSegmentBoundary(input, legacySegmentSpace = null) {
+    var _a;
+    if (input === void 0) return { value: null, issue: null };
+    if (input === null) return { value: null, issue: "malformed" };
+    if (input && typeof input === "object" && !Array.isArray(input)) {
+      if (input.entity !== void 0 && input.entity !== null && input.entity !== "") {
+        return { value: null, issue: "entity" };
+      }
+      if (Object.prototype.hasOwnProperty.call(input, "percent")) {
+        const percent = getFiniteNumber(input.percent);
+        return Number.isFinite(percent) ? { value: normalizeResolvableValue(null, null, percent), issue: null } : { value: null, issue: "malformed" };
+      }
+      const fixed = getFiniteNumber((_a = input.fixed) != null ? _a : input.value);
+      return Number.isFinite(fixed) ? { value: normalizeResolvableValue(fixed, null), issue: null } : { value: null, issue: "malformed" };
+    }
+    if (typeof input === "string") {
+      const trimmed = input.trim();
+      if (looksLikeEntityId(trimmed)) return { value: null, issue: "entity" };
+      if (trimmed.includes("%")) {
+        const percent = parsePercentLiteral(trimmed);
+        return Number.isFinite(percent) ? { value: normalizeResolvableValue(null, null, percent), issue: null } : { value: null, issue: "malformed_percent" };
+      }
+    }
+    const numeric = getFiniteNumber(input);
+    if (!Number.isFinite(numeric)) return { value: null, issue: "malformed" };
+    return legacySegmentSpace === "percent" ? { value: normalizeResolvableValue(null, null, numeric), issue: null } : { value: normalizeResolvableValue(numeric, null), issue: null };
   }
-  function normalizeGaugeSegments(input) {
+  function normalizeGaugeSegments(input, options = {}) {
     if (!Array.isArray(input)) return null;
+    const { legacySegmentSpace = null } = options;
     const segments = input.map((segment) => {
-      var _a;
-      const from = normalizeStructuredResolvableValue(segment == null ? void 0 : segment.from, null, null, { allowPercent: true });
-      const to = (segment == null ? void 0 : segment.to) === void 0 ? null : normalizeStructuredResolvableValue(segment.to, null, null, { allowPercent: true });
-      if (!hasResolvableMagnitude(from) || !(segment == null ? void 0 : segment.color)) {
+      var _a, _b;
+      const from = (segment == null ? void 0 : segment.from) === void 0 ? { value: null, issue: "malformed" } : normalizeSegmentBoundary(segment.from, legacySegmentSpace);
+      const to = (segment == null ? void 0 : segment.to) === void 0 ? { value: null, issue: null } : segment.to === null ? { value: null, issue: null } : normalizeSegmentBoundary(segment.to, legacySegmentSpace);
+      if (!(segment == null ? void 0 : segment.color)) {
         return null;
       }
       return {
-        from,
-        to,
+        from: from.value,
+        to: to.value,
+        invalidBoundary: (_a = from.issue) != null ? _a : to.issue,
         color: segment.color,
-        label: (_a = segment.label) != null ? _a : null
+        label: (_b = segment.label) != null ? _b : null
       };
     }).filter(Boolean);
     return segments.map((segment, index) => {
       var _a;
+      const nextValid = segments.slice(index + 1).find((candidate) => !candidate.invalidBoundary);
       return {
-        from: { ...segment.from },
-        to: segment.to ? { ...segment.to } : index < segments.length - 1 ? { ...segments[index + 1].from } : null,
+        from: segment.from ? { ...segment.from } : null,
+        to: segment.to ? { ...segment.to } : (nextValid == null ? void 0 : nextValid.from) ? { ...nextValid.from } : null,
+        ...segment.invalidBoundary ? { invalidBoundary: segment.invalidBoundary } : {},
         color: segment.color,
         label: (_a = segment.label) != null ? _a : null
       };
     });
   }
   function normalizeScaleBound(entityConfig, cardConfig, key, defaultValue) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
     const cardScale = cardConfig == null ? void 0 : cardConfig.scale;
     const entityScale = entityConfig == null ? void 0 : entityConfig.scale;
     const entityKey = `${key}_entity`;
@@ -399,18 +446,28 @@
       (_d = cardConfig == null ? void 0 : cardConfig[key]) != null ? _d : defaultValue,
       (_e = cardConfig == null ? void 0 : cardConfig[entityKey]) != null ? _e : null
     );
+    const inheritedFixedExplicit = cardBound ? cardBound.fixed_explicit !== false && cardBound.fixed !== null && cardBound.fixed !== void 0 : (cardConfig == null ? void 0 : cardConfig[key]) !== null && (cardConfig == null ? void 0 : cardConfig[key]) !== void 0;
+    const withFixedExplicit = (bound, explicit) => {
+      Object.defineProperty(bound, "fixed_explicit", { value: explicit });
+      return bound;
+    };
     if ((entityScale == null ? void 0 : entityScale[key]) !== void 0) {
-      return normalizeStructuredResolvableValue(
+      const input = entityScale[key];
+      const fixedExplicit = looksLikeEntityId(input) ? inheritedFixedExplicit : typeof input === "object" && input !== null ? ((_f = input.fixed) != null ? _f : input.value) !== null && ((_g = input.fixed) != null ? _g : input.value) !== void 0 : input !== null;
+      return withFixedExplicit(normalizeStructuredResolvableValue(
         entityScale[key],
         inherited,
         defaultValue
-      );
+      ), fixedExplicit);
     }
     const entityOverride = entityConfig[entityKey];
     const hasEntityOverride = entityOverride !== void 0 && entityOverride !== null;
-    const value = (_g = (_f = entityConfig[key]) != null ? _f : hasEntityOverride ? null : inherited.fixed) != null ? _g : inherited.entity ? null : defaultValue;
-    const entity = (_h = entityOverride != null ? entityOverride : inherited.entity) != null ? _h : null;
-    return normalizeResolvableValue(value, entity);
+    const value = (_i = (_h = entityConfig[key]) != null ? _h : hasEntityOverride ? null : inherited.fixed) != null ? _i : inherited.entity ? null : defaultValue;
+    const entity = (_j = entityOverride != null ? entityOverride : inherited.entity) != null ? _j : null;
+    return withFixedExplicit(
+      normalizeResolvableValue(value, entity),
+      entityConfig[key] !== null && entityConfig[key] !== void 0 || !hasEntityOverride && inheritedFixedExplicit
+    );
   }
   function normalizeScaleConfig(entityConfig, cardConfig) {
     return {
@@ -535,7 +592,7 @@
     return { ...base };
   }
   function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A;
     const scopeExplicitness = (_a = options.scopeExplicitness) != null ? _a : getPaintExplicitness(entityConfig);
     const inheritedExplicitness = (_c = (_b = options.inheritedExplicitness) != null ? _b : cardConfig == null ? void 0 : cardConfig[PAINT_EXPLICITNESS]) != null ? _c : getPaintExplicitness(cardConfig);
     const isCardScope = (_d = options.isCardScope) != null ? _d : cardConfig == null;
@@ -548,28 +605,25 @@
     const cardTopLevelSegments = (_f = cardConfig == null ? void 0 : cardConfig.segments) != null ? _f : null;
     const cardLegacySeverity = (_g = cardConfig == null ? void 0 : cardConfig.severity) != null ? _g : null;
     let segments = null;
-    let segment_space = (_h = cardBar == null ? void 0 : cardBar.segment_space) != null ? _h : "percent";
+    let segment_space = (cardBar == null ? void 0 : cardBar.segment_space) === "percent" || (cardBar == null ? void 0 : cardBar.segment_space) === "scale" ? cardBar.segment_space : null;
     if (entityStructuredSegments !== void 0 && entityStructuredSegments !== null) {
-      segments = normalizeGaugeSegments(entityStructuredSegments);
-      segment_space = "scale";
+      segment_space = (entityBar == null ? void 0 : entityBar.segment_space) === "percent" || (entityBar == null ? void 0 : entityBar.segment_space) === "scale" ? entityBar.segment_space : segment_space;
+      segments = normalizeGaugeSegments(entityStructuredSegments, { legacySegmentSpace: segment_space });
     } else if (entityTopLevelSegments !== void 0 && entityTopLevelSegments !== null) {
       segments = normalizeGaugeSegments(entityTopLevelSegments);
-      segment_space = "scale";
     } else if (entityLegacySeverity !== void 0 && entityLegacySeverity !== null) {
       segments = normalizeSeverityToSegments(entityLegacySeverity);
       segment_space = "percent";
     } else if (cardStructuredSegments !== null && cardStructuredSegments !== void 0) {
       segments = cardStructuredSegments.map((segment) => ({ ...segment }));
-      segment_space = (_i = cardBar == null ? void 0 : cardBar.segment_space) != null ? _i : "percent";
     } else if (cardTopLevelSegments !== null && cardTopLevelSegments !== void 0) {
       segments = normalizeGaugeSegments(cardTopLevelSegments);
-      segment_space = "scale";
     } else if (cardLegacySeverity !== null && cardLegacySeverity !== void 0) {
       segments = normalizeSeverityToSegments(cardLegacySeverity);
       segment_space = "percent";
     }
-    const structuredAboveTargetColor = (entityConfig == null ? void 0 : entityConfig.target) && typeof entityConfig.target === "object" && !Array.isArray(entityConfig.target) ? (_j = entityConfig.target.when_exceeded) == null ? void 0 : _j.fill_color : void 0;
-    const inheritedStructuredAboveTargetColor = (cardConfig == null ? void 0 : cardConfig.target) && typeof cardConfig.target === "object" && !Array.isArray(cardConfig.target) ? (_k = cardConfig.target.when_exceeded) == null ? void 0 : _k.fill_color : void 0;
+    const structuredAboveTargetColor = (entityConfig == null ? void 0 : entityConfig.target) && typeof entityConfig.target === "object" && !Array.isArray(entityConfig.target) ? (_h = entityConfig.target.when_exceeded) == null ? void 0 : _h.fill_color : void 0;
+    const inheritedStructuredAboveTargetColor = (cardConfig == null ? void 0 : cardConfig.target) && typeof cardConfig.target === "object" && !Array.isArray(cardConfig.target) ? (_i = cardConfig.target.when_exceeded) == null ? void 0 : _i.fill_color : void 0;
     const normalizedMode = resolveNormalizedBarMode(
       entityBar,
       entityConfig,
@@ -581,16 +635,16 @@
       fill_style: normalizedMode.fill_style,
       color_mode: normalizedMode.color_mode,
       needle: normalizeNeedleConfig(entityBar == null ? void 0 : entityBar.needle, cardBar == null ? void 0 : cardBar.needle),
-      solid_fill: (_m = (_l = entityBar == null ? void 0 : entityBar.solid_fill) != null ? _l : cardBar == null ? void 0 : cardBar.solid_fill) != null ? _m : false,
-      color: (_q = (_p = (_o = (_n = entityBar == null ? void 0 : entityBar.color) != null ? _n : entityConfig.color) != null ? _o : cardBar == null ? void 0 : cardBar.color) != null ? _p : cardConfig == null ? void 0 : cardConfig.color) != null ? _q : "#4a9eff",
+      solid_fill: (_k = (_j = entityBar == null ? void 0 : entityBar.solid_fill) != null ? _j : cardBar == null ? void 0 : cardBar.solid_fill) != null ? _k : false,
+      color: (_o = (_n = (_m = (_l = entityBar == null ? void 0 : entityBar.color) != null ? _l : entityConfig.color) != null ? _m : cardBar == null ? void 0 : cardBar.color) != null ? _n : cardConfig == null ? void 0 : cardConfig.color) != null ? _o : "#4a9eff",
       gradient_stops: normalizeGradientStops(
-        (_u = (_t = (_s = (_r = entityBar == null ? void 0 : entityBar.gradient_stops) != null ? _r : entityConfig.gradient_stops) != null ? _s : cardBar == null ? void 0 : cardBar.gradient_stops) != null ? _t : cardConfig == null ? void 0 : cardConfig.gradient_stops) != null ? _u : null
+        (_s = (_r = (_q = (_p = entityBar == null ? void 0 : entityBar.gradient_stops) != null ? _p : entityConfig.gradient_stops) != null ? _q : cardBar == null ? void 0 : cardBar.gradient_stops) != null ? _r : cardConfig == null ? void 0 : cardConfig.gradient_stops) != null ? _s : null
       ),
       severity: segments,
       segments,
       segment_space,
-      animated: (_y = (_x = (_w = (_v = entityBar == null ? void 0 : entityBar.animated) != null ? _v : entityConfig.animated) != null ? _w : cardBar == null ? void 0 : cardBar.animated) != null ? _x : cardConfig == null ? void 0 : cardConfig.animated) != null ? _y : true,
-      above_target_color: (_C = (_B = (_A = (_z = structuredAboveTargetColor != null ? structuredAboveTargetColor : entityConfig.above_target_color) != null ? _z : cardBar == null ? void 0 : cardBar.above_target_color) != null ? _A : inheritedStructuredAboveTargetColor) != null ? _B : cardConfig == null ? void 0 : cardConfig.above_target_color) != null ? _C : null
+      animated: (_w = (_v = (_u = (_t = entityBar == null ? void 0 : entityBar.animated) != null ? _t : entityConfig.animated) != null ? _u : cardBar == null ? void 0 : cardBar.animated) != null ? _v : cardConfig == null ? void 0 : cardConfig.animated) != null ? _w : true,
+      above_target_color: (_A = (_z = (_y = (_x = structuredAboveTargetColor != null ? structuredAboveTargetColor : entityConfig.above_target_color) != null ? _x : cardBar == null ? void 0 : cardBar.above_target_color) != null ? _y : inheritedStructuredAboveTargetColor) != null ? _z : cardConfig == null ? void 0 : cardConfig.above_target_color) != null ? _A : null
     };
   }
   function clampSupportedRowHeight(height) {
@@ -864,7 +918,10 @@
     normalizedEntity.target_marker = normalizeTargetMarkerConfig(entityConfig, cardConfig);
     normalizedEntity.peak_marker = normalizePeakMarkerConfig(entityConfig, cardConfig);
     normalizedEntity.floor_marker = normalizeFloorMarkerConfig(entityConfig, cardConfig);
-    const normalizedMarkers = entityConfig.markers === void 0 ? { markers: (_c = cardConfig == null ? void 0 : cardConfig.generic_markers) != null ? _c : [], invalidList: (cardConfig == null ? void 0 : cardConfig.generic_markers_invalid) === true } : normalizeGenericMarkerList(entityConfig.markers);
+    const normalizedMarkers = entityConfig.markers === void 0 ? {
+      markers: applyGenericMarkerCapacity((_c = cardConfig == null ? void 0 : cardConfig.generic_markers) != null ? _c : [], normalizedEntity),
+      invalidList: (cardConfig == null ? void 0 : cardConfig.generic_markers_invalid) === true
+    } : normalizeGenericMarkerList(entityConfig.markers, normalizedEntity);
     normalizedEntity.generic_markers = normalizedMarkers.markers;
     normalizedEntity.generic_markers_invalid = normalizedMarkers.invalidList;
     normalizedEntity.min = normalizedEntity.scale.min.fixed;
@@ -943,7 +1000,7 @@
       enumerable: false
     });
     normalizedCard.layout = normalizeLayoutConfig(baseConfig, null);
-    normalizedCard.scale = normalizeScaleConfig(baseConfig, null);
+    normalizedCard.scale = normalizeScaleConfig(rawConfig, null);
     normalizedCard.bar = normalizeBarConfig(baseConfig, null, {
       scopeExplicitness: cardPaintExplicitness,
       inheritedExplicitness: null,
@@ -954,7 +1011,7 @@
     normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);
     normalizedCard.peak_marker = normalizePeakMarkerConfig(baseConfig, null);
     normalizedCard.floor_marker = normalizeFloorMarkerConfig(baseConfig, null);
-    const normalizedMarkers = normalizeGenericMarkerList(baseConfig.markers);
+    const normalizedMarkers = normalizeGenericMarkerList(baseConfig.markers, normalizedCard);
     normalizedCard.generic_markers = normalizedMarkers.markers;
     normalizedCard.generic_markers_invalid = normalizedMarkers.invalidList;
     normalizedCard.entities = baseConfig.entities.map(
@@ -1003,6 +1060,35 @@
     }
     return null;
   }
+  function getResolvedScale(hass, scale, previousScale = null) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+    const isValid = (bounds) => Number.isFinite(bounds == null ? void 0 : bounds.min) && Number.isFinite(bounds == null ? void 0 : bounds.max) && bounds.min < bounds.max;
+    const fixed = {
+      min: getNumericValue(null, (_c = (_a = scale == null ? void 0 : scale.min) == null ? void 0 : _a.fixed) != null ? _c : (_b = scale == null ? void 0 : scale.min) == null ? void 0 : _b.value),
+      max: getNumericValue(null, (_f = (_d = scale == null ? void 0 : scale.max) == null ? void 0 : _d.fixed) != null ? _f : (_e = scale == null ? void 0 : scale.max) == null ? void 0 : _e.value)
+    };
+    if (((_g = scale == null ? void 0 : scale.min) == null ? void 0 : _g.entity) && ((_h = scale == null ? void 0 : scale.max) == null ? void 0 : _h.entity)) {
+      const dynamic = {
+        min: getEntityNumericValue(hass, scale.min.entity),
+        max: getEntityNumericValue(hass, scale.max.entity)
+      };
+      if (isValid(dynamic)) return dynamic;
+      if (Number.isFinite(dynamic.min) && Number.isFinite(dynamic.max) && isValid(previousScale)) {
+        return previousScale;
+      }
+      return scale.min.fixed_explicit !== false && scale.max.fixed_explicit !== false && isValid(fixed) ? fixed : { min: 0, max: 100 };
+    }
+    const resolved = {
+      min: (_i = getNormalizedResolvableNumericValue(hass, scale == null ? void 0 : scale.min)) != null ? _i : 0,
+      max: (_j = getNormalizedResolvableNumericValue(hass, scale == null ? void 0 : scale.max)) != null ? _j : 100
+    };
+    if (isValid(resolved)) return resolved;
+    const fallback = {
+      min: (_k = fixed.min) != null ? _k : 0,
+      max: (_l = fixed.max) != null ? _l : 100
+    };
+    return isValid(fallback) ? fallback : { min: 0, max: 100 };
+  }
   var init_resolve = __esm({
     "src/config/resolve.js"() {
       init_normalize();
@@ -1024,6 +1110,22 @@
     diagnostics.warnings.push(createDiagnostic(code, message, path, entity));
   }
   function validateScaleBounds(diagnostics, scale, path, entity = null) {
+    var _a, _b;
+    if (((_a = scale == null ? void 0 : scale.min) == null ? void 0 : _a.entity) && ((_b = scale == null ? void 0 : scale.max) == null ? void 0 : _b.entity)) {
+      const hasFixed = (bound) => {
+        var _a2, _b2;
+        return bound.fixed_explicit !== false && ((_a2 = bound.fixed) != null ? _a2 : bound.value) !== null && ((_b2 = bound.fixed) != null ? _b2 : bound.value) !== void 0;
+      };
+      if (hasFixed(scale.min) !== hasFixed(scale.max)) {
+        addWarning(
+          diagnostics,
+          "scale.orphan_fixed_fallback",
+          "Both dynamic scale bounds require a complete fixed fallback pair. The single fixed fallback will not be used if the dynamic pair becomes unavailable.",
+          `${path}.scale`,
+          entity
+        );
+      }
+    }
     const min = getStaticFixedValue(scale == null ? void 0 : scale.min);
     const max = getStaticFixedValue(scale == null ? void 0 : scale.max);
     if (Number.isFinite(min) && Number.isFinite(max) && min > max) {
@@ -1109,7 +1211,7 @@
     }
   }
   function validateGenericMarkers(diagnostics, markers, invalidList, path, entity = null) {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     if (invalidList) {
       addWarning(diagnostics, "markers.invalid_list", "Markers must be a list; ignoring the malformed value.", path, entity);
     }
@@ -1137,14 +1239,16 @@
       if (marker.invalidDirection) {
         addWarning(diagnostics, "markers.invalid_direction", "Invalid marker direction; using inward.", `${markerPath}.direction`, entity);
       }
-      if ((_a = marker.label) == null ? void 0 : _a.invalidShow) addWarning(diagnostics, "markers.invalid_label_show", "Marker label show must be a boolean; using the existing fallback.", `${markerPath}.label.show`, entity);
-      if ((_b = marker.label) == null ? void 0 : _b.invalidText) addWarning(diagnostics, "markers.invalid_label_text", "Marker label text must be a string; ignoring it.", `${markerPath}.label.text`, entity);
-      if ((_c = marker.label) == null ? void 0 : _c.invalidShowValue) addWarning(diagnostics, "markers.invalid_label_show_value", "Marker label show_value must be a boolean; using the inherited or default value.", `${markerPath}.label.show_value`, entity);
-      if ((_d = marker.label) == null ? void 0 : _d.invalidShowUnit) addWarning(diagnostics, "markers.invalid_label_show_unit", "Marker label show_unit must be a boolean; using the inherited or default value.", `${markerPath}.label.show_unit`, entity);
-      if ((_e = marker.label) == null ? void 0 : _e.invalidPrecision) addWarning(diagnostics, "markers.invalid_label_precision", "Marker label precision must be a non-negative integer; using the inherited or row precision.", `${markerPath}.label.${(_f = marker.label.invalidPrecisionKey) != null ? _f : "precision"}`, entity);
-      if ((_g = marker.label) == null ? void 0 : _g.unsupportedUnit) addWarning(diagnostics, "markers.unsupported_label_unit", "Marker label unit is no longer supported; use show_unit instead.", `${markerPath}.label.unit`, entity);
+      if (marker.invalidShowMarker) addWarning(diagnostics, "markers.invalid_show_marker", "Marker show_marker must be a boolean; using true.", `${markerPath}.show_marker`, entity);
+      if ((_a = marker.label) == null ? void 0 : _a.invalidEntity) addWarning(diagnostics, "markers.invalid_label_entity", "Marker label entity must be a valid entity ID; ignoring it.", `${markerPath}.label.entity`, entity);
+      if ((_b = marker.label) == null ? void 0 : _b.invalidShow) addWarning(diagnostics, "markers.invalid_label_show", "Marker label show must be a boolean; using the existing fallback.", `${markerPath}.label.show`, entity);
+      if ((_c = marker.label) == null ? void 0 : _c.invalidText) addWarning(diagnostics, "markers.invalid_label_text", "Marker label text must be a string; ignoring it.", `${markerPath}.label.text`, entity);
+      if ((_d = marker.label) == null ? void 0 : _d.invalidShowValue) addWarning(diagnostics, "markers.invalid_label_show_value", "Marker label show_value must be a boolean; using the inherited or default value.", `${markerPath}.label.show_value`, entity);
+      if ((_e = marker.label) == null ? void 0 : _e.invalidShowUnit) addWarning(diagnostics, "markers.invalid_label_show_unit", "Marker label show_unit must be a boolean; using the inherited or default value.", `${markerPath}.label.show_unit`, entity);
+      if ((_f = marker.label) == null ? void 0 : _f.invalidPrecision) addWarning(diagnostics, "markers.invalid_label_precision", "Marker label precision must be a non-negative integer; using the inherited or row precision.", `${markerPath}.label.${(_g = marker.label.invalidPrecisionKey) != null ? _g : "precision"}`, entity);
+      if ((_h = marker.label) == null ? void 0 : _h.unsupportedUnit) addWarning(diagnostics, "markers.unsupported_label_unit", "Marker label unit is no longer supported; use show_unit instead.", `${markerPath}.label.unit`, entity);
       if (marker.valid && !marker.accepted) {
-        addWarning(diagnostics, "markers.excess_capacity", `Only the first two valid markers in the ${marker.lane} lane are rendered.`, markerPath, entity);
+        addWarning(diagnostics, "markers.excess_capacity", "This marker is not rendered because its lane already has four markers.", markerPath, entity);
       }
     }
   }
@@ -1162,6 +1266,18 @@
       const from = getStaticSegmentBound(segment == null ? void 0 : segment.from);
       const to = getStaticSegmentBound(segment == null ? void 0 : segment.to);
       const segmentPath = `${path}.segments[${index}]`;
+      if ((segment == null ? void 0 : segment.invalidBoundary) === "entity") {
+        addWarning(diagnostics, "segments.unsupported_entity_boundary", "Entity-backed segment boundaries are not supported; ignoring this segment.", segmentPath, entity);
+        continue;
+      }
+      if ((segment == null ? void 0 : segment.invalidBoundary) === "malformed_percent") {
+        addWarning(diagnostics, "segments.invalid_percentage", "Malformed percentage segment boundary; ignoring this segment.", segmentPath, entity);
+        continue;
+      }
+      if (segment == null ? void 0 : segment.invalidBoundary) {
+        addWarning(diagnostics, "segments.invalid_boundary", 'Segment boundary must be a numeric value or a percentage such as "35%"; ignoring this segment.', segmentPath, entity);
+        continue;
+      }
       if (Number.isFinite(from) && Number.isFinite(to) && from > to) {
         addWarning(diagnostics, "segments.from_gt_to", "Segment start is greater than segment end.", segmentPath, entity);
       }
@@ -1230,7 +1346,7 @@
     validateGradientStops(diagnostics, (_b = config == null ? void 0 : config.bar) == null ? void 0 : _b.gradient_stops, `${path}.bar`, entity);
   }
   function validateNormalizedConfig(config) {
-    var _a;
+    var _a, _b;
     const diagnostics = {
       warnings: [],
       errors: []
@@ -1264,6 +1380,16 @@
           `${path}.markers`,
           entityId
         );
+      } else {
+        const inheritedOverflow = ((_b = entityConfig.generic_markers) != null ? _b : []).filter(
+          (marker) => {
+            var _a2, _b2;
+            return marker.valid && !marker.accepted && ((_b2 = (_a2 = config.generic_markers) == null ? void 0 : _a2[marker.index]) == null ? void 0 : _b2.accepted) === true;
+          }
+        );
+        if (inheritedOverflow.length) {
+          validateGenericMarkers(diagnostics, inheritedOverflow, false, `${path}.markers`, entityId);
+        }
       }
     }
     return diagnostics;
@@ -1305,7 +1431,7 @@
   }
   function createMarkerLabelPresentation(value, unit, precision = null, options = {}) {
     const semanticText = typeof options.text === "string" ? options.text : "";
-    const number = options.showValue === false || !Number.isFinite(value) ? "" : formatNumericDisplay(value, precision);
+    const number = options.showValue === false || value === null || value === void 0 || value === "" ? "" : Number.isFinite(value) ? formatNumericDisplay(value, precision) : String(value);
     const cleanUnit = options.showUnit === false ? "" : String(unit != null ? unit : "").trim();
     const text = [semanticText, number, cleanUnit].filter(Boolean).join(" ");
     return {
@@ -1351,7 +1477,8 @@
     label = null,
     labelVisible = false,
     shape = "circle",
-    direction = "inward"
+    direction = "inward",
+    showMarker = true
   }) {
     return {
       id,
@@ -1364,7 +1491,8 @@
       label,
       labelVisible: labelVisible === true,
       shape: normalizeMarkerShape(shape),
-      direction
+      direction,
+      showMarker: showMarker !== false
     };
   }
   function hasMarkerLabelContent(label) {
@@ -1473,7 +1601,8 @@
         label: marker.label,
         labelVisible: marker.labelVisible && hasMarkerLabelContent(marker.label),
         shape: marker.shape,
-        direction: marker.direction
+        direction: marker.direction,
+        showMarker: marker.showMarker
       }))
     ];
   }
@@ -1612,14 +1741,15 @@
     };
   }
   function buildRowViewModel(options) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W, _X, _Y, _Z, __, _$, _aa, _ba, _ca, _da, _ea, _fa, _ga, _ha, _ia, _ja;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W, _X, _Y, _Z, __, _$, _aa, _ba, _ca, _da, _ea, _fa, _ga, _ha;
     const {
       hass,
       cardConfig,
       entityConfig,
       entityState,
       peaks,
-      extrema
+      extrema,
+      previousScale
     } = options;
     void cardConfig;
     const entityId = (_a = entityConfig == null ? void 0 : entityConfig.entity) != null ? _a : null;
@@ -1629,24 +1759,21 @@
     const configuredUnit = (_e = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _e.unit;
     const targetUnit = (_f = configuredUnit != null ? configuredUnit : rawUnit) != null ? _f : "";
     const displayUnit = numericValue !== null ? targetUnit : "";
-    const min = getNormalizedResolvableNumericValue(hass, (_g = entityConfig == null ? void 0 : entityConfig.scale) == null ? void 0 : _g.min);
-    const max = getNormalizedResolvableNumericValue(hass, (_h = entityConfig == null ? void 0 : entityConfig.scale) == null ? void 0 : _h.max);
-    const safeMin = Number.isFinite(min) ? min : 0;
-    const safeMax = Number.isFinite(max) ? max : 100;
+    const { min: safeMin, max: safeMax } = getResolvedScale(hass, entityConfig == null ? void 0 : entityConfig.scale, previousScale);
     const percent = numericValue !== null ? toScalePct(numericValue, safeMin, safeMax) : 0;
-    const decimal = (_j = (_i = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _i.decimal) != null ? _j : null;
+    const decimal = (_h = (_g = entityConfig == null ? void 0 : entityConfig.formatting) == null ? void 0 : _g.decimal) != null ? _h : null;
     const primaryPresentation = numericValue === null ? createTextPresentation(rawState) : createNumericPresentation(numericValue, displayUnit, decimal);
-    const targetValue = ((_k = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _k.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_l = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _l.source, safeMin, safeMax);
+    const targetValue = ((_i = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _i.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_j = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _j.source, safeMin, safeMax);
     const targetPercent = targetValue !== null ? toScalePct(targetValue, safeMin, safeMax) : null;
     const targetVisible = targetValue !== null;
-    const targetDecimal = (_n = (_m = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _m.label_decimal) != null ? _n : decimal;
+    const targetDecimal = (_l = (_k = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _k.label_decimal) != null ? _l : decimal;
     const targetPresentation = targetValue !== null ? createNumericPresentation(targetValue, targetUnit, targetDecimal) : null;
-    const targetLabelPresentation = targetValue !== null ? createMarkerLabelPresentation(targetValue, targetUnit, (_p = (_o = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _o.label_precision) != null ? _p : targetDecimal, {
-      text: (_q = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _q.label_text,
-      showValue: (_r = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _r.label_show_value,
-      showUnit: (_s = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _s.label_show_unit
+    const targetLabelPresentation = targetValue !== null ? createMarkerLabelPresentation(targetValue, targetUnit, (_n = (_m = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _m.label_precision) != null ? _n : targetDecimal, {
+      text: (_o = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _o.label_text,
+      showValue: (_p = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _p.label_show_value,
+      showUnit: (_q = entityConfig == null ? void 0 : entityConfig.target_marker) == null ? void 0 : _q.label_show_unit
     }) : null;
-    const baselineValue = ((_t = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _t.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_u = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _u.at, safeMin, safeMax);
+    const baselineValue = ((_r = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _r.enabled) === false ? null : getNormalizedResolvableNumericValue(hass, (_s = entityConfig == null ? void 0 : entityConfig.baseline) == null ? void 0 : _s.at, safeMin, safeMax);
     const baselinePercent = Number.isFinite(baselineValue) ? toScalePct(baselineValue, safeMin, safeMax) : null;
     const baselineVisible = Number.isFinite(baselineValue);
     const legacyPeak = Number.isFinite(getFiniteNumber(peaks == null ? void 0 : peaks[entityId])) ? { value: getFiniteNumber(peaks == null ? void 0 : peaks[entityId]) } : null;
@@ -1654,9 +1781,9 @@
       numericValue,
       safeMin,
       safeMax,
-      (_v = extrema == null ? void 0 : extrema.peak) != null ? _v : legacyPeak,
+      (_t = extrema == null ? void 0 : extrema.peak) != null ? _t : legacyPeak,
       "max",
-      ((_w = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _w.show) === true
+      ((_u = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _u.show) === true
     );
     const floorState = getExtremumState(
       numericValue,
@@ -1664,30 +1791,36 @@
       safeMax,
       extrema == null ? void 0 : extrema.floor,
       "min",
-      ((_x = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _x.show) === true
+      ((_v = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _v.show) === true
     );
-    const peakDecimal = (_z = (_y = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _y.label_decimal) != null ? _z : decimal;
-    const floorDecimal = (_B = (_A = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _A.label_decimal) != null ? _B : decimal;
-    const peakLabelPrecision = (_D = (_C = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _C.label_precision) != null ? _D : peakDecimal;
-    const floorLabelPrecision = (_F = (_E = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _E.label_precision) != null ? _F : floorDecimal;
+    const peakDecimal = (_x = (_w = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _w.label_decimal) != null ? _x : decimal;
+    const floorDecimal = (_z = (_y = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _y.label_decimal) != null ? _z : decimal;
+    const peakLabelPrecision = (_B = (_A = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _A.label_precision) != null ? _B : peakDecimal;
+    const floorLabelPrecision = (_D = (_C = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _C.label_precision) != null ? _D : floorDecimal;
     const peakPresentation = peakState.visible ? createNumericPresentation(peakState.value, targetUnit, peakDecimal) : null;
     const floorPresentation = floorState.visible ? createNumericPresentation(floorState.value, targetUnit, floorDecimal) : null;
     const peakLabelPresentation = peakState.visible ? createMarkerLabelPresentation(peakState.value, targetUnit, peakLabelPrecision, {
-      text: (_G = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _G.label_text,
-      showValue: (_H = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _H.label_show_value,
-      showUnit: (_I = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _I.label_show_unit
+      text: (_E = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _E.label_text,
+      showValue: (_F = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _F.label_show_value,
+      showUnit: (_G = entityConfig == null ? void 0 : entityConfig.peak_marker) == null ? void 0 : _G.label_show_unit
     }) : null;
     const floorLabelPresentation = floorState.visible ? createMarkerLabelPresentation(floorState.value, targetUnit, floorLabelPrecision, {
-      text: (_J = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _J.label_text,
-      showValue: (_K = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _K.label_show_value,
-      showUnit: (_L = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _L.label_show_unit
+      text: (_H = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _H.label_text,
+      showValue: (_I = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _I.label_show_value,
+      showUnit: (_J = entityConfig == null ? void 0 : entityConfig.floor_marker) == null ? void 0 : _J.label_show_unit
     }) : null;
-    const genericMarkers = ((_M = entityConfig == null ? void 0 : entityConfig.generic_markers) != null ? _M : []).filter((marker) => marker.accepted).map((marker) => {
-      var _a2;
+    const genericMarkers = ((_K = entityConfig == null ? void 0 : entityConfig.generic_markers) != null ? _K : []).filter((marker) => marker.accepted).map((marker) => {
+      var _a2, _b2, _c2, _d2, _e2;
       const value = getNormalizedResolvableNumericValue(hass, marker.source, safeMin, safeMax);
       const visible = Number.isFinite(value);
       const markerPrecision = (_a2 = marker.label.precision) != null ? _a2 : decimal;
-      const label = marker.label.show ? createMarkerLabelPresentation(value, targetUnit, markerPrecision, {
+      const labelStateObj = marker.label.entity ? (_b2 = hass == null ? void 0 : hass.states) == null ? void 0 : _b2[marker.label.entity] : null;
+      const rawLabelState = labelStateObj == null ? void 0 : labelStateObj.state;
+      const cleanLabelState = typeof rawLabelState === "string" ? rawLabelState.trim() : "";
+      const usableLabelState = labelStateObj && cleanLabelState && !["unknown", "unavailable"].includes(cleanLabelState.toLowerCase());
+      const labelValue = marker.label.entity ? usableLabelState ? (_c2 = getFiniteNumber(cleanLabelState)) != null ? _c2 : cleanLabelState : null : value;
+      const labelUnit = marker.label.entity ? usableLabelState ? (_e2 = (_d2 = labelStateObj == null ? void 0 : labelStateObj.attributes) == null ? void 0 : _d2.unit_of_measurement) != null ? _e2 : "" : "" : targetUnit;
+      const label = marker.label.show ? createMarkerLabelPresentation(labelValue, labelUnit, markerPrecision, {
         text: marker.label.text,
         showValue: marker.label.showValue,
         showUnit: marker.label.showUnit
@@ -1701,6 +1834,7 @@
         color: marker.color,
         shape: marker.shape,
         direction: marker.direction,
+        showMarker: marker.showMarker,
         label,
         labelVisible: marker.label.show
       };
@@ -1726,8 +1860,8 @@
     });
     return {
       entityId,
-      name: (_P = (_O = entityConfig == null ? void 0 : entityConfig.name) != null ? _O : (_N = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _N.friendly_name) != null ? _P : entityId,
-      icon: (entityConfig == null ? void 0 : entityConfig.icon) === false ? false : (_S = (_R = entityConfig == null ? void 0 : entityConfig.icon) != null ? _R : (_Q = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _Q.icon) != null ? _S : getDefaultEntityIcon(entityState, entityId),
+      name: (_N = (_M = entityConfig == null ? void 0 : entityConfig.name) != null ? _M : (_L = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _L.friendly_name) != null ? _N : entityId,
+      icon: (entityConfig == null ? void 0 : entityConfig.icon) === false ? false : (_Q = (_P = entityConfig == null ? void 0 : entityConfig.icon) != null ? _P : (_O = entityState == null ? void 0 : entityState.attributes) == null ? void 0 : _O.icon) != null ? _Q : getDefaultEntityIcon(entityState, entityId),
       state: rawState,
       numericValue,
       rawUnit,
@@ -1738,11 +1872,11 @@
       displayUnit: primaryPresentation.unit,
       primaryPresentation,
       unit: primaryPresentation.unit,
-      barColor: (_U = (_T = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _T.color) != null ? _U : null,
-      fillStyle: (_W = (_V = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _V.fill_style) != null ? _W : null,
+      barColor: (_S = (_R = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _R.color) != null ? _S : null,
+      fillStyle: (_U = (_T = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _T.fill_style) != null ? _U : null,
       target: targetValue,
       targetPercent,
-      targetDisplay: (_X = targetPresentation == null ? void 0 : targetPresentation.text) != null ? _X : null,
+      targetDisplay: (_V = targetPresentation == null ? void 0 : targetPresentation.text) != null ? _V : null,
       targetPresentation,
       targetLabelPresentation,
       targetVisible,
@@ -1751,31 +1885,31 @@
       baselineVisible,
       peak: peakState.value,
       peakPercent: peakState.percent,
-      peakDisplay: (_Y = peakPresentation == null ? void 0 : peakPresentation.number) != null ? _Y : null,
+      peakDisplay: (_W = peakPresentation == null ? void 0 : peakPresentation.number) != null ? _W : null,
       peakPresentation,
       peakLabelPresentation,
       peakVisible: peakState.visible,
       floor: floorState.value,
       floorPercent: floorState.percent,
-      floorDisplay: (_Z = floorPresentation == null ? void 0 : floorPresentation.number) != null ? _Z : null,
+      floorDisplay: (_X = floorPresentation == null ? void 0 : floorPresentation.number) != null ? _X : null,
       floorPresentation,
       floorLabelPresentation,
       floorVisible: floorState.visible,
       markers,
       markerLaneOccupancy: getMarkerLaneOccupancy(entityConfig),
       markerLabelLaneOccupancy: getMarkerLabelLaneOccupancy(entityConfig),
-      segments: (_$ = (__ = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : __.segments) != null ? _$ : null,
-      gradientStops: (_ba = (_aa = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _aa.gradient_stops) != null ? _ba : null,
+      segments: (_Z = (_Y = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _Y.segments) != null ? _Z : null,
+      gradientStops: (_$ = (__ = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : __.gradient_stops) != null ? _$ : null,
       needle: getNeedleState(entityConfig, numericValue, safeMin, safeMax, baselinePercent),
       classes: {
-        labelPosition: (_ea = (_da = (_ca = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _ca.label) == null ? void 0 : _da.position) != null ? _ea : "left",
-        animated: ((_fa = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _fa.animated) !== false
+        labelPosition: (_ca = (_ba = (_aa = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _aa.label) == null ? void 0 : _ba.position) != null ? _ca : "left",
+        animated: ((_da = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _da.animated) !== false
       },
       attributes: {
         entity: entityId,
-        baseHeight: (_ha = (_ga = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _ga.height) != null ? _ha : 38,
-        heightExplicit: ((_ia = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _ia.height_explicit) === true,
-        barAnimated: ((_ja = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _ja.animated) !== false
+        baseHeight: (_fa = (_ea = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _ea.height) != null ? _fa : 38,
+        heightExplicit: ((_ga = entityConfig == null ? void 0 : entityConfig.layout) == null ? void 0 : _ga.height_explicit) === true,
+        barAnimated: ((_ha = entityConfig == null ? void 0 : entityConfig.bar) == null ? void 0 : _ha.animated) !== false
       }
     };
   }
@@ -1836,8 +1970,11 @@
           this._diagnostics = { warnings: [], errors: [] };
           this._lastDiagnosticsSignature = null;
           this._hass = null;
-          this._extrema = {};
-          this._leftModeResponsiveHistory = /* @__PURE__ */ new Map();
+          this._extrema = /* @__PURE__ */ new WeakMap();
+          this._rowScales = /* @__PURE__ */ new WeakMap();
+          this._rowGeneration = 0;
+          this._rowPresence = [];
+          this._leftModeResponsiveHistory = /* @__PURE__ */ new WeakMap();
           this._rendered = false;
           this._resizeObserver = null;
           this._densityPassScheduled = false;
@@ -1852,9 +1989,11 @@
         }
         connectedCallback() {
           window.addEventListener("resize", this._boundWindowResize, { passive: true });
+          this._setupResizeObserver();
           this._schedulePostLayoutDensityPass();
         }
         disconnectedCallback() {
+          this._rowGeneration += 1;
           window.removeEventListener("resize", this._boundWindowResize);
           this._clearMarkerHover();
           this._disconnectResizeObserver();
@@ -1866,52 +2005,89 @@
           this._densityPassDirty = false;
         }
         setConfig(config) {
-          var _a, _b, _c, _d;
+          var _a;
           if (!config.entities && !config.entity) {
             throw new Error("You must define entities or entity");
           }
           this._rendered = false;
+          this._rowGeneration += 1;
           const previousConfig = this._config;
           this._config = this.normalizeCardConfig(config);
-          const activeLeftEntityIds = new Set(
-            (this._config.entities || []).filter((entityConfig) => {
-              var _a2, _b2;
-              return ((_b2 = (_a2 = entityConfig.layout) == null ? void 0 : _a2.label) == null ? void 0 : _b2.position) === "left";
-            }).map((entityConfig) => entityConfig.entity)
-          );
-          for (const entityId of this._leftModeResponsiveHistory.keys()) {
-            if (!activeLeftEntityIds.has(entityId)) {
-              this._leftModeResponsiveHistory.delete(entityId);
-            }
-          }
-          const activeEntityIds = new Set(
-            (this._config.entities || []).map((entityConfig) => entityConfig.entity)
-          );
-          for (const entityId of Object.keys(this._extrema)) {
-            if (!activeEntityIds.has(entityId)) {
-              delete this._extrema[entityId];
-            }
-          }
-          const previousEntities = new Map(((_a = previousConfig == null ? void 0 : previousConfig.entities) != null ? _a : []).map((entity) => [entity.entity, entity]));
-          for (const entityConfig of (_b = this._config.entities) != null ? _b : []) {
-            const previous = previousEntities.get(entityConfig.entity);
-            const current = entityConfig;
-            const stored = this._extrema[entityConfig.entity];
-            if (!stored) continue;
-            for (const key of ["peak", "floor"]) {
-              const previousMarker = previous == null ? void 0 : previous[`${key}_marker`];
-              const currentMarker = current == null ? void 0 : current[`${key}_marker`];
-              if ((previousMarker == null ? void 0 : previousMarker.show) === true && (currentMarker == null ? void 0 : currentMarker.show) !== true) {
-                delete stored[key];
-              } else if (JSON.stringify((_c = previousMarker == null ? void 0 : previousMarker.reset) != null ? _c : { kind: "never" }) !== JSON.stringify((_d = currentMarker == null ? void 0 : currentMarker.reset) != null ? _d : { kind: "never" })) {
-                delete stored[key];
-              }
-            }
-            if (!stored.peak && !stored.floor) delete this._extrema[entityConfig.entity];
-          }
+          this._rowScales = /* @__PURE__ */ new WeakMap();
+          this._reconcileRowHistory((_a = previousConfig == null ? void 0 : previousConfig.entities) != null ? _a : []);
           this._diagnostics = validateNormalizedConfig(this._config);
           this._logDiagnostics();
           this._render();
+        }
+        _reconcileRowHistory(previousRows) {
+          var _a, _b, _c, _d;
+          const canonical = (value, key = "") => {
+            if (Array.isArray(value)) return value.map(canonical);
+            if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().filter((name) => !["severity", "segment_space", "label_precision_key"].includes(name)).map((name) => [name, canonical(value[name], name)]));
+            if (key === "fixed") return getNumericValue(null, value);
+            if (/color/i.test(key) && typeof value === "string" && /^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(value.trim())) {
+              const hex = value.trim().slice(1).toLowerCase();
+              return `#${hex.length === 3 ? hex.split("").map((char) => char + char).join("") : hex}`;
+            }
+            return value;
+          };
+          const signature = (row) => {
+            var _a2;
+            return JSON.stringify(canonical({
+              entity: row.entity,
+              name: row.name,
+              icon: (_a2 = row.icon) != null ? _a2 : null,
+              layout: row.layout,
+              scale: Object.fromEntries(["min", "max"].map((key) => [key, {
+                ...row.scale[key],
+                fixed_explicit: row.scale[key].fixed_explicit !== false
+              }])),
+              bar: row.bar,
+              baseline: row.baseline,
+              formatting: row.formatting,
+              target_marker: row.target_marker,
+              peak_marker: row.peak_marker,
+              floor_marker: row.floor_marker,
+              generic_markers: row.generic_markers
+            }));
+          };
+          const unmatchedOld = new Set(previousRows);
+          const matches = /* @__PURE__ */ new Map();
+          const oldSignatures = new Map(previousRows.map((row) => [row, signature(row)]));
+          for (const row of this._config.entities) {
+            const key = signature(row);
+            const previous = [...unmatchedOld].find((old) => oldSignatures.get(old) === key);
+            if (!previous) continue;
+            matches.set(row, previous);
+            unmatchedOld.delete(previous);
+          }
+          const unmatchedNew = this._config.entities.filter((row) => !matches.has(row));
+          for (const row of unmatchedNew) {
+            const old = [...unmatchedOld].filter((previous) => previous.entity === row.entity);
+            const next = unmatchedNew.filter((current) => current.entity === row.entity);
+            if (old.length !== 1 || next.length !== 1) continue;
+            matches.set(row, old[0]);
+            unmatchedOld.delete(old[0]);
+          }
+          const extrema = /* @__PURE__ */ new WeakMap();
+          const responsive = /* @__PURE__ */ new WeakMap();
+          for (const [row, previous] of matches) {
+            const stored = this._extrema.get(previous);
+            const retained = {};
+            for (const key of ["peak", "floor"]) {
+              const before = previous[`${key}_marker`];
+              const after = row[`${key}_marker`];
+              if ((stored == null ? void 0 : stored[key]) && (before == null ? void 0 : before.show) === true && (after == null ? void 0 : after.show) === true && JSON.stringify(before.reset) === JSON.stringify(after.reset)) {
+                retained[key] = { ...stored[key] };
+              }
+            }
+            if (retained.peak || retained.floor) extrema.set(row, retained);
+            if (((_b = (_a = previous.layout) == null ? void 0 : _a.label) == null ? void 0 : _b.position) === "left" && ((_d = (_c = row.layout) == null ? void 0 : _c.label) == null ? void 0 : _d.position) === "left" && this._leftModeResponsiveHistory.has(previous)) {
+              responsive.set(row, this._leftModeResponsiveHistory.get(previous));
+            }
+          }
+          this._extrema = extrema;
+          this._leftModeResponsiveHistory = responsive;
         }
         _logDiagnostics() {
           var _a;
@@ -2033,6 +2209,7 @@
         set hass(hass) {
           const oldHass = this._hass;
           this._hass = hass;
+          if (!this._config.entities) return;
           if (!oldHass) {
             this._update();
             return;
@@ -2062,8 +2239,7 @@
           var _a, _b, _c;
           const sample = getFiniteNumber(stateObj == null ? void 0 : stateObj.state);
           if (!Number.isFinite(sample)) return;
-          const entityId = entityCfg.entity;
-          const current = (_a = this._extrema[entityId]) != null ? _a : {};
+          const current = (_a = this._extrema.get(entityCfg)) != null ? _a : {};
           const timestamp = this._getStateTimestamp(stateObj);
           for (const key of ["peak", "floor"]) {
             const marker = normalizedEntity == null ? void 0 : normalizedEntity[`${key}_marker`];
@@ -2080,9 +2256,9 @@
             );
           }
           if (current.peak || current.floor) {
-            this._extrema[entityId] = current;
+            this._extrema.set(entityCfg, current);
           } else {
-            delete this._extrema[entityId];
+            this._extrema.delete(entityCfg);
           }
         }
         _getDefaultEntityIcon(stateObj, entityId = "") {
@@ -2130,9 +2306,9 @@
               (_d = (_c = ecfg.scale) == null ? void 0 : _c.max) == null ? void 0 : _d.entity,
               (_f = (_e = ecfg.baseline) == null ? void 0 : _e.at) == null ? void 0 : _f.entity,
               (_h = (_g = ecfg.target_marker) == null ? void 0 : _g.source) == null ? void 0 : _h.entity,
-              ...((_i = ecfg.generic_markers) != null ? _i : []).filter((marker) => marker.accepted).map((marker) => {
-                var _a2;
-                return (_a2 = marker.source) == null ? void 0 : _a2.entity;
+              ...((_i = ecfg.generic_markers) != null ? _i : []).filter((marker) => marker.accepted).flatMap((marker) => {
+                var _a2, _b2;
+                return [(_a2 = marker.source) == null ? void 0 : _a2.entity, (_b2 = marker.label) == null ? void 0 : _b2.entity];
               })
             ].filter(Boolean);
             for (const ent of entitiesToWatch) {
@@ -2232,6 +2408,13 @@
           const labelSelector = markerEl.matches(".target-marker") ? ".target-value-label" : markerEl.matches(".peak-marker") ? ".peak-value-label" : markerEl.matches(".floor-marker") ? ".floor-value-label" : null;
           return labelSelector ? row.querySelector(labelSelector) : null;
         }
+        _getGenericMarkerForLabel(labelEl) {
+          var _a, _b;
+          const row = labelEl == null ? void 0 : labelEl.closest(".row");
+          const markerId = (_a = labelEl == null ? void 0 : labelEl.dataset) == null ? void 0 : _a.markerId;
+          if (!row || !markerId) return null;
+          return (_b = [...row.querySelectorAll(".generic-marker[data-marker-id]")].find((marker) => marker.dataset.markerId === markerId)) != null ? _b : null;
+        }
         _setMarkerHover(markerEl) {
           var _a;
           const label = this._getMarkerLabel(markerEl);
@@ -2250,16 +2433,19 @@
           this._markerHover = null;
         }
         _handleMarkerPointerOver(event) {
-          var _a, _b;
+          var _a, _b, _c;
           if (event.pointerType === "touch") return;
-          const markerEl = (_b = (_a = event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, ".generic-marker, .target-marker, .peak-marker, .floor-marker");
+          const target = (_b = (_a = event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, '.generic-value-label[data-show-marker="false"], .generic-marker, .target-marker, .peak-marker, .floor-marker');
+          const markerEl = ((_c = target == null ? void 0 : target.matches) == null ? void 0 : _c.call(target, ".generic-value-label")) ? this._getGenericMarkerForLabel(target) : target;
           if (markerEl) this._setMarkerHover(markerEl);
         }
         _handleMarkerPointerOut(event) {
           var _a, _b;
           if (event.pointerType === "touch") return;
-          const markerEl = (_b = (_a = event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, ".generic-marker, .target-marker, .peak-marker, .floor-marker");
-          if (!markerEl || markerEl.contains(event.relatedTarget)) return;
+          const target = (_b = (_a = event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, '.generic-value-label[data-show-marker="false"], .generic-marker, .target-marker, .peak-marker, .floor-marker');
+          if (!target || target.contains(event.relatedTarget)) return;
+          const markerEl = target.matches(".generic-value-label") ? this._getGenericMarkerForLabel(target) : target;
+          if (!markerEl) return;
           this._clearMarkerHover(markerEl);
         }
         _positionMarkerValueLabel(row, labelSelector, markerSelector) {
@@ -2414,7 +2600,7 @@
           var _a, _b;
           const safeMin = Number.isFinite(minValue) ? minValue : 0;
           const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
-          const rawSegments = Array.isArray((_a = ecfg.bar) == null ? void 0 : _a.segments) ? ecfg.bar.segments : [];
+          const rawSegments = (Array.isArray((_a = ecfg.bar) == null ? void 0 : _a.segments) ? ecfg.bar.segments : []).filter((segment) => !(segment == null ? void 0 : segment.invalidBoundary));
           if (((_b = ecfg.bar) == null ? void 0 : _b.segment_space) === "scale" || this._segmentsNeedBoundaryResolution(rawSegments)) {
             const resolvedSegments = rawSegments.map((segment) => {
               var _a2;
@@ -2902,7 +3088,8 @@
         .main-line.left-mode[data-hide-left-icon="true"] .icon-wrap,
         .main-line.above-mode[data-hide-above-icon="true"] .icon-wrap,
         .main-line.inside-mode[data-hide-inside-icon="true"] .icon-wrap,
-        .main-line.inside-mode[data-priority-hide-inside-icon="true"] .icon-wrap {
+        .main-line.inside-mode[data-priority-hide-inside-icon="true"] .icon-wrap,
+        .main-line.off-mode[data-hide-off-icon="true"] .icon-wrap {
           display: none;
         }
         .main-line.left-mode[data-left-density="normal"] {
@@ -3085,14 +3272,21 @@
           display: none;
         }
         .bar-inner-label .inside-value {
-          flex: 0 1 auto;
+          flex: 0 0 auto;
           min-width: 0;
-          max-width: 56%;
+          max-width: 100%;
           display: inline-flex;
           align-items: baseline;
         }
         .bar-inner-label .inside-value[data-hide-value="true"] {
           display: none;
+        }
+        .bar-inner-label[data-value-fit="compact"] {
+          padding: 0 2px;
+        }
+        .bar-inner-label .inside-value[data-value-fit="compact"] {
+          padding-left: 2px;
+          padding-right: 2px;
         }
         .main-line.inside-mode[data-hide-inside-icon="true"] .bar-inner-label .inside-value,
         .main-line.inside-mode[data-priority-hide-inside-icon="true"] .bar-inner-label .inside-value,
@@ -3194,6 +3388,10 @@
           visibility: hidden;
           transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
         }
+        .generic-value-label[data-show-marker="false"] {
+          pointer-events: auto;
+          cursor: pointer;
+        }
         .peak-value-label {
           bottom: 100%;
           margin-bottom: 1px;
@@ -3248,6 +3446,10 @@
           gap: var(--sbcp-main-gap);
           margin-bottom: 2px;
           min-height: 16px;
+        }
+        .above-bar-label[data-hide-name="true"],
+        .above-bar-label[data-priority-hide-name="true"] {
+          gap: 0;
         }
         .above-bar-label-name {
           flex: 1 1 auto;
@@ -3644,6 +3846,13 @@
         .generic-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
           display: block;
         }
+        .generic-marker[data-show-marker="false"][data-shape] .peak-inset,
+        .generic-marker[data-show-marker="false"][data-shape] .peak-outset,
+        .generic-marker[data-show-marker="false"][data-shape] .target-inset,
+        .generic-marker[data-show-marker="false"][data-shape] .target-outset,
+        .generic-marker[data-show-marker="false"][data-shape] .marker-shape-svg {
+          display: none;
+        }
         .marker-shape-svg path {
           display: none;
           fill: currentColor;
@@ -3704,6 +3913,9 @@
           min-width: 0;
           overflow: hidden;
           white-space: nowrap;
+        }
+        .main-line.off-mode .value-right {
+          flex-shrink: 1;
         }
         .value-right-text.has-unit {
           gap: 2px;
@@ -3779,20 +3991,24 @@
               titleEl.style.display = "none";
             }
           }
-          this._disconnectResizeObserver();
-          this._resizeObserver = new ResizeObserver(() => {
+          this._setupResizeObserver();
+          this._update();
+          this._schedulePostLayoutDensityPass();
+        }
+        _setupResizeObserver() {
+          if (!this.isConnected || this._resizeObserver) return;
+          const surface = this.shadowRoot.querySelector("ha-card");
+          const card = this.shadowRoot.querySelector(".card");
+          if (!surface || !card) return;
+          const observer = new ResizeObserver(() => {
+            if (!this.isConnected || this._resizeObserver !== observer) return;
             this._applyCompactTier();
             this._schedulePostLayoutDensityPass();
           });
-          const surface = this.shadowRoot.querySelector("ha-card");
-          const card = this.shadowRoot.querySelector(".card");
-          if (surface && card) {
-            this._applyCompactTier();
-            this._resizeObserver.observe(surface);
-            this._resizeObserver.observe(this);
-          }
-          this._update();
-          this._schedulePostLayoutDensityPass();
+          this._resizeObserver = observer;
+          this._applyCompactTier();
+          observer.observe(surface);
+          observer.observe(this);
         }
         _disconnectResizeObserver() {
           if (!this._resizeObserver) return;
@@ -3909,69 +4125,77 @@
             const nameEl = innerLabel.querySelector(".inside-name");
             const valueEl = innerLabel.querySelector(".inside-value");
             if (!track || !nameEl || !valueEl) return;
-            const trackWidth = track.getBoundingClientRect().width;
-            const valueDisplay = this._decodeDataAttr(valueEl.dataset.display || valueEl.textContent || "");
-            const valueUnit = this._decodeDataAttr(valueEl.dataset.unit || ((_a = valueEl.querySelector(".inside-unit")) == null ? void 0 : _a.textContent) || "");
-            const valueWidth = this._measureInsideValueMarkupWidth(valueEl, valueDisplay, valueUnit, false);
-            const valueOnlyWidth = this._measureInsideValueMarkupWidth(valueEl, valueDisplay, valueUnit, true);
-            let density = this._classifyInsideDensity(trackWidth, valueWidth);
-            const rowWidth = typeof (mainLine == null ? void 0 : mainLine.getBoundingClientRect) === "function" ? mainLine.getBoundingClientRect().width : 0;
-            const rowDensity = this._isReliableWidth(rowWidth) ? this._classifyRowDensity(rowWidth, ((_b = mainLine == null ? void 0 : mainLine.dataset) == null ? void 0 : _b.rowDensity) || "normal") : ((_c = mainLine == null ? void 0 : mainLine.dataset) == null ? void 0 : _c.rowDensity) || "normal";
-            const iconWrap = (_e = (_d = mainLine == null ? void 0 : mainLine.querySelector) == null ? void 0 : _d.call(mainLine, ".icon-wrap")) != null ? _e : null;
-            let hideIcon = rowDensity === "dense" || rowDensity === "compressed";
-            const reclaimedWidth = iconWrap ? this._getLeftModeIconWidth(iconWrap, mainLine) + this._getLeftModeGap(mainLine) : 0;
-            if (!hideIcon && valueWidth > this._getInsideValueVisibleCap(trackWidth, density)) {
-              hideIcon = true;
-            }
-            if (iconWrap && hideIcon) {
-              density = this._classifyInsideDensity(trackWidth + reclaimedWidth, valueWidth);
-            }
-            const effectiveTrackWidth = trackWidth + (hideIcon ? reclaimedWidth : 0);
-            let hideName = false;
-            if (rowDensity === "compressed") {
-              density = "compressed";
-              hideIcon = true;
-            }
-            const rawValueCap = this._getInsideValueVisibleCap(trackWidth, density);
-            const innerPadding = this._getNumericStyleValue(innerLabel, "padding-left", 0) + this._getNumericStyleValue(innerLabel, "padding-right", 0);
-            const valueCap = Math.max(0, rawValueCap - innerPadding);
-            const hideUnit = !!valueUnit && valueWidth > valueCap;
-            const hideValue = valueOnlyWidth > valueCap;
-            const reservedValueWidth = hideValue ? 0 : Math.ceil(hideUnit ? valueOnlyWidth : valueWidth);
-            const labelGap = !hideValue ? this._getNumericStyleValue(innerLabel, "gap", 0) : 0;
-            if (!hideValue) {
-              const nameText = (nameEl.textContent || "").trim();
-              const nameFullWidth = nameEl.scrollWidth || ((_f = nameEl.getBoundingClientRect) == null ? void 0 : _f.call(nameEl).width) || this._measureTextWidthWithStyles(nameEl, nameText);
-              if (!nameText || !Number.isFinite(nameFullWidth) || nameFullWidth <= 0) {
-                hideName = density === "dense" || density === "compressed";
-              } else {
-                const usefulNameWidth = this._getInsideUsefulNameWidth(nameEl, nameText, nameFullWidth);
-                const availableNameWidth = Math.max(
-                  0,
-                  trackWidth - innerPadding - reservedValueWidth - labelGap
-                );
+            const display = this._decodeDataAttr(valueEl.dataset.display || valueEl.textContent || "");
+            const unit = this._decodeDataAttr(valueEl.dataset.unit || "");
+            valueEl.dataset.valueFit = "normal";
+            innerLabel.dataset.valueFit = "normal";
+            const fullWidth = this._measureInsideValueMarkupWidth(valueEl, display, unit, false);
+            const numberWidth = this._measureInsideValueMarkupWidth(valueEl, display, unit, true);
+            const rowWidth = (_b = (_a = mainLine == null ? void 0 : mainLine.getBoundingClientRect) == null ? void 0 : _a.call(mainLine).width) != null ? _b : 0;
+            const rowDensity = this._isReliableWidth(rowWidth) ? this._classifyRowDensity(rowWidth, (_c = mainLine == null ? void 0 : mainLine.dataset) == null ? void 0 : _c.rowDensity) : ((_d = mainLine == null ? void 0 : mainLine.dataset) == null ? void 0 : _d.rowDensity) || "normal";
+            const iconWrap = (_f = (_e = mainLine == null ? void 0 : mainLine.querySelector) == null ? void 0 : _e.call(mainLine, ".icon-wrap")) != null ? _f : null;
+            const iconReserve = iconWrap ? this._getLeftModeIconWidth(iconWrap, mainLine) + this._getLeftModeGap(mainLine) : 0;
+            const minimum = this._getLeftModeBarMinWidth(mainLine);
+            const withIconWidth = this._isReliableWidth(rowWidth) ? Math.max(minimum, rowWidth - iconReserve) : track.getBoundingClientRect().width;
+            const withoutIconWidth = this._isReliableWidth(rowWidth) ? Math.max(minimum, rowWidth) : withIconWidth + iconReserve;
+            const nameText = (nameEl.textContent || "").trim();
+            const nameWidth = this._measureTextWidthWithStyles(nameEl, nameText) || nameEl.scrollWidth;
+            const candidate = (trackWidth) => {
+              const density = rowDensity === "compressed" ? "compressed" : this._classifyInsideDensity(trackWidth, fullWidth);
+              innerLabel.dataset.insideDensity = density;
+              innerLabel.dataset.valueFit = "normal";
+              valueEl.dataset.valueFit = "normal";
+              const padding = this._getNumericStyleValue(innerLabel, "padding-left", 0) + this._getNumericStyleValue(innerLabel, "padding-right", 0);
+              let cap = Math.max(0, trackWidth - padding);
+              const hideUnit = !!unit && fullWidth > cap;
+              let readingWidth = hideUnit ? numberWidth : fullWidth;
+              let valueFit = "normal";
+              if (readingWidth > cap) {
+                valueFit = "compact";
+                innerLabel.dataset.valueFit = valueFit;
+                valueEl.dataset.valueFit = valueFit;
+                cap = Math.max(0, trackWidth - this._getNumericStyleValue(innerLabel, "padding-left", 0) - this._getNumericStyleValue(innerLabel, "padding-right", 0));
+                readingWidth = this._measureInsideValueMarkupWidth(valueEl, display, unit, true);
+              }
+              const hideValue = readingWidth > cap;
+              const gap = hideValue ? 0 : this._getNumericStyleValue(innerLabel, "gap", 0);
+              const nameShare = density === "compact" ? 0.56 : density === "tight" ? 0.48 : 0.6;
+              const availableNameWidth = Math.max(
+                0,
+                Math.min(cap * nameShare, cap - (hideValue ? 0 : Math.ceil(readingWidth)) - gap)
+              );
+              let hideName = density === "dense" || density === "compressed";
+              if (nameText && nameWidth > 0) {
+                const usefulWidth = this._getInsideUsefulNameWidth(nameEl, nameText, nameWidth);
                 const visibleChars = this._measureVisibleLabelCharacters(nameEl, nameText, availableNameWidth);
-                const minUsefulChars = Math.min(4, nameText.length);
-                const nameNeedsTruncation = nameFullWidth > availableNameWidth + 1;
-                const hasUsefulRoom = availableNameWidth >= usefulNameWidth && (!nameNeedsTruncation || visibleChars >= minUsefulChars);
-                hideName = !hasUsefulRoom;
+                hideName = availableNameWidth < usefulWidth || nameWidth > availableNameWidth + 1 && visibleChars < Math.min(4, nameText.length);
+              }
+              return {
+                density,
+                valueFit,
+                hideUnit,
+                hideValue,
+                hideName,
+                rank: hideValue ? 3 : valueFit === "compact" ? 2 : hideUnit ? 1 : 0
+              };
+            };
+            let hideIcon = rowDensity === "dense" || rowDensity === "compressed";
+            let chosen = candidate(hideIcon ? withoutIconWidth : withIconWidth);
+            if (iconWrap && !hideIcon) {
+              const withoutIcon = candidate(withoutIconWidth);
+              if (withoutIcon.rank < chosen.rank || withoutIcon.rank === chosen.rank && chosen.hideName && !withoutIcon.hideName) {
+                hideIcon = true;
+                chosen = withoutIcon;
               }
             }
-            if (hideName && density === "normal") density = "dense";
-            innerLabel.dataset.insideDensity = density;
-            innerLabel.dataset.hideName = hideName ? "true" : "false";
-            valueEl.dataset.hideUnit = hideUnit ? "true" : "false";
-            valueEl.dataset.hideValue = hideValue ? "true" : "false";
-            if (mainLine) {
-              mainLine.dataset.hideInsideIcon = hideIcon ? "true" : "false";
-            }
+            innerLabel.dataset.insideDensity = chosen.density;
+            innerLabel.dataset.valueFit = chosen.valueFit;
+            innerLabel.dataset.hideName = chosen.hideName ? "true" : "false";
+            valueEl.dataset.valueFit = chosen.valueFit;
+            valueEl.dataset.hideUnit = chosen.hideUnit ? "true" : "false";
+            valueEl.dataset.hideValue = chosen.hideValue ? "true" : "false";
+            if (mainLine) mainLine.dataset.hideInsideIcon = hideIcon ? "true" : "false";
           });
-        }
-        _getInsideValueVisibleCap(trackWidth, density) {
-          if (density === "dense" || density === "compressed") {
-            return trackWidth;
-          }
-          return trackWidth * 0.56;
         }
         _classifyInsideDensity(trackWidth, valueWidth) {
           if (trackWidth < Math.max(72, valueWidth + 12)) return "compressed";
@@ -3995,7 +4219,7 @@
         _applyAboveLabelDensity() {
           if (!this.shadowRoot) return;
           this.shadowRoot.querySelectorAll(".above-line, .hero-line").forEach((aboveLine) => {
-            var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t;
+            var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
             const label = aboveLine.querySelector(".above-bar-label, .hero-header");
             if (!label) return;
             const isHeroLine = aboveLine.classList.contains("hero-line");
@@ -4030,31 +4254,41 @@
               const rowStack = (_k = aboveLine.closest) == null ? void 0 : _k.call(aboveLine, ".row-stack");
               const lineWidth = (_o = (_n = (_l = rowStack == null ? void 0 : rowStack.getBoundingClientRect) == null ? void 0 : _l.call(rowStack).width) != null ? _n : (_m = aboveLine.getBoundingClientRect) == null ? void 0 : _m.call(aboveLine).width) != null ? _o : width;
               const spacerEl = typeof aboveLine.querySelector === "function" ? aboveLine.querySelector(".above-icon-spacer") : null;
-              const spacerWidth = (_q = (_p = spacerEl == null ? void 0 : spacerEl.getBoundingClientRect) == null ? void 0 : _p.call(spacerEl).width) != null ? _q : 0;
+              const spacerWidth = mainIconVisible ? iconRect.width : 0;
               const lineGap = spacerEl ? this._getNumericStyleValue(aboveLine, "gap", 0) : 0;
-              const nameWidth = (_t = (_s = (_r = labelText.getBoundingClientRect) == null ? void 0 : _r.call(labelText).width) != null ? _s : labelText.clientWidth) != null ? _t : 0;
-              const labelGap = this._getNumericStyleValue(label, "gap", this._getLeftModeGap(aboveLine));
+              const labelGap = this._getNumericStyleValue(aboveLine, "--sbcp-main-gap", this._getLeftModeGap(aboveLine));
               const fullValueWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, false) + 2);
               const valueOnlyWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, true) + 2);
               const text = (labelText.textContent || "").trim();
-              const visibleWidth = labelText.clientWidth;
-              const fullWidth = labelText.scrollWidth;
-              const visibleChars = this._measureVisibleLabelCharacters(labelText, text, visibleWidth);
-              const labelIsUnhelpful = this._shouldHideLeftLabel(text, fullWidth, visibleWidth, visibleChars);
               const spacerReserve = mainIconVisible && spacerWidth > 0 ? spacerWidth + lineGap : 0;
-              const availableWithName = Math.max(0, lineWidth - spacerReserve - nameWidth - labelGap);
+              const nameWidth = this._measureTextWidthWithStyles(labelText, text) || labelText.scrollWidth || 0;
+              const withNameBudget = Math.max(0, lineWidth - spacerReserve - labelGap);
+              const fitsWithName = (valueWidth, budget = withNameBudget) => {
+                const visibleWidth = Math.max(0, budget - valueWidth);
+                const visibleChars = this._measureVisibleLabelCharacters(labelText, text, visibleWidth);
+                return !this._shouldHideLeftLabel(text, nameWidth, visibleWidth, visibleChars);
+              };
               const availableValueOnly = Math.max(0, lineWidth);
-              hideName = labelIsUnhelpful;
-              if (!hideName && fullValueWidth <= availableWithName) {
+              let hideUnit = false;
+              if (fullValueWidth <= withNameBudget && fitsWithName(fullValueWidth)) {
+                hideName = false;
                 hideSpacer = !mainIconVisible;
-              } else if (!hideName && valueOnlyWidth <= availableWithName) {
+              } else if (fullValueWidth <= availableValueOnly) {
+                hideName = !fitsWithName(fullValueWidth, lineWidth - labelGap);
+                hideSpacer = true;
+              } else if (valueOnlyWidth <= withNameBudget && fitsWithName(valueOnlyWidth)) {
+                hideName = false;
+                hideUnit = !!unit;
                 hideSpacer = !mainIconVisible;
+              } else if (fitsWithName(valueOnlyWidth, lineWidth - labelGap)) {
+                hideName = false;
+                hideSpacer = true;
+                hideUnit = !!unit;
               } else {
                 hideName = true;
                 hideSpacer = true;
+                hideUnit = !!unit && fullValueWidth > availableValueOnly;
               }
-              const availableWidth = hideName ? availableValueOnly : availableWithName;
-              const hideUnit = !!unit && fullValueWidth > availableWidth;
               valueEl.dataset.hideUnit = hideUnit ? "true" : "false";
             } else if (valueEl) {
               valueEl.dataset.hideUnit = "false";
@@ -4181,6 +4415,26 @@
               if (valueWidth("normal", false) <= availableWithoutLabel) return;
             }
             if (hasUnit) {
+              for (const fit of ["tight", "minimum"]) {
+                const readingWidth = valueWidth(fit, false);
+                if (readingWidth <= availableWithoutLabel) {
+                  heroLine.dataset.heroValueFit = fit;
+                  if (!labelHiddenByDensity && labelEl) {
+                    const text = (labelEl.textContent || "").trim();
+                    const nameWidth = this._measureTextWidthWithStyles(labelEl, text);
+                    const availableName = Math.max(0, availableWithLabel - readingWidth);
+                    if (!this._shouldHideLeftLabel(
+                      text,
+                      nameWidth,
+                      availableName,
+                      this._measureVisibleLabelCharacters(labelEl, text, availableName)
+                    )) {
+                      delete headerEl.dataset.priorityHideName;
+                    }
+                  }
+                  return;
+                }
+              }
               heroLine.dataset.hideHeroUnit = "true";
               if (valueWidth("normal", true) <= availableWithoutLabel) return;
             }
@@ -4219,17 +4473,13 @@
           clone.style.textOverflow = "clip";
           clone.style.whiteSpace = "nowrap";
           clone.innerHTML = this._formatInsideValueMarkup(display, unit, hideUnit);
-          layer.replaceChildren(clone);
-          let extraWidth = 0;
-          try {
-            const style = getComputedStyle(valueEl);
-            extraWidth += parseFloat(style.paddingLeft || "0") || 0;
-            extraWidth += parseFloat(style.paddingRight || "0") || 0;
-            extraWidth += parseFloat(style.borderLeftWidth || "0") || 0;
-            extraWidth += parseFloat(style.borderRightWidth || "0") || 0;
-          } catch (_err) {
-          }
-          return clone.getBoundingClientRect().width + extraWidth;
+          clone.removeAttribute("data-hide-value");
+          const wrapper = document.createElement("div");
+          wrapper.className = "bar-inner-label";
+          wrapper.style.cssText = "position:static;display:block;padding:0";
+          wrapper.appendChild(clone);
+          layer.replaceChildren(wrapper);
+          return clone.getBoundingClientRect().width;
         }
         _measureTextWidthWithStyles(sourceEl, text) {
           var _a;
@@ -4298,22 +4548,22 @@
             let desiredWidth = fullWidth;
             if (mainLine == null ? void 0 : mainLine.classList.contains("off-mode")) {
               const barWrap = mainLine.querySelector(".bar-wrap");
-              const mainStyle = getStyle(mainLine);
-              const gap = parseFloat(mainStyle.getPropertyValue("gap")) || 0;
+              const iconWrap = mainLine.querySelector(".icon-wrap");
+              mainLine.dataset.hideOffIcon = "false";
+              const gap = parseFloat(getStyle(mainLine).gap) || 0;
               const rowWidth = (_e = (_d = mainLine.getBoundingClientRect) == null ? void 0 : _d.call(mainLine).width) != null ? _e : 0;
-              const fixedWidth = [...mainLine.children].reduce((total, child) => {
-                var _a2, _b2;
-                if (child === valueEl) return total;
-                if (child === barWrap) {
-                  const barStyle = getStyle(child);
-                  return total + (parseFloat(barStyle.minWidth) || ((_a2 = child.getBoundingClientRect) == null ? void 0 : _a2.call(child).width) || 0);
-                }
-                return total + (((_b2 = child.getBoundingClientRect) == null ? void 0 : _b2.call(child).width) || 0);
-              }, 0);
-              const gapCount = Math.max(0, mainLine.children.length - 1);
-              const availableWidth = rowWidth - fixedWidth - gap * gapCount;
+              const minimumRail = parseFloat(getStyle(barWrap).minWidth) || 0;
+              const iconVisible = iconWrap && getStyle(iconWrap).display !== "none";
+              const iconWidth = iconVisible ? this._getLeftModeIconWidth(iconWrap, mainLine) : 0;
+              const withoutIcon = Math.max(0, rowWidth - minimumRail - gap);
+              const withIcon = withoutIcon - (iconVisible ? iconWidth + gap : 0);
+              const numberWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, true) + 2);
+              const hideIcon = iconVisible && (fullWidth > withIcon && fullWidth <= withoutIcon || numberWidth > withIcon && numberWidth <= withoutIcon);
+              mainLine.dataset.hideOffIcon = hideIcon ? "true" : "false";
+              const availableWidth = hideIcon ? withoutIcon : withIcon;
               if (availableWidth > 0) {
-                desiredWidth = Math.min(fullWidth, availableWidth);
+                const readableWidth = fullWidth <= availableWidth ? fullWidth : numberWidth;
+                desiredWidth = Math.min(readableWidth, availableWidth);
               }
             }
             const extraWidth = Math.max(0, desiredWidth - baseWidth);
@@ -4467,10 +4717,18 @@
             candidateLabelWidth,
             this._measureVisibleLabelCharacters(labelMetrics.labelText, labelMetrics.text, candidateLabelWidth)
           );
+          const withoutIconLabelWidth = Math.min(labelWidth, Math.max(0, rowWidth - barMinWidth - gap));
+          const labelSacrificialWithoutIcon = !labelMetrics || this._shouldHideLeftLabel(
+            labelMetrics.text,
+            labelMetrics.naturalWidth,
+            withoutIconLabelWidth,
+            this._measureVisibleLabelCharacters(labelMetrics.labelText, labelMetrics.text, withoutIconLabelWidth)
+          );
           return {
             rowWidth,
             gap,
             barMinWidth,
+            labelSacrificialWithoutIcon,
             labelWidth: this._isReliableWidth(labelWidth, 0) ? labelWidth : 0,
             iconWidth: this._isReliableWidth(iconWidth, 0) ? iconWidth : 0,
             valueWidth: this._isReliableWidth(valueWidth, 0) ? valueWidth : 0,
@@ -4515,6 +4773,12 @@
               { hideLabel: false, topValue: true, hideIcon: false }
             );
           }
+          if (budget && !budget.labelSacrificialWithoutIcon) {
+            states.push(
+              { hideLabel: false, topValue: false, hideIcon: true },
+              { hideLabel: false, topValue: true, hideIcon: true }
+            );
+          }
           states.push(
             { hideLabel: true, topValue: false, hideIcon: false },
             { hideLabel: true, topValue: false, hideIcon: true },
@@ -4531,32 +4795,32 @@
           }
           return fallback;
         }
-        _chooseLeftModeResponsiveState(row) {
-          var _a, _b, _c;
+        _chooseLeftModeResponsiveState(row, settled = true) {
+          var _a, _b, _c, _d;
           const budget = this._estimateLeftModeWidthBudget(row);
           if (!budget) return null;
           const minimumBarShare = this._getMinimumBarShare();
           const states = this._getLeftModeCandidateStates(budget);
-          const entityId = (_a = row == null ? void 0 : row.dataset) == null ? void 0 : _a.entity;
-          const previousTopValue = entityId && this._leftModeResponsiveHistory.has(entityId) ? this._leftModeResponsiveHistory.get(entityId) : ((_c = (_b = budget.rowStack) == null ? void 0 : _b.dataset) == null ? void 0 : _c.forceTopValue) === "true";
+          const entityCfg = (_b = this._config.entities) == null ? void 0 : _b[Number((_a = row == null ? void 0 : row.dataset) == null ? void 0 : _a.rowIndex)];
+          const previousTopValue = entityCfg && this._leftModeResponsiveHistory.has(entityCfg) ? this._leftModeResponsiveHistory.get(entityCfg) : ((_d = (_c = budget.rowStack) == null ? void 0 : _c.dataset) == null ? void 0 : _d.forceTopValue) === "true";
           const topStates = states.filter((state) => state.topValue);
           const enableShare = this._getTopValueEnableShare();
           const disableShare = this._getTopValueDisableShare();
           for (const state of states) {
-            const threshold = state.topValue ? minimumBarShare : previousTopValue ? disableShare : enableShare;
+            const threshold = state.topValue || settled ? minimumBarShare : previousTopValue ? disableShare : enableShare;
             const predicted = this._predictLeftModeBarShareForState(row, state, budget);
             if ((predicted == null ? void 0 : predicted.fits) && predicted.share >= threshold) return { ...state, predicted };
           }
           return this._chooseFallbackPredictedLeftModeState(row, topStates, budget);
         }
         _applyLeftModeResponsiveState(row, state) {
-          var _a;
+          var _a, _b;
           const mainLine = row == null ? void 0 : row.querySelector(".main-line");
           const rowStack = row == null ? void 0 : row.querySelector(".row-stack");
           const leftLabel = row == null ? void 0 : row.querySelector(".label-left");
           if (!mainLine || !rowStack) return;
-          const entityId = (_a = row == null ? void 0 : row.dataset) == null ? void 0 : _a.entity;
-          if (entityId) this._leftModeResponsiveHistory.set(entityId, (state == null ? void 0 : state.topValue) === true);
+          const entityCfg = (_b = this._config.entities) == null ? void 0 : _b[Number((_a = row == null ? void 0 : row.dataset) == null ? void 0 : _a.rowIndex)];
+          if (entityCfg) this._leftModeResponsiveHistory.set(entityCfg, (state == null ? void 0 : state.topValue) === true);
           delete rowStack.dataset.forceTopValue;
           delete mainLine.dataset.hideLeftIcon;
           if (leftLabel) delete leftLabel.dataset.priorityHidden;
@@ -4675,7 +4939,7 @@
           if (!metrics || !metrics.text) return false;
           return this._shouldHideLeftLabel(metrics.text, metrics.fullWidth, metrics.visibleWidth, metrics.visibleChars);
         }
-        _ensureMinimumBarShare(rows = null) {
+        _ensureMinimumBarShare(rows = null, leftWidths = null) {
           if (!this.shadowRoot) return;
           const targetRows = rows || this.shadowRoot.querySelectorAll(".row[data-entity]");
           const minimumBarShare = this._getMinimumBarShare();
@@ -4685,8 +4949,10 @@
             const mode = mainLine.classList.contains("left-mode") ? "left" : mainLine.classList.contains("above-mode") ? "above" : mainLine.classList.contains("inside-mode") ? "inside" : "other";
             if (mode === "other") return;
             if (mode === "left") {
-              const state = this._chooseLeftModeResponsiveState(row);
+              const settled = !leftWidths || leftWidths.get(mainLine) === mainLine.getBoundingClientRect().width;
+              const state = this._chooseLeftModeResponsiveState(row, settled);
               if (state) this._applyLeftModeResponsiveState(row, state);
+              if (!settled) this._schedulePostLayoutDensityPass();
               return;
             }
             this._clearMinimumBarShareOverrides(row);
@@ -4797,23 +5063,30 @@
           });
         }
         _runPostLayoutPasses(rows = null) {
+          const generation = this._rowGeneration;
           requestAnimationFrame(() => {
+            var _a;
+            if (!this.isConnected || generation !== this._rowGeneration) return;
             this._applyRowDensity();
             this._applyLeftModeDensity();
             this._applyAboveLabelDensity();
             this._applyHeroValueFit();
             this._applyInsideLabelDensity();
             this._applyValueWidthReservation();
+            const leftWidths = new Map(
+              [...((_a = this.shadowRoot) == null ? void 0 : _a.querySelectorAll(".main-line.left-mode")) || []].map((mainLine) => [mainLine, mainLine.getBoundingClientRect().width])
+            );
             requestAnimationFrame(() => {
-              var _a;
+              var _a2;
+              if (!this.isConnected || generation !== this._rowGeneration) return;
               this._applyAdaptiveRowHeight();
               this._applyValueVisibility();
               this._applyLeftLabelUsefulness();
               this._applyTopRightValueLayout();
-              this._ensureMinimumBarShare(rows);
+              this._ensureMinimumBarShare(rows, leftWidths);
               this._applyTopRightValueLayout();
               this._applyLeftLabelUsefulness();
-              const targetRows = rows || ((_a = this.shadowRoot) == null ? void 0 : _a.querySelectorAll(".row[data-entity]")) || [];
+              const targetRows = rows || ((_a2 = this.shadowRoot) == null ? void 0 : _a2.querySelectorAll(".row[data-entity]")) || [];
               targetRows.forEach((row) => {
                 this._positionTargetLabel(row);
                 this._positionMarkerValueLabel(row, ".peak-value-label", ".peak-marker");
@@ -5005,7 +5278,7 @@
           if (marker.type === "generic") {
             const triangleClasses = lane === "above" ? ["peak-inset", "peak-outset"] : ["target-inset", "target-outset"];
             return `
-      <div class="generic-marker" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" data-direction="${(_b = marker.direction) != null ? _b : "inward"}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+      <div class="generic-marker" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" data-direction="${(_b = marker.direction) != null ? _b : "inward"}" data-show-marker="${marker.showMarker === false ? "false" : "true"}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
         <div class="${triangleClasses[0]}"></div>
         <div class="${triangleClasses[1]}"></div>
         <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${(_c = marker.direction) != null ? _c : "inward"}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
@@ -5036,6 +5309,9 @@
           this._setDatasetIfChanged(markerEl, "shape", shape);
           this._setDatasetIfChanged(markerEl, "lane", (_a = marker.lane) != null ? _a : marker.type === "peak" ? "above" : "below");
           this._setDatasetIfChanged(markerEl, "direction", (_b = marker.direction) != null ? _b : "inward");
+          if (marker.type === "generic") {
+            this._setDatasetIfChanged(markerEl, "showMarker", marker.showMarker === false ? "false" : "true");
+          }
           const shapeSvg = (_c = markerEl.querySelector) == null ? void 0 : _c.call(markerEl, ".marker-shape-svg");
           if (shapeSvg) {
             this._setDatasetIfChanged(shapeSvg, "shape", shape);
@@ -5056,67 +5332,74 @@
           this._setStyleIfChanged(labelEl, "--marker-color", markerColor);
           this._setStyleIfChanged(labelEl, "--marker-contrast-color", this._getMarkerContrastColor(markerColor));
         }
-        _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
-          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F;
-          const ecfg = this._resolve(entityCfg);
-          const stateObj = (_c = (_b = (_a = this._hass) == null ? void 0 : _a.states) == null ? void 0 : _b[entityCfg.entity]) != null ? _c : null;
-          if (stateObj) this._updateExtrema(entityCfg, ecfg, stateObj);
-          const rowViewModel = stateObj ? buildRowViewModel({
+        _buildRowViewModel(entityCfg, ecfg, stateObj) {
+          var _a;
+          const rowViewModel = buildRowViewModel({
             hass: this._hass,
             cardConfig: this._config,
             entityConfig: ecfg,
             entityState: stateObj,
-            extrema: (_d = this._extrema[entityCfg.entity]) != null ? _d : null
-          }) : null;
+            extrema: (_a = this._extrema.get(entityCfg)) != null ? _a : null,
+            previousScale: this._rowScales.get(entityCfg)
+          });
+          this._rowScales.set(entityCfg, { min: rowViewModel.min, max: rowViewModel.max });
+          return rowViewModel;
+        }
+        _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue, rowIndex = ((_b) => (_b = ((_a) => (_a = this._config.entities) == null ? void 0 : _a.indexOf(entityCfg))()) != null ? _b : -1)()) {
+          var _a2, _b2, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E;
+          const ecfg = this._resolve(entityCfg);
+          const stateObj = (_c = (_b2 = (_a2 = this._hass) == null ? void 0 : _a2.states) == null ? void 0 : _b2[entityCfg.entity]) != null ? _c : null;
+          if (stateObj) this._updateExtrema(entityCfg, ecfg, stateObj);
+          const rowViewModel = stateObj ? this._buildRowViewModel(entityCfg, ecfg, stateObj) : null;
           const layout = ecfg.layout;
           const bar = ecfg.bar;
           const safeMin = Number.isFinite(minValue) ? minValue : 0;
           const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
-          const baselinePct = (_e = rowViewModel == null ? void 0 : rowViewModel.baselinePercent) != null ? _e : this._resolveBaselinePct(ecfg, safeMin, safeMax);
+          const baselinePct = (_d = rowViewModel == null ? void 0 : rowViewModel.baselinePercent) != null ? _d : this._resolveBaselinePct(ecfg, safeMin, safeMax);
           const lp = layout.label.position;
-          const h = (_g = (_f = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _f.baseHeight) != null ? _g : layout.height;
-          const name = (_k = (_j = (_h = rowViewModel == null ? void 0 : rowViewModel.name) != null ? _h : ecfg.name) != null ? _j : (_i = stateObj == null ? void 0 : stateObj.attributes) == null ? void 0 : _i.friendly_name) != null ? _k : entityCfg.entity;
-          const escapedEntityId = escapeHtml((_l = rowViewModel == null ? void 0 : rowViewModel.entityId) != null ? _l : entityCfg.entity);
+          const h = (_f = (_e = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _e.baseHeight) != null ? _f : layout.height;
+          const name = (_j = (_i = (_g = rowViewModel == null ? void 0 : rowViewModel.name) != null ? _g : ecfg.name) != null ? _i : (_h = stateObj == null ? void 0 : stateObj.attributes) == null ? void 0 : _h.friendly_name) != null ? _j : entityCfg.entity;
+          const escapedEntityId = escapeHtml((_k = rowViewModel == null ? void 0 : rowViewModel.entityId) != null ? _k : entityCfg.entity);
           const escapedName = escapeHtml(name);
           const markerModels = this._getRowMarkerModels(rowViewModel, ecfg, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor);
           const targetMarkerModel = this._getMarkerModel(markerModels, "target");
           const peakMarkerModel = this._getMarkerModel(markerModels, "peak");
           const floorMarkerModel = this._getMarkerModel(markerModels, "floor");
           const genericMarkerModels = markerModels.filter((marker) => marker.type === "generic");
-          const markerLaneOccupancy = (_m = rowViewModel == null ? void 0 : rowViewModel.markerLaneOccupancy) != null ? _m : getMarkerLaneOccupancy(ecfg);
-          const markerLabelLaneOccupancy = (_n = rowViewModel == null ? void 0 : rowViewModel.markerLabelLaneOccupancy) != null ? _n : getMarkerLabelLaneOccupancy(ecfg);
-          const rawValue = (_o = rowViewModel == null ? void 0 : rowViewModel.numericValue) != null ? _o : this._getFiniteNumber(stateDisplay);
-          const needleState = (_p = rowViewModel == null ? void 0 : rowViewModel.needle) != null ? _p : this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
+          const markerLaneOccupancy = (_l = rowViewModel == null ? void 0 : rowViewModel.markerLaneOccupancy) != null ? _l : getMarkerLaneOccupancy(ecfg);
+          const markerLabelLaneOccupancy = (_m = rowViewModel == null ? void 0 : rowViewModel.markerLabelLaneOccupancy) != null ? _m : getMarkerLabelLaneOccupancy(ecfg);
+          const rawValue = (_n = rowViewModel == null ? void 0 : rowViewModel.numericValue) != null ? _n : this._getFiniteNumber(stateDisplay);
+          const needleState = (_o = rowViewModel == null ? void 0 : rowViewModel.needle) != null ? _o : this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
           const fillState = this._getFillRenderState(pct, "var(--sbcp-row-height)", ecfg, color, targetPct, baselinePct, safeMin, safeMax, needleState.show);
-          const baselineAt = (_q = ecfg.baseline) == null ? void 0 : _q.at;
-          const baselineConfigured = ((_r = ecfg.baseline) == null ? void 0 : _r.enabled) !== false && (Number.isFinite(baselinePct) || Boolean(baselineAt == null ? void 0 : baselineAt.entity) || (baselineAt == null ? void 0 : baselineAt.fixed) !== null && (baselineAt == null ? void 0 : baselineAt.fixed) !== void 0 || Number.isFinite(baselineAt == null ? void 0 : baselineAt.percent));
+          const baselineAt = (_p = ecfg.baseline) == null ? void 0 : _p.at;
+          const baselineConfigured = ((_q = ecfg.baseline) == null ? void 0 : _q.enabled) !== false && (Number.isFinite(baselinePct) || Boolean(baselineAt == null ? void 0 : baselineAt.entity) || (baselineAt == null ? void 0 : baselineAt.fixed) !== null && (baselineAt == null ? void 0 : baselineAt.fixed) !== void 0 || Number.isFinite(baselineAt == null ? void 0 : baselineAt.percent));
           const baselineIndicator = baselineConfigured ? `<div class="baseline-indicator" aria-hidden="true" style="${Number.isFinite(baselinePct) ? `left:${baselinePct}%;display:block;` : "display:none;"}"></div>` : "";
           const peakMarker = this._renderMarker(peakMarkerModel);
           const targetMarker = this._renderMarker(targetMarkerModel);
           const floorMarker = this._renderMarker(floorMarkerModel);
           const targetValueLabel = (targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) ? `
-      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;visibility:${targetMarkerModel.visible && ((_s = targetMarkerModel.label) == null ? void 0 : _s.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(targetMarkerModel)}">
-        ${((_t = targetMarkerModel.label) == null ? void 0 : _t.text) ? escapeHtml(targetMarkerModel.label.text) : ""}
+      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;visibility:${targetMarkerModel.visible && ((_r = targetMarkerModel.label) == null ? void 0 : _r.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(targetMarkerModel)}">
+        ${((_s = targetMarkerModel.label) == null ? void 0 : _s.text) ? escapeHtml(targetMarkerModel.label.text) : ""}
       </div>` : "";
           const peakValueLabel = (peakMarkerModel == null ? void 0 : peakMarkerModel.labelVisible) ? `
-      <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;visibility:${peakMarkerModel.visible && ((_u = peakMarkerModel.label) == null ? void 0 : _u.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(peakMarkerModel)}">
-        ${peakMarkerModel.visible && ((_v = peakMarkerModel.label) == null ? void 0 : _v.text) ? escapeHtml(peakMarkerModel.label.text) : ""}
+      <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;visibility:${peakMarkerModel.visible && ((_t = peakMarkerModel.label) == null ? void 0 : _t.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(peakMarkerModel)}">
+        ${peakMarkerModel.visible && ((_u = peakMarkerModel.label) == null ? void 0 : _u.text) ? escapeHtml(peakMarkerModel.label.text) : ""}
       </div>` : "";
           const floorValueLabel = (floorMarkerModel == null ? void 0 : floorMarkerModel.labelVisible) ? `
-      <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;visibility:${floorMarkerModel.visible && ((_w = floorMarkerModel.label) == null ? void 0 : _w.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(floorMarkerModel)}">
-        ${floorMarkerModel.visible && ((_x = floorMarkerModel.label) == null ? void 0 : _x.text) ? escapeHtml(floorMarkerModel.label.text) : ""}
+      <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;visibility:${floorMarkerModel.visible && ((_v = floorMarkerModel.label) == null ? void 0 : _v.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(floorMarkerModel)}">
+        ${floorMarkerModel.visible && ((_w = floorMarkerModel.label) == null ? void 0 : _w.text) ? escapeHtml(floorMarkerModel.label.text) : ""}
       </div>` : "";
           const genericMarkers = genericMarkerModels.map((marker) => this._renderMarker(marker)).join("");
           const genericValueLabels = genericMarkerModels.filter((marker) => marker.labelVisible).map((marker) => {
-            var _a2, _b2;
+            var _a3, _b3;
             return `
-      <div class="generic-value-label" data-marker-id="${escapeHtml(marker.id)}" data-lane="${marker.lane}" style="left:${Number.isFinite(marker.position) ? marker.position : 0}%;visibility:${marker.visible && ((_a2 = marker.label) == null ? void 0 : _a2.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(marker)}">
-        ${marker.visible && ((_b2 = marker.label) == null ? void 0 : _b2.text) ? escapeHtml(marker.label.text) : ""}
+      <div class="generic-value-label" data-marker-id="${escapeHtml(marker.id)}" data-lane="${marker.lane}" data-show-marker="${marker.showMarker === false ? "false" : "true"}" style="left:${Number.isFinite(marker.position) ? marker.position : 0}%;visibility:${marker.visible && ((_a3 = marker.label) == null ? void 0 : _a3.text) ? "visible" : "hidden"};${this._getMarkerLabelColorStyle(marker)}">
+        ${marker.visible && ((_b3 = marker.label) == null ? void 0 : _b3.text) ? escapeHtml(marker.label.text) : ""}
       </div>`;
           }).join("");
-          const needleMarker = ((_z = (_y = ecfg.bar) == null ? void 0 : _y.needle) == null ? void 0 : _z.show) && !Number.isFinite(baselinePct) ? `
+          const needleMarker = ((_y = (_x = ecfg.bar) == null ? void 0 : _x.needle) == null ? void 0 : _y.show) && !Number.isFinite(baselinePct) ? `
       <div class="needle-layer">
-        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_A = needleState.pct) != null ? _A : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
+        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${(_z = needleState.pct) != null ? _z : 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? "block" : "none"};"></div>
       </div>` : "";
           const paintLayers = fillState.paintLayers.map((layer) => `
                   <div class="bar-paint-layer" data-layer="${layer.id}" style="z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}"></div>`).join("");
@@ -5128,7 +5411,7 @@
           ${this._formatAboveValueMarkup(stateDisplay, unit, false)}
         </div>
       </div>` : "";
-          const heroSize = (_B = layout.hero.size) != null ? _B : "small";
+          const heroSize = (_A = layout.hero.size) != null ? _A : "small";
           const heroFontSize = layout.hero.value_size;
           const heroHeader = lp === "hero" ? `
       <div class="hero-line" data-hero-size="${heroSize}"${Number.isFinite(heroFontSize) ? ` style="--sbcp-hero-base-size:${heroFontSize}px"` : ""}>
@@ -5148,7 +5431,7 @@
           const escapedIcon = ecfg.icon && ecfg.icon !== false ? escapeHtml(ecfg.icon) : "";
           const mainIcon = escapedIcon && lp !== "hero" ? `<div class="icon-wrap"><ha-icon icon="${escapedIcon}"></ha-icon></div>` : "";
           return `
-      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${((_D = (_C = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _C.heightExplicit) != null ? _D : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_F = (_E = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _E.barAnimated) != null ? _F : bar.animated) ? "true" : "false"}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? "true" : "false"}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? "true" : "false"}">
+      <div class="row" data-row-index="${rowIndex}" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${((_C = (_B = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _B.heightExplicit) != null ? _C : layout.height_explicit) ? "true" : "false"}" data-bar-animated="${((_E = (_D = rowViewModel == null ? void 0 : rowViewModel.attributes) == null ? void 0 : _D.barAnimated) != null ? _E : bar.animated) ? "true" : "false"}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? "true" : "false"}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? "true" : "false"}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${heroHeader}
@@ -5180,17 +5463,12 @@ ${paintLayers}
       </div>`;
         }
         _patchRow(row, entityCfg, stateObj, previousHass = null) {
-          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
           if (!row || !stateObj) return;
           const ecfg = this._resolve(entityCfg);
           this._updateExtrema(entityCfg, ecfg, stateObj);
-          const rowViewModel = buildRowViewModel({
-            hass: this._hass,
-            cardConfig: this._config,
-            entityConfig: ecfg,
-            entityState: stateObj,
-            extrema: (_a = this._extrema[entityCfg.entity]) != null ? _a : null
-          });
+          const previousScale = this._rowScales.get(entityCfg);
+          const rowViewModel = this._buildRowViewModel(entityCfg, ecfg, stateObj);
           const safeMin = rowViewModel.min;
           const safeMax = rowViewModel.max;
           const pct = rowViewModel.percent;
@@ -5204,13 +5482,14 @@ ${paintLayers}
           const liveBaselinePct = rowViewModel.baselinePercent;
           const needleState = rowViewModel.needle;
           const fillState = this._getFillRenderState(pct, "var(--sbcp-row-height)", ecfg, color, liveTargetPct, liveBaselinePct, safeMin, safeMax, needleState.show);
-          const previousStateObj = (_c = (_b = previousHass == null ? void 0 : previousHass.states) == null ? void 0 : _b[entityCfg.entity]) != null ? _c : null;
+          const previousStateObj = (_b = (_a = previousHass == null ? void 0 : previousHass.states) == null ? void 0 : _a[entityCfg.entity]) != null ? _b : null;
           const previousViewModel = previousStateObj ? buildRowViewModel({
             hass: previousHass,
             cardConfig: this._config,
             entityConfig: ecfg,
             entityState: previousStateObj,
-            extrema: (_d = this._extrema[entityCfg.entity]) != null ? _d : null
+            extrema: (_c = this._extrema.get(entityCfg)) != null ? _c : null,
+            previousScale
           }) : null;
           const revealDuration = this._getRevealTransitionDuration(
             previousViewModel && Number.isFinite(previousViewModel.numericValue) ? { valuePercent: previousViewModel.percent, baselinePercent: previousViewModel.baselinePercent } : null,
@@ -5242,7 +5521,7 @@ ${paintLayers}
           const needleEl = row.querySelector(".needle-marker");
           if (needleEl) {
             this._setStyleIfChanged(needleEl, "display", needleState.show ? "block" : "none");
-            this._setStyleIfChanged(needleEl, "left", `${(_e = needleState.pct) != null ? _e : 0}%`);
+            this._setStyleIfChanged(needleEl, "left", `${(_d = needleState.pct) != null ? _d : 0}%`);
             this._setStyleIfChanged(needleEl, "--needle-color", needleState.color);
             this._setStyleIfChanged(needleEl, "--needle-border-color", needleState.borderColor);
             this._setDatasetIfChanged(needleEl, "edge", needleState.edge);
@@ -5293,17 +5572,18 @@ ${paintLayers}
           const targetLabelEl = row.querySelector(".target-value-label");
           const peakLabelEl = row.querySelector(".peak-value-label");
           const floorLabelEl = row.querySelector(".floor-value-label");
-          const markerModels = (_f = rowViewModel.markers) != null ? _f : [];
+          const markerModels = (_e = rowViewModel.markers) != null ? _e : [];
           this._patchMarker(targetEl, this._getMarkerModel(markerModels, "target"));
           this._patchMarker(row.querySelector(".peak-marker"), this._getMarkerModel(markerModels, "peak"));
           this._patchMarker(row.querySelector(".floor-marker"), this._getMarkerModel(markerModels, "floor"));
-          ((_h = (_g = row.querySelectorAll) == null ? void 0 : _g.call(row, ".generic-marker[data-marker-id]")) != null ? _h : []).forEach((markerEl) => {
+          ((_g = (_f = row.querySelectorAll) == null ? void 0 : _f.call(row, ".generic-marker[data-marker-id]")) != null ? _g : []).forEach((markerEl) => {
             var _a2, _b2, _c2, _d2, _e2;
             const markerId = markerEl.dataset.markerId;
             const marker = this._getMarkerModel(markerModels, markerId);
             this._patchMarker(markerEl, marker);
             const labelEl = [...(_b2 = (_a2 = row.querySelectorAll) == null ? void 0 : _a2.call(row, ".generic-value-label[data-marker-id]")) != null ? _b2 : []].find((label) => label.dataset.markerId === markerId);
             if (!labelEl) return;
+            this._setDatasetIfChanged(labelEl, "showMarker", (marker == null ? void 0 : marker.showMarker) === false ? "false" : "true");
             this._patchMarkerLabelAppearance(labelEl, marker);
             if ((marker == null ? void 0 : marker.labelVisible) && marker.visible && ((_c2 = marker.label) == null ? void 0 : _c2.text)) {
               this._setTextIfChanged(labelEl, (_e2 = (_d2 = marker.label) == null ? void 0 : _d2.text) != null ? _e2 : null);
@@ -5316,8 +5596,8 @@ ${paintLayers}
           const targetMarkerModel = this._getMarkerModel(markerModels, "target");
           this._patchMarkerLabelAppearance(targetLabelEl, targetMarkerModel);
           if (targetLabelEl) {
-            if ((targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) && targetMarkerModel.visible && ((_i = targetMarkerModel.label) == null ? void 0 : _i.text)) {
-              this._setTextIfChanged(targetLabelEl, (_k = (_j = targetMarkerModel.label) == null ? void 0 : _j.text) != null ? _k : null);
+            if ((targetMarkerModel == null ? void 0 : targetMarkerModel.labelVisible) && targetMarkerModel.visible && ((_h = targetMarkerModel.label) == null ? void 0 : _h.text)) {
+              this._setTextIfChanged(targetLabelEl, (_j = (_i = targetMarkerModel.label) == null ? void 0 : _i.text) != null ? _j : null);
             } else {
               this._setStyleIfChanged(targetLabelEl, "visibility", "hidden");
             }
@@ -5339,29 +5619,27 @@ ${paintLayers}
           patchValueLabel(floorLabelEl, "floor");
         }
         _update(previousHass = null) {
-          var _a, _b, _c, _d, _e;
+          var _a, _b, _c, _d;
           if (!this._hass || !this._config) return;
           const rowsEl = this.shadowRoot.querySelector(".rows");
           if (!rowsEl) return;
           const entities = this._config.entities;
-          if (!this._rendered) {
+          const presence = entities.map((entityCfg) => !!this._hass.states[entityCfg.entity]);
+          const presenceChanged = presence.some((present, index) => present !== this._rowPresence[index]);
+          if (!this._rendered || presenceChanged) {
+            this._rowGeneration += 1;
+            this._rowPresence = presence;
             let html = "";
             for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
               const entityCfg = entities[entityIndex];
               const stateObj = this._hass.states[entityCfg.entity];
               if (!stateObj) {
-                html += `<div class="row"><span style="color:var(--error-color,red);font-size:12px;">Entity not found: ${escapeHtml(entityCfg.entity)}</span></div>`;
+                html += `<div class="row" data-row-index="${entityIndex}"><span style="color:var(--error-color,red);font-size:12px;">Entity not found: ${escapeHtml(entityCfg.entity)}</span></div>`;
                 continue;
               }
               const ecfg = this._resolve(entityCfg);
               this._updateExtrema(entityCfg, ecfg, stateObj);
-              const rowViewModel = buildRowViewModel({
-                hass: this._hass,
-                cardConfig: this._config,
-                entityConfig: ecfg,
-                entityState: stateObj,
-                extrema: (_a = this._extrema[entityCfg.entity]) != null ? _a : null
-              });
+              const rowViewModel = this._buildRowViewModel(entityCfg, ecfg, stateObj);
               const safeMin = rowViewModel.min;
               const safeMax = rowViewModel.max;
               const pct = rowViewModel.percent;
@@ -5369,17 +5647,17 @@ ${paintLayers}
               const display = rowViewModel.primaryPresentation.number;
               const displayUnit = rowViewModel.primaryPresentation.unit;
               const targetPct = rowViewModel.targetPercent;
-              const targetDisplay = (_c = (_b = rowViewModel.targetPresentation) == null ? void 0 : _b.text) != null ? _c : null;
+              const targetDisplay = (_b = (_a = rowViewModel.targetPresentation) == null ? void 0 : _a.text) != null ? _b : null;
               const peakPct = rowViewModel.peakPercent;
-              const peakDisplay = (_e = (_d = rowViewModel.peakPresentation) == null ? void 0 : _d.number) != null ? _e : null;
-              html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_marker.color, ecfg.target_marker.color, safeMin, safeMax);
+              const peakDisplay = (_d = (_c = rowViewModel.peakPresentation) == null ? void 0 : _c.number) != null ? _d : null;
+              html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_marker.color, ecfg.target_marker.color, safeMin, safeMax, entityIndex);
             }
             this._clearMarkerHover();
             rowsEl.innerHTML = html;
             this._rendered = true;
             const builtRows = rowsEl.querySelectorAll(".row[data-entity]");
-            builtRows.forEach((row, idx) => {
-              const entityCfg = entities[idx];
+            builtRows.forEach((row) => {
+              const entityCfg = entities[Number(row.dataset.rowIndex)];
               const stateObj = entityCfg ? this._hass.states[entityCfg.entity] : null;
               if (entityCfg && stateObj) {
                 this._patchRow(row, entityCfg, stateObj);
@@ -5396,20 +5674,12 @@ ${paintLayers}
             return;
           }
           const rows = rowsEl.querySelectorAll(".row[data-entity]");
-          let rowIdx = 0;
-          for (const entityCfg of entities) {
+          for (const row of rows) {
+            const entityCfg = entities[Number(row.dataset.rowIndex)];
+            if (!entityCfg) continue;
             const stateObj = this._hass.states[entityCfg.entity];
-            if (!stateObj) {
-              rowIdx++;
-              continue;
-            }
-            const row = rows[rowIdx];
-            if (!row) {
-              rowIdx++;
-              continue;
-            }
+            if (!stateObj) continue;
             this._patchRow(row, entityCfg, stateObj, previousHass);
-            rowIdx++;
           }
           this._runPostLayoutPasses(rows);
         }
@@ -5422,6 +5692,7 @@ ${paintLayers}
   var init_SensorBarCardPlusEditor = __esm({
     "src/editor/SensorBarCardPlusEditor.js"() {
       init_normalize();
+      init_resolve();
       SensorBarCardPlusEditor = class extends HTMLElement {
         constructor() {
           super();
@@ -5469,11 +5740,16 @@ ${paintLayers}
             this._config = nextConfig;
             return;
           }
+          if (nextConfigJson === this._lastEmittedConfigJson) {
+            this._config = nextConfig;
+            return;
+          }
           if (this._getEmittedConfigJson(nextConfig) === this._getEmittedConfigJson(this._draftConfig)) {
             this._config = nextConfig;
             return;
           }
           const shouldRender = !((_a = this.shadowRoot) == null ? void 0 : _a.innerHTML) || nextConfigJson !== this._lastRenderedConfigJson;
+          this._lastEmittedConfigJson = null;
           this._config = nextConfig;
           this._draftConfig = this._cloneDeep(nextConfig);
           this._gradientStopsDrafts = /* @__PURE__ */ new Map();
@@ -5532,7 +5808,7 @@ ${paintLayers}
           return JSON.stringify(normalize(value != null ? value : null));
         }
         _getEmittedConfigJson(config) {
-          return this._serializeConfig(this._cleanupEditorEmittedConfig(this._cloneDeep(config)));
+          return this._serializeConfig(config);
         }
         _isObject(value) {
           return !!value && typeof value === "object" && !Array.isArray(value);
@@ -5954,23 +6230,11 @@ ${paintLayers}
           return nextTarget;
         }
         _cleanupResolvableValueForEmit(value) {
-          const nextValue = {};
-          if (this._isObject(value)) {
-            const fixed = this._normalizeNumberValue(value.fixed);
-            const entity = this._normalizeTextValue(value.entity).trim();
-            if (fixed !== null) {
-              nextValue.fixed = fixed;
-            }
-            if (entity) {
-              nextValue.entity = entity;
-            }
-          } else {
-            const fixed = this._normalizeNumberValue(value);
-            if (fixed !== null) {
-              nextValue.fixed = fixed;
-            }
+          if (this._isObject(value) || value === null || typeof value === "string" && this._normalizeNumberValue(value) === null) {
+            return this._cloneDeep(value);
           }
-          return Object.keys(nextValue).length ? nextValue : null;
+          const fixed = this._normalizeNumberValue(value);
+          return fixed === null ? null : { fixed };
         }
         _cleanupScaleForEmit(target) {
           if (!this._isObject(target) || !this._isObject(target.scale)) {
@@ -5983,7 +6247,7 @@ ${paintLayers}
               return;
             }
             const cleanedValue = this._cleanupResolvableValueForEmit(nextScale[key]);
-            if (cleanedValue) {
+            if (cleanedValue || nextScale[key] === null) {
               nextScale[key] = cleanedValue;
               delete nextTarget[key];
               delete nextTarget[`${key}_entity`];
@@ -6098,7 +6362,7 @@ ${paintLayers}
           if (typeof nextMarker.enabled !== "boolean") {
             delete nextMarker.enabled;
           }
-          if (cleanedAt) {
+          if (cleanedAt || nextMarker.at === null) {
             nextMarker.at = cleanedAt;
             delete nextTarget.target_entity;
           } else {
@@ -6155,7 +6419,7 @@ ${paintLayers}
           if (typeof nextBaseline.enabled !== "boolean") {
             delete nextBaseline.enabled;
           }
-          if (cleanedAt) {
+          if (cleanedAt || nextBaseline.at === null) {
             nextBaseline.at = cleanedAt;
           } else {
             delete nextBaseline.at;
@@ -6262,18 +6526,43 @@ ${paintLayers}
           else label.precision = precision;
           return label;
         }
-        _cleanupBarForEmit(target) {
+        _cleanupBarForEmit(target, scope = { type: "card" }, cardConfig = null, inheritedSegmentSpace = null) {
           if (!this._isObject(target) || !this._isObject(target.bar)) {
             return target;
           }
           const nextTarget = this._cloneDeep(target);
           const nextBar = this._cloneDeep(nextTarget.bar);
+          const scopedSegmentSpace = ["percent", "scale"].includes(nextBar.segment_space) ? nextBar.segment_space : (scope == null ? void 0 : scope.type) === "entity" && ["percent", "scale"].includes(inheritedSegmentSpace) ? inheritedSegmentSpace : null;
+          const legacySegmentSpace = scopedSegmentSpace;
+          if (legacySegmentSpace === "percent" && Array.isArray(nextBar.segments)) {
+            const asLegacyPercent = (boundary) => {
+              if (typeof boundary === "number" && Number.isFinite(boundary)) return `${boundary}%`;
+              if (typeof boundary === "string" && boundary.trim() !== "" && !boundary.includes("%") && Number.isFinite(Number(boundary.trim()))) {
+                return `${Number(boundary.trim())}%`;
+              }
+              return boundary;
+            };
+            nextBar.segments = nextBar.segments.map((segment) => ({
+              ...segment,
+              from: asLegacyPercent(segment == null ? void 0 : segment.from),
+              ...Object.prototype.hasOwnProperty.call(segment != null ? segment : {}, "to") ? { to: asLegacyPercent(segment.to) } : {}
+            }));
+          }
+          delete nextBar.segment_space;
           const fillStyle = this._normalizeTextValue(nextBar.fill_style).trim();
           const color = this._normalizeTextValue(nextBar.color).trim();
           const segments = Array.isArray(nextBar.segments) ? nextBar.segments : null;
           const gradientStops = Array.isArray(nextBar.gradient_stops) ? nextBar.gradient_stops : null;
-          if (fillStyle && fillStyle !== "bands") {
-            nextBar.fill_style = fillStyle;
+          if (fillStyle) {
+            const withoutLocalFillStyle = this._cloneDeep(nextTarget);
+            delete withoutLocalFillStyle.bar.fill_style;
+            const inheritedStyle = normalizeBarConfig(
+              withoutLocalFillStyle,
+              (scope == null ? void 0 : scope.type) === "entity" ? cardConfig : null,
+              { isCardScope: (scope == null ? void 0 : scope.type) !== "entity" }
+            ).fill_style;
+            if (fillStyle === "bands" && inheritedStyle === "bands") delete nextBar.fill_style;
+            else nextBar.fill_style = fillStyle;
             delete nextTarget.color_mode;
           } else {
             delete nextBar.fill_style;
@@ -6289,14 +6578,14 @@ ${paintLayers}
           } else {
             delete nextBar.solid_fill;
           }
-          if (segments && segments.length && !this._segmentsEqualForEditor(segments, this._getDefaultSegments())) {
+          if (segments && (!segments.length || legacySegmentSpace || !this._segmentsEqualForEditor(segments, this._getDefaultSegments()))) {
             nextBar.segments = segments;
             delete nextTarget.segments;
             delete nextTarget.severity;
           } else {
             delete nextBar.segments;
           }
-          if (gradientStops && gradientStops.length >= 2 && !this._isDefaultGradientStops(gradientStops)) {
+          if (gradientStops && (!gradientStops.length || gradientStops.length >= 2 && !this._isDefaultGradientStops(gradientStops))) {
             nextBar.gradient_stops = this._sanitizeGradientStopsForEmit(gradientStops);
             delete nextTarget.gradient_stops;
           } else {
@@ -6385,9 +6674,11 @@ ${paintLayers}
           return orderedValue;
         }
         _cleanupEditorEmittedConfig(config) {
+          var _a;
           if (!this._isObject(config)) {
             return config;
           }
+          const inheritedSegmentSpace = (_a = config.bar) == null ? void 0 : _a.segment_space;
           let nextConfig = this._cleanupEntityIdentityForEmit(config);
           nextConfig = this._cleanupScaleForEmit(nextConfig);
           nextConfig = this._cleanupTargetForEmit(nextConfig, { type: "card" });
@@ -6398,7 +6689,7 @@ ${paintLayers}
           nextConfig = this._cleanupLayoutForEmit(nextConfig);
           nextConfig = this._cleanupFormattingForEmit(nextConfig);
           nextConfig = this._cleanupNeedleForEmit(nextConfig, { type: "card" });
-          nextConfig = this._cleanupBarForEmit(nextConfig);
+          nextConfig = this._cleanupBarForEmit(nextConfig, { type: "card" });
           if (Array.isArray(nextConfig.entities)) {
             nextConfig.entities = nextConfig.entities.map((entry, index) => {
               if (!this._isObject(entry)) {
@@ -6414,9 +6705,38 @@ ${paintLayers}
               cleanedEntry = this._cleanupLayoutForEmit(cleanedEntry);
               cleanedEntry = this._cleanupFormattingForEmit(cleanedEntry);
               cleanedEntry = this._cleanupNeedleForEmit(cleanedEntry, { type: "entity" });
-              cleanedEntry = this._cleanupBarForEmit(cleanedEntry);
+              cleanedEntry = this._cleanupBarForEmit(cleanedEntry, { type: "entity", index }, nextConfig, inheritedSegmentSpace);
               return cleanedEntry;
             });
+          }
+          const meaning = (raw) => {
+            const normalized = normalizeCardConfig({ ...raw, ...!raw.entities && !raw.entity ? { entities: [] } : {} });
+            const featureKeys = ["layout", "scale", "bar", "baseline", "formatting", "target_marker", "peak_marker", "floor_marker", "generic_markers"];
+            const scope = (value) => ({
+              ...Object.fromEntries(featureKeys.map((key) => [key, value[key]])),
+              scale: Object.fromEntries(["min", "max"].map((key) => [key, {
+                ...value.scale[key],
+                fixed_explicit: value.scale[key].fixed_explicit !== false
+              }]))
+            });
+            const canonical = (value, key = "") => {
+              if (Array.isArray(value)) return value.map((entry) => canonical(entry));
+              if (this._isObject(value)) return Object.fromEntries(Object.entries(value).filter(([name]) => !["severity", "segment_space", "label_precision_key"].includes(name) && !/invalid/i.test(name)).map(([name, entry]) => [name, canonical(entry, name)]));
+              if (key === "fixed") return getNumericValue(null, value);
+              if (/color/i.test(key) && typeof value === "string") return this._normalizeColorComparisonValue(value);
+              return value;
+            };
+            return this._serializeConfig(canonical({ card: scope(normalized), entities: normalized.entities.map((row) => ({
+              entity: row.entity,
+              name: row.name,
+              icon: row.icon,
+              ...scope(row)
+            })) }));
+          };
+          try {
+            if (meaning(config) !== meaning(nextConfig)) nextConfig = this._cloneDeep(config);
+          } catch (_error) {
+            nextConfig = this._cloneDeep(config);
           }
           return this._orderEditorConfigKeys(nextConfig);
         }
@@ -6637,18 +6957,26 @@ ${paintLayers}
           return this._setCanonicalScopedValue(scope, canonicalPath, normalizedValue, options);
         }
         _getResolvablePartsFromTarget(target, field, options = {}) {
-          var _a, _b, _c, _d;
+          var _a, _b, _c, _d, _e, _f;
           const canonicalBasePath = (_a = options.canonicalBasePath) != null ? _a : ["scale", field];
           const legacyFixedPath = (_b = options.legacyFixedPath) != null ? _b : [field];
           const legacyEntityPath = (_c = options.legacyEntityPath) != null ? _c : [`${field}_entity`];
           const structuredValue = this._getPathValue(target, canonicalBasePath);
           const legacyFixedValue = this._getPathValue(target, legacyFixedPath);
           const legacyEntityValue = this._getPathValue(target, legacyEntityPath);
-          const structuredFixedValue = this._isObject(structuredValue) ? structuredValue == null ? void 0 : structuredValue.fixed : structuredValue;
-          const structuredEntityValue = this._isObject(structuredValue) ? structuredValue == null ? void 0 : structuredValue.entity : void 0;
+          if (structuredValue !== void 0) {
+            const source = normalizeStructuredResolvableValue(structuredValue, (_d = options.inheritedSource) != null ? _d : null, null, {
+              allowPercent: ["target", "baseline"].includes(canonicalBasePath[0])
+            });
+            return {
+              fixed: (_e = source.fixed) != null ? _e : "",
+              entity: (_f = source.entity) != null ? _f : "",
+              ...Number.isFinite(source.percent) ? { percent: source.percent } : {}
+            };
+          }
           return {
-            fixed: structuredFixedValue != null ? structuredFixedValue : !this._isObject(legacyFixedValue) && legacyFixedValue !== void 0 ? legacyFixedValue : "",
-            entity: (_d = structuredEntityValue != null ? structuredEntityValue : legacyEntityValue) != null ? _d : ""
+            fixed: !this._isObject(legacyFixedValue) && legacyFixedValue !== void 0 ? legacyFixedValue : "",
+            entity: legacyEntityValue != null ? legacyEntityValue : ""
           };
         }
         _getResolvableScopedValue(scope, field, options = {}) {
@@ -6656,11 +6984,19 @@ ${paintLayers}
           return this._getResolvablePartsFromTarget(target != null ? target : {}, field, options);
         }
         _getEffectiveResolvableScopedValue(scope, field, options = {}) {
+          var _a, _b;
           const localValue = this._getResolvableScopedValue(scope, field, options);
           if ((scope == null ? void 0 : scope.type) !== "entity") {
             return localValue;
           }
           const inheritedValue = this._getResolvableScopedValue({ type: "card" }, field, options);
+          const target = this._getEntityRawEntries()[scope.index];
+          if (this._getPathValue(target, (_a = options.canonicalBasePath) != null ? _a : ["scale", field]) !== void 0) {
+            return this._getResolvablePartsFromTarget(target, field, {
+              ...options,
+              inheritedSource: { fixed: inheritedValue.fixed === "" ? null : inheritedValue.fixed, entity: inheritedValue.entity || null, percent: (_b = inheritedValue.percent) != null ? _b : null }
+            });
+          }
           return {
             fixed: this._hasExplicitOverrideValue(localValue.fixed) ? localValue.fixed : inheritedValue.fixed,
             entity: this._hasExplicitOverrideValue(localValue.entity) ? localValue.entity : inheritedValue.entity
@@ -6700,10 +7036,12 @@ ${paintLayers}
             nextTarget = this._deletePathValue(nextTarget, canonicalBasePath);
             const hasFixed = nextParts.fixed !== void 0 && nextParts.fixed !== null && nextParts.fixed !== "";
             const hasEntity = nextParts.entity !== void 0 && nextParts.entity !== null && nextParts.entity !== "";
-            if (hasFixed || hasEntity) {
+            const hasPercent = Number.isFinite(nextParts.percent);
+            if (hasFixed || hasEntity || hasPercent) {
               const nextValue = {};
               if (hasFixed) nextValue.fixed = nextParts.fixed;
               if (hasEntity) nextValue.entity = nextParts.entity;
+              if (hasPercent) nextValue.percent = nextParts.percent;
               nextTarget = this._setPathValue(nextTarget, canonicalBasePath, nextValue);
             }
             prunePaths.forEach((path) => {
@@ -7006,7 +7344,8 @@ ${paintLayers}
           ];
         }
         _normalizeGradientStopPosValue(rawValue) {
-          const numericValue = this._normalizeNumberValue(rawValue);
+          const percent = parsePercentLiteral(rawValue);
+          const numericValue = Number.isFinite(percent) ? percent : this._normalizeNumberValue(rawValue);
           if (numericValue === null || !Number.isFinite(numericValue)) {
             return null;
           }
@@ -7683,6 +8022,7 @@ ${paintLayers}
           return this._applyScopedMutation(scope, (target) => {
             var _a, _b, _c, _d;
             let next = this._cloneDeep(target);
+            if (key === "target" && field === "show") next = this._deletePathValue(next, ["show_target_label"]);
             const marker = this._isObject(this._getPathValue(next, [key])) ? this._cloneDeep(this._getPathValue(next, [key])) : {};
             const label = this._isObject(marker.label) ? this._cloneDeep(marker.label) : {};
             const inheritedLabel = (scope == null ? void 0 : scope.type) === "entity" ? (_a = this._getScopedValue({ type: "card" }, [key, "label"])) != null ? _a : {} : {};
@@ -8389,7 +8729,7 @@ ${paintLayers}
           return this._setScopedGradientStops(scope, nextStops, { rerender: true });
         }
         _getFillStyleValue() {
-          return this._getScopedFillStyleValue({ type: "card" });
+          return this._getEffectiveFillStyleValue({ type: "card" });
         }
         _getFillStyleFromColorMode(colorMode) {
           switch (colorMode) {
@@ -8413,14 +8753,11 @@ ${paintLayers}
           return this._getFillStyleFromColorMode(colorMode);
         }
         _getEffectiveScopedFillStyleValue(scope) {
-          if ((scope == null ? void 0 : scope.type) !== "entity") {
-            return this._getScopedFillStyleValue(scope);
-          }
           return this._getEffectiveFillStyleValue(scope);
         }
         _setScopedBarFillStyle(scope, rawValue) {
           const normalizedValue = this._normalizeTextValue(rawValue).trim();
-          if (!normalizedValue || normalizedValue === "bands") {
+          if (!normalizedValue) {
             return this._removeCanonicalScopedValue(scope, ["bar", "fill_style"], {
               deprecatedKeys: [["color_mode"]],
               prunePaths: [["bar"]]
@@ -9061,6 +9398,9 @@ ${paintLayers}
             return nextTarget;
           }, { rerender: true });
         }
+        _removeBaseline(scope) {
+          return this._removeScopedValue(scope, ["baseline"], { rerender: true });
+        }
         _hasBaselineOverride(scope) {
           const baselineValue = this._getScopedValue(scope, ["baseline"]);
           if (this._isObject(baselineValue) && Object.keys(baselineValue).length) {
@@ -9228,13 +9568,13 @@ ${paintLayers}
         }
         _getEffectiveFillStyleValue(scope) {
           if ((scope == null ? void 0 : scope.type) === "entity") {
-            const hasEntityFillStyle = this._getScopedValue(scope, ["bar", "fill_style"]) !== void 0 || this._getScopedValue(scope, ["bar", "color_mode"]) !== void 0 || this._getScopedValue(scope, ["color_mode"]) !== void 0;
-            if (hasEntityFillStyle) {
-              return this._getScopedFillStyleValue(scope);
-            }
-            return this._getFillStyleValue();
+            return normalizeBarConfig(
+              this._getEntityRawEntries()[scope.index],
+              this._draftConfig,
+              { isCardScope: false }
+            ).fill_style;
           }
-          return this._getScopedFillStyleValue(scope);
+          return normalizeBarConfig(this._draftConfig, null, { isCardScope: true }).fill_style;
         }
         _getScopedGradientStopsValue(scope) {
           const localRows = this._getGradientStopsUiRows(scope);
@@ -9499,7 +9839,7 @@ ${paintLayers}
           const markerUiIds = this._getGenericMarkerUiIds(scope, markers.length);
           const override = this._hasMarkersOverride(scope);
           const rows = markers.map((marker, markerIndex) => {
-            var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+            var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
             const source = this._getGenericMarkerSource(marker);
             const markerUiId = markerUiIds[markerIndex];
             const rowId = `${scopeType}-${scopeIndex}-generic-${markerUiId}`;
@@ -9508,6 +9848,16 @@ ${paintLayers}
               "scope-type": scopeType,
               "marker-index": markerIndex
             }) : "";
+            const labelEntitySource = this._renderEntitySourceInput(
+              "generic-marker-label-entity",
+              scopeIndex,
+              (_b = (_a = marker == null ? void 0 : marker.label) == null ? void 0 : _a.entity) != null ? _b : "",
+              "sensor.information",
+              {
+                "scope-type": scopeType,
+                "marker-index": markerIndex
+              }
+            );
             return `
         <div class="generic-marker-item" data-marker-ui-id="${markerUiId}" data-expanded="${expanded ? "true" : "false"}">
           <div class="generic-marker-header">
@@ -9556,13 +9906,13 @@ ${paintLayers}
               <label for="${rowId}-lane">Lane</label>
               <select id="${rowId}-lane" data-kind="generic-marker-lane" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
                 <option value="above"${(marker == null ? void 0 : marker.lane) === "above" ? " selected" : ""}>Above</option>
-                <option value="below"${((_a = marker == null ? void 0 : marker.lane) != null ? _a : "below") === "below" ? " selected" : ""}>Below</option>
+                <option value="below"${((_c = marker == null ? void 0 : marker.lane) != null ? _c : "below") === "below" ? " selected" : ""}>Below</option>
               </select>
             </div>
             <div class="field-row">
               <label for="${rowId}-direction">Direction</label>
               <select id="${rowId}-direction" data-kind="generic-marker-direction" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${normalizeMarkerDirection(marker == null ? void 0 : marker.direction)}">
-                <option value="inward"${((_b = marker == null ? void 0 : marker.direction) != null ? _b : "inward") === "inward" ? " selected" : ""}>Inward</option>
+                <option value="inward"${((_d = marker == null ? void 0 : marker.direction) != null ? _d : "inward") === "inward" ? " selected" : ""}>Inward</option>
                 <option value="outward"${(marker == null ? void 0 : marker.direction) === "outward" ? " selected" : ""}>Outward</option>
               </select>
             </div>
@@ -9582,30 +9932,38 @@ ${paintLayers}
               id: `${rowId}-color`,
               kind: "generic-marker-color",
               index: scopeIndex,
-              value: (_c = marker == null ? void 0 : marker.color) != null ? _c : "#888888",
+              value: (_e = marker == null ? void 0 : marker.color) != null ? _e : "#888888",
               fallbackHex: "#888888",
               placeholder: "#888888",
               extraDataset: { "scope-type": scopeType, "marker-index": markerIndex }
             })}
           </div>
           <div class="field-row"><div class="toggle">
-            <input id="${rowId}-label-show" type="checkbox" data-kind="generic-marker-label-show" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_d = marker == null ? void 0 : marker.label) == null ? void 0 : _d.show) === true ? " checked" : ""}>
+            <input id="${rowId}-show-marker" type="checkbox" data-kind="generic-marker-show-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${(marker == null ? void 0 : marker.show_marker) === false ? "" : " checked"}>
+            <label for="${rowId}-show-marker">Show marker shape</label>
+          </div></div>
+          <div class="field-row"><div class="toggle">
+            <input id="${rowId}-label-show" type="checkbox" data-kind="generic-marker-label-show" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_f = marker == null ? void 0 : marker.label) == null ? void 0 : _f.show) === true ? " checked" : ""}>
             <label for="${rowId}-label-show">Show label</label>
           </div></div>
           <div class="field-row"><label for="${rowId}-label-text">Label text</label>
-            <input id="${rowId}-label-text" type="text" data-kind="generic-marker-label-text" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute((_f = (_e = marker == null ? void 0 : marker.label) == null ? void 0 : _e.text) != null ? _f : "")}" placeholder="optional semantic text">
+            <input id="${rowId}-label-text" type="text" data-kind="generic-marker-label-text" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute((_h = (_g = marker == null ? void 0 : marker.label) == null ? void 0 : _g.text) != null ? _h : "")}" placeholder="optional semantic text">
+          </div>
+          <div class="field-row">
+            <label>Label content entity</label>
+            ${labelEntitySource}
           </div>
           <div class="inline-row generic-marker-options">
             <div class="field-row"><div class="toggle">
-              <input id="${rowId}-label-show-value" type="checkbox" data-kind="generic-marker-label-show-value" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_g = marker == null ? void 0 : marker.label) == null ? void 0 : _g.show_value) === false ? "" : " checked"}>
+              <input id="${rowId}-label-show-value" type="checkbox" data-kind="generic-marker-label-show-value" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_i = marker == null ? void 0 : marker.label) == null ? void 0 : _i.show_value) === false ? "" : " checked"}>
               <label for="${rowId}-label-show-value">Show value</label>
             </div></div>
             <div class="field-row"><div class="toggle">
-              <input id="${rowId}-label-show-unit" type="checkbox" data-kind="generic-marker-label-show-unit" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_h = marker == null ? void 0 : marker.label) == null ? void 0 : _h.show_unit) === false ? "" : " checked"}>
+              <input id="${rowId}-label-show-unit" type="checkbox" data-kind="generic-marker-label-show-unit" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"${((_j = marker == null ? void 0 : marker.label) == null ? void 0 : _j.show_unit) === false ? "" : " checked"}>
               <label for="${rowId}-label-show-unit">Show raw unit</label>
             </div></div>
             <div class="field-row generic-marker-precision"><label for="${rowId}-label-precision">Label precision</label>
-              <input id="${rowId}-label-precision" type="number" min="0" step="1" data-kind="generic-marker-label-precision" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute((_l = (_k = (_i = marker == null ? void 0 : marker.label) == null ? void 0 : _i.precision) != null ? _k : (_j = marker == null ? void 0 : marker.label) == null ? void 0 : _j.decimal) != null ? _l : "")}" placeholder="inherit">
+              <input id="${rowId}-label-precision" type="number" min="0" step="1" data-kind="generic-marker-label-precision" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${this._escapeAttribute((_n = (_m = (_k = marker == null ? void 0 : marker.label) == null ? void 0 : _k.precision) != null ? _m : (_l = marker == null ? void 0 : marker.label) == null ? void 0 : _l.decimal) != null ? _n : "")}" placeholder="inherit">
             </div>
           </div>
           </div>
@@ -9623,7 +9981,7 @@ ${paintLayers}
       ${inheritControl}
       ${overrideNote}
       ${scopeType === "card" || override ? `
-        <div class="section-note">First two valid markers per lane render; excess markers remain editable and show a warning. Unresolved markers still reserve a slot and lane.</div>
+        <div class="section-note">Up to four markers render in each lane, including Peak, Floor, and Target. Excess generic markers remain editable and show a warning. Unresolved markers still reserve a slot and lane.</div>
         <div class="list generic-marker-list">${rows}</div>
         <button type="button" data-action="add-generic-marker" data-scope-type="${scopeType}" data-index="${scopeIndex}">Add reference marker</button>` : ""}
     `;
@@ -9677,6 +10035,13 @@ ${paintLayers}
             return marker;
           });
           if (kind === "generic-marker-source-mode") return this._setGenericMarkerSourceMode(scope, markerIndex, value);
+          if (kind === "generic-marker-show-marker") {
+            return this._updateGenericMarker(scope, markerIndex, (marker) => {
+              if (value === false) marker.show_marker = false;
+              else delete marker.show_marker;
+              return marker;
+            });
+          }
           if (kind === "generic-marker-fixed") {
             return atLeaf("fixed", (_a = this._normalizeNumberValue(value)) != null ? _a : void 0);
           }
@@ -9715,6 +10080,11 @@ ${paintLayers}
                 if (text) label.text = text;
                 else delete label.text;
               }
+              if (kind === "generic-marker-label-entity") {
+                const entity = this._normalizeTextValue(value).trim();
+                if (entity) label.entity = entity;
+                else delete label.entity;
+              }
               if (kind === "generic-marker-label-show-value") label.show_value = value === true;
               if (kind === "generic-marker-label-show-unit") label.show_unit = value === true;
               if (kind === "generic-marker-label-precision") {
@@ -9740,6 +10110,7 @@ ${paintLayers}
             var _a;
             if (!this._isObject(rawMarker)) return rawMarker;
             const marker = this._cloneDeep(rawMarker);
+            if (marker.show_marker === true) delete marker.show_marker;
             if (this._isObject(marker.at)) {
               const at = this._cloneDeep(marker.at);
               const fixed = this._normalizeNumberValue(at.fixed);
@@ -10914,8 +11285,11 @@ ${paintLayers}
 	                      <div class="field-row">
 	                        <div class="toggle">
 	                          <input id="entity-${index}-baseline-inherit" type="checkbox" data-kind="entity-baseline-inherit" data-index="${index}"${baselineInherited ? " checked" : ""}>
-                          <label for="entity-${index}-baseline-inherit">Inherit card settings</label>
+	                          <label for="entity-${index}-baseline-inherit">Inherit card settings</label>
                         </div>
+                      </div>
+                      <div class="field-row">
+                        <button type="button" data-action="remove-baseline" data-scope-type="entity" data-index="${index}" aria-label="Remove Baseline" title="Remove Baseline">\u{1F5D1}</button>
                       </div>
                       <div class="field-row">
                         <label for="entity-${index}-baseline-mode">Baseline mode</label>
@@ -11041,14 +11415,14 @@ ${paintLayers}
 	                          `
                 });
                 return `
-	                          ${scaleGroup}
-	                          ${targetGroup}
-	                          ${baselineGroup}
-                          ${needleGroup}
+                          ${scaleGroup}
+                          ${targetGroup}
                           ${peakGroup}
                           ${floorGroup}
-	                          ${markersGroup}
-	                          ${barGroup}
+                          ${markersGroup}
+                          ${barGroup}
+                          ${baselineGroup}
+                          ${needleGroup}
 	                          ${segmentsGroup}
 	                          ${gradientStopsGroup}
 	                          ${layoutGroup}
@@ -11283,6 +11657,9 @@ ${paintLayers}
               summary: this._getCardBaselineSummary(),
               content: `
           <div class="field-grid">
+            <div class="field-row">
+              <button type="button" data-action="remove-baseline" data-scope-type="card" aria-label="Remove Baseline" title="Remove Baseline">\u{1F5D1}</button>
+            </div>
             <div class="field-row">
               <label for="baseline-mode">Baseline mode</label>
               <select id="baseline-mode" data-field="baseline-mode" value="${this._escapeAttribute(baselineMode)}">
@@ -11537,7 +11914,7 @@ ${paintLayers}
           if (!this.shadowRoot) return;
           const entities = this._getEntitiesValue();
           const syncPicker = (picker) => {
-            var _a, _b;
+            var _a, _b, _c, _d;
             const kind = picker.dataset.kind;
             const indexValue = picker.dataset.index;
             const index = Number(indexValue);
@@ -11595,6 +11972,12 @@ ${paintLayers}
               picker.value = (_b = this._getGenericMarkerSource(marker).entity) != null ? _b : "";
               picker.label = "Reference marker entity";
             }
+            if (kind === "generic-marker-label-entity") {
+              const scope = this._getGenericMarkerScope(picker);
+              const marker = this._getGenericMarkers(scope)[Number(picker.dataset.markerIndex)];
+              picker.value = (_d = (_c = marker == null ? void 0 : marker.label) == null ? void 0 : _c.entity) != null ? _d : "";
+              picker.label = "Label content entity";
+            }
           };
           [
             'ha-entity-picker[data-kind="entity-picker"]',
@@ -11606,7 +11989,8 @@ ${paintLayers}
             'ha-entity-picker[data-kind="entity-override-max-entity-source"]',
             'ha-entity-picker[data-kind="entity-baseline-entity-source"]',
             'ha-entity-picker[data-kind="entity-target-entity-source"]',
-            'ha-entity-picker[data-kind="generic-marker-entity"]'
+            'ha-entity-picker[data-kind="generic-marker-entity"]',
+            'ha-entity-picker[data-kind="generic-marker-label-entity"]'
           ].forEach((selector) => {
             this.shadowRoot.querySelectorAll(selector).forEach(syncPicker);
           });
@@ -11622,7 +12006,8 @@ ${paintLayers}
                 'ha-entity-picker[data-kind="entity-override-max-entity-source"]',
                 'ha-entity-picker[data-kind="entity-baseline-entity-source"]',
                 'ha-entity-picker[data-kind="entity-target-entity-source"]',
-                'ha-entity-picker[data-kind="generic-marker-entity"]'
+                'ha-entity-picker[data-kind="generic-marker-entity"]',
+                'ha-entity-picker[data-kind="generic-marker-label-entity"]'
               ].forEach((selector) => {
                 var _a;
                 (_a = this.shadowRoot) == null ? void 0 : _a.querySelectorAll(selector).forEach(syncPicker);
@@ -11690,6 +12075,11 @@ ${paintLayers}
           }
           if (action === "remove-entity") {
             this._removeEntityRow(Number(target.dataset.index));
+            return;
+          }
+          if (action === "remove-baseline") {
+            const scope = target.dataset.scopeType === "entity" ? { type: "entity", index: Number(target.dataset.index) } : { type: "card" };
+            this._removeBaseline(scope);
             return;
           }
           if (action === "add-generic-marker") {

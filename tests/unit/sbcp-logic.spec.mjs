@@ -1048,7 +1048,7 @@ describe('Sensor Bar Card Plus logic', () => {
       { from: { fixed: 50, entity: null }, to: { fixed: 80, entity: null }, color: '#FF9800', label: null },
       { from: { fixed: 80, entity: null }, to: null, color: '#F44336', label: 'High' },
     ]);
-    expect(cfg.bar.segment_space).toBe('scale');
+    expect(cfg.bar.segment_space).toBeNull();
   });
 
   it('accepts structured bar.segments', () => {
@@ -1067,7 +1067,7 @@ describe('Sensor Bar Card Plus logic', () => {
       { from: { fixed: 0, entity: null }, to: { fixed: 60, entity: null }, color: '#4CAF50', label: null },
       { from: { fixed: 60, entity: null }, to: null, color: '#F44336', label: null },
     ]);
-    expect(cfg.bar.segment_space).toBe('scale');
+    expect(cfg.bar.segment_space).toBeNull();
   });
 
   it('parses percent literals with optional whitespace and decimals', () => {
@@ -1095,6 +1095,49 @@ describe('Sensor Bar Card Plus logic', () => {
       { from: { fixed: null, entity: null, percent: 0 }, to: { fixed: null, entity: null, percent: 50 }, color: '#22c55e', label: null },
       { from: { fixed: null, entity: null, percent: 50 }, to: { fixed: null, entity: null, percent: 100 }, color: '#ef4444', label: null },
     ]);
+  });
+
+  it('interprets modern segment boundaries independently as scale values or visible-scale percentages', () => {
+    const card = createCard();
+    const rowFor = (segments) => card.normalizeCardConfig({
+      scale: { min: { fixed: -100 }, max: { fixed: 300 } },
+      bar: { segments },
+      entities: [{ entity: 'sensor.row' }],
+    }).entities[0];
+
+    expect(card._getSegmentsForRendering(rowFor([{ from: 40, to: 200, color: '#111111' }]), -100, 300)[0])
+      .toMatchObject({ from: 35, to: 75 });
+    expect(card._getSegmentsForRendering(rowFor([{ from: '25%', to: '75%', color: '#111111' }]), -100, 300)[0])
+      .toMatchObject({ from: 25, to: 75 });
+    expect(card._getSegmentsForRendering(rowFor([{ from: 40, to: '75%', color: '#111111' }]), -100, 300)[0])
+      .toMatchObject({ from: 35, to: 75 });
+    expect(card._getSegmentsForRendering(rowFor([
+      { from: 40, to: '50%', color: '#111111' },
+      { from: '50%', to: 200, color: '#222222' },
+    ]), -100, 300)).toEqual([
+      { from: 35, to: 50, color: '#111111', label: null },
+      { from: 50, to: 75, color: '#222222', label: null },
+    ]);
+  });
+
+  it('keeps legacy segment_space for bare numbers while explicit percentages remain percentages', () => {
+    const card = createCard();
+    const render = (segmentSpace, segment) => {
+      const row = card.normalizeCardConfig({
+        scale: { min: { fixed: 0 }, max: { fixed: 200 } },
+        bar: {
+          segment_space: segmentSpace,
+          segments: [{ ...segment, color: '#111111' }],
+        },
+        entities: [{ entity: 'sensor.row' }],
+      }).entities[0];
+      return card._getSegmentsForRendering(row, 0, 200);
+    };
+
+    expect(render('percent', { from: 25, to: 75 })).toEqual([{ from: 25, to: 75, color: '#111111', label: null }]);
+    expect(render('scale', { from: 25, to: 75 })).toEqual([{ from: 12.5, to: 37.5, color: '#111111', label: null }]);
+    expect(render('percent', { from: 25, to: '75%' })).toEqual([{ from: 25, to: 75, color: '#111111', label: null }]);
+    expect(render('scale', { from: 25, to: '75%' })).toEqual([{ from: 12.5, to: 75, color: '#111111', label: null }]);
   });
 
   it('accepts top-level segments with percentage-string boundaries', () => {
@@ -1695,7 +1738,7 @@ describe('Sensor Bar Card Plus logic', () => {
       entities: [{ entity: 'sensor.row', name: 'Sensor' }],
     }).entities[0];
 
-    card._extrema['sensor.row'] = { peak: { value: 42, startedAtMs: null, windowKey: null } };
+    card._extrema.set(cfg, { peak: { value: 42, startedAtMs: null, windowKey: null } });
     const peakMarker = createTrackedElement({
       style: {
         left: '42%',
@@ -1735,7 +1778,7 @@ describe('Sensor Bar Card Plus logic', () => {
       entities: [{ entity: 'sensor.row', name: 'Sensor' }],
     }).entities[0];
 
-    card._extrema['sensor.row'] = { peak: { value: 80, startedAtMs: null, windowKey: null } };
+    card._extrema.set(cfg, { peak: { value: 80, startedAtMs: null, windowKey: null } });
     const peakMarker = createTrackedElement({
       style: {
         left: '80%',
@@ -1761,7 +1804,7 @@ describe('Sensor Bar Card Plus logic', () => {
       },
     });
 
-    expect(card._extrema['sensor.row'].peak.value).toBe(80);
+    expect(card._extrema.get(cfg).peak.value).toBe(80);
     expect(peakMarker.style.left).toBe('80%');
   });
 
@@ -1774,7 +1817,7 @@ describe('Sensor Bar Card Plus logic', () => {
       entities: [{ entity: 'sensor.row', name: 'Sensor' }],
     }).entities[0];
 
-    card._extrema['sensor.row'] = { peak: { value: 80, startedAtMs: null, windowKey: null } };
+    card._extrema.set(cfg, { peak: { value: 80, startedAtMs: null, windowKey: null } });
     const peakMarker = createTrackedElement({
       style: {
         left: '80%',
@@ -1832,7 +1875,7 @@ describe('Sensor Bar Card Plus logic', () => {
         },
       },
     };
-    card._extrema['sensor.row'] = { peak: { value: 80, startedAtMs: null, windowKey: null } };
+    card._extrema.set(card._config.entities[0], { peak: { value: 80, startedAtMs: null, windowKey: null } });
     card.shadowRoot = {
       querySelectorAll: () => [],
       querySelector: (selector) => (
@@ -1855,29 +1898,23 @@ describe('Sensor Bar Card Plus logic', () => {
 
     card._update();
 
-    expect(card._extrema['sensor.row'].peak.value).toBe(80);
+    expect(card._extrema.get(card._config.entities[0]).peak.value).toBe(80);
     expect(capturedPeakPct).toBe(80);
     expect(capturedPeakDisplay).toBe('80');
   });
 
-  it('prunes stale peak entries when config entities change and preserves active peaks', () => {
+  it('prunes removed row histories and preserves active peaks', () => {
     const card = createCard();
     card._render = () => {};
-    card._extrema = {
-      'sensor.keep': { peak: { value: 75, startedAtMs: null, windowKey: null } },
-      'sensor.remove': { peak: { value: 42, startedAtMs: null, windowKey: null } },
-    };
-
-    card.setConfig({
-      entities: [
-        { entity: 'sensor.keep' },
-        { entity: 'sensor.new' },
-      ],
-    });
-
-    expect(card._extrema).toEqual({
-      'sensor.keep': { peak: { value: 75, startedAtMs: null, windowKey: null } },
-    });
+    card.setConfig({ peak: { enabled: true }, entities: [{ entity: 'sensor.keep' }, { entity: 'sensor.remove' }] });
+    const [keep, removed] = card._config.entities;
+    const tracker = { peak: { value: 75, startedAtMs: null, windowKey: null } };
+    card._extrema.set(keep, tracker);
+    card._extrema.set(removed, { peak: { value: 42, startedAtMs: null, windowKey: null } });
+    card.setConfig({ peak: { enabled: true }, entities: [{ entity: 'sensor.keep' }, { entity: 'sensor.new' }] });
+    expect(card._extrema.get(card._config.entities[0])).toEqual(tracker);
+    expect(card._extrema.has(removed)).toBe(false);
+    expect(card._extrema.has(card._config.entities[1])).toBe(false);
   });
 
   it('does not recreate or rewrite an unchanged needle marker during _patchRow', () => {
@@ -2648,7 +2685,7 @@ describe('Sensor Bar Card Plus logic', () => {
       { from: { fixed: 0, entity: null }, to: { fixed: 80, entity: null }, color: '#2563eb', label: null },
       { from: { fixed: 80, entity: null }, to: null, color: '#ef4444', label: null },
     ]);
-    expect(cfg.bar.segment_space).toBe('scale');
+    expect(cfg.bar.segment_space).toBeNull();
   });
 
   it('inherits card-level segments and lets entity-level segments override them', () => {
@@ -3223,6 +3260,33 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(card._shouldUpdate(card._hass, newSourceChanged)).toBe(true);
   });
 
+  it('watches accepted generic marker label entities independently from position sources', () => {
+    const card = createCard();
+    card._render = () => {};
+    card.setConfig({
+      markers: [{
+        at: { entity: 'sensor.position' },
+        label: { show: true, entity: 'sensor.label_content' },
+      }],
+      entities: [{ entity: 'sensor.row' }],
+    });
+
+    const row = { state: '20', attributes: {} };
+    const position = { state: '50', attributes: {} };
+    const label = { state: 'Charging', attributes: {} };
+    card._hass = { states: { 'sensor.row': row, 'sensor.position': position, 'sensor.label_content': label } };
+    expect(card._shouldUpdate(card._hass, { states: {
+      'sensor.row': row,
+      'sensor.position': position,
+      'sensor.label_content': { state: 'Discharging', attributes: {} },
+    } })).toBe(true);
+    expect(card._shouldUpdate(card._hass, { states: {
+      'sensor.row': row,
+      'sensor.position': { state: '65', attributes: {} },
+      'sensor.label_content': label,
+    } })).toBe(true);
+  });
+
   it('supports baseline direction color shorthand and expanded color objects', () => {
     const card = createCard();
     const shorthandCfg = card.normalizeCardConfig({
@@ -3482,7 +3546,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
   it('inside mode hides the unit before hiding the value pill when the number still fits', () => {
     const card = createCard();
-    card._measureInsideValueMarkupWidth = (_el, _display, _unit, hideUnit) => hideUnit ? 60 : 100;
+    card._measureInsideValueMarkupWidth = (_el, _display, _unit, hideUnit) => hideUnit ? 60 : 180;
     const mainLine = {
       dataset: { rowDensity: 'normal' },
       querySelector: () => null,
@@ -3590,7 +3654,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
   it('inside mode hides the icon before hiding the name when icon space resolves value pressure', () => {
     const card = createCard();
-    card._measureInsideValueMarkupWidth = () => 90;
+    card._measureInsideValueMarkupWidth = (_el, _display, _unit, hideUnit) => hideUnit ? 90 : 170;
     const iconWrap = { getBoundingClientRect: () => ({ width: 28 }) };
     const mainLine = {
       dataset: { rowDensity: 'tight' },
@@ -3606,7 +3670,7 @@ describe('Sensor Bar Card Plus logic', () => {
           : null
       ),
       querySelector: (selector) => (
-        selector === '.inside-name' ? {}
+        selector === '.inside-name' ? { textContent: 'EV', scrollWidth: 12 }
           : selector === '.inside-value' ? valueEl
           : null
       ),
@@ -3618,16 +3682,17 @@ describe('Sensor Bar Card Plus logic', () => {
 
     card._applyInsideLabelDensity();
 
-    expect(innerLabel.dataset.insideDensity).toBe('compact');
+    expect(innerLabel.dataset.insideDensity).toBe('dense');
     expect(innerLabel.dataset.hideName).toBe('false');
     expect(mainLine.dataset.hideInsideIcon).toBe('true');
   });
 
-  it('inside mode hides the name only when icon sacrifice still leaves no room', () => {
+  it('inside mode retains the icon when removal cannot restore the unit or useful name', () => {
     const card = createCard();
     // Full value+unit does not fit, but numeric value alone still fits.
     // This keeps the test focused on name hiding, not value-pill hiding.
-    card._measureInsideValueMarkupWidth = (_valueEl, _display, _unit, hideUnit) => hideUnit ? 20 : 52;    const iconWrap = { getBoundingClientRect: () => ({ width: 28 }) };
+    card._measureInsideValueMarkupWidth = (_valueEl, _display, _unit, hideUnit) => hideUnit ? 20 : 80;
+    const iconWrap = { getBoundingClientRect: () => ({ width: 28 }) };
     const mainLine = {
       dataset: { rowDensity: 'tight' },
       querySelector: (selector) => selector === '.icon-wrap' ? iconWrap : null,
@@ -3657,7 +3722,7 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(innerLabel.dataset.insideDensity).toBe('compressed');
     expect(innerLabel.dataset.hideName).toBe('true');
     expect(valueEl.dataset.hideUnit).toBe('true');
-    expect(mainLine.dataset.hideInsideIcon).toBe('true');
+    expect(mainLine.dataset.hideInsideIcon).toBe('false');
   });
 
   it('inside mode keeps compressed emergency collapse even if icon reclamation would relax density', () => {
@@ -3730,7 +3795,9 @@ describe('Sensor Bar Card Plus logic', () => {
 
     card._applyInsideLabelDensity();
 
-    expect(mainLine.dataset.hideInsideIcon).toBe('true');
+    expect(mainLine.dataset.hideInsideIcon).toBe('false');
+    expect(valueEl.dataset.hideUnit).toBe('false');
+    expect(valueEl.dataset.hideValue).toBe('false');
     expect(innerLabel.dataset.hideName).toBe('false');
   });
 
@@ -3800,7 +3867,7 @@ describe('Sensor Bar Card Plus logic', () => {
   it('above mode hides the label when it interferes with the numeric value width', () => {
     const card = createCard();
     card._measureValueMarkupWidth = (_el, _display, _unit, hideUnit) => hideUnit ? 44 : 58;
-    card._measureVisibleLabelCharacters = () => 6;
+    card._measureVisibleLabelCharacters = (_el, _text, width) => width >= 38 ? 6 : 4;
     const labelText = {
       textContent: 'Very long label',
       clientWidth: 38,
@@ -3972,6 +4039,29 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(source).toContain('.hero-header[data-hide-name=\"true\"] .hero-value,');
   });
 
+  it.each([
+    { completeMinimum: 170, expectedUnitHidden: 'false', expectedFit: 'minimum' },
+    { completeMinimum: 240, expectedUnitHidden: 'true', expectedFit: 'tight' },
+  ])('Hero exhausts complete-reading sizes before number-only fitting: $expectedUnitHidden', ({
+    completeMinimum, expectedUnitHidden, expectedFit,
+  }) => {
+    const card = createCard();
+    const header = { dataset: { hideName: 'true' }, getBoundingClientRect: () => ({ width: 200 }) };
+    const value = {};
+    const line = { dataset: {}, querySelector: (selector) => ({
+      '.hero-header': header, '.hero-value': value, '.unit-group': { textContent: 'kWh/m²/year' },
+    })[selector] ?? null };
+    card.shadowRoot = { querySelectorAll: () => [line] };
+    card._measureHeroValueWidth = (_line, _value, fit, hideUnit) => hideUnit
+      ? fit === 'normal' ? 220 : 100
+      : fit === 'minimum' ? completeMinimum : 300;
+
+    card._applyHeroValueFit();
+
+    expect(line.dataset.hideHeroUnit).toBe(expectedUnitHidden);
+    expect(line.dataset.heroValueFit).toBe(expectedFit);
+  });
+
   it('above mode keeps name truncation and standard value-unit markup', () => {
     const card = createCard();
     card._hass.states = {
@@ -4127,6 +4217,16 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(leftLabel.dataset.priorityHidden).toBeUndefined();
     expect(rowStack.dataset.forceTopValue).toBe('true');
     expect(mainLine.dataset.hideLeftIcon).toBeUndefined();
+  });
+
+  it('Left removes icon before useful identification when top reading alone is not enough', () => {
+    const { card, row } = makeLeftModeResponsiveFixture({
+      text: 'X', clientWidth: 6, scrollWidth: 6, labelWidth: 12, rowWidth: 105,
+    });
+
+    expect(card._chooseLeftModeResponsiveState(row)).toMatchObject({
+      hideLabel: false, topValue: true, hideIcon: true,
+    });
   });
 
   it('keeps fully visible Active labels visible on wide rows', () => {
@@ -4567,44 +4667,70 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(wide.card._chooseLeftModeResponsiveState(wide.row)).toMatchObject({ hideLabel: false, topValue: false, hideIcon: false });
   });
 
-  it('keeps inline when previous state was inline and predicted share is 0.49 or 0.50', () => {
+  it('during changing widths, keeps inline when previous state was inline and predicted share is 0.49 or 0.50', () => {
     const at049 = makeLeftModeResponsiveFixture({ rowWidth: 255, labelWidth: 20 });
     const at050 = makeLeftModeResponsiveFixture({ rowWidth: 260, labelWidth: 20 });
 
-    expect(at049.card._chooseLeftModeResponsiveState(at049.row)).toMatchObject({ topValue: false });
-    expect(at050.card._chooseLeftModeResponsiveState(at050.row)).toMatchObject({ topValue: false });
+    expect(at049.card._chooseLeftModeResponsiveState(at049.row, false)).toMatchObject({ topValue: false });
+    expect(at050.card._chooseLeftModeResponsiveState(at050.row, false)).toMatchObject({ topValue: false });
   });
 
-  it('switches to top-right when previous state was inline and predicted share falls below 0.48', () => {
+  it('during changing widths, switches to top-right when previous state was inline and predicted share falls below 0.48', () => {
     const below048 = makeLeftModeResponsiveFixture({ rowWidth: 248, labelWidth: 20 });
 
-    expect(below048.card._chooseLeftModeResponsiveState(below048.row)).toMatchObject({ topValue: true });
+    expect(below048.card._chooseLeftModeResponsiveState(below048.row, false)).toMatchObject({ topValue: true });
   });
 
-  it('keeps top-right when previous state was top-right and predicted share is 0.50 or 0.51', () => {
+  it('during changing widths, keeps top-right when previous state was top-right and predicted share is 0.50 or 0.51', () => {
     const at050 = makeLeftModeResponsiveFixture({ rowWidth: 260, labelWidth: 20, previousForceTopValue: true });
     const at051 = makeLeftModeResponsiveFixture({ rowWidth: 266, labelWidth: 20, previousForceTopValue: true });
 
-    expect(at050.card._chooseLeftModeResponsiveState(at050.row)).toMatchObject({ topValue: true });
-    expect(at051.card._chooseLeftModeResponsiveState(at051.row)).toMatchObject({ topValue: true });
+    expect(at050.card._chooseLeftModeResponsiveState(at050.row, false)).toMatchObject({ topValue: true });
+    expect(at051.card._chooseLeftModeResponsiveState(at051.row, false)).toMatchObject({ topValue: true });
   });
 
-  it('switches back inline when previous state was top-right and predicted share is above 0.52', () => {
+  it('during changing widths, switches back inline when previous state was top-right and predicted share is above 0.52', () => {
     const above052 = makeLeftModeResponsiveFixture({ rowWidth: 276, labelWidth: 20, previousForceTopValue: true });
 
-    expect(above052.card._chooseLeftModeResponsiveState(above052.row)).toMatchObject({ topValue: false });
+    expect(above052.card._chooseLeftModeResponsiveState(above052.row, false)).toMatchObject({ topValue: false });
   });
 
-  it('does not oscillate when predicted share bounces around 0.50', () => {
+  it('during changing widths, does not oscillate when predicted share bounces around 0.50', () => {
     const keepInline = makeLeftModeResponsiveFixture({ rowWidth: 255, labelWidth: 20 });
     const switchTop = makeLeftModeResponsiveFixture({ rowWidth: 248, labelWidth: 20 });
     const keepTop = makeLeftModeResponsiveFixture({ rowWidth: 266, labelWidth: 20, previousForceTopValue: true });
     const switchBackInline = makeLeftModeResponsiveFixture({ rowWidth: 276, labelWidth: 20, previousForceTopValue: true });
 
-    expect(keepInline.card._chooseLeftModeResponsiveState(keepInline.row)).toMatchObject({ topValue: false });
-    expect(switchTop.card._chooseLeftModeResponsiveState(switchTop.row)).toMatchObject({ topValue: true });
-    expect(keepTop.card._chooseLeftModeResponsiveState(keepTop.row)).toMatchObject({ topValue: true });
-    expect(switchBackInline.card._chooseLeftModeResponsiveState(switchBackInline.row)).toMatchObject({ topValue: false });
+    expect(keepInline.card._chooseLeftModeResponsiveState(keepInline.row, false)).toMatchObject({ topValue: false });
+    expect(switchTop.card._chooseLeftModeResponsiveState(switchTop.row, false)).toMatchObject({ topValue: true });
+    expect(keepTop.card._chooseLeftModeResponsiveState(keepTop.row, false)).toMatchObject({ topValue: true });
+    expect(switchBackInline.card._chooseLeftModeResponsiveState(switchBackInline.row, false)).toMatchObject({ topValue: false });
+  });
+
+  it.each([255, 264, 266])('settles identically at row width %s with opposite prior placements', (rowWidth) => {
+    const fromInline = makeLeftModeResponsiveFixture({ rowWidth, labelWidth: 20 });
+    const fromTop = makeLeftModeResponsiveFixture({ rowWidth, labelWidth: 20, previousForceTopValue: true });
+    const inlineState = fromInline.card._chooseLeftModeResponsiveState(fromInline.row);
+    const topState = fromTop.card._chooseLeftModeResponsiveState(fromTop.row);
+
+    expect(topState).toEqual(inlineState);
+    expect(topState.topValue).toBe(rowWidth < 264);
+  });
+
+  it('reconsiders a changing-width hysteresis decision once the row width is stable', () => {
+    const { card, row, mainLine, rowStack } = makeLeftModeResponsiveFixture({
+      rowWidth: 266, labelWidth: 20, previousForceTopValue: true,
+    });
+    let scheduled = 0;
+    card._schedulePostLayoutDensityPass = () => { scheduled += 1; };
+
+    card._ensureMinimumBarShare([row], new Map([[mainLine, 255]]));
+    expect(rowStack.dataset.forceTopValue).toBe('true');
+    expect(scheduled).toBe(1);
+
+    card._ensureMinimumBarShare([row], new Map([[mainLine, 266]]));
+    expect(rowStack.dataset.forceTopValue).toBeUndefined();
+    expect(scheduled).toBe(1);
   });
 
   it('keeps short complete left labels visible', () => {
@@ -4733,6 +4859,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
   it('applies final top-right presentation in the same post-layout pass when forceTopValue is chosen', () => {
     const card = createCard();
+    card.isConnected = true;
     const { row, mainLine, rowStack, topValue } = makeLeftModeResponsiveFixture({ rowWidth: 100, labelWidth: 20 });
     const originalRaf = globalThis.requestAnimationFrame;
 
@@ -4772,6 +4899,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
   it('does not let final rendered truncation feed back into stable label usefulness', () => {
     const card = createCard();
+    card.isConnected = true;
     const originalRaf = globalThis.requestAnimationFrame;
     card._measureTextWidthWithStyles = (_el, text) => (text === '...' ? 12 : text.length * 10);
 
@@ -4798,6 +4926,7 @@ describe('Sensor Bar Card Plus logic', () => {
     const mainLine = {
       classList: { contains: (name) => name === 'left-mode' },
       dataset: { leftDensity: 'normal', rowDensity: 'normal' },
+      getBoundingClientRect: () => ({ width: 400 }),
       closest: (selector) => selector === '.row-stack' ? rowStack : null,
       querySelector: (selector) => (
         selector === '.label-left' ? leftLabel
@@ -4855,6 +4984,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
   it('keeps a left label visible when final layout still shows at least five useful characters', () => {
     const card = createCard();
+    card.isConnected = true;
     const originalRaf = globalThis.requestAnimationFrame;
     card._measureTextWidthWithStyles = (_el, text) => (text === '...' ? 12 : text.length * 10);
 
@@ -4881,6 +5011,7 @@ describe('Sensor Bar Card Plus logic', () => {
     const mainLine = {
       classList: { contains: (name) => name === 'left-mode' },
       dataset: { leftDensity: 'normal', rowDensity: 'normal' },
+      getBoundingClientRect: () => ({ width: 400 }),
       closest: (selector) => selector === '.row-stack' ? rowStack : null,
       querySelector: (selector) => (
         selector === '.label-left' ? leftLabel
@@ -5705,7 +5836,7 @@ describe('Sensor Bar Card Plus logic', () => {
     ]);
   });
 
-  it('keeps numeric structured bar.segments in scale-space', () => {
+  it('interprets numeric structured bar.segments as active-scale values', () => {
     const card = createCard();
     const cfg = card.normalizeCardConfig({
       scale: {
@@ -6152,12 +6283,12 @@ describe('Sensor Bar Card Plus logic', () => {
     card._updateExtrema(entityCfg, entityCfg, state);
     state.state = '20';
     card._updateExtrema(entityCfg, entityCfg, state);
-    expect(card._extrema['sensor.row'].peak.value).toBe(60);
-    expect(card._extrema['sensor.row'].floor.value).toBe(20);
+    expect(card._extrema.get(card._config.entities[0]).peak.value).toBe(60);
+    expect(card._extrema.get(card._config.entities[0]).floor.value).toBe(20);
 
     card.setConfig({ entities: [{ entity: 'sensor.row', peak: { enabled: false }, floor: { enabled: true } }] });
-    expect(card._extrema['sensor.row'].peak).toBeUndefined();
-    expect(card._extrema['sensor.row'].floor.value).toBe(20);
+    expect(card._extrema.get(card._config.entities[0]).peak).toBeUndefined();
+    expect(card._extrema.get(card._config.entities[0]).floor.value).toBe(20);
   });
 
   it('clears only Peak when its effective reset policy changes', () => {
@@ -6176,21 +6307,21 @@ describe('Sensor Bar Card Plus logic', () => {
     card._updateExtrema(entityCfg, entityCfg, state);
     state.state = '20';
     card._updateExtrema(entityCfg, entityCfg, state);
-    const floorBefore = card._extrema['sensor.row'].floor;
-    const peakBefore = card._extrema['sensor.row'].peak;
+    const floorBefore = card._extrema.get(card._config.entities[0]).floor;
+    const peakBefore = card._extrema.get(card._config.entities[0]).peak;
 
     card.setConfig(config('hourly'));
-    expect(card._extrema['sensor.row'].peak).toBeUndefined();
-    expect(card._extrema['sensor.row'].floor).toBe(floorBefore);
+    expect(card._extrema.get(card._config.entities[0]).peak).toBeUndefined();
+    expect(card._extrema.get(card._config.entities[0]).floor).toEqual(floorBefore);
 
     entityCfg = card._config.entities[0];
     state.state = '55';
     state.last_updated = '2026-01-01T10:08:00.000Z';
     card._updateExtrema(entityCfg, entityCfg, state);
     expect(entityCfg.peak_marker.reset).toEqual({ kind: 'calendar', unit: 'hourly' });
-    expect(card._extrema['sensor.row'].peak).toMatchObject({ value: 55, startedAtMs: null });
-    expect(card._extrema['sensor.row'].peak.windowKey).not.toBe(peakBefore.windowKey);
-    expect(card._extrema['sensor.row'].floor).toBe(floorBefore);
+    expect(card._extrema.get(card._config.entities[0]).peak).toMatchObject({ value: 55, startedAtMs: null });
+    expect(card._extrema.get(card._config.entities[0]).peak.windowKey).not.toBe(peakBefore.windowKey);
+    expect(card._extrema.get(card._config.entities[0]).floor).toEqual(floorBefore);
   });
 
   it('clears only Floor when its effective reset policy changes', () => {
@@ -6209,21 +6340,21 @@ describe('Sensor Bar Card Plus logic', () => {
     card._updateExtrema(entityCfg, entityCfg, state);
     state.state = '20';
     card._updateExtrema(entityCfg, entityCfg, state);
-    const peakBefore = card._extrema['sensor.row'].peak;
-    const floorBefore = card._extrema['sensor.row'].floor;
+    const peakBefore = card._extrema.get(card._config.entities[0]).peak;
+    const floorBefore = card._extrema.get(card._config.entities[0]).floor;
 
     card.setConfig(config('daily'));
-    expect(card._extrema['sensor.row'].floor).toBeUndefined();
-    expect(card._extrema['sensor.row'].peak).toBe(peakBefore);
+    expect(card._extrema.get(card._config.entities[0]).floor).toBeUndefined();
+    expect(card._extrema.get(card._config.entities[0]).peak).toEqual(peakBefore);
 
     entityCfg = card._config.entities[0];
     state.state = '55';
     state.last_updated = '2026-01-01T10:08:00.000Z';
     card._updateExtrema(entityCfg, entityCfg, state);
     expect(entityCfg.floor_marker.reset).toEqual({ kind: 'calendar', unit: 'daily' });
-    expect(card._extrema['sensor.row'].floor).toMatchObject({ value: 55, startedAtMs: null });
-    expect(card._extrema['sensor.row'].floor.windowKey).not.toBe(floorBefore.windowKey);
-    expect(card._extrema['sensor.row'].peak).toBe(peakBefore);
+    expect(card._extrema.get(card._config.entities[0]).floor).toMatchObject({ value: 55, startedAtMs: null });
+    expect(card._extrema.get(card._config.entities[0]).floor.windowKey).not.toBe(floorBefore.windowKey);
+    expect(card._extrema.get(card._config.entities[0]).peak).toEqual(peakBefore);
   });
 
   it('preserves Peak and Floor across visual-only configuration changes', () => {
@@ -6242,11 +6373,11 @@ describe('Sensor Bar Card Plus logic', () => {
     card._updateExtrema(entityCfg, entityCfg, state);
     state.state = '20';
     card._updateExtrema(entityCfg, entityCfg, state);
-    const extremaBefore = structuredClone(card._extrema['sensor.row']);
+    const extremaBefore = structuredClone(card._extrema.get(card._config.entities[0]));
 
     card.setConfig(config('#ff0000', true, 0));
 
-    expect(card._extrema['sensor.row']).toEqual(extremaBefore);
+    expect(card._extrema.get(card._config.entities[0])).toEqual(extremaBefore);
   });
 
   it('preserves extrema when equivalent reset and enabled settings move between inherited and explicit config', () => {
@@ -6263,7 +6394,7 @@ describe('Sensor Bar Card Plus logic', () => {
     card._updateExtrema(entityCfg, entityCfg, state);
     state.state = '20';
     card._updateExtrema(entityCfg, entityCfg, state);
-    const extremaBefore = structuredClone(card._extrema['sensor.row']);
+    const extremaBefore = structuredClone(card._extrema.get(card._config.entities[0]));
 
     card.setConfig({
       ...inherited,
@@ -6273,10 +6404,10 @@ describe('Sensor Bar Card Plus logic', () => {
         floor: { enabled: true, reset: 'quarterly' },
       }],
     });
-    expect(card._extrema['sensor.row']).toEqual(extremaBefore);
+    expect(card._extrema.get(card._config.entities[0])).toEqual(extremaBefore);
 
     card.setConfig(inherited);
-    expect(card._extrema['sensor.row']).toEqual(extremaBefore);
+    expect(card._extrema.get(card._config.entities[0])).toEqual(extremaBefore);
   });
 
   it('applies relative 26m resets through the card update path, including delayed samples', () => {
@@ -6287,26 +6418,26 @@ describe('Sensor Bar Card Plus logic', () => {
     const state = { state: '10', last_updated: '2026-01-01T10:07:00.000Z' };
 
     card._updateExtrema(entityCfg, entityCfg, state);
-    expect(card._extrema['sensor.row'].peak).toMatchObject({ value: 10, startedAtMs: Date.parse(state.last_updated) });
+    expect(card._extrema.get(card._config.entities[0]).peak).toMatchObject({ value: 10, startedAtMs: Date.parse(state.last_updated) });
 
     state.state = '20';
     state.last_updated = '2026-01-01T10:32:00.000Z';
     card._updateExtrema(entityCfg, entityCfg, state);
-    expect(card._extrema['sensor.row'].peak).toMatchObject({ value: 20, startedAtMs: Date.parse('2026-01-01T10:07:00.000Z') });
+    expect(card._extrema.get(card._config.entities[0]).peak).toMatchObject({ value: 20, startedAtMs: Date.parse('2026-01-01T10:07:00.000Z') });
 
     state.state = '5';
     state.last_updated = '2026-01-01T10:33:00.000Z';
     card._updateExtrema(entityCfg, entityCfg, state);
-    expect(card._extrema['sensor.row'].peak).toMatchObject({ value: 5, startedAtMs: Date.parse(state.last_updated) });
+    expect(card._extrema.get(card._config.entities[0]).peak).toMatchObject({ value: 5, startedAtMs: Date.parse(state.last_updated) });
 
-    card._extrema = {};
+    card._extrema = new WeakMap();
     state.state = '10';
     state.last_updated = '2026-01-01T10:07:00.000Z';
     card._updateExtrema(entityCfg, entityCfg, state);
     state.state = '5';
     state.last_updated = '2026-01-01T10:36:00.000Z';
     card._updateExtrema(entityCfg, entityCfg, state);
-    expect(card._extrema['sensor.row'].peak).toMatchObject({ value: 5, startedAtMs: Date.parse(state.last_updated) });
+    expect(card._extrema.get(card._config.entities[0]).peak).toMatchObject({ value: 5, startedAtMs: Date.parse(state.last_updated) });
   });
 
   it('distinguishes relative 15m from quarterly resets through the card update path', () => {
@@ -6324,27 +6455,27 @@ describe('Sensor Bar Card Plus logic', () => {
     const state = { state: '50', last_updated: localIso(10, 7) };
 
     card._updateExtrema(entityCfg, entityCfg, state);
-    const initialFloorWindow = card._extrema['sensor.row'].floor.windowKey;
-    const initialPeakStart = card._extrema['sensor.row'].peak.startedAtMs;
+    const initialFloorWindow = card._extrema.get(card._config.entities[0]).floor.windowKey;
+    const initialPeakStart = card._extrema.get(card._config.entities[0]).peak.startedAtMs;
 
     state.state = '60';
     state.last_updated = localIso(10, 14);
     card._updateExtrema(entityCfg, entityCfg, state);
-    expect(card._extrema['sensor.row'].peak.startedAtMs).toBe(initialPeakStart);
-    expect(card._extrema['sensor.row'].floor.windowKey).toBe(initialFloorWindow);
+    expect(card._extrema.get(card._config.entities[0]).peak.startedAtMs).toBe(initialPeakStart);
+    expect(card._extrema.get(card._config.entities[0]).floor.windowKey).toBe(initialFloorWindow);
 
     state.state = '40';
     state.last_updated = localIso(10, 15);
     card._updateExtrema(entityCfg, entityCfg, state);
-    expect(card._extrema['sensor.row'].peak.value).toBe(60);
-    expect(card._extrema['sensor.row'].peak.startedAtMs).toBe(initialPeakStart);
-    expect(card._extrema['sensor.row'].floor.value).toBe(40);
-    expect(card._extrema['sensor.row'].floor.windowKey).not.toBe(initialFloorWindow);
+    expect(card._extrema.get(card._config.entities[0]).peak.value).toBe(60);
+    expect(card._extrema.get(card._config.entities[0]).peak.startedAtMs).toBe(initialPeakStart);
+    expect(card._extrema.get(card._config.entities[0]).floor.value).toBe(40);
+    expect(card._extrema.get(card._config.entities[0]).floor.windowKey).not.toBe(initialFloorWindow);
 
     state.state = '30';
     state.last_updated = localIso(10, 22);
     card._updateExtrema(entityCfg, entityCfg, state);
-    expect(card._extrema['sensor.row'].peak.value).toBe(30);
-    expect(card._extrema['sensor.row'].peak.startedAtMs).toBe(Date.parse(state.last_updated));
+    expect(card._extrema.get(card._config.entities[0]).peak.value).toBe(30);
+    expect(card._extrema.get(card._config.entities[0]).peak.startedAtMs).toBe(Date.parse(state.last_updated));
   });
 });

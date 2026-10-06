@@ -1,4 +1,4 @@
-import { getNormalizedResolvableNumericValue } from '../config/resolve.js';
+import { getNormalizedResolvableNumericValue, getResolvedScale } from '../config/resolve.js';
 import { getFiniteNumber } from '../config/normalize.js';
 import {
   createNumericPresentation,
@@ -166,6 +166,7 @@ export function buildRowViewModel(options) {
     entityState,
     peaks,
     extrema,
+    previousScale,
   } = options;
 
   void cardConfig;
@@ -179,10 +180,7 @@ export function buildRowViewModel(options) {
   const displayUnit = numericValue !== null
     ? targetUnit
     : '';
-  const min = getNormalizedResolvableNumericValue(hass, entityConfig?.scale?.min);
-  const max = getNormalizedResolvableNumericValue(hass, entityConfig?.scale?.max);
-  const safeMin = Number.isFinite(min) ? min : 0;
-  const safeMax = Number.isFinite(max) ? max : 100;
+  const { min: safeMin, max: safeMax } = getResolvedScale(hass, entityConfig?.scale, previousScale);
   const percent = numericValue !== null ? toScalePct(numericValue, safeMin, safeMax) : 0;
   const decimal = entityConfig?.formatting?.decimal ?? null;
   const primaryPresentation = numericValue === null
@@ -261,8 +259,19 @@ export function buildRowViewModel(options) {
       const value = getNormalizedResolvableNumericValue(hass, marker.source, safeMin, safeMax);
       const visible = Number.isFinite(value);
       const markerPrecision = marker.label.precision ?? decimal;
+      const labelStateObj = marker.label.entity ? hass?.states?.[marker.label.entity] : null;
+      const rawLabelState = labelStateObj?.state;
+      const cleanLabelState = typeof rawLabelState === 'string' ? rawLabelState.trim() : '';
+      const usableLabelState = labelStateObj && cleanLabelState
+        && !['unknown', 'unavailable'].includes(cleanLabelState.toLowerCase());
+      const labelValue = marker.label.entity
+        ? usableLabelState ? getFiniteNumber(cleanLabelState) ?? cleanLabelState : null
+        : value;
+      const labelUnit = marker.label.entity
+        ? (usableLabelState ? labelStateObj?.attributes?.unit_of_measurement ?? '' : '')
+        : targetUnit;
       const label = marker.label.show
-        ? createMarkerLabelPresentation(value, targetUnit, markerPrecision, {
+        ? createMarkerLabelPresentation(labelValue, labelUnit, markerPrecision, {
           text: marker.label.text,
           showValue: marker.label.showValue,
           showUnit: marker.label.showUnit,
@@ -277,6 +286,7 @@ export function buildRowViewModel(options) {
         color: marker.color,
         shape: marker.shape,
         direction: marker.direction,
+        showMarker: marker.showMarker,
         label,
         labelVisible: marker.label.show,
       };

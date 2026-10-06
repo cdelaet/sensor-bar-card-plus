@@ -67,7 +67,29 @@ export function normalizeStructuredResolvableValue(input, inheritedResolvable = 
   return normalizeResolvableValue(input, null);
 }
 
-export function normalizeGenericMarkerList(input) {
+function hasConfiguredMarkerSource(source) {
+  return !!source && (
+    getFiniteNumber(source.fixed ?? source.value) !== null
+    || Number.isFinite(source.percent)
+    || !!source.entity
+  );
+}
+
+function applyGenericMarkerCapacity(markers, config) {
+  const occupied = {
+    above: config?.peak_marker?.show === true ? 1 : 0,
+    below: (config?.floor_marker?.show === true ? 1 : 0)
+      + (config?.target_marker?.enabled !== false && hasConfiguredMarkerSource(config?.target_marker?.source) ? 1 : 0),
+  };
+
+  return markers.map((marker) => {
+    const accepted = marker.valid && occupied[marker.lane] < 4;
+    if (accepted) occupied[marker.lane] += 1;
+    return { ...marker, accepted };
+  });
+}
+
+export function normalizeGenericMarkerList(input, capacityConfig = null) {
   if (!Array.isArray(input)) {
     return { markers: [], invalidList: input !== undefined };
   }
@@ -113,6 +135,12 @@ export function normalizeGenericMarkerList(input) {
       ? rawMarker.label
       : {};
     const labelConfig = normalizeMarkerLabelConfig(label);
+    const labelEntityInput = label.entity;
+    const labelEntity = typeof labelEntityInput === 'string' ? labelEntityInput.trim() : '';
+    const invalidLabelEntity = labelEntityInput !== undefined && labelEntityInput !== null && labelEntityInput !== ''
+      && !looksLikeEntityId(labelEntity);
+    const validLabelEntity = labelEntity && looksLikeEntityId(labelEntity) ? labelEntity : null;
+    const showMarker = typeof rawMarker.show_marker === 'boolean' ? rawMarker.show_marker : true;
 
     return {
       id: `generic-${index}`,
@@ -125,10 +153,13 @@ export function normalizeGenericMarkerList(input) {
       shape: validShape ? (rawMarker.shape ?? 'circle') : 'circle',
       direction,
       invalidDirection,
+      showMarker,
+      invalidShowMarker: rawMarker.show_marker !== undefined && typeof rawMarker.show_marker !== 'boolean',
       color: typeof rawMarker.color === 'string' && rawMarker.color.trim() ? rawMarker.color : '#888888',
       label: {
         show: label.show === true,
         text: labelConfig.label_text,
+        entity: validLabelEntity,
         showValue: labelConfig.label_show_value,
         showUnit: labelConfig.label_show_unit,
         precision: labelConfig.label_precision,
@@ -139,6 +170,7 @@ export function normalizeGenericMarkerList(input) {
         invalidPrecision: labelConfig.label_invalid_precision,
         invalidPrecisionKey: labelConfig.label_precision_key,
         unsupportedUnit: labelConfig.label_unsupported_unit,
+        invalidEntity: invalidLabelEntity,
       },
       valid: validSource && validLane,
       invalidSource: !validSource,
@@ -150,14 +182,7 @@ export function normalizeGenericMarkerList(input) {
     };
   });
 
-  const laneCounts = { above: 0, below: 0 };
-  for (const marker of markers) {
-    if (!marker.valid) continue;
-    if (laneCounts[marker.lane] < 2) marker.accepted = true;
-    laneCounts[marker.lane] += 1;
-  }
-
-  return { markers, invalidList: false };
+  return { markers: applyGenericMarkerCapacity(markers, capacityConfig), invalidList: false };
 }
 
 export function normalizeBaselineDirectionConfig(input, inheritedDirection = null) {
@@ -262,34 +287,82 @@ export function hasResolvableMagnitude(resolvable) {
   );
 }
 
-export function normalizeGaugeSegments(input) {
+function normalizeSegmentBoundary(input, legacySegmentSpace = null) {
+  if (input === undefined) return { value: null, issue: null };
+  if (input === null) return { value: null, issue: 'malformed' };
+
+  if (input && typeof input === 'object' && !Array.isArray(input)) {
+    if (input.entity !== undefined && input.entity !== null && input.entity !== '') {
+      return { value: null, issue: 'entity' };
+    }
+    if (Object.prototype.hasOwnProperty.call(input, 'percent')) {
+      const percent = getFiniteNumber(input.percent);
+      return Number.isFinite(percent)
+        ? { value: normalizeResolvableValue(null, null, percent), issue: null }
+        : { value: null, issue: 'malformed' };
+    }
+    const fixed = getFiniteNumber(input.fixed ?? input.value);
+    return Number.isFinite(fixed)
+      ? { value: normalizeResolvableValue(fixed, null), issue: null }
+      : { value: null, issue: 'malformed' };
+  }
+
+  if (typeof input === 'string') {
+    const trimmed = input.trim();
+    if (looksLikeEntityId(trimmed)) return { value: null, issue: 'entity' };
+    if (trimmed.includes('%')) {
+      const percent = parsePercentLiteral(trimmed);
+      return Number.isFinite(percent)
+        ? { value: normalizeResolvableValue(null, null, percent), issue: null }
+        : { value: null, issue: 'malformed_percent' };
+    }
+  }
+
+  const numeric = getFiniteNumber(input);
+  if (!Number.isFinite(numeric)) return { value: null, issue: 'malformed' };
+  return legacySegmentSpace === 'percent'
+    ? { value: normalizeResolvableValue(null, null, numeric), issue: null }
+    : { value: normalizeResolvableValue(numeric, null), issue: null };
+}
+
+export function normalizeGaugeSegments(input, options = {}) {
   if (!Array.isArray(input)) return null;
+  const { legacySegmentSpace = null } = options;
   const segments = input
     .map((segment) => {
-      const from = normalizeStructuredResolvableValue(segment?.from, null, null, { allowPercent: true });
+      const from = segment?.from === undefined
+        ? { value: null, issue: 'malformed' }
+        : normalizeSegmentBoundary(segment.from, legacySegmentSpace);
       const to = segment?.to === undefined
-        ? null
-        : normalizeStructuredResolvableValue(segment.to, null, null, { allowPercent: true });
+        ? { value: null, issue: null }
+        : segment.to === null
+          ? { value: null, issue: null }
+          : normalizeSegmentBoundary(segment.to, legacySegmentSpace);
 
-      if (!hasResolvableMagnitude(from) || !segment?.color) {
+      if (!segment?.color) {
         return null;
       }
 
       return {
-        from,
-        to,
+        from: from.value,
+        to: to.value,
+        invalidBoundary: from.issue ?? to.issue,
         color: segment.color,
         label: segment.label ?? null,
       };
     })
     .filter(Boolean);
 
-  return segments.map((segment, index) => ({
-    from: { ...segment.from },
-    to: segment.to ? { ...segment.to } : (index < segments.length - 1 ? { ...segments[index + 1].from } : null),
-    color: segment.color,
-    label: segment.label ?? null,
-  }));
+  return segments.map((segment, index) => {
+    const nextValid = segments.slice(index + 1).find((candidate) => !candidate.invalidBoundary);
+    return {
+      from: segment.from ? { ...segment.from } : null,
+      to: segment.to ? { ...segment.to } : (nextValid?.from ? { ...nextValid.from } : null),
+      ...(segment.invalidBoundary ? { invalidBoundary: segment.invalidBoundary } : {}),
+      color: segment.color,
+      label: segment.label ?? null,
+    };
+  });
 }
 
 export function normalizeScaleBound(entityConfig, cardConfig, key, defaultValue) {
@@ -307,13 +380,27 @@ export function normalizeScaleBound(entityConfig, cardConfig, key, defaultValue)
       cardConfig?.[key] ?? defaultValue,
       cardConfig?.[entityKey] ?? null
     );
+  const inheritedFixedExplicit = cardBound
+    ? cardBound.fixed_explicit !== false && cardBound.fixed !== null && cardBound.fixed !== undefined
+    : cardConfig?.[key] !== null && cardConfig?.[key] !== undefined;
+  const withFixedExplicit = (bound, explicit) => {
+    // Keep default provenance internal while preserving the normalized shape.
+    Object.defineProperty(bound, 'fixed_explicit', { value: explicit });
+    return bound;
+  };
 
   if (entityScale?.[key] !== undefined) {
-    return normalizeStructuredResolvableValue(
+    const input = entityScale[key];
+    const fixedExplicit = looksLikeEntityId(input)
+      ? inheritedFixedExplicit
+      : (typeof input === 'object' && input !== null
+        ? (input.fixed ?? input.value) !== null && (input.fixed ?? input.value) !== undefined
+        : input !== null);
+    return withFixedExplicit(normalizeStructuredResolvableValue(
       entityScale[key],
       inherited,
       defaultValue
-    );
+    ), fixedExplicit);
   }
 
   const entityOverride = entityConfig[entityKey];
@@ -330,7 +417,9 @@ export function normalizeScaleBound(entityConfig, cardConfig, key, defaultValue)
     ?? inherited.entity
     ?? null;
 
-  return normalizeResolvableValue(value, entity);
+  return withFixedExplicit(normalizeResolvableValue(value, entity),
+    (entityConfig[key] !== null && entityConfig[key] !== undefined)
+      || (!hasEntityOverride && inheritedFixedExplicit));
 }
 
 export function normalizeScaleConfig(entityConfig, cardConfig) {
@@ -484,23 +573,24 @@ export function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
   const cardTopLevelSegments = cardConfig?.segments ?? null;
   const cardLegacySeverity = cardConfig?.severity ?? null;
   let segments = null;
-  let segment_space = cardBar?.segment_space ?? 'percent';
+  let segment_space = cardBar?.segment_space === 'percent' || cardBar?.segment_space === 'scale'
+    ? cardBar.segment_space
+    : null;
 
   if (entityStructuredSegments !== undefined && entityStructuredSegments !== null) {
-    segments = normalizeGaugeSegments(entityStructuredSegments);
-    segment_space = 'scale';
+    segment_space = entityBar?.segment_space === 'percent' || entityBar?.segment_space === 'scale'
+      ? entityBar.segment_space
+      : segment_space;
+    segments = normalizeGaugeSegments(entityStructuredSegments, { legacySegmentSpace: segment_space });
   } else if (entityTopLevelSegments !== undefined && entityTopLevelSegments !== null) {
     segments = normalizeGaugeSegments(entityTopLevelSegments);
-    segment_space = 'scale';
   } else if (entityLegacySeverity !== undefined && entityLegacySeverity !== null) {
     segments = normalizeSeverityToSegments(entityLegacySeverity);
     segment_space = 'percent';
   } else if (cardStructuredSegments !== null && cardStructuredSegments !== undefined) {
     segments = cardStructuredSegments.map((segment) => ({ ...segment }));
-    segment_space = cardBar?.segment_space ?? 'percent';
   } else if (cardTopLevelSegments !== null && cardTopLevelSegments !== undefined) {
     segments = normalizeGaugeSegments(cardTopLevelSegments);
-    segment_space = 'scale';
   } else if (cardLegacySeverity !== null && cardLegacySeverity !== undefined) {
     segments = normalizeSeverityToSegments(cardLegacySeverity);
     segment_space = 'percent';
@@ -869,8 +959,11 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
   normalizedEntity.peak_marker = normalizePeakMarkerConfig(entityConfig, cardConfig);
   normalizedEntity.floor_marker = normalizeFloorMarkerConfig(entityConfig, cardConfig);
   const normalizedMarkers = entityConfig.markers === undefined
-    ? { markers: cardConfig?.generic_markers ?? [], invalidList: cardConfig?.generic_markers_invalid === true }
-    : normalizeGenericMarkerList(entityConfig.markers);
+    ? {
+      markers: applyGenericMarkerCapacity(cardConfig?.generic_markers ?? [], normalizedEntity),
+      invalidList: cardConfig?.generic_markers_invalid === true,
+    }
+    : normalizeGenericMarkerList(entityConfig.markers, normalizedEntity);
   normalizedEntity.generic_markers = normalizedMarkers.markers;
   normalizedEntity.generic_markers_invalid = normalizedMarkers.invalidList;
 
@@ -954,7 +1047,7 @@ export function normalizeCardConfig(rawConfig) {
   });
 
   normalizedCard.layout = normalizeLayoutConfig(baseConfig, null);
-  normalizedCard.scale = normalizeScaleConfig(baseConfig, null);
+  normalizedCard.scale = normalizeScaleConfig(rawConfig, null);
   normalizedCard.bar = normalizeBarConfig(baseConfig, null, {
     scopeExplicitness: cardPaintExplicitness,
     inheritedExplicitness: null,
@@ -965,7 +1058,7 @@ export function normalizeCardConfig(rawConfig) {
   normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);
   normalizedCard.peak_marker = normalizePeakMarkerConfig(baseConfig, null);
   normalizedCard.floor_marker = normalizeFloorMarkerConfig(baseConfig, null);
-  const normalizedMarkers = normalizeGenericMarkerList(baseConfig.markers);
+  const normalizedMarkers = normalizeGenericMarkerList(baseConfig.markers, normalizedCard);
   normalizedCard.generic_markers = normalizedMarkers.markers;
   normalizedCard.generic_markers_invalid = normalizedMarkers.invalidList;
   normalizedCard.entities = baseConfig.entities.map((entityCfg) =>

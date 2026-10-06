@@ -214,8 +214,11 @@ export class SensorBarCard extends HTMLElement {
     this._diagnostics = { warnings: [], errors: [] };
     this._lastDiagnosticsSignature = null;
     this._hass = null;
-    this._extrema = {};
-    this._leftModeResponsiveHistory = new Map();
+    this._extrema = new WeakMap();
+    this._rowScales = new WeakMap();
+    this._rowGeneration = 0;
+    this._rowPresence = [];
+    this._leftModeResponsiveHistory = new WeakMap();
     this._rendered = false;
     this._resizeObserver = null;
     this._densityPassScheduled = false;
@@ -231,10 +234,12 @@ export class SensorBarCard extends HTMLElement {
 
   connectedCallback() {
     window.addEventListener('resize', this._boundWindowResize, { passive: true });
+    this._setupResizeObserver();
     this._schedulePostLayoutDensityPass();
   }
 
   disconnectedCallback() {
+    this._rowGeneration += 1;
     window.removeEventListener('resize', this._boundWindowResize);
     this._clearMarkerHover();
     this._disconnectResizeObserver();
@@ -251,49 +256,82 @@ export class SensorBarCard extends HTMLElement {
       throw new Error('You must define entities or entity');
     }
     this._rendered = false; // force full rebuild on config change
+    this._rowGeneration += 1;
     const previousConfig = this._config;
     this._config = this.normalizeCardConfig(config);
-    // Keep hysteresis history for surviving left-mode rows; every layout pass
-    // reevaluates it against current geometry, while removed/non-left rows reset.
-    const activeLeftEntityIds = new Set(
-      (this._config.entities || [])
-        .filter((entityConfig) => entityConfig.layout?.label?.position === 'left')
-        .map((entityConfig) => entityConfig.entity)
-    );
-    for (const entityId of this._leftModeResponsiveHistory.keys()) {
-      if (!activeLeftEntityIds.has(entityId)) {
-        this._leftModeResponsiveHistory.delete(entityId);
-      }
-    }
-    const activeEntityIds = new Set(
-      (this._config.entities || []).map((entityConfig) => entityConfig.entity)
-    );
-    for (const entityId of Object.keys(this._extrema)) {
-      if (!activeEntityIds.has(entityId)) {
-        delete this._extrema[entityId];
-      }
-    }
-    const previousEntities = new Map((previousConfig?.entities ?? []).map((entity) => [entity.entity, entity]));
-    for (const entityConfig of this._config.entities ?? []) {
-      const previous = previousEntities.get(entityConfig.entity);
-      const current = entityConfig;
-      const stored = this._extrema[entityConfig.entity];
-      if (!stored) continue;
-      for (const key of ['peak', 'floor']) {
-        const previousMarker = previous?.[`${key}_marker`];
-        const currentMarker = current?.[`${key}_marker`];
-        if (previousMarker?.show === true && currentMarker?.show !== true) {
-          delete stored[key];
-        } else if (JSON.stringify(previousMarker?.reset ?? { kind: 'never' })
-          !== JSON.stringify(currentMarker?.reset ?? { kind: 'never' })) {
-          delete stored[key];
-        }
-      }
-      if (!stored.peak && !stored.floor) delete this._extrema[entityConfig.entity];
-    }
+    this._rowScales = new WeakMap();
+    this._reconcileRowHistory(previousConfig?.entities ?? []);
     this._diagnostics = validateNormalizedConfig(this._config);
     this._logDiagnostics();
     this._render();
+  }
+
+  _reconcileRowHistory(previousRows) {
+    // Compare normalized behavior, not retained raw aliases. Scale provenance
+    // must be explicit here because it changes unavailable-source fallback.
+    const canonical = (value, key = '') => {
+      if (Array.isArray(value)) return value.map(canonical);
+      if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort()
+        .filter(name => !['severity', 'segment_space', 'label_precision_key'].includes(name))
+        .map(name => [name, canonical(value[name], name)]));
+      if (key === 'fixed') return getNumericValue(null, value);
+      if (/color/i.test(key) && typeof value === 'string' && /^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(value.trim())) {
+        const hex = value.trim().slice(1).toLowerCase();
+        return `#${hex.length === 3 ? hex.split('').map(char => char + char).join('') : hex}`;
+      }
+      return value;
+    };
+    const signature = row => JSON.stringify(canonical({
+      entity: row.entity, name: row.name, icon: row.icon ?? null,
+      layout: row.layout,
+      scale: Object.fromEntries(['min', 'max'].map(key => [key, {
+        ...row.scale[key], fixed_explicit: row.scale[key].fixed_explicit !== false,
+      }])),
+      bar: row.bar, baseline: row.baseline, formatting: row.formatting,
+      target_marker: row.target_marker, peak_marker: row.peak_marker,
+      floor_marker: row.floor_marker, generic_markers: row.generic_markers,
+    }));
+    // Consume unchanged rows one-to-one, then preserve only unique remaining
+    // old/new pairs for an entity. Ambiguous edited duplicates start fresh.
+    const unmatchedOld = new Set(previousRows);
+    const matches = new Map();
+    const oldSignatures = new Map(previousRows.map(row => [row, signature(row)]));
+    for (const row of this._config.entities) {
+      const key = signature(row);
+      const previous = [...unmatchedOld].find(old => oldSignatures.get(old) === key);
+      if (!previous) continue;
+      matches.set(row, previous);
+      unmatchedOld.delete(previous);
+    }
+    const unmatchedNew = this._config.entities.filter(row => !matches.has(row));
+    for (const row of unmatchedNew) {
+      const old = [...unmatchedOld].filter(previous => previous.entity === row.entity);
+      const next = unmatchedNew.filter(current => current.entity === row.entity);
+      if (old.length !== 1 || next.length !== 1) continue;
+      matches.set(row, old[0]);
+      unmatchedOld.delete(old[0]);
+    }
+    const extrema = new WeakMap();
+    const responsive = new WeakMap();
+    for (const [row, previous] of matches) {
+      const stored = this._extrema.get(previous);
+      const retained = {};
+      for (const key of ['peak', 'floor']) {
+        const before = previous[`${key}_marker`];
+        const after = row[`${key}_marker`];
+        if (stored?.[key] && before?.show === true && after?.show === true
+          && JSON.stringify(before.reset) === JSON.stringify(after.reset)) {
+          retained[key] = { ...stored[key] };
+        }
+      }
+      if (retained.peak || retained.floor) extrema.set(row, retained);
+      if (previous.layout?.label?.position === 'left' && row.layout?.label?.position === 'left'
+        && this._leftModeResponsiveHistory.has(previous)) {
+        responsive.set(row, this._leftModeResponsiveHistory.get(previous));
+      }
+    }
+    this._extrema = extrema;
+    this._leftModeResponsiveHistory = responsive;
   }
 
   _logDiagnostics() {
@@ -447,6 +485,7 @@ export class SensorBarCard extends HTMLElement {
   set hass(hass) {
     const oldHass = this._hass;
     this._hass = hass;
+    if (!this._config.entities) return;
     
     if (!oldHass) {
       this._update();
@@ -481,8 +520,7 @@ export class SensorBarCard extends HTMLElement {
     const sample = getFiniteNumber(stateObj?.state);
     if (!Number.isFinite(sample)) return;
 
-    const entityId = entityCfg.entity;
-    const current = this._extrema[entityId] ?? {};
+    const current = this._extrema.get(entityCfg) ?? {};
     const timestamp = this._getStateTimestamp(stateObj);
     for (const key of ['peak', 'floor']) {
       const marker = normalizedEntity?.[`${key}_marker`];
@@ -499,9 +537,9 @@ export class SensorBarCard extends HTMLElement {
       );
     }
     if (current.peak || current.floor) {
-      this._extrema[entityId] = current;
+      this._extrema.set(entityCfg, current);
     } else {
-      delete this._extrema[entityId];
+      this._extrema.delete(entityCfg);
     }
   }
 
@@ -553,7 +591,7 @@ export class SensorBarCard extends HTMLElement {
         ecfg.target_marker?.source?.entity,
         ...(ecfg.generic_markers ?? [])
           .filter((marker) => marker.accepted)
-          .map((marker) => marker.source?.entity)
+          .flatMap((marker) => [marker.source?.entity, marker.label?.entity])
       ].filter(Boolean);
       
       for (const ent of entitiesToWatch) {
@@ -664,6 +702,14 @@ export class SensorBarCard extends HTMLElement {
     return labelSelector ? row.querySelector(labelSelector) : null;
   }
 
+  _getGenericMarkerForLabel(labelEl) {
+    const row = labelEl?.closest('.row');
+    const markerId = labelEl?.dataset?.markerId;
+    if (!row || !markerId) return null;
+    return [...row.querySelectorAll('.generic-marker[data-marker-id]')]
+      .find((marker) => marker.dataset.markerId === markerId) ?? null;
+  }
+
   _setMarkerHover(markerEl) {
     const label = this._getMarkerLabel(markerEl);
     if (!label || markerEl.style.display === 'none' || getComputedStyle(label).visibility !== 'visible') {
@@ -684,14 +730,17 @@ export class SensorBarCard extends HTMLElement {
 
   _handleMarkerPointerOver(event) {
     if (event.pointerType === 'touch') return;
-    const markerEl = event.target?.closest?.('.generic-marker, .target-marker, .peak-marker, .floor-marker');
+    const target = event.target?.closest?.('.generic-value-label[data-show-marker="false"], .generic-marker, .target-marker, .peak-marker, .floor-marker');
+    const markerEl = target?.matches?.('.generic-value-label') ? this._getGenericMarkerForLabel(target) : target;
     if (markerEl) this._setMarkerHover(markerEl);
   }
 
   _handleMarkerPointerOut(event) {
     if (event.pointerType === 'touch') return;
-    const markerEl = event.target?.closest?.('.generic-marker, .target-marker, .peak-marker, .floor-marker');
-    if (!markerEl || markerEl.contains(event.relatedTarget)) return;
+    const target = event.target?.closest?.('.generic-value-label[data-show-marker="false"], .generic-marker, .target-marker, .peak-marker, .floor-marker');
+    if (!target || target.contains(event.relatedTarget)) return;
+    const markerEl = target.matches('.generic-value-label') ? this._getGenericMarkerForLabel(target) : target;
+    if (!markerEl) return;
     this._clearMarkerHover(markerEl);
   }
 
@@ -894,7 +943,8 @@ export class SensorBarCard extends HTMLElement {
   _getSegmentsForRendering(ecfg, minValue = 0, maxValue = 100) {
     const safeMin = Number.isFinite(minValue) ? minValue : 0;
     const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
-    const rawSegments = Array.isArray(ecfg.bar?.segments) ? ecfg.bar.segments : [];
+    const rawSegments = (Array.isArray(ecfg.bar?.segments) ? ecfg.bar.segments : [])
+      .filter((segment) => !segment?.invalidBoundary);
     if (ecfg.bar?.segment_space === 'scale' || this._segmentsNeedBoundaryResolution(rawSegments)) {
       const resolvedSegments = rawSegments
         .map((segment) => ({
@@ -1442,7 +1492,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         .main-line.left-mode[data-hide-left-icon="true"] .icon-wrap,
         .main-line.above-mode[data-hide-above-icon="true"] .icon-wrap,
         .main-line.inside-mode[data-hide-inside-icon="true"] .icon-wrap,
-        .main-line.inside-mode[data-priority-hide-inside-icon="true"] .icon-wrap {
+        .main-line.inside-mode[data-priority-hide-inside-icon="true"] .icon-wrap,
+        .main-line.off-mode[data-hide-off-icon="true"] .icon-wrap {
           display: none;
         }
         .main-line.left-mode[data-left-density="normal"] {
@@ -1625,14 +1676,21 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           display: none;
         }
         .bar-inner-label .inside-value {
-          flex: 0 1 auto;
+          flex: 0 0 auto;
           min-width: 0;
-          max-width: 56%;
+          max-width: 100%;
           display: inline-flex;
           align-items: baseline;
         }
         .bar-inner-label .inside-value[data-hide-value="true"] {
           display: none;
+        }
+        .bar-inner-label[data-value-fit="compact"] {
+          padding: 0 2px;
+        }
+        .bar-inner-label .inside-value[data-value-fit="compact"] {
+          padding-left: 2px;
+          padding-right: 2px;
         }
         .main-line.inside-mode[data-hide-inside-icon="true"] .bar-inner-label .inside-value,
         .main-line.inside-mode[data-priority-hide-inside-icon="true"] .bar-inner-label .inside-value,
@@ -1734,6 +1792,10 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           visibility: hidden;
           transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
         }
+        .generic-value-label[data-show-marker="false"] {
+          pointer-events: auto;
+          cursor: pointer;
+        }
         .peak-value-label {
           bottom: 100%;
           margin-bottom: 1px;
@@ -1788,6 +1850,10 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           gap: var(--sbcp-main-gap);
           margin-bottom: 2px;
           min-height: 16px;
+        }
+        .above-bar-label[data-hide-name="true"],
+        .above-bar-label[data-priority-hide-name="true"] {
+          gap: 0;
         }
         .above-bar-label-name {
           flex: 1 1 auto;
@@ -2184,6 +2250,13 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         .generic-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
           display: block;
         }
+        .generic-marker[data-show-marker="false"][data-shape] .peak-inset,
+        .generic-marker[data-show-marker="false"][data-shape] .peak-outset,
+        .generic-marker[data-show-marker="false"][data-shape] .target-inset,
+        .generic-marker[data-show-marker="false"][data-shape] .target-outset,
+        .generic-marker[data-show-marker="false"][data-shape] .marker-shape-svg {
+          display: none;
+        }
         .marker-shape-svg path {
           display: none;
           fill: currentColor;
@@ -2244,6 +2317,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           min-width: 0;
           overflow: hidden;
           white-space: nowrap;
+        }
+        .main-line.off-mode .value-right {
+          flex-shrink: 1;
         }
         .value-right-text.has-unit {
           gap: 2px;
@@ -2322,21 +2398,26 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       }
     }
 
-    this._disconnectResizeObserver();
-    this._resizeObserver = new ResizeObserver(() => {
+    this._setupResizeObserver();
+    this._update();
+    this._schedulePostLayoutDensityPass();
+  }
+
+  _setupResizeObserver() {
+    if (!this.isConnected || this._resizeObserver) return;
+    const surface = this.shadowRoot.querySelector('ha-card');
+    const card = this.shadowRoot.querySelector('.card');
+    if (!surface || !card) return;
+
+    const observer = new ResizeObserver(() => {
+      if (!this.isConnected || this._resizeObserver !== observer) return;
       this._applyCompactTier();
       this._schedulePostLayoutDensityPass();
     });
-
-    const surface = this.shadowRoot.querySelector('ha-card');
-    const card = this.shadowRoot.querySelector('.card');
-    if (surface && card) {
-      this._applyCompactTier();
-      this._resizeObserver.observe(surface);
-      this._resizeObserver.observe(this);
-    }
-    this._update();
-    this._schedulePostLayoutDensityPass();
+    this._resizeObserver = observer;
+    this._applyCompactTier();
+    observer.observe(surface);
+    observer.observe(this);
   }
 
   _disconnectResizeObserver() {
@@ -2472,91 +2553,85 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       const valueEl = innerLabel.querySelector('.inside-value');
       if (!track || !nameEl || !valueEl) return;
 
-      const trackWidth = track.getBoundingClientRect().width;
-      const valueDisplay = this._decodeDataAttr(valueEl.dataset.display || valueEl.textContent || '');
-      const valueUnit = this._decodeDataAttr(valueEl.dataset.unit || valueEl.querySelector('.inside-unit')?.textContent || '');
-      const valueWidth = this._measureInsideValueMarkupWidth(valueEl, valueDisplay, valueUnit, false);
-      const valueOnlyWidth = this._measureInsideValueMarkupWidth(valueEl, valueDisplay, valueUnit, true);
-
-      let density = this._classifyInsideDensity(trackWidth, valueWidth);
-      const rowWidth = typeof mainLine?.getBoundingClientRect === 'function'
-        ? mainLine.getBoundingClientRect().width
-        : 0;
+      const display = this._decodeDataAttr(valueEl.dataset.display || valueEl.textContent || '');
+      const unit = this._decodeDataAttr(valueEl.dataset.unit || '');
+      valueEl.dataset.valueFit = 'normal';
+      innerLabel.dataset.valueFit = 'normal';
+      const fullWidth = this._measureInsideValueMarkupWidth(valueEl, display, unit, false);
+      const numberWidth = this._measureInsideValueMarkupWidth(valueEl, display, unit, true);
+      const rowWidth = mainLine?.getBoundingClientRect?.().width ?? 0;
       const rowDensity = this._isReliableWidth(rowWidth)
-        ? this._classifyRowDensity(rowWidth, mainLine?.dataset?.rowDensity || 'normal')
+        ? this._classifyRowDensity(rowWidth, mainLine?.dataset?.rowDensity)
         : (mainLine?.dataset?.rowDensity || 'normal');
       const iconWrap = mainLine?.querySelector?.('.icon-wrap') ?? null;
-      let hideIcon = rowDensity === 'dense' || rowDensity === 'compressed';
-      const reclaimedWidth = iconWrap
+      const iconReserve = iconWrap
         ? this._getLeftModeIconWidth(iconWrap, mainLine) + this._getLeftModeGap(mainLine)
         : 0;
+      const minimum = this._getLeftModeBarMinWidth(mainLine);
+      const withIconWidth = this._isReliableWidth(rowWidth)
+        ? Math.max(minimum, rowWidth - iconReserve)
+        : track.getBoundingClientRect().width;
+      const withoutIconWidth = this._isReliableWidth(rowWidth)
+        ? Math.max(minimum, rowWidth)
+        : withIconWidth + iconReserve;
+      const nameText = (nameEl.textContent || '').trim();
+      const nameWidth = this._measureTextWidthWithStyles(nameEl, nameText) || nameEl.scrollWidth;
 
-      if (!hideIcon && valueWidth > this._getInsideValueVisibleCap(trackWidth, density)) {
-        hideIcon = true;
-      }
-
-      if (iconWrap && hideIcon) {
-        density = this._classifyInsideDensity(trackWidth + reclaimedWidth, valueWidth);
-      }
-
-      const effectiveTrackWidth = trackWidth + (hideIcon ? reclaimedWidth : 0);
-      let hideName = false;
-
-      if (rowDensity === 'compressed') {
-        density = 'compressed';
-        hideIcon = true;
-      }
-
-      const rawValueCap = this._getInsideValueVisibleCap(trackWidth, density);
-      const innerPadding =
-        this._getNumericStyleValue(innerLabel, 'padding-left', 0)
-        + this._getNumericStyleValue(innerLabel, 'padding-right', 0);
-
-      const valueCap = Math.max(0, rawValueCap - innerPadding);
-      const hideUnit = !!valueUnit && valueWidth > valueCap;
-      const hideValue = valueOnlyWidth > valueCap;
-      const reservedValueWidth = hideValue ? 0 : Math.ceil(hideUnit ? valueOnlyWidth : valueWidth);
-      const labelGap = !hideValue ? this._getNumericStyleValue(innerLabel, 'gap', 0) : 0;
-
-      if (!hideValue) {
-        const nameText = (nameEl.textContent || '').trim();
-        const nameFullWidth = nameEl.scrollWidth
-          || nameEl.getBoundingClientRect?.().width
-          || this._measureTextWidthWithStyles(nameEl, nameText);
-        if (!nameText || !Number.isFinite(nameFullWidth) || nameFullWidth <= 0) {
-          hideName = density === 'dense' || density === 'compressed';
-        } else {
-          const usefulNameWidth = this._getInsideUsefulNameWidth(nameEl, nameText, nameFullWidth);
-          const availableNameWidth = Math.max(
-            0,
-            trackWidth - innerPadding - reservedValueWidth - labelGap,
-          );
+      const candidate = (trackWidth) => {
+        const density = rowDensity === 'compressed' ? 'compressed'
+          : this._classifyInsideDensity(trackWidth, fullWidth);
+        innerLabel.dataset.insideDensity = density;
+        innerLabel.dataset.valueFit = 'normal';
+        valueEl.dataset.valueFit = 'normal';
+        const padding = this._getNumericStyleValue(innerLabel, 'padding-left', 0)
+          + this._getNumericStyleValue(innerLabel, 'padding-right', 0);
+        let cap = Math.max(0, trackWidth - padding);
+        const hideUnit = !!unit && fullWidth > cap;
+        let readingWidth = hideUnit ? numberWidth : fullWidth;
+        let valueFit = 'normal';
+        if (readingWidth > cap) {
+          // Compact existing pill padding before giving up a physically fitting number.
+          valueFit = 'compact';
+          innerLabel.dataset.valueFit = valueFit;
+          valueEl.dataset.valueFit = valueFit;
+          cap = Math.max(0, trackWidth - this._getNumericStyleValue(innerLabel, 'padding-left', 0)
+            - this._getNumericStyleValue(innerLabel, 'padding-right', 0));
+          readingWidth = this._measureInsideValueMarkupWidth(valueEl, display, unit, true);
+        }
+        const hideValue = readingWidth > cap;
+        const gap = hideValue ? 0 : this._getNumericStyleValue(innerLabel, 'gap', 0);
+        const nameShare = density === 'compact' ? 0.56 : density === 'tight' ? 0.48 : 0.6;
+        const availableNameWidth = Math.max(0,
+          Math.min(cap * nameShare, cap - (hideValue ? 0 : Math.ceil(readingWidth)) - gap));
+        let hideName = density === 'dense' || density === 'compressed';
+        if (nameText && nameWidth > 0) {
+          const usefulWidth = this._getInsideUsefulNameWidth(nameEl, nameText, nameWidth);
           const visibleChars = this._measureVisibleLabelCharacters(nameEl, nameText, availableNameWidth);
-          const minUsefulChars = Math.min(4, nameText.length);
-          const nameNeedsTruncation = nameFullWidth > availableNameWidth + 1;
-          const hasUsefulRoom = availableNameWidth >= usefulNameWidth
-            && (!nameNeedsTruncation || visibleChars >= minUsefulChars);
-          hideName = !hasUsefulRoom;
+          hideName = availableNameWidth < usefulWidth
+            || (nameWidth > availableNameWidth + 1 && visibleChars < Math.min(4, nameText.length));
+        }
+        return { density, valueFit, hideUnit, hideValue, hideName,
+          rank: hideValue ? 3 : valueFit === 'compact' ? 2 : hideUnit ? 1 : 0 };
+      };
+
+      let hideIcon = rowDensity === 'dense' || rowDensity === 'compressed';
+      let chosen = candidate(hideIcon ? withoutIconWidth : withIconWidth);
+      if (iconWrap && !hideIcon) {
+        const withoutIcon = candidate(withoutIconWidth);
+        if (withoutIcon.rank < chosen.rank
+          || (withoutIcon.rank === chosen.rank && chosen.hideName && !withoutIcon.hideName)) {
+          hideIcon = true;
+          chosen = withoutIcon;
         }
       }
-
-      if (hideName && density === 'normal') density = 'dense';
-
-      innerLabel.dataset.insideDensity = density;
-      innerLabel.dataset.hideName = hideName ? 'true' : 'false';
-      valueEl.dataset.hideUnit = hideUnit ? 'true' : 'false';
-      valueEl.dataset.hideValue = hideValue ? 'true' : 'false';
-      if (mainLine) {
-        mainLine.dataset.hideInsideIcon = hideIcon ? 'true' : 'false';
-      }
+      innerLabel.dataset.insideDensity = chosen.density;
+      innerLabel.dataset.valueFit = chosen.valueFit;
+      innerLabel.dataset.hideName = chosen.hideName ? 'true' : 'false';
+      valueEl.dataset.valueFit = chosen.valueFit;
+      valueEl.dataset.hideUnit = chosen.hideUnit ? 'true' : 'false';
+      valueEl.dataset.hideValue = chosen.hideValue ? 'true' : 'false';
+      if (mainLine) mainLine.dataset.hideInsideIcon = hideIcon ? 'true' : 'false';
     });
-  }
-
-  _getInsideValueVisibleCap(trackWidth, density) {
-    if (density === 'dense' || density === 'compressed') {
-      return trackWidth;
-    }
-    return trackWidth * 0.56;
   }
 
   _classifyInsideDensity(trackWidth, valueWidth) {
@@ -2628,37 +2703,44 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           ?? aboveLine.getBoundingClientRect?.().width
           ?? width;
         const spacerEl = typeof aboveLine.querySelector === 'function' ? aboveLine.querySelector('.above-icon-spacer') : null;
-        const spacerWidth = spacerEl?.getBoundingClientRect?.().width ?? 0;
+        const spacerWidth = mainIconVisible ? iconRect.width : 0;
         const lineGap = spacerEl ? this._getNumericStyleValue(aboveLine, 'gap', 0) : 0;
-        const nameWidth = labelText.getBoundingClientRect?.().width ?? labelText.clientWidth ?? 0;
-        const labelGap = this._getNumericStyleValue(label, 'gap', this._getLeftModeGap(aboveLine));
+        const labelGap = this._getNumericStyleValue(aboveLine, '--sbcp-main-gap', this._getLeftModeGap(aboveLine));
         const fullValueWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, false) + 2);
         const valueOnlyWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, true) + 2);
         const text = (labelText.textContent || '').trim();
-        const visibleWidth = labelText.clientWidth;
-        const fullWidth = labelText.scrollWidth;
-        const visibleChars = this._measureVisibleLabelCharacters(labelText, text, visibleWidth);
-        const labelIsUnhelpful = this._shouldHideLeftLabel(text, fullWidth, visibleWidth, visibleChars);
-
         const spacerReserve = mainIconVisible && spacerWidth > 0 ? spacerWidth + lineGap : 0;
-        const availableWithName = Math.max(0, lineWidth - spacerReserve - nameWidth - labelGap);
+        const nameWidth = this._measureTextWidthWithStyles(labelText, text) || labelText.scrollWidth || 0;
+        const withNameBudget = Math.max(0, lineWidth - spacerReserve - labelGap);
+        const fitsWithName = (valueWidth, budget = withNameBudget) => {
+          const visibleWidth = Math.max(0, budget - valueWidth);
+          const visibleChars = this._measureVisibleLabelCharacters(labelText, text, visibleWidth);
+          return !this._shouldHideLeftLabel(text, nameWidth, visibleWidth, visibleChars);
+        };
         const availableValueOnly = Math.max(0, lineWidth);
 
-        hideName = labelIsUnhelpful;
-
-        if (!hideName && fullValueWidth <= availableWithName) {
+        let hideUnit = false;
+        if (fullValueWidth <= withNameBudget && fitsWithName(fullValueWidth)) {
+          hideName = false;
           hideSpacer = !mainIconVisible;
-        } else if (!hideName && valueOnlyWidth <= availableWithName) {
+        } else if (fullValueWidth <= availableValueOnly) {
+          // Header alignment and name yield before a unit that fits the full header.
+          hideName = !fitsWithName(fullValueWidth, lineWidth - labelGap);
+          hideSpacer = true;
+        } else if (valueOnlyWidth <= withNameBudget && fitsWithName(valueOnlyWidth)) {
+          hideName = false;
+          hideUnit = !!unit;
           hideSpacer = !mainIconVisible;
+        } else if (fitsWithName(valueOnlyWidth, lineWidth - labelGap)) {
+          hideName = false;
+          hideSpacer = true;
+          hideUnit = !!unit;
         } else {
           hideName = true;
           hideSpacer = true;
+          hideUnit = !!unit && fullValueWidth > availableValueOnly;
         }
 
-        const availableWidth = hideName
-          ? availableValueOnly
-          : availableWithName;
-        const hideUnit = !!unit && fullValueWidth > availableWidth;
         valueEl.dataset.hideUnit = hideUnit ? 'true' : 'false';
       } else if (valueEl) {
         valueEl.dataset.hideUnit = 'false';
@@ -2804,6 +2886,23 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       }
 
       if (hasUnit) {
+        // Keep the complete reading through the existing readable fitting sizes.
+        for (const fit of ['tight', 'minimum']) {
+          const readingWidth = valueWidth(fit, false);
+          if (readingWidth <= availableWithoutLabel) {
+            heroLine.dataset.heroValueFit = fit;
+            if (!labelHiddenByDensity && labelEl) {
+              const text = (labelEl.textContent || '').trim();
+              const nameWidth = this._measureTextWidthWithStyles(labelEl, text);
+              const availableName = Math.max(0, availableWithLabel - readingWidth);
+              if (!this._shouldHideLeftLabel(text, nameWidth, availableName,
+                this._measureVisibleLabelCharacters(labelEl, text, availableName))) {
+                delete headerEl.dataset.priorityHideName;
+              }
+            }
+            return;
+          }
+        }
         heroLine.dataset.hideHeroUnit = 'true';
         if (valueWidth('normal', true) <= availableWithoutLabel) return;
       }
@@ -2845,19 +2944,14 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     clone.style.textOverflow = 'clip';
     clone.style.whiteSpace = 'nowrap';
     clone.innerHTML = this._formatInsideValueMarkup(display, unit, hideUnit);
-    layer.replaceChildren(clone);
-    let extraWidth = 0;
-
-    try {
-      const style = getComputedStyle(valueEl);
-      extraWidth += parseFloat(style.paddingLeft || '0') || 0;
-      extraWidth += parseFloat(style.paddingRight || '0') || 0;
-      extraWidth += parseFloat(style.borderLeftWidth || '0') || 0;
-      extraWidth += parseFloat(style.borderRightWidth || '0') || 0;
-    } catch (_err) {
-      // Ignore computed-style lookup failures in non-browser test shims.
-    }
-    return clone.getBoundingClientRect().width + extraWidth;
+    // Reproduce the actual Inside typography and pill padding in the measuring layer.
+    clone.removeAttribute('data-hide-value');
+    const wrapper = document.createElement('div');
+    wrapper.className = 'bar-inner-label';
+    wrapper.style.cssText = 'position:static;display:block;padding:0';
+    wrapper.appendChild(clone);
+    layer.replaceChildren(wrapper);
+    return clone.getBoundingClientRect().width;
   }
 
   _measureTextWidthWithStyles(sourceEl, text) {
@@ -2938,21 +3032,25 @@ _getAboveTargetLayerGeometry(targetPct = null) {
 
       if (mainLine?.classList.contains('off-mode')) {
         const barWrap = mainLine.querySelector('.bar-wrap');
-        const mainStyle = getStyle(mainLine);
-        const gap = parseFloat(mainStyle.getPropertyValue('gap')) || 0;
+        const iconWrap = mainLine.querySelector('.icon-wrap');
+        mainLine.dataset.hideOffIcon = 'false';
+        const gap = parseFloat(getStyle(mainLine).gap) || 0;
         const rowWidth = mainLine.getBoundingClientRect?.().width ?? 0;
-        const fixedWidth = [...mainLine.children].reduce((total, child) => {
-          if (child === valueEl) return total;
-          if (child === barWrap) {
-            const barStyle = getStyle(child);
-            return total + (parseFloat(barStyle.minWidth) || child.getBoundingClientRect?.().width || 0);
-          }
-          return total + (child.getBoundingClientRect?.().width || 0);
-        }, 0);
-        const gapCount = Math.max(0, mainLine.children.length - 1);
-        const availableWidth = rowWidth - fixedWidth - (gap * gapCount);
+        const minimumRail = parseFloat(getStyle(barWrap).minWidth) || 0;
+        const iconVisible = iconWrap && getStyle(iconWrap).display !== 'none';
+        const iconWidth = iconVisible ? this._getLeftModeIconWidth(iconWrap, mainLine) : 0;
+        const withoutIcon = Math.max(0, rowWidth - minimumRail - gap);
+        const withIcon = withoutIcon - (iconVisible ? iconWidth + gap : 0);
+        const numberWidth = Math.ceil(this._measureValueMarkupWidth(valueEl, display, unit, true) + 2);
+        const hideIcon = iconVisible && (
+          (fullWidth > withIcon && fullWidth <= withoutIcon)
+          || (numberWidth > withIcon && numberWidth <= withoutIcon)
+        );
+        mainLine.dataset.hideOffIcon = hideIcon ? 'true' : 'false';
+        const availableWidth = hideIcon ? withoutIcon : withIcon;
         if (availableWidth > 0) {
-          desiredWidth = Math.min(fullWidth, availableWidth);
+          const readableWidth = fullWidth <= availableWidth ? fullWidth : numberWidth;
+          desiredWidth = Math.min(readableWidth, availableWidth);
         }
       }
 
@@ -3119,10 +3217,17 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       this._measureVisibleLabelCharacters(labelMetrics.labelText, labelMetrics.text, candidateLabelWidth),
     );
 
+    const withoutIconLabelWidth = Math.min(labelWidth, Math.max(0, rowWidth - barMinWidth - gap));
+    const labelSacrificialWithoutIcon = !labelMetrics || this._shouldHideLeftLabel(
+      labelMetrics.text, labelMetrics.naturalWidth, withoutIconLabelWidth,
+      this._measureVisibleLabelCharacters(labelMetrics.labelText, labelMetrics.text, withoutIconLabelWidth),
+    );
+
     return {
       rowWidth,
       gap,
       barMinWidth,
+      labelSacrificialWithoutIcon,
       labelWidth: this._isReliableWidth(labelWidth, 0) ? labelWidth : 0,
       iconWidth: this._isReliableWidth(iconWidth, 0) ? iconWidth : 0,
       valueWidth: this._isReliableWidth(valueWidth, 0) ? valueWidth : 0,
@@ -3175,6 +3280,12 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         { hideLabel: false, topValue: true, hideIcon: false },
       );
     }
+    if (budget && !budget.labelSacrificialWithoutIcon) {
+      states.push(
+        { hideLabel: false, topValue: false, hideIcon: true },
+        { hideLabel: false, topValue: true, hideIcon: true },
+      );
+    }
     states.push(
       { hideLabel: true, topValue: false, hideIcon: false },
       { hideLabel: true, topValue: false, hideIcon: true },
@@ -3193,20 +3304,20 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     return fallback;
   }
 
-  _chooseLeftModeResponsiveState(row) {
+  _chooseLeftModeResponsiveState(row, settled = true) {
     const budget = this._estimateLeftModeWidthBudget(row);
     if (!budget) return null;
     const minimumBarShare = this._getMinimumBarShare();
     const states = this._getLeftModeCandidateStates(budget);
-    const entityId = row?.dataset?.entity;
-    const previousTopValue = entityId && this._leftModeResponsiveHistory.has(entityId)
-      ? this._leftModeResponsiveHistory.get(entityId)
+    const entityCfg = this._config.entities?.[Number(row?.dataset?.rowIndex)];
+    const previousTopValue = entityCfg && this._leftModeResponsiveHistory.has(entityCfg)
+      ? this._leftModeResponsiveHistory.get(entityCfg)
       : budget.rowStack?.dataset?.forceTopValue === 'true';
     const topStates = states.filter(state => state.topValue);
     const enableShare = this._getTopValueEnableShare();
     const disableShare = this._getTopValueDisableShare();
     for (const state of states) {
-      const threshold = state.topValue
+      const threshold = state.topValue || settled
         ? minimumBarShare
         : previousTopValue ? disableShare : enableShare;
       const predicted = this._predictLeftModeBarShareForState(row, state, budget);
@@ -3221,8 +3332,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     const leftLabel = row?.querySelector('.label-left');
     if (!mainLine || !rowStack) return;
 
-    const entityId = row?.dataset?.entity;
-    if (entityId) this._leftModeResponsiveHistory.set(entityId, state?.topValue === true);
+    const entityCfg = this._config.entities?.[Number(row?.dataset?.rowIndex)];
+    if (entityCfg) this._leftModeResponsiveHistory.set(entityCfg, state?.topValue === true);
     delete rowStack.dataset.forceTopValue;
     delete mainLine.dataset.hideLeftIcon;
     if (leftLabel) delete leftLabel.dataset.priorityHidden;
@@ -3353,7 +3464,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     return this._shouldHideLeftLabel(metrics.text, metrics.fullWidth, metrics.visibleWidth, metrics.visibleChars);
   }
 
-  _ensureMinimumBarShare(rows = null) {
+  _ensureMinimumBarShare(rows = null, leftWidths = null) {
     if (!this.shadowRoot) return;
     const targetRows = rows || this.shadowRoot.querySelectorAll('.row[data-entity]');
     const minimumBarShare = this._getMinimumBarShare();
@@ -3370,8 +3481,10 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       if (mode === 'other') return;
 
       if (mode === 'left') {
-        const state = this._chooseLeftModeResponsiveState(row);
+        const settled = !leftWidths || leftWidths.get(mainLine) === mainLine.getBoundingClientRect().width;
+        const state = this._chooseLeftModeResponsiveState(row, settled);
         if (state) this._applyLeftModeResponsiveState(row, state);
+        if (!settled) this._schedulePostLayoutDensityPass();
         return;
       }
 
@@ -3499,7 +3612,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
   }
 
   _runPostLayoutPasses(rows = null) {
+    const generation = this._rowGeneration;
     requestAnimationFrame(() => {
+      if (!this.isConnected || generation !== this._rowGeneration) return;
       this._applyRowDensity();
       this._applyLeftModeDensity();
       this._applyAboveLabelDensity();
@@ -3507,12 +3622,20 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       this._applyInsideLabelDensity();
       this._applyValueWidthReservation();
 
+      // Hysteresis smooths changing widths, but a stable width must select the
+      // same candidate regardless of the row's previous inline/top placement.
+      const leftWidths = new Map(
+        [...(this.shadowRoot?.querySelectorAll('.main-line.left-mode') || [])]
+          .map(mainLine => [mainLine, mainLine.getBoundingClientRect().width])
+      );
+
       requestAnimationFrame(() => {
+        if (!this.isConnected || generation !== this._rowGeneration) return;
         this._applyAdaptiveRowHeight();
         this._applyValueVisibility();
         this._applyLeftLabelUsefulness();
         this._applyTopRightValueLayout();
-        this._ensureMinimumBarShare(rows);
+        this._ensureMinimumBarShare(rows, leftWidths);
         this._applyTopRightValueLayout();
         this._applyLeftLabelUsefulness();
         const targetRows = rows || this.shadowRoot?.querySelectorAll('.row[data-entity]') || [];
@@ -3736,7 +3859,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         ? ['peak-inset', 'peak-outset']
         : ['target-inset', 'target-outset'];
       return `
-      <div class="generic-marker" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+      <div class="generic-marker" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" data-show-marker="${marker.showMarker === false ? 'false' : 'true'}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
         <div class="${triangleClasses[0]}"></div>
         <div class="${triangleClasses[1]}"></div>
         <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
@@ -3770,6 +3893,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     this._setDatasetIfChanged(markerEl, 'shape', shape);
     this._setDatasetIfChanged(markerEl, 'lane', marker.lane ?? (marker.type === 'peak' ? 'above' : 'below'));
     this._setDatasetIfChanged(markerEl, 'direction', marker.direction ?? 'inward');
+    if (marker.type === 'generic') {
+      this._setDatasetIfChanged(markerEl, 'showMarker', marker.showMarker === false ? 'false' : 'true');
+    }
     const shapeSvg = markerEl.querySelector?.('.marker-shape-svg');
     if (shapeSvg) {
       this._setDatasetIfChanged(shapeSvg, 'shape', shape);
@@ -3793,18 +3919,25 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     this._setStyleIfChanged(labelEl, '--marker-contrast-color', this._getMarkerContrastColor(markerColor));
   }
 
-  _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue) {
+  _buildRowViewModel(entityCfg, ecfg, stateObj) {
+    const rowViewModel = buildRowViewModel({
+      hass: this._hass,
+      cardConfig: this._config,
+      entityConfig: ecfg,
+      entityState: stateObj,
+      extrema: this._extrema.get(entityCfg) ?? null,
+      previousScale: this._rowScales.get(entityCfg),
+    });
+    this._rowScales.set(entityCfg, { min: rowViewModel.min, max: rowViewModel.max });
+    return rowViewModel;
+  }
+
+  _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue, rowIndex = this._config.entities?.indexOf(entityCfg) ?? -1) {
     const ecfg = this._resolve(entityCfg);
     const stateObj = this._hass?.states?.[entityCfg.entity] ?? null;
     if (stateObj) this._updateExtrema(entityCfg, ecfg, stateObj);
     const rowViewModel = stateObj
-      ? buildRowViewModel({
-        hass: this._hass,
-        cardConfig: this._config,
-        entityConfig: ecfg,
-        entityState: stateObj,
-        extrema: this._extrema[entityCfg.entity] ?? null,
-      })
+      ? this._buildRowViewModel(entityCfg, ecfg, stateObj)
       : null;
     const layout = ecfg.layout;
     const bar = ecfg.bar;
@@ -3859,7 +3992,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     const genericValueLabels = genericMarkerModels
       .filter((marker) => marker.labelVisible)
       .map((marker) => `
-      <div class="generic-value-label" data-marker-id="${escapeHtml(marker.id)}" data-lane="${marker.lane}" style="left:${Number.isFinite(marker.position) ? marker.position : 0}%;visibility:${marker.visible && marker.label?.text ? 'visible' : 'hidden'};${this._getMarkerLabelColorStyle(marker)}">
+      <div class="generic-value-label" data-marker-id="${escapeHtml(marker.id)}" data-lane="${marker.lane}" data-show-marker="${marker.showMarker === false ? 'false' : 'true'}" style="left:${Number.isFinite(marker.position) ? marker.position : 0}%;visibility:${marker.visible && marker.label?.text ? 'visible' : 'hidden'};${this._getMarkerLabelColorStyle(marker)}">
         ${marker.visible && marker.label?.text ? escapeHtml(marker.label.text) : ''}
       </div>`)
       .join('');
@@ -3907,7 +4040,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       ? `<div class="icon-wrap"><ha-icon icon="${escapedIcon}"></ha-icon></div>`
       : '';
     return `
-      <div class="row" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${(rowViewModel?.attributes?.heightExplicit ?? layout.height_explicit) ? 'true' : 'false'}" data-bar-animated="${(rowViewModel?.attributes?.barAnimated ?? bar.animated) ? 'true' : 'false'}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? 'true' : 'false'}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? 'true' : 'false'}">
+      <div class="row" data-row-index="${rowIndex}" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${(rowViewModel?.attributes?.heightExplicit ?? layout.height_explicit) ? 'true' : 'false'}" data-bar-animated="${(rowViewModel?.attributes?.barAnimated ?? bar.animated) ? 'true' : 'false'}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? 'true' : 'false'}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? 'true' : 'false'}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${heroHeader}
@@ -3944,13 +4077,8 @@ ${paintLayers}
 
     const ecfg = this._resolve(entityCfg);
     this._updateExtrema(entityCfg, ecfg, stateObj);
-    const rowViewModel = buildRowViewModel({
-      hass: this._hass,
-      cardConfig: this._config,
-      entityConfig: ecfg,
-      entityState: stateObj,
-      extrema: this._extrema[entityCfg.entity] ?? null,
-    });
+    const previousScale = this._rowScales.get(entityCfg);
+    const rowViewModel = this._buildRowViewModel(entityCfg, ecfg, stateObj);
     const safeMin = rowViewModel.min;
     const safeMax = rowViewModel.max;
     const pct = rowViewModel.percent;
@@ -3972,7 +4100,8 @@ ${paintLayers}
         cardConfig: this._config,
         entityConfig: ecfg,
         entityState: previousStateObj,
-        extrema: this._extrema[entityCfg.entity] ?? null,
+        extrema: this._extrema.get(entityCfg) ?? null,
+        previousScale,
       })
       : null;
     const revealDuration = this._getRevealTransitionDuration(
@@ -4074,6 +4203,7 @@ ${paintLayers}
       const labelEl = [...(row.querySelectorAll?.('.generic-value-label[data-marker-id]') ?? [])]
         .find((label) => label.dataset.markerId === markerId);
       if (!labelEl) return;
+      this._setDatasetIfChanged(labelEl, 'showMarker', marker?.showMarker === false ? 'false' : 'true');
       this._patchMarkerLabelAppearance(labelEl, marker);
       if (marker?.labelVisible && marker.visible && marker.label?.text) {
         this._setTextIfChanged(labelEl, marker.label?.text ?? null);
@@ -4114,26 +4244,26 @@ ${paintLayers}
     if (!rowsEl) return;
 
     const entities = this._config.entities;
+    const presence = entities.map(entityCfg => !!this._hass.states[entityCfg.entity]);
+    const presenceChanged = presence.some((present, index) => present !== this._rowPresence[index]);
 
     // First render: build all rows from scratch
-    if (!this._rendered) {
+    if (!this._rendered || presenceChanged) {
+      // Reconstruct DOM association only. Configured row ownership and runtime
+      // histories survive primary-entity appearance/disappearance.
+      this._rowGeneration += 1;
+      this._rowPresence = presence;
       let html = '';
       for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
         const entityCfg = entities[entityIndex];
         const stateObj = this._hass.states[entityCfg.entity];
         if (!stateObj) {
-          html += `<div class="row"><span style="color:var(--error-color,red);font-size:12px;">Entity not found: ${escapeHtml(entityCfg.entity)}</span></div>`;
+          html += `<div class="row" data-row-index="${entityIndex}"><span style="color:var(--error-color,red);font-size:12px;">Entity not found: ${escapeHtml(entityCfg.entity)}</span></div>`;
           continue;
         }
         const ecfg      = this._resolve(entityCfg);
         this._updateExtrema(entityCfg, ecfg, stateObj);
-        const rowViewModel = buildRowViewModel({
-          hass: this._hass,
-          cardConfig: this._config,
-          entityConfig: ecfg,
-          entityState: stateObj,
-          extrema: this._extrema[entityCfg.entity] ?? null,
-        });
+        const rowViewModel = this._buildRowViewModel(entityCfg, ecfg, stateObj);
         const safeMin   = rowViewModel.min;
         const safeMax   = rowViewModel.max;
         const pct       = rowViewModel.percent;
@@ -4144,15 +4274,15 @@ ${paintLayers}
         const targetDisplay = rowViewModel.targetPresentation?.text ?? null;
         const peakPct = rowViewModel.peakPercent;
         const peakDisplay = rowViewModel.peakPresentation?.number ?? null;
-        html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_marker.color, ecfg.target_marker.color, safeMin, safeMax);
+        html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_marker.color, ecfg.target_marker.color, safeMin, safeMax, entityIndex);
       }
       this._clearMarkerHover();
       rowsEl.innerHTML = html;
       this._rendered = true;
 
       const builtRows = rowsEl.querySelectorAll('.row[data-entity]');
-      builtRows.forEach((row, idx) => {
-        const entityCfg = entities[idx];
+      builtRows.forEach((row) => {
+        const entityCfg = entities[Number(row.dataset.rowIndex)];
         const stateObj = entityCfg ? this._hass.states[entityCfg.entity] : null;
         if (entityCfg && stateObj) {
           this._patchRow(row, entityCfg, stateObj);
@@ -4173,15 +4303,12 @@ ${paintLayers}
 
     // Subsequent renders: patch only what changed, preserving DOM for smooth transitions
     const rows = rowsEl.querySelectorAll('.row[data-entity]');
-    let rowIdx = 0;
-    for (const entityCfg of entities) {
+    for (const row of rows) {
+      const entityCfg = entities[Number(row.dataset.rowIndex)];
+      if (!entityCfg) continue;
       const stateObj = this._hass.states[entityCfg.entity];
-      if (!stateObj) { rowIdx++; continue; }
-
-      const row = rows[rowIdx];
-      if (!row) { rowIdx++; continue; }
+      if (!stateObj) continue;
       this._patchRow(row, entityCfg, stateObj, previousHass);
-      rowIdx++;
     }
     this._runPostLayoutPasses(rows);
   }

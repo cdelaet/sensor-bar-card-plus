@@ -23,6 +23,7 @@ export function createMarkerModel({
   labelVisible = false,
   shape = 'circle',
   direction = 'inward',
+  showMarker = true,
 }) {
   return {
     id,
@@ -36,6 +37,7 @@ export function createMarkerModel({
     labelVisible: labelVisible === true,
     shape: normalizeMarkerShape(shape),
     direction,
+    showMarker: showMarker !== false,
   };
 }
 
@@ -156,6 +158,7 @@ export function buildMarkerModels({
       labelVisible: marker.labelVisible && hasMarkerLabelContent(marker.label),
       shape: marker.shape,
       direction: marker.direction,
+      showMarker: marker.showMarker,
     })),
   ];
 }

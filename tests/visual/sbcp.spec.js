@@ -52,7 +52,69 @@ async function render(page, { width = 720, config, states = baseStates }) {
   return page.locator('#mount');
 }
 
-test('left responsive history survives unrelated config rebuilds per entity', async ({ page }) => {
+for (const animated of [false, true]) {
+  test(`dynamic scale holds invalid bounds and settles simultaneous updates (animated=${animated})`, async ({ page }) => {
+    const states = (value, min, max, baseline) => ({
+      'sensor.value': sensor(value, { friendly_name: 'Dynamic scale' }),
+      'sensor.min': sensor(min),
+      'sensor.max': sensor(max),
+      'sensor.baseline': sensor(baseline),
+    });
+    await render(page, {
+      config: {
+        entity: 'sensor.value',
+        scale: { min: { entity: 'sensor.min' }, max: { entity: 'sensor.max' } },
+        baseline: { at: { entity: 'sensor.baseline' } },
+        target: { at: { fixed: 250 }, label: { show: true } },
+        bar: { animated },
+      },
+      states: states(50, 0, 100, 25),
+    });
+    const card = page.locator('sensor-bar-card-plus');
+    const readGeometry = () => card.evaluate((element) => {
+      const row = element.shadowRoot.querySelector('.row[data-entity]');
+      const track = row.querySelector('.bar-track');
+      const reveal = row.querySelector('.bar-fill-reveal');
+      const baseline = row.querySelector('.baseline-indicator');
+      const target = row.querySelector('.target-marker');
+      const clip = getComputedStyle(reveal).clipPath;
+      const [top, right = top, bottom = top, left = right] = clip.startsWith('inset(')
+        ? clip.slice(6).split(' round ')[0].replace(')', '').split(' ').map(parseFloat)
+        : [];
+      return {
+        clip: [top, right, bottom, left],
+        baseline: parseFloat(getComputedStyle(baseline).left) / track.getBoundingClientRect().width * 100,
+        target: target.style.left,
+        duration: parseFloat(getComputedStyle(reveal).transitionDuration),
+        value: row.querySelector('.value-right').dataset.display,
+        styles: [...row.querySelectorAll('[style]')].map((node) => node.getAttribute('style')).join(';'),
+      };
+    });
+    const update = async (nextStates, expectedClip, baseline, target, value) => {
+      await card.evaluate((element, nextStates) => { element.hass = { states: nextStates }; }, nextStates);
+      await expect.poll(async () => (await readGeometry()).clip).toEqual(expectedClip);
+      await expect.poll(async () => Math.round((await readGeometry()).baseline)).toBe(baseline);
+      const geometry = await readGeometry();
+      expect(geometry.target).toBe(`${target}%`);
+      expect(geometry.value).toBe(String(value));
+      expect(geometry.styles).not.toMatch(/NaN|Infinity/);
+      expect(Number.isFinite(geometry.duration)).toBe(true);
+      if (animated) expect(geometry.duration).toBeGreaterThan(0);
+      else expect(geometry.duration).toBe(0);
+    };
+
+    // All four sources change in one snapshot; the value crosses Baseline.
+    await update(states(140, 100, 300, 220), [0, 40, 0, 20], 60, 75, 140);
+    await update(states(180, 300, 300, 260), [0, 20, 0, 40], 80, 75, 180);
+    await update(states(220, 400, 300, 180), [0, 40, 0, 40], 40, 75, 220);
+    await update(states(500, 200, 600, 300), [0, 25, 0, 25], 25, 12.5, 500);
+    // Unavailable pair members discard dynamic history; recovery resumes it.
+    await update(states(50, 'unavailable', 600, 25), [0, 50, 0, 25], 25, 100, 50);
+    await update(states(900, 500, 1300, 700), [0, 50, 0, 25], 25, 0, 900);
+  });
+}
+
+test('left responsive layout converges across config rebuilds and fresh rendering per entity', async ({ page }) => {
   const config = {
     layout: { label: { position: 'left', width: 100 }, height: 38 },
     scale: { min: { fixed: 0 }, max: { fixed: 300 } },
@@ -89,7 +151,7 @@ test('left responsive history survives unrelated config rebuilds per entity', as
         valueWidth: budget.valueWidth,
         gap: budget.gap,
         inlineShare: inlineCandidate.share,
-        history: card._leftModeResponsiveHistory.get(entityId),
+        history: card._leftModeResponsiveHistory.get(card._config.entities[Number(row.dataset.rowIndex)]),
       };
     });
   });
@@ -144,20 +206,21 @@ test('left responsive history survives unrelated config rebuilds per entity', as
   await page.evaluate((nextConfig) => {
     document.querySelector('sensor-bar-card-plus').setConfig(nextConfig);
   }, onlyPowerConfig);
-  await expect.poll(() => page.locator('sensor-bar-card-plus').evaluate((card) => [...card._leftModeResponsiveHistory.keys()]))
+  await expect.poll(() => page.locator('sensor-bar-card-plus').evaluate((card) => card._config.entities.filter(row => card._leftModeResponsiveHistory.has(row)).map(row => row.entity)))
     .toEqual(['sensor.power']);
 
   const abovePowerConfig = { ...onlyPowerConfig, layout: { label: { position: 'above' } } };
   await page.evaluate((nextConfig) => {
     document.querySelector('sensor-bar-card-plus').setConfig(nextConfig);
   }, abovePowerConfig);
-  await expect.poll(() => page.locator('sensor-bar-card-plus').evaluate((card) => [...card._leftModeResponsiveHistory.keys()]))
+  await expect.poll(() => page.locator('sensor-bar-card-plus').evaluate((card) => card._config.entities.filter(row => card._leftModeResponsiveHistory.has(row)).map(row => row.entity)))
     .toEqual([]);
 
   const freshConfig = { ...config, entities: [{ entity: 'sensor.power' }] };
   await render(page, { width: 450, config: freshConfig, states });
-  await expect.poll(async () => (await readRows())[0]?.top).toBe(false);
+  await expect.poll(async () => (await readRows())[0]?.top).toBe(beforeNeedle[0].top);
   expect((await readRows())[0].inlineShare).toBeCloseTo(0.4878, 3);
+  expect((await readRows())[0]).toEqual(beforeNeedle[0]);
 });
 
 test('marker editor keeps focused inputs mounted and disclosures usable at narrow width', async ({ page }) => {
@@ -1574,6 +1637,7 @@ test('generic marker DOM identity survives unresolved and resolved source update
       const card = document.querySelector('sensor-bar-card-plus');
       card.hass = {
         states: {
+          ...card._hass.states,
           'sensor.reference_row': window.__sbcpCreateState(20, {
             friendly_name: 'Reference row',
             unit_of_measurement: 'W',
@@ -1648,6 +1712,137 @@ test('generic marker DOM identity survives unresolved and resolved source update
     rowMarginBottom: '13px',
     clearanceToNextRow: 13,
   });
+});
+
+test('generic marker label entities update independently and hidden glyph labels remain interactive', async ({ page }) => {
+  await render(page, {
+    width: 420,
+    config: {
+      type: 'custom:sensor-bar-card-plus',
+      label_position: 'off',
+      min: 0,
+      max: 100,
+      markers: [
+        { at: { fixed: 100 }, show_marker: false, lane: 'above', label: { show: true, entity: 'sensor.daily_energy', precision: 1 } },
+        { at: { entity: 'sensor.reference_position' }, lane: 'above', label: { show: true, text: 'Mode', entity: 'sensor.battery_status' } },
+        { at: { fixed: 50 }, show_marker: false, lane: 'above', label: { show: true, text: 'Anchor A', entity: 'sensor.anchor_a' } },
+        { at: { fixed: 55 }, show_marker: false, lane: 'above', label: { show: true, text: 'Anchor B', entity: 'sensor.anchor_b' } },
+        { at: { fixed: 15 }, lane: 'below' },
+        { at: { fixed: 25 }, lane: 'below' },
+        { at: { fixed: 35 }, lane: 'below' },
+        { at: { fixed: 45 }, lane: 'below' },
+      ],
+      entities: [{ entity: 'sensor.information_row' }],
+    },
+    states: {
+      'sensor.information_row': sensor(20, { friendly_name: 'Battery power', unit_of_measurement: 'W' }),
+      'sensor.daily_energy': sensor(12.37, { unit_of_measurement: 'kWh' }),
+      'sensor.reference_position': sensor(75, { unit_of_measurement: 'W' }),
+      'sensor.battery_status': sensor('Charging', { unit_of_measurement: '' }),
+      'sensor.anchor_a': sensor('Ready', { unit_of_measurement: '' }),
+      'sensor.anchor_b': sensor('Waiting', { unit_of_measurement: '' }),
+    },
+  });
+
+  const card = page.locator('sensor-bar-card-plus');
+  const row = card.locator('.row[data-entity="sensor.information_row"]');
+  await expect(row.locator('.generic-marker')).toHaveCount(8);
+  await expect(row.locator('.generic-value-label')).toHaveCount(4);
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-0"]')).toHaveText('12.4 kWh');
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-1"]')).toHaveText('Mode Charging');
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-2"]')).toHaveText('Anchor A Ready');
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-3"]')).toHaveText('Anchor B Waiting');
+
+  await expect.poll(() => row.evaluate((element) => {
+    const track = element.querySelector('.bar-track').getBoundingClientRect();
+    const label = element.querySelector('.generic-value-label[data-marker-id="generic-0"]').getBoundingClientRect();
+    return label.left >= track.left - 1 && label.right <= track.right + 1;
+  })).toBe(true);
+
+  const initialGeometry = await row.evaluate((element) => {
+    const track = element.querySelector('.bar-track').getBoundingClientRect();
+    const endpointLabel = element.querySelector('.generic-value-label[data-marker-id="generic-0"]');
+    const labelRect = endpointLabel.getBoundingClientRect();
+    return {
+      position: element.querySelector('.generic-marker[data-marker-id="generic-0"]').style.left,
+      glyphDisplay: getComputedStyle(element.querySelector('.generic-marker[data-marker-id="generic-0"] .marker-shape-svg')).display,
+      withinTrack: labelRect.left >= track.left - 1 && labelRect.right <= track.right + 1,
+      dynamicPosition: element.querySelector('.generic-marker[data-marker-id="generic-1"]').style.left,
+      labelLanes: [...element.querySelectorAll('.generic-value-label')].map((label) => label.dataset.lane),
+    };
+  });
+  expect(initialGeometry).toEqual({
+    position: '100%',
+    glyphDisplay: 'none',
+    withinTrack: true,
+    dynamicPosition: '75%',
+    labelLanes: ['above', 'above', 'above', 'above'],
+  });
+
+  const themePresentation = await card.evaluate((element) => {
+    const label = element.shadowRoot.querySelector('.generic-value-label[data-marker-id="generic-0"]');
+    const themes = [
+      ['#1c1c1c', '#f5f5f5'],
+      ['#ffffff', '#202020'],
+    ];
+    const result = themes.map(([background, foreground]) => {
+      element.style.setProperty('--card-background-color', background);
+      element.style.setProperty('--primary-text-color', foreground);
+      const style = getComputedStyle(label);
+      return [style.backgroundColor, style.visibility, style.pointerEvents];
+    });
+    element.style.removeProperty('--card-background-color');
+    element.style.removeProperty('--primary-text-color');
+    return result;
+  });
+  expect(themePresentation).toEqual([
+    ['rgb(28, 28, 28)', 'visible', 'auto'],
+    ['rgb(255, 255, 255)', 'visible', 'auto'],
+  ]);
+
+  await card.evaluate((element) => {
+    element.hass = { states: {
+      ...element._hass.states,
+      'sensor.daily_energy': { state: '15.88', attributes: { unit_of_measurement: 'kWh' } },
+    } };
+  });
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-0"]')).toHaveText('15.9 kWh');
+  expect(await row.locator('.generic-marker[data-marker-id="generic-0"]').evaluate((marker) => marker.style.left)).toBe('100%');
+
+  await card.evaluate((element) => {
+    element.hass = { states: {
+      ...element._hass.states,
+      'sensor.reference_position': { state: '25', attributes: { unit_of_measurement: 'W' } },
+    } };
+  });
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-1"]')).toHaveText('Mode Charging');
+  expect(await row.locator('.generic-marker[data-marker-id="generic-1"]').evaluate((marker) => marker.style.left)).toBe('25%');
+
+  await card.evaluate((element) => {
+    element.hass = { states: {
+      ...element._hass.states,
+      'sensor.battery_status': { state: 'unavailable', attributes: { unit_of_measurement: 'W' } },
+    } };
+  });
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-1"]')).toHaveText('Mode');
+  expect(await row.locator('.generic-marker[data-marker-id="generic-1"]').evaluate((marker) => marker.style.display)).toBe('');
+  await card.evaluate((element) => {
+    element.hass = { states: {
+      ...element._hass.states,
+      'sensor.battery_status': { state: 'Charging', attributes: { unit_of_measurement: '' } },
+    } };
+  });
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-1"]')).toHaveText('Mode Charging');
+
+  const anchorA = row.locator('.generic-value-label[data-marker-id="generic-2"]');
+  const anchorB = row.locator('.generic-value-label[data-marker-id="generic-3"]');
+  await anchorA.hover({ position: { x: 2, y: 2 } });
+  await expect(anchorA).toHaveAttribute('data-marker-hovered', 'true');
+  await expect(anchorA).toHaveCSS('z-index', '11');
+  await anchorB.hover({ position: { x: (await anchorB.boundingBox()).width - 2, y: 2 } });
+  await expect(anchorB).toHaveAttribute('data-marker-hovered', 'true');
+  await expect(anchorB).toHaveCSS('z-index', '11');
+  await expect(anchorA).not.toHaveAttribute('data-marker-hovered', 'true');
 });
 
 test('target marker defaults to diamond and supports explicit triangle overrides', async ({ page }) => {

@@ -9720,3 +9720,1747 @@ views:
         label:
           show: true
           text: Forecast
+- title: README Captures v1.7.0
+  path: sensor-bar-card-plus-readme-captures-v17
+  icon: mdi:camera-outline
+  badges: []
+  cards:
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: |
+        # README Captures — v1.7.0
+        Documentation-focused, deterministic capture cards. See `examples/dashboards/sensor-bar-card-plus-screenshots-v1.7-manifest.md` for phase setup and output filenames.
+    - type: entities
+      title: Synthetic energy story phase
+      show_header_toggle: false
+      entities:
+      - entity: input_select.sbcp_docs_energy_phase
+        name: Select capture phase
+    - type: markdown
+      content: |
+        ## overview-energy-dashboard
+        Capture a balanced synthetic home-energy view. Select **EV plugged in** in the energy story helper first.
+    - type: grid
+      columns: 2
+      square: false
+      cards:
+      - type: custom:sensor-bar-card-plus
+        title: Solar production
+        entity: sensor.sbcp_docs_solar
+        name: Rooftop array
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 7000
+        formatting:
+          decimal: 0
+        bar:
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0F766E'
+          - pos: 70
+            color: '#34D399'
+          - pos: 100
+            color: '#FDE68A'
+      - type: custom:sensor-bar-card-plus
+        title: Household load
+        entity: sensor.sbcp_docs_home_load
+        name: Home
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 4000
+        formatting:
+          decimal: 0
+        bar:
+          fill_style: soft_bands
+          segments:
+          - from: 0%
+            to: 65%
+            color: '#0EA5E9'
+          - from: 65%
+            to: 100%
+            color: '#F59E0B'
+      - type: custom:sensor-bar-card-plus
+        title: Utility exchange
+        entity: sensor.sbcp_docs_grid_flow
+        name: Import / export
+        scale:
+          min:
+            fixed: -6000
+          max:
+            fixed: 6000
+        baseline:
+          at:
+            fixed: 0
+        formatting:
+          decimal: 0
+        bar:
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#2563EB'
+          - pos: 50
+            color: '#E2E8F0'
+          - pos: 100
+            color: '#F59E0B'
+      - type: custom:sensor-bar-card-plus
+        title: Battery power
+        entity: sensor.sbcp_docs_battery_power
+        name: Charge / discharge
+        scale:
+          min:
+            fixed: -2500
+          max:
+            fixed: 2500
+        baseline:
+          at:
+            fixed: 0
+        formatting:
+          decimal: 0
+        bar:
+          fill_style: soft_bands
+          segments:
+          - from: 0%
+            to: 50%
+            color: '#2563EB'
+          - from: 50%
+            to: 100%
+            color: '#22C55E'
+      - type: custom:sensor-bar-card-plus
+        title: EV charging
+        entity: sensor.sbcp_docs_ev_charge
+        name: EV
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 5000
+        formatting:
+          decimal: 0
+        bar:
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0EA5E9'
+          - pos: 100
+            color: '#8B5CF6'
+      - type: custom:sensor-bar-card-plus
+        title: Battery reserve
+        entity: sensor.sbcp_docs_battery_soc
+        name: State of charge
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 100
+        formatting:
+          decimal: 0
+        bar:
+          fill_style: bands
+          segments:
+          - from: 0%
+            to: 20%
+            color: '#EF4444'
+          - from: 20%
+            to: 80%
+            color: '#22C55E'
+          - from: 80%
+            to: 100%
+            color: '#06B6D4'
+
+    - type: markdown
+      content: |
+        ## layout-modes
+        One fixed reading across Left, Above, Inside, Off, and Hero label modes.
+    - type: custom:sensor-bar-card-plus
+      title: Five label layouts
+      layout:
+        label:
+          position: left
+          width: 132
+        height: 38
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#0F766E'
+        - pos: 70
+          color: '#34D399'
+        - pos: 100
+          color: '#FDE68A'
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Left label
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Above label
+        layout:
+          label:
+            position: above
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Inside label
+        layout:
+          label:
+            position: inside
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Label off
+        layout:
+          label:
+            position: off
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Hero label
+        layout:
+          label:
+            position: hero
+          hero:
+            size: small
+
+    - type: markdown
+      content: |
+        ## fill-style-comparison
+        Identical static readings make the paint styles easy to compare.
+    - type: grid
+      columns: 3
+      square: false
+      cards:
+      - type: custom:sensor-bar-card-plus
+        title: Solid
+        entity: sensor.sbcp_hero_shot_solar
+        name: Solar
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 10
+        bar:
+          fill_style: solid
+          color: '#14B8A6'
+      - type: custom:sensor-bar-card-plus
+        title: Gradient
+        entity: sensor.sbcp_hero_shot_solar
+        name: Solar
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 10
+        bar:
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#0F766E'
+          - pos: 70
+            color: '#34D399'
+          - pos: 100
+            color: '#FDE68A'
+      - type: custom:sensor-bar-card-plus
+        title: Bands
+        entity: sensor.sbcp_hero_shot_solar
+        name: Solar
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 10
+        bar:
+          fill_style: bands
+          segments:
+          - from: 0%
+            to: 40%
+            color: '#0F766E'
+          - from: 40%
+            to: 80%
+            color: '#34D399'
+          - from: 80%
+            to: 100%
+            color: '#FDE68A'
+      - type: custom:sensor-bar-card-plus
+        title: Soft bands
+        entity: sensor.sbcp_hero_shot_solar
+        name: Solar
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 10
+        bar:
+          fill_style: soft_bands
+          segments:
+          - from: 0%
+            to: 40%
+            color: '#0F766E'
+          - from: 40%
+            to: 80%
+            color: '#34D399'
+          - from: 80%
+            to: 100%
+            color: '#FDE68A'
+      - type: custom:sensor-bar-card-plus
+        title: Band gradient
+        entity: sensor.sbcp_hero_shot_solar
+        name: Solar
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 10
+        bar:
+          fill_style: band_gradient
+          segments:
+          - from: 0%
+            to: 40%
+            color: '#0F766E'
+          - from: 40%
+            to: 80%
+            color: '#34D399'
+          - from: 80%
+            to: 100%
+            color: '#FDE68A'
+      - type: custom:sensor-bar-card-plus
+        title: Band gradient + solid fill
+        entity: sensor.sbcp_hero_shot_solar
+        name: Solar
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 10
+        bar:
+          fill_style: band_gradient
+          solid_fill: true
+          segments:
+          - from: 0%
+            to: 40%
+            color: '#0F766E'
+          - from: 40%
+            to: 80%
+            color: '#34D399'
+          - from: 80%
+            to: 100%
+            color: '#FDE68A'
+
+    - type: markdown
+      content: |
+        ## baseline-bidirectional-origin
+        Baseline is the zero fill origin. These paired live readings show export and battery charging around zero; there is no Target marker on either track.
+    - type: custom:sensor-bar-card-plus
+      title: Energy across zero
+      entities:
+      - entity: sensor.sbcp_docs_grid_flow
+        name: Grid export / import
+        icon: mdi:transmission-tower
+      - entity: sensor.sbcp_docs_battery_power
+        name: Battery charge / discharge
+        icon: mdi:battery-sync
+      scale:
+        min:
+          fixed: -6000
+        max:
+          fixed: 6000
+      baseline:
+        at:
+          fixed: 0
+        above:
+          color: '#22C55E'
+        below:
+          color: '#60A5FA'
+      layout:
+        label:
+          position: left
+          width: 190
+        height: 48
+      formatting:
+        decimal: 0
+        unit: W
+      bar:
+        fill_style: soft_bands
+        segment_space: scale
+        segments:
+        - from: -6000
+          to: 0
+          color: '#2563EB'
+        - from: 0
+          to: 6000
+          color: '#22C55E'
+
+    - type: markdown
+      content: |
+        ## target-peak-floor
+        Start from Dawn, reset this view, advance the story through all phases, and capture at Night. Target is configured; Max and Min are the highest and lowest sampled battery-power values for this card session.
+    - type: custom:sensor-bar-card-plus
+      title: Target and observed range
+      entity: sensor.sbcp_docs_battery_power
+      name: Battery power
+      scale:
+        min:
+          fixed: -2500
+        max:
+          fixed: 2500
+      baseline:
+        at:
+          fixed: 0
+        above:
+          color: '#22C55E'
+        below:
+          color: '#60A5FA'
+      target:
+        at:
+          fixed: 500
+        color: '#FDE68A'
+        label:
+          show: true
+          text: Charge target
+      peak:
+        enabled: true
+        reset: never
+        color: '#A78BFA'
+        label:
+          show: true
+          text: Max
+      floor:
+        enabled: true
+        reset: never
+        color: '#FB923C'
+        label:
+          show: true
+          text: Min
+      layout:
+        label:
+          position: above
+        height: 52
+      formatting:
+        decimal: 0
+        unit: W
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#2563EB'
+        - pos: 50
+          color: '#E2E8F0'
+        - pos: 100
+          color: '#22C55E'
+
+    - type: markdown
+      content: |
+        ## generic-marker-glyphs
+        All glyphs below are rendered by SBCP. The second card compares Inward and Outward on directional shapes only.
+    - type: custom:sensor-bar-card-plus
+      title: Circle, Diamond, Triangle, Chevron
+      entity: sensor.sbcp_marker_comfort
+      name: Room comfort scale
+      scale:
+        min:
+          fixed: 16
+        max:
+          fixed: 30
+      markers:
+      - at: 25%
+        lane: above
+        shape: circle
+        color: '#2563EB'
+        label:
+          show: true
+          text: Reserve
+      - at: 75%
+        lane: above
+        shape: diamond
+        color: '#0891B2'
+        label:
+          show: true
+          text: Plan
+      - at: 25%
+        lane: below
+        shape: triangle
+        color: '#7C3AED'
+        label:
+          show: true
+          text: Low
+      - at: 75%
+        lane: below
+        shape: chevron
+        color: '#EA5808'
+        label:
+          show: true
+          text: High
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#0F766E'
+        - pos: 100
+          color: '#FDE68A'
+    - type: custom:sensor-bar-card-plus
+      title: Arrow and Pin direction
+      entity: sensor.sbcp_marker_comfort
+      name: Room comfort scale
+      scale:
+        min:
+          fixed: 16
+        max:
+          fixed: 30
+      markers:
+      - at: 30%
+        lane: above
+        shape: arrow
+        direction: inward
+        color: '#16A34A'
+        label:
+          show: true
+          text: In
+      - at: 70%
+        lane: above
+        shape: arrow
+        direction: outward
+        color: '#D97706'
+        label:
+          show: true
+          text: Out
+      - at: 30%
+        lane: below
+        shape: pin
+        direction: inward
+        color: '#16A34A'
+        label:
+          show: true
+          text: In
+      - at: 70%
+        lane: below
+        shape: pin
+        direction: outward
+        color: '#D97706'
+        label:
+          show: true
+          text: Out
+      bar:
+        fill_style: solid
+        color: '#0F766E'
+
+    - type: markdown
+      content: |
+        ## marker-labels-and-comfort-range
+        A useful room comfort range: lower bound, ideal Target, and upper bound with restrained labels.
+    - type: custom:sensor-bar-card-plus
+      title: Bedroom comfort range
+      entity: sensor.sbcp_marker_comfort
+      name: Current temperature
+      scale:
+        min:
+          fixed: 16
+        max:
+          fixed: 30
+      target:
+        at:
+          fixed: 22
+        color: '#FDE68A'
+        label:
+          show: true
+          text: Ideal
+      markers:
+      - at:
+          fixed: 19
+        lane: above
+        shape: circle
+        color: '#60A5FA'
+        label:
+          show: true
+          text: Low
+      - at:
+          fixed: 25
+        lane: below
+        shape: circle
+        color: '#FB923C'
+        label:
+          show: true
+          text: High
+      layout:
+        label:
+          position: above
+      formatting:
+        decimal: 1
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#60A5FA'
+        - pos: 50
+          color: '#22C55E'
+        - pos: 100
+          color: '#FB923C'
+
+    - type: markdown
+      content: |
+        ## visual-editor-markers
+        Manual editor capture: open this card in the Home Assistant Visual Editor. It intentionally combines a Target with two generic references.
+    - type: custom:sensor-bar-card-plus
+      title: EDITOR PREP — Marker controls
+      entity: sensor.sbcp_marker_comfort
+      name: Room temperature
+      scale:
+        min:
+          fixed: 16
+        max:
+          fixed: 30
+      target:
+        at:
+          fixed: 22
+        label:
+          show: true
+          text: Ideal
+      markers:
+      - at:
+          fixed: 19
+        lane: above
+        shape: triangle
+        color: '#60A5FA'
+        label:
+          show: true
+          text: Minimum
+      - at:
+          fixed: 25
+        lane: below
+        shape: pin
+        color: '#FB923C'
+        label:
+          show: true
+          text: Maximum
+      bar:
+        fill_style: bands
+        segment_space: scale
+        segments:
+        - from: 16
+          to: 19
+          color: '#60A5FA'
+        - from: 19
+          to: 25
+          color: '#22C55E'
+        - from: 25
+          to: 30
+          color: '#FB923C'
+
+    - type: markdown
+      content: |
+        ## responsive-hero — optional
+        A long-label Hero row for a narrow viewport or mobile-width capture.
+    - type: custom:sensor-bar-card-plus
+      title: Responsive Hero
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Rooftop solar generation on a clear late-summer afternoon
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Household utility exchange while the battery is charging
+      layout:
+        label:
+          position: hero
+        height: 34
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+      formatting:
+        decimal: 1
+      baseline:
+        at:
+          fixed: 0
+      bar:
+        fill_style: gradient
+        gradient_stops:
+        - pos: 0
+          color: '#2563EB'
+        - pos: 50
+          color: '#E2E8F0'
+        - pos: 100
+          color: '#22C55E'
+- title: Hero Showcase v1.7
+  path: sensor-bar-card-plus-hero-showcase-v17
+  icon: mdi:solar-power-variant
+  badges: []
+  cards:
+    - type: vertical-stack
+      title: Home energy
+      cards:
+        - type: custom:sensor-bar-card-plus
+          entities:
+            - entity: sensor.sbcp_docs_solar
+              name: Rooftop solar
+              icon: mdi:solar-power
+              bar:
+                gradient_stops:
+                  - pos: 0
+                    color: '#ff4013'
+                  - pos: 30
+                    color: '#ffaa00'
+                  - pos: 65
+                    color: '#fffb00'
+                  - pos: 100
+                    color: '#00f900'
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 7000
+          layout:
+            height: 32
+            label:
+              position: above
+          formatting:
+            unit: W
+            decimal: 0
+          bar:
+            fill_style: gradient
+            gradient_stops:
+              - pos: 0
+                color: '#9929bd'
+              - pos: 30
+                color: '#e392fe'
+              - pos: 65
+                color: '#ffc677'
+              - pos: 100
+                color: '#ffd9a8'
+          markers:
+            - at:
+                entity: sensor.sbcp_docs_solar_forecast
+              shape: pin
+              color: '#FDE68A'
+              label:
+                show: true
+                text: Forecast
+                show_value: false
+                show_unit: false
+        - type: custom:sensor-bar-card-plus
+          scale:
+            min:
+              fixed: -5000
+            max:
+              fixed: 5000
+          target:
+            at:
+              fixed: 3000
+            color: '#94e3fe'
+            label:
+              show: true
+              show_value: false
+              show_unit: false
+              text: Grid Import Limit
+            when_exceeded:
+              fill_color: '#941100'
+          layout:
+            height: 32
+            label:
+              position: hero
+            hero:
+              size: small
+          formatting:
+            unit: W
+            decimal: 0
+          bar:
+            fill_style: band_gradient
+            color: '#96d35f'
+            needle:
+              show: true
+            segments:
+              - from: -5000
+                to: -3000
+                color: '#8e51ff'
+              - from: -3000
+                to: -1500
+                color: '#2b7fff'
+              - from: -1500
+                to: -300
+                color: '#3bbbdb'
+              - from: -300
+                to: 300
+                color: '#42a047'
+              - from: 300
+                to: 1000
+                color: '#f5c043'
+              - from: 1000
+                to: 2000
+                color: '#eb9842'
+              - from: 2000
+                to: 3000
+                color: '#ff692a'
+              - from: 3000
+                to: 4000
+                color: '#db4537'
+              - from: 4000
+                to: 5000
+                color: '#9f0912'
+          entity: sensor.sbcp_docs_grid_flow
+          name: Grid · export / import
+          icon: mdi:transmission-tower
+          markers: []
+        - type: custom:sensor-bar-card-plus
+          entities:
+            - entity: sensor.sbcp_docs_home_load
+              name: Home
+              icon: mdi:home-lightning-bolt
+              bar:
+                fill_style: gradient
+                gradient_stops:
+                  - pos: 0
+                    color: '#45caff'
+                  - pos: 100
+                    color: '#ff1c6b'
+            - entity: sensor.sbcp_docs_ev_charge
+              name: EV charging
+              icon: mdi:car-electric
+              bar:
+                fill_style: gradient
+                color: '#7DD3FC'
+                gradient_stops:
+                  - pos: 0
+                    color: '#40c9ff'
+                  - pos: 25
+                    color: '#e81cff'
+                  - pos: 50
+                    color: '#40c9ff'
+                  - pos: 100
+                    color: '#277796'
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 5000
+          layout:
+            height: 24
+            label:
+              position: above
+          formatting:
+            unit: W
+            decimal: 0
+        - type: custom:sensor-bar-card-plus
+          entities:
+            - entity: sensor.sbcp_docs_battery_power
+              name: Battery
+              icon: mdi:battery-sync
+              scale:
+                min:
+                  fixed: -2500
+                max:
+                  fixed: 2500
+              baseline:
+                at:
+                  fixed: 0
+                above:
+                  color: '#34fcec'
+                below:
+                  color: '#6ec4ff'
+              peak:
+                enabled: true
+                reset: never
+                label:
+                  show: true
+                  text: Max
+                  show_value: false
+                  show_unit: false
+                color: '#34fcec'
+              floor:
+                enabled: true
+                reset: never
+                label:
+                  show: true
+                  text: Min
+                  show_value: false
+                  show_unit: false
+                color: '#6ec4ff'
+              bar:
+                fill_style: solid
+                color: '#34D399'
+              markers:
+                - at: 0%
+                  shape: diamond
+                  color: '#919191'
+                  label:
+                    show: true
+                    text: discharge
+                    show_value: false
+                    show_unit: false
+                - at: 100%
+                  shape: diamond
+                  label:
+                    text: charge
+                    show_value: false
+                    show_unit: false
+                    show: true
+            - entity: sensor.sbcp_docs_battery_soc
+              name: SoC
+              icon: mdi:home-battery
+              scale:
+                min:
+                  fixed: 0
+                max:
+                  fixed: 100
+              target:
+                at:
+                  fixed: 80
+                color: '#FDE68A'
+                label:
+                  show: true
+                  text: Goal
+                enabled: false
+              layout:
+                label:
+                  position: inside
+              formatting:
+                unit: '%'
+              bar:
+                fill_style: soft_bands
+                needle:
+                  show: true
+                  color: '#F8FAFC'
+                segments:
+                  - from: 0%
+                    to: 12%
+                    color: '#ff6251'
+                  - from: 12%
+                    to: 80%
+                    color: '#00fa92'
+                  - from: 80%
+                    to: 100%
+                    color: '#9437ff'
+              markers:
+                - at:
+                    fixed: 80
+                  shape: chevron
+                  color: '#fde68a'
+                  label:
+                    show: true
+                    text: Target
+          layout:
+            height: 28
+            label:
+              position: above
+          formatting:
+            unit: W
+            decimal: 0
+    - type: entities
+      show_header_toggle: false
+      entities:
+        - entity: input_button.sbcp_docs_hero_capture
+          name: Set showcase capture state
+        - entity: sensor.sbcp_docs_current_phase
+          name: Current energy phase
+        - entity: input_select.sbcp_docs_energy_phase
+          name: Choose / jump to phase
+        - entity: input_button.sbcp_docs_animation_seek
+          name: Jump to selected phase (pause playback)
+    - type: entities
+      title: Animation Controls
+      show_header_toggle: false
+      entities:
+        - entity: input_button.sbcp_docs_animation_run
+          name: Run / Play
+        - entity: input_button.sbcp_docs_animation_stop
+          name: Stop / Pause
+        - entity: input_button.sbcp_docs_animation_step_back
+          name: Step backward
+        - entity: input_button.sbcp_docs_animation_step_forward
+          name: Step forward
+        - entity: input_select.sbcp_docs_animation_speed
+          name: Playback speed
+        - entity: input_text.sbcp_docs_transition_seconds
+          name: Transition seconds, Dawn through Night
+        - entity: input_number.sbcp_docs_phase_hold
+          name: Hold at keyframes
+        - entity: input_number.sbcp_docs_night_hold
+          name: Hold at Night before looping
+
+- title: README Hero Still v1.7
+  path: sensor-bar-card-plus-readme-hero-still-v17
+  icon: mdi:image
+  badges: []
+  cards:
+  - type: vertical-stack
+    title: Home energy
+    cards:
+    - type: custom:sensor-bar-card-plus
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 7000
+      layout:
+        height: 32
+        label:
+          position: above
+      formatting:
+        unit: W
+        decimal: 0
+      bar:
+        fill_style: gradient
+        gradient_stops:
+          - pos: 0
+            color: '#9929bd'
+          - pos: 30
+            color: '#e392fe'
+          - pos: 65
+            color: '#ffc677'
+          - pos: 100
+            color: '#ffd9a8'
+      entity: sensor.sbcp_docs_static_hero_solar
+      name: Rooftop solar
+      icon: mdi:solar-power
+      markers:
+        - at:
+            entity: sensor.sbcp_docs_static_hero_solar_forecast
+          shape: pin
+          color: '#FDE68A'
+          label:
+            show: true
+            text: Forecast
+            show_value: false
+            show_unit: false
+
+    - type: custom:sensor-bar-card-plus
+      scale:
+        min:
+          fixed: -5000
+        max:
+          fixed: 5000
+      target:
+        at:
+          fixed: 3000
+        color: '#ff905b'
+        label:
+          show: true
+          show_value: false
+          show_unit: false
+          text: Grid Import Limit
+        when_exceeded:
+          fill_color: '#b51a00'
+      baseline:
+        at:
+          fixed: 0
+        above:
+          color: '#ffb380'
+        below:
+          color: '#06c2b5'
+      layout:
+        height: 32
+        label:
+          position: above
+      formatting:
+        unit: W
+        decimal: 0
+      bar:
+        fill_style: solid
+        color: '#34D399'
+      entity: sensor.sbcp_docs_static_hero_grid_flow
+      name: Grid · export / import
+      icon: mdi:transmission-tower
+      markers: []
+
+    - type: custom:sensor-bar-card-plus
+      entities:
+        - entity: sensor.sbcp_docs_static_hero_home_load
+          name: Home
+          icon: mdi:home-lightning-bolt
+          bar:
+            fill_style: gradient
+            gradient_stops:
+              - pos: 0
+                color: '#8997ff'
+              - pos: 100
+                color: '#ced4ff'
+
+        - entity: sensor.sbcp_docs_static_hero_ev_charge
+          name: EV charging
+          icon: mdi:car-electric
+          bar:
+            fill_style: gradient
+            color: '#7DD3FC'
+            gradient_stops:
+              - pos: 0
+                color: '#0897f4'
+              - pos: 50
+                color: '#068fcf'
+              - pos: 100
+                color: '#04829e'
+          markers:
+            - at: 0%
+              lane: below
+              color: '#7DD3FC'
+              show_marker: false
+              label:
+                show: true
+                text: SoC
+                entity: sensor.sbcp_docs_static_hero_ev_soc
+                precision: 0
+            - at: 50%
+              lane: below
+              color: '#7DD3FC'
+              show_marker: false
+              label:
+                show: true
+                text: Charging
+                entity: sensor.sbcp_docs_static_hero_ev_charging_state
+            - at: 100%
+              lane: below
+              color: '#7DD3FC'
+              show_marker: false
+              label:
+                show: true
+                entity: sensor.sbcp_docs_static_hero_ev_current
+                precision: 1
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 5000
+      layout:
+        height: 24
+        label:
+          position: above
+      formatting:
+        unit: W
+        decimal: 0
+
+    - type: custom:sensor-bar-card-plus
+      entities:
+        - entity: sensor.sbcp_docs_static_hero_battery_power
+          name: Battery · discharge / charge
+          icon: mdi:battery-sync
+          scale:
+            min:
+              fixed: -2500
+            max:
+              fixed: 2500
+          baseline:
+            at:
+              fixed: 0
+            above:
+              color: '#34fcec'
+            below:
+              color: '#6ec4ff'
+          peak:
+            enabled: true
+            reset: never
+            label:
+              show: true
+              text: Max
+              show_value: false
+              show_unit: false
+            color: '#34fcec'
+          floor:
+            enabled: true
+            reset: never
+            label:
+              show: true
+              text: Min
+              show_value: false
+              show_unit: false
+            color: '#6ec4ff'
+          bar:
+            fill_style: solid
+            color: '#34D399'
+
+        - entity: sensor.sbcp_docs_static_hero_battery_soc
+          name: Battery reserve
+          icon: mdi:home-battery
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 100
+          target:
+            at:
+              fixed: 80
+            color: '#FDE68A'
+            label:
+              show: true
+              text: Goal
+            enabled: false
+          layout:
+            label:
+              position: inside
+          formatting:
+            unit: '%'
+          bar:
+            fill_style: soft_bands
+            needle:
+              show: true
+              color: '#F8FAFC'
+            segments:
+              - from: 0%
+                to: 12%
+                color: '#8997ff'
+              - from: 12%
+                to: 80%
+                color: '#ffd668'
+              - from: 80%
+                to: 100%
+                color: '#ff97aa'
+          markers:
+            - at:
+                fixed: 80
+              shape: chevron
+              color: '#fde68a'
+              label:
+                show: true
+                text: Target
+      layout:
+        height: 28
+        label:
+          position: above
+      formatting:
+        unit: W
+        decimal: 0
+  - type: entities
+    title: Static Capture Controls
+    show_header_toggle: false
+    entities:
+      - entity: input_number.sbcp_docs_static_hero_solar
+        name: Solar (W)
+      - entity: input_number.sbcp_docs_static_hero_solar_forecast
+        name: Solar Forecast (W)
+      - entity: input_number.sbcp_docs_static_hero_home_load
+        name: Home load (W)
+      - entity: input_number.sbcp_docs_static_hero_ev_charge
+        name: EV charging (W)
+      - entity: input_number.sbcp_docs_static_hero_ev_soc
+        name: EV state of charge (%)
+      - entity: input_number.sbcp_docs_static_hero_battery_power
+        name: Battery current (W)
+      - entity: input_number.sbcp_docs_static_hero_battery_reserve
+        name: Battery reserve (%)
+      - entity: input_number.sbcp_docs_static_hero_peak_setup
+        name: Peak setup (W)
+      - entity: input_number.sbcp_docs_static_hero_floor_setup
+        name: Floor setup (W)
+      - entity: script.sbcp_docs_static_hero_prepare_peak_floor
+        name: Prepare extrema
+      - entity: script.sbcp_docs_static_hero_reset_recommended_values
+        name: Reset recommended values
+- title: Visual Examples
+  path: sensor-bar-card-plus-visual-examples
+  icon: mdi:palette-swatch-variant
+  type: sections
+  max_columns: 3
+  dense_section_placement: false
+  badges: []
+  header:
+    layout: start
+    card:
+      type: markdown
+      content: |
+        # Visual Examples
+        Copyable comparisons using the same power reading and palette. Load the playground package first, then use the controls below. Resize the dashboard or open it on a phone to see the layouts adapt.
+
+        Start with Power **7200**, Scale **0–10000**, Baseline **2000**, Target **6500** and Reference **3500** W. These controls are separate from the other playground views. Keep Power within the chosen Scale for unclamped comparisons.
+
+        Scale, Baseline, Target and reference positions update live. The Scale controls stay ordered; if either Scale source is unavailable, the complete fixed fallback is **0–10000 W**. Fallbacks are for unavailable sources, not extra slider modes.
+
+        Turn on **GIF sweep** to move Power by **1000 W every second**, starting from its current value and reversing at the Scale minimum and maximum. The default **0–10000 W** Scale takes approximately **10 seconds from minimum to maximum**, **10 seconds back**, and **20 seconds for a complete triangle-wave cycle**. Turn it off to stop at the current value and use the sliders manually. It starts disabled.
+  sections:
+  - type: grid
+    cards:
+    - type: vertical-stack
+      cards:
+      - type: entities
+        title: Visual Example Controls
+        show_header_toggle: false
+        entities:
+        - entity: input_number.sbcp_examples_primary
+          name: Power (W)
+        - entity: input_number.sbcp_examples_scale_min
+          name: Scale minimum (W)
+        - entity: input_number.sbcp_examples_scale_max
+          name: Scale maximum (W)
+        - entity: input_number.sbcp_examples_baseline
+          name: Baseline (W)
+        - entity: input_number.sbcp_examples_target
+          name: Target limit (W)
+        - entity: input_number.sbcp_examples_reference
+          name: Generic reference (W)
+        - entity: input_number.sbcp_examples_battery
+          name: Battery charge (%)
+        - entity: input_boolean.sbcp_examples_sweep_enabled
+          name: GIF sweep · start / stop
+  - type: grid
+    cards:
+    - type: vertical-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        title: Five Label Layouts
+        layout:
+          label:
+            position: left
+            width: 150
+        scale:
+          min:
+            entity: input_number.sbcp_examples_scale_min
+            fixed: 0
+          max:
+            entity: input_number.sbcp_examples_scale_max
+            fixed: 10000
+        formatting:
+          decimal: 0
+        bar:
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#00F5D4'
+          - pos: 70
+            color: '#FFF200'
+          - pos: 100
+            color: '#FF007F'
+        entities:
+        - entity: sensor.sbcp_examples_primary
+          name: House load · Left
+        - entity: sensor.sbcp_examples_primary
+          name: House load · Above
+          layout:
+            label:
+              position: above
+        - entity: sensor.sbcp_examples_primary
+          name: House load · Inside
+          layout:
+            label:
+              position: inside
+        - entity: sensor.sbcp_examples_primary
+          layout:
+            label:
+              position: 'off'
+        - entity: sensor.sbcp_examples_primary
+          name: House load · Hero
+          layout:
+            label:
+              position: hero
+            hero:
+              size: small
+      - type: markdown
+        content: |
+          ## Layouts
+          The five rows use the same reading and icon; the name identifies the layout. The fourth row is **Off** and deliberately has no name. Hero has no icon. Heights are implicit so normal responsive density can adapt; headers and pills differ by layout.
+  - type: grid
+    cards:
+    - type: vertical-stack
+      cards:
+      - type: custom:sensor-bar-card-plus
+        title: Fill Styles
+        layout:
+          label:
+            position: above
+        scale:
+          min:
+            entity: input_number.sbcp_examples_scale_min
+            fixed: 0
+          max:
+            entity: input_number.sbcp_examples_scale_max
+            fixed: 10000
+        formatting:
+          decimal: 0
+        bar:
+          color: '#00F5D4'
+          needle:
+            show: true
+            color: '#F8FAFC'
+          gradient_stops:
+          - pos: 0
+            color: '#00F5D4'
+          - pos: 70
+            color: '#FFF200'
+          - pos: 100
+            color: '#FF007F'
+          segments:
+          - from: 0%
+            to: 40%
+            color: '#00F5D4'
+          - from: 40%
+            to: 80%
+            color: '#FFF200'
+          - from: 80%
+            to: 100%
+            color: '#FF007F'
+        entities:
+        - entity: sensor.sbcp_examples_primary
+          name: Solid
+          bar:
+            fill_style: solid
+        - entity: sensor.sbcp_examples_primary
+          name: Gradient
+          bar:
+            fill_style: gradient
+        - entity: sensor.sbcp_examples_primary
+          name: Bands
+          bar:
+            fill_style: bands
+        - entity: sensor.sbcp_examples_primary
+          name: Soft Bands
+          bar:
+            fill_style: soft_bands
+        - entity: sensor.sbcp_examples_primary
+          name: Band Gradient
+          bar:
+            fill_style: band_gradient
+        - entity: sensor.sbcp_examples_primary
+          name: Band Gradient + Solid Fill
+          bar:
+            fill_style: band_gradient
+            solid_fill: true
+      - type: markdown
+        content: |
+          ## Fill styles
+          Needle keeps the entire rail painted and marks Power (**72%** at the initial **7200 W / 0–10000 W** Scale). Compare vivid **cyan / yellow / magenta** across the complete rail, or turn on **GIF sweep** to animate the comparison.
+
+          Solid stays cyan. Gradient uses rail-percentage stops; Bands keeps hard boundaries; Soft Bands blends briefly at eligible boundaries; Band Gradient blends the Segment color sequence continuously. The last row uses **solid_fill**, a modifier that paints the whole rail with the Band Gradient color sampled at Power; that single color changes as the Needle moves.
+      - type: custom:sensor-bar-card-plus
+        title: Value and Mixed Segment Coordinates
+        layout:
+          label:
+            position: above
+        scale:
+          min:
+            entity: input_number.sbcp_examples_scale_min
+            fixed: 0
+          max:
+            entity: input_number.sbcp_examples_scale_max
+            fixed: 10000
+        formatting:
+          decimal: 0
+        bar:
+          fill_style: bands
+          segments:
+          - from: 0%
+            to: 2000
+            color: '#00F5D4'
+          - from: 2000
+            to: 6000
+            color: '#FFF200'
+          - from: 6000
+            to: 100%
+            color: '#FF007F'
+        entities:
+        - entity: sensor.sbcp_examples_primary
+          name: Values · 2000 / 6000 W
+        - entity: sensor.sbcp_examples_primary
+          name: Mixed · 2000 W / 75%
+          bar:
+            segments:
+            - from: 0%
+              to: 2000
+              color: '#00F5D4'
+            - from: 2000
+              to: 75%
+              color: '#FFF200'
+            - from: 75%
+              to: 100%
+              color: '#FF007F'
+      - type: markdown
+        content: |
+          ## Segment coordinates
+          The Bands row above uses **40% / 80%** boundaries. Here, numeric boundaries mean **2000 / 6000 W**; the mixed row combines **2000 W / 75%**. Change Scale maximum to see value thresholds move relative to the rail while percentage thresholds stay at their fractions. Gradient stops remain rail percentages too: bare `pos: 70` means **70%**, not 70 W.
+      - type: custom:sensor-bar-card-plus
+        title: Compact Needle · 24 px Rail
+        layout:
+          height: 24
+          label:
+            position: above
+        scale:
+          min:
+            entity: input_number.sbcp_examples_scale_min
+            fixed: 0
+          max:
+            entity: input_number.sbcp_examples_scale_max
+            fixed: 10000
+        formatting:
+          decimal: 0
+        bar:
+          needle:
+            show: true
+            color: '#F8FAFC'
+          gradient_stops:
+          - pos: 0
+            color: '#00F5D4'
+          - pos: 70
+            color: '#FFF200'
+          - pos: 100
+            color: '#FF007F'
+          segments:
+          - from: 0%
+            to: 40%
+            color: '#00F5D4'
+          - from: 40%
+            to: 80%
+            color: '#FFF200'
+          - from: 80%
+            to: 100%
+            color: '#FF007F'
+        entities:
+        - entity: sensor.sbcp_examples_primary
+          name: Gradient
+          bar:
+            fill_style: gradient
+        - entity: sensor.sbcp_examples_primary
+          name: Bands
+          bar:
+            fill_style: bands
+      - type: markdown
+        content: |
+          ## Compact Needle
+          Needle shows the whole colored rail and marks the current value, instead of revealing a growing fill. These two rows use an explicit **24 px rail** as a useful compact option; their complete rows are taller because of the headers. Compare smooth Gradient with hard Bands, then move Power.
+      - type: custom:sensor-bar-card-plus
+        title: Baseline Origins and Side Colors
+        layout:
+          label:
+            position: above
+        scale:
+          min:
+            entity: input_number.sbcp_examples_scale_min
+            fixed: 0
+          max:
+            entity: input_number.sbcp_examples_scale_max
+            fixed: 10000
+        formatting:
+          decimal: 0
+        bar:
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#00F5D4'
+          - pos: 70
+            color: '#FFF200'
+          - pos: 100
+            color: '#FF007F'
+        entities:
+        - entity: sensor.sbcp_examples_primary
+          name: Value · 0 W
+          baseline:
+            at: 0
+        - entity: sensor.sbcp_examples_primary
+          name: Position · 50%
+          baseline:
+            at: 50%
+        - entity: sensor.sbcp_examples_primary
+          name: Live Baseline · side colors
+          baseline:
+            at:
+              entity: input_number.sbcp_examples_baseline
+              fixed: 2000
+            below:
+              color: '#60A5FA'
+            above:
+              color: '#34D399'
+      - type: markdown
+        content: |
+          ## Baseline origins and side colors
+          Fill spans Baseline to Power in either direction, with a persistent indicator at Baseline. **0 W** is a Scale value; **50%** is the visible midpoint (5000 W on the initial Scale). Change Scale minimum to **−2000 W** to make that distinction clearer. The third row follows the Baseline control and deliberately replaces the two sides with blue/green paint. Move Power below, equal to, and above Baseline. These examples use Reveal Fill; an active Baseline suppresses Needle.
+      - type: custom:sensor-bar-card-plus
+        title: Built-in and Generic References
+        layout:
+          height: 38
+          label:
+            position: above
+        scale:
+          min:
+            entity: input_number.sbcp_examples_scale_min
+            fixed: 0
+          max:
+            entity: input_number.sbcp_examples_scale_max
+            fixed: 10000
+        formatting:
+          decimal: 0
+        bar:
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#00F5D4'
+          - pos: 70
+            color: '#FFF200'
+          - pos: 100
+            color: '#FF007F'
+        entities:
+        - entity: sensor.sbcp_examples_primary
+          name: Target + Peak / Floor
+          target:
+            at:
+              entity: input_number.sbcp_examples_target
+              fixed: 6500
+            color: '#FDE68A'
+            label:
+              show: true
+              text: Limit
+              show_value: false
+              show_unit: false
+            when_exceeded:
+              fill_color: '#00B2FF'
+          peak:
+            enabled: true
+            color: '#F8FAFC'
+          floor:
+            enabled: true
+            color: '#60A5FA'
+        - entity: sensor.sbcp_examples_primary
+          name: Generic references
+          markers:
+          - at:
+              entity: input_number.sbcp_examples_reference
+              fixed: 3500
+            lane: above
+            shape: pin
+            direction: inward
+            color: '#60A5FA'
+            label:
+              show: true
+              text: Reference
+              show_value: false
+              show_unit: false
+          - at: 75%
+            lane: below
+            shape: chevron
+            direction: outward
+            color: '#FDE68A'
+            label:
+              show: true
+              text: 75%
+              show_value: false
+              show_unit: false
+          - at: 100%
+            lane: above
+            show_marker: false
+            color: '#34D399'
+            label:
+              show: true
+              text: Now
+              entity: sensor.sbcp_examples_primary
+              show_unit: false
+              precision: 0
+      - type: markdown
+        content: |
+          ## Built-in and generic references
+          The first row has a live diamond Target, plus triangular Peak (above) and Floor (below). Move Power to **3000**, then **9000**, then back to **7200 W** to separate the session extrema. Fill above Target becomes vivid blue (**#00B2FF**), distinct from the magenta palette color. Peak/Floor history resets when the card is recreated.
+
+          The second row separates a live inward Pin (above), a fixed **75%** outward Chevron (below), and a label-only endpoint. **Now** reads the primary sensor independently of its fixed endpoint position. Move Reference or change the Scale to compare value and percentage anchors. Labels can overlap at narrow widths; hover where available to raise a label.
+      - type: markdown
+        content: |
+          ## Complete Practical Cards
+          Three complete cards from the Examples Guide, using the controls in the first column. The power cards retain their fixed 0–10000 W Scale and the House Power card retains its fixed 6500 W Target.
+      - type: markdown
+        content: |
+          ### Battery percentage at a glance
+          Hero shows Battery charge on a fixed 0–100% Scale, with a cyan reveal fill and no icon.
+      - type: custom:sensor-bar-card-plus
+        title: Home Battery
+        layout:
+          label:
+            position: hero
+          hero:
+            size: small
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 100
+        formatting:
+          decimal: 0
+        bar:
+          fill_style: solid
+          color: '#00F5D4'
+        entities:
+        - entity: input_number.sbcp_examples_battery
+          name: Charge
+      - type: markdown
+        content: |
+          ### House power with a limit
+          House load uses the cyan/yellow/magenta Gradient palette and a fixed 6500 W Target. The revealed portion above Target turns blue.
+      - type: custom:sensor-bar-card-plus
+        title: House Power
+        layout:
+          label:
+            position: above
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 10000
+        formatting:
+          decimal: 0
+        bar:
+          fill_style: gradient
+          gradient_stops:
+          - pos: 0
+            color: '#00F5D4'
+          - pos: 70
+            color: '#FFF200'
+          - pos: 100
+            color: '#FF007F'
+        target:
+          at:
+            fixed: 6500
+          color: '#FDE68A'
+          label:
+            show: true
+            text: Limit
+            show_value: false
+            show_unit: false
+          when_exceeded:
+            fill_color: '#00B2FF'
+        entities:
+        - entity: sensor.sbcp_examples_primary
+          name: House load
+      - type: markdown
+        content: |
+          ### Power relative to a live reference
+          The live Baseline control supplies both the fill origin and the Pin reference. Blue/green side colors distinguish readings below/above it; Now independently shows Power at the endpoint.
+      - type: custom:sensor-bar-card-plus
+        title: Power Against Reference
+        layout:
+          label:
+            position: above
+        scale:
+          min:
+            fixed: 0
+          max:
+            fixed: 10000
+        formatting:
+          decimal: 0
+        bar:
+          fill_style: solid
+          color: '#00F5D4'
+        baseline:
+          at:
+            entity: input_number.sbcp_examples_baseline
+            fixed: 2000
+          below:
+            color: '#60A5FA'
+          above:
+            color: '#34D399'
+        markers:
+        - at:
+            entity: input_number.sbcp_examples_baseline
+            fixed: 2000
+          lane: above
+          shape: pin
+          direction: inward
+          color: '#60A5FA'
+          label:
+            show: true
+            text: Reference
+            show_value: false
+            show_unit: false
+        - at: 100%
+          lane: above
+          show_marker: false
+          color: '#34D399'
+          label:
+            show: true
+            text: Now
+            entity: sensor.sbcp_examples_primary
+            show_unit: false
+            precision: 0
+        entities:
+        - entity: sensor.sbcp_examples_primary
+          name: House load

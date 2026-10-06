@@ -16,6 +16,15 @@ function addWarning(diagnostics, code, message, path, entity = null) {
 }
 
 function validateScaleBounds(diagnostics, scale, path, entity = null) {
+  if (scale?.min?.entity && scale?.max?.entity) {
+    const hasFixed = (bound) => bound.fixed_explicit !== false
+      && (bound.fixed ?? bound.value) !== null && (bound.fixed ?? bound.value) !== undefined;
+    if (hasFixed(scale.min) !== hasFixed(scale.max)) {
+      addWarning(diagnostics, 'scale.orphan_fixed_fallback',
+        'Both dynamic scale bounds require a complete fixed fallback pair. The single fixed fallback will not be used if the dynamic pair becomes unavailable.',
+        `${path}.scale`, entity);
+    }
+  }
   const min = getStaticFixedValue(scale?.min);
   const max = getStaticFixedValue(scale?.max);
   if (Number.isFinite(min) && Number.isFinite(max) && min > max) {
@@ -136,6 +145,8 @@ function validateGenericMarkers(diagnostics, markers, invalidList, path, entity 
     if (marker.invalidDirection) {
       addWarning(diagnostics, 'markers.invalid_direction', 'Invalid marker direction; using inward.', `${markerPath}.direction`, entity);
     }
+    if (marker.invalidShowMarker) addWarning(diagnostics, 'markers.invalid_show_marker', 'Marker show_marker must be a boolean; using true.', `${markerPath}.show_marker`, entity);
+    if (marker.label?.invalidEntity) addWarning(diagnostics, 'markers.invalid_label_entity', 'Marker label entity must be a valid entity ID; ignoring it.', `${markerPath}.label.entity`, entity);
     if (marker.label?.invalidShow) addWarning(diagnostics, 'markers.invalid_label_show', 'Marker label show must be a boolean; using the existing fallback.', `${markerPath}.label.show`, entity);
     if (marker.label?.invalidText) addWarning(diagnostics, 'markers.invalid_label_text', 'Marker label text must be a string; ignoring it.', `${markerPath}.label.text`, entity);
     if (marker.label?.invalidShowValue) addWarning(diagnostics, 'markers.invalid_label_show_value', 'Marker label show_value must be a boolean; using the inherited or default value.', `${markerPath}.label.show_value`, entity);
@@ -143,7 +154,7 @@ function validateGenericMarkers(diagnostics, markers, invalidList, path, entity 
     if (marker.label?.invalidPrecision) addWarning(diagnostics, 'markers.invalid_label_precision', 'Marker label precision must be a non-negative integer; using the inherited or row precision.', `${markerPath}.label.${marker.label.invalidPrecisionKey ?? 'precision'}`, entity);
     if (marker.label?.unsupportedUnit) addWarning(diagnostics, 'markers.unsupported_label_unit', 'Marker label unit is no longer supported; use show_unit instead.', `${markerPath}.label.unit`, entity);
     if (marker.valid && !marker.accepted) {
-      addWarning(diagnostics, 'markers.excess_capacity', `Only the first two valid markers in the ${marker.lane} lane are rendered.`, markerPath, entity);
+      addWarning(diagnostics, 'markers.excess_capacity', 'This marker is not rendered because its lane already has four markers.', markerPath, entity);
     }
   }
 }
@@ -163,6 +174,19 @@ function validateSegments(diagnostics, segments, scaleBounds, path, entity = nul
     const from = getStaticSegmentBound(segment?.from);
     const to = getStaticSegmentBound(segment?.to);
     const segmentPath = `${path}.segments[${index}]`;
+
+    if (segment?.invalidBoundary === 'entity') {
+      addWarning(diagnostics, 'segments.unsupported_entity_boundary', 'Entity-backed segment boundaries are not supported; ignoring this segment.', segmentPath, entity);
+      continue;
+    }
+    if (segment?.invalidBoundary === 'malformed_percent') {
+      addWarning(diagnostics, 'segments.invalid_percentage', 'Malformed percentage segment boundary; ignoring this segment.', segmentPath, entity);
+      continue;
+    }
+    if (segment?.invalidBoundary) {
+      addWarning(diagnostics, 'segments.invalid_boundary', 'Segment boundary must be a numeric value or a percentage such as "35%"; ignoring this segment.', segmentPath, entity);
+      continue;
+    }
 
     if (Number.isFinite(from) && Number.isFinite(to) && from > to) {
       addWarning(diagnostics, 'segments.from_gt_to', 'Segment start is greater than segment end.', segmentPath, entity);
@@ -275,6 +299,13 @@ export function validateNormalizedConfig(config) {
         `${path}.markers`,
         entityId
       );
+    } else {
+      const inheritedOverflow = (entityConfig.generic_markers ?? []).filter((marker) =>
+        marker.valid && !marker.accepted && config.generic_markers?.[marker.index]?.accepted === true
+      );
+      if (inheritedOverflow.length) {
+        validateGenericMarkers(diagnostics, inheritedOverflow, false, `${path}.markers`, entityId);
+      }
     }
   }
 
