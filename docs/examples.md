@@ -16,9 +16,11 @@ Each YAML block is a complete card unless introduced as a replacement or an addi
 | Off | A surrounding title already identifies the metric. | No name is displayed; the icon and reading can still provide context. |
 | Hero | One prominent reading should be easy to scan. | Larger typography needs room and shrinks to fit. |
 
-**Hero does not display an entity icon.** This is an intentional layout characteristic at every width. The other layouts can show an entity icon and may hide it responsively when space is constrained. Use `icon: false` on a row to remove it explicitly.
+**Hero does not display an entity icon.** This is intentional at every width. The other layouts can show an entity icon and may hide it responsively when space is constrained. Use `icon: false` on a row to remove it explicitly.
 
 This comparison repeats the same sensor so only the layout changes. Leave rail height implicit to let responsive density adapt.
+
+![The same power reading in Left, Above, Inside, Off and Hero layouts](images/examples/label-layouts.png)
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -60,6 +62,8 @@ See [Layout Options and Responsive Behavior](configuration.md#layout-options-and
 Needle paints the full rail and indicates the current value. This keeps every color region visible, even at a low reading, making the fill styles easier to compare.
 
 The shared palette is cyan **#00F5D4**, yellow **#FFF200**, and magenta **#FF007F**. Gradient stops sit at **0%, 70%, and 100%**. Segment ranges are **0–40%, 40–80%, and 80–100%**.
+
+![Fill styles comparison with animated Needle](images/examples/fill-styles.gif)
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -116,6 +120,8 @@ The cards above use a fixed **0–10000 W** Scale and percentage Segment boundar
 
 This comparison uses value thresholds at 2000/6000 W, then replaces the second threshold with 75%:
 
+![Value-based Segment thresholds at 2000 and 6000 W compared with a mixed 2000 W and 75% threshold](images/examples/segment-coordinates.png)
+
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Value and Mixed Segment Coordinates
@@ -162,6 +168,8 @@ The bounds follow the helpers live. If either source is unavailable, this comple
 
 This Gradient gauge uses an explicit **24 px rail**. The header makes the complete row taller than 24 px. Needle keeps the full colored rail painted and marks the reading instead of revealing a growing fill.
 
+![Gradient and Bands Needle gauges with 24 px rails](images/examples/compact-needle.png)
+
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Compact Power Gauge
@@ -191,6 +199,8 @@ Needle works with every fill style and `solid_fill`. An active, resolved Baselin
 Ordinary reveal fill starts at the Scale minimum. With Baseline, fill spans **Baseline to the current value**, extending in either direction. A persistent line marks Baseline even when the reading equals it.
 
 Compare a fixed 0 W origin, the visible midpoint, and a live origin with blue below/green above. On this Scale, 50% is 5000 W; if the minimum becomes −2000 W, the midpoint becomes 4000 W while the fixed origin remains 0 W.
+
+![Fixed, percentage and live Baseline origins, including blue and green side colors](images/examples/baseline.png)
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -226,6 +236,8 @@ Move the reading below, equal to, and above the live Baseline to see the directi
 ## Target, Peak and Floor
 
 Add these settings to a power card with the 0–10000 W Scale, or to one of its entity rows. The live Target has a fixed 6500 W fallback. Its default Diamond sits below the rail; Peak is an above-lane triangle and Floor is a below-lane triangle.
+
+![Target, Peak and Floor with blue exceeded paint, plus Pin, Chevron and label-only references](images/examples/references.png)
 
 ```yaml
 target:
@@ -290,6 +302,8 @@ Labels can overlap when references are close or the card is narrow. Each lane ha
 
 Use Hero for a prominent battery reading, with a simple cyan reveal fill. Choose a sensor already reporting a percentage.
 
+![Hero battery percentage reading with a cyan reveal fill](images/examples/home-battery.png)
+
 ```yaml
 type: custom:sensor-bar-card-plus
 title: Home Battery
@@ -309,6 +323,8 @@ entities:
 ### House power with a limit
 
 This uses the same Gradient palette and blue exceeded paint as the comparisons. The fixed Target highlights only the revealed part above 6500 W; it does not recolor the whole bar.
+
+![House power with a Target limit and blue fill above the limit](images/examples/house-power.png)
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -337,6 +353,8 @@ entities:
 ### Power relative to a live reference
 
 Baseline shows how far the reading lies above or below a live reference, with the same blue/green side colors as the comparison. A Pin labels that origin; an independent **Now** label shows the reading at the rail endpoint. Use a reference source in the same unit as the power sensor.
+
+![Power relative to a live Baseline, with a Reference Pin and an independent Now label](images/examples/power-reference.png)
 
 ```yaml
 type: custom:sensor-bar-card-plus

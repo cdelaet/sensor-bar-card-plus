@@ -168,6 +168,15 @@ input_number:
     initial: 3500
     unit_of_measurement: W
 
+  sbcp_examples_battery:
+    name: Visual Examples · Battery Charge
+    min: 0
+    max: 100
+    step: 1
+    mode: slider
+    initial: 83
+    unit_of_measurement: "%"
+
   sbcp_current_quick:
     name: SBCP Current Quick Slider
     min: -100
@@ -413,7 +422,15 @@ input_boolean:
     name: SBCP Documentation Animation Running
     initial: false
 
+  # Internal source selection; the dashboard exposes only the capture button.
+  sbcp_docs_hero_capture_active:
+    name: SBCP Hero Capture Active
+    initial: false
+
 input_button:
+  sbcp_docs_hero_capture:
+    name: Set showcase capture state
+    icon: mdi:camera
   sbcp_docs_animation_run:
     name: Play energy story
     icon: mdi:play
@@ -1329,52 +1346,72 @@ template:
         default_entity_id: sensor.sbcp_docs_current_phase
         icon: mdi:progress-clock
         state: >-
-          {% set phases = ['Dawn', 'Morning ramp', 'Solar surplus', 'Battery charge', 'Peak sun', 'EV plugged in', 'Cloud passing', 'Evening import', 'Night'] %}
-          {% set position = states('input_number.sbcp_docs_story_position') | float(3) %}
-          {{ phases[[8, (position + 0.5) | int(0)] | min] }}
+          {% if is_state('input_boolean.sbcp_docs_hero_capture_active', 'on') %}
+            Showcase capture
+          {% else %}
+            {% set phases = ['Dawn', 'Morning ramp', 'Solar surplus', 'Battery charge', 'Peak sun', 'EV plugged in', 'Cloud passing', 'Evening import', 'Night'] %}
+            {% set position = states('input_number.sbcp_docs_story_position') | float(3) %}
+            {{ phases[[8, (position + 0.5) | int(0)] | min] }}
+          {% endif %}
       - name: SBCP Documentation Solar Production
         default_entity_id: sensor.sbcp_docs_solar
         unit_of_measurement: W
         icon: mdi:solar-power
         state: >-
-          {% set values = [0, 850, 2800, 5200, 6100, 4800, 2000, 350, 0] %}
-          {% set i = states('sensor.sbcp_docs_energy_phase_index') | int(0) %}
-          {% set t = states('sensor.sbcp_docs_energy_phase_fraction') | float(0) %}
-          {{ (values[i] + (values[i + 1] - values[i]) * t) | round(1) }}
+          {% if is_state('input_boolean.sbcp_docs_hero_capture_active', 'on') %}
+            {{ states('input_number.sbcp_docs_static_hero_solar') | float(0) }}
+          {% else %}
+            {% set values = [0, 850, 2800, 5200, 6100, 4800, 2000, 350, 0] %}
+            {% set i = states('sensor.sbcp_docs_energy_phase_index') | int(0) %}
+            {% set t = states('sensor.sbcp_docs_energy_phase_fraction') | float(0) %}
+            {{ (values[i] + (values[i + 1] - values[i]) * t) | round(1) }}
+          {% endif %}
       - name: SBCP Documentation Solar Forecast
         default_entity_id: sensor.sbcp_docs_solar_forecast
         unit_of_measurement: W
         icon: mdi:weather-sunny
         state: >-
-          {% set values = [150, 1200, 2650, 5500, 5800, 5100, 2700, 500, 0] %}
-          {% set i = states('sensor.sbcp_docs_energy_phase_index') | int(0) %}
-          {% set t = states('sensor.sbcp_docs_energy_phase_fraction') | float(0) %}
-          {{ (values[i] + (values[i + 1] - values[i]) * t) | round(1) }}
+          {% if is_state('input_boolean.sbcp_docs_hero_capture_active', 'on') %}
+            {{ states('input_number.sbcp_docs_static_hero_solar_forecast') | float(0) }}
+          {% else %}
+            {% set values = [150, 1200, 2650, 5500, 5800, 5100, 2700, 500, 0] %}
+            {% set i = states('sensor.sbcp_docs_energy_phase_index') | int(0) %}
+            {% set t = states('sensor.sbcp_docs_energy_phase_fraction') | float(0) %}
+            {{ (values[i] + (values[i + 1] - values[i]) * t) | round(1) }}
+          {% endif %}
       - name: SBCP Documentation Home Load
         default_entity_id: sensor.sbcp_docs_home_load
         unit_of_measurement: W
         icon: mdi:home-lightning-bolt
         state: >-
-          {% set values = [1100, 1450, 1900, 2100, 2300, 2400, 2200, 1800, 1400] %}
-          {% set i = states('sensor.sbcp_docs_energy_phase_index') | int(0) %}
-          {% set t = states('sensor.sbcp_docs_energy_phase_fraction') | float(0) %}
-          {{ (values[i] + (values[i + 1] - values[i]) * t) | round(1) }}
+          {% if is_state('input_boolean.sbcp_docs_hero_capture_active', 'on') %}
+            {{ states('input_number.sbcp_docs_static_hero_home_load') | float(0) }}
+          {% else %}
+            {% set values = [1100, 1450, 1900, 2100, 2300, 2400, 2200, 1800, 1400] %}
+            {% set i = states('sensor.sbcp_docs_energy_phase_index') | int(0) %}
+            {% set t = states('sensor.sbcp_docs_energy_phase_fraction') | float(0) %}
+            {{ (values[i] + (values[i + 1] - values[i]) * t) | round(1) }}
+          {% endif %}
       - name: SBCP Documentation EV Charge
         default_entity_id: sensor.sbcp_docs_ev_charge
         unit_of_measurement: W
         icon: mdi:car-electric
         state: >-
-          {% set values = [0, 0, 0, 0, 0, 3600, 3600, 3600, 0] %}
-          {% set i = states('sensor.sbcp_docs_energy_phase_index') | int(0) %}
-          {% set t = states('sensor.sbcp_docs_energy_phase_fraction') | float(0) %}
-          {% set durations = states('input_text.sbcp_docs_transition_seconds').split(',') | map('trim') | map('float') | list %}
-          {% set position = states('input_number.sbcp_docs_story_position') | float(3) %}
-          {% if i == 4 and position > 4 %}
-            {% set duration = [0.5, durations[i] | float(6)] | max %}
-            {% set ramp = [1, ((position - i) * duration / 3) | float(0)] | min %}
-            {{ (300 + 3300 * ramp * ramp * (3 - 2 * ramp)) | round(1) }}
+          {% if is_state('input_boolean.sbcp_docs_hero_capture_active', 'on') %}
+            {{ states('input_number.sbcp_docs_static_hero_ev_charge') | float(0) }}
           {% else %}
-            {{ (values[i] + (values[i + 1] - values[i]) * t) | round(1) }}
+            {% set values = [0, 0, 0, 0, 0, 3600, 3600, 3600, 0] %}
+            {% set i = states('sensor.sbcp_docs_energy_phase_index') | int(0) %}
+            {% set t = states('sensor.sbcp_docs_energy_phase_fraction') | float(0) %}
+            {% set durations = states('input_text.sbcp_docs_transition_seconds').split(',') | map('trim') | map('float') | list %}
+            {% set position = states('input_number.sbcp_docs_story_position') | float(3) %}
+            {% if i == 4 and position > 4 %}
+              {% set duration = [0.5, durations[i] | float(6)] | max %}
+              {% set ramp = [1, ((position - i) * duration / 3) | float(0)] | min %}
+              {{ (300 + 3300 * ramp * ramp * (3 - 2 * ramp)) | round(1) }}
+            {% else %}
+              {{ (values[i] + (values[i + 1] - values[i]) * t) | round(1) }}
+            {% endif %}
           {% endif %}
       - name: SBCP Documentation EV Current
         default_entity_id: sensor.sbcp_docs_ev_current
@@ -1399,43 +1436,59 @@ template:
         unit_of_measurement: W
         icon: mdi:battery-sync
         state: >-
-          {% set values = [0, 0, 700, 1800, 1800, 0, -1200, -800, 0] %}
-          {% set i = states('sensor.sbcp_docs_energy_phase_index') | int(0) %}
-          {% set t = states('sensor.sbcp_docs_energy_phase_fraction') | float(0) %}
-          {{ (values[i] + (values[i + 1] - values[i]) * t) | round(1) }}
+          {% if is_state('input_boolean.sbcp_docs_hero_capture_active', 'on') %}
+            {{ states('input_number.sbcp_docs_static_hero_battery_power_driven') | float(0) }}
+          {% else %}
+            {% set values = [0, 0, 700, 1800, 1800, 0, -1200, -800, 0] %}
+            {% set i = states('sensor.sbcp_docs_energy_phase_index') | int(0) %}
+            {% set t = states('sensor.sbcp_docs_energy_phase_fraction') | float(0) %}
+            {{ (values[i] + (values[i + 1] - values[i]) * t) | round(1) }}
+          {% endif %}
       - name: SBCP Documentation Battery Charge
         default_entity_id: sensor.sbcp_docs_battery_soc
         unit_of_measurement: '%'
         icon: mdi:home-battery
         state: >-
-          {% set values = [38, 39, 43, 55, 68, 72, 64, 54, 50] %}
-          {% set i = states('sensor.sbcp_docs_energy_phase_index') | int(0) %}
-          {% set t = states('sensor.sbcp_docs_energy_phase_fraction') | float(0) %}
-          {{ (values[i] + (values[i + 1] - values[i]) * t) | round(1) }}
+          {% if is_state('input_boolean.sbcp_docs_hero_capture_active', 'on') %}
+            {{ states('input_number.sbcp_docs_static_hero_battery_reserve') | float(0) }}
+          {% else %}
+            {% set values = [38, 39, 43, 55, 68, 72, 64, 54, 50] %}
+            {% set i = states('sensor.sbcp_docs_energy_phase_index') | int(0) %}
+            {% set t = states('sensor.sbcp_docs_energy_phase_fraction') | float(0) %}
+            {{ (values[i] + (values[i + 1] - values[i]) * t) | round(1) }}
+          {% endif %}
       - name: SBCP Documentation Grid Exchange
         default_entity_id: sensor.sbcp_docs_grid_flow
         unit_of_measurement: W
         icon: mdi:transmission-tower
         state: >-
-          {% set solar = [0, 850, 2800, 5200, 6100, 4800, 2000, 350, 0] %}
-          {% set home = [1100, 1450, 1900, 2100, 2300, 2400, 2200, 1800, 1400] %}
-          {% set ev = [0, 0, 0, 0, 0, 3600, 3600, 3600, 0] %}
-          {% set battery = [0, 0, 700, 1800, 1800, 0, -1200, -800, 0] %}
-          {% set i = states('sensor.sbcp_docs_energy_phase_index') | int(0) %}
-          {% set t = states('sensor.sbcp_docs_energy_phase_fraction') | float(0) %}
-          {% set solar_now = (solar[i] + (solar[i + 1] - solar[i]) * t) | round(1) %}
-          {% set home_now = (home[i] + (home[i + 1] - home[i]) * t) | round(1) %}
-          {% set battery_now = (battery[i] + (battery[i + 1] - battery[i]) * t) | round(1) %}
-          {% set position = states('input_number.sbcp_docs_story_position') | float(3) %}
-          {% if i == 4 and position > 4 %}
-            {% set durations = states('input_text.sbcp_docs_transition_seconds').split(',') | map('trim') | map('float') | list %}
-            {% set duration = [0.5, durations[i] | float(6)] | max %}
-            {% set ramp = [1, ((position - i) * duration / 3) | float(0)] | min %}
-            {% set ev_now = (300 + 3300 * ramp * ramp * (3 - 2 * ramp)) | round(1) %}
+          {% if is_state('input_boolean.sbcp_docs_hero_capture_active', 'on') %}
+            {% set home = states('input_number.sbcp_docs_static_hero_home_load') | float(0) %}
+            {% set ev = states('input_number.sbcp_docs_static_hero_ev_charge') | float(0) %}
+            {% set battery = states('input_number.sbcp_docs_static_hero_battery_power_driven') | float(0) %}
+            {% set solar = states('input_number.sbcp_docs_static_hero_solar') | float(0) %}
+            {{ home + ev + battery - solar }}
           {% else %}
-            {% set ev_now = (ev[i] + (ev[i + 1] - ev[i]) * t) | round(1) %}
+            {% set solar = [0, 850, 2800, 5200, 6100, 4800, 2000, 350, 0] %}
+            {% set home = [1100, 1450, 1900, 2100, 2300, 2400, 2200, 1800, 1400] %}
+            {% set ev = [0, 0, 0, 0, 0, 3600, 3600, 3600, 0] %}
+            {% set battery = [0, 0, 700, 1800, 1800, 0, -1200, -800, 0] %}
+            {% set i = states('sensor.sbcp_docs_energy_phase_index') | int(0) %}
+            {% set t = states('sensor.sbcp_docs_energy_phase_fraction') | float(0) %}
+            {% set solar_now = (solar[i] + (solar[i + 1] - solar[i]) * t) | round(1) %}
+            {% set home_now = (home[i] + (home[i + 1] - home[i]) * t) | round(1) %}
+            {% set battery_now = (battery[i] + (battery[i + 1] - battery[i]) * t) | round(1) %}
+            {% set position = states('input_number.sbcp_docs_story_position') | float(3) %}
+            {% if i == 4 and position > 4 %}
+              {% set durations = states('input_text.sbcp_docs_transition_seconds').split(',') | map('trim') | map('float') | list %}
+              {% set duration = [0.5, durations[i] | float(6)] | max %}
+              {% set ramp = [1, ((position - i) * duration / 3) | float(0)] | min %}
+              {% set ev_now = (300 + 3300 * ramp * ramp * (3 - 2 * ramp)) | round(1) %}
+            {% else %}
+              {% set ev_now = (ev[i] + (ev[i + 1] - ev[i]) * t) | round(1) %}
+            {% endif %}
+            {{ (home_now + ev_now + battery_now - solar_now) | round(1) }}
           {% endif %}
-          {{ (home_now + ev_now + battery_now - solar_now) | round(1) }}
       - name: SBCP Documentation Grid Plan
         default_entity_id: sensor.sbcp_docs_grid_plan
         unit_of_measurement: W
@@ -1507,6 +1560,98 @@ template:
         state: "{{ states('input_number.sbcp_docs_static_hero_battery_reserve') | float(65) }}"
 
 script:
+  sbcp_docs_hero_capture:
+    alias: Set SBCP Showcase Capture State
+    mode: restart
+    sequence:
+      # Stop both writers of the sources reused for capture.
+      - service: script.turn_off
+        target:
+          entity_id:
+            - script.sbcp_docs_energy_playback
+            - script.sbcp_docs_static_hero_prepare_peak_floor
+      - service: input_boolean.turn_off
+        target:
+          entity_id:
+            - input_boolean.sbcp_docs_animation_running
+            - input_boolean.sbcp_docs_hero_capture_active
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_solar
+        data:
+          value: 6650
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_solar_forecast
+        data:
+          value: 5600
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_home_load
+        data:
+          value: 4250
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_ev_charge
+        data:
+          value: 4250
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_battery_power
+        data:
+          value: 2150
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_battery_reserve
+        data:
+          value: 65
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_battery_power_driven
+        data:
+          value: 2400
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.sbcp_docs_hero_capture_active
+      # Peak/Floor live in the connected card, not in HA. Confirm each sensor
+      # state, then keep it visible for the existing fixture's two-second
+      # observation interval so the frontend can receive both extrema.
+      # reset: never deliberately retains any wider history already observed.
+      - repeat:
+          for_each:
+            - 2400
+            - -1500
+          sequence:
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.sbcp_docs_static_hero_battery_power_driven
+              data:
+                value: "{{ repeat.item }}"
+            - wait_template: "{{ states('sensor.sbcp_docs_battery_power') | float(99999) == repeat.item }}"
+              timeout: "00:00:10"
+              continue_on_timeout: false
+            - delay:
+                seconds: 2
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.sbcp_docs_static_hero_battery_power_driven
+        data:
+          value: "{{ states('input_number.sbcp_docs_static_hero_battery_power') | float(2150) }}"
+      - wait_template: >-
+          {{ states('sensor.sbcp_docs_battery_power') | float(99999) == 2150
+             and states('sensor.sbcp_docs_solar') | float(99999) == 6650
+             and states('sensor.sbcp_docs_solar_forecast') | float(99999) == 5600
+             and states('sensor.sbcp_docs_home_load') | float(99999) == 4250
+             and states('sensor.sbcp_docs_ev_charge') | float(99999) == 4250
+             and states('sensor.sbcp_docs_battery_soc') | float(99999) == 65
+             and states('sensor.sbcp_docs_grid_flow') | float(99999) == 4000 }}
+        timeout: "00:00:10"
+        continue_on_timeout: false
+      # Let the final reading reach the connected card and its 600 ms reveal
+      # transition settle before the capture operation completes.
+      - delay:
+          seconds: 1
+
   sbcp_docs_static_hero_reset_recommended_values:
     alias: Reset SBCP Static Hero Recommended Values
     mode: single
@@ -1991,6 +2136,9 @@ automation:
     alias: SBCP Documentation Energy Playback Controls
     trigger:
       - platform: state
+        entity_id: input_button.sbcp_docs_hero_capture
+        id: capture
+      - platform: state
         entity_id: input_button.sbcp_docs_animation_run
         id: run
       - platform: state
@@ -2009,7 +2157,28 @@ automation:
         entity_id: input_select.sbcp_docs_energy_phase
         id: phase
     action:
+      - variables:
+          leave_capture: >-
+            {{ trigger.id in ['run', 'back', 'forward', 'seek']
+               or (trigger.id == 'phase' and is_state('input_boolean.sbcp_docs_hero_capture_active', 'on')) }}
+      - if:
+          - condition: template
+            value_template: "{{ leave_capture }}"
+        then:
+          - service: script.turn_off
+            target:
+              entity_id: script.sbcp_docs_hero_capture
+          - service: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.sbcp_docs_hero_capture_active
       - choose:
+          - conditions:
+              - condition: trigger
+                id: capture
+            sequence:
+              - service: script.turn_on
+                target:
+                  entity_id: script.sbcp_docs_hero_capture
           - conditions:
               - condition: trigger
                 id: run
@@ -2100,7 +2269,7 @@ automation:
                   {% set selected = phases.index(states('input_select.sbcp_docs_energy_phase')) if states('input_select.sbcp_docs_energy_phase') in phases else 0 %}
                   {% set position = states('input_number.sbcp_docs_story_position') | float(0) %}
                   {% set current = [8, (position + 0.5) | int(0)] | min %}
-                  {{ selected != current }}
+                  {{ selected != current or leave_capture }}
             sequence:
               - service: script.turn_off
                 target:

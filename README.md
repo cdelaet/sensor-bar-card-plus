@@ -1,4 +1,4 @@
-![Sensor Bar Card Plus](images/branding/logo-300.png)
+![Sensor Bar Card Plus](images/branding/new-logo-500.png)
 
 # Sensor Bar Card Plus
 
@@ -9,7 +9,7 @@
 
 Sensor Bar Card Plus (SBCP) is a Home Assistant dashboard card for presenting numeric sensor values as configurable bars or gauges. It is useful when a value needs visual context: its scale, operating range, target, recent extrema, or relationship to a neutral point.
 
-![Sensor Bar Card Plus showcase](images/hero-400.gif)
+![Sensor Bar Card Plus showcase](images/hero-v17.gif)
 
 SBCP supports multiple entities, structured YAML, animated reveal fills, Needle gauges, semantic fill styles, five label layouts including Hero, dynamic scales, Baseline fill origins, Target/Peak/Floor markers, generic reference markers, per-entity overrides, and a Visual Editor. Its responsive layout adapts labels and supporting details to the available card width.
 
