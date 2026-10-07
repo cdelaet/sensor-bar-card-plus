@@ -598,6 +598,8 @@
     const isCardScope = (_d = options.isCardScope) != null ? _d : cardConfig == null;
     const cardBar = cardConfig == null ? void 0 : cardConfig.bar;
     const entityBar = entityConfig == null ? void 0 : entityConfig.bar;
+    const inheritedSegmentSpace = hasOwnConfigValue(cardBar, EXPLICIT_SEGMENT_SPACE) ? cardBar[EXPLICIT_SEGMENT_SPACE] : ["percent", "scale"].includes(cardBar == null ? void 0 : cardBar.segment_space) ? cardBar.segment_space : null;
+    const explicitSegmentSpace = ["percent", "scale"].includes(entityBar == null ? void 0 : entityBar.segment_space) ? entityBar.segment_space : inheritedSegmentSpace;
     const entityStructuredSegments = entityBar == null ? void 0 : entityBar.segments;
     const entityTopLevelSegments = entityConfig.segments;
     const entityLegacySeverity = entityConfig.severity;
@@ -607,7 +609,7 @@
     let segments = null;
     let segment_space = (cardBar == null ? void 0 : cardBar.segment_space) === "percent" || (cardBar == null ? void 0 : cardBar.segment_space) === "scale" ? cardBar.segment_space : null;
     if (entityStructuredSegments !== void 0 && entityStructuredSegments !== null) {
-      segment_space = (entityBar == null ? void 0 : entityBar.segment_space) === "percent" || (entityBar == null ? void 0 : entityBar.segment_space) === "scale" ? entityBar.segment_space : segment_space;
+      segment_space = explicitSegmentSpace;
       segments = normalizeGaugeSegments(entityStructuredSegments, { legacySegmentSpace: segment_space });
     } else if (entityTopLevelSegments !== void 0 && entityTopLevelSegments !== null) {
       segments = normalizeGaugeSegments(entityTopLevelSegments);
@@ -631,7 +633,7 @@
       cardConfig,
       { scopeExplicitness, inheritedExplicitness, isCardScope }
     );
-    return {
+    const normalizedBar = {
       fill_style: normalizedMode.fill_style,
       color_mode: normalizedMode.color_mode,
       needle: normalizeNeedleConfig(entityBar == null ? void 0 : entityBar.needle, cardBar == null ? void 0 : cardBar.needle),
@@ -646,6 +648,8 @@
       animated: (_w = (_v = (_u = (_t = entityBar == null ? void 0 : entityBar.animated) != null ? _t : entityConfig.animated) != null ? _u : cardBar == null ? void 0 : cardBar.animated) != null ? _v : cardConfig == null ? void 0 : cardConfig.animated) != null ? _w : true,
       above_target_color: (_A = (_z = (_y = (_x = structuredAboveTargetColor != null ? structuredAboveTargetColor : entityConfig.above_target_color) != null ? _x : cardBar == null ? void 0 : cardBar.above_target_color) != null ? _y : inheritedStructuredAboveTargetColor) != null ? _z : cardConfig == null ? void 0 : cardConfig.above_target_color) != null ? _A : null
     };
+    Object.defineProperty(normalizedBar, EXPLICIT_SEGMENT_SPACE, { value: explicitSegmentSpace });
+    return normalizedBar;
   }
   function clampSupportedRowHeight(height) {
     return Math.max(24, height);
@@ -1019,11 +1023,12 @@
     );
     return normalizedCard;
   }
-  var PAINT_EXPLICITNESS;
+  var PAINT_EXPLICITNESS, EXPLICIT_SEGMENT_SPACE;
   var init_normalize = __esm({
     "src/config/normalize.js"() {
       init_extrema();
       PAINT_EXPLICITNESS = /* @__PURE__ */ Symbol("sbcp.paintExplicitness");
+      EXPLICIT_SEGMENT_SPACE = /* @__PURE__ */ Symbol("sbcp.explicitSegmentSpace");
     }
   });
 
