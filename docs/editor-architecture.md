@@ -1,9 +1,10 @@
-# Shared editor infrastructure and sections (Phases 3A–3D)
+# Shared editor infrastructure and sections (Phases 3A–3E)
 
 The shipped standalone host remains `src/editor/SensorBarCardPlusEditor.js`.
 It uses the same HTMLElement, shadow DOM, string templates and delegated events.
 Phase 3D adds a separate Card Feature editor host without changing the
-standalone host or its persistence policy.
+standalone host or its persistence policy. Phase 3E shares the two stateful
+palette sections between these hosts; their persistence policies remain distinct.
 
 ## Shared seam
 
@@ -23,10 +24,10 @@ whitespace is preserved so representative generated HTML can match exactly.
 
 ## Responsibilities deliberately retained by the standalone host
 
-`setConfig`, draft maps, config-echo handling, focus restoration, scheduling,
+`setConfig`, non-palette draft maps, config-echo handling, focus restoration, scheduling,
 picker synchronization, disclosure state, section composition and delegated event
 lifecycle remain in the host. Generic effective inheritance/source readers, source
-canonicalization, array mutation/validation and `_applyScopedMutation` (including
+canonicalization, non-palette array mutation/validation and `_applyScopedMutation` (including
 standalone shorthand-to-entity-list conversion).
 
 `_applyUserConfig`, `_emitConfigChanged` and `_cleanupEditorEmittedConfig` remain
@@ -220,8 +221,8 @@ Control ownership is explicit:
 - Formatting edits own only the selected unit/decimal and its top-level alias.
 - Bar edits own only the selected fill style/color/solid-fill and its existing
   top-level alias/default-removal behavior. Opening or unrelated edits never
-  remove explicit defaults. No palette, animation, Needle or marker field is
-  rewritten because it is absent from the current UI.
+  remove explicit defaults. No inactive palette, animation, Needle or marker field is
+  rewritten by an unrelated edit.
 - Scale source edits use `src/feature/feature-editor-config.js`, a small host
   persistence adapter rather than standalone source canonicalization. Object
   bounds retain metadata and the other source part; the fixed control owns its
@@ -255,7 +256,7 @@ HA `value-changed` is authoritative; internal picker input/change events are
 ignored. A one-time `whenDefined` completion upgrades a late HA picker without
 polling. HA input arrival order is independent. Echoes/no-ops preserve mounted
 controls and avoid duplicate emissions. Ordinary value updates patch properties;
-only entity/picker/color-control structure changes rebuild DOM, restoring focus
+only entity/picker/color-control/palette structure changes rebuild DOM, restoring focus
 and text selection where applicable. A CSS-color fallback remains mounted during
 typing until blur, even if its value becomes hex; a focused override toggle is
 also retained until blur when clearing removes its no-parent presentation.
@@ -274,10 +275,10 @@ The single resource guards registration of
 and marks its discovery entry configurable. `getStubConfig()` remains entity-free.
 There is no private Tile DOM dependency or second resource.
 
-Current composition is Entity → Scale → Bar Appearance → Formatting. There are
-no title/entity-row/name/icon/layout/height/Hero/Bottom/Inline controls. Palette,
-animation, Needle, Baseline, built-in/reference marker and marker-label editors
-remain absent; their raw configuration survives edits. There is no embedded
+Current composition is Entity → Scale → Bar Appearance → applicable Segments
+or Gradient Stops → Formatting. There are no title/entity-row/name/icon/layout/
+height/Hero/Bottom/Inline controls. Animation, Needle, Baseline, built-in/reference
+marker and marker-label editors remain absent; their raw configuration survives edits. There is no embedded
 runtime preview or duplicate scale/extrema history; use HA's surrounding preview.
 Feature-local CSS makes the shared grid fit narrow dialogs without modifying
 standalone CSS or templates.
@@ -293,14 +294,142 @@ and Card Feature runtime tests/snapshots, remain regression gates. These are
 public-contract harness tests; live HA editor acceptance still needs manual
 testing in an installation.
 
+## Stateful palettes (Phase 3E)
+
+`src/editor/sections/segments.js` and `gradient-stops.js` contain the exact root
+and entity control templates previously embedded in `_render`, plus palette
+readers, summaries, drafts, validation, previews and commit behavior. Both hosts
+instantiate the same `SegmentsSection` and `GradientStopsSection` classes.
+Standalone supplies its original disclosure wrapper to `render(scope, renderGroup)`;
+Feature uses the same root content without the disclosure. Palettes remain
+siblings of Bar Appearance; its Baseline/Needle child callback is unchanged.
+Feature composes Segments for `bands`, `soft_bands`, `band_gradient`, Gradient
+Stops for `gradient`, and neither for `solid`. Switching style retains both arrays.
+
+### Original implementation map and ownership
+
+The original `SensorBarCardPlusEditor.js` contained all the following responsibilities:
+
+| Area | Segment entry points/state | Gradient Stop entry points/state |
+|---|---|---|
+| Scope/storage/display | `_getSegmentsValue`, `_getScopedSegmentsValue`, `_getStoredScopedSegments`, `_getFallbackSegments`, `_getDefaultSegments`, `_hasSegmentsOverride`, `_getSegmentsSummary`, `_isSegmentFillStyle` | `_getGradientStopsValue`, `_getScopedGradientStopsValue`, `_getStoredScopedGradientStops`, `_getFallbackGradientStops`, `_getDefaultGradientStops`, `_hasGradientStopsOverride`, `_getGradientStopsSummary` |
+| Draft identity | `_getSegmentsScopeKey`, `_getSegmentBoundaryTextKey`; `_segmentDrafts`, `_segmentUiRows`, `_segmentBoundaryTexts` | `_getGradientStopsDraftKey`, `_getGradientStopPosTextKey`; `_gradientStopsDrafts`, `_gradientStopsUiRows`, `_gradientStopPosTexts`, `_gradientStopValidationMessages` |
+| Draft lifecycle | `_getSegmentDraftState`, `_createSegmentDraftState`, `_getNewSegmentDefaults`, `_getSegmentDraftColorDefault`, `_setSegmentDraftState`, `_setSegmentDraftField`, `_commitSegmentDraft` | `_getGradientStopsDraftState`, `_createGradientStopDraftState`, `_getNextSuggestedGradientStopPos`, `_getGradientStopDraftColorDefault`, `_setGradientStopsDraftState`, `_setGradientStopsDraftField`, `_commitGradientStopDraft` |
+| Intermediate text | `_getSegmentBoundaryText`, `_setSegmentBoundaryText`, `_clearSegmentBoundaryText`, `_clearSegmentScopeTextState`, `_getSegmentsUiRows`, `_setSegmentsUiRows` | `_getGradientStopPosText`, `_setGradientStopPosText`, `_clearGradientStopPosText`, `_clearGradientStopScopeTextState`, `_getGradientStopsUiRows`, `_setGradientStopsUiRows` |
+| Parsing/comparison | `_parseSegmentBoundaryInput`, `_parseSegmentBoundaryText`, `_formatSegmentBoundaryValue`, `_compareSegmentBoundaries`, `_normalizeSegmentForEditorComparison`, `_segmentsEqualForEditor`, `_sortSegmentsForEditor` | `_normalizeGradientStopPosValue`, `_sanitizeGradientStopsForEmit`, `_isDefaultGradientStops` |
+| Validation/commit | `_buildSegmentValidationRows`, `_getSegmentRowValidationMessage`, `_getValidSegmentDraft`, `_canAddSegment`, `_getSegmentDraftValidationMessage`, `_commitSegmentBoundaryEdit` | `_getValidGradientDraftStop`, `_hasGradientStopDuplicate`, `_canAddGradientStop`, `_getGradientDraftValidationMessage`, `_commitGradientStopPosEdit` |
+| Preview/DOM refresh | `_getSegmentPreviewBoundaryValue`, `_getSegmentPreviewRows`, `_buildEditorSegmentPreviewStyle`, `_getSegmentPreviewDomIds`, `_renderSegmentPreview`, `_refreshSegmentPreview`, `_getSegmentDomIds`, `_refreshSegmentUi` | `_buildGradientPreviewEffectiveStops`, `_buildEditorGradientPreviewStyle`, `_getGradientPreviewStyle`, `_renderGradientPreview`, `_getGradientPreviewDomIds`, `_refreshGradientDraftUi` |
+| Standalone persistence | `_setScopedSegments`, `_clearSegmentsOverride`, `_setSegments` | `_setScopedGradientStops`, `_clearGradientStopsOverride`, `_setGradientStops` |
+| Templates/events | `_render` root sections and entity override content; palette branches in `_handleClick`, `_handleInput`, `_handleChange`, `_handleKeydown`, `_handleFieldEvent` | Same host entry points, including CSS-color fallback routing |
+
+There were no reorder controls. These entries now delegate to the shared section
+except `_setScopedSegments`/`_setScopedGradientStops`, whose original persistence
+bodies remain standalone-owned. Override clearing moves with section state but
+uses the host's scoped mutation/cleanup path. All 84 extracted private methods
+remain explicit compatibility delegates. The seven state maps have compatibility
+getters; shared controllers own/reset the maps.
+
+### Minimal stateful interface
+
+The established `read`, `mutate`, `source`, `setSource` context **does not change**.
+Scale, Formatting and Bar are unaffected. Each palette additionally receives:
+
+- A UI boundary `{ root(), render(), focus(selector) }`: access its shadow-root
+  controls, request host-owned structural rendering, and queue focus for Add.
+- An array adapter `write(scope, displayRows, options, operation)`. Operations
+  are exactly `{ type: 'edit', index, field, value }`, `{ type: 'add', item }` and
+  `{ type: 'remove', index }`. These express user intent rather than asking the
+  Feature to persist a sanitized display array.
+- The Feature adapter additionally supplies `rows(scope, section)` for raw-order
+  display and `patchOnly: true` for strict commit validation/raw-index duplicate
+  checks. No complete host or generic form framework crosses this boundary.
+
+`src/editor/shared/palette-section.js` shares delegated event decoding for the
+root/entity variants, keyboard/Add/remove routing and color edit intent. It
+contains no configuration emission or whole-config cleanup. UI IDs, index data
+attributes, error strings and exact standalone template whitespace are retained.
+
+### Persistence and coordinate distinctions
+
+Standalone still sorts/canonicalizes Gradient Stops, filters invalid entries,
+trims colors, removes default/<2-stop arrays, deletes legacy keys and prunes the
+bar. Segment boundary/add/remove commits sort; color commits preserve UI order;
+empty/default segments remove overrides and aliases. Whole-config cleanup and
+its normalized-semantics guard remain host-owned and unchanged.
+
+`src/feature/feature-editor-palettes.js` instead starts from the authoritative
+raw array and patches **only** the selected field. Adds append the new known-schema
+item; removes splice exactly the selected index. Every other item retains its
+original value and order, including invalid/unrecognized rows and percentage
+strings. Edited-item unknown primitives, nested objects, arrays and explicit
+`undefined` members survive. Immutable config helpers preserve these values;
+JSON equality is never used to reconstruct a payload. Existing palette aliases
+stay at their authoritative stored path; unrelated/inactive aliases and bar
+siblings survive. Displayed fallback palettes are persisted only on an explicit
+palette operation. Opening never materializes an omitted Segment `to`.
+
+Segment numeric boundaries remain active-Scale values at runtime; percentage
+strings/objects remain percentages. Gradient numeric and percentage-string
+positions both remain percentage coordinates. Parsing is still separate.
+Existing standalone validation/preview comparison behavior remains unchanged;
+it is not a replacement for runtime scale resolution. Feature display handles
+existing fixed/value/percent objects without rewriting their raw representation.
+The pre-existing standalone fixed-object display exception remains outside this
+extraction. No entity-backed boundary UI or new Segment CSS-color alternative
+is introduced; Segment color stays native, Gradient color retains its fallback.
+
+### Session, drafts, focus and browser layout
+
+Scope/index keys, draft suggestions, intermediate text maps and Escape reset
+semantics are unchanged. Ordinary rerenders/config echoes retain local drafts.
+Foreign standalone config replacement resets its maps at the original boundary;
+foreign Feature config replacement resets its controllers without emitting.
+Intermediate Feature boundary edits remain local until validation succeeds;
+standalone retains its existing invalid-boundary commit behavior. Gradient
+positions reject invalid/out-of-range/duplicate values in both hosts; the Feature
+checks duplicates by original raw index before any display-only sorting.
+Structural Feature add/remove clears obsolete index text state. There is no new
+persistent row ID scheme or implicit reorder.
+
+Hosts own focus and listener lifetime. Standalone retains `_queuePostRenderFocus`
+and `_applyPendingFocus`; Feature retains `_captureFocus` and indexed restoration. Native drafts update hints
+and previews without replacing focused controls. Click Add queues draft focus.
+Standalone Enter commits still do not queue focus; the existing Gradient Enter
+focus-loss quirk remains characterized. Feature restores the exact indexed row
+where its host rebuilds structure. CSS-color fallbacks remain mounted until blur.
+Feature-only container CSS wraps existing controls below 320px; standalone CSS
+and viewport breakpoints are unchanged. No observers/global state are added.
+
+### Validation coverage
+
+Before extraction, additional source/dist characterization covered omitted ends,
+invalid Segment commits, Gradient normalization/order and root/entity draft echoes;
+the root palette browser baselines were captured. Existing extensive tests cover
+percent/numeric boundaries, overlap, add/remove, previews, scoped cleanup and
+Enter behavior. Four standalone root/override palette screenshots now protect
+this stateful seam. Expanded exact HTML parity adds omitted ends, percentage
+objects, unsorted palettes, invalid stops, legacy paths, empty arrays and entity
+overrides to the original 20/32/80-case matrices (96 combinations).
+
+Feature unit/browser coverage checks selected-field metadata, nested arrays and
+undefined members, raw order, append/remove, inactive palettes, omitted ends,
+fixed/value objects, legacy paths, invalid drafts, duplicates, echo stability,
+shared controller identity and conditional composition. Browser tests run both
+source/dist at 360px and 240px, checking real focus, CSS colors, previews and
+containment. Four new Feature palette screenshots supplement two whole-editor
+screenshots, intentionally updated to include the newly available palette section.
+All standalone and runtime snapshot baselines remain unchanged. Source/dist and
+picker/fallback parity remain required. Live HA acceptance remains a manual step.
+
+Final Phase 3E validation: 1,134 unit tests and 218 Playwright tests pass.
+The standalone host shrinks from 6,657 to 5,400 lines; the Feature host grows
+from 228 to 297 lines. The normal dist build and `git diff --check` pass.
+
 ## Recommended next boundary
 
-The second host validates the shared-section architecture, including different
-source and persistence policies without changing the context. There is no new
-prerequisite exposed by this foundation. Extract Segments and Gradient Stops
-next, with characterization of drafts, validation, focus, array ordering and
-unknown row metadata before composing them into the Feature host. Their shared
-mutation paths must honor Feature patch-only preservation rather than assume
-standalone cleanup. Keep the small context and add a lifecycle capability only
-if those stateful sections demonstrate a concrete need. Phase 3D does not start
-that extraction.
+Extract **Needle + Baseline** next. They are the existing Bar Appearance children
+and share a concrete standalone interaction (enabling Needle clears Baseline),
+so they should be characterized and extracted together before composing the
+Feature controls. This phase revealed no prerequisite that requires a broader
+form framework or marker extraction. Preserve each host's persistence policy;
+do not start Target/Peak/Floor or marker-label editors in that next extraction.

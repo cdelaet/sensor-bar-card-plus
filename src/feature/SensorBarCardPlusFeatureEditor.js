@@ -15,6 +15,10 @@ import {
 } from '../editor/sections/bar-appearance.js';
 import { getFeatureScaleSource, patchFeatureScaleSource } from './feature-editor-config.js';
 
+import { SegmentsSection } from '../editor/sections/segments.js';
+import { GradientStopsSection } from '../editor/sections/gradient-stops.js';
+import { createFeaturePaletteArray } from './feature-editor-palettes.js';
+
 const root = { type: 'card' };
 
 export class SensorBarCardPlusFeatureEditor extends HTMLElement {
@@ -26,6 +30,17 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._chooseEntity = false;
     this._renderEpoch = 0;
     this._updateComplete = Promise.resolve();
+    const context = this._createSectionContext();
+    const ui = {
+      root: () => this.shadowRoot,
+      render: () => { this._paletteRenderRequested = true; this._requestRender(); },
+      focus: selector => { this._pendingPaletteFocus = selector; },
+    };
+    this._segmentsSection = new SegmentsSection(context, ui, createFeaturePaletteArray(context, 'segments'));
+    this._gradientStopsSection = new GradientStopsSection(context, ui, createFeaturePaletteArray(context, 'gradient_stops'));
+    for (const type of ['click', 'keydown']) this.shadowRoot.addEventListener(type, event => {
+      this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event);
+    });
     const handleField = event => this._handleField(event);
     for (const type of ['input', 'change', 'value-changed']) this.shadowRoot.addEventListener(type, handleField);
     this.shadowRoot.addEventListener('focusout', () => this._requestRender());
@@ -38,7 +53,11 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
   setConfig(config) {
     if (!isObject(config)) throw new Error('Invalid Sensor Bar Card Plus feature configuration');
     if (serializeConfig(config) !== serializeConfig(this._config)) {
+      this._paletteRenderRequested ||= ['bar.segments', 'bar.gradient_stops', 'segments', 'severity', 'gradient_stops']
+        .some(path => serializeConfig(getPathValue(config, path.split('.'))) !== serializeConfig(getPathValue(this._config, path.split('.'))));
       this._config = cloneDeep(config);
+      this._segmentsSection.reset();
+      this._gradientStopsSection.reset();
       this._chooseEntity = false;
       this._configReplaced = true;
     }
@@ -109,6 +128,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       this._requestRender();
       return;
     }
+    if (this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event)) return;
     const context = this._createSectionContext();
     if (handleScaleField(context, { field, kind, value })) return;
     if (handleFormattingField(context, { field, kind, value })) return;
@@ -142,23 +162,44 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const selector = active.id ? `#${active.id}`
       : active.dataset.field ? `[data-field="${active.dataset.field}"]`
       : active.dataset.kind ? `[data-kind="${active.dataset.kind}"]` : null;
-    return selector ? { selector, start: active.selectionStart, end: active.selectionEnd } : null;
+    const item = active.dataset.segmentIndex ?? active.dataset.stopIndex ?? active.dataset.index;
+    const rowSelector = selector && active.dataset.kind && item !== undefined
+      ? `${selector}[data-${active.dataset.segmentIndex !== undefined ? 'segment-index' : active.dataset.stopIndex !== undefined ? 'stop-index' : 'index'}="${item}"]` : selector;
+    return rowSelector ? { selector: rowSelector, start: active.selectionStart, end: active.selectionEnd } : null;
   }
 
   _render() {
     const color = getBarColorValue(this._createSectionContext(), root);
+    const fillStyle = getEffectiveFillStyleValue(this._createSectionContext(), root);
+    const palette = fillStyle === 'gradient' ? this._gradientStopsSection
+      : this._segmentsSection._isSegmentFillStyle(fillStyle) ? this._segmentsSection : null;
+    const paletteRows = palette === this._gradientStopsSection ? palette._getScopedGradientStopsValue(root)
+      : palette ? palette._getScopedSegmentsValue(root) : [];
     const signature = JSON.stringify([
       !!(this._context.entity_id || this._explicitEntity), this._showEntityPicker,
+      fillStyle, paletteRows.length,
+      palette === this._gradientStopsSection ? !isHexColorValue(palette._getGradientStopsDraftState(root).color) : false,
+      ...paletteRows.map(row => !isHexColorValue(row.color)),
       !!customElements.get('ha-entity-picker'), !!color && !isHexColorValue(color),
     ]);
     // Keep active controls mounted through their native input/change sequence.
     const activeField = this.shadowRoot.activeElement?.dataset?.field;
-    const defer = activeField === 'bar-color-text-fallback'
+    const activeKind = this.shadowRoot.activeElement?.dataset?.kind;
+    const defer = activeKind?.endsWith('-text-fallback') || activeField === 'bar-color-text-fallback'
       || activeField === 'feature-entity-override' && !this._context.entity_id && !this._explicitEntity;
-    if (signature !== this._structureSignature && !defer) {
+    if ((signature !== this._structureSignature || this._paletteRenderRequested) && !defer) {
       const focus = this._captureFocus();
       const context = this._createSectionContext();
       this.shadowRoot.innerHTML = `<style>${editorStyles}
+        :host { container-type: inline-size; }
+        .list-row.gradient-stop-row .field-grid { grid-template-columns: minmax(0, 1fr); }
+        @container (max-width: 320px) {
+          .list-row.segment-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .list-row.gradient-stop-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .list-row.segment-row > button, .list-row.gradient-stop-row > button {
+            grid-column: 1 / -1; width: 100%;
+          }
+        }
         .inline-row { grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); }
         .section-note { overflow-wrap: anywhere; }
         ha-entity-picker { display: block; min-width: 0; max-width: 100%; }
@@ -166,15 +207,21 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         ${this._renderEntitySection()}
         ${renderScaleSection(context, root)}
         ${renderBarAppearanceSection(context, root)}
+        ${palette?.render(root) ?? ''}
         ${renderFormattingSection(context, root)}
       </div>`;
       this._structureSignature = signature;
+      this._paletteRenderRequested = false;
       this._syncControls();
       const active = focus && this.shadowRoot.querySelector(focus.selector);
       active?.focus?.();
       if (active?.type === 'text' && focus.start != null) active.setSelectionRange?.(focus.start, focus.end);
     } else {
       this._syncControls();
+    }
+    if (this._pendingPaletteFocus) {
+      this.shadowRoot.querySelector(this._pendingPaletteFocus)?.focus?.();
+      this._pendingPaletteFocus = null;
     }
     this._configReplaced = false;
   }
@@ -195,6 +242,28 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       const control = this.shadowRoot.querySelector(`[data-field="${field}"]`);
       if (control && (control !== this.shadowRoot.activeElement || this._configReplaced)) control.value = String(value);
       if (field === 'bar-color-text-fallback') control?.setAttribute('aria-label', 'Bar color (CSS value)');
+    }
+    for (const section of [this._segmentsSection, this._gradientStopsSection]) {
+      const segment = section === this._segmentsSection;
+      const rows = segment ? section._getScopedSegmentsValue(root) : section._getScopedGradientStopsValue(root);
+      for (const field of segment ? ['from', 'to', 'color'] : ['pos', 'color']) {
+        for (const control of this.shadowRoot.querySelectorAll(`input[data-kind="${segment ? 'segment' : 'gradient'}-${field}"]`)) {
+          const index = Number(control.dataset.index), row = rows[index];
+          const value = segment && field !== 'color' ? section._getSegmentBoundaryText(root, index, field, row?.[field])
+            : !segment && field === 'pos' ? section._getGradientStopPosText(root, index, row?.pos ?? '') : row?.color;
+          if (control !== this.shadowRoot.activeElement || this._configReplaced) control.value = value ?? '';
+        }
+      }
+      if (this._configReplaced) {
+        const draft = segment ? section._getSegmentDraftState(root) : section._getGradientStopsDraftState(root);
+        for (const field of Object.keys(draft)) for (const suffix of ['', '-text-fallback']) for (const control of this.shadowRoot.querySelectorAll(`input[data-kind="${segment ? 'segment' : 'gradient'}-draft-${field}${suffix}"]`)) {
+          control.value = field === 'color' && control.type === 'color' ? getColorPickerValue(draft[field], '#4CAF50') : draft[field];
+        }
+      }
+      if (segment) section._refreshSegmentUi(root);
+      // Refreshing gradient hints in the lightweight unit DOM intentionally uses
+      // structural render in standalone; avoid an endless host render loop here.
+      else if (this.shadowRoot.querySelector('#gradient-draft-pos')?.closest) section._refreshGradientDraftUi(root);
     }
     const solid = this.shadowRoot.querySelector('#bar-solid-fill');
     if (solid) solid.checked = getBarSolidFillValue(context, root);

@@ -7193,6 +7193,1397 @@ ${barMarkerStyles}
     }
   });
 
+  // src/editor/shared/palette-section.js
+  var PaletteSection;
+  var init_palette_section = __esm({
+    "src/editor/shared/palette-section.js"() {
+      init_bar_appearance();
+      init_editor_config();
+      PaletteSection = class {
+        constructor(context, ui, array) {
+          this.context = context;
+          this.ui = ui;
+          this.array = array;
+        }
+        get shadowRoot() {
+          return this.ui.root();
+        }
+        fillStyle(scope) {
+          return getEffectiveFillStyleValue(this.context, scope);
+        }
+        _getShadowElementById(id) {
+          var _a, _b, _c, _d;
+          return (_d = (_b = (_a = this.shadowRoot) == null ? void 0 : _a.getElementById) == null ? void 0 : _b.call(_a, id)) != null ? _d : (_c = this.shadowRoot) == null ? void 0 : _c.querySelector(`#${id}`);
+        }
+        _renderListRows(items, renderItem) {
+          return items.map(renderItem).join("");
+        }
+        handle(event, mode = event.type) {
+          var _a, _b, _c, _d, _e, _f, _g, _h;
+          const target = event.target;
+          if (mode === "input" && (target == null ? void 0 : target.type) === "checkbox") return false;
+          const rawKind = (_a = target == null ? void 0 : target.dataset) == null ? void 0 : _a.kind;
+          const kind = rawKind == null ? void 0 : rawKind.replace(/-text-fallback$/, "");
+          const action = (_b = target == null ? void 0 : target.dataset) == null ? void 0 : _b.action;
+          const segment = !!this._getScopedSegmentsValue;
+          const prefix = segment ? "segment" : "gradient";
+          const isEntity = (_c = mode === "click" ? action : kind) == null ? void 0 : _c.includes("entity-");
+          const scope = isEntity ? { type: "entity", index: Number(target.dataset.index) } : { type: "card" };
+          const local = kind == null ? void 0 : kind.replace(/^entity-/, "");
+          const index = Number(isEntity ? target.dataset[segment ? "segmentIndex" : "stopIndex"] : (_d = target == null ? void 0 : target.dataset) == null ? void 0 : _d.index);
+          const rows = () => segment ? this._getScopedSegmentsValue(scope) : this._getScopedGradientStopsValue(scope);
+          const write = (next2, options, operation) => segment ? this._setScopedSegments(scope, next2, options, operation) : this._setScopedGradientStops(scope, next2, options, operation);
+          const commit = () => segment ? this._commitSegmentDraft(scope) : this._commitGradientStopDraft(scope);
+          const refresh = () => segment ? this._refreshSegmentUi(scope) : this._refreshGradientDraftUi(scope);
+          if (mode === "click") {
+            if (![
+              "add-segment",
+              "remove-segment",
+              "add-entity-segment",
+              "remove-entity-segment",
+              "add-gradient-stop",
+              "remove-gradient-stop",
+              "add-entity-gradient-stop",
+              "remove-entity-gradient-stop"
+            ].includes(action) || !action.includes(prefix)) return false;
+            if (action.startsWith("add-")) {
+              this.ui.focus(`#${isEntity ? `entity-${scope.index}-` : ""}${prefix}-draft-${segment ? "from" : "pos"}`);
+              commit();
+            } else {
+              write(rows().filter((_, i) => i !== index), { rerender: true, ...segment ? { sort: true } : {} }, { type: "remove", index });
+            }
+            return true;
+          }
+          if (kind === `entity-${segment ? "segments" : "gradient-stops"}-inherit`) {
+            if (target.checked) segment ? this._clearSegmentsOverride(scope) : this._clearGradientStopsOverride(scope);
+            return true;
+          }
+          if (!(local == null ? void 0 : local.startsWith(`${prefix}-`))) return false;
+          const draft = local.startsWith(`${prefix}-draft-`);
+          const field = local.slice((draft ? `${prefix}-draft-` : `${prefix}-`).length);
+          const value = (_f = (_e = event.detail) == null ? void 0 : _e.value) != null ? _f : target.value;
+          if (mode === "keydown") {
+            if (event.key === "Escape" && draft) {
+              (_g = event.preventDefault) == null ? void 0 : _g.call(event);
+              if (segment) this._segmentDrafts.set(this._getSegmentsScopeKey(scope), this._createSegmentDraftState(scope));
+              else this._gradientStopsDrafts.set(this._getGradientStopsDraftKey(scope), this._createGradientStopDraftState(scope));
+              this.ui.render();
+            } else if (event.key === "Enter") {
+              (_h = event.preventDefault) == null ? void 0 : _h.call(event);
+              if (draft) commit();
+              else if (segment && ["from", "to"].includes(field)) this._commitSegmentBoundaryEdit(scope, index, field, value, target);
+              else if (!segment && field === "pos") this._commitGradientStopPosEdit(scope, index, value, target);
+            }
+            return true;
+          }
+          if (draft) {
+            if (segment) this._setSegmentDraftField(scope, field, value);
+            else this._setGradientStopsDraftField(scope, field, value);
+            return true;
+          }
+          if (segment && ["from", "to"].includes(field) || !segment && field === "pos") {
+            if (mode === "input") {
+              if (segment) {
+                this._setSegmentBoundaryText(scope, index, field, value);
+                refresh();
+              } else this._setGradientStopPosText(scope, index, value);
+            } else if (mode === "change") {
+              if (segment) this._commitSegmentBoundaryEdit(scope, index, field, value, target);
+              else this._commitGradientStopPosEdit(scope, index, value, target);
+            }
+            return true;
+          }
+          const current = rows();
+          const next = current.map((row, i) => {
+            var _a2, _b2;
+            return i !== index ? row : segment ? { ...row, color: value } : { ...row, pos: (_a2 = this._normalizeGradientStopPosValue(row == null ? void 0 : row.pos)) != null ? _a2 : 0, color: field === "color" ? value : (_b2 = row == null ? void 0 : row.color) != null ? _b2 : "#4a9eff" };
+          });
+          if (segment || serializeConfig(next) !== serializeConfig(this._sanitizeGradientStopsForEmit(current))) {
+            write(next, segment ? { sort: false } : {}, { type: "edit", index, field: "color", value });
+          }
+          return true;
+        }
+      };
+    }
+  });
+
+  // src/editor/sections/segments.js
+  var SegmentsSection;
+  var init_segments = __esm({
+    "src/editor/sections/segments.js"() {
+      init_editor_config();
+      init_editor_controls();
+      init_palette_section();
+      SegmentsSection = class extends PaletteSection {
+        constructor(context, ui, array) {
+          super(context, ui, array);
+          this.reset();
+        }
+        reset() {
+          this._segmentDrafts = /* @__PURE__ */ new Map();
+          this._segmentUiRows = /* @__PURE__ */ new Map();
+          this._segmentBoundaryTexts = /* @__PURE__ */ new Map();
+        }
+        _setSegments(segments, options = {}) {
+          return this._setScopedSegments({ type: "card" }, segments, options);
+        }
+        _clearSegmentsOverride(scope) {
+          this._segmentDrafts.delete(this._getSegmentsScopeKey(scope));
+          this._segmentUiRows.delete(this._getSegmentsScopeKey(scope));
+          this._clearSegmentScopeTextState(scope);
+          return this.context.mutate(scope, (target) => {
+            let nextTarget = deletePathValue(target, ["bar", "segments"]);
+            nextTarget = deletePathValue(nextTarget, ["segments"]);
+            nextTarget = deletePathValue(nextTarget, ["severity"]);
+            nextTarget = pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
+            return nextTarget;
+          }, { rerender: true });
+        }
+        _getSegmentsValue() {
+          return this._getScopedSegmentsValue({ type: "card" });
+        }
+        _getSegmentsScopeKey(scope = { type: "card" }) {
+          return (scope == null ? void 0 : scope.type) === "entity" ? `entity:${scope.index}` : "card";
+        }
+        _getSegmentBoundaryTextKey(scope, segmentIndex, field) {
+          return `${this._getSegmentsScopeKey(scope)}:${segmentIndex}:${field}`;
+        }
+        _getSegmentBoundaryText(scope = { type: "card" }, segmentIndex, field, fallbackValue = "") {
+          const key = this._getSegmentBoundaryTextKey(scope, segmentIndex, field);
+          if (this._segmentBoundaryTexts.has(key)) {
+            return this._segmentBoundaryTexts.get(key);
+          }
+          return this._formatSegmentBoundaryValue(fallbackValue);
+        }
+        _setSegmentBoundaryText(scope, segmentIndex, field, rawValue) {
+          this._segmentBoundaryTexts.set(
+            this._getSegmentBoundaryTextKey(scope, segmentIndex, field),
+            normalizeTextValue(rawValue)
+          );
+        }
+        _clearSegmentBoundaryText(scope, segmentIndex, field) {
+          this._segmentBoundaryTexts.delete(this._getSegmentBoundaryTextKey(scope, segmentIndex, field));
+        }
+        _clearSegmentScopeTextState(scope) {
+          const prefix = `${this._getSegmentsScopeKey(scope)}:`;
+          for (const key of this._segmentBoundaryTexts.keys()) {
+            if (key.startsWith(prefix)) {
+              this._segmentBoundaryTexts.delete(key);
+            }
+          }
+        }
+        _getSegmentsUiRows(scope = { type: "card" }) {
+          const key = this._getSegmentsScopeKey(scope);
+          if (this._segmentUiRows.has(key)) {
+            return cloneDeep(this._segmentUiRows.get(key));
+          }
+          return null;
+        }
+        _setSegmentsUiRows(scope, rows) {
+          this._segmentUiRows.set(this._getSegmentsScopeKey(scope), cloneDeep(rows));
+        }
+        _getSegmentDraftState(scope = { type: "card" }) {
+          const key = this._getSegmentsScopeKey(scope);
+          if (!this._segmentDrafts.has(key)) {
+            this._segmentDrafts.set(key, this._createSegmentDraftState(scope));
+          }
+          return cloneDeep(this._segmentDrafts.get(key));
+        }
+        _setSegmentDraftState(scope, nextDraft, options = {}) {
+          var _a, _b, _c;
+          this._segmentDrafts.set(this._getSegmentsScopeKey(scope), {
+            from: (_a = nextDraft == null ? void 0 : nextDraft.from) != null ? _a : "",
+            to: (_b = nextDraft == null ? void 0 : nextDraft.to) != null ? _b : "",
+            color: (_c = nextDraft == null ? void 0 : nextDraft.color) != null ? _c : this._getSegmentDraftColorDefault(scope)
+          });
+          if (options == null ? void 0 : options.refreshOnly) {
+            this._refreshSegmentUi(scope);
+            return;
+          }
+          this.ui.render();
+        }
+        _setSegmentDraftField(scope, field, rawValue) {
+          const currentDraft = this._getSegmentDraftState(scope);
+          const nextValue = field === "color" ? normalizeTextValue(rawValue).trim() : normalizeTextValue(rawValue);
+          this._setSegmentDraftState(scope, {
+            ...currentDraft,
+            [field]: nextValue
+          }, { refreshOnly: true });
+        }
+        _isSegmentFillStyle(fillStyle) {
+          return ["bands", "soft_bands", "band_gradient"].includes(fillStyle);
+        }
+        _getDefaultSegments() {
+          return [
+            { from: "0%", to: "33%", color: "#4CAF50" },
+            { from: "33%", to: "75%", color: "#FF9800" },
+            { from: "75%", to: "100%", color: "#F44336" }
+          ];
+        }
+        _getStoredScopedSegments(scope = { type: "card" }) {
+          const structuredValue = this.context.read(scope, ["bar", "segments"]);
+          if (structuredValue !== void 0) {
+            return structuredValue;
+          }
+          const legacySegments = this.context.read(scope, ["segments"]);
+          if (legacySegments !== void 0) {
+            return legacySegments;
+          }
+          const legacySeverity = this.context.read(scope, ["severity"]);
+          if (legacySeverity !== void 0) {
+            return legacySeverity;
+          }
+          return null;
+        }
+        _parseSegmentBoundaryInput(rawValue) {
+          const normalizedValue = normalizeTextValue(rawValue).trim();
+          if (!normalizedValue) {
+            return null;
+          }
+          const percentMatch = normalizedValue.match(/^\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*%\s*$/);
+          const percent = percentMatch ? parseFloat(percentMatch[1]) : null;
+          if (Number.isFinite(percent)) {
+            return `${percent}%`;
+          }
+          const numericValue = normalizeNumberValue(normalizedValue);
+          return numericValue === null ? null : numericValue;
+        }
+        _formatSegmentBoundaryValue(value) {
+          if (typeof value === "string") {
+            return value;
+          }
+          if (typeof value === "number" && Number.isFinite(value)) {
+            return String(value);
+          }
+          if (isObject(value)) {
+            if (Number.isFinite(value.percent)) {
+              return `${value.percent}%`;
+            }
+            if (Number.isFinite(this._getFiniteNumber(value.fixed))) {
+              return String(this._getFiniteNumber(value.fixed));
+            }
+          }
+          return "";
+        }
+        _getSegmentDraftColorDefault(scope = { type: "card" }) {
+          var _a;
+          const segments = this._getScopedSegmentsValue(scope);
+          if (segments.length) {
+            return normalizeTextValue((_a = segments[segments.length - 1]) == null ? void 0 : _a.color).trim() || "#4a9eff";
+          }
+          return "#4CAF50";
+        }
+        _getNewSegmentDefaults(scope = { type: "card" }) {
+          var _a;
+          const segments = this._getScopedSegmentsValue(scope);
+          const previous = segments[segments.length - 1];
+          const previousTo = (_a = previous == null ? void 0 : previous.to) != null ? _a : null;
+          return {
+            from: previousTo != null ? previousTo : "0%",
+            to: "100%",
+            color: "#4a9eff"
+          };
+        }
+        _createSegmentDraftState(scope = { type: "card" }) {
+          var _a;
+          const defaults = this._getNewSegmentDefaults(scope);
+          const formattedFrom = this._formatSegmentBoundaryValue(defaults.from);
+          const formattedTo = this._formatSegmentBoundaryValue(defaults.to);
+          const draftFrom = formattedFrom === "100%" || formattedFrom === "100" ? "" : formattedFrom;
+          const draftTo = draftFrom ? formattedTo : "";
+          return {
+            from: draftFrom,
+            to: draftTo,
+            color: (_a = defaults.color) != null ? _a : this._getSegmentDraftColorDefault(scope)
+          };
+        }
+        _normalizeSegmentForEditorComparison(segment) {
+          if (!isObject(segment)) {
+            return null;
+          }
+          const from = this._formatSegmentBoundaryValue(segment.from).trim();
+          const to = this._formatSegmentBoundaryValue(segment.to).trim();
+          const color = normalizeColorComparisonValue(segment.color);
+          if (!from || !to || !color) {
+            return null;
+          }
+          return { from, to, color };
+        }
+        _segmentsEqualForEditor(leftSegments, rightSegments) {
+          const left = Array.isArray(leftSegments) ? leftSegments.map((segment) => this._normalizeSegmentForEditorComparison(segment)).filter(Boolean) : [];
+          const right = Array.isArray(rightSegments) ? rightSegments.map((segment) => this._normalizeSegmentForEditorComparison(segment)).filter(Boolean) : [];
+          if (left.length !== right.length) {
+            return false;
+          }
+          return left.every((segment, index) => segment.from === right[index].from && segment.to === right[index].to && segment.color === right[index].color);
+        }
+        _getFallbackSegments(scope = { type: "card" }) {
+          if ((scope == null ? void 0 : scope.type) === "entity") {
+            const cardStoredSegments = this._getStoredScopedSegments({ type: "card" });
+            if (cardStoredSegments !== null) {
+              return cloneDeep(this._getScopedSegmentsValue({ type: "card" }));
+            }
+          }
+          if (!this._isSegmentFillStyle(this.fillStyle(scope))) {
+            return [];
+          }
+          return cloneDeep(this._getDefaultSegments());
+        }
+        _parseSegmentBoundaryText(rawValue) {
+          const normalizedValue = normalizeTextValue(rawValue).trim();
+          if (!normalizedValue) {
+            return { state: "empty", value: null };
+          }
+          const parsed = this._parseSegmentBoundaryInput(normalizedValue);
+          if (parsed === null) {
+            return { state: "invalid", value: null };
+          }
+          return { state: "valid", value: parsed };
+        }
+        _compareSegmentBoundaries(left, right) {
+          const leftValue = this._getSegmentPreviewBoundaryValue(left);
+          const rightValue = this._getSegmentPreviewBoundaryValue(right);
+          if (leftValue === null || rightValue === null) {
+            return null;
+          }
+          if (leftValue < rightValue) return -1;
+          if (leftValue > rightValue) return 1;
+          return 0;
+        }
+        _buildSegmentValidationRows(scope = { type: "card" }) {
+          var _a;
+          const rows = (_a = this._getSegmentsUiRows(scope)) != null ? _a : this._getScopedSegmentsValue(scope);
+          return rows.map((segment, index) => {
+            const rawFrom = this._getSegmentBoundaryText(scope, index, "from", segment == null ? void 0 : segment.from);
+            const rawTo = this._getSegmentBoundaryText(scope, index, "to", segment == null ? void 0 : segment.to);
+            const parsedFrom = this._parseSegmentBoundaryText(rawFrom);
+            const parsedTo = this._parseSegmentBoundaryText(rawTo);
+            return {
+              index,
+              rawFrom,
+              rawTo,
+              parsedFrom,
+              parsedTo
+            };
+          });
+        }
+        _getSegmentRowValidationMessage(scope = { type: "card" }, segmentIndex) {
+          const rows = this._buildSegmentValidationRows(scope);
+          const row = rows[segmentIndex];
+          if (!row) {
+            return "";
+          }
+          if (row.parsedFrom.state === "invalid" || row.parsedTo.state === "invalid" || row.parsedFrom.state === "empty" || row.parsedTo.state === "empty") {
+            return "Enter valid from/to values.";
+          }
+          if (this._compareSegmentBoundaries(row.parsedFrom.value, row.parsedTo.value) !== -1) {
+            return "From must be below To.";
+          }
+          const candidateFrom = this._getSegmentPreviewBoundaryValue(row.parsedFrom.value);
+          const candidateTo = this._getSegmentPreviewBoundaryValue(row.parsedTo.value);
+          for (const other of rows) {
+            if (other.index === segmentIndex) continue;
+            if (other.parsedFrom.state !== "valid" || other.parsedTo.state !== "valid") continue;
+            const otherFrom = this._getSegmentPreviewBoundaryValue(other.parsedFrom.value);
+            const otherTo = this._getSegmentPreviewBoundaryValue(other.parsedTo.value);
+            if (candidateFrom === otherFrom) {
+              return "Duplicate segment start.";
+            }
+            if (candidateFrom < otherTo && candidateTo > otherFrom) {
+              return "Segments overlap.";
+            }
+          }
+          return "";
+        }
+        _getValidSegmentDraft(scope = { type: "card" }) {
+          const draft = this._getSegmentDraftState(scope);
+          const parsedFrom = this._parseSegmentBoundaryText(draft.from);
+          const parsedTo = this._parseSegmentBoundaryText(draft.to);
+          const color = normalizeTextValue(draft.color).trim();
+          if (parsedFrom.state !== "valid" || parsedTo.state !== "valid" || !color) {
+            return null;
+          }
+          if (this._compareSegmentBoundaries(parsedFrom.value, parsedTo.value) !== -1) {
+            return null;
+          }
+          const candidateFrom = this._getSegmentPreviewBoundaryValue(parsedFrom.value);
+          const candidateTo = this._getSegmentPreviewBoundaryValue(parsedTo.value);
+          const rows = this._buildSegmentValidationRows(scope);
+          for (const row of rows) {
+            if (row.parsedFrom.state !== "valid" || row.parsedTo.state !== "valid") continue;
+            const otherFrom = this._getSegmentPreviewBoundaryValue(row.parsedFrom.value);
+            const otherTo = this._getSegmentPreviewBoundaryValue(row.parsedTo.value);
+            if (candidateFrom === otherFrom || candidateFrom < otherTo && candidateTo > otherFrom) {
+              return null;
+            }
+          }
+          return {
+            from: parsedFrom.value,
+            to: parsedTo.value,
+            color
+          };
+        }
+        _canAddSegment(scope = { type: "card" }) {
+          return !!this._getValidSegmentDraft(scope);
+        }
+        _getSegmentDraftValidationMessage(scope = { type: "card" }) {
+          const draft = this._getSegmentDraftState(scope);
+          const parsedFrom = this._parseSegmentBoundaryText(draft.from);
+          const parsedTo = this._parseSegmentBoundaryText(draft.to);
+          const color = normalizeTextValue(draft.color).trim();
+          if (!normalizeTextValue(draft.from).trim() && !normalizeTextValue(draft.to).trim()) {
+            return "";
+          }
+          if (parsedFrom.state !== "valid" || parsedTo.state !== "valid") {
+            return "Enter valid from/to values.";
+          }
+          if (this._compareSegmentBoundaries(parsedFrom.value, parsedTo.value) !== -1) {
+            return "From must be below To.";
+          }
+          if (!color) {
+            return "Choose a color to add a segment.";
+          }
+          const candidateFrom = this._getSegmentPreviewBoundaryValue(parsedFrom.value);
+          const candidateTo = this._getSegmentPreviewBoundaryValue(parsedTo.value);
+          const rows = this._buildSegmentValidationRows(scope);
+          for (const row of rows) {
+            if (row.parsedFrom.state !== "valid" || row.parsedTo.state !== "valid") continue;
+            const otherFrom = this._getSegmentPreviewBoundaryValue(row.parsedFrom.value);
+            const otherTo = this._getSegmentPreviewBoundaryValue(row.parsedTo.value);
+            if (candidateFrom === otherFrom) {
+              return "Duplicate segment start.";
+            }
+            if (candidateFrom < otherTo && candidateTo > otherFrom) {
+              return "Segments overlap.";
+            }
+          }
+          return "";
+        }
+        _getSegmentPreviewBoundaryValue(value) {
+          if (typeof value === "string") {
+            const match = value.trim().match(/^([+-]?(?:\d+(?:\.\d+)?|\.\d+))%$/);
+            if (match) {
+              const parsed = parseFloat(match[1]);
+              return Number.isFinite(parsed) ? parsed : null;
+            }
+          }
+          if (typeof value === "number" && Number.isFinite(value)) {
+            return value;
+          }
+          if (isObject(value)) {
+            if (Number.isFinite(value.percent)) {
+              return value.percent;
+            }
+            const fixedValue = this._getFiniteNumber(value.fixed);
+            if (Number.isFinite(fixedValue)) {
+              return fixedValue;
+            }
+          }
+          return null;
+        }
+        _sortSegmentsForEditor(segments) {
+          if (!Array.isArray(segments)) {
+            return [];
+          }
+          return cloneDeep(segments).sort((left, right) => {
+            const leftFrom = this._getSegmentPreviewBoundaryValue(left == null ? void 0 : left.from);
+            const rightFrom = this._getSegmentPreviewBoundaryValue(right == null ? void 0 : right.from);
+            if (leftFrom === null && rightFrom === null) return 0;
+            if (leftFrom === null) return 1;
+            if (rightFrom === null) return -1;
+            return leftFrom - rightFrom;
+          });
+        }
+        _getSegmentPreviewRows(scope = { type: "card" }) {
+          var _a;
+          const baseSegments = (_a = this._getSegmentsUiRows(scope)) != null ? _a : this._getScopedSegmentsValue(scope);
+          const previewSegments = this._sortSegmentsForEditor(baseSegments);
+          const validDraft = this._getValidSegmentDraft(scope);
+          if (validDraft) {
+            previewSegments.push(validDraft);
+          }
+          return this._sortSegmentsForEditor(previewSegments).filter((segment) => {
+            const from = this._getSegmentPreviewBoundaryValue(segment == null ? void 0 : segment.from);
+            const to = this._getSegmentPreviewBoundaryValue(segment == null ? void 0 : segment.to);
+            return from !== null && to !== null && typeof (segment == null ? void 0 : segment.color) === "string" && segment.color.trim();
+          });
+        }
+        _buildEditorSegmentPreviewStyle(scope = { type: "card" }) {
+          const segments = this._getSegmentPreviewRows(scope);
+          if (!segments.length) {
+            return "";
+          }
+          const fillStyle = this.fillStyle(scope);
+          const stops = [];
+          segments.forEach((segment) => {
+            const from = Math.max(0, Math.min(100, this._getSegmentPreviewBoundaryValue(segment.from)));
+            const to = Math.max(0, Math.min(100, this._getSegmentPreviewBoundaryValue(segment.to)));
+            stops.push(`${segment.color} ${from}%`, `${segment.color} ${to}%`);
+          });
+          if (fillStyle === "bands") {
+            return `background:linear-gradient(to right,${stops.join(",")});background-repeat:no-repeat;`;
+          }
+          return `background:linear-gradient(to right,${stops.join(",")});background-repeat:no-repeat;`;
+        }
+        _getSegmentPreviewDomIds(scope = { type: "card" }) {
+          if ((scope == null ? void 0 : scope.type) === "entity") {
+            return {
+              previewId: `entity-${scope.index}-segment-preview`,
+              trackId: `entity-${scope.index}-segment-preview-track`
+            };
+          }
+          return {
+            previewId: "card-segment-preview",
+            trackId: "card-segment-preview-track"
+          };
+        }
+        _renderSegmentPreview(scope = { type: "card" }) {
+          var _a;
+          const { previewId, trackId } = this._getSegmentPreviewDomIds(scope);
+          const segments = this._getSegmentPreviewRows(scope);
+          const markers = [];
+          segments.forEach((segment) => {
+            const from = this._getSegmentPreviewBoundaryValue(segment.from);
+            const to = this._getSegmentPreviewBoundaryValue(segment.to);
+            if (from !== null) markers.push(from);
+            if (to !== null) markers.push(to);
+          });
+          const uniqueMarkers = [...new Set(markers)].sort((left, right) => left - right);
+          return `
+      <div id="${previewId}" class="gradient-preview segment-preview">
+        <div id="${trackId}" class="gradient-preview-track segment-preview-track" style="${escapeAttribute((_a = this._buildEditorSegmentPreviewStyle(scope)) != null ? _a : "")}">
+          ${uniqueMarkers.map((marker, index) => `
+            <span
+              id="${previewId}-stop-${index}"
+              class="gradient-preview-stop"
+              style="left:${escapeAttribute(String(marker))}%"
+              title="${escapeAttribute(`${marker}%`)}"
+            ></span>
+          `).join("")}
+        </div>
+      </div>
+    `;
+        }
+        _refreshSegmentPreview(scope = { type: "card" }) {
+          var _a;
+          const { previewId, trackId } = this._getSegmentPreviewDomIds(scope);
+          const track = this._getShadowElementById(trackId);
+          if (!track) {
+            return;
+          }
+          track.setAttribute("style", (_a = this._buildEditorSegmentPreviewStyle(scope)) != null ? _a : "");
+          const segments = this._getSegmentPreviewRows(scope);
+          const markers = [];
+          segments.forEach((segment) => {
+            const from = this._getSegmentPreviewBoundaryValue(segment.from);
+            const to = this._getSegmentPreviewBoundaryValue(segment.to);
+            if (from !== null) markers.push(from);
+            if (to !== null) markers.push(to);
+          });
+          const uniqueMarkers = [...new Set(markers)].sort((left, right) => left - right);
+          track.innerHTML = uniqueMarkers.map((marker, index) => `
+      <span
+        id="${previewId}-stop-${index}"
+        class="gradient-preview-stop"
+        style="left:${escapeAttribute(String(marker))}%"
+        title="${escapeAttribute(`${marker}%`)}"
+      ></span>
+    `).join("");
+        }
+        _getSegmentDomIds(scope = { type: "card" }) {
+          if ((scope == null ? void 0 : scope.type) === "entity") {
+            return {
+              hintPrefix: `entity-${scope.index}-segment-row-hint-`,
+              draftHintId: `entity-${scope.index}-segment-draft-hint`,
+              addSelector: `button[data-action="add-entity-segment"][data-index="${scope.index}"]`
+            };
+          }
+          return {
+            hintPrefix: "segment-row-hint-",
+            draftHintId: "segment-draft-hint",
+            addSelector: 'button[data-action="add-segment"]'
+          };
+        }
+        _refreshSegmentUi(scope = { type: "card" }) {
+          var _a, _b;
+          this._refreshSegmentPreview(scope);
+          if (!this.shadowRoot) {
+            return;
+          }
+          const { hintPrefix, draftHintId, addSelector } = this._getSegmentDomIds(scope);
+          const addButton = this.shadowRoot.querySelector(addSelector);
+          if (addButton) {
+            addButton.disabled = !this._canAddSegment(scope);
+          }
+          const rows = (_a = this._getSegmentsUiRows(scope)) != null ? _a : this._getScopedSegmentsValue(scope);
+          rows.forEach((_, index) => {
+            var _a2;
+            const hint = this._getShadowElementById(`${hintPrefix}${index}`);
+            const message = this._getSegmentRowValidationMessage(scope, index);
+            if (hint) {
+              hint.textContent = message;
+              (_a2 = hint.setAttribute) == null ? void 0 : _a2.call(hint, "style", message ? "" : "display:none");
+            }
+          });
+          const draftHint = this._getShadowElementById(draftHintId);
+          if (draftHint) {
+            const message = this._getSegmentDraftValidationMessage(scope);
+            draftHint.textContent = message;
+            (_b = draftHint.setAttribute) == null ? void 0 : _b.call(draftHint, "style", message ? "" : "display:none");
+          }
+        }
+        _commitSegmentDraft(scope = { type: "card" }) {
+          var _a;
+          const draftSegment = this._getValidSegmentDraft(scope);
+          if (!draftSegment) {
+            this._refreshSegmentUi(scope);
+            return false;
+          }
+          const committedSegments = (_a = this._getSegmentsUiRows(scope)) != null ? _a : this._getScopedSegmentsValue(scope);
+          const nextSegments = this._sortSegmentsForEditor([...committedSegments, draftSegment]);
+          const applied = this._setScopedSegments(scope, nextSegments, { rerender: true }, { type: "add", item: draftSegment });
+          if (applied !== false) {
+            this._segmentDrafts.set(this._getSegmentsScopeKey(scope), this._createSegmentDraftState(scope));
+          }
+          return applied;
+        }
+        _commitSegmentBoundaryEdit(scope = { type: "card" }, segmentIndex, field, rawValue, inputEl = null) {
+          var _a, _b, _c, _d;
+          this._setSegmentBoundaryText(scope, segmentIndex, field, rawValue);
+          if (this.array.patchOnly) {
+            const message2 = this._getSegmentRowValidationMessage(scope, segmentIndex);
+            if (message2) {
+              (_a = inputEl == null ? void 0 : inputEl.setCustomValidity) == null ? void 0 : _a.call(inputEl, message2);
+              (_b = inputEl == null ? void 0 : inputEl.reportValidity) == null ? void 0 : _b.call(inputEl);
+              this._refreshSegmentUi(scope);
+              return false;
+            }
+          }
+          const normalizedText = normalizeTextValue(rawValue).trim();
+          const parsedValue = this._parseSegmentBoundaryInput(rawValue);
+          const nextValue = parsedValue === null ? normalizedText : parsedValue;
+          const currentSegments = (_c = this._getSegmentsUiRows(scope)) != null ? _c : this._getScopedSegmentsValue(scope);
+          const nextSegments = currentSegments.map((segment, currentIndex) => currentIndex === segmentIndex ? { ...segment, [field]: nextValue } : segment);
+          this._clearSegmentBoundaryText(scope, segmentIndex, field);
+          const applied = this._setScopedSegments(scope, nextSegments, { rerender: true }, { type: "edit", index: segmentIndex, field, value: nextValue });
+          const message = this._getSegmentRowValidationMessage(scope, segmentIndex);
+          if (inputEl == null ? void 0 : inputEl.setCustomValidity) {
+            inputEl.setCustomValidity(message || "");
+            if (message) {
+              (_d = inputEl.reportValidity) == null ? void 0 : _d.call(inputEl);
+            }
+          }
+          return applied;
+        }
+        _getScopedSegmentsValue(scope) {
+          if (this.array.rows) return this.array.rows(scope, this);
+          const uiRows = this._getSegmentsUiRows(scope);
+          if (uiRows !== null) {
+            return cloneDeep(uiRows);
+          }
+          const storedSegments = this._getStoredScopedSegments(scope);
+          if (storedSegments !== null) {
+            return this._sortSegmentsForEditor(storedSegments);
+          }
+          return this._sortSegmentsForEditor(this._getFallbackSegments(scope));
+        }
+        _hasSegmentsOverride(scope) {
+          return this._getStoredScopedSegments(scope) !== null;
+        }
+        _getSegmentsSummary(scope) {
+          const segments = this._getScopedSegmentsValue(scope);
+          if (!Array.isArray(segments) || segments.length === 0) {
+            return "Inherited";
+          }
+          if ((scope == null ? void 0 : scope.type) !== "entity" && !this._hasSegmentsOverride(scope) && this._isSegmentFillStyle(this.fillStyle(scope))) {
+            return "Default bands";
+          }
+          return `${segments.length} segments`;
+        }
+        _setScopedSegments(scope, rows, options = {}, operation) {
+          return this.array.write(scope, rows, options, operation);
+        }
+        render(scope = { type: "card" }, renderGroup = ({ content }) => content) {
+          if ((scope == null ? void 0 : scope.type) === "entity") {
+            const index = scope.index;
+            const entitySegments = this._getScopedSegmentsValue(scope);
+            const segmentsInherited = !this._hasSegmentsOverride(scope);
+            return `
+	                      <div class="field-row">
+	                        <div class="toggle">
+	                          <input id="entity-${index}-segments-inherit" type="checkbox" data-kind="entity-segments-inherit" data-index="${index}"${segmentsInherited ? " checked" : ""}>
+                          <label for="entity-${index}-segments-inherit">Inherit card settings</label>
+                        </div>
+                      </div>
+                      ${this._isSegmentFillStyle(this.fillStyle(scope)) ? "" : '<div class="section-note">Only used with segment-based fill styles.</div>'}
+                      ${this._renderSegmentPreview(scope)}
+                      <div class="field-row">
+                        <label>Segments</label>
+                        <div class="list">
+                          ${this._renderListRows(entitySegments, (segment, segmentIndex) => {
+              var _a;
+              return `
+                            <div class="segment-editor-row">
+                            <div class="list-row triple segment-row">
+                              <input type="text" data-kind="entity-segment-from" data-index="${index}" data-segment-index="${segmentIndex}" value="${escapeAttribute(this._getSegmentBoundaryText(scope, segmentIndex, "from", segment == null ? void 0 : segment.from))}" placeholder="0%">
+                              <input type="text" data-kind="entity-segment-to" data-index="${index}" data-segment-index="${segmentIndex}" value="${escapeAttribute(this._getSegmentBoundaryText(scope, segmentIndex, "to", segment == null ? void 0 : segment.to))}" placeholder="100%">
+                              <input type="color" data-kind="entity-segment-color" data-index="${index}" data-segment-index="${segmentIndex}" value="${escapeAttribute((_a = segment == null ? void 0 : segment.color) != null ? _a : "#4a9eff")}">
+                              <button type="button" data-action="remove-entity-segment" data-index="${index}" data-segment-index="${segmentIndex}" aria-label="Remove" title="Remove">\u{1F5D1}</button>
+                            </div>
+                            <div id="entity-${index}-segment-row-hint-${segmentIndex}" class="section-note"${this._getSegmentRowValidationMessage(scope, segmentIndex) ? "" : ' style="display:none"'}>${escapeAttribute(this._getSegmentRowValidationMessage(scope, segmentIndex))}</div>
+                            </div>
+                          `;
+            })}
+                          <div class="segment-draft">
+                            <div class="list-row triple segment-row">
+                              <input id="entity-${index}-segment-draft-from" type="text" data-kind="entity-segment-draft-from" data-index="${index}" value="${escapeAttribute(this._getSegmentDraftState(scope).from)}" placeholder="0%">
+                              <input id="entity-${index}-segment-draft-to" type="text" data-kind="entity-segment-draft-to" data-index="${index}" value="${escapeAttribute(this._getSegmentDraftState(scope).to)}" placeholder="100%">
+                              <input type="color" data-kind="entity-segment-draft-color" data-index="${index}" value="${escapeAttribute(this._getSegmentDraftState(scope).color || "#4a9eff")}">
+                              <button type="button" data-action="add-entity-segment" data-index="${index}"${this._canAddSegment(scope) ? "" : " disabled"}>Add</button>
+                            </div>
+                            <div id="entity-${index}-segment-draft-hint" class="section-note"${this._getSegmentDraftValidationMessage(scope) ? "" : ' style="display:none"'}>${escapeAttribute(this._getSegmentDraftValidationMessage(scope))}</div>
+                          </div>
+                        </div>
+                      </div>
+	                          `;
+          }
+          const fillStyle = this.fillStyle(scope);
+          const segments = this._getScopedSegmentsValue(scope);
+          const defaultSegmentsVisible = !this._hasSegmentsOverride(scope) && this._isSegmentFillStyle(fillStyle);
+          return `	        <div class="section">
+	          <div class="section-head">
+	            <h3>Segments</h3>
+	            <div class="section-note">Segments define colored value ranges.</div>
+	          </div>
+	          ${renderGroup({
+            group: "segments",
+            title: "Segments",
+            summary: this._getSegmentsSummary({ type: "card" }),
+            inactive: !this._isSegmentFillStyle(fillStyle),
+            content: `
+	              ${this._isSegmentFillStyle(fillStyle) ? "" : '<div class="section-note">Only used with segment-based fill styles.</div>'}
+                ${this._renderSegmentPreview({ type: "card" })}
+	              <div class="field-row">
+	                <label>Segments</label>
+	                <div class="list">
+	                  ${defaultSegmentsVisible ? '<div class="section-note">Default bands</div>' : ""}
+	                  ${this._renderListRows(segments, (segment, index) => {
+              var _a;
+              return `
+	                    <div class="segment-editor-row">
+	                    <div class="list-row triple segment-row">
+	                      <input type="text" data-kind="segment-from" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: "card" }, index, "from", segment == null ? void 0 : segment.from))}" placeholder="0%">
+	                      <input type="text" data-kind="segment-to" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: "card" }, index, "to", segment == null ? void 0 : segment.to))}" placeholder="100%">
+	                      <input type="color" data-kind="segment-color" data-index="${index}" value="${escapeAttribute((_a = segment == null ? void 0 : segment.color) != null ? _a : "#4a9eff")}">
+	                      <button type="button" data-action="remove-segment" data-index="${index}" aria-label="Remove" title="Remove">\u{1F5D1}</button>
+	                    </div>
+                      <div id="segment-row-hint-${index}" class="section-note"${this._getSegmentRowValidationMessage({ type: "card" }, index) ? "" : ' style="display:none"'}>${escapeAttribute(this._getSegmentRowValidationMessage({ type: "card" }, index))}</div>
+                      </div>
+	                  `;
+            })}
+                    <div class="segment-draft">
+                      <div class="list-row triple segment-row">
+                        <input id="segment-draft-from" type="text" data-kind="segment-draft-from" value="${escapeAttribute(this._getSegmentDraftState({ type: "card" }).from)}" placeholder="0%">
+                        <input id="segment-draft-to" type="text" data-kind="segment-draft-to" value="${escapeAttribute(this._getSegmentDraftState({ type: "card" }).to)}" placeholder="100%">
+                        <input type="color" data-kind="segment-draft-color" value="${escapeAttribute(this._getSegmentDraftState({ type: "card" }).color || "#4a9eff")}">
+                        <button type="button" data-action="add-segment"${this._canAddSegment({ type: "card" }) ? "" : " disabled"}>Add</button>
+                      </div>
+                      <div id="segment-draft-hint" class="section-note"${this._getSegmentDraftValidationMessage({ type: "card" }) ? "" : ' style="display:none"'}>${escapeAttribute(this._getSegmentDraftValidationMessage({ type: "card" }))}</div>
+                    </div>
+	                </div>
+	              </div>
+	            `
+          })}
+	        </div>`;
+        }
+      };
+    }
+  });
+
+  // src/editor/sections/gradient-stops.js
+  var GradientStopsSection;
+  var init_gradient_stops = __esm({
+    "src/editor/sections/gradient-stops.js"() {
+      init_normalize();
+      init_editor_config();
+      init_editor_controls();
+      init_palette_section();
+      GradientStopsSection = class extends PaletteSection {
+        constructor(context, ui, array) {
+          super(context, ui, array);
+          this.reset();
+        }
+        reset() {
+          this._gradientStopsDrafts = /* @__PURE__ */ new Map();
+          this._gradientStopsUiRows = /* @__PURE__ */ new Map();
+          this._gradientStopPosTexts = /* @__PURE__ */ new Map();
+          this._gradientStopValidationMessages = /* @__PURE__ */ new Map();
+        }
+        _setGradientStops(stops, options = {}) {
+          return this._setScopedGradientStops({ type: "card" }, stops, options);
+        }
+        _getDefaultGradientStops() {
+          return [
+            { pos: 0, color: "#4CAF50" },
+            { pos: 50, color: "#FF9800" },
+            { pos: 100, color: "#F44336" }
+          ];
+        }
+        _normalizeGradientStopPosValue(rawValue) {
+          const percent = parsePercentLiteral(rawValue);
+          const numericValue = Number.isFinite(percent) ? percent : normalizeNumberValue(rawValue);
+          if (numericValue === null || !Number.isFinite(numericValue)) {
+            return null;
+          }
+          if (numericValue < 0 || numericValue > 100) {
+            return null;
+          }
+          return numericValue;
+        }
+        _sanitizeGradientStopsForEmit(stops) {
+          if (!Array.isArray(stops)) {
+            return [];
+          }
+          return stops.map((stop) => {
+            if (!isObject(stop)) {
+              return null;
+            }
+            const pos = this._normalizeGradientStopPosValue(stop.pos);
+            const color = normalizeTextValue(stop.color).trim();
+            if (pos === null || !color) {
+              return null;
+            }
+            return {
+              ...stop,
+              pos,
+              color
+            };
+          }).filter(Boolean).sort((left, right) => left.pos - right.pos);
+        }
+        _getGradientStopDraftColorDefault(scope = { type: "card" }) {
+          var _a;
+          const committedStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
+          if (committedStops.length) {
+            return (_a = committedStops[committedStops.length - 1].color) != null ? _a : "#4CAF50";
+          }
+          return this._getDefaultGradientStops()[0].color;
+        }
+        _getNextSuggestedGradientStopPos(scope = { type: "card" }) {
+          const committedStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
+          if (!committedStops.length) {
+            return 0;
+          }
+          const highest = committedStops[committedStops.length - 1];
+          if (highest.pos >= 100) {
+            return "";
+          }
+          let suggestedPos;
+          if (committedStops.length === 1) {
+            suggestedPos = highest.pos + 25;
+          } else {
+            const previous = committedStops[committedStops.length - 2];
+            suggestedPos = highest.pos + (highest.pos - previous.pos);
+          }
+          const clampedPos = Math.min(100, Math.max(0, suggestedPos));
+          if (committedStops.some((stop) => stop.pos === clampedPos)) {
+            return "";
+          }
+          return clampedPos;
+        }
+        _getGradientStopsDraftKey(scope) {
+          return (scope == null ? void 0 : scope.type) === "entity" ? `entity:${scope.index}` : "card";
+        }
+        _getGradientStopPosTextKey(scope, stopIndex) {
+          return `${this._getGradientStopsDraftKey(scope)}:pos:${stopIndex}`;
+        }
+        _getGradientStopPosText(scope = { type: "card" }, stopIndex, fallbackValue = "") {
+          const key = this._getGradientStopPosTextKey(scope, stopIndex);
+          if (this._gradientStopPosTexts.has(key)) {
+            return this._gradientStopPosTexts.get(key);
+          }
+          if (fallbackValue === "" || fallbackValue === null || fallbackValue === void 0) {
+            return "";
+          }
+          return String(fallbackValue);
+        }
+        _setGradientStopPosText(scope, stopIndex, rawValue) {
+          this._gradientStopPosTexts.set(
+            this._getGradientStopPosTextKey(scope, stopIndex),
+            normalizeTextValue(rawValue)
+          );
+        }
+        _clearGradientStopPosText(scope, stopIndex) {
+          this._gradientStopPosTexts.delete(this._getGradientStopPosTextKey(scope, stopIndex));
+        }
+        _clearGradientStopScopeTextState(scope) {
+          const prefix = `${this._getGradientStopsDraftKey(scope)}:pos:`;
+          for (const key of this._gradientStopPosTexts.keys()) {
+            if (key.startsWith(prefix)) {
+              this._gradientStopPosTexts.delete(key);
+            }
+          }
+          for (const key of this._gradientStopValidationMessages.keys()) {
+            if (key.startsWith(prefix)) {
+              this._gradientStopValidationMessages.delete(key);
+            }
+          }
+        }
+        _getGradientStopsUiRows(scope = { type: "card" }) {
+          const key = this._getGradientStopsDraftKey(scope);
+          if (this._gradientStopsUiRows.has(key)) {
+            return cloneDeep(this._gradientStopsUiRows.get(key));
+          }
+          return null;
+        }
+        _setGradientStopsUiRows(scope, stops) {
+          this._gradientStopsUiRows.set(this._getGradientStopsDraftKey(scope), cloneDeep(stops));
+        }
+        _getStoredScopedGradientStops(scope = { type: "card" }) {
+          const structuredValue = this.context.read(scope, ["bar", "gradient_stops"]);
+          if (structuredValue !== void 0) {
+            return structuredValue;
+          }
+          const legacyValue = this.context.read(scope, ["gradient_stops"]);
+          if (legacyValue !== void 0) {
+            return legacyValue;
+          }
+          return null;
+        }
+        _getFallbackGradientStops(scope = { type: "card" }) {
+          if ((scope == null ? void 0 : scope.type) === "entity") {
+            const inheritedStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue({ type: "card" }));
+            return inheritedStops.length ? inheritedStops : this._getDefaultGradientStops();
+          }
+          return this._getDefaultGradientStops();
+        }
+        _createGradientStopDraftState(scope = { type: "card" }) {
+          const suggestedPos = this._getNextSuggestedGradientStopPos(scope);
+          return {
+            pos: suggestedPos === "" ? "" : String(suggestedPos),
+            color: this._getGradientStopDraftColorDefault(scope)
+          };
+        }
+        _getGradientStopsDraftState(scope = { type: "card" }) {
+          const key = this._getGradientStopsDraftKey(scope);
+          if (!this._gradientStopsDrafts.has(key)) {
+            this._gradientStopsDrafts.set(key, this._createGradientStopDraftState(scope));
+          }
+          return cloneDeep(this._gradientStopsDrafts.get(key));
+        }
+        _setGradientStopsDraftState(scope, nextDraft, options = {}) {
+          var _a, _b;
+          this._gradientStopsDrafts.set(this._getGradientStopsDraftKey(scope), {
+            pos: (_a = nextDraft == null ? void 0 : nextDraft.pos) != null ? _a : "",
+            color: (_b = nextDraft == null ? void 0 : nextDraft.color) != null ? _b : this._getGradientStopDraftColorDefault(scope)
+          });
+          if (options == null ? void 0 : options.refreshOnly) {
+            this._refreshGradientDraftUi(scope);
+            return;
+          }
+          this.ui.render();
+        }
+        _setGradientStopsDraftField(scope, field, rawValue) {
+          const currentDraft = this._getGradientStopsDraftState(scope);
+          const nextValue = field === "color" ? normalizeTextValue(rawValue).trim() : normalizeTextValue(rawValue);
+          this._setGradientStopsDraftState(scope, {
+            ...currentDraft,
+            [field]: nextValue
+          }, { refreshOnly: field === "pos" });
+        }
+        _getValidGradientDraftStop(scope = { type: "card" }) {
+          const draft = this._getGradientStopsDraftState(scope);
+          const pos = this._normalizeGradientStopPosValue(draft.pos);
+          const color = normalizeTextValue(draft.color).trim();
+          if (pos === null || !color) {
+            return null;
+          }
+          return { pos, color };
+        }
+        _hasGradientStopDuplicate(scope = { type: "card" }, candidatePos, excludeIndex = null) {
+          if (this.array.patchOnly) return this._getScopedGradientStopsValue(scope).some((stop, index) => index !== excludeIndex && this._normalizeGradientStopPosValue(stop == null ? void 0 : stop.pos) === candidatePos);
+          return this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope)).some((stop, index) => index !== excludeIndex && stop.pos === candidatePos);
+        }
+        _canAddGradientStop(scope = { type: "card" }) {
+          const draftStop = this._getValidGradientDraftStop(scope);
+          if (!draftStop) {
+            return false;
+          }
+          return !this._hasGradientStopDuplicate(scope, draftStop.pos);
+        }
+        _getGradientDraftValidationMessage(scope = { type: "card" }) {
+          const draft = this._getGradientStopsDraftState(scope);
+          const normalizedPosText = normalizeTextValue(draft.pos).trim();
+          const normalizedColor = normalizeTextValue(draft.color).trim();
+          if (!normalizedPosText) {
+            return "Enter a position to add a stop.";
+          }
+          if (this._normalizeGradientStopPosValue(draft.pos) === null) {
+            return "Enter a value from 0 to 100.";
+          }
+          if (!normalizedColor) {
+            return "Choose a color to add a stop.";
+          }
+          if (this._hasGradientStopDuplicate(scope, this._normalizeGradientStopPosValue(draft.pos))) {
+            return "Position already exists.";
+          }
+          return "";
+        }
+        _isDefaultGradientStops(stops) {
+          const sanitizedStops = this._sanitizeGradientStopsForEmit(stops);
+          const defaultStops = this._getDefaultGradientStops();
+          if (sanitizedStops.length !== defaultStops.length) {
+            return false;
+          }
+          return sanitizedStops.every((stop, index) => stop.pos === defaultStops[index].pos && normalizeColorComparisonValue(stop.color) === normalizeColorComparisonValue(defaultStops[index].color));
+        }
+        _clearGradientStopsOverride(scope) {
+          var _a;
+          const previousUiRowsJson = serializeConfig((_a = this._getGradientStopsUiRows(scope)) != null ? _a : []);
+          this._gradientStopsDrafts.delete(this._getGradientStopsDraftKey(scope));
+          this._gradientStopsUiRows.delete(this._getGradientStopsDraftKey(scope));
+          this._clearGradientStopScopeTextState(scope);
+          const applied = this.context.mutate(scope, (target) => {
+            let nextTarget = deletePathValue(target, ["bar", "gradient_stops"]);
+            nextTarget = deletePathValue(nextTarget, ["gradient_stops"]);
+            nextTarget = pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
+            return nextTarget;
+          }, { rerender: true });
+          if (applied === false && previousUiRowsJson !== serializeConfig([])) {
+            this.ui.render();
+          }
+          return applied;
+        }
+        _getGradientStopsValue() {
+          return this._getScopedGradientStopsValue({ type: "card" });
+        }
+        _commitGradientStopDraft(scope = { type: "card" }) {
+          const draftStop = this._getValidGradientDraftStop(scope);
+          if (!draftStop || this._hasGradientStopDuplicate(scope, draftStop.pos)) {
+            this._refreshGradientDraftUi(scope);
+            return false;
+          }
+          const committedStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
+          const nextStops = [...committedStops, draftStop].sort((left, right) => left.pos - right.pos);
+          const applied = this._setScopedGradientStops(scope, nextStops, { rerender: true }, { type: "add", item: draftStop });
+          if (applied !== false) {
+            this._gradientStopsDrafts.set(this._getGradientStopsDraftKey(scope), {
+              pos: (() => {
+                const suggestion = this._getNextSuggestedGradientStopPos(scope);
+                return suggestion === "" ? "" : String(suggestion);
+              })(),
+              color: draftStop.color
+            });
+          }
+          return applied;
+        }
+        _getGradientPreviewDomIds(scope = { type: "card" }) {
+          if ((scope == null ? void 0 : scope.type) === "entity") {
+            return {
+              previewId: `entity-${scope.index}-gradient-preview`,
+              trackId: `entity-${scope.index}-gradient-preview-track`,
+              hintId: `entity-${scope.index}-gradient-draft-hint`,
+              addSelector: `button[data-action="add-entity-gradient-stop"][data-index="${scope.index}"]`,
+              draftInputId: `entity-${scope.index}-gradient-draft-pos`
+            };
+          }
+          return {
+            previewId: "card-gradient-preview",
+            trackId: "card-gradient-preview-track",
+            hintId: "gradient-draft-hint",
+            addSelector: 'button[data-action="add-gradient-stop"]',
+            draftInputId: "gradient-draft-pos"
+          };
+        }
+        _refreshGradientDraftUi(scope = { type: "card" }) {
+          var _a, _b, _c;
+          if (!this.shadowRoot) {
+            return;
+          }
+          const getById = (_b = (_a = this.shadowRoot.getElementById) == null ? void 0 : _a.bind(this.shadowRoot)) != null ? _b : ((id) => {
+            var _a2, _b2, _c2;
+            return (_c2 = (_b2 = (_a2 = this.shadowRoot).querySelector) == null ? void 0 : _b2.call(_a2, `#${id}`)) != null ? _c2 : null;
+          });
+          const { previewId, trackId, hintId, addSelector, draftInputId } = this._getGradientPreviewDomIds(scope);
+          const addButton = this.shadowRoot.querySelector(addSelector);
+          if (addButton) {
+            addButton.disabled = !this._canAddGradientStop(scope);
+          }
+          const draftInput = getById(draftInputId);
+          if (draftInput && typeof draftInput.closest !== "function") {
+            this.ui.render();
+            return;
+          }
+          const draftContainer = draftInput == null ? void 0 : draftInput.closest(".gradient-stop-draft");
+          const nextMessage = this._getGradientDraftValidationMessage(scope);
+          const existingHint = getById(hintId);
+          if (nextMessage) {
+            if (existingHint) {
+              existingHint.textContent = nextMessage;
+            } else if (draftContainer) {
+              const hint = document.createElement("div");
+              hint.id = hintId;
+              hint.className = "section-note";
+              hint.textContent = nextMessage;
+              draftContainer.appendChild(hint);
+            }
+          } else if (existingHint) {
+            existingHint.remove();
+          }
+          const preview = getById(previewId);
+          const track = getById(trackId);
+          if (!preview || !track) {
+            return;
+          }
+          track.setAttribute("style", (_c = this._getGradientPreviewStyle(scope)) != null ? _c : "");
+          const markerStops = this._buildGradientPreviewEffectiveStops(scope);
+          const renderedStops = markerStops.length ? markerStops : this._getDefaultGradientStops();
+          track.innerHTML = renderedStops.map((stop, index) => `
+      <span
+        id="${previewId}-stop-${index}"
+        class="gradient-preview-stop"
+        style="left:${escapeAttribute(String(stop.pos))}%"
+        title="${escapeAttribute(`${stop.pos}%`)}"
+      ></span>
+    `).join("");
+        }
+        _commitGradientStopPosEdit(scope = { type: "card" }, stopIndex, rawValue, inputEl = null) {
+          const nextPos = this._normalizeGradientStopPosValue(rawValue);
+          if (nextPos === null || this._hasGradientStopDuplicate(scope, nextPos, stopIndex)) {
+            if (inputEl == null ? void 0 : inputEl.setCustomValidity) {
+              inputEl.setCustomValidity(nextPos === null ? "Enter a value from 0 to 100." : "Position already exists.");
+              if (inputEl.reportValidity) {
+                inputEl.reportValidity();
+              }
+            }
+            return false;
+          }
+          if (inputEl == null ? void 0 : inputEl.setCustomValidity) {
+            inputEl.setCustomValidity("");
+          }
+          const currentStops = this._getScopedGradientStopsValue(scope);
+          const nextStops = currentStops.map((stop, currentStopIndex) => currentStopIndex === stopIndex ? { ...stop, pos: nextPos } : stop);
+          this._clearGradientStopPosText(scope, stopIndex);
+          return this._setScopedGradientStops(scope, nextStops, { rerender: true }, { type: "edit", index: stopIndex, field: "pos", value: nextPos });
+        }
+        _getScopedGradientStopsValue(scope) {
+          if (this.array.rows) return this.array.rows(scope, this);
+          const localRows = this._getGradientStopsUiRows(scope);
+          if (Array.isArray(localRows)) {
+            return localRows;
+          }
+          const storedStops = this._getStoredScopedGradientStops(scope);
+          if (storedStops !== null) {
+            return this._sanitizeGradientStopsForEmit(storedStops);
+          }
+          return cloneDeep(this._getFallbackGradientStops(scope));
+        }
+        _hasGradientStopsOverride(scope) {
+          if (this._getStoredScopedGradientStops(scope) !== null) {
+            return true;
+          }
+          const localRows = this._getGradientStopsUiRows(scope);
+          if (!Array.isArray(localRows)) {
+            return false;
+          }
+          return serializeConfig(this._sanitizeGradientStopsForEmit(localRows)) !== serializeConfig(this._sanitizeGradientStopsForEmit(this._getFallbackGradientStops(scope)));
+        }
+        _getGradientStopsSummary(scope) {
+          if ((scope == null ? void 0 : scope.type) === "entity" && !this._hasGradientStopsOverride(scope)) {
+            return "Inherited";
+          }
+          const gradientStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
+          if (this.fillStyle(scope) !== "gradient") {
+            return "Inactive fill style";
+          }
+          if (!gradientStops.length) {
+            return (scope == null ? void 0 : scope.type) === "entity" ? "Inherited" : "Default gradient";
+          }
+          if (this._isDefaultGradientStops(gradientStops)) {
+            return "Default gradient";
+          }
+          return `${gradientStops.length} stops`;
+        }
+        _buildGradientPreviewEffectiveStops(scope = { type: "card" }) {
+          const committedStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
+          const draftStop = this._getValidGradientDraftStop(scope);
+          const previewStops = [...committedStops];
+          if (draftStop && !this._hasGradientStopDuplicate(scope, draftStop.pos)) {
+            previewStops.push(draftStop);
+          }
+          return previewStops.sort((left, right) => left.pos - right.pos);
+        }
+        _buildEditorGradientPreviewStyle(stops) {
+          if (!Array.isArray(stops) || !stops.length) {
+            return "";
+          }
+          const cssStops = stops.map((stop) => {
+            var _a;
+            const color = normalizeTextValue(stop.color).trim();
+            const pos = this._normalizeGradientStopPosValue((_a = stop.p) != null ? _a : stop.pos);
+            if (!color || pos === null) {
+              return null;
+            }
+            return `${color} ${pos}%`;
+          }).filter(Boolean);
+          if (!cssStops.length) {
+            return "";
+          }
+          return `background:linear-gradient(to right,${cssStops.join(",")});background-repeat:no-repeat;`;
+        }
+        _getGradientPreviewStyle(scope = { type: "card" }) {
+          const previewStops = this._buildGradientPreviewEffectiveStops(scope);
+          const resolvedStops = previewStops.length >= 2 ? previewStops.map((stop) => ({ p: stop.pos, color: stop.color })) : this._getDefaultGradientStops().map((stop) => ({ p: stop.pos, color: stop.color }));
+          return this._buildEditorGradientPreviewStyle(resolvedStops);
+        }
+        _renderGradientPreview(scope = { type: "card" }, options = {}) {
+          var _a, _b, _c;
+          const previewId = (_a = options.previewId) != null ? _a : "gradient-preview";
+          const trackId = (_b = options.trackId) != null ? _b : `${previewId}-track`;
+          const effectiveStops = this._buildGradientPreviewEffectiveStops(scope);
+          const markerStops = effectiveStops.length ? effectiveStops : this._getDefaultGradientStops();
+          return `
+      <div id="${previewId}" class="gradient-preview">
+        <div id="${trackId}" class="gradient-preview-track" style="${escapeAttribute((_c = this._getGradientPreviewStyle(scope)) != null ? _c : "")}">
+          ${markerStops.map((stop, index) => `
+            <span
+              id="${previewId}-stop-${index}"
+              class="gradient-preview-stop"
+              style="left:${escapeAttribute(String(stop.pos))}%"
+              title="${escapeAttribute(`${stop.pos}%`)}"
+            ></span>
+          `).join("")}
+        </div>
+      </div>
+    `;
+        }
+        _setScopedGradientStops(scope, rows, options = {}, operation) {
+          return this.array.write(scope, rows, options, operation);
+        }
+        render(scope = { type: "card" }, renderGroup = ({ content }) => content) {
+          if ((scope == null ? void 0 : scope.type) === "entity") {
+            const index = scope.index;
+            const entityGradientStops = this._getScopedGradientStopsValue(scope);
+            const entityGradientDraft = this._getGradientStopsDraftState(scope);
+            const entityGradientDraftMessage = this._getGradientDraftValidationMessage(scope);
+            const gradientStopsInherited = !this._hasGradientStopsOverride(scope);
+            return `
+	                      <div class="field-row">
+	                        <div class="toggle">
+	                          <input id="entity-${index}-gradient-stops-inherit" type="checkbox" data-kind="entity-gradient-stops-inherit" data-index="${index}"${gradientStopsInherited ? " checked" : ""}>
+                          <label for="entity-${index}-gradient-stops-inherit">Inherit card settings</label>
+                        </div>
+                      </div>
+                      ${this.fillStyle(scope) !== "gradient" ? '<div class="section-note">Only used with Gradient fill style</div>' : ""}
+                      ${this._renderGradientPreview(scope, {
+              previewId: `entity-${index}-gradient-preview`,
+              trackId: `entity-${index}-gradient-preview-track`
+            })}
+                      <div class="field-row">
+                        <label>Gradient stops</label>
+                        <div class="list gradient-stop-list">
+                          ${this._renderListRows(entityGradientStops, (stop, stopIndex) => {
+              var _a, _b;
+              return `
+                            <div class="list-row gradient-stop-row">
+                              <input type="number" min="0" max="100" step="any" data-kind="entity-gradient-pos" data-index="${index}" data-stop-index="${stopIndex}" value="${escapeAttribute(this._getGradientStopPosText(scope, stopIndex, (_a = stop == null ? void 0 : stop.pos) != null ? _a : ""))}" placeholder="0">
+                              ${renderColorInput({
+                id: `entity-${index}-gradient-color-${stopIndex}`,
+                kind: "entity-gradient-color",
+                index,
+                value: (_b = stop == null ? void 0 : stop.color) != null ? _b : "#4a9eff",
+                fallbackHex: "#4CAF50",
+                placeholder: "CSS color value",
+                extraDataset: { "stop-index": stopIndex }
+              })}
+                              <button type="button" data-action="remove-entity-gradient-stop" data-index="${index}" data-stop-index="${stopIndex}" aria-label="Remove" title="Remove">\u{1F5D1}</button>
+                            </div>
+                          `;
+            })}
+                          <div class="gradient-stop-draft">
+                            <div class="list-row gradient-stop-row">
+                              <input id="entity-${index}-gradient-draft-pos" type="number" min="0" max="100" step="any" data-kind="entity-gradient-draft-pos" data-index="${index}" value="${escapeAttribute(entityGradientDraft.pos)}" placeholder="0">
+                              ${renderColorInput({
+              id: `entity-${index}-gradient-draft-color`,
+              kind: "entity-gradient-draft-color",
+              index,
+              value: entityGradientDraft.color,
+              fallbackHex: "#4CAF50",
+              placeholder: "CSS color value"
+            })}
+                              <button type="button" data-action="add-entity-gradient-stop" data-index="${index}"${this._canAddGradientStop(scope) ? "" : " disabled"}>Add</button>
+                            </div>
+                            ${entityGradientDraftMessage ? `<div id="entity-${index}-gradient-draft-hint" class="section-note">${escapeAttribute(entityGradientDraftMessage)}</div>` : ""}
+                          </div>
+                        </div>
+                      </div>
+	                          `;
+          }
+          const gradientStops = this._getScopedGradientStopsValue(scope);
+          const gradientDraft = this._getGradientStopsDraftState(scope);
+          const gradientDraftMessage = this._getGradientDraftValidationMessage(scope);
+          const gradientStopsSummary = this._getGradientStopsSummary(scope);
+          const gradientStopsInactive = this.fillStyle(scope) !== "gradient";
+          return `	        <div class="section">
+	          <div class="section-head">
+	            <h3>Gradient Stops</h3>
+	            <div class="section-note">Gradient stops define a smooth color transition from 0 to 100%.</div>
+	          </div>
+	          ${renderGroup({
+            group: "gradient-stops",
+            title: "Gradient Stops",
+            summary: gradientStopsSummary,
+            inactive: gradientStopsInactive,
+            content: `
+	              ${gradientStopsInactive ? '<div class="section-note">Only used with Gradient fill style</div>' : ""}
+	              ${this._renderGradientPreview({ type: "card" }, {
+              previewId: "card-gradient-preview",
+              trackId: "card-gradient-preview-track"
+            })}
+	              <div class="field-row">
+	                <label>Gradient stops</label>
+	                <div class="list gradient-stop-list">
+	                  ${this._renderListRows(gradientStops, (stop, index) => {
+              var _a, _b;
+              return `
+	                    <div class="list-row gradient-stop-row">
+	                      <input type="number" min="0" max="100" step="any" data-kind="gradient-pos" data-index="${index}" value="${escapeAttribute(this._getGradientStopPosText({ type: "card" }, index, (_a = stop == null ? void 0 : stop.pos) != null ? _a : ""))}" placeholder="0">
+	                      ${renderColorInput({
+                id: `gradient-color-${index}`,
+                kind: "gradient-color",
+                index,
+                value: (_b = stop == null ? void 0 : stop.color) != null ? _b : "#4a9eff",
+                fallbackHex: "#4CAF50",
+                placeholder: "CSS color value"
+              })}
+	                      <button type="button" data-action="remove-gradient-stop" data-index="${index}" aria-label="Remove" title="Remove">\u{1F5D1}</button>
+	                    </div>
+	                  `;
+            })}
+	                  <div class="gradient-stop-draft">
+	                    <div class="list-row gradient-stop-row">
+	                      <input id="gradient-draft-pos" type="number" min="0" max="100" step="any" data-kind="gradient-draft-pos" value="${escapeAttribute(gradientDraft.pos)}" placeholder="0">
+	                      ${renderColorInput({
+              id: "gradient-draft-color",
+              kind: "gradient-draft-color",
+              index: "card",
+              value: gradientDraft.color,
+              fallbackHex: "#4CAF50",
+              placeholder: "CSS color value"
+            })}
+	                      <button type="button" data-action="add-gradient-stop"${this._canAddGradientStop({ type: "card" }) ? "" : " disabled"}>Add</button>
+	                    </div>
+	                    ${gradientDraftMessage ? `<div id="gradient-draft-hint" class="section-note">${escapeAttribute(gradientDraftMessage)}</div>` : ""}
+	                  </div>
+	                </div>
+	              </div>
+	            `
+          })}
+	        </div>`;
+        }
+      };
+    }
+  });
+
   // src/editor/SensorBarCardPlusEditor.js
   var SensorBarCardPlusEditor;
   var init_SensorBarCardPlusEditor = __esm({
@@ -7205,10 +8596,39 @@ ${barMarkerStyles}
       init_scale();
       init_formatting();
       init_bar_appearance();
+      init_segments();
+      init_gradient_stops();
       SensorBarCardPlusEditor = class extends HTMLElement {
+        get _gradientStopValidationMessages() {
+          return this._gradientStopsSection._gradientStopValidationMessages;
+        }
+        get _gradientStopPosTexts() {
+          return this._gradientStopsSection._gradientStopPosTexts;
+        }
+        get _gradientStopsUiRows() {
+          return this._gradientStopsSection._gradientStopsUiRows;
+        }
+        get _gradientStopsDrafts() {
+          return this._gradientStopsSection._gradientStopsDrafts;
+        }
+        get _segmentBoundaryTexts() {
+          return this._segmentsSection._segmentBoundaryTexts;
+        }
+        get _segmentUiRows() {
+          return this._segmentsSection._segmentUiRows;
+        }
+        get _segmentDrafts() {
+          return this._segmentsSection._segmentDrafts;
+        }
         constructor() {
           super();
           this.attachShadow({ mode: "open" });
+          this._segmentsSection = new SegmentsSection(this._createSectionContext(), this._paletteUi(), {
+            write: (scope, rows, options) => this._setScopedSegments(scope, rows, options)
+          });
+          this._gradientStopsSection = new GradientStopsSection(this._createSectionContext(), this._paletteUi(), {
+            write: (scope, rows, options) => this._setScopedGradientStops(scope, rows, options)
+          });
           this._config = {};
           this._draftConfig = {};
           this._hass = null;
@@ -7223,13 +8643,6 @@ ${barMarkerStyles}
           this._genericMarkerUiIds = /* @__PURE__ */ new Map();
           this._expandedGenericMarkerUiIds = /* @__PURE__ */ new Set();
           this._nextGenericMarkerUiId = 0;
-          this._gradientStopsDrafts = /* @__PURE__ */ new Map();
-          this._gradientStopsUiRows = /* @__PURE__ */ new Map();
-          this._gradientStopPosTexts = /* @__PURE__ */ new Map();
-          this._gradientStopValidationMessages = /* @__PURE__ */ new Map();
-          this._segmentDrafts = /* @__PURE__ */ new Map();
-          this._segmentUiRows = /* @__PURE__ */ new Map();
-          this._segmentBoundaryTexts = /* @__PURE__ */ new Map();
           this._targetAboveFillDrafts = /* @__PURE__ */ new Map();
           this._baselineColorDrafts = /* @__PURE__ */ new Map();
           this._pendingFocusSelector = null;
@@ -7264,13 +8677,8 @@ ${barMarkerStyles}
           this._lastEmittedConfigJson = null;
           this._config = nextConfig;
           this._draftConfig = this._cloneDeep(nextConfig);
-          this._gradientStopsDrafts = /* @__PURE__ */ new Map();
-          this._gradientStopsUiRows = /* @__PURE__ */ new Map();
-          this._gradientStopPosTexts = /* @__PURE__ */ new Map();
-          this._gradientStopValidationMessages = /* @__PURE__ */ new Map();
-          this._segmentDrafts = /* @__PURE__ */ new Map();
-          this._segmentUiRows = /* @__PURE__ */ new Map();
-          this._segmentBoundaryTexts = /* @__PURE__ */ new Map();
+          this._segmentsSection.reset();
+          this._gradientStopsSection.reset();
           this._targetAboveFillDrafts = /* @__PURE__ */ new Map();
           this._baselineColorDrafts = /* @__PURE__ */ new Map();
           this._genericMarkerUiIds.clear();
@@ -8517,6 +9925,13 @@ ${barMarkerStyles}
           }
           return "";
         }
+        _paletteUi() {
+          return {
+            root: () => this.shadowRoot,
+            render: () => this._render(),
+            focus: (selector) => this._queuePostRenderFocus(selector)
+          };
+        }
         _createSectionContext() {
           return {
             read: (scope, path) => this._getScopedValue(scope, path),
@@ -8722,224 +10137,83 @@ ${barMarkerStyles}
         _setBarColor(value) {
           return this._setScopedBarColor({ type: "card" }, value);
         }
-        _setGradientStops(stops, options = {}) {
-          return this._setScopedGradientStops({ type: "card" }, stops, options);
+        _setGradientStops(...args) {
+          return this._gradientStopsSection._setGradientStops(...args);
         }
-        _setSegments(segments, options = {}) {
-          return this._setScopedSegments({ type: "card" }, segments, options);
+        _setSegments(...args) {
+          return this._segmentsSection._setSegments(...args);
         }
-        _getDefaultGradientStops() {
-          return [
-            { pos: 0, color: "#4CAF50" },
-            { pos: 50, color: "#FF9800" },
-            { pos: 100, color: "#F44336" }
-          ];
+        _getDefaultGradientStops(...args) {
+          return this._gradientStopsSection._getDefaultGradientStops(...args);
         }
-        _normalizeGradientStopPosValue(rawValue) {
-          const percent = parsePercentLiteral(rawValue);
-          const numericValue = Number.isFinite(percent) ? percent : this._normalizeNumberValue(rawValue);
-          if (numericValue === null || !Number.isFinite(numericValue)) {
-            return null;
-          }
-          if (numericValue < 0 || numericValue > 100) {
-            return null;
-          }
-          return numericValue;
+        _normalizeGradientStopPosValue(...args) {
+          return this._gradientStopsSection._normalizeGradientStopPosValue(...args);
         }
-        _sanitizeGradientStopsForEmit(stops) {
-          if (!Array.isArray(stops)) {
-            return [];
-          }
-          return stops.map((stop) => {
-            if (!this._isObject(stop)) {
-              return null;
-            }
-            const pos = this._normalizeGradientStopPosValue(stop.pos);
-            const color = this._normalizeTextValue(stop.color).trim();
-            if (pos === null || !color) {
-              return null;
-            }
-            return {
-              ...stop,
-              pos,
-              color
-            };
-          }).filter(Boolean).sort((left, right) => left.pos - right.pos);
+        _sanitizeGradientStopsForEmit(...args) {
+          return this._gradientStopsSection._sanitizeGradientStopsForEmit(...args);
         }
-        _getGradientStopDraftColorDefault(scope = { type: "card" }) {
-          var _a;
-          const committedStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
-          if (committedStops.length) {
-            return (_a = committedStops[committedStops.length - 1].color) != null ? _a : "#4CAF50";
-          }
-          return this._getDefaultGradientStops()[0].color;
+        _getGradientStopDraftColorDefault(...args) {
+          return this._gradientStopsSection._getGradientStopDraftColorDefault(...args);
         }
-        _getNextSuggestedGradientStopPos(scope = { type: "card" }) {
-          const committedStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
-          if (!committedStops.length) {
-            return 0;
-          }
-          const highest = committedStops[committedStops.length - 1];
-          if (highest.pos >= 100) {
-            return "";
-          }
-          let suggestedPos;
-          if (committedStops.length === 1) {
-            suggestedPos = highest.pos + 25;
-          } else {
-            const previous = committedStops[committedStops.length - 2];
-            suggestedPos = highest.pos + (highest.pos - previous.pos);
-          }
-          const clampedPos = Math.min(100, Math.max(0, suggestedPos));
-          if (committedStops.some((stop) => stop.pos === clampedPos)) {
-            return "";
-          }
-          return clampedPos;
+        _getNextSuggestedGradientStopPos(...args) {
+          return this._gradientStopsSection._getNextSuggestedGradientStopPos(...args);
         }
-        _getGradientStopsDraftKey(scope) {
-          return (scope == null ? void 0 : scope.type) === "entity" ? `entity:${scope.index}` : "card";
+        _getGradientStopsDraftKey(...args) {
+          return this._gradientStopsSection._getGradientStopsDraftKey(...args);
         }
-        _getGradientStopPosTextKey(scope, stopIndex) {
-          return `${this._getGradientStopsDraftKey(scope)}:pos:${stopIndex}`;
+        _getGradientStopPosTextKey(...args) {
+          return this._gradientStopsSection._getGradientStopPosTextKey(...args);
         }
-        _getGradientStopPosText(scope = { type: "card" }, stopIndex, fallbackValue = "") {
-          const key = this._getGradientStopPosTextKey(scope, stopIndex);
-          if (this._gradientStopPosTexts.has(key)) {
-            return this._gradientStopPosTexts.get(key);
-          }
-          if (fallbackValue === "" || fallbackValue === null || fallbackValue === void 0) {
-            return "";
-          }
-          return String(fallbackValue);
+        _getGradientStopPosText(...args) {
+          return this._gradientStopsSection._getGradientStopPosText(...args);
         }
-        _setGradientStopPosText(scope, stopIndex, rawValue) {
-          this._gradientStopPosTexts.set(
-            this._getGradientStopPosTextKey(scope, stopIndex),
-            this._normalizeTextValue(rawValue)
-          );
+        _setGradientStopPosText(...args) {
+          return this._gradientStopsSection._setGradientStopPosText(...args);
         }
-        _clearGradientStopPosText(scope, stopIndex) {
-          this._gradientStopPosTexts.delete(this._getGradientStopPosTextKey(scope, stopIndex));
+        _clearGradientStopPosText(...args) {
+          return this._gradientStopsSection._clearGradientStopPosText(...args);
         }
-        _clearGradientStopScopeTextState(scope) {
-          const prefix = `${this._getGradientStopsDraftKey(scope)}:pos:`;
-          for (const key of this._gradientStopPosTexts.keys()) {
-            if (key.startsWith(prefix)) {
-              this._gradientStopPosTexts.delete(key);
-            }
-          }
-          for (const key of this._gradientStopValidationMessages.keys()) {
-            if (key.startsWith(prefix)) {
-              this._gradientStopValidationMessages.delete(key);
-            }
-          }
+        _clearGradientStopScopeTextState(...args) {
+          return this._gradientStopsSection._clearGradientStopScopeTextState(...args);
         }
-        _getGradientStopsUiRows(scope = { type: "card" }) {
-          const key = this._getGradientStopsDraftKey(scope);
-          if (this._gradientStopsUiRows.has(key)) {
-            return this._cloneDeep(this._gradientStopsUiRows.get(key));
-          }
-          return null;
+        _getGradientStopsUiRows(...args) {
+          return this._gradientStopsSection._getGradientStopsUiRows(...args);
         }
-        _setGradientStopsUiRows(scope, stops) {
-          this._gradientStopsUiRows.set(this._getGradientStopsDraftKey(scope), this._cloneDeep(stops));
+        _setGradientStopsUiRows(...args) {
+          return this._gradientStopsSection._setGradientStopsUiRows(...args);
         }
-        _getStoredScopedGradientStops(scope = { type: "card" }) {
-          const structuredValue = this._getScopedValue(scope, ["bar", "gradient_stops"]);
-          if (structuredValue !== void 0) {
-            return structuredValue;
-          }
-          const legacyValue = this._getScopedValue(scope, ["gradient_stops"]);
-          if (legacyValue !== void 0) {
-            return legacyValue;
-          }
-          return null;
+        _getStoredScopedGradientStops(...args) {
+          return this._gradientStopsSection._getStoredScopedGradientStops(...args);
         }
-        _getFallbackGradientStops(scope = { type: "card" }) {
-          if ((scope == null ? void 0 : scope.type) === "entity") {
-            const inheritedStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue({ type: "card" }));
-            return inheritedStops.length ? inheritedStops : this._getDefaultGradientStops();
-          }
-          return this._getDefaultGradientStops();
+        _getFallbackGradientStops(...args) {
+          return this._gradientStopsSection._getFallbackGradientStops(...args);
         }
-        _createGradientStopDraftState(scope = { type: "card" }) {
-          const suggestedPos = this._getNextSuggestedGradientStopPos(scope);
-          return {
-            pos: suggestedPos === "" ? "" : String(suggestedPos),
-            color: this._getGradientStopDraftColorDefault(scope)
-          };
+        _createGradientStopDraftState(...args) {
+          return this._gradientStopsSection._createGradientStopDraftState(...args);
         }
-        _getGradientStopsDraftState(scope = { type: "card" }) {
-          const key = this._getGradientStopsDraftKey(scope);
-          if (!this._gradientStopsDrafts.has(key)) {
-            this._gradientStopsDrafts.set(key, this._createGradientStopDraftState(scope));
-          }
-          return this._cloneDeep(this._gradientStopsDrafts.get(key));
+        _getGradientStopsDraftState(...args) {
+          return this._gradientStopsSection._getGradientStopsDraftState(...args);
         }
-        _setGradientStopsDraftState(scope, nextDraft, options = {}) {
-          var _a, _b;
-          this._gradientStopsDrafts.set(this._getGradientStopsDraftKey(scope), {
-            pos: (_a = nextDraft == null ? void 0 : nextDraft.pos) != null ? _a : "",
-            color: (_b = nextDraft == null ? void 0 : nextDraft.color) != null ? _b : this._getGradientStopDraftColorDefault(scope)
-          });
-          if (options == null ? void 0 : options.refreshOnly) {
-            this._refreshGradientDraftUi(scope);
-            return;
-          }
-          this._render();
+        _setGradientStopsDraftState(...args) {
+          return this._gradientStopsSection._setGradientStopsDraftState(...args);
         }
-        _setGradientStopsDraftField(scope, field, rawValue) {
-          const currentDraft = this._getGradientStopsDraftState(scope);
-          const nextValue = field === "color" ? this._normalizeTextValue(rawValue).trim() : this._normalizeTextValue(rawValue);
-          this._setGradientStopsDraftState(scope, {
-            ...currentDraft,
-            [field]: nextValue
-          }, { refreshOnly: field === "pos" });
+        _setGradientStopsDraftField(...args) {
+          return this._gradientStopsSection._setGradientStopsDraftField(...args);
         }
-        _getValidGradientDraftStop(scope = { type: "card" }) {
-          const draft = this._getGradientStopsDraftState(scope);
-          const pos = this._normalizeGradientStopPosValue(draft.pos);
-          const color = this._normalizeTextValue(draft.color).trim();
-          if (pos === null || !color) {
-            return null;
-          }
-          return { pos, color };
+        _getValidGradientDraftStop(...args) {
+          return this._gradientStopsSection._getValidGradientDraftStop(...args);
         }
-        _hasGradientStopDuplicate(scope = { type: "card" }, candidatePos, excludeIndex = null) {
-          return this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope)).some((stop, index) => index !== excludeIndex && stop.pos === candidatePos);
+        _hasGradientStopDuplicate(...args) {
+          return this._gradientStopsSection._hasGradientStopDuplicate(...args);
         }
-        _canAddGradientStop(scope = { type: "card" }) {
-          const draftStop = this._getValidGradientDraftStop(scope);
-          if (!draftStop) {
-            return false;
-          }
-          return !this._hasGradientStopDuplicate(scope, draftStop.pos);
+        _canAddGradientStop(...args) {
+          return this._gradientStopsSection._canAddGradientStop(...args);
         }
-        _getGradientDraftValidationMessage(scope = { type: "card" }) {
-          const draft = this._getGradientStopsDraftState(scope);
-          const normalizedPosText = this._normalizeTextValue(draft.pos).trim();
-          const normalizedColor = this._normalizeTextValue(draft.color).trim();
-          if (!normalizedPosText) {
-            return "Enter a position to add a stop.";
-          }
-          if (this._normalizeGradientStopPosValue(draft.pos) === null) {
-            return "Enter a value from 0 to 100.";
-          }
-          if (!normalizedColor) {
-            return "Choose a color to add a stop.";
-          }
-          if (this._hasGradientStopDuplicate(scope, this._normalizeGradientStopPosValue(draft.pos))) {
-            return "Position already exists.";
-          }
-          return "";
+        _getGradientDraftValidationMessage(...args) {
+          return this._gradientStopsSection._getGradientDraftValidationMessage(...args);
         }
-        _isDefaultGradientStops(stops) {
-          const sanitizedStops = this._sanitizeGradientStopsForEmit(stops);
-          const defaultStops = this._getDefaultGradientStops();
-          if (sanitizedStops.length !== defaultStops.length) {
-            return false;
-          }
-          return sanitizedStops.every((stop, index) => stop.pos === defaultStops[index].pos && this._normalizeColorComparisonValue(stop.color) === this._normalizeColorComparisonValue(defaultStops[index].color));
+        _isDefaultGradientStops(...args) {
+          return this._gradientStopsSection._isDefaultGradientStops(...args);
         }
         _setScopedGradientStops(scope, stops, options = {}) {
           var _a;
@@ -8965,22 +10239,8 @@ ${barMarkerStyles}
           }
           return applied;
         }
-        _clearGradientStopsOverride(scope) {
-          var _a;
-          const previousUiRowsJson = this._serializeConfig((_a = this._getGradientStopsUiRows(scope)) != null ? _a : []);
-          this._gradientStopsDrafts.delete(this._getGradientStopsDraftKey(scope));
-          this._gradientStopsUiRows.delete(this._getGradientStopsDraftKey(scope));
-          this._clearGradientStopScopeTextState(scope);
-          const applied = this._applyScopedMutation(scope, (target) => {
-            let nextTarget = this._deletePathValue(target, ["bar", "gradient_stops"]);
-            nextTarget = this._deletePathValue(nextTarget, ["gradient_stops"]);
-            nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
-            return nextTarget;
-          }, { rerender: true });
-          if (applied === false && previousUiRowsJson !== this._serializeConfig([])) {
-            this._render();
-          }
-          return applied;
+        _clearGradientStopsOverride(...args) {
+          return this._gradientStopsSection._clearGradientStopsOverride(...args);
         }
         _setScopedSegments(scope, segments, options = {}) {
           const nextSegments = (options == null ? void 0 : options.sort) === false ? this._cloneDeep(segments) : this._sortSegmentsForEditor(segments);
@@ -9002,17 +10262,8 @@ ${barMarkerStyles}
           }
           return applied;
         }
-        _clearSegmentsOverride(scope) {
-          this._segmentDrafts.delete(this._getSegmentsScopeKey(scope));
-          this._segmentUiRows.delete(this._getSegmentsScopeKey(scope));
-          this._clearSegmentScopeTextState(scope);
-          return this._applyScopedMutation(scope, (target) => {
-            let nextTarget = this._deletePathValue(target, ["bar", "segments"]);
-            nextTarget = this._deletePathValue(nextTarget, ["segments"]);
-            nextTarget = this._deletePathValue(nextTarget, ["severity"]);
-            nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
-            return nextTarget;
-          }, { rerender: true });
+        _clearSegmentsOverride(...args) {
+          return this._segmentsSection._clearSegmentsOverride(...args);
         }
         _setNeedle(value) {
           return this._setScopedNeedleMode({ type: "card" }, value ? "enabled" : "disabled");
@@ -9457,644 +10708,143 @@ ${barMarkerStyles}
             value: rawValue != null ? rawValue : ""
           };
         }
-        _getGradientStopsValue() {
-          return this._getScopedGradientStopsValue({ type: "card" });
+        _getGradientStopsValue(...args) {
+          return this._gradientStopsSection._getGradientStopsValue(...args);
         }
-        _getSegmentsValue() {
-          return this._getScopedSegmentsValue({ type: "card" });
+        _getSegmentsValue(...args) {
+          return this._segmentsSection._getSegmentsValue(...args);
         }
-        _getSegmentsScopeKey(scope = { type: "card" }) {
-          return (scope == null ? void 0 : scope.type) === "entity" ? `entity:${scope.index}` : "card";
+        _getSegmentsScopeKey(...args) {
+          return this._segmentsSection._getSegmentsScopeKey(...args);
         }
-        _getSegmentBoundaryTextKey(scope, segmentIndex, field) {
-          return `${this._getSegmentsScopeKey(scope)}:${segmentIndex}:${field}`;
+        _getSegmentBoundaryTextKey(...args) {
+          return this._segmentsSection._getSegmentBoundaryTextKey(...args);
         }
-        _getSegmentBoundaryText(scope = { type: "card" }, segmentIndex, field, fallbackValue = "") {
-          const key = this._getSegmentBoundaryTextKey(scope, segmentIndex, field);
-          if (this._segmentBoundaryTexts.has(key)) {
-            return this._segmentBoundaryTexts.get(key);
-          }
-          return this._formatSegmentBoundaryValue(fallbackValue);
+        _getSegmentBoundaryText(...args) {
+          return this._segmentsSection._getSegmentBoundaryText(...args);
         }
-        _setSegmentBoundaryText(scope, segmentIndex, field, rawValue) {
-          this._segmentBoundaryTexts.set(
-            this._getSegmentBoundaryTextKey(scope, segmentIndex, field),
-            this._normalizeTextValue(rawValue)
-          );
+        _setSegmentBoundaryText(...args) {
+          return this._segmentsSection._setSegmentBoundaryText(...args);
         }
-        _clearSegmentBoundaryText(scope, segmentIndex, field) {
-          this._segmentBoundaryTexts.delete(this._getSegmentBoundaryTextKey(scope, segmentIndex, field));
+        _clearSegmentBoundaryText(...args) {
+          return this._segmentsSection._clearSegmentBoundaryText(...args);
         }
-        _clearSegmentScopeTextState(scope) {
-          const prefix = `${this._getSegmentsScopeKey(scope)}:`;
-          for (const key of this._segmentBoundaryTexts.keys()) {
-            if (key.startsWith(prefix)) {
-              this._segmentBoundaryTexts.delete(key);
-            }
-          }
+        _clearSegmentScopeTextState(...args) {
+          return this._segmentsSection._clearSegmentScopeTextState(...args);
         }
-        _getSegmentsUiRows(scope = { type: "card" }) {
-          const key = this._getSegmentsScopeKey(scope);
-          if (this._segmentUiRows.has(key)) {
-            return this._cloneDeep(this._segmentUiRows.get(key));
-          }
-          return null;
+        _getSegmentsUiRows(...args) {
+          return this._segmentsSection._getSegmentsUiRows(...args);
         }
-        _setSegmentsUiRows(scope, rows) {
-          this._segmentUiRows.set(this._getSegmentsScopeKey(scope), this._cloneDeep(rows));
+        _setSegmentsUiRows(...args) {
+          return this._segmentsSection._setSegmentsUiRows(...args);
         }
-        _getSegmentDraftState(scope = { type: "card" }) {
-          const key = this._getSegmentsScopeKey(scope);
-          if (!this._segmentDrafts.has(key)) {
-            this._segmentDrafts.set(key, this._createSegmentDraftState(scope));
-          }
-          return this._cloneDeep(this._segmentDrafts.get(key));
+        _getSegmentDraftState(...args) {
+          return this._segmentsSection._getSegmentDraftState(...args);
         }
-        _setSegmentDraftState(scope, nextDraft, options = {}) {
-          var _a, _b, _c;
-          this._segmentDrafts.set(this._getSegmentsScopeKey(scope), {
-            from: (_a = nextDraft == null ? void 0 : nextDraft.from) != null ? _a : "",
-            to: (_b = nextDraft == null ? void 0 : nextDraft.to) != null ? _b : "",
-            color: (_c = nextDraft == null ? void 0 : nextDraft.color) != null ? _c : this._getSegmentDraftColorDefault(scope)
-          });
-          if (options == null ? void 0 : options.refreshOnly) {
-            this._refreshSegmentUi(scope);
-            return;
-          }
-          this._render();
+        _setSegmentDraftState(...args) {
+          return this._segmentsSection._setSegmentDraftState(...args);
         }
-        _setSegmentDraftField(scope, field, rawValue) {
-          const currentDraft = this._getSegmentDraftState(scope);
-          const nextValue = field === "color" ? this._normalizeTextValue(rawValue).trim() : this._normalizeTextValue(rawValue);
-          this._setSegmentDraftState(scope, {
-            ...currentDraft,
-            [field]: nextValue
-          }, { refreshOnly: true });
+        _setSegmentDraftField(...args) {
+          return this._segmentsSection._setSegmentDraftField(...args);
         }
-        _isSegmentFillStyle(fillStyle) {
-          return ["bands", "soft_bands", "band_gradient"].includes(fillStyle);
+        _isSegmentFillStyle(...args) {
+          return this._segmentsSection._isSegmentFillStyle(...args);
         }
-        _getDefaultSegments() {
-          return [
-            { from: "0%", to: "33%", color: "#4CAF50" },
-            { from: "33%", to: "75%", color: "#FF9800" },
-            { from: "75%", to: "100%", color: "#F44336" }
-          ];
+        _getDefaultSegments(...args) {
+          return this._segmentsSection._getDefaultSegments(...args);
         }
-        _getStoredScopedSegments(scope = { type: "card" }) {
-          const structuredValue = this._getScopedValue(scope, ["bar", "segments"]);
-          if (structuredValue !== void 0) {
-            return structuredValue;
-          }
-          const legacySegments = this._getScopedValue(scope, ["segments"]);
-          if (legacySegments !== void 0) {
-            return legacySegments;
-          }
-          const legacySeverity = this._getScopedValue(scope, ["severity"]);
-          if (legacySeverity !== void 0) {
-            return legacySeverity;
-          }
-          return null;
+        _getStoredScopedSegments(...args) {
+          return this._segmentsSection._getStoredScopedSegments(...args);
         }
-        _parseSegmentBoundaryInput(rawValue) {
-          const normalizedValue = this._normalizeTextValue(rawValue).trim();
-          if (!normalizedValue) {
-            return null;
-          }
-          const percentMatch = normalizedValue.match(/^\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*%\s*$/);
-          const percent = percentMatch ? parseFloat(percentMatch[1]) : null;
-          if (Number.isFinite(percent)) {
-            return `${percent}%`;
-          }
-          const numericValue = this._normalizeNumberValue(normalizedValue);
-          return numericValue === null ? null : numericValue;
+        _parseSegmentBoundaryInput(...args) {
+          return this._segmentsSection._parseSegmentBoundaryInput(...args);
         }
-        _formatSegmentBoundaryValue(value) {
-          if (typeof value === "string") {
-            return value;
-          }
-          if (typeof value === "number" && Number.isFinite(value)) {
-            return String(value);
-          }
-          if (this._isObject(value)) {
-            if (Number.isFinite(value.percent)) {
-              return `${value.percent}%`;
-            }
-            if (Number.isFinite(this._getFiniteNumber(value.fixed))) {
-              return String(this._getFiniteNumber(value.fixed));
-            }
-          }
-          return "";
+        _formatSegmentBoundaryValue(...args) {
+          return this._segmentsSection._formatSegmentBoundaryValue(...args);
         }
-        _getSegmentDraftColorDefault(scope = { type: "card" }) {
-          var _a;
-          const segments = this._getScopedSegmentsValue(scope);
-          if (segments.length) {
-            return this._normalizeTextValue((_a = segments[segments.length - 1]) == null ? void 0 : _a.color).trim() || "#4a9eff";
-          }
-          return "#4CAF50";
+        _getSegmentDraftColorDefault(...args) {
+          return this._segmentsSection._getSegmentDraftColorDefault(...args);
         }
-        _getNewSegmentDefaults(scope = { type: "card" }) {
-          var _a;
-          const segments = this._getScopedSegmentsValue(scope);
-          const previous = segments[segments.length - 1];
-          const previousTo = (_a = previous == null ? void 0 : previous.to) != null ? _a : null;
-          return {
-            from: previousTo != null ? previousTo : "0%",
-            to: "100%",
-            color: "#4a9eff"
-          };
+        _getNewSegmentDefaults(...args) {
+          return this._segmentsSection._getNewSegmentDefaults(...args);
         }
-        _createSegmentDraftState(scope = { type: "card" }) {
-          var _a;
-          const defaults = this._getNewSegmentDefaults(scope);
-          const formattedFrom = this._formatSegmentBoundaryValue(defaults.from);
-          const formattedTo = this._formatSegmentBoundaryValue(defaults.to);
-          const draftFrom = formattedFrom === "100%" || formattedFrom === "100" ? "" : formattedFrom;
-          const draftTo = draftFrom ? formattedTo : "";
-          return {
-            from: draftFrom,
-            to: draftTo,
-            color: (_a = defaults.color) != null ? _a : this._getSegmentDraftColorDefault(scope)
-          };
+        _createSegmentDraftState(...args) {
+          return this._segmentsSection._createSegmentDraftState(...args);
         }
-        _normalizeSegmentForEditorComparison(segment) {
-          if (!this._isObject(segment)) {
-            return null;
-          }
-          const from = this._formatSegmentBoundaryValue(segment.from).trim();
-          const to = this._formatSegmentBoundaryValue(segment.to).trim();
-          const color = this._normalizeColorComparisonValue(segment.color);
-          if (!from || !to || !color) {
-            return null;
-          }
-          return { from, to, color };
+        _normalizeSegmentForEditorComparison(...args) {
+          return this._segmentsSection._normalizeSegmentForEditorComparison(...args);
         }
-        _segmentsEqualForEditor(leftSegments, rightSegments) {
-          const left = Array.isArray(leftSegments) ? leftSegments.map((segment) => this._normalizeSegmentForEditorComparison(segment)).filter(Boolean) : [];
-          const right = Array.isArray(rightSegments) ? rightSegments.map((segment) => this._normalizeSegmentForEditorComparison(segment)).filter(Boolean) : [];
-          if (left.length !== right.length) {
-            return false;
-          }
-          return left.every((segment, index) => segment.from === right[index].from && segment.to === right[index].to && segment.color === right[index].color);
+        _segmentsEqualForEditor(...args) {
+          return this._segmentsSection._segmentsEqualForEditor(...args);
         }
-        _getFallbackSegments(scope = { type: "card" }) {
-          if ((scope == null ? void 0 : scope.type) === "entity") {
-            const cardStoredSegments = this._getStoredScopedSegments({ type: "card" });
-            if (cardStoredSegments !== null) {
-              return this._cloneDeep(this._getScopedSegmentsValue({ type: "card" }));
-            }
-          }
-          if (!this._isSegmentFillStyle(this._getEffectiveFillStyleValue(scope))) {
-            return [];
-          }
-          return this._cloneDeep(this._getDefaultSegments());
+        _getFallbackSegments(...args) {
+          return this._segmentsSection._getFallbackSegments(...args);
         }
-        _parseSegmentBoundaryText(rawValue) {
-          const normalizedValue = this._normalizeTextValue(rawValue).trim();
-          if (!normalizedValue) {
-            return { state: "empty", value: null };
-          }
-          const parsed = this._parseSegmentBoundaryInput(normalizedValue);
-          if (parsed === null) {
-            return { state: "invalid", value: null };
-          }
-          return { state: "valid", value: parsed };
+        _parseSegmentBoundaryText(...args) {
+          return this._segmentsSection._parseSegmentBoundaryText(...args);
         }
-        _compareSegmentBoundaries(left, right) {
-          const leftValue = this._getSegmentPreviewBoundaryValue(left);
-          const rightValue = this._getSegmentPreviewBoundaryValue(right);
-          if (leftValue === null || rightValue === null) {
-            return null;
-          }
-          if (leftValue < rightValue) return -1;
-          if (leftValue > rightValue) return 1;
-          return 0;
+        _compareSegmentBoundaries(...args) {
+          return this._segmentsSection._compareSegmentBoundaries(...args);
         }
-        _buildSegmentValidationRows(scope = { type: "card" }) {
-          var _a;
-          const rows = (_a = this._getSegmentsUiRows(scope)) != null ? _a : this._getScopedSegmentsValue(scope);
-          return rows.map((segment, index) => {
-            const rawFrom = this._getSegmentBoundaryText(scope, index, "from", segment == null ? void 0 : segment.from);
-            const rawTo = this._getSegmentBoundaryText(scope, index, "to", segment == null ? void 0 : segment.to);
-            const parsedFrom = this._parseSegmentBoundaryText(rawFrom);
-            const parsedTo = this._parseSegmentBoundaryText(rawTo);
-            return {
-              index,
-              rawFrom,
-              rawTo,
-              parsedFrom,
-              parsedTo
-            };
-          });
+        _buildSegmentValidationRows(...args) {
+          return this._segmentsSection._buildSegmentValidationRows(...args);
         }
-        _getSegmentRowValidationMessage(scope = { type: "card" }, segmentIndex) {
-          const rows = this._buildSegmentValidationRows(scope);
-          const row = rows[segmentIndex];
-          if (!row) {
-            return "";
-          }
-          if (row.parsedFrom.state === "invalid" || row.parsedTo.state === "invalid" || row.parsedFrom.state === "empty" || row.parsedTo.state === "empty") {
-            return "Enter valid from/to values.";
-          }
-          if (this._compareSegmentBoundaries(row.parsedFrom.value, row.parsedTo.value) !== -1) {
-            return "From must be below To.";
-          }
-          const candidateFrom = this._getSegmentPreviewBoundaryValue(row.parsedFrom.value);
-          const candidateTo = this._getSegmentPreviewBoundaryValue(row.parsedTo.value);
-          for (const other of rows) {
-            if (other.index === segmentIndex) continue;
-            if (other.parsedFrom.state !== "valid" || other.parsedTo.state !== "valid") continue;
-            const otherFrom = this._getSegmentPreviewBoundaryValue(other.parsedFrom.value);
-            const otherTo = this._getSegmentPreviewBoundaryValue(other.parsedTo.value);
-            if (candidateFrom === otherFrom) {
-              return "Duplicate segment start.";
-            }
-            if (candidateFrom < otherTo && candidateTo > otherFrom) {
-              return "Segments overlap.";
-            }
-          }
-          return "";
+        _getSegmentRowValidationMessage(...args) {
+          return this._segmentsSection._getSegmentRowValidationMessage(...args);
         }
-        _getValidSegmentDraft(scope = { type: "card" }) {
-          const draft = this._getSegmentDraftState(scope);
-          const parsedFrom = this._parseSegmentBoundaryText(draft.from);
-          const parsedTo = this._parseSegmentBoundaryText(draft.to);
-          const color = this._normalizeTextValue(draft.color).trim();
-          if (parsedFrom.state !== "valid" || parsedTo.state !== "valid" || !color) {
-            return null;
-          }
-          if (this._compareSegmentBoundaries(parsedFrom.value, parsedTo.value) !== -1) {
-            return null;
-          }
-          const candidateFrom = this._getSegmentPreviewBoundaryValue(parsedFrom.value);
-          const candidateTo = this._getSegmentPreviewBoundaryValue(parsedTo.value);
-          const rows = this._buildSegmentValidationRows(scope);
-          for (const row of rows) {
-            if (row.parsedFrom.state !== "valid" || row.parsedTo.state !== "valid") continue;
-            const otherFrom = this._getSegmentPreviewBoundaryValue(row.parsedFrom.value);
-            const otherTo = this._getSegmentPreviewBoundaryValue(row.parsedTo.value);
-            if (candidateFrom === otherFrom || candidateFrom < otherTo && candidateTo > otherFrom) {
-              return null;
-            }
-          }
-          return {
-            from: parsedFrom.value,
-            to: parsedTo.value,
-            color
-          };
+        _getValidSegmentDraft(...args) {
+          return this._segmentsSection._getValidSegmentDraft(...args);
         }
-        _canAddSegment(scope = { type: "card" }) {
-          return !!this._getValidSegmentDraft(scope);
+        _canAddSegment(...args) {
+          return this._segmentsSection._canAddSegment(...args);
         }
-        _getSegmentDraftValidationMessage(scope = { type: "card" }) {
-          const draft = this._getSegmentDraftState(scope);
-          const parsedFrom = this._parseSegmentBoundaryText(draft.from);
-          const parsedTo = this._parseSegmentBoundaryText(draft.to);
-          const color = this._normalizeTextValue(draft.color).trim();
-          if (!this._normalizeTextValue(draft.from).trim() && !this._normalizeTextValue(draft.to).trim()) {
-            return "";
-          }
-          if (parsedFrom.state !== "valid" || parsedTo.state !== "valid") {
-            return "Enter valid from/to values.";
-          }
-          if (this._compareSegmentBoundaries(parsedFrom.value, parsedTo.value) !== -1) {
-            return "From must be below To.";
-          }
-          if (!color) {
-            return "Choose a color to add a segment.";
-          }
-          const candidateFrom = this._getSegmentPreviewBoundaryValue(parsedFrom.value);
-          const candidateTo = this._getSegmentPreviewBoundaryValue(parsedTo.value);
-          const rows = this._buildSegmentValidationRows(scope);
-          for (const row of rows) {
-            if (row.parsedFrom.state !== "valid" || row.parsedTo.state !== "valid") continue;
-            const otherFrom = this._getSegmentPreviewBoundaryValue(row.parsedFrom.value);
-            const otherTo = this._getSegmentPreviewBoundaryValue(row.parsedTo.value);
-            if (candidateFrom === otherFrom) {
-              return "Duplicate segment start.";
-            }
-            if (candidateFrom < otherTo && candidateTo > otherFrom) {
-              return "Segments overlap.";
-            }
-          }
-          return "";
+        _getSegmentDraftValidationMessage(...args) {
+          return this._segmentsSection._getSegmentDraftValidationMessage(...args);
         }
-        _getSegmentPreviewBoundaryValue(value) {
-          if (typeof value === "string") {
-            const match = value.trim().match(/^([+-]?(?:\d+(?:\.\d+)?|\.\d+))%$/);
-            if (match) {
-              const parsed = parseFloat(match[1]);
-              return Number.isFinite(parsed) ? parsed : null;
-            }
-          }
-          if (typeof value === "number" && Number.isFinite(value)) {
-            return value;
-          }
-          if (this._isObject(value)) {
-            if (Number.isFinite(value.percent)) {
-              return value.percent;
-            }
-            const fixedValue = this._getFiniteNumber(value.fixed);
-            if (Number.isFinite(fixedValue)) {
-              return fixedValue;
-            }
-          }
-          return null;
+        _getSegmentPreviewBoundaryValue(...args) {
+          return this._segmentsSection._getSegmentPreviewBoundaryValue(...args);
         }
-        _sortSegmentsForEditor(segments) {
-          if (!Array.isArray(segments)) {
-            return [];
-          }
-          return this._cloneDeep(segments).sort((left, right) => {
-            const leftFrom = this._getSegmentPreviewBoundaryValue(left == null ? void 0 : left.from);
-            const rightFrom = this._getSegmentPreviewBoundaryValue(right == null ? void 0 : right.from);
-            if (leftFrom === null && rightFrom === null) return 0;
-            if (leftFrom === null) return 1;
-            if (rightFrom === null) return -1;
-            return leftFrom - rightFrom;
-          });
+        _sortSegmentsForEditor(...args) {
+          return this._segmentsSection._sortSegmentsForEditor(...args);
         }
-        _getSegmentPreviewRows(scope = { type: "card" }) {
-          var _a;
-          const baseSegments = (_a = this._getSegmentsUiRows(scope)) != null ? _a : this._getScopedSegmentsValue(scope);
-          const previewSegments = this._sortSegmentsForEditor(baseSegments);
-          const validDraft = this._getValidSegmentDraft(scope);
-          if (validDraft) {
-            previewSegments.push(validDraft);
-          }
-          return this._sortSegmentsForEditor(previewSegments).filter((segment) => {
-            const from = this._getSegmentPreviewBoundaryValue(segment == null ? void 0 : segment.from);
-            const to = this._getSegmentPreviewBoundaryValue(segment == null ? void 0 : segment.to);
-            return from !== null && to !== null && typeof (segment == null ? void 0 : segment.color) === "string" && segment.color.trim();
-          });
+        _getSegmentPreviewRows(...args) {
+          return this._segmentsSection._getSegmentPreviewRows(...args);
         }
-        _buildEditorSegmentPreviewStyle(scope = { type: "card" }) {
-          const segments = this._getSegmentPreviewRows(scope);
-          if (!segments.length) {
-            return "";
-          }
-          const fillStyle = this._getEffectiveFillStyleValue(scope);
-          const stops = [];
-          segments.forEach((segment) => {
-            const from = Math.max(0, Math.min(100, this._getSegmentPreviewBoundaryValue(segment.from)));
-            const to = Math.max(0, Math.min(100, this._getSegmentPreviewBoundaryValue(segment.to)));
-            stops.push(`${segment.color} ${from}%`, `${segment.color} ${to}%`);
-          });
-          if (fillStyle === "bands") {
-            return `background:linear-gradient(to right,${stops.join(",")});background-repeat:no-repeat;`;
-          }
-          return `background:linear-gradient(to right,${stops.join(",")});background-repeat:no-repeat;`;
+        _buildEditorSegmentPreviewStyle(...args) {
+          return this._segmentsSection._buildEditorSegmentPreviewStyle(...args);
         }
-        _getSegmentPreviewDomIds(scope = { type: "card" }) {
-          if ((scope == null ? void 0 : scope.type) === "entity") {
-            return {
-              previewId: `entity-${scope.index}-segment-preview`,
-              trackId: `entity-${scope.index}-segment-preview-track`
-            };
-          }
-          return {
-            previewId: "card-segment-preview",
-            trackId: "card-segment-preview-track"
-          };
+        _getSegmentPreviewDomIds(...args) {
+          return this._segmentsSection._getSegmentPreviewDomIds(...args);
         }
-        _renderSegmentPreview(scope = { type: "card" }) {
-          var _a;
-          const { previewId, trackId } = this._getSegmentPreviewDomIds(scope);
-          const segments = this._getSegmentPreviewRows(scope);
-          const markers = [];
-          segments.forEach((segment) => {
-            const from = this._getSegmentPreviewBoundaryValue(segment.from);
-            const to = this._getSegmentPreviewBoundaryValue(segment.to);
-            if (from !== null) markers.push(from);
-            if (to !== null) markers.push(to);
-          });
-          const uniqueMarkers = [...new Set(markers)].sort((left, right) => left - right);
-          return `
-      <div id="${previewId}" class="gradient-preview segment-preview">
-        <div id="${trackId}" class="gradient-preview-track segment-preview-track" style="${this._escapeAttribute((_a = this._buildEditorSegmentPreviewStyle(scope)) != null ? _a : "")}">
-          ${uniqueMarkers.map((marker, index) => `
-            <span
-              id="${previewId}-stop-${index}"
-              class="gradient-preview-stop"
-              style="left:${this._escapeAttribute(String(marker))}%"
-              title="${this._escapeAttribute(`${marker}%`)}"
-            ></span>
-          `).join("")}
-        </div>
-      </div>
-    `;
+        _renderSegmentPreview(...args) {
+          return this._segmentsSection._renderSegmentPreview(...args);
         }
-        _refreshSegmentPreview(scope = { type: "card" }) {
-          var _a;
-          const { previewId, trackId } = this._getSegmentPreviewDomIds(scope);
-          const track = this._getShadowElementById(trackId);
-          if (!track) {
-            return;
-          }
-          track.setAttribute("style", (_a = this._buildEditorSegmentPreviewStyle(scope)) != null ? _a : "");
-          const segments = this._getSegmentPreviewRows(scope);
-          const markers = [];
-          segments.forEach((segment) => {
-            const from = this._getSegmentPreviewBoundaryValue(segment.from);
-            const to = this._getSegmentPreviewBoundaryValue(segment.to);
-            if (from !== null) markers.push(from);
-            if (to !== null) markers.push(to);
-          });
-          const uniqueMarkers = [...new Set(markers)].sort((left, right) => left - right);
-          track.innerHTML = uniqueMarkers.map((marker, index) => `
-      <span
-        id="${previewId}-stop-${index}"
-        class="gradient-preview-stop"
-        style="left:${this._escapeAttribute(String(marker))}%"
-        title="${this._escapeAttribute(`${marker}%`)}"
-      ></span>
-    `).join("");
+        _refreshSegmentPreview(...args) {
+          return this._segmentsSection._refreshSegmentPreview(...args);
         }
-        _getSegmentDomIds(scope = { type: "card" }) {
-          if ((scope == null ? void 0 : scope.type) === "entity") {
-            return {
-              hintPrefix: `entity-${scope.index}-segment-row-hint-`,
-              draftHintId: `entity-${scope.index}-segment-draft-hint`,
-              addSelector: `button[data-action="add-entity-segment"][data-index="${scope.index}"]`
-            };
-          }
-          return {
-            hintPrefix: "segment-row-hint-",
-            draftHintId: "segment-draft-hint",
-            addSelector: 'button[data-action="add-segment"]'
-          };
+        _getSegmentDomIds(...args) {
+          return this._segmentsSection._getSegmentDomIds(...args);
         }
-        _refreshSegmentUi(scope = { type: "card" }) {
-          var _a, _b;
-          this._refreshSegmentPreview(scope);
-          if (!this.shadowRoot) {
-            return;
-          }
-          const { hintPrefix, draftHintId, addSelector } = this._getSegmentDomIds(scope);
-          const addButton = this.shadowRoot.querySelector(addSelector);
-          if (addButton) {
-            addButton.disabled = !this._canAddSegment(scope);
-          }
-          const rows = (_a = this._getSegmentsUiRows(scope)) != null ? _a : this._getScopedSegmentsValue(scope);
-          rows.forEach((_, index) => {
-            var _a2;
-            const hint = this._getShadowElementById(`${hintPrefix}${index}`);
-            const message = this._getSegmentRowValidationMessage(scope, index);
-            if (hint) {
-              hint.textContent = message;
-              (_a2 = hint.setAttribute) == null ? void 0 : _a2.call(hint, "style", message ? "" : "display:none");
-            }
-          });
-          const draftHint = this._getShadowElementById(draftHintId);
-          if (draftHint) {
-            const message = this._getSegmentDraftValidationMessage(scope);
-            draftHint.textContent = message;
-            (_b = draftHint.setAttribute) == null ? void 0 : _b.call(draftHint, "style", message ? "" : "display:none");
-          }
+        _refreshSegmentUi(...args) {
+          return this._segmentsSection._refreshSegmentUi(...args);
         }
-        _commitSegmentDraft(scope = { type: "card" }) {
-          var _a;
-          const draftSegment = this._getValidSegmentDraft(scope);
-          if (!draftSegment) {
-            this._refreshSegmentUi(scope);
-            return false;
-          }
-          const committedSegments = (_a = this._getSegmentsUiRows(scope)) != null ? _a : this._getScopedSegmentsValue(scope);
-          const nextSegments = this._sortSegmentsForEditor([...committedSegments, draftSegment]);
-          const applied = this._setScopedSegments(scope, nextSegments, { rerender: true });
-          if (applied !== false) {
-            this._segmentDrafts.set(this._getSegmentsScopeKey(scope), this._createSegmentDraftState(scope));
-          }
-          return applied;
+        _commitSegmentDraft(...args) {
+          return this._segmentsSection._commitSegmentDraft(...args);
         }
-        _commitSegmentBoundaryEdit(scope = { type: "card" }, segmentIndex, field, rawValue, inputEl = null) {
-          var _a, _b;
-          this._setSegmentBoundaryText(scope, segmentIndex, field, rawValue);
-          const normalizedText = this._normalizeTextValue(rawValue).trim();
-          const parsedValue = this._parseSegmentBoundaryInput(rawValue);
-          const nextValue = parsedValue === null ? normalizedText : parsedValue;
-          const currentSegments = (_a = this._getSegmentsUiRows(scope)) != null ? _a : this._getScopedSegmentsValue(scope);
-          const nextSegments = currentSegments.map((segment, currentIndex) => currentIndex === segmentIndex ? { ...segment, [field]: nextValue } : segment);
-          this._clearSegmentBoundaryText(scope, segmentIndex, field);
-          const applied = this._setScopedSegments(scope, nextSegments, { rerender: true });
-          const message = this._getSegmentRowValidationMessage(scope, segmentIndex);
-          if (inputEl == null ? void 0 : inputEl.setCustomValidity) {
-            inputEl.setCustomValidity(message || "");
-            if (message) {
-              (_b = inputEl.reportValidity) == null ? void 0 : _b.call(inputEl);
-            }
-          }
-          return applied;
+        _commitSegmentBoundaryEdit(...args) {
+          return this._segmentsSection._commitSegmentBoundaryEdit(...args);
         }
-        _commitGradientStopDraft(scope = { type: "card" }) {
-          const draftStop = this._getValidGradientDraftStop(scope);
-          if (!draftStop || this._hasGradientStopDuplicate(scope, draftStop.pos)) {
-            this._refreshGradientDraftUi(scope);
-            return false;
-          }
-          const committedStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
-          const nextStops = [...committedStops, draftStop].sort((left, right) => left.pos - right.pos);
-          const applied = this._setScopedGradientStops(scope, nextStops, { rerender: true });
-          if (applied !== false) {
-            this._gradientStopsDrafts.set(this._getGradientStopsDraftKey(scope), {
-              pos: (() => {
-                const suggestion = this._getNextSuggestedGradientStopPos(scope);
-                return suggestion === "" ? "" : String(suggestion);
-              })(),
-              color: draftStop.color
-            });
-          }
-          return applied;
+        _commitGradientStopDraft(...args) {
+          return this._gradientStopsSection._commitGradientStopDraft(...args);
         }
-        _getGradientPreviewDomIds(scope = { type: "card" }) {
-          if ((scope == null ? void 0 : scope.type) === "entity") {
-            return {
-              previewId: `entity-${scope.index}-gradient-preview`,
-              trackId: `entity-${scope.index}-gradient-preview-track`,
-              hintId: `entity-${scope.index}-gradient-draft-hint`,
-              addSelector: `button[data-action="add-entity-gradient-stop"][data-index="${scope.index}"]`,
-              draftInputId: `entity-${scope.index}-gradient-draft-pos`
-            };
-          }
-          return {
-            previewId: "card-gradient-preview",
-            trackId: "card-gradient-preview-track",
-            hintId: "gradient-draft-hint",
-            addSelector: 'button[data-action="add-gradient-stop"]',
-            draftInputId: "gradient-draft-pos"
-          };
+        _getGradientPreviewDomIds(...args) {
+          return this._gradientStopsSection._getGradientPreviewDomIds(...args);
         }
-        _refreshGradientDraftUi(scope = { type: "card" }) {
-          var _a, _b, _c;
-          if (!this.shadowRoot) {
-            return;
-          }
-          const getById = (_b = (_a = this.shadowRoot.getElementById) == null ? void 0 : _a.bind(this.shadowRoot)) != null ? _b : ((id) => {
-            var _a2, _b2, _c2;
-            return (_c2 = (_b2 = (_a2 = this.shadowRoot).querySelector) == null ? void 0 : _b2.call(_a2, `#${id}`)) != null ? _c2 : null;
-          });
-          const { previewId, trackId, hintId, addSelector, draftInputId } = this._getGradientPreviewDomIds(scope);
-          const addButton = this.shadowRoot.querySelector(addSelector);
-          if (addButton) {
-            addButton.disabled = !this._canAddGradientStop(scope);
-          }
-          const draftInput = getById(draftInputId);
-          if (draftInput && typeof draftInput.closest !== "function") {
-            this._render();
-            return;
-          }
-          const draftContainer = draftInput == null ? void 0 : draftInput.closest(".gradient-stop-draft");
-          const nextMessage = this._getGradientDraftValidationMessage(scope);
-          const existingHint = getById(hintId);
-          if (nextMessage) {
-            if (existingHint) {
-              existingHint.textContent = nextMessage;
-            } else if (draftContainer) {
-              const hint = document.createElement("div");
-              hint.id = hintId;
-              hint.className = "section-note";
-              hint.textContent = nextMessage;
-              draftContainer.appendChild(hint);
-            }
-          } else if (existingHint) {
-            existingHint.remove();
-          }
-          const preview = getById(previewId);
-          const track = getById(trackId);
-          if (!preview || !track) {
-            return;
-          }
-          track.setAttribute("style", (_c = this._getGradientPreviewStyle(scope)) != null ? _c : "");
-          const markerStops = this._buildGradientPreviewEffectiveStops(scope);
-          const renderedStops = markerStops.length ? markerStops : this._getDefaultGradientStops();
-          track.innerHTML = renderedStops.map((stop, index) => `
-      <span
-        id="${previewId}-stop-${index}"
-        class="gradient-preview-stop"
-        style="left:${this._escapeAttribute(String(stop.pos))}%"
-        title="${this._escapeAttribute(`${stop.pos}%`)}"
-      ></span>
-    `).join("");
+        _refreshGradientDraftUi(...args) {
+          return this._gradientStopsSection._refreshGradientDraftUi(...args);
         }
-        _commitGradientStopPosEdit(scope = { type: "card" }, stopIndex, rawValue, inputEl = null) {
-          const nextPos = this._normalizeGradientStopPosValue(rawValue);
-          if (nextPos === null || this._hasGradientStopDuplicate(scope, nextPos, stopIndex)) {
-            if (inputEl == null ? void 0 : inputEl.setCustomValidity) {
-              inputEl.setCustomValidity(nextPos === null ? "Enter a value from 0 to 100." : "Position already exists.");
-              if (inputEl.reportValidity) {
-                inputEl.reportValidity();
-              }
-            }
-            return false;
-          }
-          if (inputEl == null ? void 0 : inputEl.setCustomValidity) {
-            inputEl.setCustomValidity("");
-          }
-          const currentStops = this._getScopedGradientStopsValue(scope);
-          const nextStops = currentStops.map((stop, currentStopIndex) => currentStopIndex === stopIndex ? { ...stop, pos: nextPos } : stop);
-          this._clearGradientStopPosText(scope, stopIndex);
-          return this._setScopedGradientStops(scope, nextStops, { rerender: true });
+        _commitGradientStopPosEdit(...args) {
+          return this._gradientStopsSection._commitGradientStopPosEdit(...args);
         }
         _getFillStyleValue() {
           return getEffectiveFillStyleValue(this._createSectionContext(), { type: "card" });
@@ -10831,122 +11581,38 @@ ${barMarkerStyles}
         _getBarAppearanceSummary(scope) {
           return getBarAppearanceSummary(this._createSectionContext(), scope);
         }
-        _getScopedSegmentsValue(scope) {
-          const uiRows = this._getSegmentsUiRows(scope);
-          if (uiRows !== null) {
-            return this._cloneDeep(uiRows);
-          }
-          const storedSegments = this._getStoredScopedSegments(scope);
-          if (storedSegments !== null) {
-            return this._sortSegmentsForEditor(storedSegments);
-          }
-          return this._sortSegmentsForEditor(this._getFallbackSegments(scope));
+        _getScopedSegmentsValue(...args) {
+          return this._segmentsSection._getScopedSegmentsValue(...args);
         }
-        _hasSegmentsOverride(scope) {
-          return this._getStoredScopedSegments(scope) !== null;
+        _hasSegmentsOverride(...args) {
+          return this._segmentsSection._hasSegmentsOverride(...args);
         }
-        _getSegmentsSummary(scope) {
-          const segments = this._getScopedSegmentsValue(scope);
-          if (!Array.isArray(segments) || segments.length === 0) {
-            return "Inherited";
-          }
-          if ((scope == null ? void 0 : scope.type) !== "entity" && !this._hasSegmentsOverride(scope) && this._isSegmentFillStyle(this._getEffectiveFillStyleValue(scope))) {
-            return "Default bands";
-          }
-          return `${segments.length} segments`;
+        _getSegmentsSummary(...args) {
+          return this._segmentsSection._getSegmentsSummary(...args);
         }
         _getEffectiveFillStyleValue(scope) {
           return getEffectiveFillStyleValue(this._createSectionContext(), scope);
         }
-        _getScopedGradientStopsValue(scope) {
-          const localRows = this._getGradientStopsUiRows(scope);
-          if (Array.isArray(localRows)) {
-            return localRows;
-          }
-          const storedStops = this._getStoredScopedGradientStops(scope);
-          if (storedStops !== null) {
-            return this._sanitizeGradientStopsForEmit(storedStops);
-          }
-          return this._cloneDeep(this._getFallbackGradientStops(scope));
+        _getScopedGradientStopsValue(...args) {
+          return this._gradientStopsSection._getScopedGradientStopsValue(...args);
         }
-        _hasGradientStopsOverride(scope) {
-          if (this._getStoredScopedGradientStops(scope) !== null) {
-            return true;
-          }
-          const localRows = this._getGradientStopsUiRows(scope);
-          if (!Array.isArray(localRows)) {
-            return false;
-          }
-          return this._serializeConfig(this._sanitizeGradientStopsForEmit(localRows)) !== this._serializeConfig(this._sanitizeGradientStopsForEmit(this._getFallbackGradientStops(scope)));
+        _hasGradientStopsOverride(...args) {
+          return this._gradientStopsSection._hasGradientStopsOverride(...args);
         }
-        _getGradientStopsSummary(scope) {
-          if ((scope == null ? void 0 : scope.type) === "entity" && !this._hasGradientStopsOverride(scope)) {
-            return "Inherited";
-          }
-          const gradientStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
-          if (this._getEffectiveFillStyleValue(scope) !== "gradient") {
-            return "Inactive fill style";
-          }
-          if (!gradientStops.length) {
-            return (scope == null ? void 0 : scope.type) === "entity" ? "Inherited" : "Default gradient";
-          }
-          if (this._isDefaultGradientStops(gradientStops)) {
-            return "Default gradient";
-          }
-          return `${gradientStops.length} stops`;
+        _getGradientStopsSummary(...args) {
+          return this._gradientStopsSection._getGradientStopsSummary(...args);
         }
-        _buildGradientPreviewEffectiveStops(scope = { type: "card" }) {
-          const committedStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
-          const draftStop = this._getValidGradientDraftStop(scope);
-          const previewStops = [...committedStops];
-          if (draftStop && !this._hasGradientStopDuplicate(scope, draftStop.pos)) {
-            previewStops.push(draftStop);
-          }
-          return previewStops.sort((left, right) => left.pos - right.pos);
+        _buildGradientPreviewEffectiveStops(...args) {
+          return this._gradientStopsSection._buildGradientPreviewEffectiveStops(...args);
         }
-        _buildEditorGradientPreviewStyle(stops) {
-          if (!Array.isArray(stops) || !stops.length) {
-            return "";
-          }
-          const cssStops = stops.map((stop) => {
-            var _a;
-            const color = this._normalizeTextValue(stop.color).trim();
-            const pos = this._normalizeGradientStopPosValue((_a = stop.p) != null ? _a : stop.pos);
-            if (!color || pos === null) {
-              return null;
-            }
-            return `${color} ${pos}%`;
-          }).filter(Boolean);
-          if (!cssStops.length) {
-            return "";
-          }
-          return `background:linear-gradient(to right,${cssStops.join(",")});background-repeat:no-repeat;`;
+        _buildEditorGradientPreviewStyle(...args) {
+          return this._gradientStopsSection._buildEditorGradientPreviewStyle(...args);
         }
-        _getGradientPreviewStyle(scope = { type: "card" }) {
-          const previewStops = this._buildGradientPreviewEffectiveStops(scope);
-          const resolvedStops = previewStops.length >= 2 ? previewStops.map((stop) => ({ p: stop.pos, color: stop.color })) : this._getDefaultGradientStops().map((stop) => ({ p: stop.pos, color: stop.color }));
-          return this._buildEditorGradientPreviewStyle(resolvedStops);
+        _getGradientPreviewStyle(...args) {
+          return this._gradientStopsSection._getGradientPreviewStyle(...args);
         }
-        _renderGradientPreview(scope = { type: "card" }, options = {}) {
-          var _a, _b, _c;
-          const previewId = (_a = options.previewId) != null ? _a : "gradient-preview";
-          const trackId = (_b = options.trackId) != null ? _b : `${previewId}-track`;
-          const effectiveStops = this._buildGradientPreviewEffectiveStops(scope);
-          const markerStops = effectiveStops.length ? effectiveStops : this._getDefaultGradientStops();
-          return `
-      <div id="${previewId}" class="gradient-preview">
-        <div id="${trackId}" class="gradient-preview-track" style="${this._escapeAttribute((_c = this._getGradientPreviewStyle(scope)) != null ? _c : "")}">
-          ${markerStops.map((stop, index) => `
-            <span
-              id="${previewId}-stop-${index}"
-              class="gradient-preview-stop"
-              style="left:${this._escapeAttribute(String(stop.pos))}%"
-              title="${this._escapeAttribute(`${stop.pos}%`)}"
-            ></span>
-          `).join("")}
-        </div>
-      </div>
-    `;
+        _renderGradientPreview(...args) {
+          return this._gradientStopsSection._renderGradientPreview(...args);
         }
         _getNeedleSummary(scope) {
           if ((scope == null ? void 0 : scope.type) === "entity" && !this._hasNeedleOverride(scope)) return "Inherited";
@@ -11454,10 +12120,6 @@ ${barMarkerStyles}
             const layoutHeight = this._getScopedLayoutValue({ type: "card" }, "height");
             const layoutLabelWidth = this._getScopedLayoutValue({ type: "card" }, "width");
             const cardNeedle = this._getScopedNeedleConfig({ type: "card" });
-            const gradientStops = this._getGradientStopsValue();
-            const gradientDraft = this._getGradientStopsDraftState({ type: "card" });
-            const gradientDraftMessage = this._getGradientDraftValidationMessage({ type: "card" });
-            const segments = this._getSegmentsValue();
             const baseline = this._getBaselineResolvableValue({ type: "card" });
             const baselineMode = this._getBaselineMode({ type: "card" });
             const baselineAboveColor = this._getBaselineDirectionalColorValue({ type: "card" }, "above");
@@ -11473,9 +12135,6 @@ ${barMarkerStyles}
             const cardPeak = this._getScopedPeakConfig({ type: "card" });
             const cardPeakExtras = this._getEffectiveMarkerExtras({ type: "card" }, "peak");
             const cardFloor = this._getEffectiveScopedFloorConfig({ type: "card" });
-            const gradientStopsSummary = this._getGradientStopsSummary({ type: "card" });
-            const gradientStopsInactive = this._getEffectiveFillStyleValue({ type: "card" }) !== "gradient";
-            const defaultSegmentsVisible = !this._hasSegmentsOverride({ type: "card" }) && this._isSegmentFillStyle(this._getEffectiveFillStyleValue({ type: "card" }));
             this._syncExpandedEntityOverrides(entities.length);
             this.shadowRoot.innerHTML = `
 	      <style>${editorStyles}</style>
@@ -11542,16 +12201,10 @@ ${barMarkerStyles}
                 const targetDirection2 = this._getEffectiveMarkerDirection(scope, "target");
                 const layoutInherited = !this._hasLayoutOverride(scope);
                 const peakInherited = !this._hasPeakOverride(scope);
-                const gradientStopsInherited = !this._hasGradientStopsOverride(scope);
-                const segmentsInherited = !this._hasSegmentsOverride(scope);
                 const entityPeak = this._getEffectiveScopedPeakConfig(scope);
                 const entityPeakExtras = this._getEffectiveMarkerExtras(scope, "peak");
                 const floorInherited = !this._hasExtremumOverride(scope, "floor");
                 const entityFloor = this._getEffectiveScopedFloorConfig(scope);
-                const entityGradientStops = this._getScopedGradientStopsValue(scope);
-                const entityGradientDraft = this._getGradientStopsDraftState(scope);
-                const entityGradientDraftMessage = this._getGradientDraftValidationMessage(scope);
-                const entitySegments = this._getScopedSegmentsValue(scope);
                 const scaleGroup = this._renderOverrideGroup({
                   index,
                   group: "scale",
@@ -11755,101 +12408,14 @@ ${barMarkerStyles}
                   group: "segments",
                   title: "Segments",
                   summary: this._getSegmentsSummary(scope),
-                  content: `
-	                      <div class="field-row">
-	                        <div class="toggle">
-	                          <input id="entity-${index}-segments-inherit" type="checkbox" data-kind="entity-segments-inherit" data-index="${index}"${segmentsInherited ? " checked" : ""}>
-                          <label for="entity-${index}-segments-inherit">Inherit card settings</label>
-                        </div>
-                      </div>
-                      ${this._isSegmentFillStyle(this._getEffectiveFillStyleValue(scope)) ? "" : '<div class="section-note">Only used with segment-based fill styles.</div>'}
-                      ${this._renderSegmentPreview(scope)}
-                      <div class="field-row">
-                        <label>Segments</label>
-                        <div class="list">
-                          ${this._renderListRows(entitySegments, (segment, segmentIndex) => {
-                    var _a4;
-                    return `
-                            <div class="segment-editor-row">
-                            <div class="list-row triple segment-row">
-                              <input type="text" data-kind="entity-segment-from" data-index="${index}" data-segment-index="${segmentIndex}" value="${this._escapeAttribute(this._getSegmentBoundaryText(scope, segmentIndex, "from", segment == null ? void 0 : segment.from))}" placeholder="0%">
-                              <input type="text" data-kind="entity-segment-to" data-index="${index}" data-segment-index="${segmentIndex}" value="${this._escapeAttribute(this._getSegmentBoundaryText(scope, segmentIndex, "to", segment == null ? void 0 : segment.to))}" placeholder="100%">
-                              <input type="color" data-kind="entity-segment-color" data-index="${index}" data-segment-index="${segmentIndex}" value="${this._escapeAttribute((_a4 = segment == null ? void 0 : segment.color) != null ? _a4 : "#4a9eff")}">
-                              <button type="button" data-action="remove-entity-segment" data-index="${index}" data-segment-index="${segmentIndex}" aria-label="Remove" title="Remove">\u{1F5D1}</button>
-                            </div>
-                            <div id="entity-${index}-segment-row-hint-${segmentIndex}" class="section-note"${this._getSegmentRowValidationMessage(scope, segmentIndex) ? "" : ' style="display:none"'}>${this._escapeAttribute(this._getSegmentRowValidationMessage(scope, segmentIndex))}</div>
-                            </div>
-                          `;
-                  })}
-                          <div class="segment-draft">
-                            <div class="list-row triple segment-row">
-                              <input id="entity-${index}-segment-draft-from" type="text" data-kind="entity-segment-draft-from" data-index="${index}" value="${this._escapeAttribute(this._getSegmentDraftState(scope).from)}" placeholder="0%">
-                              <input id="entity-${index}-segment-draft-to" type="text" data-kind="entity-segment-draft-to" data-index="${index}" value="${this._escapeAttribute(this._getSegmentDraftState(scope).to)}" placeholder="100%">
-                              <input type="color" data-kind="entity-segment-draft-color" data-index="${index}" value="${this._escapeAttribute(this._getSegmentDraftState(scope).color || "#4a9eff")}">
-                              <button type="button" data-action="add-entity-segment" data-index="${index}"${this._canAddSegment(scope) ? "" : " disabled"}>Add</button>
-                            </div>
-                            <div id="entity-${index}-segment-draft-hint" class="section-note"${this._getSegmentDraftValidationMessage(scope) ? "" : ' style="display:none"'}>${this._escapeAttribute(this._getSegmentDraftValidationMessage(scope))}</div>
-                          </div>
-                        </div>
-                      </div>
-	                          `
+                  content: this._segmentsSection.render(scope)
                 });
                 const gradientStopsGroup = this._renderOverrideGroup({
                   index,
                   group: "gradient-stops",
                   title: "Gradient Stops",
                   summary: this._getGradientStopsSummary(scope),
-                  content: `
-	                      <div class="field-row">
-	                        <div class="toggle">
-	                          <input id="entity-${index}-gradient-stops-inherit" type="checkbox" data-kind="entity-gradient-stops-inherit" data-index="${index}"${gradientStopsInherited ? " checked" : ""}>
-                          <label for="entity-${index}-gradient-stops-inherit">Inherit card settings</label>
-                        </div>
-                      </div>
-                      ${this._getEffectiveFillStyleValue(scope) !== "gradient" ? '<div class="section-note">Only used with Gradient fill style</div>' : ""}
-                      ${this._renderGradientPreview(scope, {
-                    previewId: `entity-${index}-gradient-preview`,
-                    trackId: `entity-${index}-gradient-preview-track`
-                  })}
-                      <div class="field-row">
-                        <label>Gradient stops</label>
-                        <div class="list gradient-stop-list">
-                          ${this._renderListRows(entityGradientStops, (stop, stopIndex) => {
-                    var _a4, _b3;
-                    return `
-                            <div class="list-row gradient-stop-row">
-                              <input type="number" min="0" max="100" step="any" data-kind="entity-gradient-pos" data-index="${index}" data-stop-index="${stopIndex}" value="${this._escapeAttribute(this._getGradientStopPosText(scope, stopIndex, (_a4 = stop == null ? void 0 : stop.pos) != null ? _a4 : ""))}" placeholder="0">
-                              ${this._renderColorInput({
-                      id: `entity-${index}-gradient-color-${stopIndex}`,
-                      kind: "entity-gradient-color",
-                      index,
-                      value: (_b3 = stop == null ? void 0 : stop.color) != null ? _b3 : "#4a9eff",
-                      fallbackHex: "#4CAF50",
-                      placeholder: "CSS color value",
-                      extraDataset: { "stop-index": stopIndex }
-                    })}
-                              <button type="button" data-action="remove-entity-gradient-stop" data-index="${index}" data-stop-index="${stopIndex}" aria-label="Remove" title="Remove">\u{1F5D1}</button>
-                            </div>
-                          `;
-                  })}
-                          <div class="gradient-stop-draft">
-                            <div class="list-row gradient-stop-row">
-                              <input id="entity-${index}-gradient-draft-pos" type="number" min="0" max="100" step="any" data-kind="entity-gradient-draft-pos" data-index="${index}" value="${this._escapeAttribute(entityGradientDraft.pos)}" placeholder="0">
-                              ${this._renderColorInput({
-                    id: `entity-${index}-gradient-draft-color`,
-                    kind: "entity-gradient-draft-color",
-                    index,
-                    value: entityGradientDraft.color,
-                    fallbackHex: "#4CAF50",
-                    placeholder: "CSS color value"
-                  })}
-                              <button type="button" data-action="add-entity-gradient-stop" data-index="${index}"${this._canAddGradientStop(scope) ? "" : " disabled"}>Add</button>
-                            </div>
-                            ${entityGradientDraftMessage ? `<div id="entity-${index}-gradient-draft-hint" class="section-note">${this._escapeAttribute(entityGradientDraftMessage)}</div>` : ""}
-                          </div>
-                        </div>
-                      </div>
-	                          `
+                  content: this._gradientStopsSection.render(scope)
                 });
                 const baselineGroup = this._renderOverrideGroup({
                   index,
@@ -12251,108 +12817,9 @@ ${renderBarAppearanceSection(this._createSectionContext(), { type: "card" }, () 
             </div>
           </div>`)}
 
-	        <div class="section">
-	          <div class="section-head">
-	            <h3>Segments</h3>
-	            <div class="section-note">Segments define colored value ranges.</div>
-	          </div>
-	          ${this._renderCardGroup({
-              group: "segments",
-              title: "Segments",
-              summary: this._getSegmentsSummary({ type: "card" }),
-              inactive: !this._isSegmentFillStyle(fillStyle),
-              content: `
-	              ${this._isSegmentFillStyle(fillStyle) ? "" : '<div class="section-note">Only used with segment-based fill styles.</div>'}
-                ${this._renderSegmentPreview({ type: "card" })}
-	              <div class="field-row">
-	                <label>Segments</label>
-	                <div class="list">
-	                  ${defaultSegmentsVisible ? '<div class="section-note">Default bands</div>' : ""}
-	                  ${this._renderListRows(segments, (segment, index) => {
-                var _a2;
-                return `
-	                    <div class="segment-editor-row">
-	                    <div class="list-row triple segment-row">
-	                      <input type="text" data-kind="segment-from" data-index="${index}" value="${this._escapeAttribute(this._getSegmentBoundaryText({ type: "card" }, index, "from", segment == null ? void 0 : segment.from))}" placeholder="0%">
-	                      <input type="text" data-kind="segment-to" data-index="${index}" value="${this._escapeAttribute(this._getSegmentBoundaryText({ type: "card" }, index, "to", segment == null ? void 0 : segment.to))}" placeholder="100%">
-	                      <input type="color" data-kind="segment-color" data-index="${index}" value="${this._escapeAttribute((_a2 = segment == null ? void 0 : segment.color) != null ? _a2 : "#4a9eff")}">
-	                      <button type="button" data-action="remove-segment" data-index="${index}" aria-label="Remove" title="Remove">\u{1F5D1}</button>
-	                    </div>
-                      <div id="segment-row-hint-${index}" class="section-note"${this._getSegmentRowValidationMessage({ type: "card" }, index) ? "" : ' style="display:none"'}>${this._escapeAttribute(this._getSegmentRowValidationMessage({ type: "card" }, index))}</div>
-                      </div>
-	                  `;
-              })}
-                    <div class="segment-draft">
-                      <div class="list-row triple segment-row">
-                        <input id="segment-draft-from" type="text" data-kind="segment-draft-from" value="${this._escapeAttribute(this._getSegmentDraftState({ type: "card" }).from)}" placeholder="0%">
-                        <input id="segment-draft-to" type="text" data-kind="segment-draft-to" value="${this._escapeAttribute(this._getSegmentDraftState({ type: "card" }).to)}" placeholder="100%">
-                        <input type="color" data-kind="segment-draft-color" value="${this._escapeAttribute(this._getSegmentDraftState({ type: "card" }).color || "#4a9eff")}">
-                        <button type="button" data-action="add-segment"${this._canAddSegment({ type: "card" }) ? "" : " disabled"}>Add</button>
-                      </div>
-                      <div id="segment-draft-hint" class="section-note"${this._getSegmentDraftValidationMessage({ type: "card" }) ? "" : ' style="display:none"'}>${this._escapeAttribute(this._getSegmentDraftValidationMessage({ type: "card" }))}</div>
-                    </div>
-	                </div>
-	              </div>
-	            `
-            })}
-	        </div>
+${this._segmentsSection.render({ type: "card" }, (options) => this._renderCardGroup(options))}
 
-	        <div class="section">
-	          <div class="section-head">
-	            <h3>Gradient Stops</h3>
-	            <div class="section-note">Gradient stops define a smooth color transition from 0 to 100%.</div>
-	          </div>
-	          ${this._renderCardGroup({
-              group: "gradient-stops",
-              title: "Gradient Stops",
-              summary: gradientStopsSummary,
-              inactive: gradientStopsInactive,
-              content: `
-	              ${gradientStopsInactive ? '<div class="section-note">Only used with Gradient fill style</div>' : ""}
-	              ${this._renderGradientPreview({ type: "card" }, {
-                previewId: "card-gradient-preview",
-                trackId: "card-gradient-preview-track"
-              })}
-	              <div class="field-row">
-	                <label>Gradient stops</label>
-	                <div class="list gradient-stop-list">
-	                  ${this._renderListRows(gradientStops, (stop, index) => {
-                var _a2, _b;
-                return `
-	                    <div class="list-row gradient-stop-row">
-	                      <input type="number" min="0" max="100" step="any" data-kind="gradient-pos" data-index="${index}" value="${this._escapeAttribute(this._getGradientStopPosText({ type: "card" }, index, (_a2 = stop == null ? void 0 : stop.pos) != null ? _a2 : ""))}" placeholder="0">
-	                      ${this._renderColorInput({
-                  id: `gradient-color-${index}`,
-                  kind: "gradient-color",
-                  index,
-                  value: (_b = stop == null ? void 0 : stop.color) != null ? _b : "#4a9eff",
-                  fallbackHex: "#4CAF50",
-                  placeholder: "CSS color value"
-                })}
-	                      <button type="button" data-action="remove-gradient-stop" data-index="${index}" aria-label="Remove" title="Remove">\u{1F5D1}</button>
-	                    </div>
-	                  `;
-              })}
-	                  <div class="gradient-stop-draft">
-	                    <div class="list-row gradient-stop-row">
-	                      <input id="gradient-draft-pos" type="number" min="0" max="100" step="any" data-kind="gradient-draft-pos" value="${this._escapeAttribute(gradientDraft.pos)}" placeholder="0">
-	                      ${this._renderColorInput({
-                id: "gradient-draft-color",
-                kind: "gradient-draft-color",
-                index: "card",
-                value: gradientDraft.color,
-                fallbackHex: "#4CAF50",
-                placeholder: "CSS color value"
-              })}
-	                      <button type="button" data-action="add-gradient-stop"${this._canAddGradientStop({ type: "card" }) ? "" : " disabled"}>Add</button>
-	                    </div>
-	                    ${gradientDraftMessage ? `<div id="gradient-draft-hint" class="section-note">${this._escapeAttribute(gradientDraftMessage)}</div>` : ""}
-	                  </div>
-	                </div>
-	              </div>
-	            `
-            })}
-	        </div>
+${this._gradientStopsSection.render({ type: "card" }, (options) => this._renderCardGroup(options))}
 
 	        <div class="section">
 	          <div class="section-head">
@@ -12523,6 +12990,7 @@ ${this._renderFormattingSection({ type: "card" })}
         }
         _handleClick(event) {
           var _a, _b, _c, _d, _e, _f;
+          if (this._segmentsSection.handle(event, "click") || this._gradientStopsSection.handle(event, "click")) return;
           const target = (_c = (_b = (_a = event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, "[data-action]")) != null ? _c : event.target;
           const action = (_d = target == null ? void 0 : target.dataset) == null ? void 0 : _d.action;
           if (!action) return;
@@ -12616,101 +13084,21 @@ ${this._renderFormattingSection({ type: "card" })}
             this._setGenericMarkerList(scope, markers, { rerender: true });
             return;
           }
-          if (action === "add-gradient-stop") {
-            this._queuePostRenderFocus("#gradient-draft-pos");
-            this._commitGradientStopDraft({ type: "card" });
-            return;
-          }
-          if (action === "remove-gradient-stop") {
-            const index = Number(target.dataset.index);
-            this._setGradientStops(this._getGradientStopsValue().filter((_, stopIndex) => stopIndex !== index), { rerender: true });
-            return;
-          }
-          if (action === "add-entity-gradient-stop") {
-            const entityIndex = Number(target.dataset.index);
-            this._queuePostRenderFocus(`#entity-${entityIndex}-gradient-draft-pos`);
-            this._commitGradientStopDraft({ type: "entity", index: entityIndex });
-            return;
-          }
-          if (action === "remove-entity-gradient-stop") {
-            const scope = { type: "entity", index: Number(target.dataset.index) };
-            const stopIndex = Number(target.dataset.stopIndex);
-            this._setScopedGradientStops(scope, this._getScopedGradientStopsValue(scope).filter((_, index) => index !== stopIndex), { rerender: true });
-            return;
-          }
-          if (action === "add-segment") {
-            this._queuePostRenderFocus("#segment-draft-from");
-            this._commitSegmentDraft({ type: "card" });
-            return;
-          }
-          if (action === "remove-segment") {
-            const index = Number(target.dataset.index);
-            this._setSegments(this._getSegmentsValue().filter((_, segmentIndex) => segmentIndex !== index), { rerender: true, sort: true });
-            return;
-          }
-          if (action === "add-entity-segment") {
-            const entityIndex = Number(target.dataset.index);
-            this._queuePostRenderFocus(`#entity-${entityIndex}-segment-draft-from`);
-            this._commitSegmentDraft({ type: "entity", index: entityIndex });
-            return;
-          }
-          if (action === "remove-entity-segment") {
-            const scope = { type: "entity", index: Number(target.dataset.index) };
-            const segmentIndex = Number(target.dataset.segmentIndex);
-            this._setScopedSegments(scope, this._getScopedSegmentsValue(scope).filter((_, index) => index !== segmentIndex), { rerender: true, sort: true });
-            return;
-          }
         }
         _handleChange(event) {
           var _a, _b;
+          if (this._segmentsSection.handle(event, "change") || this._gradientStopsSection.handle(event, "change")) return;
           const kind = (_b = (_a = event.target) == null ? void 0 : _a.dataset) == null ? void 0 : _b.kind;
-          if (kind === "gradient-pos") {
-            const stopIndex = Number(event.target.dataset.index);
-            this._commitGradientStopPosEdit({ type: "card" }, stopIndex, event.target.value, event.target);
-            return;
-          }
-          if (kind === "entity-gradient-pos") {
-            const scope = { type: "entity", index: Number(event.target.dataset.index) };
-            const stopIndex = Number(event.target.dataset.stopIndex);
-            this._commitGradientStopPosEdit(scope, stopIndex, event.target.value, event.target);
-            return;
-          }
-          if (kind === "segment-from" || kind === "segment-to") {
-            this._commitSegmentBoundaryEdit({ type: "card" }, Number(event.target.dataset.index), kind === "segment-from" ? "from" : "to", event.target.value, event.target);
-            return;
-          }
-          if (kind === "entity-segment-from" || kind === "entity-segment-to") {
-            this._commitSegmentBoundaryEdit({ type: "entity", index: Number(event.target.dataset.index) }, Number(event.target.dataset.segmentIndex), kind === "entity-segment-from" ? "from" : "to", event.target.value, event.target);
-            return;
-          }
           this._handleFieldEvent(event);
         }
         _handleInput(event) {
           var _a;
+          if (this._segmentsSection.handle(event, "input") || this._gradientStopsSection.handle(event, "input")) return;
           const target = event.target;
           if (!target) return;
           if (target.tagName === "HA-ENTITY-PICKER") return;
           if (target.tagName === "INPUT" && target.type === "checkbox") return;
           const kind = (_a = target.dataset) == null ? void 0 : _a.kind;
-          if (kind === "gradient-pos") {
-            this._setGradientStopPosText({ type: "card" }, Number(target.dataset.index), target.value);
-            return;
-          }
-          if (kind === "entity-gradient-pos") {
-            this._setGradientStopPosText({ type: "entity", index: Number(target.dataset.index) }, Number(target.dataset.stopIndex), target.value);
-            return;
-          }
-          if (kind === "segment-from" || kind === "segment-to") {
-            this._setSegmentBoundaryText({ type: "card" }, Number(target.dataset.index), kind === "segment-from" ? "from" : "to", target.value);
-            this._refreshSegmentUi({ type: "card" });
-            return;
-          }
-          if (kind === "entity-segment-from" || kind === "entity-segment-to") {
-            const scope = { type: "entity", index: Number(target.dataset.index) };
-            this._setSegmentBoundaryText(scope, Number(target.dataset.segmentIndex), kind === "entity-segment-from" ? "from" : "to", target.value);
-            this._refreshSegmentUi(scope);
-            return;
-          }
           this._handleFieldEvent(event);
         }
         _handleValueChanged(event) {
@@ -12720,94 +13108,11 @@ ${this._renderFormattingSection({ type: "card" })}
           }
         }
         _handleKeydown(event) {
-          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
-          const kind = (_b = (_a = event.target) == null ? void 0 : _a.dataset) == null ? void 0 : _b.kind;
-          if (event.key === "Escape") {
-            if (kind === "gradient-draft-pos" || kind === "gradient-draft-color") {
-              (_c = event.preventDefault) == null ? void 0 : _c.call(event);
-              this._gradientStopsDrafts.set(this._getGradientStopsDraftKey({ type: "card" }), this._createGradientStopDraftState({ type: "card" }));
-              this._render();
-              return;
-            }
-            if (kind === "entity-gradient-draft-pos" || kind === "entity-gradient-draft-color") {
-              (_d = event.preventDefault) == null ? void 0 : _d.call(event);
-              const scope = { type: "entity", index: Number(event.target.dataset.index) };
-              this._gradientStopsDrafts.set(this._getGradientStopsDraftKey(scope), this._createGradientStopDraftState(scope));
-              this._render();
-            }
-            if (kind === "segment-draft-from" || kind === "segment-draft-to" || kind === "segment-draft-color") {
-              (_e = event.preventDefault) == null ? void 0 : _e.call(event);
-              this._segmentDrafts.set(this._getSegmentsScopeKey({ type: "card" }), this._createSegmentDraftState({ type: "card" }));
-              this._render();
-              return;
-            }
-            if (kind === "entity-segment-draft-from" || kind === "entity-segment-draft-to" || kind === "entity-segment-draft-color") {
-              (_f = event.preventDefault) == null ? void 0 : _f.call(event);
-              const scope = { type: "entity", index: Number(event.target.dataset.index) };
-              this._segmentDrafts.set(this._getSegmentsScopeKey(scope), this._createSegmentDraftState(scope));
-              this._render();
-              return;
-            }
-            return;
-          }
-          if (event.key !== "Enter") {
-            return;
-          }
-          if (kind === "gradient-pos") {
-            (_g = event.preventDefault) == null ? void 0 : _g.call(event);
-            const stopIndex = Number(event.target.dataset.index);
-            this._commitGradientStopPosEdit({ type: "card" }, stopIndex, event.target.value, event.target);
-            return;
-          }
-          if (kind === "entity-gradient-pos") {
-            (_h = event.preventDefault) == null ? void 0 : _h.call(event);
-            const scope = { type: "entity", index: Number(event.target.dataset.index) };
-            const stopIndex = Number(event.target.dataset.stopIndex);
-            this._commitGradientStopPosEdit(scope, stopIndex, event.target.value, event.target);
-            return;
-          }
-          if (kind === "gradient-draft-pos") {
-            (_i = event.preventDefault) == null ? void 0 : _i.call(event);
-            this._commitGradientStopDraft({ type: "card" });
-            return;
-          }
-          if (kind === "gradient-draft-color") {
-            (_j = event.preventDefault) == null ? void 0 : _j.call(event);
-            this._commitGradientStopDraft({ type: "card" });
-            return;
-          }
-          if (kind === "entity-gradient-draft-pos") {
-            (_k = event.preventDefault) == null ? void 0 : _k.call(event);
-            this._commitGradientStopDraft({ type: "entity", index: Number(event.target.dataset.index) });
-            return;
-          }
-          if (kind === "entity-gradient-draft-color") {
-            (_l = event.preventDefault) == null ? void 0 : _l.call(event);
-            this._commitGradientStopDraft({ type: "entity", index: Number(event.target.dataset.index) });
-            return;
-          }
-          if (kind === "segment-from" || kind === "segment-to") {
-            (_m = event.preventDefault) == null ? void 0 : _m.call(event);
-            this._commitSegmentBoundaryEdit({ type: "card" }, Number(event.target.dataset.index), kind === "segment-from" ? "from" : "to", event.target.value, event.target);
-            return;
-          }
-          if (kind === "entity-segment-from" || kind === "entity-segment-to") {
-            (_n = event.preventDefault) == null ? void 0 : _n.call(event);
-            this._commitSegmentBoundaryEdit({ type: "entity", index: Number(event.target.dataset.index) }, Number(event.target.dataset.segmentIndex), kind === "entity-segment-from" ? "from" : "to", event.target.value, event.target);
-            return;
-          }
-          if (kind === "segment-draft-from" || kind === "segment-draft-to" || kind === "segment-draft-color") {
-            (_o = event.preventDefault) == null ? void 0 : _o.call(event);
-            this._commitSegmentDraft({ type: "card" });
-            return;
-          }
-          if (kind === "entity-segment-draft-from" || kind === "entity-segment-draft-to" || kind === "entity-segment-draft-color") {
-            (_p = event.preventDefault) == null ? void 0 : _p.call(event);
-            this._commitSegmentDraft({ type: "entity", index: Number(event.target.dataset.index) });
-          }
+          this._segmentsSection.handle(event, "keydown") || this._gradientStopsSection.handle(event, "keydown");
         }
         _handleFieldEvent(event) {
-          var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+          var _a, _b, _c, _d, _e, _f, _g;
+          if (this._segmentsSection.handle(event, "field") || this._gradientStopsSection.handle(event, "field")) return;
           const target = event.target;
           const rawField = (_a = target == null ? void 0 : target.dataset) == null ? void 0 : _a.field;
           const rawKind = (_b = target == null ? void 0 : target.dataset) == null ? void 0 : _b.kind;
@@ -12971,18 +13276,6 @@ ${this._renderFormattingSection({ type: "card" })}
           if (kind === "entity-floor-reset") {
             return void this._setScopedExtremumReset({ type: "entity", index: Number(target.dataset.index) }, "floor", value);
           }
-          if (kind === "entity-segments-inherit") {
-            if (value) {
-              return void this._clearSegmentsOverride({ type: "entity", index: Number(target.dataset.index) });
-            }
-            return;
-          }
-          if (kind === "entity-gradient-stops-inherit") {
-            if (value) {
-              return void this._clearGradientStopsOverride({ type: "entity", index: Number(target.dataset.index) });
-            }
-            return;
-          }
           if (kind === "entity-bar-inherit" && handleBarAppearanceField(this._createSectionContext(), { kind, index: target.dataset.index, value })) return;
           if (kind === "entity-needle-inherit") {
             if (value) {
@@ -13053,108 +13346,6 @@ ${this._renderFormattingSection({ type: "card" })}
           }
           if (kind === "entity-target-above-fill-color") {
             return void this._setTargetAboveFillColor({ type: "entity", index: Number(target.dataset.index) }, value);
-          }
-          if (kind === "gradient-draft-pos") {
-            this._setGradientStopsDraftField({ type: "card" }, "pos", value);
-            return;
-          }
-          if (kind === "gradient-draft-color") {
-            this._setGradientStopsDraftField({ type: "card" }, "color", value);
-            return;
-          }
-          if (kind === "entity-gradient-draft-pos") {
-            this._setGradientStopsDraftField({ type: "entity", index: Number(target.dataset.index) }, "pos", value);
-            return;
-          }
-          if (kind === "entity-gradient-draft-color") {
-            this._setGradientStopsDraftField({ type: "entity", index: Number(target.dataset.index) }, "color", value);
-            return;
-          }
-          if (kind === "segment-draft-from") {
-            this._setSegmentDraftField({ type: "card" }, "from", value);
-            return;
-          }
-          if (kind === "segment-draft-to") {
-            this._setSegmentDraftField({ type: "card" }, "to", value);
-            return;
-          }
-          if (kind === "segment-draft-color") {
-            this._setSegmentDraftField({ type: "card" }, "color", value);
-            return;
-          }
-          if (kind === "entity-segment-draft-from") {
-            this._setSegmentDraftField({ type: "entity", index: Number(target.dataset.index) }, "from", value);
-            return;
-          }
-          if (kind === "entity-segment-draft-to") {
-            this._setSegmentDraftField({ type: "entity", index: Number(target.dataset.index) }, "to", value);
-            return;
-          }
-          if (kind === "entity-segment-draft-color") {
-            this._setSegmentDraftField({ type: "entity", index: Number(target.dataset.index) }, "color", value);
-            return;
-          }
-          if (kind == null ? void 0 : kind.startsWith("gradient-")) {
-            const index = Number(target.dataset.index);
-            const currentStops = this._sanitizeGradientStopsForEmit(this._getGradientStopsValue());
-            const nextStops = this._getGradientStopsValue().map((stop, stopIndex) => {
-              var _a2;
-              if (stopIndex !== index) return stop;
-              const nextPos = this._normalizeGradientStopPosValue(stop == null ? void 0 : stop.pos);
-              return {
-                ...stop,
-                pos: nextPos != null ? nextPos : 0,
-                color: kind === "gradient-color" ? value : (_a2 = stop == null ? void 0 : stop.color) != null ? _a2 : "#4a9eff"
-              };
-            });
-            if (this._serializeConfig(nextStops) !== this._serializeConfig(currentStops)) {
-              this._setGradientStops(nextStops);
-            }
-            return;
-          }
-          if (kind == null ? void 0 : kind.startsWith("entity-gradient-")) {
-            const scope = { type: "entity", index: Number(target.dataset.index) };
-            const stopIndex = Number(target.dataset.stopIndex);
-            const currentStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
-            const nextStops = this._getScopedGradientStopsValue(scope).map((stop, currentStopIndex) => {
-              var _a2;
-              if (currentStopIndex !== stopIndex) return stop;
-              const nextPos = this._normalizeGradientStopPosValue(stop == null ? void 0 : stop.pos);
-              return {
-                ...stop,
-                pos: nextPos != null ? nextPos : 0,
-                color: kind === "entity-gradient-color" ? value : (_a2 = stop == null ? void 0 : stop.color) != null ? _a2 : "#4a9eff"
-              };
-            });
-            if (this._serializeConfig(nextStops) !== this._serializeConfig(currentStops)) {
-              this._setScopedGradientStops(scope, nextStops);
-            }
-            return;
-          }
-          if (kind === "segment-color") {
-            const index = Number(target.dataset.index);
-            const nextSegments = ((_h = this._getSegmentsUiRows({ type: "card" })) != null ? _h : this._getSegmentsValue()).map((segment, segmentIndex) => {
-              if (segmentIndex !== index) return segment;
-              return {
-                ...segment,
-                color: value
-              };
-            });
-            this._setSegments(nextSegments, { sort: false });
-            return;
-          }
-          if (kind === "entity-segment-color") {
-            const scope = { type: "entity", index: Number(target.dataset.index) };
-            const segmentIndex = Number(target.dataset.segmentIndex);
-            const nextSegments = ((_i = this._getSegmentsUiRows(scope)) != null ? _i : this._getScopedSegmentsValue(scope)).map((segment, currentSegmentIndex) => {
-              if (currentSegmentIndex !== segmentIndex) return segment;
-              return {
-                ...segment,
-                color: value
-              };
-            });
-            this._setScopedSegments(scope, nextSegments, { sort: false });
-            return;
           }
         }
       };
@@ -13619,6 +13810,62 @@ ${this._renderFormattingSection({ type: "card" })}
     }
   });
 
+  // src/feature/feature-editor-palettes.js
+  function palettePath(config, kind) {
+    var _a;
+    const paths = [["bar", kind], [kind], ...kind === "segments" ? [["severity"]] : []];
+    return (_a = paths.find((path) => getPathValue(config, path) !== void 0)) != null ? _a : paths[0];
+  }
+  function displayBoundary(value) {
+    var _a;
+    if (!isObject(value)) return value;
+    if (Number.isFinite(value.percent)) return `${value.percent}%`;
+    return (_a = value.fixed) != null ? _a : value.value;
+  }
+  function createFeaturePaletteArray(context, kind) {
+    let section;
+    const rawRows = () => {
+      const config = context.read({ type: "card" }, []);
+      const stored = getPathValue(config, palettePath(config, kind));
+      if (stored !== void 0) return Array.isArray(stored) ? stored : [];
+      return kind === "segments" ? section._getFallbackSegments({ type: "card" }) : section._getDefaultGradientStops();
+    };
+    return {
+      patchOnly: true,
+      rows(_scope, controller) {
+        section = controller;
+        return rawRows().map((row) => {
+          var _a;
+          return kind === "segments" ? { ...row, from: displayBoundary(row == null ? void 0 : row.from), to: displayBoundary(row == null ? void 0 : row.to) } : { ...row, pos: (_a = controller._normalizeGradientStopPosValue(row == null ? void 0 : row.pos)) != null ? _a : row == null ? void 0 : row.pos };
+        });
+      },
+      write(scope, _displayRows, _options, operation) {
+        if (!operation) throw new Error("Feature palette writes require an explicit item operation");
+        const applied = context.mutate(scope, (config) => {
+          const path = palettePath(config, kind);
+          const rows = [...rawRows()];
+          if (operation.type === "edit") {
+            if (operation.index < 0 || operation.index >= rows.length) return config;
+            rows[operation.index] = { ...rows[operation.index], [operation.field]: operation.value };
+          } else if (operation.type === "add") rows.push(cloneDeep(operation.item));
+          else if (operation.type === "remove") rows.splice(operation.index, 1);
+          else throw new Error("Unsupported palette operation");
+          return setPathValue(config, path, rows);
+        });
+        if (applied !== false && operation.type !== "edit") {
+          if (kind === "segments") section._clearSegmentScopeTextState(scope);
+          else section._clearGradientStopScopeTextState(scope);
+        }
+        return applied;
+      }
+    };
+  }
+  var init_feature_editor_palettes = __esm({
+    "src/feature/feature-editor-palettes.js"() {
+      init_editor_config();
+    }
+  });
+
   // src/feature/SensorBarCardPlusFeatureEditor.js
   var root, SensorBarCardPlusFeatureEditor;
   var init_SensorBarCardPlusFeatureEditor = __esm({
@@ -13630,6 +13877,9 @@ ${this._renderFormattingSection({ type: "card" })}
       init_formatting();
       init_bar_appearance();
       init_feature_editor_config();
+      init_segments();
+      init_gradient_stops();
+      init_feature_editor_palettes();
       root = { type: "card" };
       SensorBarCardPlusFeatureEditor = class extends HTMLElement {
         constructor() {
@@ -13640,6 +13890,22 @@ ${this._renderFormattingSection({ type: "card" })}
           this._chooseEntity = false;
           this._renderEpoch = 0;
           this._updateComplete = Promise.resolve();
+          const context = this._createSectionContext();
+          const ui = {
+            root: () => this.shadowRoot,
+            render: () => {
+              this._paletteRenderRequested = true;
+              this._requestRender();
+            },
+            focus: (selector) => {
+              this._pendingPaletteFocus = selector;
+            }
+          };
+          this._segmentsSection = new SegmentsSection(context, ui, createFeaturePaletteArray(context, "segments"));
+          this._gradientStopsSection = new GradientStopsSection(context, ui, createFeaturePaletteArray(context, "gradient_stops"));
+          for (const type of ["click", "keydown"]) this.shadowRoot.addEventListener(type, (event) => {
+            this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event);
+          });
           const handleField = (event) => this._handleField(event);
           for (const type of ["input", "change", "value-changed"]) this.shadowRoot.addEventListener(type, handleField);
           this.shadowRoot.addEventListener("focusout", () => this._requestRender());
@@ -13650,7 +13916,10 @@ ${this._renderFormattingSection({ type: "card" })}
         setConfig(config) {
           if (!isObject(config)) throw new Error("Invalid Sensor Bar Card Plus feature configuration");
           if (serializeConfig(config) !== serializeConfig(this._config)) {
+            this._paletteRenderRequested || (this._paletteRenderRequested = ["bar.segments", "bar.gradient_stops", "segments", "severity", "gradient_stops"].some((path) => serializeConfig(getPathValue(config, path.split("."))) !== serializeConfig(getPathValue(this._config, path.split(".")))));
             this._config = cloneDeep(config);
+            this._segmentsSection.reset();
+            this._gradientStopsSection.reset();
             this._chooseEntity = false;
             this._configReplaced = true;
           }
@@ -13739,6 +14008,7 @@ ${this._renderFormattingSection({ type: "card" })}
             this._requestRender();
             return;
           }
+          if (this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event)) return;
           const context = this._createSectionContext();
           if (handleScaleField(context, { field, kind, value })) return;
           if (handleFormattingField(context, { field, kind, value })) return;
@@ -13764,26 +14034,46 @@ ${this._renderFormattingSection({ type: "card" })}
     </div>`;
         }
         _captureFocus() {
+          var _a, _b;
           const active = this.shadowRoot.activeElement;
           if (!active) return null;
           const selector = active.id ? `#${active.id}` : active.dataset.field ? `[data-field="${active.dataset.field}"]` : active.dataset.kind ? `[data-kind="${active.dataset.kind}"]` : null;
-          return selector ? { selector, start: active.selectionStart, end: active.selectionEnd } : null;
+          const item = (_b = (_a = active.dataset.segmentIndex) != null ? _a : active.dataset.stopIndex) != null ? _b : active.dataset.index;
+          const rowSelector = selector && active.dataset.kind && item !== void 0 ? `${selector}[data-${active.dataset.segmentIndex !== void 0 ? "segment-index" : active.dataset.stopIndex !== void 0 ? "stop-index" : "index"}="${item}"]` : selector;
+          return rowSelector ? { selector: rowSelector, start: active.selectionStart, end: active.selectionEnd } : null;
         }
         _render() {
-          var _a, _b, _c, _d;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i;
           const color = getBarColorValue(this._createSectionContext(), root);
+          const fillStyle = getEffectiveFillStyleValue(this._createSectionContext(), root);
+          const palette = fillStyle === "gradient" ? this._gradientStopsSection : this._segmentsSection._isSegmentFillStyle(fillStyle) ? this._segmentsSection : null;
+          const paletteRows = palette === this._gradientStopsSection ? palette._getScopedGradientStopsValue(root) : palette ? palette._getScopedSegmentsValue(root) : [];
           const signature = JSON.stringify([
             !!(this._context.entity_id || this._explicitEntity),
             this._showEntityPicker,
+            fillStyle,
+            paletteRows.length,
+            palette === this._gradientStopsSection ? !isHexColorValue(palette._getGradientStopsDraftState(root).color) : false,
+            ...paletteRows.map((row) => !isHexColorValue(row.color)),
             !!customElements.get("ha-entity-picker"),
             !!color && !isHexColorValue(color)
           ]);
           const activeField = (_b = (_a = this.shadowRoot.activeElement) == null ? void 0 : _a.dataset) == null ? void 0 : _b.field;
-          const defer = activeField === "bar-color-text-fallback" || activeField === "feature-entity-override" && !this._context.entity_id && !this._explicitEntity;
-          if (signature !== this._structureSignature && !defer) {
+          const activeKind = (_d = (_c = this.shadowRoot.activeElement) == null ? void 0 : _c.dataset) == null ? void 0 : _d.kind;
+          const defer = (activeKind == null ? void 0 : activeKind.endsWith("-text-fallback")) || activeField === "bar-color-text-fallback" || activeField === "feature-entity-override" && !this._context.entity_id && !this._explicitEntity;
+          if ((signature !== this._structureSignature || this._paletteRenderRequested) && !defer) {
             const focus = this._captureFocus();
             const context = this._createSectionContext();
             this.shadowRoot.innerHTML = `<style>${editorStyles}
+        :host { container-type: inline-size; }
+        .list-row.gradient-stop-row .field-grid { grid-template-columns: minmax(0, 1fr); }
+        @container (max-width: 320px) {
+          .list-row.segment-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .list-row.gradient-stop-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .list-row.segment-row > button, .list-row.gradient-stop-row > button {
+            grid-column: 1 / -1; width: 100%;
+          }
+        }
         .inline-row { grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); }
         .section-note { overflow-wrap: anywhere; }
         ha-entity-picker { display: block; min-width: 0; max-width: 100%; }
@@ -13791,19 +14081,26 @@ ${this._renderFormattingSection({ type: "card" })}
         ${this._renderEntitySection()}
         ${renderScaleSection(context, root)}
         ${renderBarAppearanceSection(context, root)}
+        ${(_e = palette == null ? void 0 : palette.render(root)) != null ? _e : ""}
         ${renderFormattingSection(context, root)}
       </div>`;
             this._structureSignature = signature;
+            this._paletteRenderRequested = false;
             this._syncControls();
             const active = focus && this.shadowRoot.querySelector(focus.selector);
-            (_c = active == null ? void 0 : active.focus) == null ? void 0 : _c.call(active);
-            if ((active == null ? void 0 : active.type) === "text" && focus.start != null) (_d = active.setSelectionRange) == null ? void 0 : _d.call(active, focus.start, focus.end);
+            (_f = active == null ? void 0 : active.focus) == null ? void 0 : _f.call(active);
+            if ((active == null ? void 0 : active.type) === "text" && focus.start != null) (_g = active.setSelectionRange) == null ? void 0 : _g.call(active, focus.start, focus.end);
           } else {
             this._syncControls();
+          }
+          if (this._pendingPaletteFocus) {
+            (_i = (_h = this.shadowRoot.querySelector(this._pendingPaletteFocus)) == null ? void 0 : _h.focus) == null ? void 0 : _i.call(_h);
+            this._pendingPaletteFocus = null;
           }
           this._configReplaced = false;
         }
         _syncControls() {
+          var _a, _b;
           const context = this._createSectionContext();
           const color = getBarColorValue(context, root);
           const values = {
@@ -13819,6 +14116,25 @@ ${this._renderFormattingSection({ type: "card" })}
             const control = this.shadowRoot.querySelector(`[data-field="${field}"]`);
             if (control && (control !== this.shadowRoot.activeElement || this._configReplaced)) control.value = String(value);
             if (field === "bar-color-text-fallback") control == null ? void 0 : control.setAttribute("aria-label", "Bar color (CSS value)");
+          }
+          for (const section of [this._segmentsSection, this._gradientStopsSection]) {
+            const segment = section === this._segmentsSection;
+            const rows = segment ? section._getScopedSegmentsValue(root) : section._getScopedGradientStopsValue(root);
+            for (const field of segment ? ["from", "to", "color"] : ["pos", "color"]) {
+              for (const control of this.shadowRoot.querySelectorAll(`input[data-kind="${segment ? "segment" : "gradient"}-${field}"]`)) {
+                const index = Number(control.dataset.index), row = rows[index];
+                const value = segment && field !== "color" ? section._getSegmentBoundaryText(root, index, field, row == null ? void 0 : row[field]) : !segment && field === "pos" ? section._getGradientStopPosText(root, index, (_a = row == null ? void 0 : row.pos) != null ? _a : "") : row == null ? void 0 : row.color;
+                if (control !== this.shadowRoot.activeElement || this._configReplaced) control.value = value != null ? value : "";
+              }
+            }
+            if (this._configReplaced) {
+              const draft = segment ? section._getSegmentDraftState(root) : section._getGradientStopsDraftState(root);
+              for (const field of Object.keys(draft)) for (const suffix of ["", "-text-fallback"]) for (const control of this.shadowRoot.querySelectorAll(`input[data-kind="${segment ? "segment" : "gradient"}-draft-${field}${suffix}"]`)) {
+                control.value = field === "color" && control.type === "color" ? getColorPickerValue(draft[field], "#4CAF50") : draft[field];
+              }
+            }
+            if (segment) section._refreshSegmentUi(root);
+            else if ((_b = this.shadowRoot.querySelector("#gradient-draft-pos")) == null ? void 0 : _b.closest) section._refreshGradientDraftUi(root);
           }
           const solid = this.shadowRoot.querySelector("#bar-solid-fill");
           if (solid) solid.checked = getBarSolidFillValue(context, root);

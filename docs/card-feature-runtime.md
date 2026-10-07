@@ -4,8 +4,10 @@ The existing `sensor-bar-card-plus.js` resource also registers
 `sensor-bar-card-plus-feature`. No additional resource is required. This preview
 uses Home Assistant's [public custom Card Feature API](https://developers.home-assistant.io/docs/frontend/custom-ui/custom-card-feature/).
 The graphical Feature editor exposes entity inheritance/override, Scale,
-Bar Appearance (fill style, color, solid fill) and Formatting. Advanced palette,
-Needle, Baseline and marker configuration remains available through YAML; edits
+Bar Appearance (fill style, color, solid fill), Segments for segment-based fill
+styles, Gradient Stops for gradient, and Formatting. Palette edits preserve raw
+item metadata/order and inactive palettes. Animation, Needle, Baseline and marker
+configuration remains available through YAML; edits
 in the graphical editor preserve that raw configuration. No second resource is
 required for the editor.
 
@@ -218,7 +220,9 @@ installation:
 
 Also open the graphical Feature editor and check inherited/explicit entity
 selection, clearing, context changes, picker behavior and narrow dialogs. Confirm
-advanced YAML configuration survives edits to the exposed fields. The remaining
+advanced YAML configuration survives edits to the exposed fields. Exercise palette
+add/edit/remove, invalid drafts, CSS Gradient colors and narrow dialogs; confirm
+inactive palettes, omitted Segment ends, metadata and raw order survive. The remaining
 advanced graphical sections are not part of the current editor foundation.
 
 ## Marker-label manual checks

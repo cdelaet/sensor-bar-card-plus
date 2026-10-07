@@ -137,7 +137,7 @@ export function handleBarAppearanceField(context, { field, kind, index, value })
 }
 
 // The root's existing nested Baseline/Needle content is supplied by its host.
-// Segments/Gradient Stops are sibling sections; their stateful editors stay there.
+// Shared Segments/Gradient Stops are composed separately as sibling sections.
 // Entity content still belongs inside the host-owned override disclosure.
 export function renderBarAppearanceSection(context, scope, renderChildren = () => '') {
   if (scope?.type === 'entity') {

@@ -213,7 +213,7 @@ for (const source of ['src', 'dist']) describe(`Feature editor foundation (${sou
         expect(standalone.shadowRoot.innerHTML).toContain(render(standalone._createSectionContext(), { type: 'card' }));
       }
     } finally { vi.unstubAllGlobals(); }
-    for (const excluded of ['id="title"', 'data-kind="entity-name"', 'add-entity', 'entity-0-', 'layout-height', 'hero-size', 'bar-needle-mode', 'baseline-mode', 'target-mode', 'id="gradient-draft', 'id="segment-draft', '<sensor-bar-card-plus-feature']) {
+    for (const excluded of ['id="title"', 'data-kind="entity-name"', 'add-entity', 'entity-0-', 'layout-height', 'hero-size', 'bar-needle-mode', 'baseline-mode', 'target-mode', '<sensor-bar-card-plus-feature']) {
       expect(editor.shadowRoot.innerHTML).not.toContain(excluded);
     }
   });
