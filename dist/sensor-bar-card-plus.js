@@ -6048,6 +6048,12 @@ ${barMarkerStyles}
     }
     return nextTarget;
   }
+  function hasExplicitOverrideValue(value) {
+    return value !== "" && value !== void 0 && value !== null;
+  }
+  function hasResolvableOverride(parts) {
+    return hasExplicitOverrideValue(parts == null ? void 0 : parts.fixed) || hasExplicitOverrideValue(parts == null ? void 0 : parts.entity);
+  }
   var init_editor_config = __esm({
     "src/editor/shared/editor-config.js"() {
     }
@@ -8584,6 +8590,561 @@ ${barMarkerStyles}
     }
   });
 
+  // src/editor/sections/needle.js
+  var NeedleSection;
+  var init_needle = __esm({
+    "src/editor/sections/needle.js"() {
+      init_editor_config();
+      init_editor_controls();
+      NeedleSection = class {
+        constructor(context) {
+          this.context = context;
+        }
+        _setNeedle(value) {
+          return this._setScopedNeedleMode({ type: "card" }, value ? "enabled" : "disabled");
+        }
+        _getScopedNeedleConfig(scope) {
+          var _a;
+          const rawNeedle = this.context.read(scope, ["bar", "needle"]);
+          const defaultColor = "#ffffff";
+          let mode = (scope == null ? void 0 : scope.type) === "entity" ? "inherit" : "disabled";
+          let color = "";
+          if (typeof rawNeedle === "boolean") {
+            mode = rawNeedle ? "enabled" : "disabled";
+          } else if (isObject(rawNeedle)) {
+            if (rawNeedle.show === true) {
+              mode = "enabled";
+            } else if (rawNeedle.show === false) {
+              mode = "disabled";
+            } else if ((scope == null ? void 0 : scope.type) !== "entity") {
+              mode = "disabled";
+            }
+            color = (_a = rawNeedle.color) != null ? _a : "";
+          }
+          if (color === defaultColor) {
+            color = "";
+          }
+          return { mode, color };
+        }
+        _hasNeedleOverride(scope) {
+          return this.context.read(scope, ["bar", "needle"]) !== void 0;
+        }
+        _getEffectiveScopedNeedleConfig(scope) {
+          const localNeedle = this._getScopedNeedleConfig(scope);
+          if ((scope == null ? void 0 : scope.type) !== "entity") {
+            return localNeedle;
+          }
+          if (!this._hasNeedleOverride(scope)) {
+            return this._getScopedNeedleConfig({ type: "card" });
+          }
+          const inheritedNeedle = this._getScopedNeedleConfig({ type: "card" });
+          return {
+            mode: localNeedle.mode === "inherit" ? inheritedNeedle.mode : localNeedle.mode,
+            color: localNeedle.color || inheritedNeedle.color
+          };
+        }
+        _setScopedNeedleMode(scope, mode) {
+          return this.context.mutate(scope, (target) => {
+            let nextTarget = cloneDeep(target);
+            const existingNeedle = getPathValue(nextTarget, ["bar", "needle"]);
+            const existingColor = isObject(existingNeedle) ? existingNeedle.color : void 0;
+            nextTarget = deletePathValue(nextTarget, ["bar", "needle"]);
+            if ((scope == null ? void 0 : scope.type) === "entity" && mode === "inherit") {
+              nextTarget = pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
+              return nextTarget;
+            }
+            if (mode === "disabled") {
+              if ((scope == null ? void 0 : scope.type) === "entity") {
+                nextTarget = setPathValue(nextTarget, ["bar", "needle"], { show: false });
+              }
+              nextTarget = pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
+              return nextTarget;
+            }
+            const nextNeedle = { show: true };
+            if (existingColor && existingColor !== "#ffffff") {
+              nextNeedle.color = existingColor;
+            }
+            nextTarget = setPathValue(nextTarget, ["bar", "needle"], nextNeedle);
+            nextTarget = pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
+            return nextTarget;
+          }, { needleEdit: { field: "mode", value: mode } });
+        }
+        _setScopedNeedleColor(scope, rawValue) {
+          const normalizedValue = normalizeTextValue(rawValue).trim();
+          return this.context.mutate(scope, (target) => {
+            let nextTarget = cloneDeep(target);
+            const current = this._getScopedNeedleConfig(scope);
+            const hasCustomColor = normalizedValue && normalizeColorComparisonValue(normalizedValue) !== normalizeColorComparisonValue("#ffffff");
+            nextTarget = deletePathValue(nextTarget, ["bar", "needle", "color"]);
+            if ((scope == null ? void 0 : scope.type) !== "entity" && current.mode === "disabled") {
+              nextTarget = pruneEmptyObjectsInTarget(nextTarget, ["bar", "needle"]);
+              nextTarget = pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
+              return nextTarget;
+            }
+            const showValue = current.mode === "enabled" ? true : current.mode === "disabled" ? false : void 0;
+            const nextNeedle = {};
+            if (showValue !== void 0) {
+              nextNeedle.show = showValue;
+            }
+            if (hasCustomColor) {
+              nextNeedle.color = normalizedValue;
+            }
+            if (Object.keys(nextNeedle).length) {
+              nextTarget = setPathValue(nextTarget, ["bar", "needle"], nextNeedle);
+            } else {
+              nextTarget = deletePathValue(nextTarget, ["bar", "needle"]);
+            }
+            nextTarget = pruneEmptyObjectsInTarget(nextTarget, ["bar", "needle"]);
+            nextTarget = pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
+            return nextTarget;
+          }, { needleEdit: { field: "color", value: normalizedValue } });
+        }
+        _getNeedleValue() {
+          return this._getScopedNeedleConfig({ type: "card" }).mode === "enabled";
+        }
+        _removeScopedNeedle(scope) {
+          return this.context.mutate(scope, (target) => {
+            let nextTarget = deletePathValue(target, ["bar", "needle"]);
+            nextTarget = pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
+            return nextTarget;
+          });
+        }
+        _getNeedleSummary(scope) {
+          if ((scope == null ? void 0 : scope.type) === "entity" && !this._hasNeedleOverride(scope)) return "Inherited";
+          const needle = this._getScopedNeedleConfig(scope);
+          if (needle.mode === "disabled") return needle.color ? "Disabled \u2022 Custom color" : "Disabled";
+          if (needle.mode === "enabled") return needle.color ? "Enabled \u2022 Custom color" : "Enabled";
+          if (needle.color) return "Custom color";
+          return "Inherited";
+        }
+        handleField({ field, kind, index, value }) {
+          const scope = (kind == null ? void 0 : kind.startsWith("entity-")) ? { type: "entity", index: Number(index) } : { type: "card" };
+          const control = field != null ? field : kind == null ? void 0 : kind.replace(/^entity-/, "");
+          if (kind === "entity-needle-inherit") {
+            if (value) this._removeScopedNeedle(scope);
+            return true;
+          }
+          if (["bar-needle-mode", "needle-mode"].includes(control)) {
+            this._setScopedNeedleMode(scope, value);
+            return true;
+          }
+          if (["bar-needle-color", "needle-color"].includes(control)) {
+            this._setScopedNeedleColor(scope, value);
+            return true;
+          }
+          return false;
+        }
+        render(scope = { type: "card" }, renderGroup = ({ content }) => content) {
+          if ((scope == null ? void 0 : scope.type) === "entity") {
+            const index = scope.index;
+            const needleInherited = !this._hasNeedleOverride(scope);
+            const entityNeedle = this._getEffectiveScopedNeedleConfig(scope);
+            return `
+	                      <div class="field-row">
+	                        <div class="toggle">
+	                          <input id="entity-${index}-needle-inherit" type="checkbox" data-kind="entity-needle-inherit" data-index="${index}"${needleInherited ? " checked" : ""}>
+                          <label for="entity-${index}-needle-inherit">Inherit card settings</label>
+                        </div>
+                      </div>
+	                      <div class="field-row">
+	                        <label for="entity-${index}-needle-mode">Needle mode</label>
+	                        <select id="entity-${index}-needle-mode" data-kind="entity-needle-mode" data-index="${index}" value="${escapeAttribute(entityNeedle.mode)}">
+                          <option value="enabled"${entityNeedle.mode === "enabled" ? " selected" : ""}>enabled</option>
+                          <option value="disabled"${entityNeedle.mode === "disabled" ? " selected" : ""}>disabled</option>
+                        </select>
+                      </div>
+	                      <div class="field-row">
+	                        <label for="entity-${index}-needle-color">Needle color</label>
+	                        ${renderColorInput({
+              id: `entity-${index}-needle-color`,
+              kind: "entity-needle-color",
+              index,
+              value: entityNeedle.color,
+              fallbackHex: "#ffffff",
+              placeholder: "#ffffff"
+            })}
+	                      </div>
+	                          `;
+          }
+          const cardNeedle = this._getScopedNeedleConfig(scope);
+          return `          <div class="inline-row editor-grid">
+            <div class="field-row">
+              <label for="bar-needle-mode">Needle enabled</label>
+              <select id="bar-needle-mode" data-field="bar-needle-mode" value="${escapeAttribute(cardNeedle.mode)}">
+                <option value="disabled"${cardNeedle.mode === "disabled" ? " selected" : ""}>disabled</option>
+                <option value="enabled"${cardNeedle.mode === "enabled" ? " selected" : ""}>enabled</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="bar-needle-color">Needle color</label>
+              ${renderColorInput({
+            id: "bar-needle-color",
+            field: "bar-needle-color",
+            value: cardNeedle.color,
+            fallbackHex: "#ffffff",
+            placeholder: "#ffffff"
+          })}
+            </div>
+          </div>`;
+        }
+      };
+    }
+  });
+
+  // src/editor/sections/baseline.js
+  var BaselineSection;
+  var init_baseline = __esm({
+    "src/editor/sections/baseline.js"() {
+      init_editor_config();
+      init_editor_controls();
+      BaselineSection = class {
+        constructor(context) {
+          this.context = context;
+          this.reset();
+        }
+        reset() {
+          this._baselineColorDrafts = /* @__PURE__ */ new Map();
+        }
+        _getBaselineColorDraftKey(scope = { type: "card" }, direction = "above") {
+          const scopeKey = (scope == null ? void 0 : scope.type) === "entity" ? `entity:${scope.index}` : "card";
+          return `${scopeKey}:${direction}`;
+        }
+        _setBaselineColorDraft(scope, direction, rawValue) {
+          const normalizedValue = normalizeTextValue(rawValue).trim();
+          const key = this._getBaselineColorDraftKey(scope, direction);
+          if (normalizedValue) {
+            this._baselineColorDrafts.set(key, normalizedValue);
+          } else {
+            this._baselineColorDrafts.delete(key);
+          }
+        }
+        _getBaselineColorDraft(scope, direction) {
+          var _a;
+          return (_a = this._baselineColorDrafts.get(this._getBaselineColorDraftKey(scope, direction))) != null ? _a : "";
+        }
+        _isBaselineDirectionalColorEnabled(scope, direction) {
+          return !!normalizeTextValue(this._getBaselineDirectionalColorValue(scope, direction)).trim();
+        }
+        _setBaselineDirectionalColorEnabled(scope, direction, value) {
+          const currentValue = normalizeTextValue(this._getBaselineDirectionalColorValue(scope, direction)).trim();
+          if (!value) {
+            if (currentValue) {
+              this._setBaselineColorDraft(scope, direction, currentValue);
+            }
+            return this._removeColor(scope, ["baseline", direction, "color"], {
+              prunePaths: [["baseline", direction], ["baseline"]]
+            });
+          }
+          const nextValue = this._getBaselineColorDraft(scope, direction) || normalizeTextValue(this._getEffectiveBaselineDirectionalColorValue(scope, direction)).trim() || currentValue || "#000000";
+          return this._setColor(scope, ["baseline", direction, "color"], nextValue, {
+            prunePaths: [["baseline", direction], ["baseline"]]
+          });
+        }
+        _getBaselineResolvableValue(scope) {
+          return this.context.source(scope, "baseline");
+        }
+        _getEffectiveBaselineResolvableValue(scope) {
+          return this.context.source(scope, "baseline", true);
+        }
+        _getBaselineMode(scope) {
+          const enabled = this.context.read(scope, ["baseline", "enabled"]);
+          if ((scope == null ? void 0 : scope.type) === "entity") {
+            if (enabled === false) return "disabled";
+            if (enabled === true || this._hasBaselineOverride(scope)) return "enabled";
+            return "inherit";
+          }
+          if (enabled === true) return "enabled";
+          if (enabled === false) return "disabled";
+          return "auto";
+        }
+        _getEffectiveBaselineMode(scope) {
+          const mode = this._getBaselineMode(scope);
+          if ((scope == null ? void 0 : scope.type) !== "entity" || mode !== "inherit") {
+            return mode;
+          }
+          const cardMode = this._getBaselineMode({ type: "card" });
+          if (cardMode === "disabled") return "disabled";
+          if (cardMode === "enabled") return "enabled";
+          const cardBaseline = this._getBaselineResolvableValue({ type: "card" });
+          return hasResolvableOverride(cardBaseline) || !!this._getBaselineDirectionalColorValue({ type: "card" }, "above") || !!this._getBaselineDirectionalColorValue({ type: "card" }, "below") ? "enabled" : "disabled";
+        }
+        _setBaselineMode(scope, mode) {
+          if ((scope == null ? void 0 : scope.type) === "entity" && mode === "inherit") {
+            return this._clearBaselineOverride(scope);
+          }
+          return this.context.mutate(scope, (target) => {
+            let nextTarget = cloneDeep(target);
+            if (mode === "auto") {
+              nextTarget = deletePathValue(nextTarget, ["baseline", "enabled"]);
+            } else {
+              nextTarget = setPathValue(nextTarget, ["baseline", "enabled"], mode === "enabled");
+            }
+            nextTarget = pruneEmptyObjectsInTarget(nextTarget, ["baseline"]);
+            return nextTarget;
+          }, { baselineEdit: { path: ["enabled"], value: mode === "auto" ? void 0 : mode === "enabled" } });
+        }
+        _setBaselineDirectionalColor(scope, direction, rawValue) {
+          const normalizedValue = normalizeTextValue(rawValue).trim();
+          this._setBaselineColorDraft(scope, direction, normalizedValue);
+          const path = ["baseline", direction, "color"];
+          if (!normalizedValue) {
+            return this._removeColor(scope, path, {
+              prunePaths: [["baseline", direction], ["baseline"]]
+            });
+          }
+          if (!this._isBaselineDirectionalColorEnabled(scope, direction)) {
+            return this._setBaselineDirectionalColorEnabled(scope, direction, true);
+          }
+          return this.context.mutate(scope, (target) => {
+            return setPathValue(target, path, normalizedValue);
+          }, { baselineEdit: { path: [direction, "color"], value: normalizedValue } });
+        }
+        _getBaselineDirectionalColorValue(scope, direction) {
+          var _a;
+          return (_a = this.context.read(scope, ["baseline", direction, "color"])) != null ? _a : "";
+        }
+        _getEffectiveBaselineDirectionalColorValue(scope, direction) {
+          var _a;
+          const value = this.context.read(scope, ["baseline", direction, "color"]);
+          if (value !== void 0 && value !== null && value !== "") return value;
+          return (scope == null ? void 0 : scope.type) === "entity" ? (_a = this.context.read({ type: "card" }, ["baseline", direction, "color"])) != null ? _a : "" : "";
+        }
+        _clearBaselineOverride(scope) {
+          return this.context.mutate(scope, (target) => {
+            let nextTarget = cloneDeep(target);
+            const rawBaseline = getPathValue(nextTarget, ["baseline"]);
+            if (isObject(rawBaseline)) {
+              nextTarget = deletePathValue(nextTarget, ["baseline", "enabled"]);
+              nextTarget = deletePathValue(nextTarget, ["baseline", "at"]);
+              nextTarget = deletePathValue(nextTarget, ["baseline", "above", "color"]);
+              nextTarget = deletePathValue(nextTarget, ["baseline", "below", "color"]);
+            } else {
+              nextTarget = deletePathValue(nextTarget, ["baseline"]);
+            }
+            nextTarget = pruneEmptyObjectsInTarget(nextTarget, ["baseline", "above"]);
+            nextTarget = pruneEmptyObjectsInTarget(nextTarget, ["baseline", "below"]);
+            nextTarget = pruneEmptyObjectsInTarget(nextTarget, ["baseline"]);
+            return nextTarget;
+          }, { rerender: true });
+        }
+        _removeBaseline(scope) {
+          return this.context.mutate(scope, (target) => deletePathValue(target, ["baseline"]), { rerender: true });
+        }
+        _hasBaselineOverride(scope) {
+          const baselineValue = this.context.read(scope, ["baseline"]);
+          if (isObject(baselineValue) && Object.keys(baselineValue).length) {
+            return true;
+          }
+          return !isObject(baselineValue) && baselineValue !== void 0 && baselineValue !== null && baselineValue !== "";
+        }
+        _getBaselineOverrideSummary(scope) {
+          const mode = this._getBaselineMode(scope);
+          if (mode === "disabled") return "Disabled";
+          const parts = [];
+          const baseline = this._getBaselineResolvableValue(scope);
+          if (baseline.fixed !== "" && baseline.fixed !== void 0) parts.push(`Baseline ${baseline.fixed}`);
+          if (baseline.entity) parts.push("Entity");
+          if (this._getBaselineDirectionalColorValue(scope, "above")) parts.push("Above");
+          if (this._getBaselineDirectionalColorValue(scope, "below")) parts.push("Below");
+          return parts.length ? parts.join(" \u2022 ") : "Inherited";
+        }
+        _getCardBaselineSummary() {
+          const mode = this._getBaselineMode({ type: "card" });
+          if (mode === "disabled") return "Disabled";
+          const baseline = this._getBaselineResolvableValue({ type: "card" });
+          const origin = baseline.entity || (baseline.fixed !== "" && baseline.fixed !== void 0 ? baseline.fixed : "");
+          const modeLabel = mode === "enabled" ? "Enabled" : "Auto";
+          return origin !== "" ? `${modeLabel} \xB7 ${origin}` : modeLabel;
+        }
+        _setBaselineResolvablePart(scope, part, value) {
+          return this.context.setSource(scope, "baseline", part, value);
+        }
+        _setColor(scope, path, value, options = {}) {
+          return this.context.mutate(scope, (target) => {
+            var _a;
+            let next = value === void 0 ? deletePathValue(target, path) : setPathValue(target, path, value);
+            for (const prunePath of (_a = options.prunePaths) != null ? _a : []) next = pruneEmptyObjectsInTarget(next, prunePath);
+            return next;
+          }, { ...options, baselineEdit: { path: path.slice(1), value } });
+        }
+        _removeColor(scope, path, options) {
+          return this._setColor(scope, path, void 0, options);
+        }
+        handleField({ field, kind, index, value }) {
+          const scope = (kind == null ? void 0 : kind.startsWith("entity-")) ? { type: "entity", index: Number(index) } : { type: "card" };
+          const control = field != null ? field : kind == null ? void 0 : kind.replace(/^entity-/, "");
+          if (kind === "entity-baseline-inherit") {
+            if (value) this._clearBaselineOverride(scope);
+            return true;
+          }
+          if (control === "baseline-mode") {
+            this._setBaselineMode(scope, value);
+            return true;
+          }
+          if (control === "baseline-value") {
+            this._setBaselineResolvablePart(scope, "fixed", value);
+            return true;
+          }
+          if (control === "baseline-entity-source") {
+            this._setBaselineResolvablePart(scope, "entity", value);
+            return true;
+          }
+          for (const direction of ["above", "below"]) {
+            if (control === `baseline-${direction}-color`) {
+              this._setBaselineDirectionalColor(scope, direction, value);
+              return true;
+            }
+            if (control === `baseline-${direction}-color-enabled`) {
+              this._setBaselineDirectionalColorEnabled(scope, direction, value);
+              return true;
+            }
+          }
+          return false;
+        }
+        handleClick(target) {
+          var _a;
+          if (((_a = target == null ? void 0 : target.dataset) == null ? void 0 : _a.action) !== "remove-baseline") return false;
+          this._removeBaseline(target.dataset.scopeType === "entity" ? { type: "entity", index: Number(target.dataset.index) } : { type: "card" });
+          return true;
+        }
+        render(scope = { type: "card" }, renderGroup = ({ content }) => content) {
+          if ((scope == null ? void 0 : scope.type) === "entity") {
+            const index = scope.index;
+            const baselineInherited = !this._hasBaselineOverride(scope);
+            const baselineParts = this._getEffectiveBaselineResolvableValue(scope);
+            const baselineMode2 = this._getEffectiveBaselineMode(scope);
+            return `
+	                      <div class="field-row">
+	                        <div class="toggle">
+	                          <input id="entity-${index}-baseline-inherit" type="checkbox" data-kind="entity-baseline-inherit" data-index="${index}"${baselineInherited ? " checked" : ""}>
+	                          <label for="entity-${index}-baseline-inherit">Inherit card settings</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <button type="button" data-action="remove-baseline" data-scope-type="entity" data-index="${index}" aria-label="Remove Baseline" title="Remove Baseline">\u{1F5D1}</button>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-baseline-mode">Baseline mode</label>
+                        <select id="entity-${index}-baseline-mode" data-kind="entity-baseline-mode" data-index="${index}" value="${escapeAttribute(baselineMode2)}">
+                          <option value="enabled"${baselineMode2 === "enabled" ? " selected" : ""}>enabled</option>
+                          <option value="disabled"${baselineMode2 === "disabled" ? " selected" : ""}>disabled</option>
+                        </select>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-baseline-value">Baseline fallback</label>
+                        <input id="entity-${index}-baseline-value" type="number" step="any" data-kind="entity-baseline-value" data-index="${index}" value="${escapeAttribute(baselineParts.fixed)}" placeholder="inherit card default">
+                      </div>
+                      <div class="field-row">
+                        <label>Baseline entity</label>
+                        ${renderEntitySourceInput("entity-baseline-entity-source", index, baselineParts.entity, "inherit card default")}
+                      </div>
+                      <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-baseline-above-color-enabled" type="checkbox" data-kind="entity-baseline-above-color-enabled" data-index="${index}"${this._isBaselineDirectionalColorEnabled(scope, "above") ? " checked" : ""}>
+                          <label for="entity-${index}-baseline-above-color-enabled">Above-baseline color enabled</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-baseline-above-color">Above-baseline color</label>
+                        ${renderColorInput({
+              id: `entity-${index}-baseline-above-color`,
+              kind: "entity-baseline-above-color",
+              index,
+              value: this._getEffectiveBaselineDirectionalColorValue(scope, "above"),
+              fallbackHex: "#000000",
+              placeholder: "inherit card default"
+            })}
+                      </div>
+	                      <div class="field-row">
+                          <div class="toggle">
+                            <input id="entity-${index}-baseline-below-color-enabled" type="checkbox" data-kind="entity-baseline-below-color-enabled" data-index="${index}"${this._isBaselineDirectionalColorEnabled(scope, "below") ? " checked" : ""}>
+                            <label for="entity-${index}-baseline-below-color-enabled">Below-baseline color enabled</label>
+                          </div>
+                        </div>
+	                      <div class="field-row">
+	                        <label for="entity-${index}-baseline-below-color">Below-baseline color</label>
+	                        ${renderColorInput({
+              id: `entity-${index}-baseline-below-color`,
+              kind: "entity-baseline-below-color",
+              index,
+              value: this._getEffectiveBaselineDirectionalColorValue(scope, "below"),
+              fallbackHex: "#000000",
+              placeholder: "inherit card default"
+            })}
+	                      </div>
+	                          `;
+          }
+          const baseline = this._getBaselineResolvableValue(scope);
+          const baselineMode = this._getBaselineMode(scope);
+          const baselineAboveColor = this._getBaselineDirectionalColorValue(scope, "above");
+          const baselineBelowColor = this._getBaselineDirectionalColorValue(scope, "below");
+          return `
+          ${renderGroup({
+            group: "baseline",
+            title: "Baseline",
+            summary: this._getCardBaselineSummary(),
+            content: `
+          <div class="field-grid">
+            <div class="field-row">
+              <button type="button" data-action="remove-baseline" data-scope-type="card" aria-label="Remove Baseline" title="Remove Baseline">\u{1F5D1}</button>
+            </div>
+            <div class="field-row">
+              <label for="baseline-mode">Baseline mode</label>
+              <select id="baseline-mode" data-field="baseline-mode" value="${escapeAttribute(baselineMode)}">
+                <option value="auto"${baselineMode === "auto" ? " selected" : ""}>auto</option>
+                <option value="enabled"${baselineMode === "enabled" ? " selected" : ""}>enabled</option>
+                <option value="disabled"${baselineMode === "disabled" ? " selected" : ""}>disabled</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <div class="section-note">Auto shows the baseline when a baseline value is configured.</div>
+            </div>
+            <div class="field-row">
+              <label for="baseline-value">Baseline fallback</label>
+              <input id="baseline-value" type="number" step="any" data-field="baseline-value" value="${escapeAttribute(baseline.fixed)}">
+            </div>
+            <div class="field-row">
+              <label>Baseline entity</label>
+              ${renderEntitySourceInput("baseline-entity-source", "card", baseline.entity)}
+            </div>
+            <div class="field-row">
+              <div class="toggle">
+                <input id="baseline-above-color-enabled" type="checkbox" data-field="baseline-above-color-enabled"${this._isBaselineDirectionalColorEnabled({ type: "card" }, "above") ? " checked" : ""}>
+                <label for="baseline-above-color-enabled">Above-baseline color enabled</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="baseline-above-color">Above-baseline color</label>
+              ${renderColorInput({
+              id: "baseline-above-color",
+              field: "baseline-above-color",
+              value: baselineAboveColor,
+              fallbackHex: "#000000"
+            })}
+            </div>
+            <div class="field-row">
+              <div class="toggle">
+                <input id="baseline-below-color-enabled" type="checkbox" data-field="baseline-below-color-enabled"${this._isBaselineDirectionalColorEnabled({ type: "card" }, "below") ? " checked" : ""}>
+                <label for="baseline-below-color-enabled">Below-baseline color enabled</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="baseline-below-color">Below-baseline color</label>
+              ${renderColorInput({
+              id: "baseline-below-color",
+              field: "baseline-below-color",
+              value: baselineBelowColor,
+              fallbackHex: "#000000"
+            })}
+            </div>
+          </div>`
+          })}
+`;
+        }
+      };
+    }
+  });
+
   // src/editor/SensorBarCardPlusEditor.js
   var SensorBarCardPlusEditor;
   var init_SensorBarCardPlusEditor = __esm({
@@ -8598,6 +9159,8 @@ ${barMarkerStyles}
       init_bar_appearance();
       init_segments();
       init_gradient_stops();
+      init_needle();
+      init_baseline();
       SensorBarCardPlusEditor = class extends HTMLElement {
         get _gradientStopValidationMessages() {
           return this._gradientStopsSection._gradientStopValidationMessages;
@@ -8620,6 +9183,9 @@ ${barMarkerStyles}
         get _segmentDrafts() {
           return this._segmentsSection._segmentDrafts;
         }
+        get _baselineColorDrafts() {
+          return this._baselineSection._baselineColorDrafts;
+        }
         constructor() {
           super();
           this.attachShadow({ mode: "open" });
@@ -8629,6 +9195,8 @@ ${barMarkerStyles}
           this._gradientStopsSection = new GradientStopsSection(this._createSectionContext(), this._paletteUi(), {
             write: (scope, rows, options) => this._setScopedGradientStops(scope, rows, options)
           });
+          this._needleSection = new NeedleSection(this._createSectionContext());
+          this._baselineSection = new BaselineSection(this._createSectionContext());
           this._config = {};
           this._draftConfig = {};
           this._hass = null;
@@ -8644,7 +9212,7 @@ ${barMarkerStyles}
           this._expandedGenericMarkerUiIds = /* @__PURE__ */ new Set();
           this._nextGenericMarkerUiId = 0;
           this._targetAboveFillDrafts = /* @__PURE__ */ new Map();
-          this._baselineColorDrafts = /* @__PURE__ */ new Map();
+          this._baselineSection.reset();
           this._pendingFocusSelector = null;
           this._boundHandleClick = (event) => this._handleClick(event);
           this._boundHandleChange = (event) => this._handleChange(event);
@@ -8680,7 +9248,7 @@ ${barMarkerStyles}
           this._segmentsSection.reset();
           this._gradientStopsSection.reset();
           this._targetAboveFillDrafts = /* @__PURE__ */ new Map();
-          this._baselineColorDrafts = /* @__PURE__ */ new Map();
+          this._baselineSection.reset();
           this._genericMarkerUiIds.clear();
           this._expandedGenericMarkerUiIds.clear();
           if (shouldRender) {
@@ -9932,12 +10500,35 @@ ${barMarkerStyles}
             focus: (selector) => this._queuePostRenderFocus(selector)
           };
         }
+        _applySectionMutation(scope, mutation, options) {
+          var _a;
+          if (((_a = options == null ? void 0 : options.needleEdit) == null ? void 0 : _a.field) !== "mode" || options.needleEdit.value === "disabled" || (scope == null ? void 0 : scope.type) === "entity" && options.needleEdit.value === "inherit") {
+            return this._applyScopedMutation(scope, mutation, options);
+          }
+          return this._applyScopedMutation(scope, (target) => {
+            let nextTarget = mutation(target);
+            const baselineEnabled = this._getPathValue(nextTarget, ["baseline", "enabled"]);
+            const baselineParts = this._getResolvablePartsFromTarget(nextTarget != null ? nextTarget : {}, "baseline", {
+              canonicalBasePath: ["baseline", "at"],
+              legacyFixedPath: ["baseline"],
+              legacyEntityPath: ["baseline", "at", "entity"]
+            });
+            const baselineActive = baselineEnabled === true || baselineEnabled !== false && this._hasResolvableOverride(baselineParts);
+            if (baselineActive) {
+              nextTarget = this._deletePathValue(nextTarget, ["baseline"]);
+            }
+            return nextTarget;
+          }, options);
+        }
         _createSectionContext() {
           return {
             read: (scope, path) => this._getScopedValue(scope, path),
-            mutate: (scope, mutation, options) => this._applyScopedMutation(scope, mutation, options),
-            source: (scope, key, effective = false) => effective ? this._getEffectiveResolvableScopedValue(scope, key) : this._getResolvableScopedValue(scope, key),
-            setSource: (scope, key, part, value) => this._setCanonicalResolvablePart(scope, key, part, value)
+            mutate: (scope, mutation, options) => this._applySectionMutation(scope, mutation, options),
+            source: (scope, key, effective = false) => {
+              const options = key === "baseline" ? { canonicalBasePath: ["baseline", "at"], legacyFixedPath: ["baseline"], legacyEntityPath: ["baseline", "at", "entity"] } : {};
+              return effective ? this._getEffectiveResolvableScopedValue(scope, key, options) : this._getResolvableScopedValue(scope, key, options);
+            },
+            setSource: (scope, key, part, value) => key === "baseline" ? this._persistBaselineSourcePart(scope, part, value) : this._setCanonicalResolvablePart(scope, key, part, value)
           };
         }
         _renderScaleSection(scope) {
@@ -10265,8 +10856,8 @@ ${barMarkerStyles}
         _clearSegmentsOverride(...args) {
           return this._segmentsSection._clearSegmentsOverride(...args);
         }
-        _setNeedle(value) {
-          return this._setScopedNeedleMode({ type: "card" }, value ? "enabled" : "disabled");
+        _setNeedle(...args) {
+          return this._needleSection._setNeedle(...args);
         }
         _getScopedPeakConfig(scope) {
           var _a, _b;
@@ -10885,114 +11476,23 @@ ${barMarkerStyles}
         _hasEntityBarAppearanceOverride(scope) {
           return hasBarAppearanceOverride(this._createSectionContext(), scope);
         }
-        _getScopedNeedleConfig(scope) {
-          var _a;
-          const rawNeedle = this._getScopedValue(scope, ["bar", "needle"]);
-          const defaultColor = "#ffffff";
-          let mode = (scope == null ? void 0 : scope.type) === "entity" ? "inherit" : "disabled";
-          let color = "";
-          if (typeof rawNeedle === "boolean") {
-            mode = rawNeedle ? "enabled" : "disabled";
-          } else if (this._isObject(rawNeedle)) {
-            if (rawNeedle.show === true) {
-              mode = "enabled";
-            } else if (rawNeedle.show === false) {
-              mode = "disabled";
-            } else if ((scope == null ? void 0 : scope.type) !== "entity") {
-              mode = "disabled";
-            }
-            color = (_a = rawNeedle.color) != null ? _a : "";
-          }
-          if (color === defaultColor) {
-            color = "";
-          }
-          return { mode, color };
+        _getScopedNeedleConfig(...args) {
+          return this._needleSection._getScopedNeedleConfig(...args);
         }
-        _hasNeedleOverride(scope) {
-          return this._getScopedValue(scope, ["bar", "needle"]) !== void 0;
+        _hasNeedleOverride(...args) {
+          return this._needleSection._hasNeedleOverride(...args);
         }
-        _getEffectiveScopedNeedleConfig(scope) {
-          const localNeedle = this._getScopedNeedleConfig(scope);
-          if ((scope == null ? void 0 : scope.type) !== "entity") {
-            return localNeedle;
-          }
-          if (!this._hasNeedleOverride(scope)) {
-            return this._getScopedNeedleConfig({ type: "card" });
-          }
-          const inheritedNeedle = this._getScopedNeedleConfig({ type: "card" });
-          return {
-            mode: localNeedle.mode === "inherit" ? inheritedNeedle.mode : localNeedle.mode,
-            color: localNeedle.color || inheritedNeedle.color
-          };
+        _getEffectiveScopedNeedleConfig(...args) {
+          return this._needleSection._getEffectiveScopedNeedleConfig(...args);
         }
-        _setScopedNeedleMode(scope, mode) {
-          return this._applyScopedMutation(scope, (target) => {
-            let nextTarget = this._cloneDeep(target);
-            const existingNeedle = this._getPathValue(nextTarget, ["bar", "needle"]);
-            const existingColor = this._isObject(existingNeedle) ? existingNeedle.color : void 0;
-            nextTarget = this._deletePathValue(nextTarget, ["bar", "needle"]);
-            if ((scope == null ? void 0 : scope.type) === "entity" && mode === "inherit") {
-              nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
-              return nextTarget;
-            }
-            if (mode === "disabled") {
-              if ((scope == null ? void 0 : scope.type) === "entity") {
-                nextTarget = this._setPathValue(nextTarget, ["bar", "needle"], { show: false });
-              }
-              nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
-              return nextTarget;
-            }
-            const nextNeedle = { show: true };
-            if (existingColor && existingColor !== "#ffffff") {
-              nextNeedle.color = existingColor;
-            }
-            nextTarget = this._setPathValue(nextTarget, ["bar", "needle"], nextNeedle);
-            const baselineEnabled = this._getPathValue(nextTarget, ["baseline", "enabled"]);
-            const baselineParts = this._getResolvablePartsFromTarget(nextTarget != null ? nextTarget : {}, "baseline", {
-              canonicalBasePath: ["baseline", "at"],
-              legacyFixedPath: ["baseline"],
-              legacyEntityPath: ["baseline", "at", "entity"]
-            });
-            const baselineActive = baselineEnabled === true || baselineEnabled !== false && this._hasResolvableOverride(baselineParts);
-            if (baselineActive) {
-              nextTarget = this._deletePathValue(nextTarget, ["baseline"]);
-            }
-            nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
-            return nextTarget;
-          });
+        _setScopedNeedleMode(...args) {
+          return this._needleSection._setScopedNeedleMode(...args);
         }
-        _setScopedNeedleColor(scope, rawValue) {
-          const normalizedValue = this._normalizeTextValue(rawValue).trim();
-          return this._applyScopedMutation(scope, (target) => {
-            let nextTarget = this._cloneDeep(target);
-            const current = this._getScopedNeedleConfig(scope);
-            const hasCustomColor = normalizedValue && this._normalizeColorComparisonValue(normalizedValue) !== this._normalizeColorComparisonValue("#ffffff");
-            nextTarget = this._deletePathValue(nextTarget, ["bar", "needle", "color"]);
-            if ((scope == null ? void 0 : scope.type) !== "entity" && current.mode === "disabled") {
-              nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["bar", "needle"]);
-              nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
-              return nextTarget;
-            }
-            const showValue = current.mode === "enabled" ? true : current.mode === "disabled" ? false : void 0;
-            const nextNeedle = {};
-            if (showValue !== void 0) {
-              nextNeedle.show = showValue;
-            }
-            if (hasCustomColor) {
-              nextNeedle.color = normalizedValue;
-            }
-            if (Object.keys(nextNeedle).length) {
-              nextTarget = this._setPathValue(nextTarget, ["bar", "needle"], nextNeedle);
-            } else {
-              nextTarget = this._deletePathValue(nextTarget, ["bar", "needle"]);
-            }
-            nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["bar", "needle"]);
-            nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
-            return nextTarget;
-          });
+        _setScopedNeedleColor(...args) {
+          return this._needleSection._setScopedNeedleColor(...args);
         }
-        _getNeedleValue() {
-          return this._getScopedNeedleConfig({ type: "card" }).mode === "enabled";
+        _getNeedleValue(...args) {
+          return this._needleSection._getNeedleValue(...args);
         }
         _getPeakShowValue() {
           return this._getScopedPeakConfig({ type: "card" }).mode === "enabled";
@@ -11230,22 +11730,14 @@ ${barMarkerStyles}
           var _a;
           return (_a = this._targetAboveFillDrafts.get(this._getTargetAboveFillDraftKey(scope))) != null ? _a : "";
         }
-        _getBaselineColorDraftKey(scope = { type: "card" }, direction = "above") {
-          const scopeKey = (scope == null ? void 0 : scope.type) === "entity" ? `entity:${scope.index}` : "card";
-          return `${scopeKey}:${direction}`;
+        _getBaselineColorDraftKey(...args) {
+          return this._baselineSection._getBaselineColorDraftKey(...args);
         }
-        _setBaselineColorDraft(scope, direction, rawValue) {
-          const normalizedValue = this._normalizeTextValue(rawValue).trim();
-          const key = this._getBaselineColorDraftKey(scope, direction);
-          if (normalizedValue) {
-            this._baselineColorDrafts.set(key, normalizedValue);
-          } else {
-            this._baselineColorDrafts.delete(key);
-          }
+        _setBaselineColorDraft(...args) {
+          return this._baselineSection._setBaselineColorDraft(...args);
         }
-        _getBaselineColorDraft(scope, direction) {
-          var _a;
-          return (_a = this._baselineColorDrafts.get(this._getBaselineColorDraftKey(scope, direction))) != null ? _a : "";
+        _getBaselineColorDraft(...args) {
+          return this._baselineSection._getBaselineColorDraft(...args);
         }
         _getEffectiveTargetAboveFillColorValue(scope) {
           return this._getEffectiveScopedDisplayValue(scope, ["target", "when_exceeded", "fill_color"], [["above_target_color"]]);
@@ -11287,23 +11779,11 @@ ${barMarkerStyles}
             prunePaths: [["target", "when_exceeded"], ["target"]]
           });
         }
-        _isBaselineDirectionalColorEnabled(scope, direction) {
-          return !!this._normalizeTextValue(this._getBaselineDirectionalColorValue(scope, direction)).trim();
+        _isBaselineDirectionalColorEnabled(...args) {
+          return this._baselineSection._isBaselineDirectionalColorEnabled(...args);
         }
-        _setBaselineDirectionalColorEnabled(scope, direction, value) {
-          const currentValue = this._normalizeTextValue(this._getBaselineDirectionalColorValue(scope, direction)).trim();
-          if (!value) {
-            if (currentValue) {
-              this._setBaselineColorDraft(scope, direction, currentValue);
-            }
-            return this._removeCanonicalScopedValue(scope, ["baseline", direction, "color"], {
-              prunePaths: [["baseline", direction], ["baseline"]]
-            });
-          }
-          const nextValue = this._getBaselineColorDraft(scope, direction) || this._normalizeTextValue(this._getEffectiveBaselineDirectionalColorValue(scope, direction)).trim() || currentValue || "#000000";
-          return this._setCanonicalScopedTextOverride(scope, ["baseline", direction, "color"], nextValue, {
-            prunePaths: [["baseline", direction], ["baseline"]]
-          });
+        _setBaselineDirectionalColorEnabled(...args) {
+          return this._baselineSection._setBaselineDirectionalColorEnabled(...args);
         }
         _hasTargetOverride(scope) {
           const targetValue = this._getScopedValue(scope, ["target"]);
@@ -11318,58 +11798,22 @@ ${barMarkerStyles}
             return value !== void 0 && value !== null && value !== "" && value !== false;
           }) || this._getTargetLabelDecimalValue(scope) !== "";
         }
-        _getBaselineResolvableValue(scope) {
-          return this._getResolvableScopedValue(scope, "baseline", {
-            canonicalBasePath: ["baseline", "at"],
-            legacyFixedPath: ["baseline"],
-            legacyEntityPath: ["baseline", "at", "entity"]
-          });
+        _getBaselineResolvableValue(...args) {
+          return this._baselineSection._getBaselineResolvableValue(...args);
         }
-        _getEffectiveBaselineResolvableValue(scope) {
-          return this._getEffectiveResolvableScopedValue(scope, "baseline", {
-            canonicalBasePath: ["baseline", "at"],
-            legacyFixedPath: ["baseline"],
-            legacyEntityPath: ["baseline", "at", "entity"]
-          });
+        _getEffectiveBaselineResolvableValue(...args) {
+          return this._baselineSection._getEffectiveBaselineResolvableValue(...args);
         }
-        _getBaselineMode(scope) {
-          const enabled = this._getScopedValue(scope, ["baseline", "enabled"]);
-          if ((scope == null ? void 0 : scope.type) === "entity") {
-            if (enabled === false) return "disabled";
-            if (enabled === true || this._hasBaselineOverride(scope)) return "enabled";
-            return "inherit";
-          }
-          if (enabled === true) return "enabled";
-          if (enabled === false) return "disabled";
-          return "auto";
+        _getBaselineMode(...args) {
+          return this._baselineSection._getBaselineMode(...args);
         }
-        _getEffectiveBaselineMode(scope) {
-          const mode = this._getBaselineMode(scope);
-          if ((scope == null ? void 0 : scope.type) !== "entity" || mode !== "inherit") {
-            return mode;
-          }
-          const cardMode = this._getBaselineMode({ type: "card" });
-          if (cardMode === "disabled") return "disabled";
-          if (cardMode === "enabled") return "enabled";
-          const cardBaseline = this._getBaselineResolvableValue({ type: "card" });
-          return this._hasResolvableOverride(cardBaseline) || !!this._getBaselineDirectionalColorValue({ type: "card" }, "above") || !!this._getBaselineDirectionalColorValue({ type: "card" }, "below") ? "enabled" : "disabled";
+        _getEffectiveBaselineMode(...args) {
+          return this._baselineSection._getEffectiveBaselineMode(...args);
         }
-        _setBaselineMode(scope, mode) {
-          if ((scope == null ? void 0 : scope.type) === "entity" && mode === "inherit") {
-            return this._clearBaselineOverride(scope);
-          }
-          return this._applyScopedMutation(scope, (target) => {
-            let nextTarget = this._cloneDeep(target);
-            if (mode === "auto") {
-              nextTarget = this._deletePathValue(nextTarget, ["baseline", "enabled"]);
-            } else {
-              nextTarget = this._setPathValue(nextTarget, ["baseline", "enabled"], mode === "enabled");
-            }
-            nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["baseline"]);
-            return nextTarget;
-          });
+        _setBaselineMode(...args) {
+          return this._baselineSection._setBaselineMode(...args);
         }
-        _setBaselineResolvablePart(scope, part, rawValue) {
+        _persistBaselineSourcePart(scope, part, rawValue) {
           const normalizedValue = part === "fixed" ? this._normalizeNumberValue(rawValue) : this._normalizeTextValue(rawValue).trim();
           return this._applyScopedMutation(scope, (target) => {
             const currentParts = this._getResolvablePartsFromTarget(target != null ? target : {}, "baseline", {
@@ -11404,63 +11848,29 @@ ${barMarkerStyles}
             return nextTarget;
           });
         }
-        _removeScopedNeedle(scope) {
-          return this._applyScopedMutation(scope, (target) => {
-            let nextTarget = this._deletePathValue(target, ["bar", "needle"]);
-            nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
-            return nextTarget;
-          });
+        _setBaselineResolvablePart(...args) {
+          return this._baselineSection._setBaselineResolvablePart(...args);
         }
-        _setBaselineDirectionalColor(scope, direction, rawValue) {
-          const normalizedValue = this._normalizeTextValue(rawValue).trim();
-          this._setBaselineColorDraft(scope, direction, normalizedValue);
-          const path = ["baseline", direction, "color"];
-          if (!normalizedValue) {
-            return this._removeCanonicalScopedValue(scope, path, {
-              prunePaths: [["baseline", direction], ["baseline"]]
-            });
-          }
-          if (!this._isBaselineDirectionalColorEnabled(scope, direction)) {
-            return this._setBaselineDirectionalColorEnabled(scope, direction, true);
-          }
-          return this._applyScopedMutation(scope, (target) => {
-            return this._setPathValue(target, path, normalizedValue);
-          });
+        _removeScopedNeedle(...args) {
+          return this._needleSection._removeScopedNeedle(...args);
         }
-        _getBaselineDirectionalColorValue(scope, direction) {
-          var _a;
-          return (_a = this._getScopedValue(scope, ["baseline", direction, "color"])) != null ? _a : "";
+        _setBaselineDirectionalColor(...args) {
+          return this._baselineSection._setBaselineDirectionalColor(...args);
         }
-        _getEffectiveBaselineDirectionalColorValue(scope, direction) {
-          return this._getEffectiveScopedDisplayValue(scope, ["baseline", direction, "color"]);
+        _getBaselineDirectionalColorValue(...args) {
+          return this._baselineSection._getBaselineDirectionalColorValue(...args);
         }
-        _clearBaselineOverride(scope) {
-          return this._applyScopedMutation(scope, (target) => {
-            let nextTarget = this._cloneDeep(target);
-            const rawBaseline = this._getPathValue(nextTarget, ["baseline"]);
-            if (this._isObject(rawBaseline)) {
-              nextTarget = this._deletePathValue(nextTarget, ["baseline", "enabled"]);
-              nextTarget = this._deletePathValue(nextTarget, ["baseline", "at"]);
-              nextTarget = this._deletePathValue(nextTarget, ["baseline", "above", "color"]);
-              nextTarget = this._deletePathValue(nextTarget, ["baseline", "below", "color"]);
-            } else {
-              nextTarget = this._deletePathValue(nextTarget, ["baseline"]);
-            }
-            nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["baseline", "above"]);
-            nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["baseline", "below"]);
-            nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["baseline"]);
-            return nextTarget;
-          }, { rerender: true });
+        _getEffectiveBaselineDirectionalColorValue(...args) {
+          return this._baselineSection._getEffectiveBaselineDirectionalColorValue(...args);
         }
-        _removeBaseline(scope) {
-          return this._removeScopedValue(scope, ["baseline"], { rerender: true });
+        _clearBaselineOverride(...args) {
+          return this._baselineSection._clearBaselineOverride(...args);
         }
-        _hasBaselineOverride(scope) {
-          const baselineValue = this._getScopedValue(scope, ["baseline"]);
-          if (this._isObject(baselineValue) && Object.keys(baselineValue).length) {
-            return true;
-          }
-          return !this._isObject(baselineValue) && baselineValue !== void 0 && baselineValue !== null && baselineValue !== "";
+        _removeBaseline(...args) {
+          return this._baselineSection._removeBaseline(...args);
+        }
+        _hasBaselineOverride(...args) {
+          return this._baselineSection._hasBaselineOverride(...args);
         }
         _isEntityOverrideExpanded(index) {
           return this._expandedEntityOverrides.has(index);
@@ -11523,11 +11933,11 @@ ${barMarkerStyles}
           }
           this._render();
         }
-        _hasExplicitOverrideValue(value) {
-          return value !== "" && value !== void 0 && value !== null;
+        _hasExplicitOverrideValue(...args) {
+          return hasExplicitOverrideValue(...args);
         }
-        _hasResolvableOverride(parts) {
-          return this._hasExplicitOverrideValue(parts == null ? void 0 : parts.fixed) || this._hasExplicitOverrideValue(parts == null ? void 0 : parts.entity);
+        _hasResolvableOverride(...args) {
+          return hasResolvableOverride(...args);
         }
         _getScaleOverrideSummary(scope) {
           return getScaleOverrideSummary(this._createSectionContext(), scope);
@@ -11559,24 +11969,11 @@ ${barMarkerStyles}
           if (this._getTargetAboveFillColorValue(scope)) parts.push("Above");
           return parts.length ? parts.join(" \u2022 ") : "Inherited";
         }
-        _getBaselineOverrideSummary(scope) {
-          const mode = this._getBaselineMode(scope);
-          if (mode === "disabled") return "Disabled";
-          const parts = [];
-          const baseline = this._getBaselineResolvableValue(scope);
-          if (baseline.fixed !== "" && baseline.fixed !== void 0) parts.push(`Baseline ${baseline.fixed}`);
-          if (baseline.entity) parts.push("Entity");
-          if (this._getBaselineDirectionalColorValue(scope, "above")) parts.push("Above");
-          if (this._getBaselineDirectionalColorValue(scope, "below")) parts.push("Below");
-          return parts.length ? parts.join(" \u2022 ") : "Inherited";
+        _getBaselineOverrideSummary(...args) {
+          return this._baselineSection._getBaselineOverrideSummary(...args);
         }
-        _getCardBaselineSummary() {
-          const mode = this._getBaselineMode({ type: "card" });
-          if (mode === "disabled") return "Disabled";
-          const baseline = this._getBaselineResolvableValue({ type: "card" });
-          const origin = baseline.entity || (baseline.fixed !== "" && baseline.fixed !== void 0 ? baseline.fixed : "");
-          const modeLabel = mode === "enabled" ? "Enabled" : "Auto";
-          return origin !== "" ? `${modeLabel} \xB7 ${origin}` : modeLabel;
+        _getCardBaselineSummary(...args) {
+          return this._baselineSection._getCardBaselineSummary(...args);
         }
         _getBarAppearanceSummary(scope) {
           return getBarAppearanceSummary(this._createSectionContext(), scope);
@@ -11614,13 +12011,8 @@ ${barMarkerStyles}
         _renderGradientPreview(...args) {
           return this._gradientStopsSection._renderGradientPreview(...args);
         }
-        _getNeedleSummary(scope) {
-          if ((scope == null ? void 0 : scope.type) === "entity" && !this._hasNeedleOverride(scope)) return "Inherited";
-          const needle = this._getScopedNeedleConfig(scope);
-          if (needle.mode === "disabled") return needle.color ? "Disabled \u2022 Custom color" : "Disabled";
-          if (needle.mode === "enabled") return needle.color ? "Enabled \u2022 Custom color" : "Enabled";
-          if (needle.color) return "Custom color";
-          return "Inherited";
+        _getNeedleSummary(...args) {
+          return this._needleSection._getNeedleSummary(...args);
         }
         _getFormattingSummary(scope) {
           return getFormattingSummary(this._createSectionContext(), scope);
@@ -12119,11 +12511,6 @@ ${barMarkerStyles}
             const layoutHeroValueSize = this._getScopedLayoutValue({ type: "card" }, "value_size");
             const layoutHeight = this._getScopedLayoutValue({ type: "card" }, "height");
             const layoutLabelWidth = this._getScopedLayoutValue({ type: "card" }, "width");
-            const cardNeedle = this._getScopedNeedleConfig({ type: "card" });
-            const baseline = this._getBaselineResolvableValue({ type: "card" });
-            const baselineMode = this._getBaselineMode({ type: "card" });
-            const baselineAboveColor = this._getBaselineDirectionalColorValue({ type: "card" }, "above");
-            const baselineBelowColor = this._getBaselineDirectionalColorValue({ type: "card" }, "below");
             const target = this._getTargetResolvableValue({ type: "card" });
             const targetMode = this._getTargetMode({ type: "card" });
             const targetShape = this._getEffectiveTargetShapeValue({ type: "card" });
@@ -12189,11 +12576,6 @@ ${barMarkerStyles}
                       ${(() => {
                 var _a3, _b2;
                 const scope = { type: "entity", index };
-                const needleInherited = !this._hasNeedleOverride(scope);
-                const entityNeedle = this._getEffectiveScopedNeedleConfig(scope);
-                const baselineInherited = !this._hasBaselineOverride(scope);
-                const baselineParts = this._getEffectiveBaselineResolvableValue(scope);
-                const baselineMode2 = this._getEffectiveBaselineMode(scope);
                 const targetInherited = !this._hasTargetOverride(scope);
                 const targetParts = this._getEffectiveTargetResolvableValue(scope);
                 const targetMode2 = this._getEffectiveTargetMode(scope);
@@ -12272,32 +12654,7 @@ ${barMarkerStyles}
                   group: "needle",
                   title: "Needle",
                   summary: this._getNeedleSummary(scope),
-                  content: `
-	                      <div class="field-row">
-	                        <div class="toggle">
-	                          <input id="entity-${index}-needle-inherit" type="checkbox" data-kind="entity-needle-inherit" data-index="${index}"${needleInherited ? " checked" : ""}>
-                          <label for="entity-${index}-needle-inherit">Inherit card settings</label>
-                        </div>
-                      </div>
-	                      <div class="field-row">
-	                        <label for="entity-${index}-needle-mode">Needle mode</label>
-	                        <select id="entity-${index}-needle-mode" data-kind="entity-needle-mode" data-index="${index}" value="${this._escapeAttribute(entityNeedle.mode)}">
-                          <option value="enabled"${entityNeedle.mode === "enabled" ? " selected" : ""}>enabled</option>
-                          <option value="disabled"${entityNeedle.mode === "disabled" ? " selected" : ""}>disabled</option>
-                        </select>
-                      </div>
-	                      <div class="field-row">
-	                        <label for="entity-${index}-needle-color">Needle color</label>
-	                        ${this._renderColorInput({
-                    id: `entity-${index}-needle-color`,
-                    kind: "entity-needle-color",
-                    index,
-                    value: entityNeedle.color,
-                    fallbackHex: "#ffffff",
-                    placeholder: "#ffffff"
-                  })}
-	                      </div>
-	                          `
+                  content: this._needleSection.render(scope)
                 });
                 const formattingGroup = this._renderOverrideGroup({
                   index,
@@ -12422,66 +12779,7 @@ ${barMarkerStyles}
                   group: "baseline",
                   title: "Baseline",
                   summary: this._getBaselineOverrideSummary(scope),
-                  content: `
-	                      <div class="field-row">
-	                        <div class="toggle">
-	                          <input id="entity-${index}-baseline-inherit" type="checkbox" data-kind="entity-baseline-inherit" data-index="${index}"${baselineInherited ? " checked" : ""}>
-	                          <label for="entity-${index}-baseline-inherit">Inherit card settings</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <button type="button" data-action="remove-baseline" data-scope-type="entity" data-index="${index}" aria-label="Remove Baseline" title="Remove Baseline">\u{1F5D1}</button>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-baseline-mode">Baseline mode</label>
-                        <select id="entity-${index}-baseline-mode" data-kind="entity-baseline-mode" data-index="${index}" value="${this._escapeAttribute(baselineMode2)}">
-                          <option value="enabled"${baselineMode2 === "enabled" ? " selected" : ""}>enabled</option>
-                          <option value="disabled"${baselineMode2 === "disabled" ? " selected" : ""}>disabled</option>
-                        </select>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-baseline-value">Baseline fallback</label>
-                        <input id="entity-${index}-baseline-value" type="number" step="any" data-kind="entity-baseline-value" data-index="${index}" value="${this._escapeAttribute(baselineParts.fixed)}" placeholder="inherit card default">
-                      </div>
-                      <div class="field-row">
-                        <label>Baseline entity</label>
-                        ${this._renderEntitySourceInput("entity-baseline-entity-source", index, baselineParts.entity, "inherit card default")}
-                      </div>
-                      <div class="field-row">
-                        <div class="toggle">
-                          <input id="entity-${index}-baseline-above-color-enabled" type="checkbox" data-kind="entity-baseline-above-color-enabled" data-index="${index}"${this._isBaselineDirectionalColorEnabled(scope, "above") ? " checked" : ""}>
-                          <label for="entity-${index}-baseline-above-color-enabled">Above-baseline color enabled</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-baseline-above-color">Above-baseline color</label>
-                        ${this._renderColorInput({
-                    id: `entity-${index}-baseline-above-color`,
-                    kind: "entity-baseline-above-color",
-                    index,
-                    value: this._getEffectiveBaselineDirectionalColorValue(scope, "above"),
-                    fallbackHex: "#000000",
-                    placeholder: "inherit card default"
-                  })}
-                      </div>
-	                      <div class="field-row">
-                          <div class="toggle">
-                            <input id="entity-${index}-baseline-below-color-enabled" type="checkbox" data-kind="entity-baseline-below-color-enabled" data-index="${index}"${this._isBaselineDirectionalColorEnabled(scope, "below") ? " checked" : ""}>
-                            <label for="entity-${index}-baseline-below-color-enabled">Below-baseline color enabled</label>
-                          </div>
-                        </div>
-	                      <div class="field-row">
-	                        <label for="entity-${index}-baseline-below-color">Below-baseline color</label>
-	                        ${this._renderColorInput({
-                    id: `entity-${index}-baseline-below-color`,
-                    kind: "entity-baseline-below-color",
-                    index,
-                    value: this._getEffectiveBaselineDirectionalColorValue(scope, "below"),
-                    fallbackHex: "#000000",
-                    placeholder: "inherit card default"
-                  })}
-	                      </div>
-	                          `
+                  content: this._baselineSection.render(scope)
                 });
                 const targetGroup = this._renderOverrideGroup({
                   index,
@@ -12736,86 +13034,7 @@ ${this._renderScaleSection({ type: "card" })}
           </div>
 	        </div>
 
-${renderBarAppearanceSection(this._createSectionContext(), { type: "card" }, () => `
-          ${this._renderCardGroup({
-              group: "baseline",
-              title: "Baseline",
-              summary: this._getCardBaselineSummary(),
-              content: `
-          <div class="field-grid">
-            <div class="field-row">
-              <button type="button" data-action="remove-baseline" data-scope-type="card" aria-label="Remove Baseline" title="Remove Baseline">\u{1F5D1}</button>
-            </div>
-            <div class="field-row">
-              <label for="baseline-mode">Baseline mode</label>
-              <select id="baseline-mode" data-field="baseline-mode" value="${this._escapeAttribute(baselineMode)}">
-                <option value="auto"${baselineMode === "auto" ? " selected" : ""}>auto</option>
-                <option value="enabled"${baselineMode === "enabled" ? " selected" : ""}>enabled</option>
-                <option value="disabled"${baselineMode === "disabled" ? " selected" : ""}>disabled</option>
-              </select>
-            </div>
-            <div class="field-row">
-              <div class="section-note">Auto shows the baseline when a baseline value is configured.</div>
-            </div>
-            <div class="field-row">
-              <label for="baseline-value">Baseline fallback</label>
-              <input id="baseline-value" type="number" step="any" data-field="baseline-value" value="${this._escapeAttribute(baseline.fixed)}">
-            </div>
-            <div class="field-row">
-              <label>Baseline entity</label>
-              ${this._renderEntitySourceInput("baseline-entity-source", "card", baseline.entity)}
-            </div>
-            <div class="field-row">
-              <div class="toggle">
-                <input id="baseline-above-color-enabled" type="checkbox" data-field="baseline-above-color-enabled"${this._isBaselineDirectionalColorEnabled({ type: "card" }, "above") ? " checked" : ""}>
-                <label for="baseline-above-color-enabled">Above-baseline color enabled</label>
-              </div>
-            </div>
-            <div class="field-row">
-              <label for="baseline-above-color">Above-baseline color</label>
-              ${this._renderColorInput({
-                id: "baseline-above-color",
-                field: "baseline-above-color",
-                value: baselineAboveColor,
-                fallbackHex: "#000000"
-              })}
-            </div>
-            <div class="field-row">
-              <div class="toggle">
-                <input id="baseline-below-color-enabled" type="checkbox" data-field="baseline-below-color-enabled"${this._isBaselineDirectionalColorEnabled({ type: "card" }, "below") ? " checked" : ""}>
-                <label for="baseline-below-color-enabled">Below-baseline color enabled</label>
-              </div>
-            </div>
-            <div class="field-row">
-              <label for="baseline-below-color">Below-baseline color</label>
-              ${this._renderColorInput({
-                id: "baseline-below-color",
-                field: "baseline-below-color",
-                value: baselineBelowColor,
-                fallbackHex: "#000000"
-              })}
-            </div>
-          </div>`
-            })}
-          <div class="inline-row editor-grid">
-            <div class="field-row">
-              <label for="bar-needle-mode">Needle enabled</label>
-              <select id="bar-needle-mode" data-field="bar-needle-mode" value="${this._escapeAttribute(cardNeedle.mode)}">
-                <option value="disabled"${cardNeedle.mode === "disabled" ? " selected" : ""}>disabled</option>
-                <option value="enabled"${cardNeedle.mode === "enabled" ? " selected" : ""}>enabled</option>
-              </select>
-            </div>
-            <div class="field-row">
-              <label for="bar-needle-color">Needle color</label>
-              ${this._renderColorInput({
-              id: "bar-needle-color",
-              field: "bar-needle-color",
-              value: cardNeedle.color,
-              fallbackHex: "#ffffff",
-              placeholder: "#ffffff"
-            })}
-            </div>
-          </div>`)}
+${renderBarAppearanceSection(this._createSectionContext(), { type: "card" }, () => `${this._baselineSection.render({ type: "card" }, (options) => this._renderCardGroup(options))}${this._needleSection.render({ type: "card" })}`)}
 
 ${this._segmentsSection.render({ type: "card" }, (options) => this._renderCardGroup(options))}
 
@@ -13050,11 +13269,7 @@ ${this._renderFormattingSection({ type: "card" })}
             this._removeEntityRow(Number(target.dataset.index));
             return;
           }
-          if (action === "remove-baseline") {
-            const scope = target.dataset.scopeType === "entity" ? { type: "entity", index: Number(target.dataset.index) } : { type: "card" };
-            this._removeBaseline(scope);
-            return;
-          }
+          if (this._baselineSection.handleClick(target)) return;
           if (action === "add-generic-marker") {
             const scope = this._getGenericMarkerScope(target);
             const markers = this._getGenericMarkers(scope);
@@ -13111,7 +13326,7 @@ ${this._renderFormattingSection({ type: "card" })}
           this._segmentsSection.handle(event, "keydown") || this._gradientStopsSection.handle(event, "keydown");
         }
         _handleFieldEvent(event) {
-          var _a, _b, _c, _d, _e, _f, _g;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i;
           if (this._segmentsSection.handle(event, "field") || this._gradientStopsSection.handle(event, "field")) return;
           const target = event.target;
           const rawField = (_a = target == null ? void 0 : target.dataset) == null ? void 0 : _a.field;
@@ -13145,16 +13360,7 @@ ${this._renderFormattingSection({ type: "card" })}
           if (field === "layout-label-width") return void this._setScopedLayoutLabelWidth({ type: "card" }, value);
           if (handleScaleField(this._createSectionContext(), { field, value })) return;
           if (handleBarAppearanceField(this._createSectionContext(), { field, value })) return;
-          if (field === "bar-needle-mode") return void this._setScopedNeedleMode({ type: "card" }, value);
-          if (field === "bar-needle-color") return void this._setScopedNeedleColor({ type: "card" }, value);
-          if (field === "baseline-mode") return void this._setBaselineMode({ type: "card" }, value);
-          if (field === "baseline-value") {
-            return void this._setBaselineResolvablePart({ type: "card" }, "fixed", value);
-          }
-          if (field === "baseline-above-color") return void this._setBaselineDirectionalColor({ type: "card" }, "above", value);
-          if (field === "baseline-below-color") return void this._setBaselineDirectionalColor({ type: "card" }, "below", value);
-          if (field === "baseline-above-color-enabled") return void this._setBaselineDirectionalColorEnabled({ type: "card" }, "above", value);
-          if (field === "baseline-below-color-enabled") return void this._setBaselineDirectionalColorEnabled({ type: "card" }, "below", value);
+          if (this._needleSection.handleField({ field, kind, index: (_d = target.dataset) == null ? void 0 : _d.index, value }) || this._baselineSection.handleField({ field, kind, index: (_e = target.dataset) == null ? void 0 : _e.index, value })) return;
           if (field === "target-mode") return void this._setTargetMode({ type: "card" }, value);
           if (field === "target-value") {
             return void this._setTargetResolvablePart({ type: "card" }, "fixed", value);
@@ -13191,7 +13397,7 @@ ${this._renderFormattingSection({ type: "card" })}
             if (Array.isArray(this._draftConfig.entities) || nextEntries.length > 1 || !this._draftConfig.entity) {
               this._setValueAtPath(["entities"], nextEntries);
             } else {
-              this._setValueAtPath(["entity"], (_e = (_d = nextEntities[0]) == null ? void 0 : _d.entity) != null ? _e : "");
+              this._setValueAtPath(["entity"], (_g = (_f = nextEntities[0]) == null ? void 0 : _f.entity) != null ? _g : "");
             }
             return;
           }
@@ -13202,13 +13408,10 @@ ${this._renderFormattingSection({ type: "card" })}
             return void this._setEntityField(Number(target.dataset.index), "icon", value);
           }
           if (handleScaleField(this._createSectionContext(), { kind: (kind == null ? void 0 : kind.startsWith("scale-")) ? kind : void 0, value })) return;
-          if (kind === "baseline-entity-source") {
-            return void this._setBaselineResolvablePart({ type: "card" }, "entity", value);
-          }
           if (kind === "target-entity-source") {
             return void this._setTargetResolvablePart({ type: "card" }, "entity", value);
           }
-          if (handleScaleField(this._createSectionContext(), { kind, index: (_f = target == null ? void 0 : target.dataset) == null ? void 0 : _f.index, value })) return;
+          if (handleScaleField(this._createSectionContext(), { kind, index: (_h = target == null ? void 0 : target.dataset) == null ? void 0 : _h.index, value })) return;
           if (kind === "entity-override-height") {
             return void this._setScopedLayoutHeight({ type: "entity", index: Number(target.dataset.index) }, value);
           }
@@ -13230,7 +13433,7 @@ ${this._renderFormattingSection({ type: "card" })}
           if (kind === "entity-layout-label-width") {
             return void this._setScopedLayoutLabelWidth({ type: "entity", index: Number(target.dataset.index) }, value);
           }
-          if (handleFormattingField(this._createSectionContext(), { kind, index: (_g = target == null ? void 0 : target.dataset) == null ? void 0 : _g.index, value })) return;
+          if (handleFormattingField(this._createSectionContext(), { kind, index: (_i = target == null ? void 0 : target.dataset) == null ? void 0 : _i.index, value })) return;
           if (kind === "entity-peak-inherit") {
             if (value) {
               return void this._clearPeakOverride({ type: "entity", index: Number(target.dataset.index) });
@@ -13277,46 +13480,7 @@ ${this._renderFormattingSection({ type: "card" })}
             return void this._setScopedExtremumReset({ type: "entity", index: Number(target.dataset.index) }, "floor", value);
           }
           if (kind === "entity-bar-inherit" && handleBarAppearanceField(this._createSectionContext(), { kind, index: target.dataset.index, value })) return;
-          if (kind === "entity-needle-inherit") {
-            if (value) {
-              return void this._removeScopedNeedle({ type: "entity", index: Number(target.dataset.index) });
-            }
-            return;
-          }
           if (handleBarAppearanceField(this._createSectionContext(), { kind, index: target.dataset.index, value })) return;
-          if (kind === "entity-needle-mode") {
-            return void this._setScopedNeedleMode({ type: "entity", index: Number(target.dataset.index) }, value);
-          }
-          if (kind === "entity-needle-color") {
-            return void this._setScopedNeedleColor({ type: "entity", index: Number(target.dataset.index) }, value);
-          }
-          if (kind === "entity-baseline-mode") {
-            return void this._setBaselineMode({ type: "entity", index: Number(target.dataset.index) }, value);
-          }
-          if (kind === "entity-baseline-inherit") {
-            if (value) {
-              return void this._clearBaselineOverride({ type: "entity", index: Number(target.dataset.index) });
-            }
-            return;
-          }
-          if (kind === "entity-baseline-value") {
-            return void this._setBaselineResolvablePart({ type: "entity", index: Number(target.dataset.index) }, "fixed", value);
-          }
-          if (kind === "entity-baseline-entity-source") {
-            return void this._setBaselineResolvablePart({ type: "entity", index: Number(target.dataset.index) }, "entity", value);
-          }
-          if (kind === "entity-baseline-above-color") {
-            return void this._setBaselineDirectionalColor({ type: "entity", index: Number(target.dataset.index) }, "above", value);
-          }
-          if (kind === "entity-baseline-below-color") {
-            return void this._setBaselineDirectionalColor({ type: "entity", index: Number(target.dataset.index) }, "below", value);
-          }
-          if (kind === "entity-baseline-above-color-enabled") {
-            return void this._setBaselineDirectionalColorEnabled({ type: "entity", index: Number(target.dataset.index) }, "above", value);
-          }
-          if (kind === "entity-baseline-below-color-enabled") {
-            return void this._setBaselineDirectionalColorEnabled({ type: "entity", index: Number(target.dataset.index) }, "below", value);
-          }
           if (kind === "entity-target-mode") {
             return void this._setTargetMode({ type: "entity", index: Number(target.dataset.index) }, value);
           }
@@ -13778,30 +13942,51 @@ ${this._renderFormattingSection({ type: "card" })}
     }
     return { fixed: (_d = config[key]) != null ? _d : "", entity: (_e = config[`${key}_entity`]) != null ? _e : "" };
   }
-  function patchFeatureScaleSource(config, key, part, rawValue) {
-    var _a;
-    const value = part === "fixed" ? normalizeNumberValue(rawValue) : normalizeTextValue(rawValue).trim();
-    const empty = part === "fixed" ? value === null : !value;
-    const base = ["scale", key];
-    const bound = (_a = config.scale) == null ? void 0 : _a[key];
+  function patchSource(config, base, bound, part, value, empty, allowPercent = false) {
     const patch = (target, path) => empty ? deletePathValue(target, path) : setPathValue(target, path, value);
     if (isObject(bound)) {
-      if (part === "fixed" && empty) {
-        return deletePathValue(deletePathValue(config, [...base, "fixed"]), [...base, "value"]);
-      }
+      if (part === "fixed" && empty) return deletePathValue(deletePathValue(config, [...base, "fixed"]), [...base, "value"]);
       const storedPart = part === "fixed" && bound.fixed === void 0 && bound.value !== void 0 ? "value" : part;
       return patch(config, [...base, storedPart]);
     }
     if (bound !== void 0 && bound !== null) {
-      const storedPart = looksLikeEntityId(bound) ? "entity" : "fixed";
+      const percent = allowPercent ? parsePercentLiteral(bound) : null;
+      const storedPart = looksLikeEntityId(bound) ? "entity" : Number.isFinite(percent) ? "percent" : "fixed";
       if (part === storedPart) return patch(config, base);
       if (empty) return config;
-      return setPathValue(config, base, { [storedPart]: bound, [part]: value });
-    }
-    if (bound === void 0 && (config[key] !== void 0 || config[`${key}_entity`] !== void 0)) {
-      return patch(config, [part === "fixed" ? key : `${key}_entity`]);
+      return setPathValue(config, base, { [storedPart]: storedPart === "percent" ? percent : bound, [part]: value });
     }
     return empty ? config : setPathValue(config, [...base, part], value);
+  }
+  function patchFeatureScaleSource(config, key, part, rawValue) {
+    var _a;
+    const value = part === "fixed" ? normalizeNumberValue(rawValue) : normalizeTextValue(rawValue).trim();
+    const empty = part === "fixed" ? value === null : !value;
+    const bound = (_a = config.scale) == null ? void 0 : _a[key];
+    if (bound === void 0 && (config[key] !== void 0 || config[`${key}_entity`] !== void 0)) {
+      const path = [part === "fixed" ? key : `${key}_entity`];
+      return empty ? deletePathValue(config, path) : setPathValue(config, path, value);
+    }
+    return patchSource(config, ["scale", key], bound, part, value, empty);
+  }
+  function getFeatureBaselineSource(config) {
+    var _a, _b;
+    const raw = config.baseline;
+    if (!isObject(raw)) return { fixed: raw != null ? raw : "", entity: "" };
+    const source = normalizeStructuredResolvableValue(raw.at, null, null, { allowPercent: true });
+    return { fixed: (_a = source.fixed) != null ? _a : "", entity: (_b = source.entity) != null ? _b : "", ...Number.isFinite(source.percent) ? { percent: source.percent } : {} };
+  }
+  function patchFeatureBaselineSource(config, part, rawValue) {
+    var _a;
+    const value = part === "fixed" ? normalizeNumberValue(rawValue) : normalizeTextValue(rawValue).trim();
+    const empty = part === "fixed" ? value === null : !value;
+    const raw = config.baseline;
+    if (!isObject(raw) && raw !== void 0 && raw !== null) {
+      if (part === "fixed") return empty ? deletePathValue(config, ["baseline"]) : setPathValue(config, ["baseline"], value);
+      if (empty) return config;
+      config = setPathValue(config, ["baseline"], { at: raw });
+    }
+    return patchSource(config, ["baseline", "at"], (_a = config.baseline) == null ? void 0 : _a.at, part, value, empty, true);
   }
   var init_feature_editor_config = __esm({
     "src/feature/feature-editor-config.js"() {
@@ -13866,6 +14051,42 @@ ${this._renderFormattingSection({ type: "card" })}
     }
   });
 
+  // src/feature/feature-editor-needle-baseline.js
+  function patchFeatureNeedle(config, { field, value }) {
+    var _a;
+    const path = ["bar", "needle"];
+    const raw = (_a = config.bar) == null ? void 0 : _a.needle;
+    if (field === "mode") {
+      const show = value === "enabled";
+      if (raw === void 0 && !show) return config;
+      return setPathValue(config, isObject(raw) ? [...path, "show"] : path, show);
+    }
+    const clear = !value || normalizeColorComparisonValue(value) === normalizeColorComparisonValue("#ffffff");
+    if (clear) return pruneEmptyObjectsInTarget(deletePathValue(config, [...path, "color"]), path);
+    const needle = isObject(raw) ? raw : typeof raw === "boolean" ? { show: raw } : {};
+    return setPathValue(config, path, { ...needle, color: value });
+  }
+  function patchFeatureBaselineField(config, { path, value }) {
+    const raw = config.baseline;
+    if (!isObject(raw) && raw !== void 0 && raw !== null) {
+      if (value === void 0) return config;
+      config = setPathValue(config, ["baseline"], { at: raw });
+    }
+    const ownedPath = ["baseline", ...path];
+    let next = value === void 0 ? deletePathValue(config, ownedPath) : setPathValue(config, ownedPath, value);
+    if (value === void 0) {
+      if (path.length > 1) next = pruneEmptyObjectsInTarget(next, ["baseline", path[0]]);
+      next = pruneEmptyObjectsInTarget(next, ["baseline"]);
+    }
+    return next;
+  }
+  var init_feature_editor_needle_baseline = __esm({
+    "src/feature/feature-editor-needle-baseline.js"() {
+      init_editor_config();
+      init_editor_controls();
+    }
+  });
+
   // src/feature/SensorBarCardPlusFeatureEditor.js
   var root, SensorBarCardPlusFeatureEditor;
   var init_SensorBarCardPlusFeatureEditor = __esm({
@@ -13880,6 +14101,9 @@ ${this._renderFormattingSection({ type: "card" })}
       init_segments();
       init_gradient_stops();
       init_feature_editor_palettes();
+      init_needle();
+      init_baseline();
+      init_feature_editor_needle_baseline();
       root = { type: "card" };
       SensorBarCardPlusFeatureEditor = class extends HTMLElement {
         constructor() {
@@ -13891,6 +14115,8 @@ ${this._renderFormattingSection({ type: "card" })}
           this._renderEpoch = 0;
           this._updateComplete = Promise.resolve();
           const context = this._createSectionContext();
+          this._needleSection = new NeedleSection(context);
+          this._baselineSection = new BaselineSection(context);
           const ui = {
             root: () => this.shadowRoot,
             render: () => {
@@ -13904,6 +14130,7 @@ ${this._renderFormattingSection({ type: "card" })}
           this._segmentsSection = new SegmentsSection(context, ui, createFeaturePaletteArray(context, "segments"));
           this._gradientStopsSection = new GradientStopsSection(context, ui, createFeaturePaletteArray(context, "gradient_stops"));
           for (const type of ["click", "keydown"]) this.shadowRoot.addEventListener(type, (event) => {
+            if (type === "click" && this._baselineSection.handleClick(event.target)) return;
             this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event);
           });
           const handleField = (event) => this._handleField(event);
@@ -13918,6 +14145,7 @@ ${this._renderFormattingSection({ type: "card" })}
           if (serializeConfig(config) !== serializeConfig(this._config)) {
             this._paletteRenderRequested || (this._paletteRenderRequested = ["bar.segments", "bar.gradient_stops", "segments", "severity", "gradient_stops"].some((path) => serializeConfig(getPathValue(config, path.split("."))) !== serializeConfig(getPathValue(this._config, path.split(".")))));
             this._config = cloneDeep(config);
+            this._baselineSection.reset();
             this._segmentsSection.reset();
             this._gradientStopsSection.reset();
             this._chooseEntity = false;
@@ -13971,9 +14199,9 @@ ${this._renderFormattingSection({ type: "card" })}
         _createSectionContext() {
           return {
             read: (_scope, path) => getPathValue(this._config, path),
-            mutate: (_scope, mutation) => this._mutate(mutation),
-            source: (_scope, key) => getFeatureScaleSource(this._config, key),
-            setSource: (_scope, key, part, value) => this._mutate((config) => patchFeatureScaleSource(config, key, part, value))
+            mutate: (_scope, mutation, options) => this._mutate((config) => (options == null ? void 0 : options.needleEdit) ? patchFeatureNeedle(config, options.needleEdit) : (options == null ? void 0 : options.baselineEdit) ? patchFeatureBaselineField(config, options.baselineEdit) : mutation(config)),
+            source: (_scope, key) => key === "baseline" ? getFeatureBaselineSource(this._config) : getFeatureScaleSource(this._config, key),
+            setSource: (_scope, key, part, value) => this._mutate((config) => key === "baseline" ? patchFeatureBaselineSource(config, part, value) : patchFeatureScaleSource(config, key, part, value))
           };
         }
         _mutate(mutation) {
@@ -14009,6 +14237,7 @@ ${this._renderFormattingSection({ type: "card" })}
             return;
           }
           if (this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event)) return;
+          if (this._needleSection.handleField({ field, kind, value }) || this._baselineSection.handleField({ field, kind, value })) return;
           const context = this._createSectionContext();
           if (handleScaleField(context, { field, kind, value })) return;
           if (handleFormattingField(context, { field, kind, value })) return;
@@ -14048,9 +14277,13 @@ ${this._renderFormattingSection({ type: "card" })}
           const fillStyle = getEffectiveFillStyleValue(this._createSectionContext(), root);
           const palette = fillStyle === "gradient" ? this._gradientStopsSection : this._segmentsSection._isSegmentFillStyle(fillStyle) ? this._segmentsSection : null;
           const paletteRows = palette === this._gradientStopsSection ? palette._getScopedGradientStopsValue(root) : palette ? palette._getScopedSegmentsValue(root) : [];
+          const needle = this._needleSection._getScopedNeedleConfig(root);
+          const above = this._baselineSection._getBaselineDirectionalColorValue(root, "above");
+          const below = this._baselineSection._getBaselineDirectionalColorValue(root, "below");
           const signature = JSON.stringify([
             !!(this._context.entity_id || this._explicitEntity),
             this._showEntityPicker,
+            ...[needle.color, above, below].map((value) => !!value && !isHexColorValue(value)),
             fillStyle,
             paletteRows.length,
             palette === this._gradientStopsSection ? !isHexColorValue(palette._getGradientStopsDraftState(root).color) : false,
@@ -14060,7 +14293,7 @@ ${this._renderFormattingSection({ type: "card" })}
           ]);
           const activeField = (_b = (_a = this.shadowRoot.activeElement) == null ? void 0 : _a.dataset) == null ? void 0 : _b.field;
           const activeKind = (_d = (_c = this.shadowRoot.activeElement) == null ? void 0 : _c.dataset) == null ? void 0 : _d.kind;
-          const defer = (activeKind == null ? void 0 : activeKind.endsWith("-text-fallback")) || activeField === "bar-color-text-fallback" || activeField === "feature-entity-override" && !this._context.entity_id && !this._explicitEntity;
+          const defer = (activeKind == null ? void 0 : activeKind.endsWith("-text-fallback")) || (activeField == null ? void 0 : activeField.endsWith("-text-fallback")) || activeField === "feature-entity-override" && !this._context.entity_id && !this._explicitEntity;
           if ((signature !== this._structureSignature || this._paletteRenderRequested) && !defer) {
             const focus = this._captureFocus();
             const context = this._createSectionContext();
@@ -14082,6 +14315,13 @@ ${this._renderFormattingSection({ type: "card" })}
         ${renderScaleSection(context, root)}
         ${renderBarAppearanceSection(context, root)}
         ${(_e = palette == null ? void 0 : palette.render(root)) != null ? _e : ""}
+        <div class="section"><div class="section-head"><h3>Needle</h3></div>
+          ${this._needleSection.render(root)}
+          <div class="section-note">An active, resolved Baseline takes visual precedence over Needle.</div>
+        </div>
+        <div class="section"><div class="section-head"><h3>Baseline</h3></div>
+          ${this._baselineSection.render(root)}
+        </div>
         ${renderFormattingSection(context, root)}
       </div>`;
             this._structureSignature = signature;
@@ -14109,6 +14349,15 @@ ${this._renderFormattingSection({ type: "card" })}
             "bar-fill-style": getEffectiveFillStyleValue(context, root),
             "bar-color": getColorPickerValue(color, "#4a9eff"),
             "bar-color-text-fallback": color,
+            "bar-needle-mode": this._needleSection._getScopedNeedleConfig(root).mode,
+            "bar-needle-color": getColorPickerValue(this._needleSection._getScopedNeedleConfig(root).color, "#ffffff"),
+            "bar-needle-color-text-fallback": this._needleSection._getScopedNeedleConfig(root).color,
+            "baseline-mode": this._baselineSection._getBaselineMode(root),
+            "baseline-value": getFeatureBaselineSource(this._config).fixed,
+            "baseline-above-color": getColorPickerValue(this._baselineSection._getBaselineDirectionalColorValue(root, "above"), "#000000"),
+            "baseline-above-color-text-fallback": this._baselineSection._getBaselineDirectionalColorValue(root, "above"),
+            "baseline-below-color": getColorPickerValue(this._baselineSection._getBaselineDirectionalColorValue(root, "below"), "#000000"),
+            "baseline-below-color-text-fallback": this._baselineSection._getBaselineDirectionalColorValue(root, "below"),
             "formatting-unit": getFormattingValue(context, root, "unit"),
             "formatting-decimal": getFormattingValue(context, root, "decimal")
           };
@@ -14136,6 +14385,10 @@ ${this._renderFormattingSection({ type: "card" })}
             if (segment) section._refreshSegmentUi(root);
             else if ((_b = this.shadowRoot.querySelector("#gradient-draft-pos")) == null ? void 0 : _b.closest) section._refreshGradientDraftUi(root);
           }
+          for (const direction of ["above", "below"]) {
+            const control = this.shadowRoot.querySelector(`#baseline-${direction}-color-enabled`);
+            if (control) control.checked = this._baselineSection._isBaselineDirectionalColorEnabled(root, direction);
+          }
           const solid = this.shadowRoot.querySelector("#bar-solid-fill");
           if (solid) solid.checked = getBarSolidFillValue(context, root);
           const override = this.shadowRoot.querySelector("#feature-entity-override");
@@ -14145,6 +14398,7 @@ ${this._renderFormattingSection({ type: "card" })}
           for (const [kind, value, label, id] of [
             ["feature-entity-source", this._explicitEntity, "Entity override", "feature-entity"],
             ["scale-min-entity-source", getFeatureScaleSource(this._config, "min").entity, "Min entity", "feature-scale-min-entity"],
+            ["baseline-entity-source", getFeatureBaselineSource(this._config).entity, "Baseline entity", "feature-baseline-entity"],
             ["scale-max-entity-source", getFeatureScaleSource(this._config, "max").entity, "Max entity", "feature-scale-max-entity"]
           ]) {
             for (const tag of ["input", "ha-entity-picker"]) {

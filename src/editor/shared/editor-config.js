@@ -172,3 +172,11 @@ export function pruneEmptyObjectsInTarget(target, keyPath) {
   }
   return nextTarget;
 }
+
+export function hasExplicitOverrideValue(value) {
+  return value !== '' && value !== undefined && value !== null;
+}
+
+export function hasResolvableOverride(parts) {
+  return hasExplicitOverrideValue(parts?.fixed) || hasExplicitOverrideValue(parts?.entity);
+}

@@ -5,11 +5,16 @@ The existing `sensor-bar-card-plus.js` resource also registers
 uses Home Assistant's [public custom Card Feature API](https://developers.home-assistant.io/docs/frontend/custom-ui/custom-card-feature/).
 The graphical Feature editor exposes entity inheritance/override, Scale,
 Bar Appearance (fill style, color, solid fill), Segments for segment-based fill
-styles, Gradient Stops for gradient, and Formatting. Palette edits preserve raw
-item metadata/order and inactive palettes. Animation, Needle, Baseline and marker
-configuration remains available through YAML; edits
+styles, Gradient Stops for gradient, Needle, Baseline and Formatting. Palette edits preserve raw
+item metadata/order and inactive palettes. Animation and marker configuration remain available through YAML; edits
 in the graphical editor preserve that raw configuration. No second resource is
 required for the editor.
+
+The editor preserves Needle and Baseline independently. An active, resolved
+Baseline takes visual precedence over Needle at runtime; enabling either in the
+Feature editor never removes the other. Baseline exposes its current mode,
+numeric fallback/entity source and above/below colors. Percentage Baseline YAML
+is preserved; no percentage control or future endpoint semantics are exposed.
 
 A Tile's entity is inherited when the feature omits `entity`:
 
@@ -222,7 +227,10 @@ Also open the graphical Feature editor and check inherited/explicit entity
 selection, clearing, context changes, picker behavior and narrow dialogs. Confirm
 advanced YAML configuration survives edits to the exposed fields. Exercise palette
 add/edit/remove, invalid drafts, CSS Gradient colors and narrow dialogs; confirm
-inactive palettes, omitted Segment ends, metadata and raw order survive. The remaining
+inactive palettes, omitted Segment ends, metadata and raw order survive. Exercise
+Needle/Baseline independently and verify both remain stored. Check source fallback,
+entity changes/clear, side-color toggles, percentage YAML preservation and resolved
+Baseline precedence. Compare disabled/unresolved Baseline with a configured Needle. The remaining
 advanced graphical sections are not part of the current editor foundation.
 
 ## Marker-label manual checks

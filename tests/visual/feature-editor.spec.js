@@ -79,7 +79,7 @@ test('shared fields preserve raw advanced config, focused nodes and config echoe
   expect(saved.target).toEqual(config.target);
   expect(saved.future_option).toEqual(config.future_option);
   expect(saved.entity).toBeUndefined();
-  await expect(editor.locator('#title, #layout-height, #bar-needle-mode, [data-action="add-entity"], sensor-bar-card-plus-feature')).toHaveCount(0);
+  await expect(editor.locator('#title, #layout-height, [data-action="add-entity"], sensor-bar-card-plus-feature')).toHaveCount(0);
 });
 
 test('Area/no-parent entity requirement and narrow layout stay usable', async ({ page }) => {

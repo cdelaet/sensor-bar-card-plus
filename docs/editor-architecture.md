@@ -1,10 +1,12 @@
-# Shared editor infrastructure and sections (Phases 3A–3E)
+# Shared editor infrastructure and sections (Phases 3A–3F)
 
 The shipped standalone host remains `src/editor/SensorBarCardPlusEditor.js`.
 It uses the same HTMLElement, shadow DOM, string templates and delegated events.
 Phase 3D adds a separate Card Feature editor host without changing the
 standalone host or its persistence policy. Phase 3E shares the two stateful
 palette sections between these hosts; their persistence policies remain distinct.
+Phase 3F shares Needle/Baseline while keeping destructive editing policy confined
+to the standalone host.
 
 ## Shared seam
 
@@ -24,7 +26,7 @@ whitespace is preserved so representative generated HTML can match exactly.
 
 ## Responsibilities deliberately retained by the standalone host
 
-`setConfig`, non-palette draft maps, config-echo handling, focus restoration, scheduling,
+`setConfig`, non-palette/non-Baseline draft maps, config-echo handling, focus restoration, scheduling,
 picker synchronization, disclosure state, section composition and delegated event
 lifecycle remain in the host. Generic effective inheritance/source readers, source
 canonicalization, non-palette array mutation/validation and `_applyScopedMutation` (including
@@ -276,7 +278,7 @@ and marks its discovery entry configurable. `getStubConfig()` remains entity-fre
 There is no private Tile DOM dependency or second resource.
 
 Current composition is Entity → Scale → Bar Appearance → applicable Segments
-or Gradient Stops → Formatting. There are no title/entity-row/name/icon/layout/
+or Gradient Stops → Needle → Baseline → Formatting. There are no title/entity-row/name/icon/layout/
 height/Hero/Bottom/Inline controls. Animation, Needle, Baseline, built-in/reference
 marker and marker-label editors remain absent; their raw configuration survives edits. There is no embedded
 runtime preview or duplicate scale/extrema history; use HA's surrounding preview.
@@ -425,11 +427,171 @@ Final Phase 3E validation: 1,134 unit tests and 218 Playwright tests pass.
 The standalone host shrinks from 6,657 to 5,400 lines; the Feature host grows
 from 228 to 297 lines. The normal dist build and `git diff --check` pass.
 
+## Needle and Baseline (Phase 3F)
+
+`src/editor/sections/needle.js` and `baseline.js` own both hosts' exact control
+implementations. They are section controllers like the stateful palettes, with
+no full editor instance or private host-method access. Needle has no draft map;
+Baseline owns `_baselineColorDrafts`, keyed by root/entity scope and numeric side.
+Standalone retains a compatibility getter and resets this map at the same foreign
+configuration boundary. Feature resets it on foreign replacement, retaining it
+through ordinary updates and emitted-config echoes.
+
+### Exact original implementation map
+
+| Responsibility | Needle entry points | Baseline entry points |
+|---|---|---|
+| Raw/effective reading | `_getScopedNeedleConfig`, `_getEffectiveScopedNeedleConfig`, `_getNeedleValue` | `_getBaselineResolvableValue`, `_getEffectiveBaselineResolvableValue`, `_getBaselineMode`, `_getEffectiveBaselineMode`, `_getBaselineDirectionalColorValue`, `_getEffectiveBaselineDirectionalColorValue` |
+| Detection/summary | `_hasNeedleOverride`, `_getNeedleSummary` | `_hasBaselineOverride`, `_getBaselineOverrideSummary`, `_getCardBaselineSummary` |
+| Editing/clearing | `_setNeedle`, `_setScopedNeedleMode`, `_setScopedNeedleColor`, `_removeScopedNeedle` | `_setBaselineMode`, `_setBaselineResolvablePart`, `_setBaselineDirectionalColor`, `_isBaselineDirectionalColorEnabled`, `_setBaselineDirectionalColorEnabled`, `_clearBaselineOverride`, `_removeBaseline` |
+| Drafts | None | `_getBaselineColorDraftKey`, `_setBaselineColorDraft`, `_getBaselineColorDraft`; `_baselineColorDrafts` |
+| Rendering | `_render` root Bar Appearance inline controls and entity Needle override content | `_render` root Baseline card group nested within Bar Appearance and entity Baseline override content |
+| Events | `_handleFieldEvent`: root `bar-needle-*`, entity `entity-needle-*` | `_handleFieldEvent`: root/entity mode, fallback, entity-source, side colors/toggles; `_handleClick`: `remove-baseline` |
+| Host infrastructure retained | Generic config paths, `_applyScopedMutation`, `_applyUserConfig`, `_emitConfigChanged`, `_cleanupNeedleForEmit`, focus/listener/disclosure lifecycle | Same host lifecycle plus `_getResolvablePartsFromTarget`, `_getResolvableScopedValue`, `_getEffectiveResolvableScopedValue`, source canonicalization and `_cleanupBaselineForEmit` |
+
+All 28 original section private entry points remain thin delegates. The old
+Baseline source-writing body stays in standalone as `_persistBaselineSourcePart`.
+Source getters/setters in the section call `source(scope, 'baseline', effective)`
+and `setSource(scope, 'baseline', part, value)`; the host routes this key to its
+existing generic readers and the preserved writer. Scale's paths and behavior
+are unchanged. The shared `hasExplicitOverrideValue`/`hasResolvableOverride`
+primitives are extracted from the original host verbatim with compatibility
+delegates, including the original fixed/entity-only override test.
+
+Standalone keeps the exact Baseline-before-Needle nested Bar child templates,
+whitespace, IDs/classes, labels/help text, source controls, color helpers,
+summaries, disclosure nesting and field ordering. Feature renders these same
+root control templates in separate Needle/Baseline sections after its palette.
+No extra Bar child hook, new source editor, percentage control, observer or form
+framework is introduced. Host picker synchronization extends to the existing
+Baseline entity-source control.
+
+### Host mutation policy, not duplicated controls
+
+The four-operation section context is **unchanged**. Existing mutation options
+carry two narrow field intents:
+
+- `needleEdit: { field: 'mode' | 'color', value }`
+- `baselineEdit: { path, value }` for enabled/side-color fields
+
+They describe ownership for host-specific persistence. There is no new context
+operation or arbitrary policy framework. Scale/Formatting/Bar/palette sections
+continue to use their existing contracts.
+
+The shared Needle mode mutation contains **no Baseline deletion**. Standalone
+`_applySectionMutation` wraps an enabling-mode mutation with the exact historical
+side effect formerly embedded in `_setScopedNeedleMode`: it removes the entire
+**local** Baseline when `enabled === true`, or when enabled is not false and the
+existing editor reader has a fixed/entity source. Root edits affect only root;
+entity edits affect only that entity, leaving root/siblings untouched. Disabled
+Baselines survive. Inherit/disable mode requests and color changes do not trigger
+this deletion. A percentage-only auto Baseline also survives because the existing
+editor override test omits percent; that quirk is intentionally preserved.
+Standalone still rebuilds known Needle fields, canonicalizes booleans on emission,
+removes root disabled/default settings and performs its unchanged whole-config
+cleanup. Enabling Needle may remove an explicitly enabled but unresolved Baseline:
+this is the historical editor policy, not the runtime visibility rule.
+
+Feature uses `src/feature/feature-editor-needle-baseline.js` to patch only the
+owned Needle field or Baseline field. Enabling/disabling Needle preserves **all**
+Baseline data; enabling/disabling/configuring Baseline preserves **all** Needle
+data. Colors retain nested side metadata and the opposite side. Unknown Needle,
+Baseline, source, root and bar metadata, palettes, markers and inactive settings
+survive. Clear/default Needle color owns only `color`. Explicit Remove Baseline
+owns the whole Baseline; it does not touch Needle. Neither control is disabled
+because the other is configured.
+
+### Representation and source preservation
+
+Feature opening, context changes and unrelated edits preserve `needle: true`/
+`false` exactly. Mode edits keep an existing boolean boolean; expanded objects
+patch only `show`. Enabling an absent Needle writes `true`; disabling an absent
+Needle is a no-op. Setting a custom color on a boolean minimally creates
+`{ show: <previous boolean>, color }`, including disabled false. Expanded objects
+keep unknown siblings, show state and nested metadata. A color on an absent
+Needle creates `{ color }` without implicitly enabling it. Default white removes
+only the owned color field. These storage rules intentionally avoid standalone's
+canonical rebuild/deletion behavior while using the same shared controls.
+
+`src/feature/feature-editor-config.js` now shares one internal raw source-component
+patcher between Scale and Baseline. It preserves unknown metadata and the other
+source component. Existing `value` fallback syntax stays `value`; explicit edits
+of a stored fixed part use `fixed`, and clearing the fixed control owns both
+fixed/value aliases. Other inactive aliases/metadata remain untouched. Entity
+edits own only `entity`. Scalar numeric or entity `baseline.at` forms remain
+scalar when that scalar's part is edited; adding another part minimally promotes
+to an object retaining the original component. Legacy numeric top-level Baseline
+stays scalar for fallback edits and promotes to `{ at: <previous source>, ... }`
+only when a new enabled/side-color/entity field requires an object. Opening never
+promotes it. Invalid numeric fallback input follows the existing source-control
+clear semantics and never emits malformed numeric text.
+
+Fallback means the currently supported `fixed`/`value` component alongside an
+entity. A literal unknown `fallback` property is preserved as metadata; the current
+normalizer does not consume it. No new fallback semantics are added.
+
+Percentage `baseline.at` strings/objects are readable through the existing
+normalizer and display a blank numeric fallback. No percentage control is added.
+Unrelated fields leave the percentage representation untouched. Adding an entity
+or numeric fallback to a scalar percentage minimally promotes it to
+`{ percent: <original percent>, <edited component> }`, retaining its percentage
+semantics. Object percentages and metadata survive component edits/clears.
+Standalone retains its existing source commit behavior, which reconstructs
+fixed/entity parts and can drop percentage/source metadata on a source edit.
+
+### Runtime precedence and lifecycle
+
+The runtime is unchanged. `buildRowViewModel` resolves an enabled/auto Baseline
+source; finite Baseline coordinates suppress `getNeedleState`. If disabled or
+unresolved, Baseline does not suppress Needle. Configuration presence by itself
+is insufficient. The Feature-only helper states:
+
+> An active, resolved Baseline takes visual precedence over Needle.
+
+Controls remain independently editable. Ordinary value edits patch mounted
+controls and retain focus/selection; structural CSS-color changes use existing
+capture/restoration and defer fallback removal until blur. Both hosts retain the
+same directional-color draft restoration on toggle/echo. Foreign Feature config
+replacement resets its drafts without emission. HA picker `value-changed` is
+still authoritative, including clear; internal input/change events are ignored.
+Context/hass-only changes never alter raw Needle/Baseline data. No animation or
+runtime observers/lifecycle are changed.
+
+### Regression evidence
+
+Before extraction, 18 source/dist characterization cases protected boolean/object
+reading/inheritance, local destructive policy (including disabled/percentage
+exceptions), root disabled color behavior, canonical source writes, percent reads,
+and color draft echoes. Four root/entity Needle/Baseline browser screenshots were
+captured before moving templates. The 406 pre-existing standalone editor tests
+remain required. The HTML matrix expands from 96 to 128 cases for booleans,
+colors, fixed/entity/value/percent sources, metadata, legacy scalars, enabled/
+disabled/null settings and entity overrides, retaining all old matrices.
+
+Feature unit tests cover field ownership, metadata including arrays/undefined,
+boolean/object transitions, source component/alias/percentage preservation,
+legacy promotion, independent enable/disable, explicit removal, picker events,
+source/dist shared-controller identity and template/picker parity. A test feeds
+edited config into the unchanged runtime model to verify resolved Baseline
+precedence and Needle restoration when resolution fails. Browser tests run
+source/dist at 360px/240px with real focus/echo, independent edits, source/color
+controls, percentage config and HA picker events. Four new Feature screenshots
+protect these controls; two whole-Feature baselines intentionally add the new
+sections. All standalone and runtime snapshot baselines remain unchanged.
+
+Final Phase 3F validation passes 1,219 unit tests and 226 Playwright tests.
+The 20/32/80/96-case existing HTML matrices and expanded 128-case matrix pass,
+including source/dist and picker/fallback environments. The standalone host
+shrinks from 5,400 to 4,970 lines; the Feature host grows from 297 to 333 lines.
+The normal dist build and `git diff --check` pass.
+
 ## Recommended next boundary
 
-Extract **Needle + Baseline** next. They are the existing Bar Appearance children
-and share a concrete standalone interaction (enabling Needle clears Baseline),
-so they should be characterized and extracted together before composing the
-Feature controls. This phase revealed no prerequisite that requires a broader
-form framework or marker extraction. Preserve each host's persistence policy;
-do not start Target/Peak/Floor or marker-label editors in that next extraction.
+Extract **Target alone first**. Baseline/Needle extraction revealed that generic
+source policy and raw representation preservation are the main boundary for the
+next source-backed section. Target additionally owns marker shape/direction,
+labels and above-target fill drafts/aliases, while Peak/Floor own history/reset
+controls rather than the same source editor. Target deserves its own cohesive
+characterization/extraction before Peak/Floor; grouping all three now would add
+unrelated marker-label and reset machinery to one phase. No prerequisite framework
+or runtime redesign was revealed. Do not start that extraction in Phase 3F.
