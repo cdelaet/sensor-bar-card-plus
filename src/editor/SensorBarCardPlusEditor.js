@@ -37,6 +37,7 @@ import { GradientStopsSection } from './sections/gradient-stops.js';
 import { NeedleSection } from './sections/needle.js';
 import { BaselineSection } from './sections/baseline.js';
 import { TargetSection } from './sections/target.js';
+import { ExtremaSection } from './sections/extrema.js';
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from './shared/editor-marker-controls.js';
 
 export class SensorBarCardPlusEditor extends HTMLElement {
@@ -63,6 +64,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._needleSection = new NeedleSection(this._createSectionContext());
     this._baselineSection = new BaselineSection(this._createSectionContext());
     this._targetSection = new TargetSection(this._createSectionContext());
+    this._extremaSection = new ExtremaSection(this._createSectionContext());
     this._config = {};
     this._draftConfig = {};
     this._hass = null;
@@ -1959,400 +1961,84 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return this._needleSection._setNeedle(...args);
   }
 
-  _getScopedPeakConfig(scope) {
-    const rawPeak = this._getScopedValue(scope, ['peak']);
-    const rawPeakMarker = this._getScopedValue(scope, ['peak_marker']);
-    const rawLegacyShow = this._getScopedValue(scope, ['show_peak']);
-    const rawLegacyColor = this._getScopedValue(scope, ['peak_color']);
-    const defaultColor = '#888';
-    let mode = scope?.type === 'entity' ? 'inherit' : 'disabled';
-    let color = '';
-
-    if (this._isObject(rawPeak)) {
-      if (rawPeak.enabled === true) {
-        mode = 'enabled';
-      } else if (rawPeak.enabled === false) {
-        mode = 'disabled';
-      }
-      color = rawPeak.color ?? color;
-    }
-
-    if (this._isObject(rawPeakMarker)) {
-      if (rawPeakMarker.show === true) {
-        mode = 'enabled';
-      } else if (rawPeakMarker.show === false) {
-        mode = 'disabled';
-      } else if (scope?.type !== 'entity') {
-        mode = 'disabled';
-      }
-      color = rawPeakMarker.color ?? color;
-    }
-
-    if (rawLegacyShow === true) {
-      mode = 'enabled';
-    } else if (rawLegacyShow === false) {
-      mode = 'disabled';
-    }
-
-    color = color || rawLegacyColor || '';
-    if (color && this._normalizeColorComparisonValue(color) === this._normalizeColorComparisonValue(defaultColor)) {
-      color = '';
-    }
-
-    return { mode, color };
+  _getScopedPeakConfig(...args) {
+    return this._extremaSection._getScopedPeakConfig(...args);
   }
 
-  _getEffectiveScopedPeakConfig(scope) {
-    const localPeak = this._getScopedPeakConfig(scope);
-    if (scope?.type !== 'entity') {
-      return localPeak;
-    }
-    if (!this._hasPeakOverride(scope)) {
-      return this._getScopedPeakConfig({ type: 'card' });
-    }
-    const inheritedPeak = this._getScopedPeakConfig({ type: 'card' });
-    return {
-      mode: localPeak.mode === 'inherit' ? inheritedPeak.mode : localPeak.mode,
-      color: localPeak.color || inheritedPeak.color,
-    };
+  _getEffectiveScopedPeakConfig(...args) {
+    return this._extremaSection._getEffectiveScopedPeakConfig(...args);
   }
 
-  _hasPeakOverride(scope) {
-    const peakValue = this._getScopedValue(scope, ['peak']) ?? {};
-    if (this._isObject(peakValue) && (
-      Object.prototype.hasOwnProperty.call(peakValue, 'enabled')
-      || Object.prototype.hasOwnProperty.call(peakValue, 'color')
-      || Object.prototype.hasOwnProperty.call(peakValue, 'reset')
-      || Object.prototype.hasOwnProperty.call(peakValue, 'label')
-      || Object.prototype.hasOwnProperty.call(peakValue, 'direction')
-    )) {
-      return true;
-    }
-
-    const peakMarkerValue = this._getScopedValue(scope, ['peak_marker']) ?? {};
-    if (this._isObject(peakMarkerValue) && (
-      Object.prototype.hasOwnProperty.call(peakMarkerValue, 'show')
-      || Object.prototype.hasOwnProperty.call(peakMarkerValue, 'color')
-      || Object.prototype.hasOwnProperty.call(peakMarkerValue, 'direction')
-    )) {
-      return true;
-    }
-
-    return this._getScopedValue(scope, ['show_peak']) !== undefined
-      || this._getScopedValue(scope, ['peak_color']) !== undefined;
+  _hasPeakOverride(...args) {
+    return this._extremaSection._hasPeakOverride(...args);
   }
 
-  _getPeakSummary(scope) {
-    if (scope?.type === 'entity' && !this._hasPeakOverride(scope)) return 'Inherited';
-    const peak = this._getScopedPeakConfig(scope);
-    if (peak.mode === 'disabled') return peak.color ? 'Disabled • Custom color' : 'Disabled';
-    if (peak.mode === 'enabled') return peak.color ? 'Enabled • Custom color' : 'Enabled';
-    if (peak.color) return 'Custom color';
-    return 'Inherited';
+  _getPeakSummary(...args) {
+    return this._extremaSection._getPeakSummary(...args);
   }
 
-  _clearPeakOverride(scope) {
-    return this._applyScopedMutation(scope, (target) => {
-      let nextTarget = this._deletePathValue(target, ['peak', 'enabled']);
-      nextTarget = this._deletePathValue(nextTarget, ['peak', 'color']);
-      nextTarget = this._deletePathValue(nextTarget, ['peak', 'reset']);
-      nextTarget = this._deletePathValue(nextTarget, ['peak', 'label']);
-      nextTarget = this._deletePathValue(nextTarget, ['peak', 'direction']);
-      nextTarget = this._deletePathValue(nextTarget, ['show_peak']);
-      nextTarget = this._deletePathValue(nextTarget, ['peak_color']);
-      nextTarget = this._deletePathValue(nextTarget, ['peak_marker']);
-      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['peak']);
-      return nextTarget;
-    }, { rerender: true });
+  _clearPeakOverride(...args) {
+    return this._extremaSection._clearPeakOverride(...args);
   }
 
-  _setScopedPeakEnabled(scope, value) {
-    const boolValue = !!value;
-    const defaultColor = '#888';
-    return this._applyScopedMutation(scope, (target) => {
-      let nextTarget = this._cloneDeep(target);
-      const currentPeak = this._isObject(this._getPathValue(nextTarget, ['peak']))
-        ? this._cloneDeep(this._getPathValue(nextTarget, ['peak']))
-        : {};
-      const currentColor = currentPeak.color
-        ?? (this._isObject(this._getPathValue(nextTarget, ['peak_marker'])) ? this._getPathValue(nextTarget, ['peak_marker', 'color']) : undefined)
-        ?? this._getPathValue(nextTarget, ['peak_color'])
-        ?? defaultColor;
-
-      if (scope?.type === 'entity' || boolValue) {
-        currentPeak.enabled = boolValue;
-      } else {
-        delete currentPeak.enabled;
-      }
-
-      if (currentColor && this._normalizeColorComparisonValue(currentColor) !== this._normalizeColorComparisonValue(defaultColor)) {
-        currentPeak.color = currentColor;
-      } else {
-        delete currentPeak.color;
-      }
-
-      if (Object.keys(currentPeak).length) {
-        nextTarget = this._setPathValue(nextTarget, ['peak'], currentPeak);
-      } else {
-        nextTarget = this._deletePathValue(nextTarget, ['peak']);
-      }
-
-      nextTarget = this._deletePathValue(nextTarget, ['show_peak']);
-      nextTarget = this._deletePathValue(nextTarget, ['peak_color']);
-      nextTarget = this._deletePathValue(nextTarget, ['peak_marker']);
-      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['peak']);
-      return nextTarget;
-    });
+  _setScopedPeakEnabled(...args) {
+    return this._extremaSection._setScopedPeakEnabled(...args);
   }
 
-  _setScopedPeakColor(scope, rawValue) {
-    const normalizedValue = this._normalizeTextValue(rawValue).trim();
-    const defaultColor = '#888';
-    return this._applyScopedMutation(scope, (target) => {
-      let nextTarget = this._cloneDeep(target);
-      const currentPeak = this._isObject(this._getPathValue(nextTarget, ['peak']))
-        ? this._cloneDeep(this._getPathValue(nextTarget, ['peak']))
-        : {};
-      const currentConfig = this._getScopedPeakConfig(scope);
-
-      delete currentPeak.color;
-      if (normalizedValue && this._normalizeColorComparisonValue(normalizedValue) !== this._normalizeColorComparisonValue(defaultColor)) {
-        currentPeak.color = normalizedValue;
-      }
-
-      if (scope?.type === 'entity') {
-        if (currentConfig.mode === 'enabled') currentPeak.enabled = true;
-        if (currentConfig.mode === 'disabled') currentPeak.enabled = false;
-      } else if (currentConfig.mode === 'enabled') {
-        currentPeak.enabled = true;
-      }
-
-      if (Object.keys(currentPeak).length) {
-        nextTarget = this._setPathValue(nextTarget, ['peak'], currentPeak);
-      } else {
-        nextTarget = this._deletePathValue(nextTarget, ['peak']);
-      }
-
-      nextTarget = this._deletePathValue(nextTarget, ['show_peak']);
-      nextTarget = this._deletePathValue(nextTarget, ['peak_color']);
-      nextTarget = this._deletePathValue(nextTarget, ['peak_marker']);
-      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['peak']);
-      return nextTarget;
-    });
+  _setScopedPeakColor(...args) {
+    return this._extremaSection._setScopedPeakColor(...args);
   }
 
-  _getScopedMarkerExtras(scope, key) {
-    const raw = this._getScopedValue(scope, [key]);
-    const marker = this._isObject(raw) ? raw : {};
-    const label = this._isObject(marker.label) ? marker.label : {};
-    return {
-      reset: Object.prototype.hasOwnProperty.call(marker, 'reset') ? this._normalizeTextValue(marker.reset).trim().toLowerCase() : null,
-      labelShow: typeof label.show === 'boolean' ? label.show : null,
-      labelText: typeof label.text === 'string' ? label.text.replace(/\s+/g, ' ').trim() : null,
-      labelShowValue: typeof label.show_value === 'boolean' ? label.show_value : null,
-      labelShowUnit: typeof label.show_unit === 'boolean' ? label.show_unit : null,
-      labelPrecision: (label.precision ?? label.decimal) === undefined || (label.precision ?? label.decimal) === null || (label.precision ?? label.decimal) === ''
-        ? null
-        : this._normalizeNumberValue(label.precision ?? label.decimal),
-    };
+  _getScopedMarkerExtras(...args) {
+    return this._extremaSection._getScopedMarkerExtras(...args);
   }
 
-  _hasExtremumOverride(scope, key) {
-    const marker = this._getScopedValue(scope, [key]);
-    if (!this._isObject(marker)) return false;
-    return ['enabled', 'color', 'reset', 'label', 'direction'].some((field) => (
-      Object.prototype.hasOwnProperty.call(marker, field)
-    ));
+  _hasExtremumOverride(...args) {
+    return this._extremaSection._hasExtremumOverride(...args);
   }
 
-  _getEffectiveMarkerExtras(scope, key) {
-    const local = this._getScopedMarkerExtras(scope, key);
-    if (scope?.type !== 'entity') {
-      return {
-        reset: local.reset ?? 'never',
-        labelShow: local.labelShow ?? false,
-        labelText: local.labelText,
-        labelShowValue: local.labelShowValue ?? true,
-        labelShowUnit: local.labelShowUnit ?? true,
-        labelPrecision: local.labelPrecision,
-      };
-    }
-    const card = this._getScopedMarkerExtras({ type: 'card' }, key);
-    if (!this._hasExtremumOverride(scope, key)) {
-      return {
-        reset: card.reset ?? 'never',
-        labelShow: card.labelShow ?? false,
-        labelText: card.labelText,
-        labelShowValue: card.labelShowValue ?? true,
-        labelShowUnit: card.labelShowUnit ?? true,
-        labelPrecision: card.labelPrecision,
-      };
-    }
-    return {
-      reset: local.reset ?? card.reset ?? 'never',
-      labelShow: local.labelShow ?? card.labelShow ?? false,
-      labelText: Object.prototype.hasOwnProperty.call(this._getScopedValue(scope, [key, 'label']) ?? {}, 'text') ? local.labelText : card.labelText,
-      labelShowValue: local.labelShowValue ?? card.labelShowValue ?? true,
-      labelShowUnit: local.labelShowUnit ?? card.labelShowUnit ?? true,
-      labelPrecision: local.labelPrecision ?? card.labelPrecision,
-    };
+  _getEffectiveMarkerExtras(...args) {
+    return this._extremaSection._getEffectiveMarkerExtras(...args);
   }
 
-  _getScopedFloorConfig(scope) {
-    const raw = this._getScopedValue(scope, ['floor']);
-    const marker = this._isObject(raw) ? raw : {};
-    let mode = scope?.type === 'entity' ? 'inherit' : 'disabled';
-    if (marker.enabled === true) mode = 'enabled';
-    if (marker.enabled === false) mode = 'disabled';
-    const color = marker.color && this._normalizeColorComparisonValue(marker.color) !== this._normalizeColorComparisonValue('#888888')
-      ? marker.color
-      : '';
-    return { mode, color };
+  _getScopedFloorConfig(...args) {
+    return this._extremaSection._getScopedFloorConfig(...args);
   }
 
-  _getEffectiveScopedFloorConfig(scope) {
-    const local = this._getScopedFloorConfig(scope);
-    const extras = this._getEffectiveMarkerExtras(scope, 'floor');
-    if (scope?.type !== 'entity') return { ...local, ...extras };
-    if (!this._hasExtremumOverride(scope, 'floor')) {
-      return { ...this._getScopedFloorConfig({ type: 'card' }), ...extras };
-    }
-    const card = this._getEffectiveScopedFloorConfig({ type: 'card' });
-    return {
-      mode: local.mode === 'inherit' ? card.mode : local.mode,
-      color: local.color || card.color,
-      ...extras,
-    };
+  _getEffectiveScopedFloorConfig(...args) {
+    return this._extremaSection._getEffectiveScopedFloorConfig(...args);
   }
 
-  _getFloorSummary(scope) {
-    if (scope?.type === 'entity' && !this._hasExtremumOverride(scope, 'floor')) return 'Inherited';
-    const floor = this._getEffectiveScopedFloorConfig(scope);
-    if (floor.mode === 'enabled') return floor.color ? 'Enabled • Custom color' : 'Enabled';
-    if (floor.color) return 'Disabled • Custom color';
-    return 'Disabled';
+  _getFloorSummary(...args) {
+    return this._extremaSection._getFloorSummary(...args);
   }
 
-  _getMarkerResetSummary(key) {
-    const scope = { type: 'card' };
-    const marker = key === 'peak'
-      ? this._getScopedPeakConfig(scope)
-      : this._getEffectiveScopedFloorConfig(scope);
-    const enabled = marker.mode === 'enabled';
-    const reset = this._getEffectiveMarkerExtras(scope, key).reset ?? 'never';
-    return `${enabled ? 'Enabled' : 'Disabled'} · ${reset === 'never' ? 'no reset' : `${reset} reset`}`;
+  _getMarkerResetSummary(...args) {
+    return this._extremaSection._getMarkerResetSummary(...args);
   }
 
   _getCardTargetMarkerSummary(...args) {
     return this._targetSection._getCardTargetMarkerSummary(...args);
   }
 
-  _setScopedExtremumEnabled(scope, key, value) {
-    const boolValue = !!value;
-    const defaultColor = '#888888';
-    return this._applyScopedMutation(scope, (target) => {
-      let nextTarget = this._cloneDeep(target);
-      const current = this._isObject(this._getPathValue(nextTarget, [key]))
-        ? this._cloneDeep(this._getPathValue(nextTarget, [key]))
-        : {};
-      const currentColor = current.color ?? defaultColor;
-      if (scope?.type === 'entity' || boolValue) current.enabled = boolValue;
-      else delete current.enabled;
-      if (currentColor && this._normalizeColorComparisonValue(currentColor) !== this._normalizeColorComparisonValue(defaultColor)) {
-        current.color = currentColor;
-      } else delete current.color;
-      if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
-      else nextTarget = this._deletePathValue(nextTarget, [key]);
-      return nextTarget;
-    });
+  _setScopedExtremumEnabled(...args) {
+    return this._extremaSection._setScopedExtremumEnabled(...args);
   }
 
-  _setScopedExtremumColor(scope, key, rawValue) {
-    const normalizedValue = this._normalizeTextValue(rawValue).trim();
-    const defaultColor = '#888888';
-    return this._applyScopedMutation(scope, (target) => {
-      let nextTarget = this._cloneDeep(target);
-      const current = this._isObject(this._getPathValue(nextTarget, [key]))
-        ? this._cloneDeep(this._getPathValue(nextTarget, [key]))
-        : {};
-      delete current.color;
-      if (normalizedValue && this._normalizeColorComparisonValue(normalizedValue) !== this._normalizeColorComparisonValue(defaultColor)) {
-        current.color = normalizedValue;
-      }
-      const mode = this._getScopedFloorConfig(scope).mode;
-      if (key === 'floor' && ((scope?.type === 'entity' && mode !== 'inherit') || (scope?.type !== 'entity' && mode === 'enabled'))) {
-        current.enabled = mode === 'enabled';
-      }
-      if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
-      else nextTarget = this._deletePathValue(nextTarget, [key]);
-      if (key === 'peak') {
-        nextTarget = this._deletePathValue(nextTarget, ['show_peak']);
-        nextTarget = this._deletePathValue(nextTarget, ['peak_color']);
-        nextTarget = this._deletePathValue(nextTarget, ['peak_marker']);
-      }
-      return nextTarget;
-    });
+  _setScopedExtremumColor(...args) {
+    return this._extremaSection._setScopedExtremumColor(...args);
   }
 
-  _setScopedExtremumReset(scope, key, value) {
-    const normalized = this._normalizeTextValue(value).trim().toLowerCase();
-    return this._applyScopedMutation(scope, (target) => {
-      let nextTarget = this._cloneDeep(target);
-      const current = this._isObject(this._getPathValue(nextTarget, [key]))
-        ? this._cloneDeep(this._getPathValue(nextTarget, [key]))
-        : {};
-      if (normalized && (scope?.type === 'entity' || normalized !== 'never')) current.reset = normalized;
-      else delete current.reset;
-      if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
-      else nextTarget = this._deletePathValue(nextTarget, [key]);
-      if (key === 'peak') {
-        nextTarget = this._deletePathValue(nextTarget, ['show_peak']);
-        nextTarget = this._deletePathValue(nextTarget, ['peak_color']);
-        nextTarget = this._deletePathValue(nextTarget, ['peak_marker']);
-      }
-      return nextTarget;
-    });
+  _setScopedExtremumReset(...args) {
+    return this._extremaSection._setScopedExtremumReset(...args);
   }
 
-  _setScopedExtremumLabelShow(scope, key, value) {
-    const enabled = !!value;
-    return this._applyScopedMutation(scope, (target) => {
-      let nextTarget = this._cloneDeep(target);
-      const current = this._isObject(this._getPathValue(nextTarget, [key]))
-        ? this._cloneDeep(this._getPathValue(nextTarget, [key]))
-        : {};
-      const label = this._isObject(current.label) ? this._cloneDeep(current.label) : {};
-      if (scope?.type === 'entity' || enabled) label.show = enabled;
-      else delete label.show;
-      if (Object.keys(label).length) current.label = label;
-      else delete current.label;
-      if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
-      else nextTarget = this._deletePathValue(nextTarget, [key]);
-      if (key === 'peak') {
-        nextTarget = this._deletePathValue(nextTarget, ['show_peak']);
-        nextTarget = this._deletePathValue(nextTarget, ['peak_color']);
-        nextTarget = this._deletePathValue(nextTarget, ['peak_marker']);
-      }
-      return nextTarget;
-    });
+  _setScopedExtremumLabelShow(...args) {
+    return this._extremaSection._setScopedExtremumLabelShow(...args);
   }
 
-  _setScopedExtremumLabelDecimal(scope, key, value) {
-    const decimal = this._normalizeNumberValue(value);
-    return this._applyScopedMutation(scope, (target) => {
-      let nextTarget = this._cloneDeep(target);
-      const current = this._isObject(this._getPathValue(nextTarget, [key]))
-        ? this._cloneDeep(this._getPathValue(nextTarget, [key]))
-        : {};
-      const label = this._isObject(current.label) ? this._cloneDeep(current.label) : {};
-      if (decimal !== null) label.decimal = decimal;
-      else delete label.decimal;
-      if (Object.keys(label).length) current.label = label;
-      else delete current.label;
-      if (Object.keys(current).length) nextTarget = this._setPathValue(nextTarget, [key], current);
-      else nextTarget = this._deletePathValue(nextTarget, [key]);
-      return nextTarget;
-    });
+  _setScopedExtremumLabelDecimal(...args) {
+    return this._extremaSection._setScopedExtremumLabelDecimal(...args);
   }
 
   _getBuiltinMarkerLabelOptions(scope, key) {
@@ -2368,18 +2054,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return setBuiltinMarkerLabelField(this._createSectionContext(), ...args);
   }
 
-  _clearFloorOverride(scope) {
-    return this._applyScopedMutation(scope, (target) => {
-      let nextTarget = this._cloneDeep(target);
-      const floor = this._isObject(this._getPathValue(nextTarget, ['floor']))
-        ? this._cloneDeep(this._getPathValue(nextTarget, ['floor']))
-        : {};
-      ['enabled', 'color', 'reset', 'label', 'direction'].forEach((key) => delete floor[key]);
-      if (Object.keys(floor).length) nextTarget = this._setPathValue(nextTarget, ['floor'], floor);
-      else nextTarget = this._deletePathValue(nextTarget, ['floor']);
-      nextTarget = this._deletePathValue(nextTarget, ['floor_marker']);
-      return nextTarget;
-    }, { rerender: true });
+  _clearFloorOverride(...args) {
+    return this._extremaSection._clearFloorOverride(...args);
   }
 
   _setFixedMarkerValue(rootKey, enabled, value) {
@@ -2397,8 +2073,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     });
   }
 
-  _setPeakShow(value) {
-    return this._setScopedPeakEnabled({ type: 'card' }, value);
+  _setPeakShow(...args) {
+    return this._extremaSection._setPeakShow(...args);
   }
 
   _readFixedMarker(rootKey) {
@@ -2676,8 +2352,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return this._needleSection._getNeedleValue(...args);
   }
 
-  _getPeakShowValue() {
-    return this._getScopedPeakConfig({ type: 'card' }).mode === 'enabled';
+  _getPeakShowValue(...args) {
+    return this._extremaSection._getPeakShowValue(...args);
   }
 
   _getScaleFixedValue(key, fallbackKey) {
@@ -3605,9 +3281,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       const layoutHeroValueSize = this._getScopedLayoutValue({ type: 'card' }, 'value_size');
       const layoutHeight = this._getScopedLayoutValue({ type: 'card' }, 'height');
       const layoutLabelWidth = this._getScopedLayoutValue({ type: 'card' }, 'width');
-      const cardPeak = this._getScopedPeakConfig({ type: 'card' });
-      const cardPeakExtras = this._getEffectiveMarkerExtras({ type: 'card' }, 'peak');
-      const cardFloor = this._getEffectiveScopedFloorConfig({ type: 'card' });
       this._syncExpandedEntityOverrides(entities.length);
 
       this.shadowRoot.innerHTML = `
@@ -3663,10 +3336,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                        const targetInherited = !this._hasTargetOverride(scope);
 	                        const layoutInherited = !this._hasLayoutOverride(scope);
 	                        const peakInherited = !this._hasPeakOverride(scope);
-                        const entityPeak = this._getEffectiveScopedPeakConfig(scope);
-                        const entityPeakExtras = this._getEffectiveMarkerExtras(scope, 'peak');
                         const floorInherited = !this._hasExtremumOverride(scope, 'floor');
-                        const entityFloor = this._getEffectiveScopedFloorConfig(scope);
 	                        const scaleGroup = this._renderOverrideGroup({
 	                          index,
 	                          group: 'scale',
@@ -3748,90 +3418,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                          group: 'peak',
 	                          title: 'Peak',
 	                          summary: this._getPeakSummary(scope),
-	                          content: `
-	                      <div class="field-row">
-	                        <div class="toggle">
-	                          <input id="entity-${index}-peak-inherit" type="checkbox" data-kind="entity-peak-inherit" data-index="${index}"${peakInherited ? ' checked' : ''}>
-                          <label for="entity-${index}-peak-inherit">Inherit card settings</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <div class="toggle">
-                          <input id="entity-${index}-peak-enabled" type="checkbox" data-kind="entity-peak-enabled" data-index="${index}"${entityPeak.mode === 'enabled' ? ' checked' : ''}>
-                          <label for="entity-${index}-peak-enabled">Peak enabled</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-peak-color">Peak color</label>
-                        ${this._renderColorInput({
-                          id: `entity-${index}-peak-color`,
-                          kind: 'entity-peak-color',
-                          index,
-                          value: entityPeak.color,
-                          fallbackHex: '#888',
-                          placeholder: 'inherit card default',
-                        })}
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-peak-reset">Peak reset</label>
-                        <select id="entity-${index}-peak-reset" data-kind="entity-peak-reset" data-index="${index}" value="${this._escapeAttribute(entityPeakExtras.reset ?? 'never')}">
-                          ${this._renderResetOptions(entityPeakExtras.reset ?? 'never')}
-                        </select>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-peak-direction">Direction</label>
-                        <select id="entity-${index}-peak-direction" data-kind="entity-peak-direction" data-index="${index}" value="${this._getEffectiveMarkerDirection(scope, 'peak')}">
-                          <option value="inward"${this._getEffectiveMarkerDirection(scope, 'peak') === 'inward' ? ' selected' : ''}>Inward</option>
-                          <option value="outward"${this._getEffectiveMarkerDirection(scope, 'peak') === 'outward' ? ' selected' : ''}>Outward</option>
-                        </select>
-                      </div>
-                      ${this._renderBuiltinMarkerLabelControls(scope, 'peak', 'Peak')}
-	                          `,
+	                          content: this._extremaSection.render(scope, 'peak'),
                         });
                         const floorGroup = this._renderOverrideGroup({
                           index,
                           group: 'floor',
                           title: 'Floor',
                           summary: this._getFloorSummary(scope),
-                          content: `
-                      <div class="field-row">
-                        <div class="toggle">
-                          <input id="entity-${index}-floor-inherit" type="checkbox" data-kind="entity-floor-inherit" data-index="${index}"${floorInherited ? ' checked' : ''}>
-                          <label for="entity-${index}-floor-inherit">Inherit card settings</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <div class="toggle">
-                          <input id="entity-${index}-floor-enabled" type="checkbox" data-kind="entity-floor-enabled" data-index="${index}"${entityFloor.mode === 'enabled' ? ' checked' : ''}>
-                          <label for="entity-${index}-floor-enabled">Floor enabled</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-floor-color">Floor color</label>
-                        ${this._renderColorInput({
-                          id: `entity-${index}-floor-color`,
-                          kind: 'entity-floor-color',
-                          index,
-                          value: entityFloor.color,
-                          fallbackHex: '#888888',
-                          placeholder: 'inherit card default',
-                        })}
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-floor-reset">Floor reset</label>
-                        <select id="entity-${index}-floor-reset" data-kind="entity-floor-reset" data-index="${index}" value="${this._escapeAttribute(entityFloor.reset)}">
-                          ${this._renderResetOptions(entityFloor.reset)}
-                        </select>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-floor-direction">Direction</label>
-                        <select id="entity-${index}-floor-direction" data-kind="entity-floor-direction" data-index="${index}" value="${this._getEffectiveMarkerDirection(scope, 'floor')}">
-                          <option value="inward"${this._getEffectiveMarkerDirection(scope, 'floor') === 'inward' ? ' selected' : ''}>Inward</option>
-                          <option value="outward"${this._getEffectiveMarkerDirection(scope, 'floor') === 'outward' ? ' selected' : ''}>Outward</option>
-                        </select>
-                      </div>
-                      ${this._renderBuiltinMarkerLabelControls(scope, 'floor', 'Floor')}
-                          `,
+                          content: this._extremaSection.render(scope, 'floor'),
                         });
 	                        const markersGroup = this._renderOverrideGroup({
 	                          index,
@@ -3909,77 +3503,13 @@ ${this._renderScaleSection({ type: 'card' })}
               group: 'marker-peak',
               title: 'Peak',
               summary: this._getMarkerResetSummary('peak'),
-              content: `
-            <div class="field-grid">
-            <div class="field-row">
-              <div class="toggle">
-                <input id="peak-show" type="checkbox" data-field="peak-show"${cardPeak.mode === 'enabled' ? ' checked' : ''}>
-                <label for="peak-show">Peak enabled</label>
-              </div>
-            </div>
-            <div class="field-row">
-              <label for="peak-color">Peak color</label>
-              ${this._renderColorInput({
-                id: 'peak-color',
-                field: 'peak-color',
-                value: cardPeak.color,
-                fallbackHex: '#888',
-                placeholder: '#888',
-              })}
-            </div>
-            <div class="field-row">
-              <label for="peak-reset">Peak reset</label>
-              <select id="peak-reset" data-field="peak-reset" value="${this._escapeAttribute(cardPeakExtras.reset)}">
-                ${this._renderResetOptions(cardPeakExtras.reset)}
-              </select>
-            </div>
-            <div class="field-row">
-              <label for="peak-direction">Direction</label>
-              <select id="peak-direction" data-field="peak-direction" value="${this._getEffectiveMarkerDirection({ type: 'card' }, 'peak')}">
-                <option value="inward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'peak') === 'inward' ? ' selected' : ''}>Inward</option>
-                <option value="outward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'peak') === 'outward' ? ' selected' : ''}>Outward</option>
-              </select>
-            </div>
-            ${this._renderBuiltinMarkerLabelControls({ type: 'card' }, 'peak', 'Peak')}
-            </div>`,
+              content: this._extremaSection.render({ type: 'card' }, 'peak'),
             })}
             ${this._renderCardGroup({
               group: 'marker-floor',
               title: 'Floor',
               summary: this._getMarkerResetSummary('floor'),
-              content: `
-            <div class="field-grid">
-            <div class="field-row">
-              <div class="toggle">
-                <input id="floor-show" type="checkbox" data-field="floor-show"${cardFloor.mode === 'enabled' ? ' checked' : ''}>
-                <label for="floor-show">Floor enabled</label>
-              </div>
-            </div>
-            <div class="field-row">
-              <label for="floor-color">Floor color</label>
-              ${this._renderColorInput({
-                id: 'floor-color',
-                field: 'floor-color',
-                value: cardFloor.color,
-                fallbackHex: '#888888',
-                placeholder: '#888888',
-              })}
-            </div>
-            <div class="field-row">
-              <label for="floor-reset">Floor reset</label>
-              <select id="floor-reset" data-field="floor-reset" value="${this._escapeAttribute(cardFloor.reset)}">
-                ${this._renderResetOptions(cardFloor.reset)}
-              </select>
-            </div>
-            <div class="field-row">
-              <label for="floor-direction">Direction</label>
-              <select id="floor-direction" data-field="floor-direction" value="${this._getEffectiveMarkerDirection({ type: 'card' }, 'floor')}">
-                <option value="inward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'floor') === 'inward' ? ' selected' : ''}>Inward</option>
-                <option value="outward"${this._getEffectiveMarkerDirection({ type: 'card' }, 'floor') === 'outward' ? ' selected' : ''}>Outward</option>
-              </select>
-            </div>
-            ${this._renderBuiltinMarkerLabelControls({ type: 'card' }, 'floor', 'Floor')}
-            </div>`,
+              content: this._extremaSection.render({ type: 'card' }, 'floor'),
             })}
             ${this._renderCardGroup({
               group: 'generic-markers',
@@ -4344,29 +3874,8 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (handleBarAppearanceField(this._createSectionContext(), { field, value })) return;
     if (this._needleSection.handleField({ field, kind, index: target.dataset?.index, value })
       || this._baselineSection.handleField({ field, kind, index: target.dataset?.index, value })
-      || this._targetSection.handleField({ field, kind, index: target.dataset?.index, value })) return;
-    if (field?.startsWith('peak-label-') || field?.startsWith('floor-label-')) {
-      const key = field.startsWith('peak-') ? 'peak' : 'floor';
-      const option = field.slice(`${key}-label-`.length);
-      const scope = { type: 'card' };
-      if (option === 'show') {
-        this._setBuiltinMarkerLabelField(scope, key, 'show', value);
-      } else {
-        const labelField = option === 'show-value' ? 'showValue'
-          : option === 'show-unit' ? 'showUnit' : option;
-        this._setBuiltinMarkerLabelField(scope, key, labelField, value);
-      }
-      return;
-    }
-    if (field === 'peak-show') return void this._setPeakShow(value);
-    if (field === 'peak-color') return void this._setScopedPeakColor({ type: 'card' }, value);
-    if (field === 'peak-direction') return void this._setMarkerDirection({ type: 'card' }, 'peak', value);
-    if (field === 'peak-reset') return void this._setScopedExtremumReset({ type: 'card' }, 'peak', value);
-    if (field === 'floor-show') return void this._setScopedExtremumEnabled({ type: 'card' }, 'floor', value);
-    if (field === 'floor-color') return void this._setScopedExtremumColor({ type: 'card' }, 'floor', value);
-    if (field === 'floor-direction') return void this._setMarkerDirection({ type: 'card' }, 'floor', value);
-    if (field === 'floor-reset') return void this._setScopedExtremumReset({ type: 'card' }, 'floor', value);
-
+      || this._targetSection.handleField({ field, kind, index: target.dataset?.index, value })
+      || this._extremaSection.handleField({ field, kind, index: target.dataset?.index, value })) return;
     if (kind === 'entity-picker' || kind === 'entity-input') {
       const index = Number(target.dataset.index);
       const nextEntities = this._getEntitiesValue().map((entry, entryIndex) => (
@@ -4421,63 +3930,6 @@ ${this._renderFormattingSection({ type: 'card' })}
     }
 
     if (handleFormattingField(this._createSectionContext(), { kind, index: target?.dataset?.index, value })) return;
-
-    if (kind === 'entity-peak-inherit') {
-      if (value) {
-        return void this._clearPeakOverride({ type: 'entity', index: Number(target.dataset.index) });
-      }
-      return;
-    }
-
-    if (kind === 'entity-peak-enabled') {
-      return void this._setScopedPeakEnabled({ type: 'entity', index: Number(target.dataset.index) }, value);
-    }
-
-    if (kind === 'entity-peak-color') {
-      return void this._setScopedPeakColor({ type: 'entity', index: Number(target.dataset.index) }, value);
-    }
-
-    if (kind === 'entity-peak-direction') {
-      return void this._setMarkerDirection({ type: 'entity', index: Number(target.dataset.index) }, 'peak', value);
-    }
-
-    if (kind === 'entity-peak-reset') {
-      return void this._setScopedExtremumReset({ type: 'entity', index: Number(target.dataset.index) }, 'peak', value);
-    }
-
-    const entityLabelMatch = kind?.match(/^entity-(peak|floor)-label-(show|text|show-value|show-unit|precision)$/);
-    if (entityLabelMatch) {
-      const [, key, option] = entityLabelMatch;
-      const scope = { type: 'entity', index: Number(target.dataset.index) };
-      if (option === 'show') {
-        this._setBuiltinMarkerLabelField(scope, key, 'show', value);
-      } else {
-        this._setBuiltinMarkerLabelField(scope, key, option === 'show-value' ? 'showValue'
-          : option === 'show-unit' ? 'showUnit' : option, value);
-      }
-      return;
-    }
-
-    if (kind === 'entity-floor-inherit') {
-      if (value) return void this._clearFloorOverride({ type: 'entity', index: Number(target.dataset.index) });
-      return;
-    }
-
-    if (kind === 'entity-floor-enabled') {
-      return void this._setScopedExtremumEnabled({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
-    }
-
-    if (kind === 'entity-floor-color') {
-      return void this._setScopedExtremumColor({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
-    }
-
-    if (kind === 'entity-floor-direction') {
-      return void this._setMarkerDirection({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
-    }
-
-    if (kind === 'entity-floor-reset') {
-      return void this._setScopedExtremumReset({ type: 'entity', index: Number(target.dataset.index) }, 'floor', value);
-    }
 
     if (kind === 'entity-bar-inherit' && handleBarAppearanceField(this._createSectionContext(), { kind, index: target.dataset.index, value })) return;
 

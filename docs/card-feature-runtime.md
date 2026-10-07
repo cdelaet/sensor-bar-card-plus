@@ -5,8 +5,8 @@ The existing `sensor-bar-card-plus.js` resource also registers
 uses Home Assistant's [public custom Card Feature API](https://developers.home-assistant.io/docs/frontend/custom-ui/custom-card-feature/).
 The graphical Feature editor exposes entity inheritance/override, Scale,
 Bar Appearance (fill style, color, solid fill), Segments for segment-based fill
-styles, Gradient Stops for gradient, Needle, Baseline, Target and Formatting. Palette edits preserve raw
-item metadata/order and inactive palettes. Animation, Peak/Floor and reference marker configuration remain available through YAML; edits
+styles, Gradient Stops for gradient, Needle, Baseline, Target, Peak, Floor and Formatting. Palette edits preserve raw
+item metadata/order and inactive palettes. Animation and reference marker configuration remain available through YAML; edits
 in the graphical editor preserve that raw configuration. No second resource is
 required for the editor.
 
@@ -20,6 +20,10 @@ inward/outward direction, color, built-in label controls and exceeded-fill color
 Percentage Target YAML is preserved without a percentage editing control; no
 independent Target label entity is exposed. Target/Baseline/Needle configurations
 remain independently stored, with styling precedence determined by the runtime.
+Peak and Floor expose enabled, color, inward/outward direction, built-in labels
+and the existing scalar reset presets (`never`, 1m–59m, 1h–23h and calendar
+presets). Their editors preserve unknown metadata and the other extremum; they
+configure behavior without accessing or resetting runtime history.
 
 A Tile's entity is inherited when the feature omits `entity`:
 
@@ -237,7 +241,9 @@ Needle/Baseline independently and verify both remain stored. Check source fallba
 entity changes/clear, side-color toggles, percentage YAML preservation and resolved
 Baseline precedence. Compare disabled/unresolved Baseline with a configured Needle.
 Exercise Target mode/source, shape/direction, labels and exceeded-fill toggles;
-verify percentage YAML, metadata and the other physical-bar settings survive edits. The remaining
+verify percentage YAML, metadata and the other physical-bar settings survive edits.
+Exercise Peak/Floor enable, color, direction, labels and reset presets independently;
+verify raw reset/label metadata and the other extremum survive unrelated edits. The remaining
 advanced graphical sections are not part of the current editor foundation.
 
 ## Marker-label manual checks

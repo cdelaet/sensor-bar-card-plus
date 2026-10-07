@@ -721,7 +721,7 @@ All 20/32/80/96/128/160-case HTML matrices and Feature source/dist/picker/fallba
 checks pass. The standalone host shrinks from 4,970 to 4,487 lines; the Feature
 host grows from 333 to 358 lines. The normal dist build and `git diff --check` pass.
 
-## Recommended next boundary
+## Phase 3G next boundary (completed by Phase 3H)
 
 Extract **Peak + Floor together** next. They share extremum enabled/color/reset,
 built-in label and direction controls with closely related history/reset semantics.
@@ -730,3 +730,155 @@ prerequisite. Reference markers have stateful arrays, capacity/source/label-only
 anchors and independent label entities, making them a separate larger boundary.
 Animation and percentage controls should remain a later deliberate capability-gap
 phase. No new prerequisite framework was revealed. Do not start the next phase.
+
+## Peak + Floor (Phase 3H)
+
+### Exact pre-extraction method/state map
+
+| Responsibility | Original standalone methods/state |
+|---|---|
+| Peak raw/effective enabled and color | `_getScopedPeakConfig`, `_getEffectiveScopedPeakConfig`; canonical `peak`, legacy `peak_marker`, `show_peak`, `peak_color` |
+| Floor raw/effective enabled and color | `_getScopedFloorConfig`, `_getEffectiveScopedFloorConfig`; canonical `floor` |
+| Peak detection/clear/summary | `_hasPeakOverride`, `_clearPeakOverride`, `_getPeakSummary` |
+| Floor/common detection/clear/summary | `_hasExtremumOverride`, `_clearFloorOverride`, `_getFloorSummary` |
+| Enabled compatibility/mutation | `_setScopedPeakEnabled`, `_setScopedExtremumEnabled`, `_setPeakShow`, `_getPeakShowValue` |
+| Color mutation | `_setScopedPeakColor`, `_setScopedExtremumColor` |
+| Extras/inheritance/reset summary | `_getScopedMarkerExtras`, `_getEffectiveMarkerExtras`, `_getMarkerResetSummary` |
+| Reset write | `_setScopedExtremumReset`; shared `renderResetOptions` already in `editor-controls.js` |
+| Legacy label compatibility | `_setScopedExtremumLabelShow`, `_setScopedExtremumLabelDecimal` |
+| Actual label and direction controls | `_getBuiltinMarkerLabelOptions`, `_renderBuiltinMarkerLabelControls`, `_setBuiltinMarkerLabelField`, `_getEffectiveMarkerDirection`, `_setMarkerDirection`; already shared in `editor-marker-controls.js` |
+| Rendering/routing | `_render` root `marker-peak`/`marker-floor` disclosures within Markers and per-entity Peak/Floor overrides; `_handleFieldEvent` root `peak-*`/`floor-*`, entity `entity-peak-*`/`entity-floor-*` and built-in label dispatch |
+| Host-owned cleanup/emission | `_cleanupPeakForEmit`, `_cleanupFloorForEmit`, `_cleanBuiltinMarkerLabelForEmit`, `_cleanupEditorEmittedConfig`, `_emitConfigChanged`, `_applyScopedMutation`, `_refreshDerivedEditorUi`; disclosure/focus/picker/config-echo lifecycle |
+| Local state | No Peak/Floor reset, label or direction draft map. Native reset selects have no intermediate typed draft. Existing host focus/control values and disclosure state remain host-owned. No extrema/history state in the editor. |
+
+### Actual reset schema and unchanged UI
+
+Public `peak.reset` and `floor.reset` are **scalar strings**, not reset mode
+objects. Defaults are `never`; duration strings are `1m`–`59m` and `1h`–`23h`.
+Calendar presets are `quarterly`, `hourly`, `daily`, `weekly`, `monthly`, `yearly`.
+`quarterly` means a quarter-hour boundary, not a quarter-year boundary. The
+runtime uses local clock/calendar boundaries (weekly starts Monday). Its internal
+`{ kind: 'duration', minutes/hours }` / `{ kind: 'calendar', unit }` /
+`{ kind: 'never' }` parsing results are not saved configuration syntax.
+
+Both hosts reuse the existing 89-option native select: never, six calendar
+presets, 59 minute durations, 23 hour durations. There is no mode selector,
+freeform duration input, calendar subform, reset validation message or reset draft
+map to extract. The existing pure `isValidReset` predicate trims/lowercases,
+accepts numeric minute/hour strings within those ranges (including leading zeros),
+and rejects seconds, zero/out-of-range durations and other syntax. Invalid loaded
+strings normalize to never at runtime; opening the editor does not rewrite them.
+
+The historical standalone private reset setter is deliberately permissive:
+it writes any trimmed lowercase string. The finite UI prevents malformed typing;
+characterization retains this private-method quirk rather than changing behavior.
+Feature additionally rejects invalid synthetic reset events with `isValidReset`,
+without emission or history mutation. Empty clears only reset, never stays explicit
+in Feature. Standalone removes root never and retains per-entity never; its Peak
+reset setter also removes legacy Peak alias containers as before. Native input/
+change duplicate events emit once by raw-config equality. Echo leaves mounted
+focused inputs intact; foreign replacement synchronizes controls. No reset draft
+or shared scheduling framework is introduced.
+
+### One shared extremum section, genuine differences retained
+
+`src/editor/sections/extrema.js` owns the 22 extremum-specific methods in the map,
+one root and one entity template parameterized by Peak/Floor, and one decoded
+field handler. Shared extras, reset, labels, direction and rendering have one
+implementation. Peak-specific enabled/color/override readers and mutation
+callbacks remain explicit because their alias precedence/cleanup differ. All 22
+standalone entrypoints remain thin private delegates. Root/entity disclosure
+placement, summaries, HTML whitespace, cleanup and emission remain unchanged.
+
+Peak raw editor precedence is canonical Peak, then `peak_marker.show/color`,
+then `show_peak`; an existing root `peak_marker` with no `show` selects disabled.
+Color falls back to `peak_color`; default gray is omitted. Floor enabled/color
+read only canonical Floor, default `#888888` (Peak's `#888` is the same color).
+Peak own-override detection includes legacy aliases; Floor's detection uses the
+canonical known fields. Direction for both can read legacy marker direction.
+Existing clear behavior removes known canonical fields and the whole label/
+legacy marker container while preserving unknown canonical siblings. Standalone
+Peak enable/color setters carry effective color/enabled and clear aliases; Floor
+retains its narrower canonical behavior. Existing emit cleanup differences,
+including empty/null Floor reset removal, stay in the host.
+
+Labels reuse `editor-marker-controls.js` and existing shared rendering without
+copies: `show`, `text`, `show_value`, `show_unit`, `precision`, legacy `decimal`
+reading. Default show is false; value/unit true; empty text and inherited primary
+precision. Direction remains `inward`/`outward`, default inward. There is no
+independent built-in label entity UI or new runtime semantics. No new reset helper
+is warranted: the options renderer and pure validator already exist. The section
+context still has exactly `read`, `mutate`, `source`, `setSource`; the narrow
+`extremumEdit` option identifies ownership alongside existing `markerEdit`.
+
+### Feature persistence and runtime separation
+
+`src/feature/feature-editor-extrema.js` applies only the owned canonical field.
+Unknown Peak/Floor siblings, nested label metadata, own undefined values/arrays,
+the other extremum, Target/Baseline/Needle, palette order/inactive palettes,
+reference markers, animation and root metadata survive. Explicit enabled/label
+booleans and inward direction stay explicit; Feature never runs standalone emit
+cleanup. Label precision owns legacy decimal removal; other label fields do not.
+
+Raw reset strings (including casing/leading zeros) remain unchanged on unrelated
+edits. Unsupported loaded reset objects and all their metadata also survive those
+edits. Because the actual reset schema is scalar and there are no supported nested
+reset controls, editing reset owns the **entire reset value** and replaces an
+unsupported object with a valid string. No object subfield is invented or silently
+canonicalized on open.
+
+Peak enabled owns `show_peak` removal and synchronizes only existing
+`peak_marker.show` so the shared legacy reader still displays the selected state;
+other legacy marker fields survive. Peak color owns `peak_color` and
+`peak_marker.color` removal only. Reset/label/direction edits leave these aliases
+untouched. Floor edits own only their canonical fields. Neither extremum is made
+mutually exclusive; disabling one preserves all config for the other.
+
+Feature composes both shared templates after Target and before Formatting. It
+extends existing value/check synchronization and CSS-color structure detection;
+no new lifecycle, observer, polling, global state, runtime preview or history API
+is introduced. The adapter imports only the pure reset-validation predicate,
+not extrema-update/reset-history APIs. Runtime per-instance Peak/Floor history,
+reset semantics and config-replacement behavior are unchanged.
+
+### Coverage and next boundary
+
+Before extraction, 22 source/dist characterization tests protected both extrema,
+root/entity inheritance, override detection/clear/summaries, color/defaults,
+labels/precision/direction, all presets and boundary/invalid resets, aliases,
+unsupported objects and reset setter quirks. Four new standalone root/entity
+screenshots were captured before extraction and retained unchanged, with native
+reset keyboard/focus and label edit/echo checks.
+
+Feature unit coverage asserts complete raw config equality after owned edits,
+source/dist controller/template identity, picker/fallback parity, all 89 presets,
+boundaries/invalid synthetic events, aliases, unknown reset/label metadata,
+independence and cross-feature preservation. Browser tests exercise source/dist
+at 360px/240px, default/enable/disable, CSS/native color, both directions, labels,
+reset presets/boundaries/invalid events, keyboard/focus/echo and foreign replacement.
+Four new Feature section screenshots protect Peak/Floor wide/narrow presentation;
+whole-Feature screenshots intentionally include these sections. Existing standalone
+and runtime baselines must remain unchanged.
+
+Feature capabilities are Entity, Scale, Bar Appearance, Segments, Gradient Stops,
+Needle, Baseline, Target, Peak, Floor, Formatting. `bar.animated` and reference
+markers remain YAML-only; percentage Target/Baseline controls stay deferred.
+
+Recommend **Phase 3I — Reference markers** next. Shared labels/direction/extrema
+now have the required separation; no prerequisite framework or runtime-history
+change is needed. Reference-marker arrays, sources, label-only anchors and
+independent label entities deserve their own characterization/extraction phase.
+Do not start that next phase as part of Phase 3H.
+
+Final Phase 3H validation passes **1,405 unit tests** and **241 Playwright tests**
+(22 new standalone characterization tests, 79 Feature unit tests, two standalone
+browser cases and six Feature browser cases). All 406 original standalone editor
+unit tests pass. The existing 20/32/80/96/128/160-case HTML matrices and expanded
+192-case matrix match the pre-extraction fingerprints exactly, across source/dist
+and picker/fallback environments; Feature template/control parity also passes.
+Existing standalone runtime/editor and Card Feature runtime snapshots are
+unchanged. Four new standalone screenshots remain identical to their captures
+before extraction; four new Feature section screenshots pass. Only the two
+whole-Feature editor screenshots intentionally change to include Peak/Floor.
+The normal dist build and working/staged `git diff --check` pass. Standalone host:
+4,487 → 3,939 lines; Feature host: 358 → 382 lines. No runtime source file changes.

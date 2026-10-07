@@ -22,6 +22,8 @@ import { createFeaturePaletteArray } from './feature-editor-palettes.js';
 import { NeedleSection } from '../editor/sections/needle.js';
 import { BaselineSection } from '../editor/sections/baseline.js';
 import { TargetSection } from '../editor/sections/target.js';
+import { ExtremaSection } from '../editor/sections/extrema.js';
+import { patchFeatureExtremumField } from './feature-editor-extrema.js';
 import { patchFeatureTargetField } from './feature-editor-target.js';
 import { patchFeatureNeedle, patchFeatureBaselineField } from './feature-editor-needle-baseline.js';
 
@@ -40,6 +42,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._needleSection = new NeedleSection(context);
     this._baselineSection = new BaselineSection(context);
     this._targetSection = new TargetSection(context);
+    this._extremaSection = new ExtremaSection(context);
     const ui = {
       root: () => this.shadowRoot,
       render: () => { this._paletteRenderRequested = true; this._requestRender(); },
@@ -105,7 +108,8 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       mutate: (_scope, mutation, options) => this._mutate(config => options?.needleEdit
         ? patchFeatureNeedle(config, options.needleEdit)
         : options?.baselineEdit ? patchFeatureBaselineField(config, options.baselineEdit)
-          : options?.targetEdit || options?.markerEdit?.key === 'target' ? patchFeatureTargetField(config, options.targetEdit ?? options.markerEdit) : mutation(config)),
+          : options?.targetEdit || options?.markerEdit?.key === 'target' ? patchFeatureTargetField(config, options.targetEdit ?? options.markerEdit)
+            : options?.extremumEdit || ['peak', 'floor'].includes(options?.markerEdit?.key) ? patchFeatureExtremumField(config, options.extremumEdit ?? options.markerEdit) : mutation(config)),
       source: (_scope, key) => key === 'baseline' ? getFeatureBaselineSource(this._config) : key === 'target' ? getFeatureTargetSource(this._config) : getFeatureScaleSource(this._config, key),
       setSource: (_scope, key, part, value) => this._mutate(config => key === 'baseline' ? patchFeatureBaselineSource(config, part, value) : key === 'target' ? patchFeatureTargetSource(config, part, value) : patchFeatureScaleSource(config, key, part, value)),
     };
@@ -144,7 +148,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       return;
     }
     if (this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event)) return;
-    if (this._needleSection.handleField({ field, kind, value }) || this._baselineSection.handleField({ field, kind, value }) || this._targetSection.handleField({ field, kind, value })) return;
+    if (this._needleSection.handleField({ field, kind, value }) || this._baselineSection.handleField({ field, kind, value }) || this._targetSection.handleField({ field, kind, value }) || this._extremaSection.handleField({ field, kind, value })) return;
     const context = this._createSectionContext();
     if (handleScaleField(context, { field, kind, value })) return;
     if (handleFormattingField(context, { field, kind, value })) return;
@@ -196,7 +200,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const below = this._baselineSection._getBaselineDirectionalColorValue(root, 'below');
     const signature = JSON.stringify([
       !!(this._context.entity_id || this._explicitEntity), this._showEntityPicker,
-      ...[needle.color, above, below, this._targetSection._getTargetColorValue(root), this._targetSection._getTargetAboveFillColorValue(root)].map(value => !!value && !isHexColorValue(value)),
+      ...[needle.color, above, below, this._targetSection._getTargetColorValue(root), this._targetSection._getTargetAboveFillColorValue(root), ...['peak', 'floor'].map(key => this._extremaSection._getMarkerConfig(root, key).color)].map(value => !!value && !isHexColorValue(value)),
       fillStyle, paletteRows.length,
       palette === this._gradientStopsSection ? !isHexColorValue(palette._getGradientStopsDraftState(root).color) : false,
       ...paletteRows.map(row => !isHexColorValue(row.color)),
@@ -238,6 +242,9 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         <div class="section"><div class="section-head"><h3>Target</h3></div>
           ${this._targetSection.render(root)}
         </div>
+        ${['peak', 'floor'].map(key => `<div class="section"><div class="section-head"><h3>${key === 'peak' ? 'Peak' : 'Floor'}</h3></div>
+          ${this._extremaSection.render(root, key)}
+        </div>`).join('')}
         ${renderFormattingSection(context, root)}
       </div>`;
       this._structureSignature = signature;
@@ -287,6 +294,23 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       'formatting-unit': getFormattingValue(context, root, 'unit'),
       'formatting-decimal': getFormattingValue(context, root, 'decimal'),
     };
+    for (const key of ['peak', 'floor']) {
+      const marker = this._extremaSection._getMarkerConfig(root, key);
+      const label = this._extremaSection._getBuiltinMarkerLabelOptions(root, key);
+      Object.assign(values, {
+        [`${key}-color`]: getColorPickerValue(marker.color, '#888888'),
+        [`${key}-color-text-fallback`]: marker.color,
+        [`${key}-reset`]: this._extremaSection._getEffectiveMarkerExtras(root, key).reset,
+        [`${key}-direction`]: this._extremaSection._getEffectiveMarkerDirection(root, key),
+        [`${key}-label-text`]: label.text,
+        [`${key}-label-precision`]: label.precision,
+      });
+      for (const [suffix, checked] of [['show', marker.mode === 'enabled'], ['label-show', label.show],
+        ['label-show-value', label.showValue], ['label-show-unit', label.showUnit]]) {
+        const control = this.shadowRoot.querySelector(`#${key}-${suffix}`);
+        if (control) control.checked = checked;
+      }
+    }
     for (const [field, value] of Object.entries(values)) {
       const control = this.shadowRoot.querySelector(`[data-field="${field}"]`);
       if (control && (control !== this.shadowRoot.activeElement || this._configReplaced)) control.value = String(value);
