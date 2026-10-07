@@ -3,6 +3,12 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createCard } from '../support/load-card-class.cjs';
 
+function readCardStyles() {
+  const card = createCard();
+  card._ensureBaseDom();
+  return card.shadowRoot.innerHTML.match(/<style>([\s\S]*?)<\/style>/)[1];
+}
+
 function createTrackedStyle(initial = {}) {
   const state = { ...initial };
   const writes = [];
@@ -1451,7 +1457,7 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(html).toContain('data-bar-animated="false"');
     expect(html).toContain('bar-fill-reveal no-anim');
 
-    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
+    const source = readCardStyles();
     expect(source).toContain('.row[data-bar-animated="false"] .bar-fill-reveal,');
     expect(source).toContain('.row[data-bar-animated="false"] .needle-marker,');
     expect(source).toContain('.row[data-bar-animated="false"] .target-marker,');
@@ -2551,7 +2557,7 @@ describe('Sensor Bar Card Plus logic', () => {
   });
 
   it('renders inside labels above peak/target/needle and marker layering in CSS', () => {
-    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
+    const source = readCardStyles();
 
     expect(source).toContain('.bar-inner-label {\n          position: absolute;');
     expect(source).toContain('z-index: 8;');
@@ -2597,7 +2603,7 @@ describe('Sensor Bar Card Plus logic', () => {
   });
 
   it('keeps needle glow off CSS filters to avoid clipped animation trails', () => {
-    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
+    const source = readCardStyles();
     const needleRule = source.match(/\.needle-marker \{[\s\S]*?\n        \}/)?.[0] ?? '';
 
     expect(needleRule).toContain('box-shadow:');
@@ -5423,7 +5429,7 @@ describe('Sensor Bar Card Plus logic', () => {
   });
 
   it('keeps the Baseline indicator structural and separate from marker and Reveal Fill timing', () => {
-    const source = readFileSync(new URL('../../src/card/SensorBarCard.js', import.meta.url), 'utf8');
+    const source = readCardStyles();
 
     expect(source).toContain('.baseline-indicator {\n          position: absolute;\n          top: 0;\n          bottom: 0;\n          width: 1px;');
     expect(source).toContain('background-color: var(--primary-text-color, currentColor);\n          opacity: 0.6;');
