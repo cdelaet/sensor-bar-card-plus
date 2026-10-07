@@ -211,6 +211,7 @@ function loadCardClass(options = {}) {
     card: sandbox.customElements.get('sensor-bar-card-plus'),
     editor: sandbox.customElements.get('sensor-bar-card-plus-editor'),
     feature: sandbox.customElements.get('sensor-bar-card-plus-feature'),
+    featureEditor: sandbox.customElements.get('sensor-bar-card-plus-feature-editor'),
     customCards: sandbox.window.customCards,
     customCardFeatures: sandbox.window.customCardFeatures,
     reload: () => vm.runInNewContext(source, sandbox, { filename: filePath }),

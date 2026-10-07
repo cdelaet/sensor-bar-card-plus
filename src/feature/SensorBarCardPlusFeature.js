@@ -31,6 +31,10 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     return { type: 'custom:sensor-bar-card-plus-feature' };
   }
 
+  static getConfigElement() {
+    return document.createElement('sensor-bar-card-plus-feature-editor');
+  }
+
   setConfig(config) {
     if (!config || typeof config !== 'object' || Array.isArray(config)) {
       throw new Error('Invalid Sensor Bar Card Plus feature configuration');

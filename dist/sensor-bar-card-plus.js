@@ -2928,11 +2928,11 @@
     setStyleIfChanged(markerEl, "--marker-color", markerColor);
     setStyleIfChanged(markerEl, "--marker-contrast-color", getMarkerContrastColor(markerColor));
   }
-  function patchBar(root, model, { revealDuration = 600 } = {}) {
+  function patchBar(root2, model, { revealDuration = 600 } = {}) {
     var _a, _b, _c;
-    const fillReveal = root.querySelector(".bar-fill-reveal");
-    const baselineIndicator = root.querySelector(".baseline-indicator");
-    const paintLayer = root.querySelector('.bar-paint-layer[data-layer="base"]');
+    const fillReveal = root2.querySelector(".bar-fill-reveal");
+    const baselineIndicator = root2.querySelector(".baseline-indicator");
+    const paintLayer = root2.querySelector('.bar-paint-layer[data-layer="base"]');
     if (fillReveal) {
       setStyleTextIfChanged(fillReveal, `${model.fill.revealStyle};--sbcp-reveal-duration:${revealDuration}ms`);
       setClassNameIfChanged(fillReveal, `bar-fill-reveal${model.animated ? "" : " no-anim"}`);
@@ -2949,14 +2949,14 @@
         setStyleTextIfChanged(paintLayer, `z-index:${baseLayerState.zIndex};${baseLayerState.paintStyle}${baseLayerState.revealStyle}`);
       }
     }
-    const aboveTargetLayer = root.querySelector('.bar-paint-layer[data-layer="above-target"]');
+    const aboveTargetLayer = root2.querySelector('.bar-paint-layer[data-layer="above-target"]');
     if (aboveTargetLayer) {
       const aboveTargetState = model.fill.paintLayers.find((layer) => layer.id === "above-target");
       if (aboveTargetState) {
         setStyleTextIfChanged(aboveTargetLayer, `z-index:${aboveTargetState.zIndex};${aboveTargetState.paintStyle}${aboveTargetState.revealStyle}`);
       }
     }
-    const needleEl = root.querySelector(".needle-marker");
+    const needleEl = root2.querySelector(".needle-marker");
     if (needleEl) {
       setStyleIfChanged(needleEl, "display", model.needle.show ? "block" : "none");
       setStyleIfChanged(needleEl, "left", `${(_a = model.needle.pct) != null ? _a : 0}%`);
@@ -2969,10 +2969,10 @@
       var _a2;
       return (_a2 = markers.find((marker) => marker.id === id || marker.type === id)) != null ? _a2 : null;
     };
-    patchMarker(root.querySelector(".target-marker"), getMarker("target"));
-    patchMarker(root.querySelector(".peak-marker"), getMarker("peak"));
-    patchMarker(root.querySelector(".floor-marker"), getMarker("floor"));
-    ((_c = (_b = root.querySelectorAll) == null ? void 0 : _b.call(root, ".generic-marker[data-marker-id]")) != null ? _c : []).forEach((markerEl) => {
+    patchMarker(root2.querySelector(".target-marker"), getMarker("target"));
+    patchMarker(root2.querySelector(".peak-marker"), getMarker("peak"));
+    patchMarker(root2.querySelector(".floor-marker"), getMarker("floor"));
+    ((_c = (_b = root2.querySelectorAll) == null ? void 0 : _b.call(root2, ".generic-marker[data-marker-id]")) != null ? _c : []).forEach((markerEl) => {
       patchMarker(markerEl, getMarker(markerEl.dataset.markerId));
     });
   }
@@ -5942,8 +5942,8 @@ ${barMarkerStyles}
     if (!path.length) {
       return value;
     }
-    const root = cloneContainer(target != null ? target : {});
-    let cursor = root;
+    const root2 = cloneContainer(target != null ? target : {});
+    let cursor = root2;
     let sourceCursor = target;
     for (let index = 0; index < path.length - 1; index++) {
       const key = path[index];
@@ -5953,7 +5953,7 @@ ${barMarkerStyles}
       sourceCursor = nextSource;
     }
     cursor[path[path.length - 1]] = value;
-    return root;
+    return root2;
   }
   function deletePathValue(target, path) {
     if (!path.length || !isObject(target)) {
@@ -13253,6 +13253,9 @@ ${this._renderFormattingSection({ type: "card" })}
         static getStubConfig() {
           return { type: "custom:sensor-bar-card-plus-feature" };
         }
+        static getConfigElement() {
+          return document.createElement("sensor-bar-card-plus-feature-editor");
+        }
         setConfig(config) {
           if (!config || typeof config !== "object" || Array.isArray(config)) {
             throw new Error("Invalid Sensor Bar Card Plus feature configuration");
@@ -13574,16 +13577,294 @@ ${this._renderFormattingSection({ type: "card" })}
     }
   });
 
+  // src/feature/feature-editor-config.js
+  function getFeatureScaleSource(config, key) {
+    var _a, _b, _c, _d, _e;
+    const bound = (_a = config.scale) == null ? void 0 : _a[key];
+    if (bound !== void 0) {
+      const source = normalizeStructuredResolvableValue(bound);
+      return { fixed: (_b = source.fixed) != null ? _b : "", entity: (_c = source.entity) != null ? _c : "" };
+    }
+    return { fixed: (_d = config[key]) != null ? _d : "", entity: (_e = config[`${key}_entity`]) != null ? _e : "" };
+  }
+  function patchFeatureScaleSource(config, key, part, rawValue) {
+    var _a;
+    const value = part === "fixed" ? normalizeNumberValue(rawValue) : normalizeTextValue(rawValue).trim();
+    const empty = part === "fixed" ? value === null : !value;
+    const base = ["scale", key];
+    const bound = (_a = config.scale) == null ? void 0 : _a[key];
+    const patch = (target, path) => empty ? deletePathValue(target, path) : setPathValue(target, path, value);
+    if (isObject(bound)) {
+      if (part === "fixed" && empty) {
+        return deletePathValue(deletePathValue(config, [...base, "fixed"]), [...base, "value"]);
+      }
+      const storedPart = part === "fixed" && bound.fixed === void 0 && bound.value !== void 0 ? "value" : part;
+      return patch(config, [...base, storedPart]);
+    }
+    if (bound !== void 0 && bound !== null) {
+      const storedPart = looksLikeEntityId(bound) ? "entity" : "fixed";
+      if (part === storedPart) return patch(config, base);
+      if (empty) return config;
+      return setPathValue(config, base, { [storedPart]: bound, [part]: value });
+    }
+    if (bound === void 0 && (config[key] !== void 0 || config[`${key}_entity`] !== void 0)) {
+      return patch(config, [part === "fixed" ? key : `${key}_entity`]);
+    }
+    return empty ? config : setPathValue(config, [...base, part], value);
+  }
+  var init_feature_editor_config = __esm({
+    "src/feature/feature-editor-config.js"() {
+      init_normalize();
+      init_editor_config();
+    }
+  });
+
+  // src/feature/SensorBarCardPlusFeatureEditor.js
+  var root, SensorBarCardPlusFeatureEditor;
+  var init_SensorBarCardPlusFeatureEditor = __esm({
+    "src/feature/SensorBarCardPlusFeatureEditor.js"() {
+      init_editor_config();
+      init_editor_controls();
+      init_editor_styles();
+      init_scale();
+      init_formatting();
+      init_bar_appearance();
+      init_feature_editor_config();
+      root = { type: "card" };
+      SensorBarCardPlusFeatureEditor = class extends HTMLElement {
+        constructor() {
+          super();
+          this.attachShadow({ mode: "open" });
+          this._config = {};
+          this._context = {};
+          this._chooseEntity = false;
+          this._renderEpoch = 0;
+          this._updateComplete = Promise.resolve();
+          const handleField = (event) => this._handleField(event);
+          for (const type of ["input", "change", "value-changed"]) this.shadowRoot.addEventListener(type, handleField);
+          this.shadowRoot.addEventListener("focusout", () => this._requestRender());
+          customElements.whenDefined("ha-entity-picker").then(() => {
+            if (this.isConnected) this._requestRender();
+          });
+        }
+        setConfig(config) {
+          if (!isObject(config)) throw new Error("Invalid Sensor Bar Card Plus feature configuration");
+          if (serializeConfig(config) !== serializeConfig(this._config)) {
+            this._config = cloneDeep(config);
+            this._chooseEntity = false;
+            this._configReplaced = true;
+          }
+          this._requestRender();
+        }
+        set hass(value) {
+          this._hass = value;
+          this._requestRender();
+        }
+        get hass() {
+          return this._hass;
+        }
+        set context(value) {
+          this._context = value != null ? value : {};
+          this._requestRender();
+        }
+        get context() {
+          return this._context;
+        }
+        get updateComplete() {
+          return this._updateComplete;
+        }
+        get _explicitEntity() {
+          return typeof this._config.entity === "string" ? this._config.entity.trim() : "";
+        }
+        get _effectiveEntity() {
+          return this._explicitEntity || this._context.entity_id || "";
+        }
+        get _showEntityPicker() {
+          return !!this._explicitEntity || this._chooseEntity || !this._context.entity_id;
+        }
+        connectedCallback() {
+          this._requestRender();
+        }
+        disconnectedCallback() {
+          this._renderEpoch += 1;
+          this._renderScheduled = false;
+        }
+        _requestRender() {
+          if (this._renderScheduled) return;
+          this._renderScheduled = true;
+          const epoch = this._renderEpoch;
+          this._updateComplete = Promise.resolve().then(() => {
+            if (epoch !== this._renderEpoch) return;
+            this._renderScheduled = false;
+            this._render();
+          });
+        }
+        _createSectionContext() {
+          return {
+            read: (_scope, path) => getPathValue(this._config, path),
+            mutate: (_scope, mutation) => this._mutate(mutation),
+            source: (_scope, key) => getFeatureScaleSource(this._config, key),
+            setSource: (_scope, key, part, value) => this._mutate((config) => patchFeatureScaleSource(config, key, part, value))
+          };
+        }
+        _mutate(mutation) {
+          const next = mutation(this._config);
+          if (serializeConfig(next) === serializeConfig(this._config)) return false;
+          this._config = next;
+          this._requestRender();
+          this.dispatchEvent(new CustomEvent("config-changed", {
+            bubbles: true,
+            composed: true,
+            detail: { config: cloneDeep(next) }
+          }));
+          return true;
+        }
+        _handleField(event) {
+          var _a, _b, _c, _d, _e;
+          const target = event.target;
+          if ((target == null ? void 0 : target.tagName) === "HA-ENTITY-PICKER" && event.type !== "value-changed") return;
+          const field = (_b = (_a = target == null ? void 0 : target.dataset) == null ? void 0 : _a.field) == null ? void 0 : _b.replace(/-text-fallback$/, "");
+          const kind = (_d = (_c = target == null ? void 0 : target.dataset) == null ? void 0 : _c.kind) == null ? void 0 : _d.replace(/-text-fallback$/, "");
+          const value = event.type === "value-changed" ? (_e = event.detail) == null ? void 0 : _e.value : (target == null ? void 0 : target.type) === "checkbox" ? target.checked : target == null ? void 0 : target.value;
+          if (field === "feature-entity-override") {
+            this._chooseEntity = !!value;
+            if (!value) this._mutate((config) => deletePathValue(config, ["entity"]));
+            this._requestRender();
+            return;
+          }
+          if (kind === "feature-entity-source") {
+            const entity = typeof value === "string" ? value.trim() : "";
+            this._chooseEntity = false;
+            this._mutate((config) => entity ? setPathValue(config, ["entity"], entity) : deletePathValue(config, ["entity"]));
+            this._requestRender();
+            return;
+          }
+          const context = this._createSectionContext();
+          if (handleScaleField(context, { field, kind, value })) return;
+          if (handleFormattingField(context, { field, kind, value })) return;
+          handleBarAppearanceField(context, { field, kind, value });
+        }
+        _entityDescription() {
+          if (this._explicitEntity) return `Using explicit entity: ${this._explicitEntity}`;
+          if (this._context.entity_id) return `Using parent card entity: ${this._context.entity_id}`;
+          return "An entity is required. Select an entity below.";
+        }
+        _renderEntitySection() {
+          return `<div class="section">
+      <div class="section-head"><h3>Entity</h3></div>
+      <div id="feature-entity-status" class="section-note" role="status">${escapeAttribute(this._entityDescription())}</div>
+      ${this._context.entity_id || this._explicitEntity ? `<div class="toggle">
+        <input id="feature-entity-override" type="checkbox" data-field="feature-entity-override"${this._explicitEntity || this._chooseEntity ? " checked" : ""}>
+        <label for="feature-entity-override">Use explicit entity</label>
+      </div>` : ""}
+      ${this._showEntityPicker ? `<div class="field-row">
+        <label for="feature-entity">Entity override</label>
+        ${renderEntitySourceInput("feature-entity-source", "feature", this._explicitEntity)}
+      </div>` : ""}
+    </div>`;
+        }
+        _captureFocus() {
+          const active = this.shadowRoot.activeElement;
+          if (!active) return null;
+          const selector = active.id ? `#${active.id}` : active.dataset.field ? `[data-field="${active.dataset.field}"]` : active.dataset.kind ? `[data-kind="${active.dataset.kind}"]` : null;
+          return selector ? { selector, start: active.selectionStart, end: active.selectionEnd } : null;
+        }
+        _render() {
+          var _a, _b, _c, _d;
+          const color = getBarColorValue(this._createSectionContext(), root);
+          const signature = JSON.stringify([
+            !!(this._context.entity_id || this._explicitEntity),
+            this._showEntityPicker,
+            !!customElements.get("ha-entity-picker"),
+            !!color && !isHexColorValue(color)
+          ]);
+          const activeField = (_b = (_a = this.shadowRoot.activeElement) == null ? void 0 : _a.dataset) == null ? void 0 : _b.field;
+          const defer = activeField === "bar-color-text-fallback" || activeField === "feature-entity-override" && !this._context.entity_id && !this._explicitEntity;
+          if (signature !== this._structureSignature && !defer) {
+            const focus = this._captureFocus();
+            const context = this._createSectionContext();
+            this.shadowRoot.innerHTML = `<style>${editorStyles}
+        .inline-row { grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); }
+        .section-note { overflow-wrap: anywhere; }
+        ha-entity-picker { display: block; min-width: 0; max-width: 100%; }
+      </style><div class="editor">
+        ${this._renderEntitySection()}
+        ${renderScaleSection(context, root)}
+        ${renderBarAppearanceSection(context, root)}
+        ${renderFormattingSection(context, root)}
+      </div>`;
+            this._structureSignature = signature;
+            this._syncControls();
+            const active = focus && this.shadowRoot.querySelector(focus.selector);
+            (_c = active == null ? void 0 : active.focus) == null ? void 0 : _c.call(active);
+            if ((active == null ? void 0 : active.type) === "text" && focus.start != null) (_d = active.setSelectionRange) == null ? void 0 : _d.call(active, focus.start, focus.end);
+          } else {
+            this._syncControls();
+          }
+          this._configReplaced = false;
+        }
+        _syncControls() {
+          const context = this._createSectionContext();
+          const color = getBarColorValue(context, root);
+          const values = {
+            "scale-min": getFeatureScaleSource(this._config, "min").fixed,
+            "scale-max": getFeatureScaleSource(this._config, "max").fixed,
+            "bar-fill-style": getEffectiveFillStyleValue(context, root),
+            "bar-color": getColorPickerValue(color, "#4a9eff"),
+            "bar-color-text-fallback": color,
+            "formatting-unit": getFormattingValue(context, root, "unit"),
+            "formatting-decimal": getFormattingValue(context, root, "decimal")
+          };
+          for (const [field, value] of Object.entries(values)) {
+            const control = this.shadowRoot.querySelector(`[data-field="${field}"]`);
+            if (control && (control !== this.shadowRoot.activeElement || this._configReplaced)) control.value = String(value);
+            if (field === "bar-color-text-fallback") control == null ? void 0 : control.setAttribute("aria-label", "Bar color (CSS value)");
+          }
+          const solid = this.shadowRoot.querySelector("#bar-solid-fill");
+          if (solid) solid.checked = getBarSolidFillValue(context, root);
+          const override = this.shadowRoot.querySelector("#feature-entity-override");
+          if (override) override.checked = !!this._explicitEntity || this._chooseEntity;
+          const status = this.shadowRoot.querySelector("#feature-entity-status");
+          if (status) status.textContent = this._entityDescription();
+          for (const [kind, value, label, id] of [
+            ["feature-entity-source", this._explicitEntity, "Entity override", "feature-entity"],
+            ["scale-min-entity-source", getFeatureScaleSource(this._config, "min").entity, "Min entity", "feature-scale-min-entity"],
+            ["scale-max-entity-source", getFeatureScaleSource(this._config, "max").entity, "Max entity", "feature-scale-max-entity"]
+          ]) {
+            for (const tag of ["input", "ha-entity-picker"]) {
+              for (const control of this.shadowRoot.querySelectorAll(`${tag}[data-kind="${kind}"]`)) {
+                control.id = id;
+                control.setAttribute("aria-label", label);
+                if (kind === "feature-entity-source") {
+                  control.setAttribute("aria-describedby", "feature-entity-status");
+                  control.setAttribute("aria-required", this._effectiveEntity ? "false" : "true");
+                }
+                if (control !== this.shadowRoot.activeElement || this._configReplaced) control.value = value;
+                if (tag === "ha-entity-picker") {
+                  control.hass = this._hass;
+                  control.label = label;
+                  control.allowCustomEntity = true;
+                }
+              }
+            }
+          }
+        }
+      };
+    }
+  });
+
   // src/sensor-bar-card-plus.js
   var require_sensor_bar_card_plus = __commonJS({
     "src/sensor-bar-card-plus.js"() {
       init_SensorBarCard();
       init_SensorBarCardPlusEditor();
       init_SensorBarCardPlusFeature();
+      init_SensorBarCardPlusFeatureEditor();
       for (const [name, element] of [
         ["sensor-bar-card-plus", SensorBarCard],
         ["sensor-bar-card-plus-editor", SensorBarCardPlusEditor],
-        ["sensor-bar-card-plus-feature", SensorBarCardPlusFeature]
+        ["sensor-bar-card-plus-feature", SensorBarCardPlusFeature],
+        ["sensor-bar-card-plus-feature-editor", SensorBarCardPlusFeatureEditor]
       ]) {
         if (!customElements.get(name)) customElements.define(name, element);
       }
@@ -13600,7 +13881,8 @@ ${this._renderFormattingSection({ type: "card" })}
         window.customCardFeatures.push({
           type: "sensor-bar-card-plus-feature",
           name: "Sensor Bar Card Plus",
-          isSupported: supportsSensorBarFeature
+          isSupported: supportsSensorBarFeature,
+          configurable: true
         });
       }
     }

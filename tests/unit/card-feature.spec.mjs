@@ -20,16 +20,16 @@ async function update(element, value, others = {}) {
 }
 
 describe('native feature registration', () => {
-  it('registers all elements and discovery entries, with an inherited stub and no editor', () => {
+  it('registers all elements and discovery entries, with an inherited stub and editor', () => {
     const classes = loadCardClass();
     expect(classes.card).toBeTypeOf('function');
     expect(classes.editor).toBeTypeOf('function');
     expect(classes.feature).toBeTypeOf('function');
     expect(classes.feature.getStubConfig()).toEqual({ type: 'custom:sensor-bar-card-plus-feature' });
-    expect(classes.feature.getConfigElement).toBeUndefined();
+    expect(classes.feature.getConfigElement()).toBeInstanceOf(classes.featureEditor);
     expect(classes.customCardFeatures).toHaveLength(1);
     expect(classes.customCardFeatures[0]).toMatchObject({ type: 'sensor-bar-card-plus-feature', name: 'Sensor Bar Card Plus' });
-    expect(classes.customCardFeatures[0].configurable).not.toBe(true);
+    expect(classes.customCardFeatures[0].configurable).toBe(true);
   });
   it('allows numeric or nonnumeric parents and area context without validating the eventual entity', () => {
     const supported = loadCardClass().customCardFeatures[0].isSupported;

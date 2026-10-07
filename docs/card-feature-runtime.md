@@ -1,9 +1,13 @@
-# Card Feature runtime (YAML preview)
+# Card Feature runtime and editor foundation
 
 The existing `sensor-bar-card-plus.js` resource also registers
 `sensor-bar-card-plus-feature`. No additional resource is required. This preview
 uses Home Assistant's [public custom Card Feature API](https://developers.home-assistant.io/docs/frontend/custom-ui/custom-card-feature/).
-The graphical feature editor is deferred to Phase 3; configure this runtime in YAML.
+The graphical Feature editor exposes entity inheritance/override, Scale,
+Bar Appearance (fill style, color, solid fill) and Formatting. Advanced palette,
+Needle, Baseline and marker configuration remains available through YAML; edits
+in the graphical editor preserve that raw configuration. No second resource is
+required for the editor.
 
 A Tile's entity is inherited when the feature omits `entity`:
 
@@ -172,12 +176,12 @@ a newly created instance starts fresh. Ordinary state updates patch persistent
 nodes. A change in required structure, such as Needle appearing when a dynamic
 Baseline becomes unresolved, rebuilds the physical bar.
 
-For Phase 3, keep inherited entity distinct from an explicit override and use
-the same canonical sections. Config replacement currently resets history, so
-live editor previews should account for that. Marker labels use those same
-canonical sections, with a separate compact presentation. The registry is
-intentionally not marked configurable
-and the feature has no `getConfigElement()` yet.
+The Feature editor keeps inherited entity distinct from an explicit override and
+reuses the shared Scale, Bar Appearance and Formatting sections with raw,
+patch-only persistence. Its registry entry is configurable and
+`getConfigElement()` returns `sensor-bar-card-plus-feature-editor`. Config
+replacement currently resets runtime history; the editor relies on HA's
+surrounding live preview and does not create a second runtime/history instance.
 
 ## Acceptance on current Home Assistant
 
@@ -212,7 +216,10 @@ installation:
 9. Navigate away and back, then reload the dashboard. Verify same-instance
    reconnection and new-instance history behavior, with no console errors.
 
-Full public documentation and the graphical editor remain deferred to Phase 3.
+Also open the graphical Feature editor and check inherited/explicit entity
+selection, clearing, context changes, picker behavior and narrow dialogs. Confirm
+advanced YAML configuration survives edits to the exposed fields. The remaining
+advanced graphical sections are not part of the current editor foundation.
 
 ## Marker-label manual checks
 
