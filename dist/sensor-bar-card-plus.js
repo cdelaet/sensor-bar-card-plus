@@ -6737,6 +6737,256 @@ ${barMarkerStyles}
     }
   });
 
+  // src/editor/sections/scale.js
+  function getScaleParts(context, scope, key, effective = false) {
+    return context.source(scope, key, effective);
+  }
+  function getScaleFixedValue(context, key) {
+    return getScaleParts(context, { type: "card" }, key).fixed;
+  }
+  function getScaleEntityValue(context, key) {
+    return getScaleParts(context, { type: "card" }, key).entity;
+  }
+  function setScalePart(context, scope, key, part, value) {
+    return context.setSource(scope, key, part, value);
+  }
+  function hasScaleOverride(context, scope) {
+    const explicit = (value) => value !== "" && value !== void 0 && value !== null;
+    return ["min", "max"].some((key) => {
+      const parts = getScaleParts(context, scope, key);
+      return explicit(parts == null ? void 0 : parts.fixed) || explicit(parts == null ? void 0 : parts.entity);
+    });
+  }
+  function getScaleOverrideSummary(context, scope) {
+    const parts = [];
+    const min = getScaleParts(context, scope, "min");
+    const max = getScaleParts(context, scope, "max");
+    if (min.entity) parts.push("Min entity");
+    else if (min.fixed !== "" && min.fixed !== void 0) parts.push(`Min ${min.fixed}`);
+    if (max.entity) parts.push("Max entity");
+    else if (max.fixed !== "" && max.fixed !== void 0) parts.push(`Max ${max.fixed}`);
+    return parts.length ? parts.join(" \u2022 ") : "Inherited";
+  }
+  function clearScaleOverride(context, scope) {
+    return context.mutate(scope, (target) => {
+      let nextTarget = deletePathValue(target, ["scale", "min"]);
+      nextTarget = deletePathValue(nextTarget, ["scale", "max"]);
+      nextTarget = deletePathValue(nextTarget, ["min"]);
+      nextTarget = deletePathValue(nextTarget, ["max"]);
+      nextTarget = deletePathValue(nextTarget, ["min_entity"]);
+      nextTarget = deletePathValue(nextTarget, ["max_entity"]);
+      return pruneEmptyObjectsInTarget(nextTarget, ["scale"]);
+    }, { rerender: true });
+  }
+  function handleScaleField(context, { field, kind, index, value }) {
+    if (field === "scale-min" || field === "scale-max") {
+      setScalePart(context, { type: "card" }, field.slice(6), "fixed", value);
+      return true;
+    }
+    if (kind === "scale-min-entity-source" || kind === "scale-max-entity-source") {
+      setScalePart(context, { type: "card" }, kind.split("-")[1], "entity", value);
+      return true;
+    }
+    const scope = { type: "entity", index: Number(index) };
+    if (kind === "entity-scale-inherit") {
+      if (value) clearScaleOverride(context, scope);
+      return true;
+    }
+    if (["entity-override-min", "entity-override-max", "entity-override-min-entity-source", "entity-override-max-entity-source"].includes(kind)) {
+      setScalePart(context, scope, kind.split("-")[2], kind.endsWith("-entity-source") ? "entity" : "fixed", value);
+      return true;
+    }
+    return false;
+  }
+  function renderScaleSection(context, scope) {
+    if ((scope == null ? void 0 : scope.type) === "entity") {
+      const index = scope.index;
+      const minParts = getScaleParts(context, scope, "min", true);
+      const maxParts = getScaleParts(context, scope, "max", true);
+      const scaleInherited = !hasScaleOverride(context, scope);
+      return `
+	                      <div class="field-row">
+	                        <div class="toggle">
+	                          <input id="entity-${index}-scale-inherit" type="checkbox" data-kind="entity-scale-inherit" data-index="${index}"${scaleInherited ? " checked" : ""}>
+	                          <label for="entity-${index}-scale-inherit">Inherit card settings</label>
+                        </div>
+                      </div>
+	                      <div class="section-note">Fixed values are used as fallback when entity values are unavailable.</div>
+                      <div class="field-row">
+                        <label for="entity-${index}-min">Min fallback</label>
+                        <input id="entity-${index}-min" type="number" step="any" data-kind="entity-override-min" data-index="${index}" value="${escapeAttribute(minParts.fixed)}" placeholder="inherit card default">
+                      </div>
+                      <div class="field-row">
+                        <label>Min entity</label>
+                        ${renderEntitySourceInput("entity-override-min-entity-source", index, minParts.entity, "inherit card default")}
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-max">Max fallback</label>
+                        <input id="entity-${index}-max" type="number" step="any" data-kind="entity-override-max" data-index="${index}" value="${escapeAttribute(maxParts.fixed)}" placeholder="inherit card default">
+                      </div>
+                      <div class="field-row">
+                        <label>Max entity</label>
+                        ${renderEntitySourceInput("entity-override-max-entity-source", index, maxParts.entity, "inherit card default")}
+                      </div>
+	                          `;
+    }
+    const scaleMin = getScaleFixedValue(context, "min");
+    const scaleMax = getScaleFixedValue(context, "max");
+    const scaleMinEntity = getScaleEntityValue(context, "min");
+    const scaleMaxEntity = getScaleEntityValue(context, "max");
+    return `	        <div class="section">
+	          <div class="section-head">
+	            <h3>Scale</h3>
+	            <div class="section-note">Entity values take precedence. Fixed values are used as fallback.</div>
+	          </div>
+	          <div class="inline-row editor-grid">
+            <div class="field-row">
+              <label for="scale-min">Min fallback</label>
+              <input id="scale-min" type="number" step="any" data-field="scale-min" value="${escapeAttribute(scaleMin)}">
+            </div>
+            <div class="field-row">
+              <label>Min entity</label>
+              ${renderEntitySourceInput("scale-min-entity-source", "card", scaleMinEntity)}
+            </div>
+            <div class="field-row">
+              <label for="scale-max">Max fallback</label>
+              <input id="scale-max" type="number" step="any" data-field="scale-max" value="${escapeAttribute(scaleMax)}">
+            </div>
+            <div class="field-row">
+              <label>Max entity</label>
+              ${renderEntitySourceInput("scale-max-entity-source", "card", scaleMaxEntity)}
+            </div>
+          </div>
+	        </div>`;
+  }
+  var init_scale = __esm({
+    "src/editor/sections/scale.js"() {
+      init_editor_config();
+      init_editor_controls();
+    }
+  });
+
+  // src/editor/sections/formatting.js
+  function getFormattingValue(context, scope, key) {
+    var _a, _b;
+    return (_b = (_a = context.read(scope, ["formatting", key])) != null ? _a : context.read(scope, [key])) != null ? _b : "";
+  }
+  function getEffectiveFormattingValue(context, scope, key) {
+    const paths = [["formatting", key], [key]];
+    for (const path of paths) {
+      const value = context.read(scope, path);
+      if (value !== void 0 && value !== null && value !== "") return value;
+    }
+    if ((scope == null ? void 0 : scope.type) === "entity") {
+      for (const path of paths) {
+        const value = context.read({ type: "card" }, path);
+        if (value !== void 0 && value !== null && value !== "") return value;
+      }
+    }
+    return "";
+  }
+  function setFormattingUnit(context, scope, rawValue) {
+    const value = normalizeTextValue(rawValue).trim();
+    return context.mutate(scope, (target) => {
+      let nextTarget = value ? setPathValue(target, ["formatting", "unit"], value) : deletePathValue(target, ["formatting", "unit"]);
+      nextTarget = deletePathValue(nextTarget, ["unit"]);
+      return pruneEmptyObjectsInTarget(nextTarget, ["formatting"]);
+    });
+  }
+  function setFormattingDecimal(context, scope, rawValue) {
+    const value = normalizeDecimalValue(rawValue);
+    const empty = rawValue === "" || rawValue === null || rawValue === void 0;
+    if (!empty && value === null) return false;
+    return context.mutate(scope, (target) => {
+      let nextTarget = empty ? deletePathValue(target, ["formatting", "decimal"]) : setPathValue(target, ["formatting", "decimal"], value);
+      nextTarget = deletePathValue(nextTarget, ["decimal"]);
+      return pruneEmptyObjectsInTarget(nextTarget, ["formatting"]);
+    });
+  }
+  function clearFormattingOverride(context, scope) {
+    return context.mutate(scope, (target) => {
+      const nextTarget = removePathsFromTarget(target, [["formatting", "unit"], ["formatting", "decimal"], ["unit"], ["decimal"]]);
+      return pruneEmptyObjectsInTarget(nextTarget, ["formatting"]);
+    }, { rerender: true });
+  }
+  function hasFormattingOverride(context, scope) {
+    var _a;
+    const value = (_a = context.read(scope, ["formatting"])) != null ? _a : {};
+    if (isObject(value) && (Object.prototype.hasOwnProperty.call(value, "unit") || Object.prototype.hasOwnProperty.call(value, "decimal"))) return true;
+    return context.read(scope, ["unit"]) !== void 0 || context.read(scope, ["decimal"]) !== void 0;
+  }
+  function getFormattingSummary(context, scope) {
+    const parts = [];
+    const unit = getFormattingValue(context, scope, "unit");
+    const decimal = getFormattingValue(context, scope, "decimal");
+    if (unit !== "") parts.push(`Unit ${unit}`);
+    if (decimal !== "") parts.push(`${decimal} ${Number(decimal) === 1 ? "decimal" : "decimals"}`);
+    return parts.length ? parts.join(" \u2022 ") : "Inherited";
+  }
+  function handleFormattingField(context, { field, kind, index, value }) {
+    if (field === "formatting-unit" || field === "formatting-decimal") {
+      const setter = field === "formatting-unit" ? setFormattingUnit : setFormattingDecimal;
+      setter(context, { type: "card" }, value);
+      return true;
+    }
+    const scope = { type: "entity", index: Number(index) };
+    if (kind === "entity-formatting-inherit") {
+      if (value) clearFormattingOverride(context, scope);
+      return true;
+    }
+    if (kind === "entity-formatting-unit" || kind === "entity-formatting-decimal") {
+      const setter = kind === "entity-formatting-unit" ? setFormattingUnit : setFormattingDecimal;
+      setter(context, scope, value);
+      return true;
+    }
+    return false;
+  }
+  function renderFormattingSection(context, scope) {
+    if ((scope == null ? void 0 : scope.type) === "entity") {
+      const index = scope.index;
+      const formattingInherited = !hasFormattingOverride(context, scope);
+      return `
+	                      <div class="field-row">
+	                        <div class="toggle">
+	                          <input id="entity-${index}-formatting-inherit" type="checkbox" data-kind="entity-formatting-inherit" data-index="${index}"${formattingInherited ? " checked" : ""}>
+                          <label for="entity-${index}-formatting-inherit">Inherit card settings</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-formatting-unit">Unit</label>
+                        <input id="entity-${index}-formatting-unit" type="text" data-kind="entity-formatting-unit" data-index="${index}" value="${escapeAttribute(getEffectiveFormattingValue(context, scope, "unit"))}" placeholder="inherit card default">
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-formatting-decimal">Decimals</label>
+                        <input id="entity-${index}-formatting-decimal" type="number" min="0" step="1" data-kind="entity-formatting-decimal" data-index="${index}" value="${escapeAttribute(getEffectiveFormattingValue(context, scope, "decimal"))}" placeholder="inherit card default">
+                      </div>
+	                          `;
+    }
+    const formattingUnit = getFormattingValue(context, { type: "card" }, "unit");
+    const formattingDecimal = getFormattingValue(context, { type: "card" }, "decimal");
+    return `	        <div class="section">
+	          <div class="section-head">
+	            <h3>Formatting</h3>
+	          </div>
+	          <div class="inline-row editor-grid">
+            <div class="field-row">
+              <label for="formatting-unit">Unit</label>
+              <input id="formatting-unit" type="text" data-field="formatting-unit" value="${escapeAttribute(formattingUnit)}">
+            </div>
+            <div class="field-row">
+              <label for="formatting-decimal">Decimals</label>
+              <input id="formatting-decimal" type="number" min="0" step="1" data-field="formatting-decimal" value="${escapeAttribute(formattingDecimal)}">
+            </div>
+          </div>
+	        </div>`;
+  }
+  var init_formatting = __esm({
+    "src/editor/sections/formatting.js"() {
+      init_editor_config();
+      init_editor_controls();
+    }
+  });
+
   // src/editor/SensorBarCardPlusEditor.js
   var SensorBarCardPlusEditor;
   var init_SensorBarCardPlusEditor = __esm({
@@ -6746,6 +6996,8 @@ ${barMarkerStyles}
       init_editor_config();
       init_editor_controls();
       init_editor_styles();
+      init_scale();
+      init_formatting();
       SensorBarCardPlusEditor = class extends HTMLElement {
         constructor() {
           super();
@@ -8058,52 +8310,37 @@ ${barMarkerStyles}
           }
           return "";
         }
+        _createSectionContext() {
+          return {
+            read: (scope, path) => this._getScopedValue(scope, path),
+            mutate: (scope, mutation, options) => this._applyScopedMutation(scope, mutation, options),
+            source: (scope, key, effective = false) => effective ? this._getEffectiveResolvableScopedValue(scope, key) : this._getResolvableScopedValue(scope, key),
+            setSource: (scope, key, part, value) => this._setCanonicalResolvablePart(scope, key, part, value)
+          };
+        }
+        _renderScaleSection(scope) {
+          return renderScaleSection(this._createSectionContext(), scope);
+        }
+        _renderFormattingSection(scope) {
+          return renderFormattingSection(this._createSectionContext(), scope);
+        }
         _getScopedFormattingValue(scope, key) {
-          var _a, _b;
-          return (_b = (_a = this._getScopedValue(scope, ["formatting", key])) != null ? _a : this._getScopedValue(scope, [key])) != null ? _b : "";
+          return getFormattingValue(this._createSectionContext(), scope, key);
         }
         _getEffectiveScopedFormattingValue(scope, key) {
-          return this._getEffectiveScopedDisplayValue(scope, ["formatting", key], [[key]]);
+          return getEffectiveFormattingValue(this._createSectionContext(), scope, key);
         }
         _setScopedFormattingUnit(scope, rawValue) {
-          return this._setCanonicalScopedTextOverride(scope, ["formatting", "unit"], rawValue, {
-            deprecatedKeys: [["unit"]],
-            prunePaths: [["formatting"]]
-          });
+          return setFormattingUnit(this._createSectionContext(), scope, rawValue);
         }
         _setScopedFormattingDecimal(scope, rawValue) {
-          const normalizedValue = this._normalizeDecimalValue(rawValue);
-          if (rawValue === "" || rawValue === null || rawValue === void 0) {
-            return this._removeCanonicalScopedValue(scope, ["formatting", "decimal"], {
-              deprecatedKeys: [["decimal"]],
-              prunePaths: [["formatting"]]
-            });
-          }
-          if (normalizedValue === null) {
-            return false;
-          }
-          return this._setCanonicalScopedValue(scope, ["formatting", "decimal"], normalizedValue, {
-            deprecatedKeys: [["decimal"]],
-            prunePaths: [["formatting"]]
-          });
+          return setFormattingDecimal(this._createSectionContext(), scope, rawValue);
         }
         _clearFormattingOverride(scope) {
-          return this._applyScopedMutation(scope, (target) => {
-            let nextTarget = this._deletePathValue(target, ["formatting", "unit"]);
-            nextTarget = this._deletePathValue(nextTarget, ["formatting", "decimal"]);
-            nextTarget = this._deletePathValue(nextTarget, ["unit"]);
-            nextTarget = this._deletePathValue(nextTarget, ["decimal"]);
-            nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["formatting"]);
-            return nextTarget;
-          }, { rerender: true });
+          return clearFormattingOverride(this._createSectionContext(), scope);
         }
         _hasFormattingOverride(scope) {
-          var _a;
-          const formattingValue = (_a = this._getScopedValue(scope, ["formatting"])) != null ? _a : {};
-          if (this._isObject(formattingValue) && (Object.prototype.hasOwnProperty.call(formattingValue, "unit") || Object.prototype.hasOwnProperty.call(formattingValue, "decimal"))) {
-            return true;
-          }
-          return this._getScopedValue(scope, ["unit"]) !== void 0 || this._getScopedValue(scope, ["decimal"]) !== void 0;
+          return hasFormattingOverride(this._createSectionContext(), scope);
         }
         _getScopedLayoutValue(scope, key) {
           var _a, _b, _c, _d, _e, _f, _g, _h, _i;
@@ -8267,19 +8504,10 @@ ${barMarkerStyles}
           return this._getScopedValue(scope, ["height"]) !== void 0 || this._getScopedValue(scope, ["label_position"]) !== void 0 || this._getScopedValue(scope, ["label_width"]) !== void 0;
         }
         _setScaleBound(key, value) {
-          return this._setCanonicalResolvablePart({ type: "card" }, key, "fixed", value);
+          return setScalePart(this._createSectionContext(), { type: "card" }, key, "fixed", value);
         }
         _clearScaleOverride(scope) {
-          return this._applyScopedMutation(scope, (target) => {
-            let nextTarget = this._deletePathValue(target, ["scale", "min"]);
-            nextTarget = this._deletePathValue(nextTarget, ["scale", "max"]);
-            nextTarget = this._deletePathValue(nextTarget, ["min"]);
-            nextTarget = this._deletePathValue(nextTarget, ["max"]);
-            nextTarget = this._deletePathValue(nextTarget, ["min_entity"]);
-            nextTarget = this._deletePathValue(nextTarget, ["max_entity"]);
-            nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["scale"]);
-            return nextTarget;
-          }, { rerender: true });
+          return clearScaleOverride(this._createSectionContext(), scope);
         }
         _setBarFillStyle(value) {
           return this._setScopedBarFillStyle({ type: "card" }, value);
@@ -9877,10 +10105,10 @@ ${barMarkerStyles}
           return this._getScopedPeakConfig({ type: "card" }).mode === "enabled";
         }
         _getScaleFixedValue(key, fallbackKey) {
-          return this._getResolvableScopedValue({ type: "card" }, key).fixed;
+          return getScaleFixedValue(this._createSectionContext(), key);
         }
         _getScaleEntityValue(key) {
-          return this._getResolvableScopedValue({ type: "card" }, key).entity;
+          return getScaleEntityValue(this._createSectionContext(), key);
         }
         _getTargetResolvableValue(scope) {
           return this._getResolvableScopedValue(scope, "target", {
@@ -10409,14 +10637,7 @@ ${barMarkerStyles}
           return this._hasExplicitOverrideValue(parts == null ? void 0 : parts.fixed) || this._hasExplicitOverrideValue(parts == null ? void 0 : parts.entity);
         }
         _getScaleOverrideSummary(scope) {
-          const parts = [];
-          const min = this._getResolvableScopedValue(scope, "min");
-          const max = this._getResolvableScopedValue(scope, "max");
-          if (min.entity) parts.push("Min entity");
-          else if (min.fixed !== "" && min.fixed !== void 0) parts.push(`Min ${min.fixed}`);
-          if (max.entity) parts.push("Max entity");
-          else if (max.fixed !== "" && max.fixed !== void 0) parts.push(`Max ${max.fixed}`);
-          return parts.length ? parts.join(" \u2022 ") : "Inherited";
+          return getScaleOverrideSummary(this._createSectionContext(), scope);
         }
         _getLayoutSummary(scope) {
           const parts = [];
@@ -10608,12 +10829,7 @@ ${barMarkerStyles}
           return "Inherited";
         }
         _getFormattingSummary(scope) {
-          const parts = [];
-          const unit = this._getScopedFormattingValue(scope, "unit");
-          const decimal = this._getScopedFormattingValue(scope, "decimal");
-          if (unit !== "") parts.push(`Unit ${unit}`);
-          if (decimal !== "") parts.push(`${decimal} ${Number(decimal) === 1 ? "decimal" : "decimals"}`);
-          return parts.length ? parts.join(" \u2022 ") : "Inherited";
+          return getFormattingSummary(this._createSectionContext(), scope);
         }
         _renderOverrideGroup({ index, group, title, summary, content }) {
           const expanded = this._isOverrideGroupExpanded(index, group);
@@ -11128,15 +11344,9 @@ ${barMarkerStyles}
             const targetLabelShow = this._getTargetLabelShowValue({ type: "card" });
             const targetLabelDecimal = this._getTargetLabelDecimalValue({ type: "card" });
             const targetAboveFillColor = this._getTargetAboveFillColorValue({ type: "card" });
-            const formattingUnit = this._getScopedFormattingValue({ type: "card" }, "unit");
-            const formattingDecimal = this._getScopedFormattingValue({ type: "card" }, "decimal");
             const cardPeak = this._getScopedPeakConfig({ type: "card" });
             const cardPeakExtras = this._getEffectiveMarkerExtras({ type: "card" }, "peak");
             const cardFloor = this._getEffectiveScopedFloorConfig({ type: "card" });
-            const scaleMin = this._getScaleFixedValue("min", "min");
-            const scaleMax = this._getScaleFixedValue("max", "max");
-            const scaleMinEntity = this._getScaleEntityValue("min");
-            const scaleMaxEntity = this._getScaleEntityValue("max");
             const gradientStopsSummary = this._getGradientStopsSummary({ type: "card" });
             const gradientStopsInactive = this._getEffectiveFillStyleValue({ type: "card" }) !== "gradient";
             const defaultSegmentsVisible = !this._hasSegmentsOverride({ type: "card" }) && this._isSegmentFillStyle(this._getEffectiveFillStyleValue({ type: "card" }));
@@ -11194,8 +11404,6 @@ ${barMarkerStyles}
                       ${(() => {
                 var _a3, _b2;
                 const scope = { type: "entity", index };
-                const minParts = this._getEffectiveResolvableScopedValue(scope, "min");
-                const maxParts = this._getEffectiveResolvableScopedValue(scope, "max");
                 const barAppearanceInherited = !this._hasEntityBarAppearanceOverride(scope);
                 const needleInherited = !this._hasNeedleOverride(scope);
                 const entityNeedle = this._getEffectiveScopedNeedleConfig(scope);
@@ -11207,12 +11415,10 @@ ${barMarkerStyles}
                 const targetMode2 = this._getEffectiveTargetMode(scope);
                 const targetShape2 = this._getEffectiveTargetShapeValue(scope);
                 const targetDirection2 = this._getEffectiveMarkerDirection(scope, "target");
-                const formattingInherited = !this._hasFormattingOverride(scope);
                 const layoutInherited = !this._hasLayoutOverride(scope);
                 const peakInherited = !this._hasPeakOverride(scope);
                 const gradientStopsInherited = !this._hasGradientStopsOverride(scope);
                 const segmentsInherited = !this._hasSegmentsOverride(scope);
-                const scaleInherited = !this._hasResolvableOverride(this._getResolvableScopedValue(scope, "min")) && !this._hasResolvableOverride(this._getResolvableScopedValue(scope, "max"));
                 const entityPeak = this._getEffectiveScopedPeakConfig(scope);
                 const entityPeakExtras = this._getEffectiveMarkerExtras(scope, "peak");
                 const floorInherited = !this._hasExtremumOverride(scope, "floor");
@@ -11226,31 +11432,7 @@ ${barMarkerStyles}
                   group: "scale",
                   title: "Scale",
                   summary: this._getScaleOverrideSummary(scope),
-                  content: `
-	                      <div class="field-row">
-	                        <div class="toggle">
-	                          <input id="entity-${index}-scale-inherit" type="checkbox" data-kind="entity-scale-inherit" data-index="${index}"${scaleInherited ? " checked" : ""}>
-	                          <label for="entity-${index}-scale-inherit">Inherit card settings</label>
-                        </div>
-                      </div>
-	                      <div class="section-note">Fixed values are used as fallback when entity values are unavailable.</div>
-                      <div class="field-row">
-                        <label for="entity-${index}-min">Min fallback</label>
-                        <input id="entity-${index}-min" type="number" step="any" data-kind="entity-override-min" data-index="${index}" value="${this._escapeAttribute(minParts.fixed)}" placeholder="inherit card default">
-                      </div>
-                      <div class="field-row">
-                        <label>Min entity</label>
-                        ${this._renderEntitySourceInput("entity-override-min-entity-source", index, minParts.entity, "inherit card default")}
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-max">Max fallback</label>
-                        <input id="entity-${index}-max" type="number" step="any" data-kind="entity-override-max" data-index="${index}" value="${this._escapeAttribute(maxParts.fixed)}" placeholder="inherit card default">
-                      </div>
-                      <div class="field-row">
-                        <label>Max entity</label>
-                        ${this._renderEntitySourceInput("entity-override-max-entity-source", index, maxParts.entity, "inherit card default")}
-                      </div>
-	                          `
+                  content: this._renderScaleSection(scope)
                 });
                 const layoutGroup = this._renderOverrideGroup({
                   index,
@@ -11378,22 +11560,7 @@ ${barMarkerStyles}
                   group: "formatting",
                   title: "Formatting",
                   summary: this._getFormattingSummary(scope),
-                  content: `
-	                      <div class="field-row">
-	                        <div class="toggle">
-	                          <input id="entity-${index}-formatting-inherit" type="checkbox" data-kind="entity-formatting-inherit" data-index="${index}"${formattingInherited ? " checked" : ""}>
-                          <label for="entity-${index}-formatting-inherit">Inherit card settings</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-formatting-unit">Unit</label>
-                        <input id="entity-${index}-formatting-unit" type="text" data-kind="entity-formatting-unit" data-index="${index}" value="${this._escapeAttribute(this._getEffectiveScopedFormattingValue(scope, "unit"))}" placeholder="inherit card default">
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-formatting-decimal">Decimals</label>
-                        <input id="entity-${index}-formatting-decimal" type="number" min="0" step="1" data-kind="entity-formatting-decimal" data-index="${index}" value="${this._escapeAttribute(this._getEffectiveScopedFormattingValue(scope, "decimal"))}" placeholder="inherit card default">
-                      </div>
-	                          `
+                  content: this._renderFormattingSection(scope)
                 });
                 const peakGroup = this._renderOverrideGroup({
                   index,
@@ -11755,30 +11922,7 @@ ${barMarkerStyles}
           </div>
 	        </div>
 
-	        <div class="section">
-	          <div class="section-head">
-	            <h3>Scale</h3>
-	            <div class="section-note">Entity values take precedence. Fixed values are used as fallback.</div>
-	          </div>
-	          <div class="inline-row editor-grid">
-            <div class="field-row">
-              <label for="scale-min">Min fallback</label>
-              <input id="scale-min" type="number" step="any" data-field="scale-min" value="${this._escapeAttribute(scaleMin)}">
-            </div>
-            <div class="field-row">
-              <label>Min entity</label>
-              ${this._renderEntitySourceInput("scale-min-entity-source", "card", scaleMinEntity)}
-            </div>
-            <div class="field-row">
-              <label for="scale-max">Max fallback</label>
-              <input id="scale-max" type="number" step="any" data-field="scale-max" value="${this._escapeAttribute(scaleMax)}">
-            </div>
-            <div class="field-row">
-              <label>Max entity</label>
-              ${this._renderEntitySourceInput("scale-max-entity-source", "card", scaleMaxEntity)}
-            </div>
-          </div>
-	        </div>
+${this._renderScaleSection({ type: "card" })}
 
 	        <div class="section">
           <div class="section-head">
@@ -12193,21 +12337,7 @@ ${barMarkerStyles}
           </div>
 	        </div>
 
-	        <div class="section">
-	          <div class="section-head">
-	            <h3>Formatting</h3>
-	          </div>
-	          <div class="inline-row editor-grid">
-            <div class="field-row">
-              <label for="formatting-unit">Unit</label>
-              <input id="formatting-unit" type="text" data-field="formatting-unit" value="${this._escapeAttribute(formattingUnit)}">
-            </div>
-            <div class="field-row">
-              <label for="formatting-decimal">Decimals</label>
-              <input id="formatting-decimal" type="number" min="0" step="1" data-field="formatting-decimal" value="${this._escapeAttribute(formattingDecimal)}">
-            </div>
-          </div>
-	        </div>
+${this._renderFormattingSection({ type: "card" })}
       </div>
     `;
             this._bindShadowListeners();
@@ -12619,7 +12749,7 @@ ${barMarkerStyles}
           }
         }
         _handleFieldEvent(event) {
-          var _a, _b, _c, _d, _e, _f, _g;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i;
           const target = event.target;
           const rawField = (_a = target == null ? void 0 : target.dataset) == null ? void 0 : _a.field;
           const rawKind = (_b = target == null ? void 0 : target.dataset) == null ? void 0 : _b.kind;
@@ -12644,15 +12774,13 @@ ${barMarkerStyles}
             return;
           }
           if (field === "title") return void this._setTitle(value);
-          if (field === "formatting-unit") return void this._setScopedFormattingUnit({ type: "card" }, value);
-          if (field === "formatting-decimal") return void this._setScopedFormattingDecimal({ type: "card" }, value);
+          if (handleFormattingField(this._createSectionContext(), { field, value })) return;
           if (field === "layout-label-position") return void this._setLayoutLabelPosition(value);
           if (field === "layout-label-hero-size") return void this._setLayoutHeroSize(value);
           if (field === "layout-hero-value-size") return void this._setLayoutHeroValueSize(value);
           if (field === "layout-height") return void this._setLayoutHeight(value);
           if (field === "layout-label-width") return void this._setScopedLayoutLabelWidth({ type: "card" }, value);
-          if (field === "scale-min") return void this._setScaleBound("min", value);
-          if (field === "scale-max") return void this._setScaleBound("max", value);
+          if (handleScaleField(this._createSectionContext(), { field, value })) return;
           if (field === "bar-fill-style") return void this._setBarFillStyle(value);
           if (field === "bar-color") return void this._setBarColor(value);
           if (field === "bar-solid-fill") return void this._setScopedBarSolidFill({ type: "card" }, value);
@@ -12712,36 +12840,14 @@ ${barMarkerStyles}
           if (kind === "entity-icon") {
             return void this._setEntityField(Number(target.dataset.index), "icon", value);
           }
-          if (kind === "scale-min-entity-source") {
-            return void this._setCanonicalResolvablePart({ type: "card" }, "min", "entity", value);
-          }
-          if (kind === "scale-max-entity-source") {
-            return void this._setCanonicalResolvablePart({ type: "card" }, "max", "entity", value);
-          }
+          if (handleScaleField(this._createSectionContext(), { kind: (kind == null ? void 0 : kind.startsWith("scale-")) ? kind : void 0, value })) return;
           if (kind === "baseline-entity-source") {
             return void this._setBaselineResolvablePart({ type: "card" }, "entity", value);
           }
           if (kind === "target-entity-source") {
             return void this._setTargetResolvablePart({ type: "card" }, "entity", value);
           }
-          if (kind === "entity-scale-inherit") {
-            if (value) {
-              return void this._clearScaleOverride({ type: "entity", index: Number(target.dataset.index) });
-            }
-            return;
-          }
-          if (kind === "entity-override-min") {
-            return void this._setCanonicalResolvablePart({ type: "entity", index: Number(target.dataset.index) }, "min", "fixed", value);
-          }
-          if (kind === "entity-override-max") {
-            return void this._setCanonicalResolvablePart({ type: "entity", index: Number(target.dataset.index) }, "max", "fixed", value);
-          }
-          if (kind === "entity-override-min-entity-source") {
-            return void this._setCanonicalResolvablePart({ type: "entity", index: Number(target.dataset.index) }, "min", "entity", value);
-          }
-          if (kind === "entity-override-max-entity-source") {
-            return void this._setCanonicalResolvablePart({ type: "entity", index: Number(target.dataset.index) }, "max", "entity", value);
-          }
+          if (handleScaleField(this._createSectionContext(), { kind, index: (_f = target == null ? void 0 : target.dataset) == null ? void 0 : _f.index, value })) return;
           if (kind === "entity-override-height") {
             return void this._setScopedLayoutHeight({ type: "entity", index: Number(target.dataset.index) }, value);
           }
@@ -12763,18 +12869,7 @@ ${barMarkerStyles}
           if (kind === "entity-layout-label-width") {
             return void this._setScopedLayoutLabelWidth({ type: "entity", index: Number(target.dataset.index) }, value);
           }
-          if (kind === "entity-formatting-inherit") {
-            if (value) {
-              return void this._clearFormattingOverride({ type: "entity", index: Number(target.dataset.index) });
-            }
-            return;
-          }
-          if (kind === "entity-formatting-unit") {
-            return void this._setScopedFormattingUnit({ type: "entity", index: Number(target.dataset.index) }, value);
-          }
-          if (kind === "entity-formatting-decimal") {
-            return void this._setScopedFormattingDecimal({ type: "entity", index: Number(target.dataset.index) }, value);
-          }
+          if (handleFormattingField(this._createSectionContext(), { kind, index: (_g = target == null ? void 0 : target.dataset) == null ? void 0 : _g.index, value })) return;
           if (kind === "entity-peak-inherit") {
             if (value) {
               return void this._clearPeakOverride({ type: "entity", index: Number(target.dataset.index) });
@@ -12995,7 +13090,7 @@ ${barMarkerStyles}
           }
           if (kind === "segment-color") {
             const index = Number(target.dataset.index);
-            const nextSegments = ((_f = this._getSegmentsUiRows({ type: "card" })) != null ? _f : this._getSegmentsValue()).map((segment, segmentIndex) => {
+            const nextSegments = ((_h = this._getSegmentsUiRows({ type: "card" })) != null ? _h : this._getSegmentsValue()).map((segment, segmentIndex) => {
               if (segmentIndex !== index) return segment;
               return {
                 ...segment,
@@ -13008,7 +13103,7 @@ ${barMarkerStyles}
           if (kind === "entity-segment-color") {
             const scope = { type: "entity", index: Number(target.dataset.index) };
             const segmentIndex = Number(target.dataset.segmentIndex);
-            const nextSegments = ((_g = this._getSegmentsUiRows(scope)) != null ? _g : this._getScopedSegmentsValue(scope)).map((segment, currentSegmentIndex) => {
+            const nextSegments = ((_i = this._getSegmentsUiRows(scope)) != null ? _i : this._getScopedSegmentsValue(scope)).map((segment, currentSegmentIndex) => {
               if (currentSegmentIndex !== segmentIndex) return segment;
               return {
                 ...segment,

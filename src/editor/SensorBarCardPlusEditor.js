@@ -13,6 +13,16 @@ import {
 } from './shared/editor-controls.js';
 import { editorStyles } from './shared/editor-styles.js';
 
+import {
+  getScaleFixedValue, getScaleEntityValue, setScalePart,
+  clearScaleOverride, getScaleOverrideSummary, renderScaleSection, handleScaleField,
+} from './sections/scale.js';
+import {
+  getFormattingValue, getEffectiveFormattingValue, setFormattingUnit, setFormattingDecimal,
+  clearFormattingOverride, hasFormattingOverride, getFormattingSummary,
+  renderFormattingSection, handleFormattingField,
+} from './sections/formatting.js';
+
 export class SensorBarCardPlusEditor extends HTMLElement {
   constructor() {
     super();
@@ -1493,61 +1503,47 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return '';
   }
 
+  _createSectionContext() {
+    return {
+      read: (scope, path) => this._getScopedValue(scope, path),
+      mutate: (scope, mutation, options) => this._applyScopedMutation(scope, mutation, options),
+      source: (scope, key, effective = false) => effective
+        ? this._getEffectiveResolvableScopedValue(scope, key)
+        : this._getResolvableScopedValue(scope, key),
+      setSource: (scope, key, part, value) => this._setCanonicalResolvablePart(scope, key, part, value),
+    };
+  }
+
+  _renderScaleSection(scope) {
+    return renderScaleSection(this._createSectionContext(), scope);
+  }
+
+  _renderFormattingSection(scope) {
+    return renderFormattingSection(this._createSectionContext(), scope);
+  }
+
   _getScopedFormattingValue(scope, key) {
-    return this._getScopedValue(scope, ['formatting', key])
-      ?? this._getScopedValue(scope, [key])
-      ?? '';
+    return getFormattingValue(this._createSectionContext(), scope, key);
   }
 
   _getEffectiveScopedFormattingValue(scope, key) {
-    return this._getEffectiveScopedDisplayValue(scope, ['formatting', key], [[key]]);
+    return getEffectiveFormattingValue(this._createSectionContext(), scope, key);
   }
 
   _setScopedFormattingUnit(scope, rawValue) {
-    return this._setCanonicalScopedTextOverride(scope, ['formatting', 'unit'], rawValue, {
-      deprecatedKeys: [['unit']],
-      prunePaths: [['formatting']],
-    });
+    return setFormattingUnit(this._createSectionContext(), scope, rawValue);
   }
 
   _setScopedFormattingDecimal(scope, rawValue) {
-    const normalizedValue = this._normalizeDecimalValue(rawValue);
-    if (rawValue === '' || rawValue === null || rawValue === undefined) {
-      return this._removeCanonicalScopedValue(scope, ['formatting', 'decimal'], {
-        deprecatedKeys: [['decimal']],
-        prunePaths: [['formatting']],
-      });
-    }
-    if (normalizedValue === null) {
-      return false;
-    }
-    return this._setCanonicalScopedValue(scope, ['formatting', 'decimal'], normalizedValue, {
-      deprecatedKeys: [['decimal']],
-      prunePaths: [['formatting']],
-    });
+    return setFormattingDecimal(this._createSectionContext(), scope, rawValue);
   }
 
   _clearFormattingOverride(scope) {
-    return this._applyScopedMutation(scope, (target) => {
-      let nextTarget = this._deletePathValue(target, ['formatting', 'unit']);
-      nextTarget = this._deletePathValue(nextTarget, ['formatting', 'decimal']);
-      nextTarget = this._deletePathValue(nextTarget, ['unit']);
-      nextTarget = this._deletePathValue(nextTarget, ['decimal']);
-      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['formatting']);
-      return nextTarget;
-    }, { rerender: true });
+    return clearFormattingOverride(this._createSectionContext(), scope);
   }
 
   _hasFormattingOverride(scope) {
-    const formattingValue = this._getScopedValue(scope, ['formatting']) ?? {};
-    if (this._isObject(formattingValue) && (
-      Object.prototype.hasOwnProperty.call(formattingValue, 'unit')
-      || Object.prototype.hasOwnProperty.call(formattingValue, 'decimal')
-    )) {
-      return true;
-    }
-    return this._getScopedValue(scope, ['unit']) !== undefined
-      || this._getScopedValue(scope, ['decimal']) !== undefined;
+    return hasFormattingOverride(this._createSectionContext(), scope);
   }
 
   _getScopedLayoutValue(scope, key) {
@@ -1742,20 +1738,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _setScaleBound(key, value) {
-    return this._setCanonicalResolvablePart({ type: 'card' }, key, 'fixed', value);
+    return setScalePart(this._createSectionContext(), { type: 'card' }, key, 'fixed', value);
   }
 
   _clearScaleOverride(scope) {
-    return this._applyScopedMutation(scope, (target) => {
-      let nextTarget = this._deletePathValue(target, ['scale', 'min']);
-      nextTarget = this._deletePathValue(nextTarget, ['scale', 'max']);
-      nextTarget = this._deletePathValue(nextTarget, ['min']);
-      nextTarget = this._deletePathValue(nextTarget, ['max']);
-      nextTarget = this._deletePathValue(nextTarget, ['min_entity']);
-      nextTarget = this._deletePathValue(nextTarget, ['max_entity']);
-      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['scale']);
-      return nextTarget;
-    }, { rerender: true });
+    return clearScaleOverride(this._createSectionContext(), scope);
   }
 
   _setBarFillStyle(value) {
@@ -3573,11 +3560,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _getScaleFixedValue(key, fallbackKey) {
-    return this._getResolvableScopedValue({ type: 'card' }, key).fixed;
+    return getScaleFixedValue(this._createSectionContext(), key);
   }
 
   _getScaleEntityValue(key) {
-    return this._getResolvableScopedValue({ type: 'card' }, key).entity;
+    return getScaleEntityValue(this._createSectionContext(), key);
   }
 
   _getTargetResolvableValue(scope) {
@@ -4193,14 +4180,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _getScaleOverrideSummary(scope) {
-    const parts = [];
-    const min = this._getResolvableScopedValue(scope, 'min');
-    const max = this._getResolvableScopedValue(scope, 'max');
-    if (min.entity) parts.push('Min entity');
-    else if (min.fixed !== '' && min.fixed !== undefined) parts.push(`Min ${min.fixed}`);
-    if (max.entity) parts.push('Max entity');
-    else if (max.fixed !== '' && max.fixed !== undefined) parts.push(`Max ${max.fixed}`);
-    return parts.length ? parts.join(' • ') : 'Inherited';
+    return getScaleOverrideSummary(this._createSectionContext(), scope);
   }
 
   _getLayoutSummary(scope) {
@@ -4414,12 +4394,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _getFormattingSummary(scope) {
-    const parts = [];
-    const unit = this._getScopedFormattingValue(scope, 'unit');
-    const decimal = this._getScopedFormattingValue(scope, 'decimal');
-    if (unit !== '') parts.push(`Unit ${unit}`);
-    if (decimal !== '') parts.push(`${decimal} ${Number(decimal) === 1 ? 'decimal' : 'decimals'}`);
-    return parts.length ? parts.join(' • ') : 'Inherited';
+    return getFormattingSummary(this._createSectionContext(), scope);
   }
 
   _renderOverrideGroup({ index, group, title, summary, content }) {
@@ -4955,15 +4930,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       const targetLabelShow = this._getTargetLabelShowValue({ type: 'card' });
       const targetLabelDecimal = this._getTargetLabelDecimalValue({ type: 'card' });
       const targetAboveFillColor = this._getTargetAboveFillColorValue({ type: 'card' });
-      const formattingUnit = this._getScopedFormattingValue({ type: 'card' }, 'unit');
-      const formattingDecimal = this._getScopedFormattingValue({ type: 'card' }, 'decimal');
       const cardPeak = this._getScopedPeakConfig({ type: 'card' });
       const cardPeakExtras = this._getEffectiveMarkerExtras({ type: 'card' }, 'peak');
       const cardFloor = this._getEffectiveScopedFloorConfig({ type: 'card' });
-      const scaleMin = this._getScaleFixedValue('min', 'min');
-      const scaleMax = this._getScaleFixedValue('max', 'max');
-      const scaleMinEntity = this._getScaleEntityValue('min');
-      const scaleMaxEntity = this._getScaleEntityValue('max');
       const gradientStopsSummary = this._getGradientStopsSummary({ type: 'card' });
       const gradientStopsInactive = this._getEffectiveFillStyleValue({ type: 'card' }) !== 'gradient';
       const defaultSegmentsVisible = !this._hasSegmentsOverride({ type: 'card' }) && this._isSegmentFillStyle(this._getEffectiveFillStyleValue({ type: 'card' }));
@@ -5019,8 +4988,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                       <div class="section-note">Overrides replace card defaults only for this entity.</div>
                       ${(() => {
                         const scope = { type: 'entity', index };
-                        const minParts = this._getEffectiveResolvableScopedValue(scope, 'min');
-                        const maxParts = this._getEffectiveResolvableScopedValue(scope, 'max');
 	                        const barAppearanceInherited = !this._hasEntityBarAppearanceOverride(scope);
 	                        const needleInherited = !this._hasNeedleOverride(scope);
 	                        const entityNeedle = this._getEffectiveScopedNeedleConfig(scope);
@@ -5032,13 +4999,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                         const targetMode = this._getEffectiveTargetMode(scope);
                         const targetShape = this._getEffectiveTargetShapeValue(scope);
                         const targetDirection = this._getEffectiveMarkerDirection(scope, 'target');
-	                        const formattingInherited = !this._hasFormattingOverride(scope);
 	                        const layoutInherited = !this._hasLayoutOverride(scope);
 	                        const peakInherited = !this._hasPeakOverride(scope);
 	                        const gradientStopsInherited = !this._hasGradientStopsOverride(scope);
 	                        const segmentsInherited = !this._hasSegmentsOverride(scope);
-	                        const scaleInherited = !this._hasResolvableOverride(this._getResolvableScopedValue(scope, 'min'))
-	                          && !this._hasResolvableOverride(this._getResolvableScopedValue(scope, 'max'));
                         const entityPeak = this._getEffectiveScopedPeakConfig(scope);
                         const entityPeakExtras = this._getEffectiveMarkerExtras(scope, 'peak');
                         const floorInherited = !this._hasExtremumOverride(scope, 'floor');
@@ -5052,31 +5016,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                          group: 'scale',
 	                          title: 'Scale',
 	                          summary: this._getScaleOverrideSummary(scope),
-	                          content: `
-	                      <div class="field-row">
-	                        <div class="toggle">
-	                          <input id="entity-${index}-scale-inherit" type="checkbox" data-kind="entity-scale-inherit" data-index="${index}"${scaleInherited ? ' checked' : ''}>
-	                          <label for="entity-${index}-scale-inherit">Inherit card settings</label>
-                        </div>
-                      </div>
-	                      <div class="section-note">Fixed values are used as fallback when entity values are unavailable.</div>
-                      <div class="field-row">
-                        <label for="entity-${index}-min">Min fallback</label>
-                        <input id="entity-${index}-min" type="number" step="any" data-kind="entity-override-min" data-index="${index}" value="${this._escapeAttribute(minParts.fixed)}" placeholder="inherit card default">
-                      </div>
-                      <div class="field-row">
-                        <label>Min entity</label>
-                        ${this._renderEntitySourceInput('entity-override-min-entity-source', index, minParts.entity, 'inherit card default')}
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-max">Max fallback</label>
-                        <input id="entity-${index}-max" type="number" step="any" data-kind="entity-override-max" data-index="${index}" value="${this._escapeAttribute(maxParts.fixed)}" placeholder="inherit card default">
-                      </div>
-                      <div class="field-row">
-                        <label>Max entity</label>
-                        ${this._renderEntitySourceInput('entity-override-max-entity-source', index, maxParts.entity, 'inherit card default')}
-                      </div>
-	                          `,
+	                          content: this._renderScaleSection(scope),
 	                        });
 	                        const layoutGroup = this._renderOverrideGroup({
 	                          index,
@@ -5204,22 +5144,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                          group: 'formatting',
 	                          title: 'Formatting',
 	                          summary: this._getFormattingSummary(scope),
-	                          content: `
-	                      <div class="field-row">
-	                        <div class="toggle">
-	                          <input id="entity-${index}-formatting-inherit" type="checkbox" data-kind="entity-formatting-inherit" data-index="${index}"${formattingInherited ? ' checked' : ''}>
-                          <label for="entity-${index}-formatting-inherit">Inherit card settings</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-formatting-unit">Unit</label>
-                        <input id="entity-${index}-formatting-unit" type="text" data-kind="entity-formatting-unit" data-index="${index}" value="${this._escapeAttribute(this._getEffectiveScopedFormattingValue(scope, 'unit'))}" placeholder="inherit card default">
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-formatting-decimal">Decimals</label>
-                        <input id="entity-${index}-formatting-decimal" type="number" min="0" step="1" data-kind="entity-formatting-decimal" data-index="${index}" value="${this._escapeAttribute(this._getEffectiveScopedFormattingValue(scope, 'decimal'))}" placeholder="inherit card default">
-                      </div>
-	                          `,
+	                          content: this._renderFormattingSection(scope),
 	                        });
                         const peakGroup = this._renderOverrideGroup({
 	                          index,
@@ -5583,30 +5508,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           </div>
 	        </div>
 
-	        <div class="section">
-	          <div class="section-head">
-	            <h3>Scale</h3>
-	            <div class="section-note">Entity values take precedence. Fixed values are used as fallback.</div>
-	          </div>
-	          <div class="inline-row editor-grid">
-            <div class="field-row">
-              <label for="scale-min">Min fallback</label>
-              <input id="scale-min" type="number" step="any" data-field="scale-min" value="${this._escapeAttribute(scaleMin)}">
-            </div>
-            <div class="field-row">
-              <label>Min entity</label>
-              ${this._renderEntitySourceInput('scale-min-entity-source', 'card', scaleMinEntity)}
-            </div>
-            <div class="field-row">
-              <label for="scale-max">Max fallback</label>
-              <input id="scale-max" type="number" step="any" data-field="scale-max" value="${this._escapeAttribute(scaleMax)}">
-            </div>
-            <div class="field-row">
-              <label>Max entity</label>
-              ${this._renderEntitySourceInput('scale-max-entity-source', 'card', scaleMaxEntity)}
-            </div>
-          </div>
-	        </div>
+${this._renderScaleSection({ type: 'card' })}
 
 	        <div class="section">
           <div class="section-head">
@@ -6027,21 +5929,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           </div>
 	        </div>
 
-	        <div class="section">
-	          <div class="section-head">
-	            <h3>Formatting</h3>
-	          </div>
-	          <div class="inline-row editor-grid">
-            <div class="field-row">
-              <label for="formatting-unit">Unit</label>
-              <input id="formatting-unit" type="text" data-field="formatting-unit" value="${this._escapeAttribute(formattingUnit)}">
-            </div>
-            <div class="field-row">
-              <label for="formatting-decimal">Decimals</label>
-              <input id="formatting-decimal" type="number" min="0" step="1" data-field="formatting-decimal" value="${this._escapeAttribute(formattingDecimal)}">
-            </div>
-          </div>
-	        </div>
+${this._renderFormattingSection({ type: 'card' })}
       </div>
     `;
 
@@ -6513,15 +6401,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     }
 
     if (field === 'title') return void this._setTitle(value);
-    if (field === 'formatting-unit') return void this._setScopedFormattingUnit({ type: 'card' }, value);
-    if (field === 'formatting-decimal') return void this._setScopedFormattingDecimal({ type: 'card' }, value);
+    if (handleFormattingField(this._createSectionContext(), { field, value })) return;
     if (field === 'layout-label-position') return void this._setLayoutLabelPosition(value);
     if (field === 'layout-label-hero-size') return void this._setLayoutHeroSize(value);
     if (field === 'layout-hero-value-size') return void this._setLayoutHeroValueSize(value);
     if (field === 'layout-height') return void this._setLayoutHeight(value);
     if (field === 'layout-label-width') return void this._setScopedLayoutLabelWidth({ type: 'card' }, value);
-    if (field === 'scale-min') return void this._setScaleBound('min', value);
-    if (field === 'scale-max') return void this._setScaleBound('max', value);
+    if (handleScaleField(this._createSectionContext(), { field, value })) return;
     if (field === 'bar-fill-style') return void this._setBarFillStyle(value);
     if (field === 'bar-color') return void this._setBarColor(value);
     if (field === 'bar-solid-fill') return void this._setScopedBarSolidFill({ type: 'card' }, value);
@@ -6588,13 +6474,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return void this._setEntityField(Number(target.dataset.index), 'icon', value);
     }
 
-    if (kind === 'scale-min-entity-source') {
-      return void this._setCanonicalResolvablePart({ type: 'card' }, 'min', 'entity', value);
-    }
-
-    if (kind === 'scale-max-entity-source') {
-      return void this._setCanonicalResolvablePart({ type: 'card' }, 'max', 'entity', value);
-    }
+    if (handleScaleField(this._createSectionContext(), { kind: kind?.startsWith('scale-') ? kind : undefined, value })) return;
 
     if (kind === 'baseline-entity-source') {
       return void this._setBaselineResolvablePart({ type: 'card' }, 'entity', value);
@@ -6604,28 +6484,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return void this._setTargetResolvablePart({ type: 'card' }, 'entity', value);
     }
 
-    if (kind === 'entity-scale-inherit') {
-      if (value) {
-        return void this._clearScaleOverride({ type: 'entity', index: Number(target.dataset.index) });
-      }
-      return;
-    }
-
-    if (kind === 'entity-override-min') {
-      return void this._setCanonicalResolvablePart({ type: 'entity', index: Number(target.dataset.index) }, 'min', 'fixed', value);
-    }
-
-    if (kind === 'entity-override-max') {
-      return void this._setCanonicalResolvablePart({ type: 'entity', index: Number(target.dataset.index) }, 'max', 'fixed', value);
-    }
-
-    if (kind === 'entity-override-min-entity-source') {
-      return void this._setCanonicalResolvablePart({ type: 'entity', index: Number(target.dataset.index) }, 'min', 'entity', value);
-    }
-
-    if (kind === 'entity-override-max-entity-source') {
-      return void this._setCanonicalResolvablePart({ type: 'entity', index: Number(target.dataset.index) }, 'max', 'entity', value);
-    }
+    if (handleScaleField(this._createSectionContext(), { kind, index: target?.dataset?.index, value })) return;
 
     if (kind === 'entity-override-height') {
       return void this._setScopedLayoutHeight({ type: 'entity', index: Number(target.dataset.index) }, value);
@@ -6654,20 +6513,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return void this._setScopedLayoutLabelWidth({ type: 'entity', index: Number(target.dataset.index) }, value);
     }
 
-    if (kind === 'entity-formatting-inherit') {
-      if (value) {
-        return void this._clearFormattingOverride({ type: 'entity', index: Number(target.dataset.index) });
-      }
-      return;
-    }
-
-    if (kind === 'entity-formatting-unit') {
-      return void this._setScopedFormattingUnit({ type: 'entity', index: Number(target.dataset.index) }, value);
-    }
-
-    if (kind === 'entity-formatting-decimal') {
-      return void this._setScopedFormattingDecimal({ type: 'entity', index: Number(target.dataset.index) }, value);
-    }
+    if (handleFormattingField(this._createSectionContext(), { kind, index: target?.dataset?.index, value })) return;
 
     if (kind === 'entity-peak-inherit') {
       if (value) {
