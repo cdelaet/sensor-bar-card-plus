@@ -62,7 +62,7 @@ export function hexToRgb(color) {
   };
 }
 
-export function getSeverityInterpolationStops(ecfg, minValue = 0, maxValue = 100) {
+export function getSeverityInterpolationStops(ecfg, minValue = 0, maxValue = 100, preserveCssColors = false) {
   const bands = getSegmentsForRendering(ecfg, minValue, maxValue);
   const sorted = bands
     .filter(s => Number.isFinite(s?.from) && Number.isFinite(s?.to) && s?.color)
@@ -74,7 +74,7 @@ export function getSeverityInterpolationStops(ecfg, minValue = 0, maxValue = 100
   for (let i = 0; i < sorted.length; i++) {
     const band = sorted[i];
     const rgb = hexToRgb(band.color);
-    if (!rgb) continue;
+    if (!rgb && !preserveCssColors) continue;
     let anchor;
     if (i === 0) {
       anchor = band.from;
@@ -84,7 +84,7 @@ export function getSeverityInterpolationStops(ecfg, minValue = 0, maxValue = 100
       anchor = band.from + ((band.to - band.from) / 2);
     }
     if (!stops.length || stops[stops.length - 1].p !== anchor) {
-      stops.push({ p: anchor, ...rgb });
+      stops.push({ p: anchor, ...(rgb ?? { color: band.color }) });
     }
   }
 
@@ -279,7 +279,8 @@ export function buildFullScaleGradientStyle(stops) {
 export function getGradientInterpolationStops(ecfg, minValue = 0, maxValue = 100) {
   const fillStyle = getEffectiveFillStyle(ecfg);
   if (fillStyle === 'band_gradient') {
-    return getSeverityInterpolationStops(ecfg, minValue, maxValue);
+    // Painting accepts CSS colors directly; numeric color sampling still needs RGB.
+    return getSeverityInterpolationStops(ecfg, minValue, maxValue, true);
   }
 
   if (fillStyle === 'soft_bands') {

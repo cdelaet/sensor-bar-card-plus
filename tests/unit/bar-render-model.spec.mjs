@@ -58,6 +58,29 @@ describe('shared bar presentation without a card instance', () => {
     expect(resolvedRow(appearance, 10)).toMatchObject({ min: 0, max: 100 });
   });
 
+  it.each([
+    ['green', 'orange', 'red'],
+    ['#008000', 'rgb(255, 165, 0)', 'var(--segment-high)'],
+  ])('preserves CSS colors in band-gradient paint for %j', (...colors) => {
+    const appearance = normalizeCardConfig({ entities: [{
+      entity,
+      scale: { min: { fixed: 0 }, max: { fixed: 100 } },
+      bar: { fill_style: 'band_gradient', segments: [
+        { from: 0, to: 30, color: colors[0] },
+        { from: 30, to: 70, color: colors[1] },
+        { from: 70, to: 100, color: colors[2] },
+      ] },
+    }] }).entities[0];
+    const model = buildBarRenderModel(resolvedRow(appearance, 42.7), appearance, { height: 42 });
+    const firstColor = colors[0] === '#008000' ? 'rgb(0,128,0)' : colors[0];
+    expect(model.fill.paintLayers[0].paintStyle).toContain(
+      `background-image:linear-gradient(to right,${firstColor} 0%,${colors[1]} 50%,${colors[2]} 100%);`,
+    );
+    expect(model.fill.geometry).toMatchObject({ start: 0, end: 42.7, hidden: false });
+    expect(model.fill.revealStyle).toContain('57.3%');
+    expect(renderBar(model)).toContain('background-image:linear-gradient');
+  });
+
   it('calculates transition timing solely from adapter-supplied geometry', () => {
     expect(getRevealTransitionDuration({ valuePercent: 40, baselinePercent: 50 }, { valuePercent: 60, baselinePercent: 50 })).toBe(300);
     expect(getRevealTransitionDuration(null, { valuePercent: 60, baselinePercent: 50 })).toBe(600);

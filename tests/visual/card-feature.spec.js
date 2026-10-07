@@ -11,6 +11,54 @@ async function mount(page, options = {}) {
 }
 const feature = page => page.locator('sensor-bar-card-plus-feature').first();
 
+for (const [width, height, position] of [[640, 42, 'bottom'], [96, 24, 'inline']]) {
+  test(`band_gradient with named Segment colors paints the same as standalone in ${position} placement`, async ({ page }) => {
+    await page.goto('/tests/visual/fixtures/harness.html');
+    const config = {
+      scale: { min: { fixed: 0 }, max: { fixed: 100 } },
+      bar: { fill_style: 'band_gradient', animated: false, segments: [
+        { from: 0, to: 30, color: 'green' },
+        { from: 30, to: 70, color: 'orange' },
+        { from: 70, to: 100, color: 'red' },
+      ] },
+    };
+    await page.evaluate(async ({ config, width, height, position }) => {
+      const states = { 'sensor.power': window.__sbcpCreateState(42.7) };
+      await window.__sbcpRenderCard({ config: { ...config, entities: [{ entity: 'sensor.power' }] }, states });
+      await window.__sbcpRenderFeature({ config, states, context: { entity_id: 'sensor.power' }, width, height, position });
+    }, { config, width, height, position });
+
+    const expectedPaint = 'linear-gradient(to right, rgb(0, 128, 0) 0%, rgb(255, 165, 0) 50%, rgb(255, 0, 0) 100%)';
+    const card = page.locator('sensor-bar-card-plus');
+    for (const element of [feature(page), card]) {
+      const paint = element.locator('[data-layer="base"]');
+      await expect(paint).toBeVisible();
+      await expect(paint).toHaveCSS('background-image', expectedPaint);
+      await expect(paint).toHaveCSS('opacity', '1');
+      const clip = await element.locator('.bar-fill-reveal').evaluate(node => node.style.clipPath);
+      expect(clip).toContain('57.3%');
+    }
+    const size = await feature(page).locator('[data-layer="base"]').evaluate(node => {
+      const rect = node.getBoundingClientRect();
+      return [rect.width, rect.height];
+    });
+    expect(size).toEqual([width, height]);
+
+    // Exercise both adapters' patch paths as well as their initial rendering.
+    await page.evaluate(async () => {
+      const states = { 'sensor.power': window.__sbcpCreateState(65.2) };
+      document.querySelector('sensor-bar-card-plus').hass = { states };
+      const feature = document.querySelector('sensor-bar-card-plus-feature');
+      feature.hass = { states };
+      await feature.updateComplete;
+    });
+    for (const element of [feature(page), card]) {
+      await expect(element.locator('[data-layer="base"]')).toHaveCSS('background-image', expectedPaint);
+      await expect(element.locator('.bar-fill-reveal')).toHaveCSS('clip-path', 'inset(0px 34.8% 0px 0% round 6px)');
+    }
+  });
+}
+
 for (const fillStyle of ['solid', 'bands', 'soft_bands', 'gradient', 'band_gradient']) {
   test(`feature reuses ${fillStyle} paint and Segment coordinates without standalone content`, async ({ page }) => {
     await mount(page, { config: {
