@@ -85,6 +85,40 @@ describe('editor semantic preservation', () => {
     expect(resolveTarget(config)).toBe(0);
     expect(resolveTarget(titleRoundTrip(config))).toBe(0);
   });
+  it.each([
+    ['numeric', [{ from: -20, to: 20, color: '#ff2600' }]],
+    ['mixed', [{ from: -20, to: '50%', color: '#ff2600' }, { from: '50%', to: 20, color: '#0433ff' }]],
+  ])('keeps modern row %s Segment coordinates after an unrelated title edit', (coordinates, segments) => {
+    const config = {
+      entities: [{ entity: 'sensor.power', scale: { min: -20, max: 20 }, bar: { fill_style: 'band_gradient', segments } }],
+    };
+    const emitted = titleRoundTrip(config);
+    expect(emitted.entities[0].bar.segments).toEqual(segments);
+    expect(emitted.entities[0].bar.segment_space).toBeUndefined();
+    expect(emitted.bar?.segment_space).toBeUndefined();
+    const row = normalizeCardConfig(emitted).entities[0];
+    expect(row.bar.segments[0].from).toEqual({ fixed: -20, entity: null });
+    expect(row.bar.segments.at(-1).to).toEqual({ fixed: 20, entity: null });
+    if (coordinates === 'mixed') expect(row.bar.segments[0].to).toEqual({ fixed: null, entity: null, percent: 50 });
+  });
+  it.each(['percent', 'scale'])('round-trips inherited legacy %s mode without card Segments', mode => {
+    const config = {
+      bar: { segment_space: mode },
+      entities: [{ entity: 'sensor.power', scale: { min: 0, max: 200 }, bar: {
+        fill_style: 'band_gradient', segments: [{ from: 25, to: 75, color: '#ff2600' }],
+      } }],
+    };
+    const emitted = titleRoundTrip(config);
+    expect(emitted.bar?.segment_space).toBeUndefined();
+    expect(emitted.entities[0].bar.segment_space).toBeUndefined();
+    expect(emitted.entities[0].bar.segments).toEqual([{
+      from: mode === 'percent' ? '25%' : 25,
+      to: mode === 'percent' ? '75%' : 75,
+      color: '#ff2600',
+    }]);
+    expect(normalizeCardConfig(emitted).entities[0].bar.segments)
+      .toEqual(normalizeCardConfig(config).entities[0].bar.segments);
+  });
   it('distinguishes successive external percentage configurations', () => {
     const editor = createEditor();
     editor.setConfig({ entity: 'sensor.power', baseline: { at: '25%' } });

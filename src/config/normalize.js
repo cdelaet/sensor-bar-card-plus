@@ -451,6 +451,7 @@ export function colorModeToFillStyle(colorMode) {
 }
 
 const PAINT_EXPLICITNESS = Symbol('sbcp.paintExplicitness');
+const EXPLICIT_SEGMENT_SPACE = Symbol('sbcp.explicitSegmentSpace');
 
 function hasOwnConfigValue(config, key) {
   return config !== null && config !== undefined
@@ -566,6 +567,14 @@ export function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
   const isCardScope = options.isCardScope ?? cardConfig == null;
   const cardBar = cardConfig?.bar;
   const entityBar = entityConfig?.bar;
+  // Normalized severity also uses percent space; only a configured legacy mode
+  // may govern a replacement Segment list. Null provenance prevents that leak.
+  const inheritedSegmentSpace = hasOwnConfigValue(cardBar, EXPLICIT_SEGMENT_SPACE)
+    ? cardBar[EXPLICIT_SEGMENT_SPACE]
+    : ['percent', 'scale'].includes(cardBar?.segment_space) ? cardBar.segment_space : null;
+  const explicitSegmentSpace = ['percent', 'scale'].includes(entityBar?.segment_space)
+    ? entityBar.segment_space
+    : inheritedSegmentSpace;
   const entityStructuredSegments = entityBar?.segments;
   const entityTopLevelSegments = entityConfig.segments;
   const entityLegacySeverity = entityConfig.severity;
@@ -578,9 +587,7 @@ export function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
     : null;
 
   if (entityStructuredSegments !== undefined && entityStructuredSegments !== null) {
-    segment_space = entityBar?.segment_space === 'percent' || entityBar?.segment_space === 'scale'
-      ? entityBar.segment_space
-      : segment_space;
+    segment_space = explicitSegmentSpace;
     segments = normalizeGaugeSegments(entityStructuredSegments, { legacySegmentSpace: segment_space });
   } else if (entityTopLevelSegments !== undefined && entityTopLevelSegments !== null) {
     segments = normalizeGaugeSegments(entityTopLevelSegments);
@@ -610,7 +617,7 @@ export function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
     { scopeExplicitness, inheritedExplicitness, isCardScope }
   );
 
-  return {
+  const normalizedBar = {
     fill_style: normalizedMode.fill_style,
     color_mode: normalizedMode.color_mode,
     needle: normalizeNeedleConfig(entityBar?.needle, cardBar?.needle),
@@ -625,6 +632,8 @@ export function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
     animated: entityBar?.animated ?? entityConfig.animated ?? cardBar?.animated ?? cardConfig?.animated ?? true,
     above_target_color: structuredAboveTargetColor ?? entityConfig.above_target_color ?? cardBar?.above_target_color ?? inheritedStructuredAboveTargetColor ?? cardConfig?.above_target_color ?? null,
   };
+  Object.defineProperty(normalizedBar, EXPLICIT_SEGMENT_SPACE, { value: explicitSegmentSpace });
+  return normalizedBar;
 }
 
 export function clampSupportedRowHeight(height) {

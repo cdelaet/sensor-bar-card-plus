@@ -73,6 +73,30 @@ function expectGeometry(model, row) {
 }
 
 describe('dynamic scale through the card update path', () => {
+  it('projects replacement numeric row Segments through live bounds and their explicit fallback (issue #29)', () => {
+    const { card, model } = setup({
+      scale: { min: { entity: 'sensor.min', fixed: -20 }, max: { entity: 'sensor.max', fixed: 20 } },
+      entities: [{ entity: 'sensor.value', bar: {
+        fill_style: 'band_gradient', needle: true,
+        segments: [
+          { from: -20, to: -5, color: '#ff2600' },
+          { from: -5, to: 5, color: '#000000' },
+          { from: 5, to: 20, color: '#0433ff' },
+        ],
+      } }],
+    }, snapshot(-19, -20, 20));
+    const anchors = () => card._getSeverityInterpolationStops(card._config.entities[0], model().min, model().max)
+      .map(stop => stop.p);
+    expect(model()).toMatchObject({ min: -20, max: 20, needle: { pct: 2.5 } });
+    expect(anchors()).toEqual([0, 50, 100]);
+    card.hass = snapshot(-19, -40, 40);
+    expect(model()).toMatchObject({ min: -40, max: 40, needle: { pct: 26.25 } });
+    expect(anchors()).toEqual([25, 50, 75]);
+    card.hass = snapshot(-19, 'unavailable', 'unavailable');
+    expect(model()).toMatchObject({ min: -20, max: 20, needle: { pct: 2.5 } });
+    expect(anchors()).toEqual([0, 50, 100]);
+  });
+
   it.each([
     ['minimum', { 'sensor.min': state(-100) }, -100, 100],
     ['maximum', { 'sensor.max': state(200) }, 0, 200],
