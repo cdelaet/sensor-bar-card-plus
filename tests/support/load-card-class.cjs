@@ -174,6 +174,7 @@ function loadCardClass(options = {}) {
     },
     customElements: {
       define(name, ctor) {
+        if (registry.has(name)) throw new Error(`Duplicate element: ${name}`);
         registry.set(name, ctor);
       },
       get(name) {
@@ -209,6 +210,10 @@ function loadCardClass(options = {}) {
   return {
     card: sandbox.customElements.get('sensor-bar-card-plus'),
     editor: sandbox.customElements.get('sensor-bar-card-plus-editor'),
+    feature: sandbox.customElements.get('sensor-bar-card-plus-feature'),
+    customCards: sandbox.window.customCards,
+    customCardFeatures: sandbox.window.customCardFeatures,
+    reload: () => vm.runInNewContext(source, sandbox, { filename: filePath }),
   };
 }
 
