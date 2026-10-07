@@ -1,11 +1,11 @@
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue,
   pruneEmptyObjectsInTarget, normalizeTextValue, normalizeNumberValue } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, renderResetOptions, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderResetOptions, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from '../shared/editor-marker-controls.js';
 
 // Configuration controls only. No runtime extrema/history state lives here.
 export class ExtremaSection {
-  constructor(context) { this.context = context; }
+  constructor(context, options = {}) { this.options = options; this.context = context; }
 
   _getScopedPeakConfig(scope) {
     const rawPeak = this.context.read(scope, ['peak']);
@@ -154,7 +154,7 @@ export class ExtremaSection {
   }
 
   _setScopedPeakColor(scope, rawValue) {
-    const normalizedValue = normalizeTextValue(rawValue).trim();
+    const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
     const defaultColor = '#888';
     return this.context.mutate(scope, (target) => {
       let nextTarget = cloneDeep(target);
@@ -312,7 +312,7 @@ export class ExtremaSection {
   }
 
   _setScopedExtremumColor(scope, key, rawValue) {
-    const normalizedValue = normalizeTextValue(rawValue).trim();
+    const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
     const defaultColor = '#888888';
     return this.context.mutate(scope, (target) => {
       let nextTarget = cloneDeep(target);
@@ -455,7 +455,7 @@ ${indent}                          <input id="entity-${index}-${key}-inherit" ty
                       </div>
                       <div class="field-row">
                         <label for="entity-${index}-${key}-color">${title} color</label>
-                        ${renderColorInput({
+                        ${renderColorInput({ cssText: this.options.cssText, label: 'Marker color',
                           id: `entity-${index}-${key}-color`,
                           kind: `entity-${key}-color`,
                           index,
@@ -490,7 +490,7 @@ ${indent}                          `;
             </div>
             <div class="field-row">
               <label for="${key}-color">${title} color</label>
-              ${renderColorInput({
+              ${renderColorInput({ cssText: this.options.cssText, label: 'Marker color',
                 id: `${key}-color`,
                 field: `${key}-color`,
                 value: marker.color,

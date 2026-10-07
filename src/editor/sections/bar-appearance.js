@@ -3,7 +3,7 @@ import {
   isObject, normalizeTextValue, setPathValue, deletePathValue,
   removePathsFromTarget, pruneEmptyObjectsInTarget,
 } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeColorComparisonValue, renderColorInput } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, normalizeEditorColorValue } from '../shared/editor-controls.js';
 
 export function getFillStyleFromColorMode(colorMode) {
   switch (colorMode) {
@@ -68,8 +68,8 @@ export function setBarFillStyle(context, scope, rawValue) {
   return setAppearanceValue(context, scope, 'fill_style', value || undefined, [['color_mode']]);
 }
 
-export function setBarColor(context, scope, rawValue) {
-  const value = normalizeTextValue(rawValue).trim();
+export function setBarColor(context, scope, rawValue, options = {}) {
+  const value = normalizeEditorColorValue(rawValue, options.cssText);
   const remove = !value || normalizeColorComparisonValue(value) === normalizeColorComparisonValue('#4a9eff');
   return setAppearanceValue(context, scope, 'color', remove ? undefined : value, [['color']]);
 }
@@ -87,6 +87,17 @@ export function getEffectiveBarSolidFillValue(context, scope) {
 
 export function setBarSolidFill(context, scope, value) {
   return setAppearanceValue(context, scope, 'solid_fill', value ? true : undefined);
+}
+
+export function getBarAnimatedValue(context, scope) {
+  return !!normalizeBarConfig(context.read(scope, []), scope?.type === 'entity' ? context.read({ type: 'card' }, []) : null).animated;
+}
+
+export function setBarAnimated(context, scope, value) {
+  // Keep a canonical true only when an inherited/flat false needs overriding.
+  const fallback = context.read(scope, ['animated'])
+    ?? (scope?.type === 'entity' ? normalizeBarConfig(context.read({ type: 'card' }, []), null).animated : true);
+  return setAppearanceValue(context, scope, 'animated', value ? (fallback ? undefined : true) : false);
 }
 
 export function clearBarAppearanceOverride(context, scope) {
@@ -117,10 +128,11 @@ export function getBarAppearanceSummary(context, scope) {
   return parts.length ? parts.join(' • ') : 'Inherited';
 }
 
-export function handleBarAppearanceField(context, { field, kind, index, value }) {
+export function handleBarAppearanceField(context, { field, kind, index, value }, options = {}) {
+  if (options.animation && field === 'bar-animated') { setBarAnimated(context, { type: 'card' }, value); return true; }
   const rootSetters = { 'bar-fill-style': setBarFillStyle, 'bar-color': setBarColor, 'bar-solid-fill': setBarSolidFill };
   if (Object.prototype.hasOwnProperty.call(rootSetters, field)) {
-    rootSetters[field](context, { type: 'card' }, value);
+    rootSetters[field](context, { type: 'card' }, value, options);
     return true;
   }
   const scope = { type: 'entity', index: Number(index) };
@@ -139,7 +151,7 @@ export function handleBarAppearanceField(context, { field, kind, index, value })
 // The root's existing nested Baseline/Needle content is supplied by its host.
 // Shared Segments/Gradient Stops are composed separately as sibling sections.
 // Entity content still belongs inside the host-owned override disclosure.
-export function renderBarAppearanceSection(context, scope, renderChildren = () => '') {
+export function renderBarAppearanceSection(context, scope, renderChildren = () => '', options = {}) {
   if (scope?.type === 'entity') {
     const index = scope.index;
     const barAppearanceInherited = !hasBarAppearanceOverride(context, scope);
@@ -204,9 +216,13 @@ export function renderBarAppearanceSection(context, scope, renderChildren = () =
                 <label for="bar-solid-fill">Solid fill</label>
               </div>
             </div>
-            <div class="field-row">
+            ${options.animation ? `<div class="field-row"><div class="toggle">
+              <input id="bar-animated" type="checkbox" data-field="bar-animated"${getBarAnimatedValue(context, scope) ? ' checked' : ''}>
+              <label for="bar-animated">Animated</label>
+            </div></div>` : ''}<div class="field-row">
               <label for="bar-color">Bar color</label>
               ${renderColorInput({
+                cssText: options.cssText, label: 'Bar color',
                 id: 'bar-color',
                 field: 'bar-color',
                 value: barColor,

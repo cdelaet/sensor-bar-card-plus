@@ -1,6 +1,9 @@
 import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumberValue,
   setPathValue, deletePathValue, pruneEmptyObjectsInTarget } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeColorComparisonValue } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, normalizeEditorColorValue } from '../shared/editor-controls.js';
+import { normalizeGaugeSegments, normalizeScaleConfig } from '../../config/normalize.js';
+import { getResolvedScale } from '../../config/resolve.js';
+import { getSegmentsForRendering } from '../../view-model/bar-render-model.js';
 import { PaletteSection } from '../shared/palette-section.js';
 
 export class SegmentsSection extends PaletteSection {
@@ -108,7 +111,7 @@ export class SegmentsSection extends PaletteSection {
   _setSegmentDraftField(scope, field, rawValue) {
     const currentDraft = this._getSegmentDraftState(scope);
     const nextValue = field === 'color'
-      ? normalizeTextValue(rawValue).trim()
+      ? normalizeEditorColorValue(rawValue, this.array.cssText)
       : normalizeTextValue(rawValue);
     this._setSegmentDraftState(scope, {
       ...currentDraft,
@@ -291,7 +294,44 @@ export class SegmentsSection extends PaletteSection {
     });
   }
 
+  _getAutomaticEndInputRows(scope) {
+    return this._getScopedSegmentsValue(scope).map((row, index) => {
+      const from = this._getSegmentBoundaryText(scope, index, 'from', row?.from);
+      const to = this._getSegmentBoundaryText(scope, index, 'to', row?.to);
+      return { ...row, from, ...(to.trim() ? { to } : { to: undefined }) };
+    });
+  }
+
+  _resolveAutomaticEndRows(scope, rows) {
+    const card = this.context.read({ type: 'card' }, []);
+    const local = scope?.type === 'entity' ? this.context.read(scope, []) : {};
+    const rootScale = normalizeScaleConfig(card, null);
+    const scale = getResolvedScale(this.ui.hass?.(), scope?.type === 'entity' ? normalizeScaleConfig(local, { scale: rootScale }) : rootScale);
+    // Temporary labels associate sorted resolved preview rows with raw indices.
+    // Neither this normalization nor inferred ends are written into config.
+    const segments = normalizeGaugeSegments(rows.map((row, index) => ({ ...row, to: typeof row.to === 'string' && !row.to.trim() ? undefined : row.to, label: index })), { legacySegmentSpace: this.array.segmentSpace?.() });
+    return getSegmentsForRendering({ bar: { segments } }, scale.min, scale.max);
+  }
+
+  _getAutomaticEndValidationMessage(scope, rows, index) {
+    const row = rows[index];
+    if (!row) return '';
+    const from = this._parseSegmentBoundaryText(row.from);
+    const to = this._parseSegmentBoundaryText(row.to);
+    if (from.state !== 'valid' || to.state === 'invalid') return 'Enter valid from/to values.';
+    const resolved = this._resolveAutomaticEndRows(scope, rows);
+    const candidate = resolved.find(segment => segment.label === index);
+    if (!candidate || candidate.from >= candidate.to) return 'From must be below To.';
+    for (const other of resolved) {
+      if (other.label === index || other.from >= other.to) continue;
+      if (candidate.from === other.from) return 'Duplicate segment start.';
+      if (candidate.from < other.to && candidate.to > other.from) return 'Segments overlap.';
+    }
+    return '';
+  }
+
   _getSegmentRowValidationMessage(scope = { type: 'card' }, segmentIndex) {
+    if (this.array.autoEnds) return this._getAutomaticEndValidationMessage(scope, this._getAutomaticEndInputRows(scope), segmentIndex);
     const rows = this._buildSegmentValidationRows(scope);
     const row = rows[segmentIndex];
     if (!row) {
@@ -322,6 +362,13 @@ export class SegmentsSection extends PaletteSection {
 
   _getValidSegmentDraft(scope = { type: 'card' }) {
     const draft = this._getSegmentDraftState(scope);
+    if (this.array.autoEnds) {
+      if (!draft.color.trim() || !CSS.supports('color', draft.color)) return null;
+      const rows = [...this._getAutomaticEndInputRows(scope), draft];
+      if (this._getAutomaticEndValidationMessage(scope, rows, rows.length - 1)) return null;
+      const from = this._parseSegmentBoundaryInput(draft.from), to = this._parseSegmentBoundaryInput(draft.to);
+      return { from, ...(draft.to.trim() ? { to } : {}), color: draft.color };
+    }
     const parsedFrom = this._parseSegmentBoundaryText(draft.from);
     const parsedTo = this._parseSegmentBoundaryText(draft.to);
     const color = normalizeTextValue(draft.color).trim();
@@ -355,6 +402,12 @@ export class SegmentsSection extends PaletteSection {
 
   _getSegmentDraftValidationMessage(scope = { type: 'card' }) {
     const draft = this._getSegmentDraftState(scope);
+    if (this.array.autoEnds) {
+      if (!draft.from.trim()) return 'Enter a start value to add a segment.';
+      if (!draft.color.trim() || !CSS.supports('color', draft.color)) return 'Enter a valid CSS color.';
+      const rows = [...this._getAutomaticEndInputRows(scope), draft];
+      return this._getAutomaticEndValidationMessage(scope, rows, rows.length - 1);
+    }
     const parsedFrom = this._parseSegmentBoundaryText(draft.from);
     const parsedTo = this._parseSegmentBoundaryText(draft.to);
     const color = normalizeTextValue(draft.color).trim();
@@ -425,6 +478,10 @@ export class SegmentsSection extends PaletteSection {
   }
 
   _getSegmentPreviewRows(scope = { type: 'card' }) {
+    if (this.array.autoEnds) {
+      const draft = this._getValidSegmentDraft(scope);
+      return this._resolveAutomaticEndRows(scope, [...this._getAutomaticEndInputRows(scope), ...(draft ? [draft] : [])]);
+    }
     const baseSegments = this._getSegmentsUiRows(scope) ?? this._getScopedSegmentsValue(scope);
     const previewSegments = this._sortSegmentsForEditor(baseSegments);
     const validDraft = this._getValidSegmentDraft(scope);
@@ -592,7 +649,7 @@ export class SegmentsSection extends PaletteSection {
     }
     const normalizedText = normalizeTextValue(rawValue).trim();
     const parsedValue = this._parseSegmentBoundaryInput(rawValue);
-    const nextValue = parsedValue === null ? normalizedText : parsedValue;
+    const nextValue = this.array.autoEnds && field === 'to' && !normalizedText ? undefined : parsedValue === null ? normalizedText : parsedValue;
     const currentSegments = this._getSegmentsUiRows(scope) ?? this._getScopedSegmentsValue(scope);
     const nextSegments = currentSegments.map((segment, currentIndex) => (
       currentIndex === segmentIndex
@@ -716,9 +773,9 @@ export class SegmentsSection extends PaletteSection {
 	                  ${this._renderListRows(segments, (segment, index) => `
 	                    <div class="segment-editor-row">
 	                    <div class="list-row triple segment-row">
-	                      <input type="text" data-kind="segment-from" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: 'card' }, index, 'from', segment?.from))}" placeholder="0%">
-	                      <input type="text" data-kind="segment-to" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: 'card' }, index, 'to', segment?.to))}" placeholder="100%">
-	                      <input type="color" data-kind="segment-color" data-index="${index}" value="${escapeAttribute(segment?.color ?? '#4a9eff')}">
+	                      <input type="text"${this.array.autoEnds ? ` aria-label="Segment ${index + 1} start"` : ''} data-kind="segment-from" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: 'card' }, index, 'from', segment?.from))}" placeholder="0%">
+	                      <input type="text"${this.array.autoEnds ? ` aria-label="Segment ${index + 1} end (blank = Auto)"` : ''} data-kind="segment-to" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: 'card' }, index, 'to', segment?.to))}" placeholder="${this.array.autoEnds ? 'Auto' : '100%'}">
+	                      ${this.array.cssText ? renderColorInput({ id: `segment-color-${index}`, kind: 'segment-color', index, value: segment?.color ?? '#4a9eff', fallbackHex: '#4a9eff', cssText: true, label: `Segment ${index + 1} color` }) : `<input type="color" data-kind="segment-color" data-index="${index}" value="${escapeAttribute(segment?.color ?? '#4a9eff')}">`}
 	                      <button type="button" data-action="remove-segment" data-index="${index}" aria-label="Remove" title="Remove">🗑</button>
 	                    </div>
                       <div id="segment-row-hint-${index}" class="section-note"${this._getSegmentRowValidationMessage({ type: 'card' }, index) ? '' : ' style="display:none"'}>${escapeAttribute(this._getSegmentRowValidationMessage({ type: 'card' }, index))}</div>
@@ -726,9 +783,9 @@ export class SegmentsSection extends PaletteSection {
 	                  `)}
                     <div class="segment-draft">
                       <div class="list-row triple segment-row">
-                        <input id="segment-draft-from" type="text" data-kind="segment-draft-from" value="${escapeAttribute(this._getSegmentDraftState({ type: 'card' }).from)}" placeholder="0%">
-                        <input id="segment-draft-to" type="text" data-kind="segment-draft-to" value="${escapeAttribute(this._getSegmentDraftState({ type: 'card' }).to)}" placeholder="100%">
-                        <input type="color" data-kind="segment-draft-color" value="${escapeAttribute(this._getSegmentDraftState({ type: 'card' }).color || '#4a9eff')}">
+                        <input id="segment-draft-from" type="text"${this.array.autoEnds ? ' aria-label="New segment start"' : ''} data-kind="segment-draft-from" value="${escapeAttribute(this._getSegmentDraftState({ type: 'card' }).from)}" placeholder="0%">
+                        <input id="segment-draft-to" type="text"${this.array.autoEnds ? ' aria-label="New segment end (blank = Auto)"' : ''} data-kind="segment-draft-to" value="${escapeAttribute(this._getSegmentDraftState({ type: 'card' }).to)}" placeholder="${this.array.autoEnds ? 'Auto' : '100%'}">
+                        ${this.array.cssText ? renderColorInput({ id: 'segment-draft-color', kind: 'segment-draft-color', value: this._getSegmentDraftState({ type: 'card' }).color || '#4a9eff', fallbackHex: '#4a9eff', cssText: true, label: 'New segment color' }) : `<input type="color" data-kind="segment-draft-color" value="${escapeAttribute(this._getSegmentDraftState({ type: 'card' }).color || '#4a9eff')}">`}
                         <button type="button" data-action="add-segment"${this._canAddSegment({ type: 'card' }) ? '' : ' disabled'}>Add</button>
                       </div>
                       <div id="segment-draft-hint" class="section-note"${this._getSegmentDraftValidationMessage({ type: 'card' }) ? '' : ' style="display:none"'}>${escapeAttribute(this._getSegmentDraftValidationMessage({ type: 'card' }))}</div>

@@ -72,7 +72,7 @@ for (const source of ['src', 'dist']) test(`Feature percentage Baseline and HA p
   await page.addInitScript(() => { customElements.define('ha-entity-picker', class extends HTMLElement {}); });
   const editor = await mount(page, source, 240, true);
   await expect(editor.locator('#baseline-value')).toHaveValue('');
-  await expect(editor.locator('#baseline-percent')).toHaveCount(0);
+  await expect(editor.locator('#baseline-percent')).toHaveCount(1);
   await editor.locator('#baseline-mode').selectOption('enabled');
   await editor.locator('#bar-needle-mode').selectOption('enabled');
   await editor.locator('[data-field="bar-needle-color-text-fallback"]').fill('red');

@@ -2,6 +2,7 @@ import { looksLikeEntityId, normalizeStructuredResolvableValue, parsePercentLite
 import {
   isObject, normalizeNumberValue, normalizeTextValue, setPathValue, deletePathValue,
 } from '../editor/shared/editor-config.js';
+import { normalizeScalePercentageInput } from '../editor/shared/editor-controls.js';
 
 // Display resolution only. Neither defaults nor normalized config are persisted.
 export function getFeatureScaleSource(config, key) {
@@ -51,6 +52,8 @@ export function getFeatureBaselineSource(config) {
 }
 
 export function patchFeatureBaselineSource(config, part, rawValue) {
+  if (part === 'mode') return patchFeatureMarkerSourceMode(config, 'baseline', rawValue);
+  if (part === 'percent') return patchFeatureMarkerPercentage(config, 'baseline', rawValue);
   const value = part === 'fixed' ? normalizeNumberValue(rawValue) : normalizeTextValue(rawValue).trim();
   const empty = part === 'fixed' ? value === null : !value;
   const raw = config.baseline;
@@ -83,6 +86,8 @@ export function promoteFeatureTarget(config) {
 }
 
 export function patchFeatureTargetSource(config, part, rawValue) {
+  if (part === 'mode') return patchFeatureMarkerSourceMode(config, 'target', rawValue);
+  if (part === 'percent') return patchFeatureMarkerPercentage(config, 'target', rawValue);
   const value = part === 'fixed' ? normalizeNumberValue(rawValue) : normalizeTextValue(rawValue).trim();
   const empty = part === 'fixed' ? value === null : !value;
   const raw = config.target;
@@ -96,4 +101,38 @@ export function patchFeatureTargetSource(config, part, rawValue) {
   let next = patchSource(config, ['target', 'at'], raw?.at, part, value, empty, true);
   if (part === 'entity') next = deletePathValue(next, ['target_entity']);
   return next;
+}
+
+// Explicit conversions own source components, never surrounding marker fields.
+function patchFeatureMarkerSourceMode(config, key, mode) {
+  if (!['fixed', 'entity', 'entity-fallback', 'percent'].includes(mode)) return config;
+  const read = key === 'target' ? getFeatureTargetSource : getFeatureBaselineSource;
+  const source = read(config), raw = config[key]?.at;
+  let next = key === 'target' ? promoteFeatureTarget(config)
+    : isObject(config.baseline) ? config : setPathValue(config, ['baseline'], { at: config.baseline });
+  let at = isObject(raw) ? { ...raw } : {};
+  for (const field of ['fixed', 'value', 'entity', 'percent']) delete at[field];
+  if (mode === 'percent') {
+    const percent = Number.isFinite(source.percent) ? source.percent : 50;
+    at = isObject(raw) ? { ...at, percent } : `${percent}%`;
+  } else {
+    if (mode !== 'entity') at.fixed = source.fixed !== '' && source.fixed !== undefined ? source.fixed : 50;
+    if (mode !== 'fixed') at.entity = source.entity || '';
+    if (!isObject(raw) && mode === 'fixed') at = at.fixed;
+    if (!isObject(raw) && mode === 'entity' && at.entity) at = at.entity;
+  }
+  next = setPathValue(next, [key, 'at'], at);
+  return key === 'target' ? deletePathValue(next, ['target_entity']) : next;
+}
+
+function patchFeatureMarkerPercentage(config, key, rawValue) {
+  const clear = rawValue === null;
+  const value = normalizeScalePercentageInput(rawValue);
+  if (!clear && value === null) return config;
+  const at = config[key]?.at, base = [key, 'at'];
+  if (isObject(at)) return clear ? deletePathValue(config, [...base, 'percent']) : setPathValue(config, [...base, 'percent'], value);
+  if (Number.isFinite(parsePercentLiteral(at))) return clear ? deletePathValue(config, base) : setPathValue(config, base, `${value}%`);
+  if (clear) return config;
+  const next = key === 'target' ? promoteFeatureTarget(config) : isObject(config.baseline) ? config : setPathValue(config, ['baseline'], { at: config.baseline });
+  return patchSource(next, base, next[key]?.at, 'percent', value, false, true);
 }

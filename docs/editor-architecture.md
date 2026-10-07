@@ -1064,3 +1064,167 @@ preservation, focus/echo, source/dist, narrow browser, runtime snapshot and full
 suite validation. No further substantial extraction, generic framework, new
 marker API or runtime feature is justified by this audit. **Phase 3J is recommended
 only; none of these gaps is implemented in Phase 3I.**
+
+## Capability Gap Closure (Phase 3J)
+
+### Characterized boundary and implementation decision
+
+Starting point: `feat/card-feature` at `f4a7fa4`, clean. Before production edits,
+characterization covers animation default/alias/inheritance, Target/Baseline
+percentage strings and objects/precedence, omitted/null/mixed Segment ends and
+configured-order inference, CSS direct paints versus hex interpolation, and the
+standalone controls/drafts/validation. A 288-case standalone HTML matrix was
+captured before editing, retaining all earlier matrices.
+
+Animation defaults true. Normalization uses local `bar.animated`, local flat
+`animated`, inherited structured/flat animation, then true, with nullish fallback;
+it does not coerce strings. Rendered animation uses its truthiness. Standalone
+has no animation control. Target/Baseline accept percentage strings and source
+objects with `percent`; resolution prefers numeric entity, then fixed/value, then
+percentage of the current scale. Out-of-range YAML percentages are not rejected
+by those runtime sources (positions are bounded for drawing); the new graphical
+input uses the existing Reference 0–100 editing convention without changing YAML
+runtime semantics. Reference object percentages remain unsupported.
+
+Omitted/null Segment ends inherit the following valid configured row's start in
+normalization. Remaining unresolved ends use the next sorted resolved start or
+100% (Scale max) during rendering. Mixed active-scale/percentage coordinates are
+supported; malformed/entity boundaries are skipped. Out-of-order rows can produce
+reversed ranges: the editor must report that rather than reorder or rewrite them.
+Standalone currently requires explicit ends and native Segment colors; common
+color controls show text only for already-loaded nonhex values.
+
+The shared sections opt into these extensions only when composed by the Feature
+host. This keeps existing standalone controls, cleanup, inheritance and HTML
+unchanged while sharing runtime semantics and implementation. No fifth context
+operation or broad extraction is needed. The four approved gaps are the complete
+scope; runtime paint/math, timing, geometry and all Class B/C/D items stay outside.
+
+### Four shared extensions and Feature persistence
+
+- Bar Appearance owns `getBarAnimatedValue`/`setBarAnimated` and the Animated
+  checkbox. Feature opts in with `animation: true`; omitted/default-on does not
+  emit or materialize a default. Off stores canonical false. On removes canonical
+  animation unless a flat/inherited false needs an explicit true override. The
+  flat alias remains raw; other bar/root fields are not rewritten.
+- `renderScalePercentageInput` is extracted from the existing Reference markup
+  byte-for-byte. Target/Baseline additionally use `renderMarkerPercentageControls`
+  and `normalizeScalePercentageInput`; Feature opts in via `percentSources`.
+  Existing fixed/entity component inputs remain visible to preserve mixed source
+  semantics; the note explains entity → fixed → percentage precedence. Explicit
+  Fixed/Entity/Entity-with-fallback/Percentage conversions use the same
+  `setSource` operation, replacing only recognized source components. Initial
+  fixed/percent values use the existing source value when available, otherwise 50.
+  Scalar percentage anchors remain strings; object anchors retain unknown keys.
+  Clear removes only percent; invalid/incomplete edits remain in section-local
+  drafts. Unsupported raw forms survive opening and unrelated edits.
+- Feature Segments opt into `autoEnds` through the existing palette adapter.
+  Blank End displays Auto and deletes only the owned `to`; null survives untouched.
+  `_resolveAutomaticEndRows` reuses `normalizeGaugeSegments`, `normalizeScaleConfig`,
+  `getResolvedScale` and `getSegmentsForRendering` for validation/preview, including
+  current dynamic Scale. Temporary index labels associate resolved/sorted preview
+  rows with raw rows and never persist. Explicit/automatic edits preserve color,
+  unknown row metadata, raw order and other row identities. New drafts can omit
+  End; malformed, duplicate, reversed and overlapping ranges stay local/reported.
+- `renderColorInput` has a Feature `cssText` opt-in: picker plus always-available
+  text, from default/hex/nonhex states. `normalizeEditorColorValue` preserves
+  nonempty raw text rather than converting/trimming it. The Feature host validates
+  through native `CSS.supports('color', value)` only. No parser, sampling, canvas,
+  RGB normalization or renderer change is introduced.
+
+| Exact field | Runtime class | Phase 3J text entry |
+|---|---|---|
+| `bar.color` | Direct solid/base paint | Yes |
+| `bar.segments[].color` (existing rows and draft) | Direct bands/soft_bands/band_gradient painting | Yes; numeric sampling remains limited |
+| `bar.needle.color` | Direct glyph paint; existing contrast fallback | Yes |
+| `baseline.above.color`, `baseline.below.color` | Direct overlays | Yes |
+| `target.color` | Direct glyph paint; existing contrast fallback | Yes |
+| `target.when_exceeded.fill_color` | Direct overlay | Yes |
+| `peak.color`, `floor.color` | Direct glyph paint; existing contrast fallback | Yes |
+| `markers[].color` | Direct glyph paint; existing contrast fallback | Yes |
+| `bar.gradient_stops[].color` and Gradient draft | Numeric hex interpolation | No new text path; existing loaded-nonhex fallback is retained |
+| Interpolated/sampled solid-fill color | Numeric sampling in `getColor` | No new runtime support; use hex for these combinations |
+
+Browser-valid examples verified include short/full hex, red/orange,
+`rgb(1, 2, 3)`, `rgba(0, 100, 0, .5)`, `hsl(30, 100%, 50%)` and
+`var(--warning-color)`. CSS variable resolution depends on theme definitions.
+Existing contrast/border fallbacks are unchanged; accepting direct paint does not
+promise arbitrary CSS interpolation or sampled-color support. Standalone styling,
+entity inheritance and conditional fallback controls keep their prior behavior.
+
+Invalid CSS lives in a Feature map keyed by stable text control IDs. Config echo,
+hass/context updates and blur retain it; foreign config resets it. Native picker
+edits clear the associated text draft. Segment array length changes clear indexed
+color drafts to prevent reassociation after add/remove; existing row edits keep
+other rows untouched. Reference controls retain their stable UI identities.
+Native validity and `aria-invalid` follow restored/reset drafts. Structural foreign
+replacement ignores native change events from replaced controls, preventing stale
+focused percentage text from resurrecting a discarded draft. No global observer,
+new context operation, state subscriptions or runtime lifecycle changes are added.
+
+Opening/context/reopen emits nothing and never persists normalized display values.
+Edits preserve root/bar/marker/row metadata, nested unknown keys, own `undefined`,
+unsupported fields and aliases not owned by the edit. Explicit source conversion
+owns source aliases; existing default-equivalent color removal remains unchanged.
+Cross-gap tests cover animation/custom fill, Auto/CSS Segments, percentage Target
+with labels/exceeded fill, percentage Baseline with side colors, and untouched
+Reference/Peak/Floor/Needle/inactive palettes.
+
+### Final read-only runtime versus editor audit
+
+Compared `SensorBarCardPlusFeature._reconcile`/render/label layout with
+`normalizeCardConfig`, Scale/Bar/Baseline/Target/Extrema/Reference normalization,
+`getSegmentsForRendering`/paint paths, and all composed editor sections/adapters.
+The following covers canonical Feature-appropriate runtime capabilities; aliases
+are compatibility representations, not additional capability controls.
+
+| Runtime capability | Editor coverage / remaining class |
+|---|---|
+| One inherited or explicit entity | Entity section, parent context and override/clear |
+| Scale bounds, fixed/entity and fallbacks | Shared Scale section; automatic history/holding is B |
+| Five fill styles, solid fill, base color, animation | Shared Bar Appearance; all four exposed |
+| Numeric/percent/mixed Segments, automatic ends, colors | Shared Segments with Feature opt-ins; row labels are B, entity boundaries C |
+| Hex Gradient Stops | Shared Gradient Stops; arbitrary CSS interpolation/sampling C |
+| Needle enable/color | Shared Needle; runtime precedence and geometry B |
+| Baseline mode, fixed/entity/percent, side colors | Shared Baseline plus source adapter; symbolic min/max C |
+| Target mode/source/percent, shape/direction/color, labels/exceeded fill | Shared Target; independent built-in label entity C |
+| Peak/Floor enable/color/direction/labels/reset presets | Shared Extrema; history/timing B, unsupported reset forms C |
+| Reference markers, sources/percent, lanes/shapes/direction/colors, label-only and independent label source | Shared Reference; object percent/custom label unit C |
+| Unit/precision | Shared Formatting; standalone primary labels/layout B |
+| HA feature sizing/context/theme and compact label degradation/motion | B; runtime presentation and host contract |
+| Actions/reverse/vertical/area aggregation/multiple entities | C; not implemented by Feature |
+| Legacy aliases, top-level palettes, severity, source value/decimal wrappers | D; preserve/read existing paths, no duplicate controls |
+
+**No known Class A gap remains.** No additional genuine canonical,
+Feature-appropriate runtime capability was discovered. The earlier B/C/D audit
+still applies; none is promoted or implemented in this phase. Four shared section
+extensions with explicit Feature policy flags were sufficient. Standalone has
+identical controls/HTML and remains 3,588 lines; Feature host is 437 lines. The
+four-operation context remains `read`, `mutate`, `source`, `setSource`.
+
+### Validation and next phase
+
+Phase 3J adds nine pre-change characterization tests, 63 capability unit tests and
+12 browser cases (source/dist, 360/240px, native validation, drafts/focus/echo,
+conversions, foreign replacement, Auto/CSS combined edits, verbatim side/exceeded
+color off/on). Final validation: **1,576 unit tests** in 31 files and **263
+Playwright tests** pass. All standalone runtime/editor and Card Feature runtime
+snapshots are unchanged. Twelve existing Feature editor images intentionally
+change: two each for whole-editor composition, Needle, Baseline, Target, Floor
+and Segments. Peak, Reference and Gradient Stop section images remain unchanged;
+four new images cover Bar Appearance/Auto-CSS Segments at 360/240px. Narrow
+screenshots were visually reviewed and browser containment/focus checks pass.
+
+All earlier HTML matrices (20/32/80/96/128/160/192/256) remain exact, plus the
+expanded 288-case baseline captured before production edits. Source/dist and
+picker/fallback environments pass; new Feature template parity also passes.
+Normal dist build and working/staged `git diff --check` pass. Complete diff review
+confirms only editor controls/adapters, focused tests/images, documentation and
+the regenerated bundle changed; runtime/standalone host source is untouched.
+
+Recommend **Phase 3K — Full Card Feature acceptance in real Home Assistant**.
+This is acceptance, not architecture: inherited/explicit entities; Bottom/Inline;
+narrow/mobile; every fill; animation on/off; Needle; percentage Baseline/Target;
+Peak/Floor/Reference; labels and independent Reference label entities; dynamic
+Scale; Auto ends; CSS direct paints; unknown/unavailable sources; echo/reopen;
+and complex combinations. Phase 3K is not started by this change.

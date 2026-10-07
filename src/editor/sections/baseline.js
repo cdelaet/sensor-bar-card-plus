@@ -1,14 +1,14 @@
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue,
   pruneEmptyObjectsInTarget, normalizeTextValue, hasResolvableOverride } from '../shared/editor-config.js';
-import { escapeAttribute, renderColorInput, renderEntitySourceInput } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeEditorColorValue, normalizeScalePercentageInput, renderMarkerPercentageControls, getMarkerSourceMode, renderColorInput, renderEntitySourceInput } from '../shared/editor-controls.js';
 
 export class BaselineSection {
-  constructor(context) {
+  constructor(context, options = {}) { this.options = options;
     this.context = context;
     this.reset();
   }
 
-  reset() { this._baselineColorDrafts = new Map(); }
+  reset() { this._baselineColorDrafts = new Map(); this._sourceMode = undefined; this._percentageDraft = undefined; }
 
   _getBaselineColorDraftKey(scope = { type: 'card' }, direction = 'above') {
     const scopeKey = scope?.type === 'entity' ? `entity:${scope.index}` : 'card';
@@ -16,7 +16,7 @@ export class BaselineSection {
   }
 
   _setBaselineColorDraft(scope, direction, rawValue) {
-    const normalizedValue = normalizeTextValue(rawValue).trim();
+    const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
     const key = this._getBaselineColorDraftKey(scope, direction);
     if (normalizedValue) {
       this._baselineColorDrafts.set(key, normalizedValue);
@@ -34,7 +34,7 @@ export class BaselineSection {
   }
 
   _setBaselineDirectionalColorEnabled(scope, direction, value) {
-    const currentValue = normalizeTextValue(this._getBaselineDirectionalColorValue(scope, direction)).trim();
+    const currentValue = normalizeEditorColorValue(this._getBaselineDirectionalColorValue(scope, direction), this.options.cssText);
     if (!value) {
       if (currentValue) {
         this._setBaselineColorDraft(scope, direction, currentValue);
@@ -44,12 +44,29 @@ export class BaselineSection {
       });
     }
     const nextValue = this._getBaselineColorDraft(scope, direction)
-      || normalizeTextValue(this._getEffectiveBaselineDirectionalColorValue(scope, direction)).trim()
+      || normalizeEditorColorValue(this._getEffectiveBaselineDirectionalColorValue(scope, direction), this.options.cssText)
       || currentValue
       || '#000000';
     return this._setColor(scope, ['baseline', direction, 'color'], nextValue, {
       prunePaths: [['baseline', direction], ['baseline']],
     });
+  }
+
+  _getSourceMode() { return this._sourceMode ?? getMarkerSourceMode(this.context.source({ type: 'card' }, 'baseline')); }
+
+  _handlePercentageField(control, value, scope) {
+    if (!this.options.percentSources) return false;
+    if (control === 'baseline-source-mode') {
+      this._sourceMode = value;
+      this._percentageDraft = undefined;
+      this.context.setSource(scope, 'baseline', 'mode', value);
+      return true;
+    }
+    if (control !== 'baseline-percent') return false;
+    const percent = normalizeScalePercentageInput(value);
+    this._percentageDraft = percent === null ? value : undefined;
+    if (percent !== null) this.context.setSource(scope, 'baseline', 'percent', percent);
+    return true;
   }
 
   _getBaselineResolvableValue(scope) {
@@ -106,7 +123,7 @@ export class BaselineSection {
   }
 
   _setBaselineDirectionalColor(scope, direction, rawValue) {
-    const normalizedValue = normalizeTextValue(rawValue).trim();
+    const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
     this._setBaselineColorDraft(scope, direction, normalizedValue);
     const path = ['baseline', direction, 'color'];
     if (!normalizedValue) {
@@ -203,6 +220,7 @@ export class BaselineSection {
   handleField({ field, kind, index, value }) {
     const scope = kind?.startsWith('entity-') ? { type: 'entity', index: Number(index) } : { type: 'card' };
     const control = field ?? kind?.replace(/^entity-/, '');
+    if (this._handlePercentageField(control, value, scope)) return true;
     if (kind === 'entity-baseline-inherit') { if (value) this._clearBaselineOverride(scope); return true; }
     if (control === 'baseline-mode') { this._setBaselineMode(scope, value); return true; }
     if (control === 'baseline-value') { this._setBaselineResolvablePart(scope, 'fixed', value); return true; }
@@ -215,6 +233,11 @@ export class BaselineSection {
   }
 
   handleClick(target) {
+    if (this.options.percentSources && target?.dataset?.action === 'baseline-clear-percent') {
+      this._percentageDraft = undefined;
+      this.context.setSource({ type: 'card' }, 'baseline', 'percent', null);
+      return true;
+    }
     if (target?.dataset?.action !== 'remove-baseline') return false;
     this._removeBaseline(target.dataset.scopeType === 'entity'
       ? { type: 'entity', index: Number(target.dataset.index) } : { type: 'card' });
@@ -260,7 +283,7 @@ export class BaselineSection {
                       </div>
                       <div class="field-row">
                         <label for="entity-${index}-baseline-above-color">Above-baseline color</label>
-                        ${renderColorInput({
+                        ${renderColorInput({ cssText: this.options.cssText, label: 'Baseline color',
                           id: `entity-${index}-baseline-above-color`,
                           kind: 'entity-baseline-above-color',
                           index,
@@ -277,7 +300,7 @@ export class BaselineSection {
                         </div>
 	                      <div class="field-row">
 	                        <label for="entity-${index}-baseline-below-color">Below-baseline color</label>
-	                        ${renderColorInput({
+	                        ${renderColorInput({ cssText: this.options.cssText, label: 'Baseline color',
                           id: `entity-${index}-baseline-below-color`,
                           kind: 'entity-baseline-below-color',
                           index,
@@ -313,7 +336,7 @@ export class BaselineSection {
             <div class="field-row">
               <div class="section-note">Auto shows the baseline when a baseline value is configured.</div>
             </div>
-            <div class="field-row">
+            ${this.options.percentSources ? renderMarkerPercentageControls('baseline', this._getSourceMode(), this._percentageDraft ?? baseline.percent ?? '') : ''}<div class="field-row">
               <label for="baseline-value">Baseline fallback</label>
               <input id="baseline-value" type="number" step="any" data-field="baseline-value" value="${escapeAttribute(baseline.fixed)}">
             </div>
@@ -329,7 +352,7 @@ export class BaselineSection {
             </div>
             <div class="field-row">
               <label for="baseline-above-color">Above-baseline color</label>
-              ${renderColorInput({
+              ${renderColorInput({ cssText: this.options.cssText, label: 'Baseline color',
                 id: 'baseline-above-color',
                 field: 'baseline-above-color',
                 value: baselineAboveColor,
@@ -344,7 +367,7 @@ export class BaselineSection {
             </div>
             <div class="field-row">
               <label for="baseline-below-color">Below-baseline color</label>
-              ${renderColorInput({
+              ${renderColorInput({ cssText: this.options.cssText, label: 'Baseline color',
                 id: 'baseline-below-color',
                 field: 'baseline-below-color',
                 value: baselineBelowColor,

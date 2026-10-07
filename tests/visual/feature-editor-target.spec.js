@@ -66,7 +66,7 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
 for (const source of ['src', 'dist']) test(`Feature Target percentage and HA picker (${source})`, async ({ page }) => {
   await page.addInitScript(() => { customElements.define('ha-entity-picker', class extends HTMLElement {}); });
   const editor = await mount(page, source, 240, true);
-  await expect(editor.locator('#target-value')).toHaveValue(''); await expect(editor.locator('#target-percent')).toHaveCount(0);
+  await expect(editor.locator('#target-value')).toHaveValue(''); await expect(editor.locator('#target-percent')).toHaveCount(1);
   await expect(editor.locator('[data-kind="target-label-entity"]')).toHaveCount(0);
   await editor.locator('#target-label-text').fill('Percentage goal'); await editor.locator('#target-mode').selectOption('enabled');
   await editor.locator('#formatting-unit').fill('W'); expect((await saved(editor)).target.at).toBe('70%');

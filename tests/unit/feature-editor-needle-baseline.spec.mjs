@@ -114,7 +114,7 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
     expect(editor._config.baseline.at).toEqual(at);
     if (at === '50%' || typeof at === 'object') {
       expect(editor.shadowRoot.querySelector('#baseline-value').value).toBe('');
-      expect(editor.shadowRoot.innerHTML).not.toContain('baseline-percent');
+      expect(editor.shadowRoot.innerHTML).toContain('baseline-percent');
     }
   });
   it('promotes only the source that needs another part, preserving scalar/percentage semantics', async () => {

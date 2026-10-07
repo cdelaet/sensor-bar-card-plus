@@ -126,7 +126,7 @@ test('late HA picker loading and CSS-to-hex typing preserve focus', async ({ pag
   await fallback.fill('#ff0000');
   await expect(fallback).toBeFocused();
   await editor.locator('#formatting-unit').fill('W');
-  await expect(fallback).toHaveCount(0);
+  await expect(fallback).toHaveCount(1);
   await expect(editor.locator('#formatting-unit')).toBeFocused();
   await page.evaluate(() => { customElements.define('ha-entity-picker', class extends HTMLElement {}); });
   await expect(editor.locator('ha-entity-picker[data-kind="scale-min-entity-source"]')).toHaveCount(1);

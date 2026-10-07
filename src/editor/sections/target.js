@@ -1,12 +1,12 @@
 import { normalizeTargetMarkerShape } from '../../config/normalize.js';
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue, removePathsFromTarget,
   pruneEmptyObjectsInTarget, normalizeTextValue, normalizeDecimalValue, hasResolvableOverride, getEffectiveDisplayValue } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, renderEntitySourceInput, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeEditorColorValue, normalizeScalePercentageInput, renderMarkerPercentageControls, getMarkerSourceMode, normalizeColorComparisonValue, renderColorInput, renderEntitySourceInput, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from '../shared/editor-marker-controls.js';
 
 export class TargetSection {
-  constructor(context) { this.context = context; this.reset(); }
-  reset() { this._targetAboveFillDrafts = new Map(); }
+  constructor(context, options = {}) { this.options = options; this.context = context; this.reset(); }
+  reset() { this._targetAboveFillDrafts = new Map(); this._sourceMode = undefined; this._percentageDraft = undefined; }
 
   _getCardTargetMarkerSummary() {
     const mode = this._getTargetMode({ type: 'card' });
@@ -21,6 +21,23 @@ export class TargetSection {
       parts.push(this._getEffectiveTargetShapeValue({ type: 'card' }) === 'triangle' ? 'Triangle' : 'Diamond');
     }
     return parts.length ? parts.join(' · ') : 'Automatic';
+  }
+
+  _getSourceMode() { return this._sourceMode ?? getMarkerSourceMode(this.context.source({ type: 'card' }, 'target')); }
+
+  _handlePercentageField(control, value, scope) {
+    if (!this.options.percentSources) return false;
+    if (control === 'target-source-mode') {
+      this._sourceMode = value;
+      this._percentageDraft = undefined;
+      this.context.setSource(scope, 'target', 'mode', value);
+      return true;
+    }
+    if (control !== 'target-percent') return false;
+    const percent = normalizeScalePercentageInput(value);
+    this._percentageDraft = percent === null ? value : undefined;
+    if (percent !== null) this.context.setSource(scope, 'target', 'percent', percent);
+    return true;
   }
 
   _getTargetResolvableValue(scope) { return this.context.source(scope, 'target'); }
@@ -143,7 +160,7 @@ export class TargetSection {
   }
 
   _setTargetColor(scope, rawValue) {
-    const normalizedValue = normalizeTextValue(rawValue).trim();
+    const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
     if (!normalizedValue || normalizeColorComparisonValue(normalizedValue) === normalizeColorComparisonValue('#888')) {
       return this._remove(scope, ['target', 'color'], {
         deprecatedKeys: [['target_color']],
@@ -229,7 +246,7 @@ export class TargetSection {
   }
 
   _setTargetAboveFillDraft(scope, rawValue) {
-    const normalizedValue = normalizeTextValue(rawValue).trim();
+    const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
     const key = this._getTargetAboveFillDraftKey(scope);
     if (normalizedValue) {
       this._targetAboveFillDrafts.set(key, normalizedValue);
@@ -247,7 +264,7 @@ export class TargetSection {
   }
 
   _setTargetAboveFillColor(scope, rawValue) {
-    const normalizedValue = normalizeTextValue(rawValue).trim();
+    const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
     this._setTargetAboveFillDraft(scope, normalizedValue);
     if (!this._isTargetAboveFillEnabled(scope)) {
       return false;
@@ -269,7 +286,7 @@ export class TargetSection {
   }
 
   _setTargetAboveFillEnabled(scope, value) {
-    const currentValue = normalizeTextValue(this._getTargetAboveFillColorValue(scope)).trim();
+    const currentValue = normalizeEditorColorValue(this._getTargetAboveFillColorValue(scope), this.options.cssText);
     if (!value) {
       if (currentValue) {
         this._setTargetAboveFillDraft(scope, currentValue);
@@ -280,7 +297,7 @@ export class TargetSection {
       });
     }
     const nextValue = this._getTargetAboveFillDraft(scope)
-      || normalizeTextValue(this._getEffectiveTargetAboveFillColorValue(scope)).trim()
+      || normalizeEditorColorValue(this._getEffectiveTargetAboveFillColorValue(scope), this.options.cssText)
       || currentValue
       || '#000000';
     return this._setText(scope, ['target', 'when_exceeded', 'fill_color'], nextValue, {
@@ -331,7 +348,7 @@ export class TargetSection {
     }, { ...options, targetEdit: { path: path.slice(1), value, deprecatedKeys: options.deprecatedKeys ?? [] } });
   }
   _remove(scope, path, options) { return this._write(scope, path, undefined, options); }
-  _setText(scope, path, rawValue, options) { return this._write(scope, path, normalizeTextValue(rawValue).trim() || undefined, options); }
+  _setText(scope, path, rawValue, options) { return this._write(scope, path, normalizeEditorColorValue(rawValue, this.options.cssText) || undefined, options); }
   _effectiveDisplay(scope, path, fallbacks) { return getEffectiveDisplayValue(this.context, scope, path, fallbacks); }
   _getEffectiveMarkerDirection(scope, key) { return getEffectiveMarkerDirection(this.context, scope, key); }
   _setMarkerDirection(scope, key, value) { return setMarkerDirection(this.context, scope, key, value); }
@@ -342,6 +359,7 @@ export class TargetSection {
   handleField({ field, kind, index, value }) {
     const scope = kind?.startsWith('entity-') ? { type: 'entity', index: Number(index) } : { type: 'card' };
     const control = field ?? kind?.replace(/^entity-/, '');
+    if (this._handlePercentageField(control, value, scope)) return true;
     if (control === 'target-inherit') { if (value) this._clearTargetOverride(scope); return true; }
     if (control === 'target-mode') { this._setTargetMode(scope, value); return true; }
     if (control === 'target-value') { this._setTargetResolvablePart(scope, 'fixed', value); return true; }
@@ -357,6 +375,15 @@ export class TargetSection {
     }
     if (control === 'target-above-fill-enabled') { this._setTargetAboveFillEnabled(scope, value); return true; }
     if (control === 'target-above-fill-color') { this._setTargetAboveFillColor(scope, value); return true; }
+    return false;
+  }
+
+  handleClick(target) {
+    if (this.options.percentSources && target?.dataset?.action === 'target-clear-percent') {
+      this._percentageDraft = undefined;
+      this.context.setSource({ type: 'card' }, 'target', 'percent', null);
+      return true;
+    }
     return false;
   }
 
@@ -406,7 +433,7 @@ export class TargetSection {
                       </div>
                       <div class="field-row">
                         <label for="entity-${index}-target-color">Target color</label>
-                        ${renderColorInput({
+                        ${renderColorInput({ cssText: this.options.cssText, label: 'Target color',
                           id: `entity-${index}-target-color`,
                           kind: 'entity-target-color',
                           index,
@@ -424,7 +451,7 @@ export class TargetSection {
 	                      </div>
 	                      <div class="field-row">
 	                        <label for="entity-${index}-target-above-fill">Above-target color</label>
-	                        ${renderColorInput({
+	                        ${renderColorInput({ cssText: this.options.cssText, label: 'Target color',
                           id: `entity-${index}-target-above-fill`,
                           kind: 'entity-target-above-fill-color',
                           index,
@@ -451,7 +478,7 @@ export class TargetSection {
                 <option value="disabled"${targetMode === 'disabled' ? ' selected' : ''}>disabled</option>
               </select>
             </div>
-            <div class="field-row">
+            ${this.options.percentSources ? renderMarkerPercentageControls('target', this._getSourceMode(), this._percentageDraft ?? target.percent ?? '') : ''}<div class="field-row">
               <label for="target-value">Target fallback</label>
               <input id="target-value" type="number" step="any" data-field="target-value" value="${escapeAttribute(target.fixed)}">
             </div>
@@ -475,7 +502,7 @@ export class TargetSection {
             </div>
             <div class="field-row">
               <label for="target-color">Target color</label>
-              ${renderColorInput({
+              ${renderColorInput({ cssText: this.options.cssText, label: 'Target color',
                 id: 'target-color',
                 field: 'target-color',
                 value: targetColor,
@@ -492,7 +519,7 @@ export class TargetSection {
             </div>
             <div class="field-row">
               <label for="target-above-fill-color">Above-target color</label>
-              ${renderColorInput({
+              ${renderColorInput({ cssText: this.options.cssText, label: 'Target color',
                 id: 'target-above-fill-color',
                 field: 'target-above-fill-color',
                 value: targetAboveFillColor,

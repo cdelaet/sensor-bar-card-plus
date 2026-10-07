@@ -6160,7 +6160,37 @@ ${barMarkerStyles}
     var _a, _b;
     return (_b = (_a = expandHexColor(value)) != null ? _a : expandHexColor(fallbackHex)) != null ? _b : "#000000";
   }
-  function renderColorInput({ id, field = null, kind = null, index = null, value = "", fallbackHex = "#000000", placeholder = "", extraDataset = {} }) {
+  function normalizeEditorColorValue(value, preserveText = false) {
+    const text = normalizeTextValue(value);
+    return preserveText && text.trim() ? text : text.trim();
+  }
+  function normalizeScalePercentageInput(value) {
+    const number = normalizeNumberValue(value);
+    return number !== null && number >= 0 && number <= 100 ? number : null;
+  }
+  function renderScalePercentageInput(id, routing, value) {
+    return `<input id="${id}" type="number" min="0" max="100" step="any" ${routing} value="${escapeAttribute(value)}">%`;
+  }
+  function getMarkerSourceMode(source) {
+    if (Number.isFinite(source.percent)) return "percent";
+    if (source.entity) return source.fixed !== "" && source.fixed !== void 0 ? "entity-fallback" : "entity";
+    return "fixed";
+  }
+  function renderMarkerPercentageControls(key, mode, percent) {
+    return `<div class="field-row">
+      <label for="${key}-source-mode">Source</label>
+      <select id="${key}-source-mode" data-field="${key}-source-mode">
+        ${[["fixed", "Fixed"], ["entity", "Entity"], ["entity-fallback", "Entity with fixed fallback"], ["percent", "Percentage"]].map(([value, title]) => `<option value="${value}"${mode === value ? " selected" : ""}>${title}</option>`).join("")}
+      </select>
+    </div>
+    <div class="field-row">
+      <label for="${key}-percent">Scale percentage</label>
+      ${renderScalePercentageInput(`${key}-percent`, `data-field="${key}-percent"`, percent)}
+      <button type="button" data-action="${key}-clear-percent">Clear percentage</button>
+      <div class="section-note">Percentage uses the current scale. Entity and fixed values take precedence when present.</div>
+    </div>`;
+  }
+  function renderColorInput({ id, field = null, kind = null, index = null, value = "", fallbackHex = "#000000", placeholder = "", extraDataset = {}, cssText = false, label = "Color" }) {
     const controlValue = normalizeTextValue(value).trim();
     const pickerValue = getColorPickerValue(controlValue, fallbackHex);
     const extraAttrs = Object.entries(extraDataset).map(([key, entry]) => `data-${key}="${escapeAttribute(entry)}"`).join(" ");
@@ -6169,7 +6199,7 @@ ${barMarkerStyles}
     return `
       <div class="field-grid">
         <input id="${id}" type="color" ${baseAttrs} value="${escapeAttribute(pickerValue)}">
-        ${controlValue && !isHexColorValue(controlValue) ? `<input type="text" ${fallbackAttrs} value="${escapeAttribute(controlValue)}" placeholder="${escapeAttribute(placeholder || "CSS color value")}">` : ""}
+        ${cssText || controlValue && !isHexColorValue(controlValue) ? `<input${cssText ? ` id="${id}-text-fallback" data-css-color="true" aria-label="${escapeAttribute(label)} (CSS value)"` : ""} type="text" ${fallbackAttrs} value="${escapeAttribute(cssText ? value : controlValue)}" placeholder="${escapeAttribute(placeholder || "CSS color value")}">` : ""}
       </div>
     `;
   }
@@ -7069,8 +7099,8 @@ ${barMarkerStyles}
     const value = normalizeTextValue(rawValue).trim();
     return setAppearanceValue(context, scope, "fill_style", value || void 0, [["color_mode"]]);
   }
-  function setBarColor(context, scope, rawValue) {
-    const value = normalizeTextValue(rawValue).trim();
+  function setBarColor(context, scope, rawValue, options = {}) {
+    const value = normalizeEditorColorValue(rawValue, options.cssText);
     const remove = !value || normalizeColorComparisonValue(value) === normalizeColorComparisonValue("#4a9eff");
     return setAppearanceValue(context, scope, "color", remove ? void 0 : value, [["color"]]);
   }
@@ -7085,6 +7115,14 @@ ${barMarkerStyles}
   }
   function setBarSolidFill(context, scope, value) {
     return setAppearanceValue(context, scope, "solid_fill", value ? true : void 0);
+  }
+  function getBarAnimatedValue(context, scope) {
+    return !!normalizeBarConfig(context.read(scope, []), (scope == null ? void 0 : scope.type) === "entity" ? context.read({ type: "card" }, []) : null).animated;
+  }
+  function setBarAnimated(context, scope, value) {
+    var _a;
+    const fallback = (_a = context.read(scope, ["animated"])) != null ? _a : (scope == null ? void 0 : scope.type) === "entity" ? normalizeBarConfig(context.read({ type: "card" }, []), null).animated : true;
+    return setAppearanceValue(context, scope, "animated", value ? fallback ? void 0 : true : false);
   }
   function clearBarAppearanceOverride(context, scope) {
     return context.mutate(scope, (target) => {
@@ -7113,10 +7151,14 @@ ${barMarkerStyles}
     if (color && normalizeColorComparisonValue(color) !== normalizeColorComparisonValue("#4a9eff")) parts.push("Custom color");
     return parts.length ? parts.join(" \u2022 ") : "Inherited";
   }
-  function handleBarAppearanceField(context, { field, kind, index, value }) {
+  function handleBarAppearanceField(context, { field, kind, index, value }, options = {}) {
+    if (options.animation && field === "bar-animated") {
+      setBarAnimated(context, { type: "card" }, value);
+      return true;
+    }
     const rootSetters = { "bar-fill-style": setBarFillStyle, "bar-color": setBarColor, "bar-solid-fill": setBarSolidFill };
     if (Object.prototype.hasOwnProperty.call(rootSetters, field)) {
-      rootSetters[field](context, { type: "card" }, value);
+      rootSetters[field](context, { type: "card" }, value, options);
       return true;
     }
     const scope = { type: "entity", index: Number(index) };
@@ -7131,7 +7173,7 @@ ${barMarkerStyles}
     }
     return false;
   }
-  function renderBarAppearanceSection(context, scope, renderChildren = () => "") {
+  function renderBarAppearanceSection(context, scope, renderChildren = () => "", options = {}) {
     if ((scope == null ? void 0 : scope.type) === "entity") {
       const index = scope.index;
       const barAppearanceInherited = !hasBarAppearanceOverride(context, scope);
@@ -7196,9 +7238,14 @@ ${barMarkerStyles}
                 <label for="bar-solid-fill">Solid fill</label>
               </div>
             </div>
-            <div class="field-row">
+            ${options.animation ? `<div class="field-row"><div class="toggle">
+              <input id="bar-animated" type="checkbox" data-field="bar-animated"${getBarAnimatedValue(context, scope) ? " checked" : ""}>
+              <label for="bar-animated">Animated</label>
+            </div></div>` : ""}<div class="field-row">
               <label for="bar-color">Bar color</label>
               ${renderColorInput({
+      cssText: options.cssText,
+      label: "Bar color",
       id: "bar-color",
       field: "bar-color",
       value: barColor,
@@ -7337,6 +7384,9 @@ ${barMarkerStyles}
     "src/editor/sections/segments.js"() {
       init_editor_config();
       init_editor_controls();
+      init_normalize();
+      init_resolve();
+      init_bar_render_model();
       init_palette_section();
       SegmentsSection = class extends PaletteSection {
         constructor(context, ui, array) {
@@ -7428,7 +7478,7 @@ ${barMarkerStyles}
         }
         _setSegmentDraftField(scope, field, rawValue) {
           const currentDraft = this._getSegmentDraftState(scope);
-          const nextValue = field === "color" ? normalizeTextValue(rawValue).trim() : normalizeTextValue(rawValue);
+          const nextValue = field === "color" ? normalizeEditorColorValue(rawValue, this.array.cssText) : normalizeTextValue(rawValue);
           this._setSegmentDraftState(scope, {
             ...currentDraft,
             [field]: nextValue
@@ -7591,7 +7641,40 @@ ${barMarkerStyles}
             };
           });
         }
+        _getAutomaticEndInputRows(scope) {
+          return this._getScopedSegmentsValue(scope).map((row, index) => {
+            const from = this._getSegmentBoundaryText(scope, index, "from", row == null ? void 0 : row.from);
+            const to = this._getSegmentBoundaryText(scope, index, "to", row == null ? void 0 : row.to);
+            return { ...row, from, ...to.trim() ? { to } : { to: void 0 } };
+          });
+        }
+        _resolveAutomaticEndRows(scope, rows) {
+          var _a, _b, _c, _d;
+          const card = this.context.read({ type: "card" }, []);
+          const local = (scope == null ? void 0 : scope.type) === "entity" ? this.context.read(scope, []) : {};
+          const rootScale = normalizeScaleConfig(card, null);
+          const scale = getResolvedScale((_b = (_a = this.ui).hass) == null ? void 0 : _b.call(_a), (scope == null ? void 0 : scope.type) === "entity" ? normalizeScaleConfig(local, { scale: rootScale }) : rootScale);
+          const segments = normalizeGaugeSegments(rows.map((row, index) => ({ ...row, to: typeof row.to === "string" && !row.to.trim() ? void 0 : row.to, label: index })), { legacySegmentSpace: (_d = (_c = this.array).segmentSpace) == null ? void 0 : _d.call(_c) });
+          return getSegmentsForRendering({ bar: { segments } }, scale.min, scale.max);
+        }
+        _getAutomaticEndValidationMessage(scope, rows, index) {
+          const row = rows[index];
+          if (!row) return "";
+          const from = this._parseSegmentBoundaryText(row.from);
+          const to = this._parseSegmentBoundaryText(row.to);
+          if (from.state !== "valid" || to.state === "invalid") return "Enter valid from/to values.";
+          const resolved = this._resolveAutomaticEndRows(scope, rows);
+          const candidate = resolved.find((segment) => segment.label === index);
+          if (!candidate || candidate.from >= candidate.to) return "From must be below To.";
+          for (const other of resolved) {
+            if (other.label === index || other.from >= other.to) continue;
+            if (candidate.from === other.from) return "Duplicate segment start.";
+            if (candidate.from < other.to && candidate.to > other.from) return "Segments overlap.";
+          }
+          return "";
+        }
         _getSegmentRowValidationMessage(scope = { type: "card" }, segmentIndex) {
+          if (this.array.autoEnds) return this._getAutomaticEndValidationMessage(scope, this._getAutomaticEndInputRows(scope), segmentIndex);
           const rows = this._buildSegmentValidationRows(scope);
           const row = rows[segmentIndex];
           if (!row) {
@@ -7621,6 +7704,13 @@ ${barMarkerStyles}
         }
         _getValidSegmentDraft(scope = { type: "card" }) {
           const draft = this._getSegmentDraftState(scope);
+          if (this.array.autoEnds) {
+            if (!draft.color.trim() || !CSS.supports("color", draft.color)) return null;
+            const rows2 = [...this._getAutomaticEndInputRows(scope), draft];
+            if (this._getAutomaticEndValidationMessage(scope, rows2, rows2.length - 1)) return null;
+            const from = this._parseSegmentBoundaryInput(draft.from), to = this._parseSegmentBoundaryInput(draft.to);
+            return { from, ...draft.to.trim() ? { to } : {}, color: draft.color };
+          }
           const parsedFrom = this._parseSegmentBoundaryText(draft.from);
           const parsedTo = this._parseSegmentBoundaryText(draft.to);
           const color = normalizeTextValue(draft.color).trim();
@@ -7652,6 +7742,12 @@ ${barMarkerStyles}
         }
         _getSegmentDraftValidationMessage(scope = { type: "card" }) {
           const draft = this._getSegmentDraftState(scope);
+          if (this.array.autoEnds) {
+            if (!draft.from.trim()) return "Enter a start value to add a segment.";
+            if (!draft.color.trim() || !CSS.supports("color", draft.color)) return "Enter a valid CSS color.";
+            const rows2 = [...this._getAutomaticEndInputRows(scope), draft];
+            return this._getAutomaticEndValidationMessage(scope, rows2, rows2.length - 1);
+          }
           const parsedFrom = this._parseSegmentBoundaryText(draft.from);
           const parsedTo = this._parseSegmentBoundaryText(draft.to);
           const color = normalizeTextValue(draft.color).trim();
@@ -7720,6 +7816,10 @@ ${barMarkerStyles}
         }
         _getSegmentPreviewRows(scope = { type: "card" }) {
           var _a;
+          if (this.array.autoEnds) {
+            const draft = this._getValidSegmentDraft(scope);
+            return this._resolveAutomaticEndRows(scope, [...this._getAutomaticEndInputRows(scope), ...draft ? [draft] : []]);
+          }
           const baseSegments = (_a = this._getSegmentsUiRows(scope)) != null ? _a : this._getScopedSegmentsValue(scope);
           const previewSegments = this._sortSegmentsForEditor(baseSegments);
           const validDraft = this._getValidSegmentDraft(scope);
@@ -7885,7 +7985,7 @@ ${barMarkerStyles}
           }
           const normalizedText = normalizeTextValue(rawValue).trim();
           const parsedValue = this._parseSegmentBoundaryInput(rawValue);
-          const nextValue = parsedValue === null ? normalizedText : parsedValue;
+          const nextValue = this.array.autoEnds && field === "to" && !normalizedText ? void 0 : parsedValue === null ? normalizedText : parsedValue;
           const currentSegments = (_c = this._getSegmentsUiRows(scope)) != null ? _c : this._getScopedSegmentsValue(scope);
           const nextSegments = currentSegments.map((segment, currentIndex) => currentIndex === segmentIndex ? { ...segment, [field]: nextValue } : segment);
           this._clearSegmentBoundaryText(scope, segmentIndex, field);
@@ -7992,13 +8092,13 @@ ${barMarkerStyles}
 	                <div class="list">
 	                  ${defaultSegmentsVisible ? '<div class="section-note">Default bands</div>' : ""}
 	                  ${this._renderListRows(segments, (segment, index) => {
-              var _a;
+              var _a, _b;
               return `
 	                    <div class="segment-editor-row">
 	                    <div class="list-row triple segment-row">
-	                      <input type="text" data-kind="segment-from" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: "card" }, index, "from", segment == null ? void 0 : segment.from))}" placeholder="0%">
-	                      <input type="text" data-kind="segment-to" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: "card" }, index, "to", segment == null ? void 0 : segment.to))}" placeholder="100%">
-	                      <input type="color" data-kind="segment-color" data-index="${index}" value="${escapeAttribute((_a = segment == null ? void 0 : segment.color) != null ? _a : "#4a9eff")}">
+	                      <input type="text"${this.array.autoEnds ? ` aria-label="Segment ${index + 1} start"` : ""} data-kind="segment-from" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: "card" }, index, "from", segment == null ? void 0 : segment.from))}" placeholder="0%">
+	                      <input type="text"${this.array.autoEnds ? ` aria-label="Segment ${index + 1} end (blank = Auto)"` : ""} data-kind="segment-to" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: "card" }, index, "to", segment == null ? void 0 : segment.to))}" placeholder="${this.array.autoEnds ? "Auto" : "100%"}">
+	                      ${this.array.cssText ? renderColorInput({ id: `segment-color-${index}`, kind: "segment-color", index, value: (_a = segment == null ? void 0 : segment.color) != null ? _a : "#4a9eff", fallbackHex: "#4a9eff", cssText: true, label: `Segment ${index + 1} color` }) : `<input type="color" data-kind="segment-color" data-index="${index}" value="${escapeAttribute((_b = segment == null ? void 0 : segment.color) != null ? _b : "#4a9eff")}">`}
 	                      <button type="button" data-action="remove-segment" data-index="${index}" aria-label="Remove" title="Remove">\u{1F5D1}</button>
 	                    </div>
                       <div id="segment-row-hint-${index}" class="section-note"${this._getSegmentRowValidationMessage({ type: "card" }, index) ? "" : ' style="display:none"'}>${escapeAttribute(this._getSegmentRowValidationMessage({ type: "card" }, index))}</div>
@@ -8007,9 +8107,9 @@ ${barMarkerStyles}
             })}
                     <div class="segment-draft">
                       <div class="list-row triple segment-row">
-                        <input id="segment-draft-from" type="text" data-kind="segment-draft-from" value="${escapeAttribute(this._getSegmentDraftState({ type: "card" }).from)}" placeholder="0%">
-                        <input id="segment-draft-to" type="text" data-kind="segment-draft-to" value="${escapeAttribute(this._getSegmentDraftState({ type: "card" }).to)}" placeholder="100%">
-                        <input type="color" data-kind="segment-draft-color" value="${escapeAttribute(this._getSegmentDraftState({ type: "card" }).color || "#4a9eff")}">
+                        <input id="segment-draft-from" type="text"${this.array.autoEnds ? ' aria-label="New segment start"' : ""} data-kind="segment-draft-from" value="${escapeAttribute(this._getSegmentDraftState({ type: "card" }).from)}" placeholder="0%">
+                        <input id="segment-draft-to" type="text"${this.array.autoEnds ? ' aria-label="New segment end (blank = Auto)"' : ""} data-kind="segment-draft-to" value="${escapeAttribute(this._getSegmentDraftState({ type: "card" }).to)}" placeholder="${this.array.autoEnds ? "Auto" : "100%"}">
+                        ${this.array.cssText ? renderColorInput({ id: "segment-draft-color", kind: "segment-draft-color", value: this._getSegmentDraftState({ type: "card" }).color || "#4a9eff", fallbackHex: "#4a9eff", cssText: true, label: "New segment color" }) : `<input type="color" data-kind="segment-draft-color" value="${escapeAttribute(this._getSegmentDraftState({ type: "card" }).color || "#4a9eff")}">`}
                         <button type="button" data-action="add-segment"${this._canAddSegment({ type: "card" }) ? "" : " disabled"}>Add</button>
                       </div>
                       <div id="segment-draft-hint" class="section-note"${this._getSegmentDraftValidationMessage({ type: "card" }) ? "" : ' style="display:none"'}>${escapeAttribute(this._getSegmentDraftValidationMessage({ type: "card" }))}</div>
@@ -8615,7 +8715,8 @@ ${barMarkerStyles}
       init_editor_config();
       init_editor_controls();
       NeedleSection = class {
-        constructor(context) {
+        constructor(context, options = {}) {
+          this.options = options;
           this.context = context;
         }
         _setNeedle(value) {
@@ -8688,7 +8789,7 @@ ${barMarkerStyles}
           }, { needleEdit: { field: "mode", value: mode } });
         }
         _setScopedNeedleColor(scope, rawValue) {
-          const normalizedValue = normalizeTextValue(rawValue).trim();
+          const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
           return this.context.mutate(scope, (target) => {
             let nextTarget = cloneDeep(target);
             const current = this._getScopedNeedleConfig(scope);
@@ -8774,6 +8875,8 @@ ${barMarkerStyles}
 	                      <div class="field-row">
 	                        <label for="entity-${index}-needle-color">Needle color</label>
 	                        ${renderColorInput({
+              cssText: this.options.cssText,
+              label: "Needle color",
               id: `entity-${index}-needle-color`,
               kind: "entity-needle-color",
               index,
@@ -8796,6 +8899,8 @@ ${barMarkerStyles}
             <div class="field-row">
               <label for="bar-needle-color">Needle color</label>
               ${renderColorInput({
+            cssText: this.options.cssText,
+            label: "Needle color",
             id: "bar-needle-color",
             field: "bar-needle-color",
             value: cardNeedle.color,
@@ -8816,19 +8921,22 @@ ${barMarkerStyles}
       init_editor_config();
       init_editor_controls();
       BaselineSection = class {
-        constructor(context) {
+        constructor(context, options = {}) {
+          this.options = options;
           this.context = context;
           this.reset();
         }
         reset() {
           this._baselineColorDrafts = /* @__PURE__ */ new Map();
+          this._sourceMode = void 0;
+          this._percentageDraft = void 0;
         }
         _getBaselineColorDraftKey(scope = { type: "card" }, direction = "above") {
           const scopeKey = (scope == null ? void 0 : scope.type) === "entity" ? `entity:${scope.index}` : "card";
           return `${scopeKey}:${direction}`;
         }
         _setBaselineColorDraft(scope, direction, rawValue) {
-          const normalizedValue = normalizeTextValue(rawValue).trim();
+          const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
           const key = this._getBaselineColorDraftKey(scope, direction);
           if (normalizedValue) {
             this._baselineColorDrafts.set(key, normalizedValue);
@@ -8844,7 +8952,7 @@ ${barMarkerStyles}
           return !!normalizeTextValue(this._getBaselineDirectionalColorValue(scope, direction)).trim();
         }
         _setBaselineDirectionalColorEnabled(scope, direction, value) {
-          const currentValue = normalizeTextValue(this._getBaselineDirectionalColorValue(scope, direction)).trim();
+          const currentValue = normalizeEditorColorValue(this._getBaselineDirectionalColorValue(scope, direction), this.options.cssText);
           if (!value) {
             if (currentValue) {
               this._setBaselineColorDraft(scope, direction, currentValue);
@@ -8853,10 +8961,28 @@ ${barMarkerStyles}
               prunePaths: [["baseline", direction], ["baseline"]]
             });
           }
-          const nextValue = this._getBaselineColorDraft(scope, direction) || normalizeTextValue(this._getEffectiveBaselineDirectionalColorValue(scope, direction)).trim() || currentValue || "#000000";
+          const nextValue = this._getBaselineColorDraft(scope, direction) || normalizeEditorColorValue(this._getEffectiveBaselineDirectionalColorValue(scope, direction), this.options.cssText) || currentValue || "#000000";
           return this._setColor(scope, ["baseline", direction, "color"], nextValue, {
             prunePaths: [["baseline", direction], ["baseline"]]
           });
+        }
+        _getSourceMode() {
+          var _a;
+          return (_a = this._sourceMode) != null ? _a : getMarkerSourceMode(this.context.source({ type: "card" }, "baseline"));
+        }
+        _handlePercentageField(control, value, scope) {
+          if (!this.options.percentSources) return false;
+          if (control === "baseline-source-mode") {
+            this._sourceMode = value;
+            this._percentageDraft = void 0;
+            this.context.setSource(scope, "baseline", "mode", value);
+            return true;
+          }
+          if (control !== "baseline-percent") return false;
+          const percent = normalizeScalePercentageInput(value);
+          this._percentageDraft = percent === null ? value : void 0;
+          if (percent !== null) this.context.setSource(scope, "baseline", "percent", percent);
+          return true;
         }
         _getBaselineResolvableValue(scope) {
           return this.context.source(scope, "baseline");
@@ -8902,7 +9028,7 @@ ${barMarkerStyles}
           }, { baselineEdit: { path: ["enabled"], value: mode === "auto" ? void 0 : mode === "enabled" } });
         }
         _setBaselineDirectionalColor(scope, direction, rawValue) {
-          const normalizedValue = normalizeTextValue(rawValue).trim();
+          const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
           this._setBaselineColorDraft(scope, direction, normalizedValue);
           const path = ["baseline", direction, "color"];
           if (!normalizedValue) {
@@ -8991,6 +9117,7 @@ ${barMarkerStyles}
         handleField({ field, kind, index, value }) {
           const scope = (kind == null ? void 0 : kind.startsWith("entity-")) ? { type: "entity", index: Number(index) } : { type: "card" };
           const control = field != null ? field : kind == null ? void 0 : kind.replace(/^entity-/, "");
+          if (this._handlePercentageField(control, value, scope)) return true;
           if (kind === "entity-baseline-inherit") {
             if (value) this._clearBaselineOverride(scope);
             return true;
@@ -9020,12 +9147,18 @@ ${barMarkerStyles}
           return false;
         }
         handleClick(target) {
-          var _a;
-          if (((_a = target == null ? void 0 : target.dataset) == null ? void 0 : _a.action) !== "remove-baseline") return false;
+          var _a, _b;
+          if (this.options.percentSources && ((_a = target == null ? void 0 : target.dataset) == null ? void 0 : _a.action) === "baseline-clear-percent") {
+            this._percentageDraft = void 0;
+            this.context.setSource({ type: "card" }, "baseline", "percent", null);
+            return true;
+          }
+          if (((_b = target == null ? void 0 : target.dataset) == null ? void 0 : _b.action) !== "remove-baseline") return false;
           this._removeBaseline(target.dataset.scopeType === "entity" ? { type: "entity", index: Number(target.dataset.index) } : { type: "card" });
           return true;
         }
         render(scope = { type: "card" }, renderGroup = ({ content }) => content) {
+          var _a, _b;
           if ((scope == null ? void 0 : scope.type) === "entity") {
             const index = scope.index;
             const baselineInherited = !this._hasBaselineOverride(scope);
@@ -9065,6 +9198,8 @@ ${barMarkerStyles}
                       <div class="field-row">
                         <label for="entity-${index}-baseline-above-color">Above-baseline color</label>
                         ${renderColorInput({
+              cssText: this.options.cssText,
+              label: "Baseline color",
               id: `entity-${index}-baseline-above-color`,
               kind: "entity-baseline-above-color",
               index,
@@ -9082,6 +9217,8 @@ ${barMarkerStyles}
 	                      <div class="field-row">
 	                        <label for="entity-${index}-baseline-below-color">Below-baseline color</label>
 	                        ${renderColorInput({
+              cssText: this.options.cssText,
+              label: "Baseline color",
               id: `entity-${index}-baseline-below-color`,
               kind: "entity-baseline-below-color",
               index,
@@ -9117,7 +9254,7 @@ ${barMarkerStyles}
             <div class="field-row">
               <div class="section-note">Auto shows the baseline when a baseline value is configured.</div>
             </div>
-            <div class="field-row">
+            ${this.options.percentSources ? renderMarkerPercentageControls("baseline", this._getSourceMode(), (_b = (_a = this._percentageDraft) != null ? _a : baseline.percent) != null ? _b : "") : ""}<div class="field-row">
               <label for="baseline-value">Baseline fallback</label>
               <input id="baseline-value" type="number" step="any" data-field="baseline-value" value="${escapeAttribute(baseline.fixed)}">
             </div>
@@ -9134,6 +9271,8 @@ ${barMarkerStyles}
             <div class="field-row">
               <label for="baseline-above-color">Above-baseline color</label>
               ${renderColorInput({
+              cssText: this.options.cssText,
+              label: "Baseline color",
               id: "baseline-above-color",
               field: "baseline-above-color",
               value: baselineAboveColor,
@@ -9149,6 +9288,8 @@ ${barMarkerStyles}
             <div class="field-row">
               <label for="baseline-below-color">Below-baseline color</label>
               ${renderColorInput({
+              cssText: this.options.cssText,
+              label: "Baseline color",
               id: "baseline-below-color",
               field: "baseline-below-color",
               value: baselineBelowColor,
@@ -9257,12 +9398,15 @@ ${barMarkerStyles}
       init_editor_controls();
       init_editor_marker_controls();
       TargetSection = class {
-        constructor(context) {
+        constructor(context, options = {}) {
+          this.options = options;
           this.context = context;
           this.reset();
         }
         reset() {
           this._targetAboveFillDrafts = /* @__PURE__ */ new Map();
+          this._sourceMode = void 0;
+          this._percentageDraft = void 0;
         }
         _getCardTargetMarkerSummary() {
           const mode = this._getTargetMode({ type: "card" });
@@ -9277,6 +9421,24 @@ ${barMarkerStyles}
             parts.push(this._getEffectiveTargetShapeValue({ type: "card" }) === "triangle" ? "Triangle" : "Diamond");
           }
           return parts.length ? parts.join(" \xB7 ") : "Automatic";
+        }
+        _getSourceMode() {
+          var _a;
+          return (_a = this._sourceMode) != null ? _a : getMarkerSourceMode(this.context.source({ type: "card" }, "target"));
+        }
+        _handlePercentageField(control, value, scope) {
+          if (!this.options.percentSources) return false;
+          if (control === "target-source-mode") {
+            this._sourceMode = value;
+            this._percentageDraft = void 0;
+            this.context.setSource(scope, "target", "mode", value);
+            return true;
+          }
+          if (control !== "target-percent") return false;
+          const percent = normalizeScalePercentageInput(value);
+          this._percentageDraft = percent === null ? value : void 0;
+          if (percent !== null) this.context.setSource(scope, "target", "percent", percent);
+          return true;
         }
         _getTargetResolvableValue(scope) {
           return this.context.source(scope, "target");
@@ -9385,7 +9547,7 @@ ${barMarkerStyles}
           return !!color && normalizeColorComparisonValue(color) !== normalizeColorComparisonValue("#888");
         }
         _setTargetColor(scope, rawValue) {
-          const normalizedValue = normalizeTextValue(rawValue).trim();
+          const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
           if (!normalizedValue || normalizeColorComparisonValue(normalizedValue) === normalizeColorComparisonValue("#888")) {
             return this._remove(scope, ["target", "color"], {
               deprecatedKeys: [["target_color"]],
@@ -9460,7 +9622,7 @@ ${barMarkerStyles}
           return (scope == null ? void 0 : scope.type) === "entity" ? `entity:${scope.index}` : "card";
         }
         _setTargetAboveFillDraft(scope, rawValue) {
-          const normalizedValue = normalizeTextValue(rawValue).trim();
+          const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
           const key = this._getTargetAboveFillDraftKey(scope);
           if (normalizedValue) {
             this._targetAboveFillDrafts.set(key, normalizedValue);
@@ -9476,7 +9638,7 @@ ${barMarkerStyles}
           return this._effectiveDisplay(scope, ["target", "when_exceeded", "fill_color"], [["above_target_color"]]);
         }
         _setTargetAboveFillColor(scope, rawValue) {
-          const normalizedValue = normalizeTextValue(rawValue).trim();
+          const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
           this._setTargetAboveFillDraft(scope, normalizedValue);
           if (!this._isTargetAboveFillEnabled(scope)) {
             return false;
@@ -9496,7 +9658,7 @@ ${barMarkerStyles}
           return !!normalizeTextValue(this._getTargetAboveFillColorValue(scope)).trim();
         }
         _setTargetAboveFillEnabled(scope, value) {
-          const currentValue = normalizeTextValue(this._getTargetAboveFillColorValue(scope)).trim();
+          const currentValue = normalizeEditorColorValue(this._getTargetAboveFillColorValue(scope), this.options.cssText);
           if (!value) {
             if (currentValue) {
               this._setTargetAboveFillDraft(scope, currentValue);
@@ -9506,7 +9668,7 @@ ${barMarkerStyles}
               prunePaths: [["target", "when_exceeded"], ["target"]]
             });
           }
-          const nextValue = this._getTargetAboveFillDraft(scope) || normalizeTextValue(this._getEffectiveTargetAboveFillColorValue(scope)).trim() || currentValue || "#000000";
+          const nextValue = this._getTargetAboveFillDraft(scope) || normalizeEditorColorValue(this._getEffectiveTargetAboveFillColorValue(scope), this.options.cssText) || currentValue || "#000000";
           return this._setText(scope, ["target", "when_exceeded", "fill_color"], nextValue, {
             deprecatedKeys: [["above_target_color"]],
             prunePaths: [["target", "when_exceeded"], ["target"]]
@@ -9556,7 +9718,7 @@ ${barMarkerStyles}
           return this._write(scope, path, void 0, options);
         }
         _setText(scope, path, rawValue, options) {
-          return this._write(scope, path, normalizeTextValue(rawValue).trim() || void 0, options);
+          return this._write(scope, path, normalizeEditorColorValue(rawValue, this.options.cssText) || void 0, options);
         }
         _effectiveDisplay(scope, path, fallbacks) {
           return getEffectiveDisplayValue(this.context, scope, path, fallbacks);
@@ -9579,6 +9741,7 @@ ${barMarkerStyles}
         handleField({ field, kind, index, value }) {
           const scope = (kind == null ? void 0 : kind.startsWith("entity-")) ? { type: "entity", index: Number(index) } : { type: "card" };
           const control = field != null ? field : kind == null ? void 0 : kind.replace(/^entity-/, "");
+          if (this._handlePercentageField(control, value, scope)) return true;
           if (control === "target-inherit") {
             if (value) this._clearTargetOverride(scope);
             return true;
@@ -9623,7 +9786,17 @@ ${barMarkerStyles}
           }
           return false;
         }
+        handleClick(target) {
+          var _a;
+          if (this.options.percentSources && ((_a = target == null ? void 0 : target.dataset) == null ? void 0 : _a.action) === "target-clear-percent") {
+            this._percentageDraft = void 0;
+            this.context.setSource({ type: "card" }, "target", "percent", null);
+            return true;
+          }
+          return false;
+        }
         render(scope = { type: "card" }) {
+          var _a, _b;
           if ((scope == null ? void 0 : scope.type) === "entity") {
             const index = scope.index;
             const targetInherited = !this._hasTargetOverride(scope);
@@ -9670,6 +9843,8 @@ ${barMarkerStyles}
                       <div class="field-row">
                         <label for="entity-${index}-target-color">Target color</label>
                         ${renderColorInput({
+              cssText: this.options.cssText,
+              label: "Target color",
               id: `entity-${index}-target-color`,
               kind: "entity-target-color",
               index,
@@ -9688,6 +9863,8 @@ ${barMarkerStyles}
 	                      <div class="field-row">
 	                        <label for="entity-${index}-target-above-fill">Above-target color</label>
 	                        ${renderColorInput({
+              cssText: this.options.cssText,
+              label: "Target color",
               id: `entity-${index}-target-above-fill`,
               kind: "entity-target-above-fill-color",
               index,
@@ -9714,7 +9891,7 @@ ${barMarkerStyles}
                 <option value="disabled"${targetMode === "disabled" ? " selected" : ""}>disabled</option>
               </select>
             </div>
-            <div class="field-row">
+            ${this.options.percentSources ? renderMarkerPercentageControls("target", this._getSourceMode(), (_b = (_a = this._percentageDraft) != null ? _a : target.percent) != null ? _b : "") : ""}<div class="field-row">
               <label for="target-value">Target fallback</label>
               <input id="target-value" type="number" step="any" data-field="target-value" value="${escapeAttribute(target.fixed)}">
             </div>
@@ -9739,6 +9916,8 @@ ${barMarkerStyles}
             <div class="field-row">
               <label for="target-color">Target color</label>
               ${renderColorInput({
+            cssText: this.options.cssText,
+            label: "Target color",
             id: "target-color",
             field: "target-color",
             value: targetColor,
@@ -9756,6 +9935,8 @@ ${barMarkerStyles}
             <div class="field-row">
               <label for="target-above-fill-color">Above-target color</label>
               ${renderColorInput({
+            cssText: this.options.cssText,
+            label: "Target color",
             id: "target-above-fill-color",
             field: "target-above-fill-color",
             value: targetAboveFillColor,
@@ -9776,7 +9957,8 @@ ${barMarkerStyles}
       init_editor_controls();
       init_editor_marker_controls();
       ExtremaSection = class {
-        constructor(context) {
+        constructor(context, options = {}) {
+          this.options = options;
           this.context = context;
         }
         _getScopedPeakConfig(scope) {
@@ -9896,7 +10078,7 @@ ${barMarkerStyles}
           }, { extremumEdit: { key: "peak", path: ["enabled"], value: boolValue } });
         }
         _setScopedPeakColor(scope, rawValue) {
-          const normalizedValue = normalizeTextValue(rawValue).trim();
+          const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
           const defaultColor = "#888";
           return this.context.mutate(scope, (target) => {
             let nextTarget = cloneDeep(target);
@@ -10033,7 +10215,7 @@ ${barMarkerStyles}
           }, { extremumEdit: { key, path: ["enabled"], value: boolValue } });
         }
         _setScopedExtremumColor(scope, key, rawValue) {
-          const normalizedValue = normalizeTextValue(rawValue).trim();
+          const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
           const defaultColor = "#888888";
           return this.context.mutate(scope, (target) => {
             let nextTarget = cloneDeep(target);
@@ -10161,6 +10343,8 @@ ${indent}                          <input id="entity-${index}-${key}-inherit" ty
                       <div class="field-row">
                         <label for="entity-${index}-${key}-color">${title} color</label>
                         ${renderColorInput({
+              cssText: this.options.cssText,
+              label: "Marker color",
               id: `entity-${index}-${key}-color`,
               kind: `entity-${key}-color`,
               index,
@@ -10196,6 +10380,8 @@ ${indent}                          `;
             <div class="field-row">
               <label for="${key}-color">${title} color</label>
               ${renderColorInput({
+            cssText: this.options.cssText,
+            label: "Marker color",
             id: `${key}-color`,
             field: `${key}-color`,
             value: marker.color,
@@ -10285,7 +10471,8 @@ ${indent}                          `;
       init_editor_controls();
       init_editor_marker_controls();
       ReferenceMarkersSection = class {
-        constructor(context, ui) {
+        constructor(context, ui, options = {}) {
+          this.options = options;
           this.context = context;
           this.ui = ui;
           this._genericMarkerUiIds = /* @__PURE__ */ new Map();
@@ -10436,7 +10623,7 @@ ${indent}                          `;
           ${source.mode === "percent" ? `
             <div class="field-row">
               <label for="${rowId}-percent">Scale percentage</label>
-              <input id="${rowId}-percent" type="number" min="0" max="100" step="any" data-kind="generic-marker-percent" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${escapeAttribute(source.percent)}">%
+              ${renderScalePercentageInput(`${rowId}-percent`, `data-kind="generic-marker-percent" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"`, source.percent)}
             </div>` : ""}
           <div class="inline-row generic-marker-pair">
             <div class="field-row">
@@ -10466,6 +10653,8 @@ ${indent}                          `;
           <div class="field-row">
             <label for="${rowId}-color">Color</label>
             ${renderColorInput({
+              cssText: this.options.cssText,
+              label: "Reference marker color",
               id: `${rowId}-color`,
               kind: "generic-marker-color",
               index: scopeIndex,
@@ -10602,7 +10791,7 @@ ${indent}                          `;
             normalized = field === "direction" ? normalizeMarkerDirection(value) : value;
           } else if (field === "color") {
             path = ["color"];
-            normalized = normalizeTextValue(value).trim();
+            normalized = normalizeEditorColorValue(value, this.options.cssText);
           } else if (field.startsWith("label-")) {
             const labelField = field.slice(6).replace("show-value", "show_value").replace("show-unit", "show_unit");
             if (!["show", "text", "entity", "show_value", "show_unit", "precision"].includes(labelField)) return false;
@@ -14280,6 +14469,8 @@ ${this._renderFormattingSection({ type: "card" })}
   }
   function patchFeatureBaselineSource(config, part, rawValue) {
     var _a;
+    if (part === "mode") return patchFeatureMarkerSourceMode(config, "baseline", rawValue);
+    if (part === "percent") return patchFeatureMarkerPercentage(config, "baseline", rawValue);
     const value = part === "fixed" ? normalizeNumberValue(rawValue) : normalizeTextValue(rawValue).trim();
     const empty = part === "fixed" ? value === null : !value;
     const raw = config.baseline;
@@ -14306,6 +14497,8 @@ ${this._renderFormattingSection({ type: "card" })}
     return setPathValue(config, ["target"], at === void 0 || at === null ? {} : { at });
   }
   function patchFeatureTargetSource(config, part, rawValue) {
+    if (part === "mode") return patchFeatureMarkerSourceMode(config, "target", rawValue);
+    if (part === "percent") return patchFeatureMarkerPercentage(config, "target", rawValue);
     const value = part === "fixed" ? normalizeNumberValue(rawValue) : normalizeTextValue(rawValue).trim();
     const empty = part === "fixed" ? value === null : !value;
     const raw = config.target;
@@ -14319,10 +14512,43 @@ ${this._renderFormattingSection({ type: "card" })}
     if (part === "entity") next = deletePathValue(next, ["target_entity"]);
     return next;
   }
+  function patchFeatureMarkerSourceMode(config, key, mode) {
+    var _a;
+    if (!["fixed", "entity", "entity-fallback", "percent"].includes(mode)) return config;
+    const read = key === "target" ? getFeatureTargetSource : getFeatureBaselineSource;
+    const source = read(config), raw = (_a = config[key]) == null ? void 0 : _a.at;
+    let next = key === "target" ? promoteFeatureTarget(config) : isObject(config.baseline) ? config : setPathValue(config, ["baseline"], { at: config.baseline });
+    let at = isObject(raw) ? { ...raw } : {};
+    for (const field of ["fixed", "value", "entity", "percent"]) delete at[field];
+    if (mode === "percent") {
+      const percent = Number.isFinite(source.percent) ? source.percent : 50;
+      at = isObject(raw) ? { ...at, percent } : `${percent}%`;
+    } else {
+      if (mode !== "entity") at.fixed = source.fixed !== "" && source.fixed !== void 0 ? source.fixed : 50;
+      if (mode !== "fixed") at.entity = source.entity || "";
+      if (!isObject(raw) && mode === "fixed") at = at.fixed;
+      if (!isObject(raw) && mode === "entity" && at.entity) at = at.entity;
+    }
+    next = setPathValue(next, [key, "at"], at);
+    return key === "target" ? deletePathValue(next, ["target_entity"]) : next;
+  }
+  function patchFeatureMarkerPercentage(config, key, rawValue) {
+    var _a, _b;
+    const clear = rawValue === null;
+    const value = normalizeScalePercentageInput(rawValue);
+    if (!clear && value === null) return config;
+    const at = (_a = config[key]) == null ? void 0 : _a.at, base = [key, "at"];
+    if (isObject(at)) return clear ? deletePathValue(config, [...base, "percent"]) : setPathValue(config, [...base, "percent"], value);
+    if (Number.isFinite(parsePercentLiteral(at))) return clear ? deletePathValue(config, base) : setPathValue(config, base, `${value}%`);
+    if (clear) return config;
+    const next = key === "target" ? promoteFeatureTarget(config) : isObject(config.baseline) ? config : setPathValue(config, ["baseline"], { at: config.baseline });
+    return patchSource(next, base, (_b = next[key]) == null ? void 0 : _b.at, "percent", value, false, true);
+  }
   var init_feature_editor_config = __esm({
     "src/feature/feature-editor-config.js"() {
       init_normalize();
       init_editor_config();
+      init_editor_controls();
     }
   });
 
@@ -14348,6 +14574,14 @@ ${this._renderFormattingSection({ type: "card" })}
     };
     return {
       patchOnly: true,
+      autoEnds: kind === "segments",
+      cssText: kind === "segments",
+      segmentSpace: () => {
+        var _a, _b;
+        const config = context.read({ type: "card" }, []);
+        const path = palettePath(config, kind);
+        return path[0] === "severity" ? "percent" : path[0] === "bar" ? (_b = (_a = config.bar) == null ? void 0 : _a.segment_space) != null ? _b : null : null;
+      },
       rows(_scope, controller) {
         section = controller;
         return rawRows().map((row) => {
@@ -14362,7 +14596,9 @@ ${this._renderFormattingSection({ type: "card" })}
           const rows = [...rawRows()];
           if (operation.type === "edit") {
             if (operation.index < 0 || operation.index >= rows.length) return config;
-            rows[operation.index] = { ...rows[operation.index], [operation.field]: operation.value };
+            const row = { ...rows[operation.index], [operation.field]: operation.value };
+            if (operation.value === void 0) delete row[operation.field];
+            rows[operation.index] = row;
           } else if (operation.type === "add") rows.push(cloneDeep(operation.item));
           else if (operation.type === "remove") rows.splice(operation.index, 1);
           else throw new Error("Unsupported palette operation");
@@ -14557,11 +14793,13 @@ ${this._renderFormattingSection({ type: "card" })}
           this._chooseEntity = false;
           this._renderEpoch = 0;
           this._updateComplete = Promise.resolve();
+          this._cssColorDrafts = /* @__PURE__ */ new Map();
           const context = this._createSectionContext();
-          this._needleSection = new NeedleSection(context);
-          this._baselineSection = new BaselineSection(context);
-          this._targetSection = new TargetSection(context);
-          this._extremaSection = new ExtremaSection(context);
+          const options = { cssText: true, percentSources: true };
+          this._needleSection = new NeedleSection(context, options);
+          this._baselineSection = new BaselineSection(context, options);
+          this._targetSection = new TargetSection(context, options);
+          this._extremaSection = new ExtremaSection(context, options);
           const ui = {
             root: () => this.shadowRoot,
             render: () => {
@@ -14570,17 +14808,21 @@ ${this._renderFormattingSection({ type: "card" })}
             },
             focus: (selector) => {
               this._pendingPaletteFocus = selector;
-            }
+            },
+            hass: () => this._hass
           };
           this._referenceMarkersSection = new ReferenceMarkersSection(context, { root: ui.root, render: () => {
             this._referenceRenderRequested = true;
             this._requestRender();
-          } });
+          } }, options);
           this._segmentsSection = new SegmentsSection(context, ui, createFeaturePaletteArray(context, "segments"));
           this._gradientStopsSection = new GradientStopsSection(context, ui, createFeaturePaletteArray(context, "gradient_stops"));
           for (const type of ["click", "keydown"]) this.shadowRoot.addEventListener(type, (event) => {
             var _a, _b, _c;
-            if (type === "click" && (this._baselineSection.handleClick(event.target) || this._referenceMarkersSection.handleClick((_c = (_b = (_a = event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, "[data-action]")) != null ? _c : event.target))) return;
+            if (type === "click" && (this._baselineSection.handleClick(event.target) || this._targetSection.handleClick(event.target) || this._referenceMarkersSection.handleClick((_c = (_b = (_a = event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, "[data-action]")) != null ? _c : event.target))) {
+              this._requestRender();
+              return;
+            }
             this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event);
           });
           const handleField = (event) => this._handleField(event);
@@ -14595,6 +14837,7 @@ ${this._renderFormattingSection({ type: "card" })}
           if (serializeConfig(config) !== serializeConfig(this._config)) {
             this._paletteRenderRequested || (this._paletteRenderRequested = ["bar.segments", "bar.gradient_stops", "segments", "severity", "gradient_stops"].some((path) => serializeConfig(getPathValue(config, path.split("."))) !== serializeConfig(getPathValue(this._config, path.split(".")))));
             this._config = cloneDeep(config);
+            this._cssColorDrafts.clear();
             this._baselineSection.reset();
             this._targetSection.reset();
             this._referenceMarkersSection.reset();
@@ -14660,8 +14903,12 @@ ${this._renderFormattingSection({ type: "card" })}
           };
         }
         _mutate(mutation) {
+          var _a, _b, _c, _d, _e, _f, _g, _h;
           const next = mutation(this._config);
           if (serializeConfig(next) === serializeConfig(this._config)) return false;
+          if (((_b = (_a = next.bar) == null ? void 0 : _a.segments) == null ? void 0 : _b.length) !== ((_d = (_c = this._config.bar) == null ? void 0 : _c.segments) == null ? void 0 : _d.length) || ((_e = next.segments) == null ? void 0 : _e.length) !== ((_f = this._config.segments) == null ? void 0 : _f.length) || ((_g = next.severity) == null ? void 0 : _g.length) !== ((_h = this._config.severity) == null ? void 0 : _h.length)) {
+            for (const key of this._cssColorDrafts.keys()) if (key.startsWith("segment-")) this._cssColorDrafts.delete(key);
+          }
           this._config = next;
           this._requestRender();
           this.dispatchEvent(new CustomEvent("config-changed", {
@@ -14672,12 +14919,22 @@ ${this._renderFormattingSection({ type: "card" })}
           return true;
         }
         _handleField(event) {
-          var _a, _b, _c, _d, _e, _f, _g, _h;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
           const target = event.target;
+          if (this._configReplaced || (target == null ? void 0 : target.isConnected) === false) return;
           if ((target == null ? void 0 : target.tagName) === "HA-ENTITY-PICKER" && event.type !== "value-changed") return;
           const field = (_b = (_a = target == null ? void 0 : target.dataset) == null ? void 0 : _a.field) == null ? void 0 : _b.replace(/-text-fallback$/, "");
           const kind = (_d = (_c = target == null ? void 0 : target.dataset) == null ? void 0 : _c.kind) == null ? void 0 : _d.replace(/-text-fallback$/, "");
           const value = event.type === "value-changed" ? (_e = event.detail) == null ? void 0 : _e.value : (target == null ? void 0 : target.type) === "checkbox" ? target.checked : target == null ? void 0 : target.value;
+          if ((target == null ? void 0 : target.type) === "color") this._cssColorDrafts.delete(`${target.id}-text-fallback`);
+          if (((_f = target == null ? void 0 : target.dataset) == null ? void 0 : _f.cssColor) === "true") {
+            const valid = !value.trim() || CSS.supports("color", value);
+            (_g = target.setCustomValidity) == null ? void 0 : _g.call(target, valid ? "" : "Enter a valid CSS color.");
+            target.setAttribute("aria-invalid", valid ? "false" : "true");
+            if (valid) this._cssColorDrafts.delete(target.id);
+            else this._cssColorDrafts.set(target.id, value);
+            if (!valid && kind !== "segment-draft-color") return;
+          }
           if (field === "feature-entity-override") {
             this._chooseEntity = !!value;
             if (!value) this._mutate((config) => deletePathValue(config, ["entity"]));
@@ -14692,17 +14949,20 @@ ${this._renderFormattingSection({ type: "card" })}
             return;
           }
           if (kind == null ? void 0 : kind.startsWith("generic-marker-")) {
-            const markerId = (_h = (_g = (_f = target.closest) == null ? void 0 : _f.call(target, ".generic-marker-item")) == null ? void 0 : _g.dataset) == null ? void 0 : _h.markerUiId;
+            const markerId = (_j = (_i = (_h = target.closest) == null ? void 0 : _h.call(target, ".generic-marker-item")) == null ? void 0 : _i.dataset) == null ? void 0 : _j.markerUiId;
             const ids = this._referenceMarkersSection._getGenericMarkerUiIds(root, this._referenceMarkersSection._getGenericMarkers(root).length);
             if (markerId && markerId !== ids[Number(target.dataset.markerIndex)]) return;
           }
           if (this._referenceMarkersSection.handleField({ target, kind, value })) return;
-          if (this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event)) return;
+          if (this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event)) {
+            this._requestRender();
+            return;
+          }
           if (this._needleSection.handleField({ field, kind, value }) || this._baselineSection.handleField({ field, kind, value }) || this._targetSection.handleField({ field, kind, value }) || this._extremaSection.handleField({ field, kind, value })) return;
           const context = this._createSectionContext();
           if (handleScaleField(context, { field, kind, value })) return;
           if (handleFormattingField(context, { field, kind, value })) return;
-          handleBarAppearanceField(context, { field, kind, value });
+          handleBarAppearanceField(context, { field, kind, value }, { animation: true, cssText: true });
         }
         _entityDescription() {
           if (this._explicitEntity) return `Using explicit entity: ${this._explicitEntity}`;
@@ -14735,26 +14995,20 @@ ${this._renderFormattingSection({ type: "card" })}
         }
         _render() {
           var _a, _b, _c, _d, _e, _f, _g, _h, _i;
-          const color = getBarColorValue(this._createSectionContext(), root);
           const fillStyle = getEffectiveFillStyleValue(this._createSectionContext(), root);
           const palette = fillStyle === "gradient" ? this._gradientStopsSection : this._segmentsSection._isSegmentFillStyle(fillStyle) ? this._segmentsSection : null;
           const paletteRows = palette === this._gradientStopsSection ? palette._getScopedGradientStopsValue(root) : palette ? palette._getScopedSegmentsValue(root) : [];
-          const needle = this._needleSection._getScopedNeedleConfig(root);
-          const above = this._baselineSection._getBaselineDirectionalColorValue(root, "above");
-          const below = this._baselineSection._getBaselineDirectionalColorValue(root, "below");
           const markers = this._referenceMarkersSection._getGenericMarkers(root);
           const markerIds = this._referenceMarkersSection._getGenericMarkerUiIds(root, markers.length);
           const signature = JSON.stringify([
             !!(this._context.entity_id || this._explicitEntity),
             this._showEntityPicker,
-            ...[needle.color, above, below, this._targetSection._getTargetColorValue(root), this._targetSection._getTargetAboveFillColorValue(root), ...["peak", "floor"].map((key) => this._extremaSection._getMarkerConfig(root, key).color)].map((value) => !!value && !isHexColorValue(value)),
-            ...markers.map((marker, i) => [markerIds[i], this._referenceMarkersSection._getGenericMarkerSource(marker).mode, !!(marker == null ? void 0 : marker.color) && !isHexColorValue(marker.color)]),
+            ...markers.map((marker, i) => [markerIds[i], this._referenceMarkersSection._getGenericMarkerSource(marker).mode]),
             fillStyle,
             paletteRows.length,
             palette === this._gradientStopsSection ? !isHexColorValue(palette._getGradientStopsDraftState(root).color) : false,
-            ...paletteRows.map((row) => !isHexColorValue(row.color)),
-            !!customElements.get("ha-entity-picker"),
-            !!color && !isHexColorValue(color)
+            ...palette === this._gradientStopsSection ? paletteRows.map((row) => !isHexColorValue(row.color)) : [],
+            !!customElements.get("ha-entity-picker")
           ]);
           const activeField = (_b = (_a = this.shadowRoot.activeElement) == null ? void 0 : _a.dataset) == null ? void 0 : _b.field;
           const activeKind = (_d = (_c = this.shadowRoot.activeElement) == null ? void 0 : _c.dataset) == null ? void 0 : _d.kind;
@@ -14765,6 +15019,7 @@ ${this._renderFormattingSection({ type: "card" })}
             this.shadowRoot.innerHTML = `<style>${editorStyles}
         :host { container-type: inline-size; }
         .list-row.gradient-stop-row .field-grid { grid-template-columns: minmax(0, 1fr); }
+        .list-row.segment-row > .field-grid { grid-template-columns: minmax(0, 1fr); }
         @container (max-width: 320px) {
           .list-row.segment-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .list-row.gradient-stop-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -14783,7 +15038,7 @@ ${this._renderFormattingSection({ type: "card" })}
       </style><div class="editor">
         ${this._renderEntitySection()}
         ${renderScaleSection(context, root)}
-        ${renderBarAppearanceSection(context, root)}
+        ${renderBarAppearanceSection(context, root, void 0, { animation: true, cssText: true })}
         ${(_e = palette == null ? void 0 : palette.render(root)) != null ? _e : ""}
         <div class="section"><div class="section-head"><h3>Needle</h3></div>
           ${this._needleSection.render(root)}
@@ -14820,7 +15075,7 @@ ${this._renderFormattingSection({ type: "card" })}
           this._configReplaced = false;
         }
         _syncControls() {
-          var _a, _b;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
           const context = this._createSectionContext();
           const color = getBarColorValue(context, root);
           const values = {
@@ -14834,12 +15089,16 @@ ${this._renderFormattingSection({ type: "card" })}
             "bar-needle-color-text-fallback": this._needleSection._getScopedNeedleConfig(root).color,
             "baseline-mode": this._baselineSection._getBaselineMode(root),
             "baseline-value": getFeatureBaselineSource(this._config).fixed,
+            "baseline-source-mode": this._baselineSection._getSourceMode(),
+            "baseline-percent": (_b = (_a = this._baselineSection._percentageDraft) != null ? _a : getFeatureBaselineSource(this._config).percent) != null ? _b : "",
             "baseline-above-color": getColorPickerValue(this._baselineSection._getBaselineDirectionalColorValue(root, "above"), "#000000"),
             "baseline-above-color-text-fallback": this._baselineSection._getBaselineDirectionalColorValue(root, "above"),
             "baseline-below-color": getColorPickerValue(this._baselineSection._getBaselineDirectionalColorValue(root, "below"), "#000000"),
             "baseline-below-color-text-fallback": this._baselineSection._getBaselineDirectionalColorValue(root, "below"),
             "target-mode": this._targetSection._getTargetMode(root),
             "target-value": getFeatureTargetSource(this._config).fixed,
+            "target-source-mode": this._targetSection._getSourceMode(),
+            "target-percent": (_d = (_c = this._targetSection._percentageDraft) != null ? _c : getFeatureTargetSource(this._config).percent) != null ? _d : "",
             "target-shape": this._targetSection._getEffectiveTargetShapeValue(root),
             "target-direction": this._targetSection._getEffectiveMarkerDirection(root, "target"),
             "target-color": getColorPickerValue(this._targetSection._getTargetColorValue(root), "#888"),
@@ -14880,21 +15139,21 @@ ${this._renderFormattingSection({ type: "card" })}
           for (const section of [this._segmentsSection, this._gradientStopsSection]) {
             const segment = section === this._segmentsSection;
             const rows = segment ? section._getScopedSegmentsValue(root) : section._getScopedGradientStopsValue(root);
-            for (const field of segment ? ["from", "to", "color"] : ["pos", "color"]) {
+            for (const field of segment ? ["from", "to", "color", "color-text-fallback"] : ["pos", "color"]) {
               for (const control of this.shadowRoot.querySelectorAll(`input[data-kind="${segment ? "segment" : "gradient"}-${field}"]`)) {
                 const index = Number(control.dataset.index), row = rows[index];
-                const value = segment && field !== "color" ? section._getSegmentBoundaryText(root, index, field, row == null ? void 0 : row[field]) : !segment && field === "pos" ? section._getGradientStopPosText(root, index, (_a = row == null ? void 0 : row.pos) != null ? _a : "") : row == null ? void 0 : row.color;
-                if (control !== this.shadowRoot.activeElement || this._configReplaced) control.value = value != null ? value : "";
+                const value = segment && !field.startsWith("color") ? section._getSegmentBoundaryText(root, index, field, row == null ? void 0 : row[field]) : !segment && field === "pos" ? section._getGradientStopPosText(root, index, (_e = row == null ? void 0 : row.pos) != null ? _e : "") : row == null ? void 0 : row.color;
+                if (control !== this.shadowRoot.activeElement || this._configReplaced) control.value = segment && control.type === "color" ? getColorPickerValue(value, "#4a9eff") : value != null ? value : "";
               }
             }
-            if (this._configReplaced) {
+            if (segment || this._configReplaced) {
               const draft = segment ? section._getSegmentDraftState(root) : section._getGradientStopsDraftState(root);
               for (const field of Object.keys(draft)) for (const suffix of ["", "-text-fallback"]) for (const control of this.shadowRoot.querySelectorAll(`input[data-kind="${segment ? "segment" : "gradient"}-draft-${field}${suffix}"]`)) {
-                control.value = field === "color" && control.type === "color" ? getColorPickerValue(draft[field], "#4CAF50") : draft[field];
+                if (control !== this.shadowRoot.activeElement || this._configReplaced) control.value = field === "color" && control.type === "color" ? getColorPickerValue(draft[field], "#4CAF50") : draft[field];
               }
             }
             if (segment) section._refreshSegmentUi(root);
-            else if ((_b = this.shadowRoot.querySelector("#gradient-draft-pos")) == null ? void 0 : _b.closest) section._refreshGradientDraftUi(root);
+            else if ((_f = this.shadowRoot.querySelector("#gradient-draft-pos")) == null ? void 0 : _f.closest) section._refreshGradientDraftUi(root);
           }
           for (const direction of ["above", "below"]) {
             const control = this.shadowRoot.querySelector(`#baseline-${direction}-color-enabled`);
@@ -14913,6 +15172,8 @@ ${this._renderFormattingSection({ type: "card" })}
           }
           const solid = this.shadowRoot.querySelector("#bar-solid-fill");
           if (solid) solid.checked = getBarSolidFillValue(context, root);
+          const animated = this.shadowRoot.querySelector("#bar-animated");
+          if (animated) animated.checked = getBarAnimatedValue(context, root);
           const override = this.shadowRoot.querySelector("#feature-entity-override");
           if (override) override.checked = !!this._explicitEntity || this._chooseEntity;
           const status = this.shadowRoot.querySelector("#feature-entity-status");
@@ -14940,6 +15201,14 @@ ${this._renderFormattingSection({ type: "card" })}
                 }
               }
             }
+          }
+          for (const control of this.shadowRoot.querySelectorAll('input[data-css-color="true"]')) {
+            const draft = this._cssColorDrafts.get(control.id);
+            if (draft !== void 0) control.value = draft;
+            control.setAttribute("aria-invalid", draft === void 0 ? "false" : "true");
+            (_g = control.setCustomValidity) == null ? void 0 : _g.call(control, draft === void 0 ? "" : "Enter a valid CSS color.");
+            const inputLabel = (_j = (_i = (_h = this.shadowRoot.querySelector(`#${control.id.replace(/-text-fallback$/, "")}`)) == null ? void 0 : _h.labels) == null ? void 0 : _i[0]) == null ? void 0 : _j.textContent;
+            if (inputLabel) control.setAttribute("aria-label", `${inputLabel} (CSS value)`);
           }
         }
       };

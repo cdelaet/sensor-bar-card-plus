@@ -1,6 +1,6 @@
 import { normalizeMarkerDirection } from '../../config/normalize.js';
 import { cloneDeep, isObject, setPathValue, deletePathValue, normalizeNumberValue, normalizeTextValue } from '../shared/editor-config.js';
-import { escapeAttribute, renderColorInput, renderEntitySourceInput, getColorPickerValue } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeEditorColorValue, renderColorInput, renderEntitySourceInput, renderScalePercentageInput, getColorPickerValue } from '../shared/editor-controls.js';
 import { normalizeMarkerLabelField } from '../shared/editor-marker-controls.js';
 
 export function getReferenceMarkerSource(marker) {
@@ -24,7 +24,8 @@ export function getReferenceMarkerSource(marker) {
 
 // Array semantics and local UI identity; hosts retain persistence/render policy.
 export class ReferenceMarkersSection {
-  constructor(context, ui) {
+  constructor(context, ui, options = {}) {
+    this.options = options;
     this.context = context;
     this.ui = ui;
     this._genericMarkerUiIds = new Map();
@@ -171,7 +172,7 @@ export class ReferenceMarkersSection {
           ${source.mode === 'percent' ? `
             <div class="field-row">
               <label for="${rowId}-percent">Scale percentage</label>
-              <input id="${rowId}-percent" type="number" min="0" max="100" step="any" data-kind="generic-marker-percent" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${escapeAttribute(source.percent)}">%
+              ${renderScalePercentageInput(`${rowId}-percent`, `data-kind="generic-marker-percent" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"`, source.percent)}
             </div>` : ''}
           <div class="inline-row generic-marker-pair">
             <div class="field-row">
@@ -197,7 +198,7 @@ export class ReferenceMarkersSection {
           </div>
           <div class="field-row">
             <label for="${rowId}-color">Color</label>
-            ${renderColorInput({
+            ${renderColorInput({ cssText: this.options.cssText, label: 'Reference marker color',
               id: `${rowId}-color`,
               kind: 'generic-marker-color',
               index: scopeIndex,
@@ -332,7 +333,7 @@ export class ReferenceMarkersSection {
     let path, normalized;
     if (field === 'show-marker') { path = ['show_marker']; normalized = value === false ? false : undefined; }
     else if (['lane', 'shape', 'direction'].includes(field)) { path = [field]; normalized = field === 'direction' ? normalizeMarkerDirection(value) : value; }
-    else if (field === 'color') { path = ['color']; normalized = normalizeTextValue(value).trim(); }
+    else if (field === 'color') { path = ['color']; normalized = normalizeEditorColorValue(value, this.options.cssText); }
     else if (field.startsWith('label-')) {
       const labelField = field.slice(6).replace('show-value', 'show_value').replace('show-unit', 'show_unit');
       if (!['show', 'text', 'entity', 'show_value', 'show_unit', 'precision'].includes(labelField)) return false;

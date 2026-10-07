@@ -4,23 +4,23 @@ The existing `sensor-bar-card-plus.js` resource also registers
 `sensor-bar-card-plus-feature`. No additional resource is required. This preview
 uses Home Assistant's [public custom Card Feature API](https://developers.home-assistant.io/docs/frontend/custom-ui/custom-card-feature/).
 The graphical Feature editor exposes entity inheritance/override, Scale,
-Bar Appearance (fill style, color, solid fill), Segments for segment-based fill
+Bar Appearance (fill style, color, solid fill, animation), Segments for segment-based fill
 styles, Gradient Stops for gradient, Needle, Baseline, Target, Peak, Floor,
 Reference markers and Formatting. Palette and reference-marker edits preserve raw
-item metadata/order and inactive palettes. Animation remains available through YAML;
-edits in the graphical editor preserve that raw configuration. No second resource is
-required for the editor.
+item metadata/order and inactive palettes. The Animated toggle follows the runtime
+default (on) and changes only `bar.animated`. No second resource is required for
+the editor.
 
 The editor preserves Needle and Baseline independently. An active, resolved
 Baseline takes visual precedence over Needle at runtime; enabling either in the
 Feature editor never removes the other. Baseline exposes its current mode,
-numeric fallback/entity source and above/below colors. Percentage Baseline YAML
-is preserved; no percentage control or future endpoint semantics are exposed.
-Target exposes mode, numeric fallback/entity source, diamond/triangle shape,
+numeric fallback/entity/percentage sources and above/below colors. Percentage
+uses the current visible Scale; no future symbolic endpoint semantics are exposed.
+Target exposes mode, numeric fallback/entity/percentage source, diamond/triangle shape,
 inward/outward direction, color, built-in label controls and exceeded-fill color.
-Percentage Target YAML is preserved without a percentage editing control; no
-independent Target label entity is exposed. Target/Baseline/Needle configurations
-remain independently stored, with styling precedence determined by the runtime.
+Scalar `at: "50%"` and object `at: {percent: 50}` sources are preserved on
+unrelated edits. No independent Target label entity is exposed.
+Target/Baseline/Needle configurations remain independently stored, with styling precedence determined by the runtime.
 Peak and Floor expose enabled, color, inward/outward direction, built-in labels
 and the existing scalar reset presets (`never`, 1m–59m, 1h–23h and calendar
 presets). Their editors preserve unknown metadata and the other extremum; they
@@ -31,6 +31,29 @@ entity-with-fallback/percentage anchors, above/below lanes, all six shapes,
 inward/outward direction, color, label-only anchors and richer label options,
 including an independent label-content entity. Source components and label fields
 patch one raw marker at a time; other markers and unknown metadata survive edits.
+
+Segments can have an automatic end: leave End blank (Auto) to omit `to`.
+Nonfinal omitted/null ends use the following valid configured start; remaining
+ends resolve to the next resolved start or Scale max. Numeric and percentage
+boundaries may be mixed. Validation/preview resolve these without saving inferred
+ends or sorting raw rows. Out-of-order reversed ranges are reported.
+
+Direct-paint colors offer both a native picker and CSS text, including Segment
+rows/new drafts, bar, Needle, Baseline sides, Target/exceeded fill, Peak, Floor and
+Reference markers. Browser-valid named colors, hex, rgb/rgba, hsl and `var(...)`
+are preserved verbatim. Variables depend on the active HA theme. Incomplete CSS
+and percentages remain local drafts through echo; foreign config replacement
+resets them. Target/Baseline percentage input uses the existing 0–100 graphical
+convention; runtime YAML normalization is unchanged. Clear percentage removes
+only that component. Explicit source-mode conversions replace recognized source
+components while retaining unknown source metadata and other marker settings.
+Entity and fixed values still take precedence over percentage when combined.
+
+Gradient Stops retain existing hex interpolation restrictions. Direct Segment
+CSS works with bands, soft_bands and band_gradient painting; numeric color
+sampling (including solid-fill overrides of interpolated styles) still requires
+supported hex values. The editor does not convert CSS into hex or extend color
+math. Existing standalone editor controls and runtime behavior are unchanged.
 
 A Tile's entity is inherited when the feature omits `entity`:
 
@@ -242,16 +265,18 @@ installation:
 Also open the graphical Feature editor and check inherited/explicit entity
 selection, clearing, context changes, picker behavior and narrow dialogs. Confirm
 advanced YAML configuration survives edits to the exposed fields. Exercise palette
-add/edit/remove, invalid drafts, CSS Gradient colors and narrow dialogs; confirm
-inactive palettes, omitted Segment ends, metadata and raw order survive. Exercise
+add/edit/remove, invalid drafts, hex Gradient Stops, direct Segment CSS colors and
+narrow dialogs; confirm inactive palettes, omitted Segment ends, metadata and raw order survive. Exercise
 Needle/Baseline independently and verify both remain stored. Check source fallback,
-entity changes/clear, side-color toggles, percentage YAML preservation and resolved
+entity changes/clear, side-color toggles, percentage editing/conversions and resolved
 Baseline precedence. Compare disabled/unresolved Baseline with a configured Needle.
 Exercise Target mode/source, shape/direction, labels and exceeded-fill toggles;
-verify percentage YAML, metadata and the other physical-bar settings survive edits.
+verify percentage sources, metadata and the other physical-bar settings survive edits.
 Exercise Peak/Floor enable, color, direction, labels and reset presets independently;
-verify raw reset/label metadata and the other extremum survive unrelated edits. The remaining
-advanced graphical sections are not part of the current editor foundation.
+verify raw reset/label metadata and the other extremum survive unrelated edits.
+Check Animated on/off, automatic Segment ends, CSS color drafts, editor echo and
+reopen with complex configurations. Phase 3K is the next real-HA acceptance phase;
+it has not been performed by the automated editor checks.
 
 ## Marker-label manual checks
 

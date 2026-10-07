@@ -21,6 +21,13 @@ export function createFeaturePaletteArray(context, kind) {
   };
   return {
     patchOnly: true,
+    autoEnds: kind === 'segments',
+    cssText: kind === 'segments',
+    segmentSpace: () => {
+      const config = context.read({ type: 'card' }, []);
+      const path = palettePath(config, kind);
+      return path[0] === 'severity' ? 'percent' : path[0] === 'bar' ? config.bar?.segment_space ?? null : null;
+    },
     rows(_scope, controller) {
       section = controller;
       // Display normalization is intentionally separate from persistence.
@@ -35,7 +42,9 @@ export function createFeaturePaletteArray(context, kind) {
         const rows = [...rawRows()];
         if (operation.type === 'edit') {
           if (operation.index < 0 || operation.index >= rows.length) return config;
-          rows[operation.index] = { ...rows[operation.index], [operation.field]: operation.value };
+          const row = { ...rows[operation.index], [operation.field]: operation.value };
+          if (operation.value === undefined) delete row[operation.field];
+          rows[operation.index] = row;
         } else if (operation.type === 'add') rows.push(cloneDeep(operation.item));
         else if (operation.type === 'remove') rows.splice(operation.index, 1);
         else throw new Error('Unsupported palette operation');

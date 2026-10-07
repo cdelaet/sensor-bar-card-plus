@@ -207,7 +207,7 @@ for (const source of ['src', 'dist']) describe(`Feature editor foundation (${sou
     vi.stubGlobal('customElements', { get: () => undefined });
     try {
       for (const render of [renderScaleSection, renderFormattingSection, renderBarAppearanceSection]) {
-        expect(editor.shadowRoot.innerHTML).toContain(render(editor._createSectionContext(), { type: 'card' }));
+        expect(editor.shadowRoot.innerHTML).toContain(render(editor._createSectionContext(), { type: 'card' }, undefined, { animation: true, cssText: true }));
       }
       for (const render of [renderScaleSection, renderFormattingSection]) {
         expect(standalone.shadowRoot.innerHTML).toContain(render(standalone._createSectionContext(), { type: 'card' }));

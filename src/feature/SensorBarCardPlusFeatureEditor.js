@@ -12,6 +12,7 @@ import {
 import {
   renderBarAppearanceSection, handleBarAppearanceField, getEffectiveFillStyleValue,
   getBarColorValue, getBarSolidFillValue,
+  getBarAnimatedValue,
 } from '../editor/sections/bar-appearance.js';
 import { getFeatureScaleSource, patchFeatureScaleSource, getFeatureBaselineSource, patchFeatureBaselineSource, getFeatureTargetSource, patchFeatureTargetSource } from './feature-editor-config.js';
 
@@ -40,21 +41,24 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._chooseEntity = false;
     this._renderEpoch = 0;
     this._updateComplete = Promise.resolve();
+    this._cssColorDrafts = new Map();
     const context = this._createSectionContext();
-    this._needleSection = new NeedleSection(context);
-    this._baselineSection = new BaselineSection(context);
-    this._targetSection = new TargetSection(context);
-    this._extremaSection = new ExtremaSection(context);
+    const options = { cssText: true, percentSources: true };
+    this._needleSection = new NeedleSection(context, options);
+    this._baselineSection = new BaselineSection(context, options);
+    this._targetSection = new TargetSection(context, options);
+    this._extremaSection = new ExtremaSection(context, options);
     const ui = {
       root: () => this.shadowRoot,
       render: () => { this._paletteRenderRequested = true; this._requestRender(); },
       focus: selector => { this._pendingPaletteFocus = selector; },
+      hass: () => this._hass,
     };
-    this._referenceMarkersSection = new ReferenceMarkersSection(context, { root: ui.root, render: () => { this._referenceRenderRequested = true; this._requestRender(); } });
+    this._referenceMarkersSection = new ReferenceMarkersSection(context, { root: ui.root, render: () => { this._referenceRenderRequested = true; this._requestRender(); } }, options);
     this._segmentsSection = new SegmentsSection(context, ui, createFeaturePaletteArray(context, 'segments'));
     this._gradientStopsSection = new GradientStopsSection(context, ui, createFeaturePaletteArray(context, 'gradient_stops'));
     for (const type of ['click', 'keydown']) this.shadowRoot.addEventListener(type, event => {
-      if (type === 'click' && (this._baselineSection.handleClick(event.target) || this._referenceMarkersSection.handleClick(event.target?.closest?.('[data-action]') ?? event.target))) return;
+      if (type === 'click' && (this._baselineSection.handleClick(event.target) || this._targetSection.handleClick(event.target) || this._referenceMarkersSection.handleClick(event.target?.closest?.('[data-action]') ?? event.target))) { this._requestRender(); return; }
       this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event);
     });
     const handleField = event => this._handleField(event);
@@ -72,6 +76,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       this._paletteRenderRequested ||= ['bar.segments', 'bar.gradient_stops', 'segments', 'severity', 'gradient_stops']
         .some(path => serializeConfig(getPathValue(config, path.split('.'))) !== serializeConfig(getPathValue(this._config, path.split('.'))));
       this._config = cloneDeep(config);
+      this._cssColorDrafts.clear();
       this._baselineSection.reset();
       this._targetSection.reset();
       this._referenceMarkersSection.reset();
@@ -122,6 +127,9 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
   _mutate(mutation) {
     const next = mutation(this._config);
     if (serializeConfig(next) === serializeConfig(this._config)) return false;
+    if (next.bar?.segments?.length !== this._config.bar?.segments?.length || next.segments?.length !== this._config.segments?.length || next.severity?.length !== this._config.severity?.length) {
+      for (const key of this._cssColorDrafts.keys()) if (key.startsWith('segment-')) this._cssColorDrafts.delete(key);
+    }
     this._config = next;
     this._requestRender();
     this.dispatchEvent(new CustomEvent('config-changed', {
@@ -132,12 +140,22 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
 
   _handleField(event) {
     const target = event.target;
+    // Replacing focused native controls can dispatch change from the old DOM.
+    if (this._configReplaced || target?.isConnected === false) return;
     // Picker input/change events are internal; HA's value-changed is authoritative.
     if (target?.tagName === 'HA-ENTITY-PICKER' && event.type !== 'value-changed') return;
     const field = target?.dataset?.field?.replace(/-text-fallback$/, '');
     const kind = target?.dataset?.kind?.replace(/-text-fallback$/, '');
     const value = event.type === 'value-changed' ? event.detail?.value
       : target?.type === 'checkbox' ? target.checked : target?.value;
+    if (target?.type === 'color') this._cssColorDrafts.delete(`${target.id}-text-fallback`);
+    if (target?.dataset?.cssColor === 'true') {
+      const valid = !value.trim() || CSS.supports('color', value);
+      target.setCustomValidity?.(valid ? '' : 'Enter a valid CSS color.');
+      target.setAttribute('aria-invalid', valid ? 'false' : 'true');
+      if (valid) this._cssColorDrafts.delete(target.id); else this._cssColorDrafts.set(target.id, value);
+      if (!valid && kind !== 'segment-draft-color') return;
+    }
     if (field === 'feature-entity-override') {
       this._chooseEntity = !!value;
       if (!value) this._mutate(config => deletePathValue(config, ['entity']));
@@ -159,12 +177,12 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       if (markerId && markerId !== ids[Number(target.dataset.markerIndex)]) return;
     }
     if (this._referenceMarkersSection.handleField({ target, kind, value })) return;
-    if (this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event)) return;
+    if (this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event)) { this._requestRender(); return; }
     if (this._needleSection.handleField({ field, kind, value }) || this._baselineSection.handleField({ field, kind, value }) || this._targetSection.handleField({ field, kind, value }) || this._extremaSection.handleField({ field, kind, value })) return;
     const context = this._createSectionContext();
     if (handleScaleField(context, { field, kind, value })) return;
     if (handleFormattingField(context, { field, kind, value })) return;
-    handleBarAppearanceField(context, { field, kind, value });
+    handleBarAppearanceField(context, { field, kind, value }, { animation: true, cssText: true });
   }
 
   _entityDescription() {
@@ -203,25 +221,20 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
   }
 
   _render() {
-    const color = getBarColorValue(this._createSectionContext(), root);
     const fillStyle = getEffectiveFillStyleValue(this._createSectionContext(), root);
     const palette = fillStyle === 'gradient' ? this._gradientStopsSection
       : this._segmentsSection._isSegmentFillStyle(fillStyle) ? this._segmentsSection : null;
     const paletteRows = palette === this._gradientStopsSection ? palette._getScopedGradientStopsValue(root)
       : palette ? palette._getScopedSegmentsValue(root) : [];
-    const needle = this._needleSection._getScopedNeedleConfig(root);
-    const above = this._baselineSection._getBaselineDirectionalColorValue(root, 'above');
-    const below = this._baselineSection._getBaselineDirectionalColorValue(root, 'below');
     const markers = this._referenceMarkersSection._getGenericMarkers(root);
     const markerIds = this._referenceMarkersSection._getGenericMarkerUiIds(root, markers.length);
     const signature = JSON.stringify([
       !!(this._context.entity_id || this._explicitEntity), this._showEntityPicker,
-      ...[needle.color, above, below, this._targetSection._getTargetColorValue(root), this._targetSection._getTargetAboveFillColorValue(root), ...['peak', 'floor'].map(key => this._extremaSection._getMarkerConfig(root, key).color)].map(value => !!value && !isHexColorValue(value)),
-      ...markers.map((marker, i) => [markerIds[i], this._referenceMarkersSection._getGenericMarkerSource(marker).mode, !!marker?.color && !isHexColorValue(marker.color)]),
+      ...markers.map((marker, i) => [markerIds[i], this._referenceMarkersSection._getGenericMarkerSource(marker).mode]),
       fillStyle, paletteRows.length,
       palette === this._gradientStopsSection ? !isHexColorValue(palette._getGradientStopsDraftState(root).color) : false,
-      ...paletteRows.map(row => !isHexColorValue(row.color)),
-      !!customElements.get('ha-entity-picker'), !!color && !isHexColorValue(color),
+      ...(palette === this._gradientStopsSection ? paletteRows.map(row => !isHexColorValue(row.color)) : []),
+      !!customElements.get('ha-entity-picker'),
     ]);
     // Keep active controls mounted through their native input/change sequence.
     const activeField = this.shadowRoot.activeElement?.dataset?.field;
@@ -234,6 +247,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       this.shadowRoot.innerHTML = `<style>${editorStyles}
         :host { container-type: inline-size; }
         .list-row.gradient-stop-row .field-grid { grid-template-columns: minmax(0, 1fr); }
+        .list-row.segment-row > .field-grid { grid-template-columns: minmax(0, 1fr); }
         @container (max-width: 320px) {
           .list-row.segment-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .list-row.gradient-stop-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -252,7 +266,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       </style><div class="editor">
         ${this._renderEntitySection()}
         ${renderScaleSection(context, root)}
-        ${renderBarAppearanceSection(context, root)}
+        ${renderBarAppearanceSection(context, root, undefined, { animation: true, cssText: true })}
         ${palette?.render(root) ?? ''}
         <div class="section"><div class="section-head"><h3>Needle</h3></div>
           ${this._needleSection.render(root)}
@@ -303,12 +317,16 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       'bar-needle-color-text-fallback': this._needleSection._getScopedNeedleConfig(root).color,
       'baseline-mode': this._baselineSection._getBaselineMode(root),
       'baseline-value': getFeatureBaselineSource(this._config).fixed,
+      'baseline-source-mode': this._baselineSection._getSourceMode(),
+      'baseline-percent': this._baselineSection._percentageDraft ?? getFeatureBaselineSource(this._config).percent ?? '',
       'baseline-above-color': getColorPickerValue(this._baselineSection._getBaselineDirectionalColorValue(root, 'above'), '#000000'),
       'baseline-above-color-text-fallback': this._baselineSection._getBaselineDirectionalColorValue(root, 'above'),
       'baseline-below-color': getColorPickerValue(this._baselineSection._getBaselineDirectionalColorValue(root, 'below'), '#000000'),
       'baseline-below-color-text-fallback': this._baselineSection._getBaselineDirectionalColorValue(root, 'below'),
       'target-mode': this._targetSection._getTargetMode(root),
       'target-value': getFeatureTargetSource(this._config).fixed,
+      'target-source-mode': this._targetSection._getSourceMode(),
+      'target-percent': this._targetSection._percentageDraft ?? getFeatureTargetSource(this._config).percent ?? '',
       'target-shape': this._targetSection._getEffectiveTargetShapeValue(root),
       'target-direction': this._targetSection._getEffectiveMarkerDirection(root, 'target'),
       'target-color': getColorPickerValue(this._targetSection._getTargetColorValue(root), '#888'),
@@ -345,18 +363,18 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     for (const section of [this._segmentsSection, this._gradientStopsSection]) {
       const segment = section === this._segmentsSection;
       const rows = segment ? section._getScopedSegmentsValue(root) : section._getScopedGradientStopsValue(root);
-      for (const field of segment ? ['from', 'to', 'color'] : ['pos', 'color']) {
+      for (const field of segment ? ['from', 'to', 'color', 'color-text-fallback'] : ['pos', 'color']) {
         for (const control of this.shadowRoot.querySelectorAll(`input[data-kind="${segment ? 'segment' : 'gradient'}-${field}"]`)) {
           const index = Number(control.dataset.index), row = rows[index];
-          const value = segment && field !== 'color' ? section._getSegmentBoundaryText(root, index, field, row?.[field])
+          const value = segment && !field.startsWith('color') ? section._getSegmentBoundaryText(root, index, field, row?.[field])
             : !segment && field === 'pos' ? section._getGradientStopPosText(root, index, row?.pos ?? '') : row?.color;
-          if (control !== this.shadowRoot.activeElement || this._configReplaced) control.value = value ?? '';
+          if (control !== this.shadowRoot.activeElement || this._configReplaced) control.value = segment && control.type === 'color' ? getColorPickerValue(value, '#4a9eff') : value ?? '';
         }
       }
-      if (this._configReplaced) {
+      if (segment || this._configReplaced) {
         const draft = segment ? section._getSegmentDraftState(root) : section._getGradientStopsDraftState(root);
         for (const field of Object.keys(draft)) for (const suffix of ['', '-text-fallback']) for (const control of this.shadowRoot.querySelectorAll(`input[data-kind="${segment ? 'segment' : 'gradient'}-draft-${field}${suffix}"]`)) {
-          control.value = field === 'color' && control.type === 'color' ? getColorPickerValue(draft[field], '#4CAF50') : draft[field];
+          if (control !== this.shadowRoot.activeElement || this._configReplaced) control.value = field === 'color' && control.type === 'color' ? getColorPickerValue(draft[field], '#4CAF50') : draft[field];
         }
       }
       if (segment) section._refreshSegmentUi(root);
@@ -377,6 +395,8 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     }
     const solid = this.shadowRoot.querySelector('#bar-solid-fill');
     if (solid) solid.checked = getBarSolidFillValue(context, root);
+    const animated = this.shadowRoot.querySelector('#bar-animated');
+    if (animated) animated.checked = getBarAnimatedValue(context, root);
     const override = this.shadowRoot.querySelector('#feature-entity-override');
     if (override) override.checked = !!this._explicitEntity || this._chooseEntity;
     const status = this.shadowRoot.querySelector('#feature-entity-status');
@@ -404,6 +424,14 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
           }
         }
       }
+    }
+    for (const control of this.shadowRoot.querySelectorAll('input[data-css-color="true"]')) {
+      const draft = this._cssColorDrafts.get(control.id);
+      if (draft !== undefined) control.value = draft;
+      control.setAttribute('aria-invalid', draft === undefined ? 'false' : 'true');
+      control.setCustomValidity?.(draft === undefined ? '' : 'Enter a valid CSS color.');
+      const inputLabel = this.shadowRoot.querySelector(`#${control.id.replace(/-text-fallback$/, '')}`)?.labels?.[0]?.textContent;
+      if (inputLabel) control.setAttribute('aria-label', `${inputLabel} (CSS value)`);
     }
   }
 }

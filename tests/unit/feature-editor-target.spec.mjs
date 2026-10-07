@@ -94,7 +94,7 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
       if (at === '70%') { expect(editor.shadowRoot.querySelector('#target-value').value).toBe(''); await edit(editor, '#target-value', ''); expect(editor._config.target.at).toBe(at); }
       await edit(editor, '#feature-target-entity', 'sensor.changed'); expect(editor._config.target.at).toEqual({ [at === '70%' ? 'percent' : 'fixed']: 70, entity: 'sensor.changed' });
     }
-    expect(editor.shadowRoot.innerHTML).not.toContain('target-percent');
+    expect(editor.shadowRoot.innerHTML).toContain('target-percent');
   });
   it('preserves legacy scalar/aliases until owned editing requires object syntax', async () => {
     const config = raw(); config.target = 70; config.target_entity = 'sensor.t';

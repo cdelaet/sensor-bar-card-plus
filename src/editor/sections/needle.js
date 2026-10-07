@@ -1,9 +1,9 @@
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue,
-  pruneEmptyObjectsInTarget, normalizeTextValue } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeColorComparisonValue, renderColorInput } from '../shared/editor-controls.js';
+  pruneEmptyObjectsInTarget } from '../shared/editor-config.js';
+import { escapeAttribute, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput } from '../shared/editor-controls.js';
 
 export class NeedleSection {
-  constructor(context) {
+  constructor(context, options = {}) { this.options = options;
     this.context = context;
   }
 
@@ -88,7 +88,7 @@ export class NeedleSection {
   }
 
   _setScopedNeedleColor(scope, rawValue) {
-    const normalizedValue = normalizeTextValue(rawValue).trim();
+    const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
     return this.context.mutate(scope, (target) => {
       let nextTarget = cloneDeep(target);
       const current = this._getScopedNeedleConfig(scope);
@@ -183,7 +183,7 @@ export class NeedleSection {
                       </div>
 	                      <div class="field-row">
 	                        <label for="entity-${index}-needle-color">Needle color</label>
-	                        ${renderColorInput({
+	                        ${renderColorInput({ cssText: this.options.cssText, label: 'Needle color',
                           id: `entity-${index}-needle-color`,
                           kind: 'entity-needle-color',
                           index,
@@ -205,7 +205,7 @@ export class NeedleSection {
             </div>
             <div class="field-row">
               <label for="bar-needle-color">Needle color</label>
-              ${renderColorInput({
+              ${renderColorInput({ cssText: this.options.cssText, label: 'Needle color',
                 id: 'bar-needle-color',
                 field: 'bar-needle-color',
                 value: cardNeedle.color,
