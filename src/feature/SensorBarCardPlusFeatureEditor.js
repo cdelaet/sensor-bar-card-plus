@@ -23,6 +23,8 @@ import { NeedleSection } from '../editor/sections/needle.js';
 import { BaselineSection } from '../editor/sections/baseline.js';
 import { TargetSection } from '../editor/sections/target.js';
 import { ExtremaSection } from '../editor/sections/extrema.js';
+import { ReferenceMarkersSection } from '../editor/sections/reference-markers.js';
+import { getFeatureReferenceMarkerSource, patchFeatureReferenceMarkerSource, patchFeatureReferenceMarker } from './feature-editor-reference-markers.js';
 import { patchFeatureExtremumField } from './feature-editor-extrema.js';
 import { patchFeatureTargetField } from './feature-editor-target.js';
 import { patchFeatureNeedle, patchFeatureBaselineField } from './feature-editor-needle-baseline.js';
@@ -48,10 +50,11 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       render: () => { this._paletteRenderRequested = true; this._requestRender(); },
       focus: selector => { this._pendingPaletteFocus = selector; },
     };
+    this._referenceMarkersSection = new ReferenceMarkersSection(context, { root: ui.root, render: () => { this._referenceRenderRequested = true; this._requestRender(); } });
     this._segmentsSection = new SegmentsSection(context, ui, createFeaturePaletteArray(context, 'segments'));
     this._gradientStopsSection = new GradientStopsSection(context, ui, createFeaturePaletteArray(context, 'gradient_stops'));
     for (const type of ['click', 'keydown']) this.shadowRoot.addEventListener(type, event => {
-      if (type === 'click' && this._baselineSection.handleClick(event.target)) return;
+      if (type === 'click' && (this._baselineSection.handleClick(event.target) || this._referenceMarkersSection.handleClick(event.target?.closest?.('[data-action]') ?? event.target))) return;
       this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event);
     });
     const handleField = event => this._handleField(event);
@@ -71,6 +74,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       this._config = cloneDeep(config);
       this._baselineSection.reset();
       this._targetSection.reset();
+      this._referenceMarkersSection.reset();
       this._segmentsSection.reset();
       this._gradientStopsSection.reset();
       this._chooseEntity = false;
@@ -105,13 +109,13 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
   _createSectionContext() {
     return {
       read: (_scope, path) => getPathValue(this._config, path),
-      mutate: (_scope, mutation, options) => this._mutate(config => options?.needleEdit
+      mutate: (_scope, mutation, options) => this._mutate(config => options?.referenceMarkerEdit ? patchFeatureReferenceMarker(config, options.referenceMarkerEdit) : options?.needleEdit
         ? patchFeatureNeedle(config, options.needleEdit)
         : options?.baselineEdit ? patchFeatureBaselineField(config, options.baselineEdit)
           : options?.targetEdit || options?.markerEdit?.key === 'target' ? patchFeatureTargetField(config, options.targetEdit ?? options.markerEdit)
             : options?.extremumEdit || ['peak', 'floor'].includes(options?.markerEdit?.key) ? patchFeatureExtremumField(config, options.extremumEdit ?? options.markerEdit) : mutation(config)),
-      source: (_scope, key) => key === 'baseline' ? getFeatureBaselineSource(this._config) : key === 'target' ? getFeatureTargetSource(this._config) : getFeatureScaleSource(this._config, key),
-      setSource: (_scope, key, part, value) => this._mutate(config => key === 'baseline' ? patchFeatureBaselineSource(config, part, value) : key === 'target' ? patchFeatureTargetSource(config, part, value) : patchFeatureScaleSource(config, key, part, value)),
+      source: (_scope, key) => key?.type === 'reference-marker' ? getFeatureReferenceMarkerSource(key.marker) : key === 'baseline' ? getFeatureBaselineSource(this._config) : key === 'target' ? getFeatureTargetSource(this._config) : getFeatureScaleSource(this._config, key),
+      setSource: (_scope, key, part, value) => this._mutate(config => key?.type === 'reference-marker' ? patchFeatureReferenceMarkerSource(config, key.index, part, value) : key === 'baseline' ? patchFeatureBaselineSource(config, part, value) : key === 'target' ? patchFeatureTargetSource(config, part, value) : patchFeatureScaleSource(config, key, part, value)),
     };
   }
 
@@ -147,6 +151,14 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       this._requestRender();
       return;
     }
+    if (kind?.startsWith('generic-marker-')) {
+      const markerId = target.closest?.('.generic-marker-item')?.dataset?.markerUiId;
+      const ids = this._referenceMarkersSection._getGenericMarkerUiIds(root, this._referenceMarkersSection._getGenericMarkers(root).length);
+      // Native blur/change can fire during structural replacement or reorder.
+      // Its old row index must never write into a different current raw item.
+      if (markerId && markerId !== ids[Number(target.dataset.markerIndex)]) return;
+    }
+    if (this._referenceMarkersSection.handleField({ target, kind, value })) return;
     if (this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event)) return;
     if (this._needleSection.handleField({ field, kind, value }) || this._baselineSection.handleField({ field, kind, value }) || this._targetSection.handleField({ field, kind, value }) || this._extremaSection.handleField({ field, kind, value })) return;
     const context = this._createSectionContext();
@@ -179,9 +191,11 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
   _captureFocus() {
     const active = this.shadowRoot.activeElement;
     if (!active) return null;
+    const markerId = active.closest?.('.generic-marker-item')?.dataset?.markerUiId;
     const selector = active.id ? `#${active.id}`
       : active.dataset.field ? `[data-field="${active.dataset.field}"]`
-      : active.dataset.kind ? `[data-kind="${active.dataset.kind}"]` : null;
+      : active.dataset.kind ? `[data-kind="${active.dataset.kind}"]`
+      : markerId && active.dataset.action ? `.generic-marker-item[data-marker-ui-id="${markerId}"] [data-action="${active.dataset.action}"]` : null;
     const item = active.dataset.segmentIndex ?? active.dataset.stopIndex ?? active.dataset.index;
     const rowSelector = selector && active.dataset.kind && item !== undefined
       ? `${selector}[data-${active.dataset.segmentIndex !== undefined ? 'segment-index' : active.dataset.stopIndex !== undefined ? 'stop-index' : 'index'}="${item}"]` : selector;
@@ -198,9 +212,12 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const needle = this._needleSection._getScopedNeedleConfig(root);
     const above = this._baselineSection._getBaselineDirectionalColorValue(root, 'above');
     const below = this._baselineSection._getBaselineDirectionalColorValue(root, 'below');
+    const markers = this._referenceMarkersSection._getGenericMarkers(root);
+    const markerIds = this._referenceMarkersSection._getGenericMarkerUiIds(root, markers.length);
     const signature = JSON.stringify([
       !!(this._context.entity_id || this._explicitEntity), this._showEntityPicker,
       ...[needle.color, above, below, this._targetSection._getTargetColorValue(root), this._targetSection._getTargetAboveFillColorValue(root), ...['peak', 'floor'].map(key => this._extremaSection._getMarkerConfig(root, key).color)].map(value => !!value && !isHexColorValue(value)),
+      ...markers.map((marker, i) => [markerIds[i], this._referenceMarkersSection._getGenericMarkerSource(marker).mode, !!marker?.color && !isHexColorValue(marker.color)]),
       fillStyle, paletteRows.length,
       palette === this._gradientStopsSection ? !isHexColorValue(palette._getGradientStopsDraftState(root).color) : false,
       ...paletteRows.map(row => !isHexColorValue(row.color)),
@@ -211,7 +228,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const activeKind = this.shadowRoot.activeElement?.dataset?.kind;
     const defer = activeKind?.endsWith('-text-fallback') || activeField?.endsWith('-text-fallback')
       || activeField === 'feature-entity-override' && !this._context.entity_id && !this._explicitEntity;
-    if ((signature !== this._structureSignature || this._paletteRenderRequested) && !defer) {
+    if ((signature !== this._structureSignature || this._paletteRenderRequested || this._referenceRenderRequested) && !defer) {
       const focus = this._captureFocus();
       const context = this._createSectionContext();
       this.shadowRoot.innerHTML = `<style>${editorStyles}
@@ -220,6 +237,11 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         @container (max-width: 320px) {
           .list-row.segment-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .list-row.gradient-stop-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .generic-marker-header { flex-wrap: wrap; }
+          .generic-marker-toggle { flex-basis: 100%; }
+          .generic-marker-actions { width: 100%; }
+          .generic-marker-actions button { flex: 1 1 auto; }
+          .generic-marker-pair, .generic-marker-options { grid-template-columns: minmax(0, 1fr); }
           .list-row.segment-row > button, .list-row.gradient-stop-row > button {
             grid-column: 1 / -1; width: 100%;
           }
@@ -245,10 +267,14 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         ${['peak', 'floor'].map(key => `<div class="section"><div class="section-head"><h3>${key === 'peak' ? 'Peak' : 'Floor'}</h3></div>
           ${this._extremaSection.render(root, key)}
         </div>`).join('')}
+        <div class="section"><div class="section-head"><h3>Reference markers</h3></div>
+          ${this._referenceMarkersSection.render(root)}
+        </div>
         ${renderFormattingSection(context, root)}
       </div>`;
       this._structureSignature = signature;
       this._paletteRenderRequested = false;
+      this._referenceRenderRequested = false;
       this._syncControls();
       const active = focus && this.shadowRoot.querySelector(focus.selector);
       active?.focus?.();
@@ -342,6 +368,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       const control = this.shadowRoot.querySelector(`#baseline-${direction}-color-enabled`);
       if (control) control.checked = this._baselineSection._isBaselineDirectionalColorEnabled(root, direction);
     }
+    this._referenceMarkersSection.syncControls(this._hass, this._configReplaced);
     const targetLabel = this._targetSection._getBuiltinMarkerLabelOptions(root, 'target');
     for (const [id, checked] of [['target-label-show', targetLabel.show], ['target-label-show-value', targetLabel.showValue],
       ['target-label-show-unit', targetLabel.showUnit], ['target-above-fill-enabled', this._targetSection._isTargetAboveFillEnabled(root)]]) {

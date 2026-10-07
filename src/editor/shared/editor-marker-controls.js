@@ -2,6 +2,13 @@ import { normalizeMarkerDirection } from '../../config/normalize.js';
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue,
   normalizeTextValue, normalizeDecimalValue, pruneEmptyObjectsInTarget } from './editor-config.js';
 
+export function normalizeMarkerLabelField(field, value) {
+  if (field === 'text') return normalizeTextValue(value).replace(/\s+/g, ' ').trim();
+  if (field === 'entity') return normalizeTextValue(value).trim();
+  if (['show', 'showValue', 'showUnit', 'show_value', 'show_unit'].includes(field)) return value === true;
+  return normalizeDecimalValue(value);
+}
+
 export function getBuiltinMarkerLabelOptions(context, scope, key, show) {
   const marker = context.read(scope, [key]);
   const label = isObject(marker?.label) ? marker.label : {};
@@ -25,10 +32,7 @@ export function setBuiltinMarkerLabelField(context, scope, key, field, value) {
     : field === 'showUnit' ? 'show_unit'
       : field === 'precision' ? 'precision' : field;
   const isText = field === 'text';
-  const normalized = isText
-    ? normalizeTextValue(value).replace(/\s+/g, ' ').trim()
-    : field === 'show' || field === 'showValue' || field === 'showUnit' ? value === true
-      : normalizeDecimalValue(value);
+  const normalized = normalizeMarkerLabelField(field, value);
   if (field === 'precision' && value !== '' && normalized === null) return false;
   return context.mutate(scope, (target) => {
     let next = cloneDeep(target);

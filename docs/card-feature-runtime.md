@@ -5,9 +5,10 @@ The existing `sensor-bar-card-plus.js` resource also registers
 uses Home Assistant's [public custom Card Feature API](https://developers.home-assistant.io/docs/frontend/custom-ui/custom-card-feature/).
 The graphical Feature editor exposes entity inheritance/override, Scale,
 Bar Appearance (fill style, color, solid fill), Segments for segment-based fill
-styles, Gradient Stops for gradient, Needle, Baseline, Target, Peak, Floor and Formatting. Palette edits preserve raw
-item metadata/order and inactive palettes. Animation and reference marker configuration remain available through YAML; edits
-in the graphical editor preserve that raw configuration. No second resource is
+styles, Gradient Stops for gradient, Needle, Baseline, Target, Peak, Floor,
+Reference markers and Formatting. Palette and reference-marker edits preserve raw
+item metadata/order and inactive palettes. Animation remains available through YAML;
+edits in the graphical editor preserve that raw configuration. No second resource is
 required for the editor.
 
 The editor preserves Needle and Baseline independently. An active, resolved
@@ -24,6 +25,12 @@ Peak and Floor expose enabled, color, inward/outward direction, built-in labels
 and the existing scalar reset presets (`never`, 1m–59m, 1h–23h and calendar
 presets). Their editors preserve unknown metadata and the other extremum; they
 configure behavior without accessing or resetting runtime history.
+
+Reference markers expose the existing add/remove/reorder controls, fixed/entity/
+entity-with-fallback/percentage anchors, above/below lanes, all six shapes,
+inward/outward direction, color, label-only anchors and richer label options,
+including an independent label-content entity. Source components and label fields
+patch one raw marker at a time; other markers and unknown metadata survive edits.
 
 A Tile's entity is inherited when the feature omits `entity`:
 

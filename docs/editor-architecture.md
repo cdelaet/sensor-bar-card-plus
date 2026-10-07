@@ -882,3 +882,185 @@ before extraction; four new Feature section screenshots pass. Only the two
 whole-Feature editor screenshots intentionally change to include Peak/Floor.
 The normal dist build and working/staged `git diff --check` pass. Standalone host:
 4,487 → 3,939 lines; Feature host: 358 → 382 lines. No runtime source file changes.
+
+## Reference Markers (Phase 3I)
+
+### Exact pre-extraction method/state map
+
+| Concern | Standalone method/state before extraction |
+|---|---|
+| Array/inheritance | `_hasMarkersOverride`, `_getGenericMarkers`, `_getGenericMarkersSummary`, `_setGenericMarkerList`; root list, entity list replacement, explicit empty override |
+| UI identity | `_genericMarkerUiIds` Map, `_expandedGenericMarkerUiIds` Set, monotonic `_nextGenericMarkerUiId`; `_getGenericMarkerScopeKey`, `_getGenericMarkerUiIds`, `_resetGenericMarkerUiScope`, `_toggleGenericMarkerExpanded` |
+| Row summary | `_getGenericMarkerSummary`, `_refreshGenericMarkerSummary`; lane, shape, source text; no separate graphical preview |
+| Source read/write | `_getGenericMarkerSource`, `_setGenericMarkerSourceMode`, `_setGenericMarkerField` and its `atLeaf` closure; `_updateGenericMarker`; public anchor `at` |
+| Rendering | `_renderGenericMarkersEditor`, root `generic-markers` card disclosure titled Reference markers and per-entity `markers` disclosure titled Reference markers; collapsible item headers, scope/index/UI-ID datasets |
+| Actions | `_handleClick` inline add/remove/move-up/move-down/toggle blocks; add appends `{ at: { fixed: 50 } }`, expands new row; reorder moves array item and UI ID together; remove deletes selected ID/expansion |
+| Field routing | `_getGenericMarkerScope`, `_handleFieldEvent` generic-marker branches plus `entity-markers-inherit`; text color suffix decoding; checkbox/input/change/value-changed host handling |
+| Label | `_setGenericMarkerField`: show/text/show_value/show_unit/precision and independent entity; legacy decimal read; richer row-specific template, shared entity-source and color controls |
+| Host lifecycle | `setConfig` clears identity/expansion on foreign replacement, not echo; `_render`, `_refreshDerivedEditorUi`, `_syncEntityPickers`, `_bindShadowListeners`; active ordinary controls remain mounted on nonstructural edits |
+| Persistence | `_cleanupGenericMarkersForEmit` and `_cleanupEditorEmittedConfig` semantic-equivalence guard, `_setScopedValue`, `_removeScopedValue`, `_applyScopedMutation`, `_emitConfigChanged`; default removal/canonicalization stay standalone policy |
+
+Rows use scope-local positional UI IDs (`marker-N`), never hashes of marker
+content. Duplicate configurations remain separate rows. IDs move with reorder,
+survive edits/echo, and disappear with removal; counter stays monotonic through
+foreign replacement. There is no maximum editor list length or separate label/
+source draft map. Active DOM inputs are the local text state. Inherited entity
+lists are deep-copied when overridden; explicit empty lists clear inheritance.
+
+The existing Source dropdown exposes Fixed, Entity, Entity with fixed fallback,
+and Percentage. Percentage input has min/max 0/100 but the private setter accepts
+out-of-range finite values; runtime validation supplies invalid-percentage feedback.
+Percent persists as an `at: 'N%'` string. Runtime rejects object `at.percent`.
+The old editor reader recognizes percent/entity strings and object fixed/entity,
+but displays scalar numeric anchors and the runtime-supported object `value` alias
+as blank fixed values. Keep that standalone quirk through extraction.
+
+Source-mode changes replace scalar sources with their normal mode defaults;
+object fixed/entity modes preserve unknown object keys. Choosing percent replaces
+the whole anchor with `50%`. Numeric blanks/invalid input remove fixed, while
+percent blanks/invalid input set at to null. Reference precision invalid/blank
+input removes precision and decimal (unlike the built-in invalid-precision rule).
+Lane defaults below, shape circle, direction inward, gray `#888888`, shape visible,
+label hidden, value/raw unit visible, precision inherited. Six shapes are circle,
+diamond, triangle, chevron, arrow, pin; directions are inward/outward. Generic
+color already supports the shared CSS text fallback. Text collapses whitespace;
+label entity trims and clears independently. `show_marker:false` retains the full
+label-only anchor; it does not disable/remove the item.
+
+Standalone emit cleanup drops explicit default presentation/label booleans,
+normalizes fixed/entity source fields, removes label unit and canonicalizes decimal
+into precision while preserving unknown keys. The whole-config equivalence guard
+can reject cleanup for incomplete/invalid input. This policy must stay unchanged;
+Feature must never apply cleanup or rebuild all rows from the display model.
+
+### Shared section and host policies
+
+`src/editor/sections/reference-markers.js` owns the exact row template, summaries,
+array operations, source modes, field normalization, scope-local IDs and expansion.
+It is a dedicated section, not a palette subclass or generic array framework.
+The standalone host retains thin delegates for all 16 mapped private methods and
+compatibility accessors for the three identity fields. Its root/entity disclosures,
+picker synchronization, event wrappers, derived-UI refresh and emit cleanup remain
+host responsibilities. `_cleanupGenericMarkersForEmit` remains standalone-only.
+
+The context still has only `read`, `mutate`, `source`, `setSource`. Source keys
+accept a narrow `{ type: 'reference-marker', marker/index }` descriptor; mutation
+options carry an explicit `referenceMarkerEdit` operation. No fifth operation,
+registry, global state, observer or runtime API is added. The standalone context
+uses the historical reader/source setter and scoped mutation policy. Feature uses
+`src/feature/feature-editor-reference-markers.js` for display and raw persistence.
+Its source writer reuses the existing `patchSource` function from
+`feature-editor-config.js`, applied relative to one marker so deletion need not
+traverse an array. Source normalization never becomes an emitted list.
+
+Feature ordinary field edits copy only the selected item's path. Untouched raw
+rows retain object identity, duplicates and order. Add appends the existing
+`{ at: { fixed: 50 } }` default; remove splices exactly one item; existing up/down
+controls move complete objects and their UI IDs together. There is no editor
+maximum; the runtime's four-per-lane occupancy/warnings remain authoritative.
+Unknown root/item/source/label metadata and own `undefined` fields survive.
+
+Unrelated edits preserve numeric, percentage, entity-string and object `at`
+representations. Feature correctly displays numeric anchors and object `value`
+aliases without altering the standalone reader quirk. Same-component scalar edits
+stay scalar; adding another source component promotes minimally. Object source
+edits preserve unknown keys and existing `value` aliases. Clear removes only the
+owned component (fixed clear owns fixed/value). Fixed/entity mode conversion owns
+the source's recognized components and retains object metadata. Selecting
+Percentage intentionally replaces the whole anchor with `50%`: object percentage
+syntax is invalid for Reference markers, so source-object metadata cannot remain
+at that anchor after this explicit conversion. Marker/label metadata still stays.
+
+`editor-marker-controls.js` shares only pure label-field normalization. Built-in
+label inheritance/default/removal/invalid-precision behavior remains unchanged;
+Reference markers retain their richer template and independent `label.entity`.
+Text, entity, booleans and precision patch separately. Precision owns the legacy
+decimal alias; blank/invalid precision clears both as before. Clearing label entity
+removes only entity. `show_marker:false` remains a label-only anchor and leaves
+labels, source and presentation intact; showing the glyph again does not destroy
+label configuration. No independent entity control is added to built-in labels.
+
+Feature composes the section after Floor and before Formatting, with narrow-host
+container rules only in its host CSS. Ordinary edits, config echoes, hass/context
+updates and validation drafts retain mounted controls. Structural add/remove/
+reorder/source-mode/picker changes use existing render scheduling and restore
+focus by stable UI ID, including row action buttons. Foreign config replacement
+resets IDs/expansion and replaces stale input values; a monotonic ID counter keeps
+old identities distinct. Feature ignores native blur/change events whose old row
+ID no longer matches the current indexed item, preventing replacement/reorder
+from writing stale values into another marker. Picker `value-changed` remains
+authoritative, with independent anchor/label association, hass, allowCustomEntity
+and accessible names. No parent entity is materialized by marker edits.
+
+### Coverage and final Phase 3I result
+
+Before extraction, 28 source/dist characterization tests and four root/entity
+screenshots captured exact standalone behavior, including all source-reader
+quirks, percentage modes, six shapes, both lanes/directions, richer labels,
+identity/reorder, inheritance, invalid input and cleanup guards. The four new
+standalone images compare unchanged after extraction. Two browser cases also
+protect mounted inputs, keyboard/focus and identity/expansion through reorder.
+
+Feature adds 71 unit tests for exact raw config equality, own undefined values,
+untouched row identity, source forms/aliases, fields, labels/entities, label-only
+anchors, add/remove/reorder, cross-section preservation, stale-event rejection,
+picker association and source/dist whole-template parity. Eight source/dist
+browser cases cover 360px/240px, source-mode focus, percent boundaries, local
+invalid input, independent picker/text entities, replacement/echo, keyboard
+disclosure and raw metadata preservation. Two new Feature section screenshots
+protect both widths; only the two whole-Feature screenshots intentionally change
+to insert Reference markers. Existing standalone editor/runtime and Feature
+runtime snapshots remain unchanged. No runtime source is changed.
+
+Final validation: **1,504 unit tests** and **251 Playwright tests**, exact
+20/32/80/96/128/160/192-case standalone HTML parity and expanded **256-case**
+Reference Marker parity, each spanning source/dist and picker/fallback. Normal
+dist build and working/staged `git diff --check` pass. Standalone host shrinks
+3,939 → **3,588 lines**; Feature host grows 382 → **409 lines**. Shared Reference
+section: 437 lines; Feature raw adapter: 62 lines.
+
+### Read-only capability-gap audit after Phase 3I
+
+The audit compares the canonical tree in `configuration.md`, normalization and
+resolution in `src/config`, `buildBarRenderModel`/paint helpers, the Feature
+runtime's compact presentation and its composed section controls. Entity,
+fixed/live Scale and fallbacks, fill style/color/solid fill, Segments, Gradient
+Stops, Needle, Baseline, Target/exceeded fill, Peak/Floor/reset, all Reference
+marker and label fields (including entity), and Formatting are now editable.
+Inactive palettes and unsupported/unknown raw metadata stay preserved. Reference
+percentages already have controls; Gradient Stop percentage literals are displayed
+numerically by the raw adapter and can be edited, so neither is a new gap.
+
+| Class | Remaining capability | Evidence and disposition |
+|---|---|---|
+| A — supported, expose | `bar.animated` | `normalizeBarConfig` and `buildBarRenderModel` consume it; Feature honors it with reduced motion and first-display suppression. Bar Appearance currently has no toggle. Add a canonical raw-field toggle. |
+| A — supported, expose | `target.at` and `baseline.at` percentages | `normalizeStructuredResolvableValue(...allowPercent)` and resolution support strings and object percent components. Feature readers preserve percent, but section controls expose fixed/entity only. Add percentage read/edit/clear while preserving object metadata and existing fixed/entity components/precedence. |
+| A — supported, expose | Omitted/null `bar.segments[].to` | `normalizeGaugeSegments` and rendering infer the next start or scale end. `_getSegmentRowValidationMessage` and `_getValidSegmentDraft` require both boundaries. Existing omitted ends survive unrelated edits but cannot be created/cleared through the UI, and block boundary validation. Allow an explicit automatic end, including drafts; infer effective validation/preview endpoints without persisting inferred values or reordering raw rows. |
+| A — supported, expose | CSS color entry for direct paints | `renderColorInput` exposes text only for an already-loaded nonhex value; hex/default controls cannot enter CSS. Segments use native color inputs only, including drafts. Expose text entry from every starting state for bar, Needle, Baseline sides, Target/exceeded fill, Peak/Floor, Reference colors and Segment colors. Preserve raw strings and active text/focus. |
+| B — runtime/presentation only | HA context/entity inheritance, host color/position, feature height/radius; compact label typography/lanes/degradation; automatic scale holding, motion timing and extrema history | Owned by HA or existing presentation/lifecycle rules. No new Feature editor controls; marker label configuration and reset policy are already exposed. |
+| B — inappropriate for this surface | Standalone title/name/icon, multirow inheritance UI, `layout`/Hero/primary labels and hover promotion; Segment label metadata | The Feature renders a singular compact bar; it overrides rail height and does not render standalone row content or Segment labels. Preserve raw data without adding ineffective controls. |
+| C — unsupported | Actions, reverse Scale, vertical orientation, symbolic/future Baseline endpoints, area aggregation, `entities` | Feature explicitly rejects entities or lacks the corresponding runtime behavior. Editor closure must not implement these. |
+| C — unsupported | Built-in `label.entity`, custom marker `label.unit`, Reference object `at.percent`, entity-backed Segment boundaries, richer reset objects/durations outside the accepted presets | Current normalization/validation does not support them. Do not infer new controls from retained unknown fields. |
+| C — incomplete color runtime support | Arbitrary CSS Gradient Stops and numeric color sampling for gradient/soft_bands/band_gradient solid-fill overrides | Ordinary Gradient Stops pass through `hexToRgb`; `getColor` samples RGB/hex, so CSS text support is not equivalent to runtime interpolation support. Direct bands, soft-band painting and band-gradient painting can pass CSS to the browser. Do not expand interpolation/sampling in editor closure; retain existing YAML/fallback behavior and describe hex requirements. |
+| D — compatibility only | Flat Scale/color/fill/animation/Target/Peak/Formatting aliases, `severity`, top-level palettes, `segment_space`, source `value`, marker label `decimal` and older marker wrappers | Normalization/host adapters already read or preserve them. Canonical controls and narrow owned-alias cleanup suffice; no duplicate compatibility controls. |
+
+Recommend **Phase 3J — Capability Gap Closure**, exactly four work items:
+
+1. Add the Feature animation toggle, editing only `bar.animated`, with legacy
+   precedence handled only when that field is explicitly edited.
+2. Add Target/Baseline percentage editing/clear for supported scalar/object
+   forms, preserving fixed/entity fallbacks and unknown source metadata. Reuse
+   source controls and the existing four-operation context; do not copy Reference
+   marker's string-only percentage conversion rule to these richer sources.
+3. Add automatic Segment ends for existing rows and new drafts, runtime-consistent
+   inferred validation/preview, raw omission on save and no sorting/reconstruction.
+4. Add Feature CSS text entry for the direct-paint fields listed above, including
+   Segment rows/drafts, with native hex controls retained. Keep Gradient Stops'
+   effective paint/sampling limitations explicit; no renderer change.
+
+Use narrow Feature policy flags/host adapters when shared controls need different
+capabilities so standalone snapshots/behavior remain unchanged. Require raw
+preservation, focus/echo, source/dist, narrow browser, runtime snapshot and full
+suite validation. No further substantial extraction, generic framework, new
+marker API or runtime feature is justified by this audit. **Phase 3J is recommended
+only; none of these gaps is implemented in Phase 3I.**

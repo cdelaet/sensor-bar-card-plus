@@ -15,7 +15,7 @@ export function getFeatureScaleSource(config, key) {
 
 // One raw source-component patcher for Scale, Baseline and Target. Display normalization
 // never becomes the persisted object; untouched source parts/metadata stay raw.
-function patchSource(config, base, bound, part, value, empty, allowPercent = false) {
+export function patchSource(config, base, bound, part, value, empty, allowPercent = false) {
   const patch = (target, path) => empty ? deletePathValue(target, path) : setPathValue(target, path, value);
   if (isObject(bound)) {
     if (part === 'fixed' && empty) return deletePathValue(deletePathValue(config, [...base, 'fixed']), [...base, 'value']);
