@@ -18,7 +18,7 @@ describe('fixed feature label geometry', () => {
         const above = occupancy.above ? 10 : 0;
         const below = occupancy.below ? 10 : 0;
         expect(result).toEqual({ above, below, railHeight: height - above - below,
-          aboveY: 0, belowY: height - 9, compactGlyphs: Boolean(occupancy.above && occupancy.below) });
+          aboveY: 0, belowY: height - 9, compactGlyphs: Boolean(occupancy.above || occupancy.below) });
       });
     }
   }
@@ -31,6 +31,7 @@ describe('fixed feature label geometry', () => {
       const hass = { states: { 'sensor.power': { state: '50', attributes: {} }, 'sensor.label': { state: value, attributes: {} } } };
       const row = buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.power'] });
       expect(getFeatureLabelGeometry(36, row.markerLabelLaneOccupancy).railHeight).toBe(16);
+      expect(getFeatureLabelGeometry(36, row.markerLabelLaneOccupancy).compactGlyphs).toBe(true);
       expect(layout(row.markers, 200)).toHaveLength(value === '99.9' ? 2 : 0);
     }
   });

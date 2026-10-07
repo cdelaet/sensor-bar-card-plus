@@ -12927,7 +12927,7 @@ ${barMarkerStyles}
     const above = occupancy.above ? 10 : 0;
     const below = occupancy.below ? 10 : 0;
     const railHeight = Math.max(0, height - above - below);
-    return { above, below, railHeight, aboveY: 0, belowY: height - 9, compactGlyphs: above > 0 && below > 0 };
+    return { above, below, railHeight, aboveY: 0, belowY: height - 9, compactGlyphs: above > 0 || below > 0 };
   }
   function layoutFeatureMarkerLabels(markers, width, measureText) {
     const layouts = [];
@@ -13159,7 +13159,7 @@ ${barMarkerStyles}
         }
         .compact-marker-label[data-lane="below"] { top: auto; bottom: 0; }
         .surface[data-bar-animated="false"] .compact-marker-label { transition: none !important; }
-        /* Both reserved label lanes cap glyphs. Uniform scaling preserves shape and edge anchoring. */
+        /* Any reserved label lane caps all glyphs. Uniform scaling preserves shape and edge anchoring. */
         .surface[data-compact-glyphs="true"] .marker-shape-svg { transform: translateX(-50%) scale(0.5); }
         .surface[data-compact-glyphs="true"] :is(.peak-inset, .target-inset, .floor-inset) {
           transform: translateX(-50%) scale(calc(8 / 14)); transform-origin: 50% 100%;

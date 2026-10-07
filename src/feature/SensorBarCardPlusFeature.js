@@ -162,7 +162,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         }
         .compact-marker-label[data-lane="below"] { top: auto; bottom: 0; }
         .surface[data-bar-animated="false"] .compact-marker-label { transition: none !important; }
-        /* Both reserved label lanes cap glyphs. Uniform scaling preserves shape and edge anchoring. */
+        /* Any reserved label lane caps all glyphs. Uniform scaling preserves shape and edge anchoring. */
         .surface[data-compact-glyphs="true"] .marker-shape-svg { transform: translateX(-50%) scale(0.5); }
         .surface[data-compact-glyphs="true"] :is(.peak-inset, .target-inset, .floor-inset) {
           transform: translateX(-50%) scale(calc(8 / 14)); transform-origin: 50% 100%;

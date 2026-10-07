@@ -128,11 +128,13 @@ Bottom's rail ends at y=32, with below text at y=33..42. Inline's rail ends at
 y=26, with below text at y=27..36. Dynamic characters never enlarge a lane.
 The deliberately small font should be checked for readability in your theme.
 
-Reserving both label lanes caps glyphs at 8px maximum dimension in both
-Bottom (22px rail) and Inline (16px rail), uniformly scaling each existing
+Reserving either label lane caps all glyphs in the bar at 8px maximum dimension
+in both Bottom and Inline, uniformly scaling each existing
 shape without changing its anchor or direction. A 14×11px triangle becomes
-8×6.29px; SVG glyph boxes become 8×8px. Zero or one reserved label lane retains
-the existing glyph geometry. Needle stays 7px wide and behind
+8×6.29px; SVG glyph boxes become 8×8px. Only bars with no reserved label lanes
+retain the existing glyph geometry. Compact sizing stays active through
+unavailable label content and horizontal degradation/suppression, including
+unlabelled markers in either lane. Needle stays 7px wide and behind
 the marker glyphs; coincident Peak/Floor leave a visible central Needle section.
 
 Within each lane, labels are sorted by physical anchor (model order breaks

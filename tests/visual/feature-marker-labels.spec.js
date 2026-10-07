@@ -17,12 +17,19 @@ async function mount(page, config, options = {}) {
 for (const [height, position] of [[42, 'bottom'], [36, 'inline']]) {
   for (const lanes of [[], ['above'], ['below'], ['above', 'below']]) {
     test(`${position}: exact geometry for ${lanes.join('+') || 'no'} label lanes`, async ({ page }) => {
-      await mount(page, { bar: { needle: true, animated: false }, markers: lanes.map((lane, index) => ({ at: 25 + index * 50, lane, label: textOnly(index ? 'Low' : 'High') })) }, { height, position });
+      await mount(page, { bar: { needle: true, animated: false }, target: { at: 50 },
+        peak: { enabled: true }, floor: { enabled: true },
+        markers: [...lanes.map((lane, index) => ({ at: 25 + index * 50, lane, label: textOnly(index ? 'Low' : 'High') })),
+          { at: 80, lane: 'above' }, { at: 20, lane: 'below' }],
+      }, { height, position });
       const result = await feature(page).evaluate(element => {
         const root = element.shadowRoot;
         const origin = root.querySelector('#surface').getBoundingClientRect();
         const rail = root.querySelector('.bar-track').getBoundingClientRect();
-        return { height: origin.height, rail: [rail.y - origin.y, rail.height], labels: [...root.querySelectorAll('.compact-marker-label')].map(node => {
+        return { height: origin.height, rail: [rail.y - origin.y, rail.height],
+          glyphWidths: [...root.querySelectorAll('.target-marker, .peak-marker, .floor-marker, .generic-marker')].map(node =>
+            node.querySelector(node.dataset.shape === 'triangle' ? '[class$="-inset"]' : 'svg').getBoundingClientRect().width),
+          labels: [...root.querySelectorAll('.compact-marker-label')].map(node => {
           const rect = node.getBoundingClientRect();
           const css = getComputedStyle(node);
           return { lane: node.dataset.lane, y: rect.y - origin.y, height: rect.height, font: css.fontSize, line: css.lineHeight };
@@ -30,6 +37,12 @@ for (const [height, position] of [[42, 'bottom'], [36, 'inline']]) {
       });
       expect(result.height).toBe(height);
       expect(result.rail).toEqual([lanes.includes('above') ? 10 : 0, height - lanes.length * 10]);
+      expect(result.glyphWidths).toHaveLength(5 + lanes.length);
+      // A generic label compacts every built-in and unlabelled reference in both lanes.
+      for (const width of result.glyphWidths) {
+        if (lanes.length) expect(width).toBeLessThanOrEqual(8);
+        else expect(width).toBeGreaterThan(8);
+      }
       for (const item of result.labels) expect(item).toEqual({ lane: item.lane, y: item.lane === 'above' ? 0 : height - 9, height: 9, font: '9px', line: '9px' });
     });
   }
@@ -59,7 +72,7 @@ for (const [height, position] of [[42, 'bottom'], [36, 'inline']]) {
   test(`${position}: independent numeric/text label updates, unavailable content and label-only anchors`, async ({ page }) => {
     await mount(page, { bar: { animated: false }, markers: [
       { at: 25, lane: 'above', show_marker: false, label: { show: true, entity: 'sensor.label', precision: 1 } },
-      { at: 75, lane: 'below', label: textOnly('Low') },
+      { at: 75, lane: 'below' },
     ] }, { height, position, states: { [entity]: state(50), 'sensor.label': state(99.9, 'kWh') } });
     await expect(label(page, 'generic-0')).toHaveText('99.9 kWh');
     const result = await feature(page).evaluate(async element => {
@@ -71,7 +84,9 @@ for (const [height, position] of [[42, 'bottom'], [36, 'inline']]) {
         element.hass = { states: { ...element.hass.states, 'sensor.label': { state: value, attributes: { unit_of_measurement: value === 'Charging' ? '' : 'kWh' } } } };
         await element.updateComplete;
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        snapshots.push({ value, text: node.textContent, hidden: node.hidden, rail: track.getBoundingClientRect().height });
+        snapshots.push({ value, text: node.textContent, hidden: node.hidden, rail: track.getBoundingClientRect().height,
+          compact: root.querySelector('#surface').dataset.compactGlyphs,
+          width: root.querySelector('.generic-marker[data-marker-id="generic-1"] svg').getBoundingClientRect().width });
       }
       return { snapshots, persistent: node === root.querySelector('[data-marker-id="generic-0"].compact-marker-label') && track === root.querySelector('.bar-track'),
         glyph: getComputedStyle(root.querySelector('.generic-marker[data-marker-id="generic-0"] .marker-shape-svg')).display,
@@ -79,10 +94,10 @@ for (const [height, position] of [[42, 'bottom'], [36, 'inline']]) {
         accessible: root.querySelector('#surface').getAttribute('aria-label') };
     });
     expect(result.snapshots).toEqual([
-      { value: 'Charging', text: 'Charging', hidden: false, rail: height - 20 },
-      { value: 'unknown', text: 'Charging', hidden: true, rail: height - 20 },
-      { value: 'unavailable', text: 'Charging', hidden: true, rail: height - 20 },
-      { value: '42.7', text: '42.7 kWh', hidden: false, rail: height - 20 },
+      { value: 'Charging', text: 'Charging', hidden: false, rail: height - 10, compact: 'true', width: 8 },
+      { value: 'unknown', text: 'Charging', hidden: true, rail: height - 10, compact: 'true', width: 8 },
+      { value: 'unavailable', text: 'Charging', hidden: true, rail: height - 10, compact: 'true', width: 8 },
+      { value: '42.7', text: '42.7 kWh', hidden: false, rail: height - 10, compact: 'true', width: 8 },
     ]);
     expect(result.persistent).toBe(true);
     expect(result.glyph).toBe('none');
@@ -91,15 +106,19 @@ for (const [height, position] of [[42, 'bottom'], [36, 'inline']]) {
   });
 }
 
-for (const [height, lanes, expectedRail] of [[36, 2, 16], [42, 2, 22], [36, 1, 26], [42, 1, 32], [36, 0, 36], [42, 0, 42]]) {
-  test(`${expectedRail}px rail: caps every glyph with both label lanes and preserves direction`, async ({ page }) => {
+for (const [height, lanes, expectedRail] of [
+  [36, ['above', 'below'], 16], [42, ['above', 'below'], 22],
+  [36, ['above'], 26], [42, ['above'], 32], [36, ['below'], 26], [42, ['below'], 32],
+  [36, [], 36], [42, [], 42],
+]) {
+  test(`${expectedRail}px rail (${lanes.join('+') || 'none'}): any reserved label lane caps every glyph and preserves direction`, async ({ page }) => {
     const shapes = ['triangle', 'diamond', 'circle', 'chevron', 'arrow', 'pin'];
     const glyphs = [];
     let result;
     for (let batch = 0; batch < shapes.length; batch += 2) {
       await mount(page, {
-        bar: { needle: { show: true, color: '#ff00ff' }, animated: false }, target: { at: 50, shape: 'triangle', label: { show: lanes === 2 } },
-        peak: { enabled: true, label: { show: lanes > 0 } }, floor: { enabled: true, label: { show: lanes === 2 } },
+        bar: { needle: { show: true, color: '#ff00ff' }, animated: false }, target: { at: 50, shape: 'triangle', label: { show: lanes.includes('below') } },
+        peak: { enabled: true, label: { show: lanes.includes('above') } }, floor: { enabled: true, label: { show: lanes.length === 2 } },
         markers: shapes.slice(batch, batch + 2).flatMap((shape, index) => ['above', 'below'].map(lane => ({
           at: index * 15 + 10, shape, lane, direction: index % 2 ? 'outward' : 'inward', label: { show: false },
         }))),
@@ -123,7 +142,7 @@ for (const [height, lanes, expectedRail] of [[36, 2, 16], [42, 2, 22], [36, 1, 2
       glyphs.push(...result.glyphs);
     }
     for (const glyph of glyphs) {
-      const compact = lanes === 2;
+      const compact = lanes.length > 0;
       const size = compact ? 8 : glyph.shape === 'triangle' ? 14 : glyph.shape === 'circle' ? 10.24 : 12;
       expect(glyph.width).toBeCloseTo(size, 3);
       expect(glyph.height).toBeCloseTo(glyph.shape === 'triangle' ? compact ? 11 * 8 / 14 : 11 : size, 3);
@@ -131,7 +150,7 @@ for (const [height, lanes, expectedRail] of [[36, 2, 16], [42, 2, 22], [36, 1, 2
       if (glyph.shape === 'triangle') expect(glyph.outset).toBeCloseTo(compact ? 8 : 10);
       expect(glyph.z).toBeGreaterThan(glyph.needleZ);
     }
-    if (lanes === 2) {
+    if (lanes.length === 2) {
       expect(result.separation).toBeGreaterThan(3);
       const png = PNG.sync.read(await feature(page).locator('.bar-track').screenshot());
       const center = (Math.floor(expectedRail / 2) * png.width + Math.round(png.width / 2)) * 4;
@@ -150,7 +169,7 @@ for (const [height, lanes, expectedRail] of [[36, 2, 16], [42, 2, 22], [36, 1, 2
 test('measured full → value/unit → hidden degradation survives resize and zero-width recovery', async ({ page }) => {
   await mount(page, { bar: { animated: false }, markers: [
     { at: 50, lane: 'above', label: { show: true, text: 'Energy Target', precision: 2 } },
-    { at: 50, lane: 'below', label: textOnly('gyp Target Energy') },
+    { at: 50, lane: 'below' },
   ] });
   const result = await feature(page).evaluate(async element => {
     const root = element.shadowRoot;
@@ -164,13 +183,16 @@ test('measured full → value/unit → hidden degradation survives resize and ze
     for (const size of [width, width - 1, 0, 640]) {
       element.parentElement.style.width = `${size}px`;
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-      modes.push({ hidden: node.hidden, mode: node.dataset.mode, text: node.textContent, rail: root.querySelector('.bar-track').getBoundingClientRect().height });
+      modes.push({ hidden: node.hidden, mode: node.dataset.mode, text: node.textContent,
+        rail: root.querySelector('.bar-track').getBoundingClientRect().height,
+        compact: root.querySelector('#surface').dataset.compactGlyphs,
+        width: root.querySelector('.generic-marker[data-marker-id="generic-1"] svg').getBoundingClientRect().width });
     }
     return { modes, value, persistent: node === root.querySelector('.compact-marker-label'), accessible: root.querySelector('#surface').getAttribute('aria-label') };
   });
   expect(result.modes.map(item => item.mode)).toEqual(['value', 'hidden', 'hidden', 'full']);
   expect(result.modes[0].text).toBe(result.value);
-  expect(result.modes.every(item => item.rail === 22)).toBe(true);
+  expect(result.modes.every(item => item.rail === 32 && item.compact === 'true' && item.width === 8)).toBe(true);
   expect(result.persistent).toBe(true);
   expect(result.accessible).toContain('label Energy Target 50.00 W');
 });
@@ -268,10 +290,12 @@ test('observer/font lifecycle, config and entity changes keep only current persi
     const replaced = { count: root.querySelectorAll('.compact-marker-label').length, same: generic === root.querySelector('.compact-marker-label'),
       text: generic.textContent, lane: generic.dataset.lane, rail: root.querySelector('.bar-track').getBoundingClientRect().height,
       accessible: root.querySelector('#surface').getAttribute('aria-label') };
-    element.setConfig({});
+    element.setConfig({ target: { at: 50 }, peak: { enabled: true }, floor: { enabled: true }, markers: [{ at: 25 }] });
     await element.updateComplete;
     return { stopped, restarted, replaced, cleared: !element._labelObserver && !element._labelFonts && element._labelNodes.size === 0,
-      rail: root.querySelector('.bar-track').getBoundingClientRect().height };
+      rail: root.querySelector('.bar-track').getBoundingClientRect().height,
+      compact: root.querySelector('#surface').dataset.compactGlyphs,
+      normalGlyphWidth: root.querySelector('.peak-inset').getBoundingClientRect().width };
   });
   expect(result.stopped).toBe(true);
   expect(result.restarted).toBe(true);
@@ -279,6 +303,8 @@ test('observer/font lifecycle, config and entity changes keep only current persi
   expect(result.replaced.accessible).toContain('sensor.other');
   expect(result.cleared).toBe(true);
   expect(result.rail).toBe(42);
+  expect(result.compact).toBe('false');
+  expect(result.normalGlyphWidth).toBe(14);
 });
 
 for (const [height, position] of [[42, 'bottom'], [36, 'inline']]) {
