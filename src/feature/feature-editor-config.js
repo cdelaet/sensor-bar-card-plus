@@ -13,7 +13,7 @@ export function getFeatureScaleSource(config, key) {
   return { fixed: config[key] ?? '', entity: config[`${key}_entity`] ?? '' };
 }
 
-// One raw source-component patcher for Scale and Baseline. Display normalization
+// One raw source-component patcher for Scale, Baseline and Target. Display normalization
 // never becomes the persisted object; untouched source parts/metadata stay raw.
 function patchSource(config, base, bound, part, value, empty, allowPercent = false) {
   const patch = (target, path) => empty ? deletePathValue(target, path) : setPathValue(target, path, value);
@@ -62,4 +62,38 @@ export function patchFeatureBaselineSource(config, part, rawValue) {
     config = setPathValue(config, ['baseline'], { at: raw });
   }
   return patchSource(config, ['baseline', 'at'], config.baseline?.at, part, value, empty, true);
+}
+
+export function getFeatureTargetSource(config) {
+  const raw = config.target;
+  if (isObject(raw) && raw.at !== undefined) {
+    const source = normalizeStructuredResolvableValue(raw.at, null, null, { allowPercent: true });
+    return { fixed: source.fixed ?? '', entity: source.entity ?? '', ...(Number.isFinite(source.percent) ? { percent: source.percent } : {}) };
+  }
+  return { fixed: isObject(raw) ? '' : raw ?? '', entity: config.target_entity ?? '' };
+}
+
+// Adding Target fields requires object syntax. Retain legacy source components
+// so promotion does not lose the source that the runtime previously resolved.
+export function promoteFeatureTarget(config) {
+  if (isObject(config.target)) return config;
+  const raw = config.target, entity = config.target_entity;
+  const at = entity !== undefined ? { ...(raw !== undefined && raw !== null ? { fixed: raw } : {}), entity } : raw;
+  return setPathValue(config, ['target'], at === undefined || at === null ? {} : { at });
+}
+
+export function patchFeatureTargetSource(config, part, rawValue) {
+  const value = part === 'fixed' ? normalizeNumberValue(rawValue) : normalizeTextValue(rawValue).trim();
+  const empty = part === 'fixed' ? value === null : !value;
+  const raw = config.target;
+  if ((!isObject(raw) || raw.at === undefined) && (raw !== undefined && !isObject(raw) || config.target_entity !== undefined)) {
+    if (part === 'entity') return empty ? deletePathValue(config, ['target_entity']) : setPathValue(config, ['target_entity'], value);
+    if (!isObject(raw)) return empty ? deletePathValue(config, ['target']) : setPathValue(config, ['target'], value);
+    if (empty) return config;
+    // The legacy entity and newly configured fallback must resolve together.
+    return setPathValue(config, ['target', 'at'], { entity: config.target_entity, fixed: value });
+  }
+  let next = patchSource(config, ['target', 'at'], raw?.at, part, value, empty, true);
+  if (part === 'entity') next = deletePathValue(next, ['target_entity']);
+  return next;
 }

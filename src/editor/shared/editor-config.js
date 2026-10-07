@@ -180,3 +180,22 @@ export function hasExplicitOverrideValue(value) {
 export function hasResolvableOverride(parts) {
   return hasExplicitOverrideValue(parts?.fixed) || hasExplicitOverrideValue(parts?.entity);
 }
+
+export function getEffectiveDisplayValue(context, scope, canonicalPath, fallbackPaths = []) {
+  const valuesToTry = [canonicalPath, ...fallbackPaths];
+  for (const path of valuesToTry) {
+    const value = context.read(scope, path);
+    if (value !== undefined && value !== null && value !== '') {
+      return value;
+    }
+  }
+  if (scope?.type === 'entity') {
+    for (const path of valuesToTry) {
+      const value = context.read({ type: 'card' }, path);
+      if (value !== undefined && value !== null && value !== '') {
+        return value;
+      }
+    }
+  }
+  return '';
+}

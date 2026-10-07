@@ -1,4 +1,4 @@
-# Shared editor infrastructure and sections (Phases 3A–3F)
+# Shared editor infrastructure and sections (Phases 3A–3G)
 
 The shipped standalone host remains `src/editor/SensorBarCardPlusEditor.js`.
 It uses the same HTMLElement, shadow DOM, string templates and delegated events.
@@ -6,7 +6,8 @@ Phase 3D adds a separate Card Feature editor host without changing the
 standalone host or its persistence policy. Phase 3E shares the two stateful
 palette sections between these hosts; their persistence policies remain distinct.
 Phase 3F shares Needle/Baseline while keeping destructive editing policy confined
-to the standalone host.
+to the standalone host. Phase 3G shares Target controls, sources and label editing
+with distinct standalone/Feature persistence.
 
 ## Shared seam
 
@@ -26,7 +27,7 @@ whitespace is preserved so representative generated HTML can match exactly.
 
 ## Responsibilities deliberately retained by the standalone host
 
-`setConfig`, non-palette/non-Baseline draft maps, config-echo handling, focus restoration, scheduling,
+`setConfig`, non-palette/non-Baseline/non-Target draft maps, config-echo handling, focus restoration, scheduling,
 picker synchronization, disclosure state, section composition and delegated event
 lifecycle remain in the host. Generic effective inheritance/source readers, source
 canonicalization, non-palette array mutation/validation and `_applyScopedMutation` (including
@@ -585,7 +586,7 @@ including source/dist and picker/fallback environments. The standalone host
 shrinks from 5,400 to 4,970 lines; the Feature host grows from 297 to 333 lines.
 The normal dist build and `git diff --check` pass.
 
-## Recommended next boundary
+### Phase 3F next boundary (completed by Phase 3G)
 
 Extract **Target alone first**. Baseline/Needle extraction revealed that generic
 source policy and raw representation preservation are the main boundary for the
@@ -595,3 +596,137 @@ controls rather than the same source editor. Target deserves its own cohesive
 characterization/extraction before Peak/Floor; grouping all three now would add
 unrelated marker-label and reset machinery to one phase. No prerequisite framework
 or runtime redesign was revealed. Do not start that extraction in Phase 3F.
+
+## Target (Phase 3G)
+
+### Exact pre-extraction method/state map
+
+| Responsibility | Original standalone methods/state |
+|---|---|
+| Source | `_getTargetResolvableValue`, `_getEffectiveTargetResolvableValue`, `_setTargetResolvablePart`; generic `_getResolvablePartsFromTarget`, `_getResolvableScopedValue`, `_getEffectiveResolvableScopedValue`, `_setCanonicalResolvablePart` with canonical `target.at`, legacy scalar `target` and `target_entity` |
+| Enabled/inheritance | `_getTargetMode`, `_getEffectiveTargetMode`, `_setTargetMode`, `_hasTargetOverride`, `_clearTargetOverride` |
+| Shape | `_getTargetShapeValue`, `_hasTargetShape`, `_getEffectiveTargetShapeValue`, `_setTargetShape` |
+| Color | `_getTargetColorValue`, `_getEffectiveTargetColorValue`, `_hasCustomTargetColor`, `_setTargetColor`; legacy `target_color` |
+| Label show/precision compatibility | `_getTargetLabelShowValue`, `_getEffectiveTargetLabelShowValue`, `_setTargetLabelShow`, `_getTargetLabelDecimalValue`, `_getEffectiveTargetLabelDecimalValue`, `_setTargetLabelDecimal`; legacy `show_target_label`, `label.decimal` |
+| Built-in label model/control/edit | `_getBuiltinMarkerLabelOptions`, `_renderBuiltinMarkerLabelControls`, `_setBuiltinMarkerLabelField` (also used by Peak/Floor); shared `renderBuiltinMarkerLabelControls` |
+| Direction | `_getEffectiveMarkerDirection`, `_setMarkerDirection` (also used by Peak/Floor); canonical `direction`, legacy marker direction read |
+| Exceeded fill | `_getTargetAboveFillColorValue`, `_getEffectiveTargetAboveFillColorValue`, `_setTargetAboveFillColor`, `_isTargetAboveFillEnabled`, `_setTargetAboveFillEnabled`; legacy `above_target_color` |
+| Drafts | `_targetAboveFillDrafts`, `_getTargetAboveFillDraftKey`, `_setTargetAboveFillDraft`, `_getTargetAboveFillDraft`; root/entity keys, reset on foreign configuration replacement |
+| Summaries | `_getCardTargetMarkerSummary`, `_getTargetOverrideSummary` |
+| Rendering | `_render`: root `marker-target` card disclosure within Markers; entity `target` override disclosure; source/color/shape/direction/built-in label/exceeded-fill controls |
+| Routing | `_handleFieldEvent`: root `target-*`, `target-entity-source`, entity `entity-target-*`, built-in label field decoding |
+| Host retained | `_cleanupTargetForEmit`, whole-config cleanup/emission, scoped mutation, generic source canonicalization, picker synchronization, disclosure state, listener/focus/render/echo lifecycle |
+
+The authoritative options are **diamond/triangle** and **inward/outward** (default
+inward), not above/below direction options. Runtime Target occupies its existing
+below lane; this phase changes no lane geometry. Label controls use `show`,
+`text`, `show_value`, `show_unit`, and `precision` with legacy `decimal` read support.
+Hidden show, empty text, value/unit true and primary precision inheritance remain
+the defaults. Literal label `value`/`unit` are not these controls' canonical fields;
+raw unsupported metadata, including independent label entity, is preserved by
+Feature rather than gaining UI or semantics. No Target label draft map exists.
+
+### Shared section and the unchanged seam
+
+`src/editor/sections/target.js` owns the 32 Target-specific methods above, the
+exceeded-fill draft map, exact root/entity templates and decoded field handler.
+Standalone retains all 32 methods as thin delegates and a compatibility draft-map
+getter. Root disclosure location and entity grouping remain host composition.
+The Feature reuses the exact root template in its own Target section after
+Baseline and before Formatting; it has no copied Target handlers/templates.
+
+`src/editor/shared/editor-marker-controls.js` extracts the existing built-in label
+option/edit algorithm and direction helpers, preserving the same delegates for
+Peak/Floor callers. Their sections are not extracted. The existing shared label,
+source and color rendering helpers are reused. A narrowly extracted
+`getEffectiveDisplayValue` primitive also keeps the standalone compatibility
+method. The four operations remain `read`, `mutate`, `source`, `setSource`.
+`targetEdit` and `markerEdit` mutation options identify field ownership for the
+Feature adapter; no new context operation, generic draft framework or editor is
+introduced. Standalone routes Target source writes to its existing generic writer.
+
+### Persistence and representation
+
+Standalone retains cleanup/default removal, alias canonicalization, inheritance,
+summary text and the exact historical override-clear field list. Target source
+edits reconstruct known fixed/entity/percent parts, preserving percentage but
+removing unknown source metadata as before. Legacy label decimal compatibility
+methods remain, while the actual label controls edit precision. No standalone
+behavior or runtime code changes.
+
+`src/feature/feature-editor-target.js` patches only the selected Target field.
+Color, shape, mode, label and exceeded-fill edits preserve source data, unknown
+Target siblings, nested label/source/exceeded-fill metadata, Baseline, Needle,
+palette arrays, animation and all YAML-only markers. Edits of owned aliases may
+clear only those aliases: color owns `target_color`, exceeded fill owns
+`above_target_color`, show owns `show_target_label`, precision owns `decimal`.
+Other aliases/defaults stay raw. Label text whitespace and invalid precision use
+the existing normalization/validation algorithm. Feature stores explicit label
+booleans without applying standalone default cleanup, and never rebuilds a label
+from its normalized model. There is no independent Target label entity control.
+
+`feature-editor-config.js` extends the existing raw source-component patcher used
+by Scale/Baseline. Scalar `target.at` stays scalar when editing its own component;
+adding another part minimally promotes it and retains its original fixed/entity/
+percent component. Existing `value` syntax remains `value`; clearing fixed owns
+fixed/value only. Unknown metadata and the other source component survive.
+Legacy scalar Target and `target_entity` survive source edits in their existing
+representation until another Target field requires object syntax. That promotion
+retains both source components, leaving unrelated aliases untouched. Literal
+`fallback` remains unknown metadata; supported numeric fallback is fixed/value.
+
+Percentage `target.at` strings/objects load with blank numeric fallback, preserve
+raw syntax on unrelated edits, and add no percentage control. Adding fixed/entity
+to a scalar percentage creates `{ percent: <original>, <edited component> }`.
+Opening never invents a source or materializes the parent entity.
+
+### Drafts, lifecycle and runtime
+
+Exceeded-fill color entered while disabled stays in the local section draft and
+emits nothing. Toggle on restores that draft/effective color or black; toggle off
+removes only the owned fill field/alias. Drafts survive echo and context changes;
+foreign replacement resets stale drafts. Enabled color text follows the existing
+CSS-color editing behavior; no new validator or color semantics is introduced.
+Mounted Feature controls synchronize values/checks without replacing ordinary
+focused inputs. Structural CSS-color transitions keep the existing deferral and
+focus restoration. HA picker value-changed events remain authoritative, including
+clear, while internal input/change events are ignored. Both hosts retain their
+existing lifecycle; no new observers, animation or global state.
+
+Target exceeded fill and Baseline side colors remain independently stored. The
+runtime owns paint precedence, not the editor. Target edits preserve Baseline and
+Needle; their edits preserve Target, as do palette and other shared fields.
+
+### Regression evidence
+
+Before extraction, 18 new source/dist characterization tests protected Target
+modes/defaults/inheritance, source canonicalization/percent/aliases, labels and
+precision validation, exact override clearing, presentation defaults and
+exceeded-fill drafts/echo. Root/entity Target screenshots were captured before
+moving templates. All 406 pre-existing standalone editor tests remain required.
+The expanded standalone HTML matrix has 160 cases and retains the older
+20/32/80/96/128 matrices, across source/dist and picker/fallback environments.
+
+Feature preservation tests assert whole raw config equality after owned edits,
+including nested arrays and own undefined metadata, source forms, aliases, label
+fields, legacy promotion and disabled drafts. Browser cases run source/dist at
+360px and 240px, checking config echoes, focused node identity, picker behavior,
+percentage preservation and combinations with Baseline/Needle/palettes. Two new
+Target Feature screenshots protect wide/narrow layouts. The two whole-Feature
+editor screenshots intentionally include Target; standalone/runtime baselines
+remain unchanged.
+
+Final Phase 3G validation passes 1,304 unit tests and 233 Playwright tests.
+All 20/32/80/96/128/160-case HTML matrices and Feature source/dist/picker/fallback
+checks pass. The standalone host shrinks from 4,970 to 4,487 lines; the Feature
+host grows from 333 to 358 lines. The normal dist build and `git diff --check` pass.
+
+## Recommended next boundary
+
+Extract **Peak + Floor together** next. They share extremum enabled/color/reset,
+built-in label and direction controls with closely related history/reset semantics.
+The reusable label/direction helpers now remove their main common-control
+prerequisite. Reference markers have stateful arrays, capacity/source/label-only
+anchors and independent label entities, making them a separate larger boundary.
+Animation and percentage controls should remain a later deliberate capability-gap
+phase. No new prerequisite framework was revealed. Do not start the next phase.
