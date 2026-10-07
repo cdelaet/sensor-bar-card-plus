@@ -73,11 +73,11 @@ fallback rules, all five fill styles, Segments, Target overlay colors, Baseline,
 Needle and built-in/reference glyphs use the shared renderer. Baseline suppresses
 Needle under the current SBCP semantics.
 
-This surface contains the physical bar only. Title, multiple entities, icons,
-Hero, label-position modes, primary-value layout, external marker labels/lanes
-and label hover promotion are excluded. `entities` is rejected; use the singular
-`entity` override. Presentation options such as `title`, `layout` and marker
-labels do not add standalone-card content. Actions, reverse scales, symbolic
+This surface contains the physical bar and compact marker labels. Title, multiple
+entities, icons, Hero, label-position modes, primary-value layout and label hover
+promotion are excluded. `entities` is rejected; use the singular
+`entity` override. Presentation options such as `title` and `layout` do not add
+standalone-card content. Actions, reverse scales, symbolic
 Baseline endpoints and vertical orientation are not implemented.
 
 The effective entity is the explicit override, otherwise `context.entity_id`.
@@ -88,18 +88,67 @@ because it cannot see the eventual feature override.
 
 Missing, unknown, unavailable and nonnumeric values show a text status with the
 entire visualization hidden. Numeric zero remains a valid reading. Accessible
-information names the entity, current value/unit and scale, or the unavailable
-state. Initial display and recovery have no motion; subsequent updates use the
+information names the entity, current value/unit, scale and visible marker
+semantics (including full configured labels even when width hides them), or the
+unavailable state. Marker anchors and independent label values are described
+separately. Initial display and recovery have no motion; subsequent updates use the
 shared transition timing and honor reduced-motion preferences. The feature has
 no controls or action handlers and leaves parent interactions available.
 
 Sizing follows `--feature-height` (42px fallback) and `--feature-border-radius`
 (12px fallback), with percentage geometry adapting to available width, inline
-placement, short heights and zero-width recovery. No measurement loop or
-ResizeObserver is needed. Theme backgrounds/text are inherited;
+placement, short heights and zero-width recovery. Configured marker labels use
+one local ResizeObserver and coalesced animation-frame layout; glyph-only
+features need neither. Theme backgrounds/text are inherited;
 `--feature-color` and HA's `color` input tint the track background. Fill colors
 remain governed by SBCP's bar/Segment configuration. No button-spacing layout
 is needed for a single passive bar.
+
+## Compact marker labels
+
+Target, Peak, Floor and reference markers use the existing `label` options,
+including text, value, unit and precision. Generic `show_marker: false` anchors
+and independent `label.entity` values work too. Labels remain passive: no hover
+promotion, controls, keyboard stops or tap handlers.
+
+Each configured above/below label lane reserves exactly 9px: 8px text with an
+8px line-height plus a 1px gap to the rail. There is no outer vertical padding.
+Reservations persist through unknown/unavailable label or anchor sources.
+Glyphs alone reserve no label space. Height comes from the feature's own CSS
+and dimensions, without inspecting Tile internals or relying on `position`.
+
+| Configured label lanes | Bottom (42px) rail | Inline (36px) rail |
+|---|---:|---:|
+| None | 42px | 36px |
+| One | 33px | 27px |
+| Both | 24px | 18px |
+
+With both lanes, above text occupies y=0..8 and the rail starts at y=9.
+Bottom's rail ends at y=33, with below text at y=34..42. Inline's rail ends at
+y=27, with below text at y=28..36. Dynamic characters never enlarge a lane.
+The deliberately small font should be checked for readability in your theme.
+
+Only an exactly 18px rail caps glyphs at 8px maximum dimension, uniformly
+scaling each existing shape without changing its anchor or direction. A
+14×11px triangle becomes 8×6.29px; SVG glyph boxes become 8×8px. Other rail
+heights retain their existing glyph geometry. Needle stays 7px wide and behind
+the marker glyphs; coincident Peak/Floor leave a visible central Needle section.
+
+Within each lane, labels are sorted by physical anchor (model order breaks
+ties) and assigned slots bounded by neighboring anchor midpoints. Slots have a
+4px separation where possible; text has 2px horizontal padding per side.
+Browser font measurements select the full configured label, then the configured
+value/unit, then hide it. Enabled units and numeric precision are preserved;
+numeric and independent state values are never truncated. Text-only labels may
+show a measured prefix of at least three characters plus an ellipsis. Glyph
+anchors and semantic lanes never move to accommodate labels. The accessible
+description always retains full resolved marker information.
+
+Label nodes persist by marker ID. Resize, font completion, configuration and
+entity updates trigger local layout. Stable movement can use the shared 600ms
+timing; resizing, slot-order/width changes and representation changes snap.
+`bar.animated: false` and reduced motion disable transitions. Disconnect removes
+the observer, font listener and pending frame; reconnect restores layout.
 
 ## History and lifecycle
 
@@ -122,8 +171,9 @@ Baseline becomes unresolved, rebuilds the physical bar.
 
 For Phase 3, keep inherited entity distinct from an explicit override and use
 the same canonical sections. Config replacement currently resets history, so
-live editor previews should account for that. External labels remain outside
-this surface's contract. The registry is intentionally not marked configurable
+live editor previews should account for that. Marker labels use those same
+canonical sections, with a separate compact presentation. The registry is
+intentionally not marked configurable
 and the feature has no `getConfigElement()` yet.
 
 ## Acceptance on current Home Assistant
@@ -160,3 +210,80 @@ installation:
    reconnection and new-instance history behavior, with no console errors.
 
 Full public documentation and the graphical editor remain deferred to Phase 3.
+
+## Marker-label manual checks
+
+Use real entities in these examples. Reuse the first Tile with
+`features_position: inline` to check the normal 36px presentation; bottom uses
+42px. Neither mode should enlarge the Tile.
+
+```yaml
+type: tile
+entity: sensor.sbcp_playground_sensor
+features_position: bottom
+features:
+  - type: custom:sensor-bar-card-plus-feature
+    scale: { min: 0, max: 100 }
+    bar: { needle: true }
+    target:
+      at: 60
+      label: { show: true, text: Target, precision: 1 }
+    markers:
+      - at: 25
+        lane: above
+        shape: diamond
+        label: { show: true, text: Low }
+      - at: 75
+        lane: below
+        shape: circle
+        label: { show: true, text: High }
+```
+
+For the coincident Inline acceptance case, replace the feature with this and
+start a fresh instance/reload while the sensor has a stable numeric value:
+
+```yaml
+- type: custom:sensor-bar-card-plus-feature
+  scale: { min: 0, max: 100 }
+  bar: { needle: true, animated: false }
+  peak:
+    enabled: true
+    label: { show: true, text: High }
+  floor:
+    enabled: true
+    label: { show: true, text: Low }
+```
+
+Peak, Floor and Needle initially share the current value. Check recognizable
+8px-capped glyphs and the Needle between them. Change the reading and check
+independent extrema, then repeat with animations enabled and reduced motion.
+
+For independent label content, replace `markers` in the first example with:
+
+```yaml
+markers:
+  - at: 25
+    lane: above
+    show_marker: false
+    label:
+      show: true
+      text: Energy
+      entity: sensor.sbcp_playground_label
+      precision: 1
+  - at: 75
+    lane: below
+    label: { show: true, text: High }
+```
+
+Update the label entity to numeric and textual states, then unknown/unavailable
+and back. Its own unit/value must update while the anchor stays at 25; no glyph
+should appear there. The two lane reservations must stay fixed. Also make the
+primary sensor unavailable and recover: status should replace the visualization
+and recovery should not animate from zero.
+
+For narrow collisions, set Target and the below reference marker near 50,
+use longer label text, and place the Tile in a narrow column/Inline layout.
+Resize wider and narrower and test a hidden view becoming visible. Expect
+full → value/unit → hidden according to measured width, with no numeric/unit
+truncation, no label overlaps and no glyph movement. Check that Tile taps still
+work over the text and that a screen reader retains the full labels.

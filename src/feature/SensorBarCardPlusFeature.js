@@ -6,6 +6,8 @@ import { renderBar, patchBar } from '../render/bar-renderer.js';
 import { barTrackStyles, barMarkerStyles, getBarAnimationStyles } from '../render/bar-styles.js';
 import { updateExtremum } from '../utils/extrema.js';
 import { formatNumericDisplay } from '../utils/format.js';
+import { setStyleIfChanged } from '../utils/dom.js';
+import { getFeatureLabelGeometry, layoutFeatureMarkerLabels } from './marker-label-layout.js';
 
 // Discovery sees parent context, not the feature's optional entity override.
 export function supportsSensorBarFeature(_hass, context) {
@@ -20,6 +22,8 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     this._extrema = {};
     this._scaleHistory = null;
     this._previousRow = null;
+    this._labelNodes = new Map();
+    this._onLabelResize = () => this._scheduleLabelLayout(true);
     this._updateComplete = Promise.resolve();
   }
 
@@ -57,6 +61,10 @@ export class SensorBarCardPlusFeature extends HTMLElement {
 
   connectedCallback() { this._requestUpdate(); }
 
+  disconnectedCallback() {
+    this._stopLabelLayout();
+  }
+
   _requestUpdate() {
     if (this._updateScheduled) return;
     this._updateScheduled = true;
@@ -76,6 +84,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       this._sampleState = null;
       this._previousRow = null;
       this._structureKey = null;
+      this._labelLayoutKey = null;
       // Keep inheritance transient: never write context.entity_id into raw config.
       this._normalized = this._config ? normalizeCardConfig({
         ...this._config,
@@ -138,9 +147,31 @@ export class SensorBarCardPlusFeature extends HTMLElement {
           width: 100%;
           min-width: 0;
           height: var(--feature-height, 42px);
-          --sbcp-row-height: var(--feature-height, 42px);
         }
-        .surface { position: relative; height: 100%; min-width: 0; }
+        .surface {
+          position: relative; height: 100%; min-width: 0;
+          --label-above: 0px; --label-below: 0px;
+          --sbcp-row-height: calc(var(--feature-height, 42px) - var(--label-above) - var(--label-below));
+        }
+        #bar { position: absolute; top: var(--label-above); width: 100%; }
+        .compact-labels { font: inherit; font-size: 8px; line-height: 8px; letter-spacing: normal; pointer-events: none; }
+        .compact-marker-label {
+          position: absolute; top: 0; height: 8px; padding: 0 2px; box-sizing: border-box;
+          color: var(--primary-text-color, currentColor); white-space: nowrap; overflow: hidden;
+          pointer-events: none;
+        }
+        .compact-marker-label[data-lane="below"] { top: auto; bottom: 0; }
+        .surface[data-bar-animated="false"] .compact-marker-label { transition: none !important; }
+        /* Only the 18px rail caps glyphs. Uniform scaling preserves shape and edge anchoring. */
+        .surface[data-compact-glyphs="true"] .marker-shape-svg { transform: translateX(-50%) scale(0.5); }
+        .surface[data-compact-glyphs="true"] :is(.peak-inset, .target-inset, .floor-inset) {
+          transform: translateX(-50%) scale(calc(8 / 14)); transform-origin: 50% 100%;
+        }
+        .surface[data-compact-glyphs="true"] .peak-inset { transform-origin: 50% 0; }
+        .surface[data-compact-glyphs="true"] :is(.peak-outset, .target-outset, .floor-outset) {
+          transform: translateX(-50%) scale(0.8); transform-origin: 50% 0;
+        }
+        .surface[data-compact-glyphs="true"] .peak-outset { transform-origin: 50% 100%; }
         .bar-track {
           border-radius: var(--feature-border-radius, 12px);
           background: var(--secondary-background-color, #e8e8e8);
@@ -168,10 +199,12 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       </style>
       <div id="surface" class="surface" role="img">
         <div id="bar" aria-hidden="true" hidden></div>
+        <div id="labels" class="compact-labels" aria-hidden="true"></div>
         <div id="status" class="status" aria-hidden="true"></div>
       </div>`;
     this._surface = this.shadowRoot.querySelector('#surface');
     this._bar = this.shadowRoot.querySelector('#bar');
+    this._labels = this.shadowRoot.querySelector('#labels');
     this._statusEl = this.shadowRoot.querySelector('#status');
   }
 
@@ -183,10 +216,22 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     this._statusEl.hidden = !status;
     this._statusEl.textContent = status ?? '';
     this._surface.dataset.state = status ? 'unavailable' : 'numeric';
+    const occupancy = row?.markerLabelLaneOccupancy ?? {};
+    const geometry = getFeatureLabelGeometry(0, occupancy);
+    setStyleIfChanged(this._surface, '--label-above', `${geometry.above}px`);
+    setStyleIfChanged(this._surface, '--label-below', `${geometry.below}px`);
+    this._syncLabels(row, status);
     const name = row?.name || this._entity || 'Sensor Bar Card Plus';
+    const markerDescription = (row?.markers ?? [])
+      .filter(marker => marker.visible && (marker.showMarker || marker.labelVisible))
+      .map(marker => {
+        const type = marker.type === 'generic' ? 'Reference marker' : `${marker.type[0].toUpperCase()}${marker.type.slice(1)}`;
+        const anchor = `${formatNumericDisplay(marker.value)}${row.displayUnit ? ` ${row.displayUnit}` : ''}`;
+        return `${type} at ${anchor}${marker.labelVisible && marker.label?.text ? `; label ${marker.label.text}` : ''}.`;
+      }).join(' ');
     this._surface.setAttribute('aria-label', status
       ? `${name}${this._entity && name !== this._entity ? ` (${this._entity})` : ''}: ${status}${row ? ` (${row.state})` : ''}`
-      : `${name} (${this._entity}): ${row.primaryPresentation.text}. Range ${formatNumericDisplay(row.min)} to ${formatNumericDisplay(row.max)}${row.displayUnit ? ` ${row.displayUnit}` : ''}.`);
+      : `${name} (${this._entity}): ${row.primaryPresentation.text}. Range ${formatNumericDisplay(row.min)} to ${formatNumericDisplay(row.max)}${row.displayUnit ? ` ${row.displayUnit}` : ''}.${markerDescription ? ` ${markerDescription}` : ''}`);
     if (status) return;
 
     const model = buildBarRenderModel(row, this._normalized.entities[0], { height: 'var(--sbcp-row-height)' });
@@ -205,5 +250,85 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       ) });
     }
     this._barRenderKey = renderKey;
+    this._labelAnimated = model.animated;
+    this._scheduleLabelLayout();
+  }
+
+  _syncLabels(row, status) {
+    const markers = (row?.markers ?? []).filter(marker => marker.labelVisible);
+    const ids = new Set(markers.map(marker => marker.id));
+    for (const [id, node] of this._labelNodes) {
+      if (!ids.has(id)) { node.remove(); this._labelNodes.delete(id); }
+    }
+    for (const marker of markers) {
+      if (!this._labelNodes.has(marker.id)) {
+        const node = document.createElement('span');
+        node.className = 'compact-marker-label';
+        node.dataset.markerId = marker.id;
+        node.hidden = true;
+        this._labels.append(node);
+        this._labelNodes.set(marker.id, node);
+      }
+      this._labelNodes.get(marker.id).dataset.lane = marker.lane;
+    }
+    this._labels.hidden = Boolean(status);
+    const required = row?.markerLabelLaneOccupancy?.above || row?.markerLabelLaneOccupancy?.below;
+    if (!required) {
+      this._stopLabelLayout();
+      this._surface.dataset.compactGlyphs = 'false';
+    } else if (this.isConnected && !this._labelObserver) {
+      this._labelObserver = new ResizeObserver(this._onLabelResize);
+      this._labelObserver.observe(this._surface);
+      this._labelFonts = document.fonts;
+      this._labelFonts.addEventListener('loadingdone', this._onLabelResize);
+      const fonts = this._labelFonts;
+      fonts.ready.then(() => {
+        if (this._labelFonts === fonts) this._scheduleLabelLayout(true);
+      });
+    }
+  }
+
+  _stopLabelLayout() {
+    this._labelObserver?.disconnect();
+    this._labelObserver = null;
+    this._labelFonts?.removeEventListener('loadingdone', this._onLabelResize);
+    this._labelFonts = null;
+    if (this._labelFrame) cancelAnimationFrame(this._labelFrame);
+    this._labelFrame = null;
+    this._labelLayoutKey = null;
+  }
+
+  _scheduleLabelLayout(snap = false) {
+    if (!this._labelObserver) return;
+    this._snapLabels = this._snapLabels || snap;
+    if (this._labelFrame) return;
+    this._labelFrame = requestAnimationFrame(() => {
+      this._labelFrame = null;
+      this._layoutLabels();
+    });
+  }
+
+  _layoutLabels() {
+    const { width, height } = this._surface.getBoundingClientRect();
+    const geometry = getFeatureLabelGeometry(height, this._row?.markerLabelLaneOccupancy);
+    this._surface.dataset.compactGlyphs = String(geometry.compactGlyphs);
+    this._labelMeasure ??= document.createElement('canvas').getContext('2d');
+    this._labelMeasure.font = getComputedStyle(this._labels).font;
+    const layouts = layoutFeatureMarkerLabels(this._row?.markers ?? [], width, text => this._labelMeasure.measureText(text).width);
+    const key = JSON.stringify([width, height, geometry.above, geometry.below, this._labelMeasure.font,
+      layouts.map(label => [label.id, label.lane, label.mode, label.width])]);
+    const animate = this._labelAnimated && !this._snapLabels && key === this._labelLayoutKey;
+    for (const node of this._labelNodes.values()) node.hidden = true;
+    for (const label of layouts) {
+      const node = this._labelNodes.get(label.id);
+      node.hidden = label.mode === 'hidden';
+      node.dataset.mode = label.mode;
+      if (node.textContent !== label.text) node.textContent = label.text;
+      setStyleIfChanged(node, 'transition', animate ? 'left 0.6s cubic-bezier(0.4,0,0.2,1)' : 'none');
+      setStyleIfChanged(node, 'left', `${label.left}px`);
+      setStyleIfChanged(node, 'width', `${label.width}px`);
+    }
+    this._labelLayoutKey = key;
+    this._snapLabels = false;
   }
 }

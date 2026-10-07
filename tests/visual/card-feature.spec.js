@@ -83,7 +83,7 @@ for (const fillStyle of ['solid', 'bands', 'soft_bands', 'gradient', 'band_gradi
         excluded: root.querySelectorAll('ha-card, ha-icon, .row, .hero-header, .bar-inner-label, .target-value-label, .generic-value-label').length,
       };
     });
-    expect(result.height).toBe(42);
+    expect(result.height).toBe(33); // Configured below-label lane reserves 9px.
     expect(result.width).toBe(640);
     expect(result.paint).toContain('linear-gradient');
     if (fillStyle === 'solid') expect(result.paint).toContain('rgb(171, 205, 239)');

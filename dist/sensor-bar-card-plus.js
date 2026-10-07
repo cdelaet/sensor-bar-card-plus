@@ -12922,6 +12922,67 @@ ${barMarkerStyles}
     }
   });
 
+  // src/feature/marker-label-layout.js
+  function getFeatureLabelGeometry(height, occupancy = {}) {
+    const above = occupancy.above ? 9 : 0;
+    const below = occupancy.below ? 9 : 0;
+    const railHeight = Math.max(0, height - above - below);
+    return { above, below, railHeight, aboveY: 0, belowY: height - 8, compactGlyphs: railHeight === 18 };
+  }
+  function layoutFeatureMarkerLabels(markers, width, measureText) {
+    const layouts = [];
+    for (const lane of ["above", "below"]) {
+      const entries = markers.filter((marker) => {
+        var _a, _b;
+        return marker.lane === lane && marker.visible && marker.labelVisible && Number.isFinite(marker.position) && ((_b = (_a = marker.label) == null ? void 0 : _a.text) == null ? void 0 : _b.trim());
+      }).map((marker) => ({ marker, anchor: Math.max(0, Math.min(100, marker.position)) * width / 100 })).sort((a, b) => a.anchor - b.anchor);
+      entries.forEach(({ marker, anchor }, index) => {
+        var _a;
+        const left = index ? (entries[index - 1].anchor + anchor) / 2 + 2 : 0;
+        const right = index + 1 < entries.length ? (anchor + entries[index + 1].anchor) / 2 - 2 : width;
+        const available = Math.max(0, right - left);
+        const label = marker.label;
+        let text = label.text;
+        let mode = "full";
+        let size = measureText(text) + 4;
+        if (size > available) {
+          text = [label.showValue !== false ? label.number : "", label.showUnit !== false ? label.unit : ""].filter(Boolean).join(" ");
+          mode = "value";
+          size = text ? measureText(text) + 4 : Infinity;
+          if (!text && !label.number && !label.unit) {
+            const characters = Array.from((_a = label.semanticText) != null ? _a : "");
+            while (characters.length >= 3) {
+              text = `${characters.join("").trimEnd()}\u2026`;
+              size = measureText(text) + 4;
+              if (size <= available) {
+                mode = "text";
+                break;
+              }
+              characters.pop();
+            }
+          }
+        }
+        if (!text || size > available || width <= 0) {
+          layouts.push({ id: marker.id, lane, mode: "hidden", text: "", left: 0, width: 0 });
+        } else {
+          layouts.push({
+            id: marker.id,
+            lane,
+            mode,
+            text,
+            left: Math.max(left, Math.min(anchor - size / 2, right - size)),
+            width: size
+          });
+        }
+      });
+    }
+    return layouts;
+  }
+  var init_marker_label_layout = __esm({
+    "src/feature/marker-label-layout.js"() {
+    }
+  });
+
   // src/feature/SensorBarCardPlusFeature.js
   function supportsSensorBarFeature(_hass, context) {
     return looksLikeEntityId(context == null ? void 0 : context.entity_id) || typeof (context == null ? void 0 : context.area_id) === "string" && context.area_id.trim().length > 0;
@@ -12937,6 +12998,8 @@ ${barMarkerStyles}
       init_bar_styles();
       init_extrema();
       init_format();
+      init_dom();
+      init_marker_label_layout();
       SensorBarCardPlusFeature = class extends HTMLElement {
         constructor() {
           super();
@@ -12944,6 +13007,8 @@ ${barMarkerStyles}
           this._extrema = {};
           this._scaleHistory = null;
           this._previousRow = null;
+          this._labelNodes = /* @__PURE__ */ new Map();
+          this._onLabelResize = () => this._scheduleLabelLayout(true);
           this._updateComplete = Promise.resolve();
         }
         static getStubConfig() {
@@ -13000,6 +13065,9 @@ ${barMarkerStyles}
         connectedCallback() {
           this._requestUpdate();
         }
+        disconnectedCallback() {
+          this._stopLabelLayout();
+        }
         _requestUpdate() {
           if (this._updateScheduled) return;
           this._updateScheduled = true;
@@ -13019,6 +13087,7 @@ ${barMarkerStyles}
             this._sampleState = null;
             this._previousRow = null;
             this._structureKey = null;
+            this._labelLayoutKey = null;
             this._normalized = this._config ? normalizeCardConfig({
               ...this._config,
               type: "custom:sensor-bar-card-plus",
@@ -13075,9 +13144,31 @@ ${barMarkerStyles}
           width: 100%;
           min-width: 0;
           height: var(--feature-height, 42px);
-          --sbcp-row-height: var(--feature-height, 42px);
         }
-        .surface { position: relative; height: 100%; min-width: 0; }
+        .surface {
+          position: relative; height: 100%; min-width: 0;
+          --label-above: 0px; --label-below: 0px;
+          --sbcp-row-height: calc(var(--feature-height, 42px) - var(--label-above) - var(--label-below));
+        }
+        #bar { position: absolute; top: var(--label-above); width: 100%; }
+        .compact-labels { font: inherit; font-size: 8px; line-height: 8px; letter-spacing: normal; pointer-events: none; }
+        .compact-marker-label {
+          position: absolute; top: 0; height: 8px; padding: 0 2px; box-sizing: border-box;
+          color: var(--primary-text-color, currentColor); white-space: nowrap; overflow: hidden;
+          pointer-events: none;
+        }
+        .compact-marker-label[data-lane="below"] { top: auto; bottom: 0; }
+        .surface[data-bar-animated="false"] .compact-marker-label { transition: none !important; }
+        /* Only the 18px rail caps glyphs. Uniform scaling preserves shape and edge anchoring. */
+        .surface[data-compact-glyphs="true"] .marker-shape-svg { transform: translateX(-50%) scale(0.5); }
+        .surface[data-compact-glyphs="true"] :is(.peak-inset, .target-inset, .floor-inset) {
+          transform: translateX(-50%) scale(calc(8 / 14)); transform-origin: 50% 100%;
+        }
+        .surface[data-compact-glyphs="true"] .peak-inset { transform-origin: 50% 0; }
+        .surface[data-compact-glyphs="true"] :is(.peak-outset, .target-outset, .floor-outset) {
+          transform: translateX(-50%) scale(0.8); transform-origin: 50% 0;
+        }
+        .surface[data-compact-glyphs="true"] .peak-outset { transform-origin: 50% 100%; }
         .bar-track {
           border-radius: var(--feature-border-radius, 12px);
           background: var(--secondary-background-color, #e8e8e8);
@@ -13105,13 +13196,16 @@ ${barMarkerStyles}
       </style>
       <div id="surface" class="surface" role="img">
         <div id="bar" aria-hidden="true" hidden></div>
+        <div id="labels" class="compact-labels" aria-hidden="true"></div>
         <div id="status" class="status" aria-hidden="true"></div>
       </div>`;
           this._surface = this.shadowRoot.querySelector("#surface");
           this._bar = this.shadowRoot.querySelector("#bar");
+          this._labels = this.shadowRoot.querySelector("#labels");
           this._statusEl = this.shadowRoot.querySelector("#status");
         }
         _render(row, status) {
+          var _a, _b;
           this._ensureDom();
           if (typeof this._color === "string" && this._color) this.style.setProperty("--feature-color", this._color);
           else this.style.removeProperty("--feature-color");
@@ -13119,8 +13213,19 @@ ${barMarkerStyles}
           this._statusEl.hidden = !status;
           this._statusEl.textContent = status != null ? status : "";
           this._surface.dataset.state = status ? "unavailable" : "numeric";
+          const occupancy = (_a = row == null ? void 0 : row.markerLabelLaneOccupancy) != null ? _a : {};
+          const geometry = getFeatureLabelGeometry(0, occupancy);
+          setStyleIfChanged(this._surface, "--label-above", `${geometry.above}px`);
+          setStyleIfChanged(this._surface, "--label-below", `${geometry.below}px`);
+          this._syncLabels(row, status);
           const name = (row == null ? void 0 : row.name) || this._entity || "Sensor Bar Card Plus";
-          this._surface.setAttribute("aria-label", status ? `${name}${this._entity && name !== this._entity ? ` (${this._entity})` : ""}: ${status}${row ? ` (${row.state})` : ""}` : `${name} (${this._entity}): ${row.primaryPresentation.text}. Range ${formatNumericDisplay(row.min)} to ${formatNumericDisplay(row.max)}${row.displayUnit ? ` ${row.displayUnit}` : ""}.`);
+          const markerDescription = ((_b = row == null ? void 0 : row.markers) != null ? _b : []).filter((marker) => marker.visible && (marker.showMarker || marker.labelVisible)).map((marker) => {
+            var _a2;
+            const type = marker.type === "generic" ? "Reference marker" : `${marker.type[0].toUpperCase()}${marker.type.slice(1)}`;
+            const anchor = `${formatNumericDisplay(marker.value)}${row.displayUnit ? ` ${row.displayUnit}` : ""}`;
+            return `${type} at ${anchor}${marker.labelVisible && ((_a2 = marker.label) == null ? void 0 : _a2.text) ? `; label ${marker.label.text}` : ""}.`;
+          }).join(" ");
+          this._surface.setAttribute("aria-label", status ? `${name}${this._entity && name !== this._entity ? ` (${this._entity})` : ""}: ${status}${row ? ` (${row.state})` : ""}` : `${name} (${this._entity}): ${row.primaryPresentation.text}. Range ${formatNumericDisplay(row.min)} to ${formatNumericDisplay(row.max)}${row.displayUnit ? ` ${row.displayUnit}` : ""}.${markerDescription ? ` ${markerDescription}` : ""}`);
           if (status) return;
           const model = buildBarRenderModel(row, this._normalized.entities[0], { height: "var(--sbcp-row-height)" });
           model.animated = model.animated && Boolean(this._previousRow);
@@ -13137,6 +13242,94 @@ ${barMarkerStyles}
             ) });
           }
           this._barRenderKey = renderKey;
+          this._labelAnimated = model.animated;
+          this._scheduleLabelLayout();
+        }
+        _syncLabels(row, status) {
+          var _a, _b, _c;
+          const markers = ((_a = row == null ? void 0 : row.markers) != null ? _a : []).filter((marker) => marker.labelVisible);
+          const ids = new Set(markers.map((marker) => marker.id));
+          for (const [id, node] of this._labelNodes) {
+            if (!ids.has(id)) {
+              node.remove();
+              this._labelNodes.delete(id);
+            }
+          }
+          for (const marker of markers) {
+            if (!this._labelNodes.has(marker.id)) {
+              const node = document.createElement("span");
+              node.className = "compact-marker-label";
+              node.dataset.markerId = marker.id;
+              node.hidden = true;
+              this._labels.append(node);
+              this._labelNodes.set(marker.id, node);
+            }
+            this._labelNodes.get(marker.id).dataset.lane = marker.lane;
+          }
+          this._labels.hidden = Boolean(status);
+          const required = ((_b = row == null ? void 0 : row.markerLabelLaneOccupancy) == null ? void 0 : _b.above) || ((_c = row == null ? void 0 : row.markerLabelLaneOccupancy) == null ? void 0 : _c.below);
+          if (!required) {
+            this._stopLabelLayout();
+            this._surface.dataset.compactGlyphs = "false";
+          } else if (this.isConnected && !this._labelObserver) {
+            this._labelObserver = new ResizeObserver(this._onLabelResize);
+            this._labelObserver.observe(this._surface);
+            this._labelFonts = document.fonts;
+            this._labelFonts.addEventListener("loadingdone", this._onLabelResize);
+            const fonts = this._labelFonts;
+            fonts.ready.then(() => {
+              if (this._labelFonts === fonts) this._scheduleLabelLayout(true);
+            });
+          }
+        }
+        _stopLabelLayout() {
+          var _a, _b;
+          (_a = this._labelObserver) == null ? void 0 : _a.disconnect();
+          this._labelObserver = null;
+          (_b = this._labelFonts) == null ? void 0 : _b.removeEventListener("loadingdone", this._onLabelResize);
+          this._labelFonts = null;
+          if (this._labelFrame) cancelAnimationFrame(this._labelFrame);
+          this._labelFrame = null;
+          this._labelLayoutKey = null;
+        }
+        _scheduleLabelLayout(snap = false) {
+          if (!this._labelObserver) return;
+          this._snapLabels = this._snapLabels || snap;
+          if (this._labelFrame) return;
+          this._labelFrame = requestAnimationFrame(() => {
+            this._labelFrame = null;
+            this._layoutLabels();
+          });
+        }
+        _layoutLabels() {
+          var _a, _b, _c, _d;
+          const { width, height } = this._surface.getBoundingClientRect();
+          const geometry = getFeatureLabelGeometry(height, (_a = this._row) == null ? void 0 : _a.markerLabelLaneOccupancy);
+          this._surface.dataset.compactGlyphs = String(geometry.compactGlyphs);
+          (_b = this._labelMeasure) != null ? _b : this._labelMeasure = document.createElement("canvas").getContext("2d");
+          this._labelMeasure.font = getComputedStyle(this._labels).font;
+          const layouts = layoutFeatureMarkerLabels((_d = (_c = this._row) == null ? void 0 : _c.markers) != null ? _d : [], width, (text) => this._labelMeasure.measureText(text).width);
+          const key = JSON.stringify([
+            width,
+            height,
+            geometry.above,
+            geometry.below,
+            this._labelMeasure.font,
+            layouts.map((label) => [label.id, label.lane, label.mode, label.width])
+          ]);
+          const animate = this._labelAnimated && !this._snapLabels && key === this._labelLayoutKey;
+          for (const node of this._labelNodes.values()) node.hidden = true;
+          for (const label of layouts) {
+            const node = this._labelNodes.get(label.id);
+            node.hidden = label.mode === "hidden";
+            node.dataset.mode = label.mode;
+            if (node.textContent !== label.text) node.textContent = label.text;
+            setStyleIfChanged(node, "transition", animate ? "left 0.6s cubic-bezier(0.4,0,0.2,1)" : "none");
+            setStyleIfChanged(node, "left", `${label.left}px`);
+            setStyleIfChanged(node, "width", `${label.width}px`);
+          }
+          this._labelLayoutKey = key;
+          this._snapLabels = false;
         }
       };
     }
