@@ -6987,6 +6987,212 @@ ${barMarkerStyles}
     }
   });
 
+  // src/editor/sections/bar-appearance.js
+  function getFillStyleFromColorMode(colorMode) {
+    switch (colorMode) {
+      case "single":
+        return "solid";
+      case "gradient":
+        return "gradient";
+      case "severity":
+        return "bands";
+      case "severity_gradient":
+        return "band_gradient";
+      default:
+        return "bands";
+    }
+  }
+  function getFillStyleValue(context, scope) {
+    var _a;
+    const fillStyle = context.read(scope, ["bar", "fill_style"]);
+    if (fillStyle) return fillStyle;
+    const colorMode = (_a = context.read(scope, ["bar", "color_mode"])) != null ? _a : context.read(scope, ["color_mode"]);
+    return getFillStyleFromColorMode(colorMode);
+  }
+  function getEffectiveFillStyleValue(context, scope) {
+    if ((scope == null ? void 0 : scope.type) === "entity") {
+      return normalizeBarConfig(context.read(scope, []), context.read({ type: "card" }, []), { isCardScope: false }).fill_style;
+    }
+    return normalizeBarConfig(context.read({ type: "card" }, []), null, { isCardScope: true }).fill_style;
+  }
+  function getBarColorValue(context, scope) {
+    var _a, _b;
+    return (_b = (_a = context.read(scope, ["bar", "color"])) != null ? _a : context.read(scope, ["color"])) != null ? _b : "#4a9eff";
+  }
+  function getEffectiveBarColorValue(context, scope) {
+    const paths = [["bar", "color"], ["color"]];
+    for (const path of paths) {
+      const value = context.read(scope, path);
+      if (value !== void 0 && value !== null && value !== "") return value || "#4a9eff";
+    }
+    if ((scope == null ? void 0 : scope.type) === "entity") {
+      for (const path of paths) {
+        const value = context.read({ type: "card" }, path);
+        if (value !== void 0 && value !== null && value !== "") return value || "#4a9eff";
+      }
+    }
+    return "#4a9eff";
+  }
+  function setAppearanceValue(context, scope, key, value, deprecatedKeys = []) {
+    const options = { deprecatedKeys, prunePaths: [["bar"]] };
+    return context.mutate(scope, (target) => {
+      let nextTarget = value === void 0 ? deletePathValue(target, ["bar", key]) : setPathValue(target, ["bar", key], value);
+      nextTarget = removePathsFromTarget(nextTarget, deprecatedKeys);
+      return pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
+    }, options);
+  }
+  function setBarFillStyle(context, scope, rawValue) {
+    const value = normalizeTextValue(rawValue).trim();
+    return setAppearanceValue(context, scope, "fill_style", value || void 0, [["color_mode"]]);
+  }
+  function setBarColor(context, scope, rawValue) {
+    const value = normalizeTextValue(rawValue).trim();
+    const remove = !value || normalizeColorComparisonValue(value) === normalizeColorComparisonValue("#4a9eff");
+    return setAppearanceValue(context, scope, "color", remove ? void 0 : value, [["color"]]);
+  }
+  function getBarSolidFillValue(context, scope) {
+    return !!context.read(scope, ["bar", "solid_fill"]);
+  }
+  function getEffectiveBarSolidFillValue(context, scope) {
+    if ((scope == null ? void 0 : scope.type) !== "entity") return getBarSolidFillValue(context, scope);
+    const localValue = context.read(scope, ["bar", "solid_fill"]);
+    if (localValue !== void 0) return !!localValue;
+    return getBarSolidFillValue(context, { type: "card" });
+  }
+  function setBarSolidFill(context, scope, value) {
+    return setAppearanceValue(context, scope, "solid_fill", value ? true : void 0);
+  }
+  function clearBarAppearanceOverride(context, scope) {
+    return context.mutate(scope, (target) => {
+      const nextTarget = removePathsFromTarget(target, [
+        ["bar", "fill_style"],
+        ["bar", "color"],
+        ["bar", "solid_fill"],
+        ["color_mode"],
+        ["color"]
+      ]);
+      return pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
+    }, { rerender: true });
+  }
+  function hasBarAppearanceOverride(context, scope) {
+    var _a;
+    const bar = (_a = context.read(scope, ["bar"])) != null ? _a : {};
+    if (isObject(bar) && (Object.prototype.hasOwnProperty.call(bar, "fill_style") || Object.prototype.hasOwnProperty.call(bar, "color") || Object.prototype.hasOwnProperty.call(bar, "solid_fill"))) return true;
+    return context.read(scope, ["color_mode"]) !== void 0 || context.read(scope, ["color"]) !== void 0;
+  }
+  function getBarAppearanceSummary(context, scope) {
+    var _a;
+    const parts = [];
+    const fillStyle = getFillStyleValue(context, scope);
+    const color = (_a = context.read(scope, ["bar", "color"])) != null ? _a : context.read(scope, ["color"]);
+    if (fillStyle && fillStyle !== "bands") parts.push(fillStyle.replace(/_/g, " "));
+    if (color && normalizeColorComparisonValue(color) !== normalizeColorComparisonValue("#4a9eff")) parts.push("Custom color");
+    return parts.length ? parts.join(" \u2022 ") : "Inherited";
+  }
+  function handleBarAppearanceField(context, { field, kind, index, value }) {
+    const rootSetters = { "bar-fill-style": setBarFillStyle, "bar-color": setBarColor, "bar-solid-fill": setBarSolidFill };
+    if (Object.prototype.hasOwnProperty.call(rootSetters, field)) {
+      rootSetters[field](context, { type: "card" }, value);
+      return true;
+    }
+    const scope = { type: "entity", index: Number(index) };
+    if (kind === "entity-bar-inherit") {
+      if (value) clearBarAppearanceOverride(context, scope);
+      return true;
+    }
+    const rowSetters = { "entity-bar-fill-style": setBarFillStyle, "entity-bar-color": setBarColor, "entity-bar-solid-fill": setBarSolidFill };
+    if (Object.prototype.hasOwnProperty.call(rowSetters, kind)) {
+      rowSetters[kind](context, scope, value);
+      return true;
+    }
+    return false;
+  }
+  function renderBarAppearanceSection(context, scope, renderChildren = () => "") {
+    if ((scope == null ? void 0 : scope.type) === "entity") {
+      const index = scope.index;
+      const barAppearanceInherited = !hasBarAppearanceOverride(context, scope);
+      return `
+	                      <div class="field-row">
+	                        <div class="toggle">
+	                          <input id="entity-${index}-bar-inherit" type="checkbox" data-kind="entity-bar-inherit" data-index="${index}"${barAppearanceInherited ? " checked" : ""}>
+                          <label for="entity-${index}-bar-inherit">Inherit card settings</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-bar-fill-style">Fill style</label>
+                        <select id="entity-${index}-bar-fill-style" data-kind="entity-bar-fill-style" data-index="${index}" value="${escapeAttribute(getEffectiveFillStyleValue(context, scope))}">
+                          <option value="bands"${getEffectiveFillStyleValue(context, scope) === "bands" ? " selected" : ""}>bands</option>
+                          <option value="solid"${getEffectiveFillStyleValue(context, scope) === "solid" ? " selected" : ""}>solid</option>
+                          <option value="gradient"${getEffectiveFillStyleValue(context, scope) === "gradient" ? " selected" : ""}>gradient</option>
+                          <option value="soft_bands"${getEffectiveFillStyleValue(context, scope) === "soft_bands" ? " selected" : ""}>soft_bands</option>
+                          <option value="band_gradient"${getEffectiveFillStyleValue(context, scope) === "band_gradient" ? " selected" : ""}>band_gradient</option>
+                        </select>
+                      </div>
+                      <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-bar-solid-fill" type="checkbox" data-kind="entity-bar-solid-fill" data-index="${index}"${getEffectiveBarSolidFillValue(context, scope) ? " checked" : ""}>
+                          <label for="entity-${index}-bar-solid-fill">Solid fill</label>
+                        </div>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-bar-color">Bar color</label>
+                        ${renderColorInput({
+        id: `entity-${index}-bar-color`,
+        kind: "entity-bar-color",
+        index,
+        value: getEffectiveBarColorValue(context, scope),
+        fallbackHex: "#4a9eff",
+        placeholder: "inherit card default"
+      })}
+                      </div>
+	                          `;
+    }
+    const fillStyle = getEffectiveFillStyleValue(context, { type: "card" });
+    const barColor = getBarColorValue(context, { type: "card" });
+    const barSolidFill = getBarSolidFillValue(context, { type: "card" });
+    return `	        <div class="section">
+	          <div class="section-head">
+	            <h3>Bar Appearance</h3>
+	            <div class="section-note">Choose the bar rendering mode and base bar colors.</div>
+	          </div>
+          <div class="inline-row editor-grid">
+            <div class="field-row">
+              <label for="bar-fill-style">Fill style</label>
+              <select id="bar-fill-style" data-field="bar-fill-style" value="${escapeAttribute(fillStyle)}">
+                <option value="solid"${fillStyle === "solid" ? " selected" : ""}>solid</option>
+                <option value="gradient"${fillStyle === "gradient" ? " selected" : ""}>gradient</option>
+                <option value="bands"${fillStyle === "bands" ? " selected" : ""}>bands</option>
+                <option value="band_gradient"${fillStyle === "band_gradient" ? " selected" : ""}>band_gradient</option>
+                <option value="soft_bands"${fillStyle === "soft_bands" ? " selected" : ""}>soft_bands</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <div class="toggle">
+                <input id="bar-solid-fill" type="checkbox" data-field="bar-solid-fill"${barSolidFill ? " checked" : ""}>
+                <label for="bar-solid-fill">Solid fill</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="bar-color">Bar color</label>
+              ${renderColorInput({
+      id: "bar-color",
+      field: "bar-color",
+      value: barColor,
+      fallbackHex: "#4a9eff",
+      placeholder: "#4a9eff"
+    })}
+            </div>
+          </div>${renderChildren()}
+	        </div>`;
+  }
+  var init_bar_appearance = __esm({
+    "src/editor/sections/bar-appearance.js"() {
+      init_normalize();
+      init_editor_config();
+      init_editor_controls();
+    }
+  });
+
   // src/editor/SensorBarCardPlusEditor.js
   var SensorBarCardPlusEditor;
   var init_SensorBarCardPlusEditor = __esm({
@@ -6998,6 +7204,7 @@ ${barMarkerStyles}
       init_editor_styles();
       init_scale();
       init_formatting();
+      init_bar_appearance();
       SensorBarCardPlusEditor = class extends HTMLElement {
         constructor() {
           super();
@@ -9890,107 +10097,43 @@ ${barMarkerStyles}
           return this._setScopedGradientStops(scope, nextStops, { rerender: true });
         }
         _getFillStyleValue() {
-          return this._getEffectiveFillStyleValue({ type: "card" });
+          return getEffectiveFillStyleValue(this._createSectionContext(), { type: "card" });
         }
         _getFillStyleFromColorMode(colorMode) {
-          switch (colorMode) {
-            case "single":
-              return "solid";
-            case "gradient":
-              return "gradient";
-            case "severity":
-              return "bands";
-            case "severity_gradient":
-              return "band_gradient";
-            default:
-              return "bands";
-          }
+          return getFillStyleFromColorMode(colorMode);
         }
         _getScopedFillStyleValue(scope) {
-          var _a;
-          const fillStyle = this._getScopedValue(scope, ["bar", "fill_style"]);
-          if (fillStyle) return fillStyle;
-          const colorMode = (_a = this._getScopedValue(scope, ["bar", "color_mode"])) != null ? _a : this._getScopedValue(scope, ["color_mode"]);
-          return this._getFillStyleFromColorMode(colorMode);
+          return getFillStyleValue(this._createSectionContext(), scope);
         }
         _getEffectiveScopedFillStyleValue(scope) {
-          return this._getEffectiveFillStyleValue(scope);
+          return getEffectiveFillStyleValue(this._createSectionContext(), scope);
         }
         _setScopedBarFillStyle(scope, rawValue) {
-          const normalizedValue = this._normalizeTextValue(rawValue).trim();
-          if (!normalizedValue) {
-            return this._removeCanonicalScopedValue(scope, ["bar", "fill_style"], {
-              deprecatedKeys: [["color_mode"]],
-              prunePaths: [["bar"]]
-            });
-          }
-          return this._setCanonicalScopedTextOverride(scope, ["bar", "fill_style"], normalizedValue, {
-            deprecatedKeys: [["color_mode"]],
-            prunePaths: [["bar"]]
-          });
+          return setBarFillStyle(this._createSectionContext(), scope, rawValue);
         }
         _getScopedBarColorValue(scope) {
-          var _a, _b;
-          return (_b = (_a = this._getScopedValue(scope, ["bar", "color"])) != null ? _a : this._getScopedValue(scope, ["color"])) != null ? _b : "#4a9eff";
+          return getBarColorValue(this._createSectionContext(), scope);
         }
         _getEffectiveScopedBarColorValue(scope) {
-          const value = this._getEffectiveScopedDisplayValue(scope, ["bar", "color"], [["color"]]);
-          return value || "#4a9eff";
+          return getEffectiveBarColorValue(this._createSectionContext(), scope);
         }
         _setScopedBarColor(scope, rawValue) {
-          const normalizedValue = this._normalizeTextValue(rawValue).trim();
-          if (!normalizedValue || this._normalizeColorComparisonValue(normalizedValue) === this._normalizeColorComparisonValue("#4a9eff")) {
-            return this._removeCanonicalScopedValue(scope, ["bar", "color"], {
-              deprecatedKeys: [["color"]],
-              prunePaths: [["bar"]]
-            });
-          }
-          return this._setCanonicalScopedTextOverride(scope, ["bar", "color"], normalizedValue, {
-            deprecatedKeys: [["color"]],
-            prunePaths: [["bar"]]
-          });
+          return setBarColor(this._createSectionContext(), scope, rawValue);
         }
         _getScopedBarSolidFillValue(scope) {
-          return !!this._getScopedValue(scope, ["bar", "solid_fill"]);
+          return getBarSolidFillValue(this._createSectionContext(), scope);
         }
         _getEffectiveScopedBarSolidFillValue(scope) {
-          if ((scope == null ? void 0 : scope.type) !== "entity") {
-            return this._getScopedBarSolidFillValue(scope);
-          }
-          const localValue = this._getScopedValue(scope, ["bar", "solid_fill"]);
-          if (localValue !== void 0) {
-            return !!localValue;
-          }
-          return this._getScopedBarSolidFillValue({ type: "card" });
+          return getEffectiveBarSolidFillValue(this._createSectionContext(), scope);
         }
         _setScopedBarSolidFill(scope, value) {
-          if (!value) {
-            return this._removeCanonicalScopedValue(scope, ["bar", "solid_fill"], {
-              prunePaths: [["bar"]]
-            });
-          }
-          return this._setCanonicalScopedValue(scope, ["bar", "solid_fill"], true, {
-            prunePaths: [["bar"]]
-          });
+          return setBarSolidFill(this._createSectionContext(), scope, value);
         }
         _clearEntityBarAppearance(scope) {
-          return this._applyScopedMutation(scope, (target) => {
-            let nextTarget = this._deletePathValue(target, ["bar", "fill_style"]);
-            nextTarget = this._deletePathValue(nextTarget, ["bar", "color"]);
-            nextTarget = this._deletePathValue(nextTarget, ["bar", "solid_fill"]);
-            nextTarget = this._deletePathValue(nextTarget, ["color_mode"]);
-            nextTarget = this._deletePathValue(nextTarget, ["color"]);
-            nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ["bar"]);
-            return nextTarget;
-          }, { rerender: true });
+          return clearBarAppearanceOverride(this._createSectionContext(), scope);
         }
         _hasEntityBarAppearanceOverride(scope) {
-          var _a;
-          const barValue = (_a = this._getScopedValue(scope, ["bar"])) != null ? _a : {};
-          if (this._isObject(barValue) && (Object.prototype.hasOwnProperty.call(barValue, "fill_style") || Object.prototype.hasOwnProperty.call(barValue, "color") || Object.prototype.hasOwnProperty.call(barValue, "solid_fill"))) {
-            return true;
-          }
-          return this._getScopedValue(scope, ["color_mode"]) !== void 0 || this._getScopedValue(scope, ["color"]) !== void 0;
+          return hasBarAppearanceOverride(this._createSectionContext(), scope);
         }
         _getScopedNeedleConfig(scope) {
           var _a;
@@ -10686,15 +10829,7 @@ ${barMarkerStyles}
           return origin !== "" ? `${modeLabel} \xB7 ${origin}` : modeLabel;
         }
         _getBarAppearanceSummary(scope) {
-          var _a;
-          const parts = [];
-          const fillStyle = this._getScopedFillStyleValue(scope);
-          const color = (_a = this._getScopedValue(scope, ["bar", "color"])) != null ? _a : this._getScopedValue(scope, ["color"]);
-          if (fillStyle && fillStyle !== "bands") parts.push(fillStyle.replace(/_/g, " "));
-          if (color && this._normalizeColorComparisonValue(color) !== this._normalizeColorComparisonValue("#4a9eff")) {
-            parts.push("Custom color");
-          }
-          return parts.length ? parts.join(" \u2022 ") : "Inherited";
+          return getBarAppearanceSummary(this._createSectionContext(), scope);
         }
         _getScopedSegmentsValue(scope) {
           const uiRows = this._getSegmentsUiRows(scope);
@@ -10721,14 +10856,7 @@ ${barMarkerStyles}
           return `${segments.length} segments`;
         }
         _getEffectiveFillStyleValue(scope) {
-          if ((scope == null ? void 0 : scope.type) === "entity") {
-            return normalizeBarConfig(
-              this._getEntityRawEntries()[scope.index],
-              this._draftConfig,
-              { isCardScope: false }
-            ).fill_style;
-          }
-          return normalizeBarConfig(this._draftConfig, null, { isCardScope: true }).fill_style;
+          return getEffectiveFillStyleValue(this._createSectionContext(), scope);
         }
         _getScopedGradientStopsValue(scope) {
           const localRows = this._getGradientStopsUiRows(scope);
@@ -11325,8 +11453,6 @@ ${barMarkerStyles}
             const layoutHeroValueSize = this._getScopedLayoutValue({ type: "card" }, "value_size");
             const layoutHeight = this._getScopedLayoutValue({ type: "card" }, "height");
             const layoutLabelWidth = this._getScopedLayoutValue({ type: "card" }, "width");
-            const barColor = this._getScopedBarColorValue({ type: "card" });
-            const barSolidFill = this._getScopedBarSolidFillValue({ type: "card" });
             const cardNeedle = this._getScopedNeedleConfig({ type: "card" });
             const gradientStops = this._getGradientStopsValue();
             const gradientDraft = this._getGradientStopsDraftState({ type: "card" });
@@ -11404,7 +11530,6 @@ ${barMarkerStyles}
                       ${(() => {
                 var _a3, _b2;
                 const scope = { type: "entity", index };
-                const barAppearanceInherited = !this._hasEntityBarAppearanceOverride(scope);
                 const needleInherited = !this._hasNeedleOverride(scope);
                 const entityNeedle = this._getEffectiveScopedNeedleConfig(scope);
                 const baselineInherited = !this._hasBaselineOverride(scope);
@@ -11487,41 +11612,7 @@ ${barMarkerStyles}
                   group: "bar",
                   title: "Bar Appearance",
                   summary: this._getBarAppearanceSummary(scope),
-                  content: `
-	                      <div class="field-row">
-	                        <div class="toggle">
-	                          <input id="entity-${index}-bar-inherit" type="checkbox" data-kind="entity-bar-inherit" data-index="${index}"${barAppearanceInherited ? " checked" : ""}>
-                          <label for="entity-${index}-bar-inherit">Inherit card settings</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-bar-fill-style">Fill style</label>
-                        <select id="entity-${index}-bar-fill-style" data-kind="entity-bar-fill-style" data-index="${index}" value="${this._escapeAttribute(this._getEffectiveScopedFillStyleValue(scope))}">
-                          <option value="bands"${this._getEffectiveScopedFillStyleValue(scope) === "bands" ? " selected" : ""}>bands</option>
-                          <option value="solid"${this._getEffectiveScopedFillStyleValue(scope) === "solid" ? " selected" : ""}>solid</option>
-                          <option value="gradient"${this._getEffectiveScopedFillStyleValue(scope) === "gradient" ? " selected" : ""}>gradient</option>
-                          <option value="soft_bands"${this._getEffectiveScopedFillStyleValue(scope) === "soft_bands" ? " selected" : ""}>soft_bands</option>
-                          <option value="band_gradient"${this._getEffectiveScopedFillStyleValue(scope) === "band_gradient" ? " selected" : ""}>band_gradient</option>
-                        </select>
-                      </div>
-                      <div class="field-row">
-                        <div class="toggle">
-                          <input id="entity-${index}-bar-solid-fill" type="checkbox" data-kind="entity-bar-solid-fill" data-index="${index}"${this._getEffectiveScopedBarSolidFillValue(scope) ? " checked" : ""}>
-                          <label for="entity-${index}-bar-solid-fill">Solid fill</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-bar-color">Bar color</label>
-                        ${this._renderColorInput({
-                    id: `entity-${index}-bar-color`,
-                    kind: "entity-bar-color",
-                    index,
-                    value: this._getEffectiveScopedBarColorValue(scope),
-                    fallbackHex: "#4a9eff",
-                    placeholder: "inherit card default"
-                  })}
-                      </div>
-	                          `
+                  content: renderBarAppearanceSection(this._createSectionContext(), scope)
                 });
                 const needleGroup = this._renderOverrideGroup({
                   index,
@@ -12079,39 +12170,7 @@ ${this._renderScaleSection({ type: "card" })}
           </div>
 	        </div>
 
-	        <div class="section">
-	          <div class="section-head">
-	            <h3>Bar Appearance</h3>
-	            <div class="section-note">Choose the bar rendering mode and base bar colors.</div>
-	          </div>
-          <div class="inline-row editor-grid">
-            <div class="field-row">
-              <label for="bar-fill-style">Fill style</label>
-              <select id="bar-fill-style" data-field="bar-fill-style" value="${this._escapeAttribute(fillStyle)}">
-                <option value="solid"${fillStyle === "solid" ? " selected" : ""}>solid</option>
-                <option value="gradient"${fillStyle === "gradient" ? " selected" : ""}>gradient</option>
-                <option value="bands"${fillStyle === "bands" ? " selected" : ""}>bands</option>
-                <option value="band_gradient"${fillStyle === "band_gradient" ? " selected" : ""}>band_gradient</option>
-                <option value="soft_bands"${fillStyle === "soft_bands" ? " selected" : ""}>soft_bands</option>
-              </select>
-            </div>
-            <div class="field-row">
-              <div class="toggle">
-                <input id="bar-solid-fill" type="checkbox" data-field="bar-solid-fill"${barSolidFill ? " checked" : ""}>
-                <label for="bar-solid-fill">Solid fill</label>
-              </div>
-            </div>
-            <div class="field-row">
-              <label for="bar-color">Bar color</label>
-              ${this._renderColorInput({
-              id: "bar-color",
-              field: "bar-color",
-              value: barColor,
-              fallbackHex: "#4a9eff",
-              placeholder: "#4a9eff"
-            })}
-            </div>
-          </div>
+${renderBarAppearanceSection(this._createSectionContext(), { type: "card" }, () => `
           ${this._renderCardGroup({
               group: "baseline",
               title: "Baseline",
@@ -12190,8 +12249,7 @@ ${this._renderScaleSection({ type: "card" })}
               placeholder: "#ffffff"
             })}
             </div>
-          </div>
-	        </div>
+          </div>`)}
 
 	        <div class="section">
 	          <div class="section-head">
@@ -12781,9 +12839,7 @@ ${this._renderFormattingSection({ type: "card" })}
           if (field === "layout-height") return void this._setLayoutHeight(value);
           if (field === "layout-label-width") return void this._setScopedLayoutLabelWidth({ type: "card" }, value);
           if (handleScaleField(this._createSectionContext(), { field, value })) return;
-          if (field === "bar-fill-style") return void this._setBarFillStyle(value);
-          if (field === "bar-color") return void this._setBarColor(value);
-          if (field === "bar-solid-fill") return void this._setScopedBarSolidFill({ type: "card" }, value);
+          if (handleBarAppearanceField(this._createSectionContext(), { field, value })) return;
           if (field === "bar-needle-mode") return void this._setScopedNeedleMode({ type: "card" }, value);
           if (field === "bar-needle-color") return void this._setScopedNeedleColor({ type: "card" }, value);
           if (field === "baseline-mode") return void this._setBaselineMode({ type: "card" }, value);
@@ -12927,27 +12983,14 @@ ${this._renderFormattingSection({ type: "card" })}
             }
             return;
           }
-          if (kind === "entity-bar-inherit") {
-            if (value) {
-              return void this._clearEntityBarAppearance({ type: "entity", index: Number(target.dataset.index) });
-            }
-            return;
-          }
+          if (kind === "entity-bar-inherit" && handleBarAppearanceField(this._createSectionContext(), { kind, index: target.dataset.index, value })) return;
           if (kind === "entity-needle-inherit") {
             if (value) {
               return void this._removeScopedNeedle({ type: "entity", index: Number(target.dataset.index) });
             }
             return;
           }
-          if (kind === "entity-bar-fill-style") {
-            return void this._setScopedBarFillStyle({ type: "entity", index: Number(target.dataset.index) }, value);
-          }
-          if (kind === "entity-bar-color") {
-            return void this._setScopedBarColor({ type: "entity", index: Number(target.dataset.index) }, value);
-          }
-          if (kind === "entity-bar-solid-fill") {
-            return void this._setScopedBarSolidFill({ type: "entity", index: Number(target.dataset.index) }, value);
-          }
+          if (handleBarAppearanceField(this._createSectionContext(), { kind, index: target.dataset.index, value })) return;
           if (kind === "entity-needle-mode") {
             return void this._setScopedNeedleMode({ type: "entity", index: Number(target.dataset.index) }, value);
           }
