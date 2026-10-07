@@ -154,15 +154,15 @@ export class SensorBarCardPlusFeature extends HTMLElement {
           --sbcp-row-height: calc(var(--feature-height, 42px) - var(--label-above) - var(--label-below));
         }
         #bar { position: absolute; top: var(--label-above); width: 100%; }
-        .compact-labels { font: inherit; font-size: 8px; line-height: 8px; letter-spacing: normal; pointer-events: none; }
+        .compact-labels { font: inherit; font-size: 9px; line-height: 9px; letter-spacing: normal; pointer-events: none; }
         .compact-marker-label {
-          position: absolute; top: 0; height: 8px; padding: 0 2px; box-sizing: border-box;
+          position: absolute; top: 0; height: 9px; padding: 0 2px; box-sizing: border-box;
           color: var(--primary-text-color, currentColor); white-space: nowrap; overflow: hidden;
           pointer-events: none;
         }
         .compact-marker-label[data-lane="below"] { top: auto; bottom: 0; }
         .surface[data-bar-animated="false"] .compact-marker-label { transition: none !important; }
-        /* Only the 18px rail caps glyphs. Uniform scaling preserves shape and edge anchoring. */
+        /* Both reserved label lanes cap glyphs. Uniform scaling preserves shape and edge anchoring. */
         .surface[data-compact-glyphs="true"] .marker-shape-svg { transform: translateX(-50%) scale(0.5); }
         .surface[data-compact-glyphs="true"] :is(.peak-inset, .target-inset, .floor-inset) {
           transform: translateX(-50%) scale(calc(8 / 14)); transform-origin: 50% 100%;

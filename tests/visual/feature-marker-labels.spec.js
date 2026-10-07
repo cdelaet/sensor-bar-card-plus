@@ -29,8 +29,8 @@ for (const [height, position] of [[42, 'bottom'], [36, 'inline']]) {
         }) };
       });
       expect(result.height).toBe(height);
-      expect(result.rail).toEqual([lanes.includes('above') ? 9 : 0, height - lanes.length * 9]);
-      for (const item of result.labels) expect(item).toEqual({ lane: item.lane, y: item.lane === 'above' ? 0 : height - 8, height: 8, font: '8px', line: '8px' });
+      expect(result.rail).toEqual([lanes.includes('above') ? 10 : 0, height - lanes.length * 10]);
+      for (const item of result.labels) expect(item).toEqual({ lane: item.lane, y: item.lane === 'above' ? 0 : height - 9, height: 9, font: '9px', line: '9px' });
     });
   }
 
@@ -79,10 +79,10 @@ for (const [height, position] of [[42, 'bottom'], [36, 'inline']]) {
         accessible: root.querySelector('#surface').getAttribute('aria-label') };
     });
     expect(result.snapshots).toEqual([
-      { value: 'Charging', text: 'Charging', hidden: false, rail: height - 18 },
-      { value: 'unknown', text: 'Charging', hidden: true, rail: height - 18 },
-      { value: 'unavailable', text: 'Charging', hidden: true, rail: height - 18 },
-      { value: '42.7', text: '42.7 kWh', hidden: false, rail: height - 18 },
+      { value: 'Charging', text: 'Charging', hidden: false, rail: height - 20 },
+      { value: 'unknown', text: 'Charging', hidden: true, rail: height - 20 },
+      { value: 'unavailable', text: 'Charging', hidden: true, rail: height - 20 },
+      { value: '42.7', text: '42.7 kWh', hidden: false, rail: height - 20 },
     ]);
     expect(result.persistent).toBe(true);
     expect(result.glyph).toBe('none');
@@ -91,8 +91,8 @@ for (const [height, position] of [[42, 'bottom'], [36, 'inline']]) {
   });
 }
 
-for (const [height, lanes, expectedRail] of [[36, 2, 18], [42, 2, 24], [36, 1, 27], [42, 1, 33], [36, 0, 36], [42, 0, 42]]) {
-  test(`${expectedRail}px rail: caps every glyph only at 18px and preserves direction`, async ({ page }) => {
+for (const [height, lanes, expectedRail] of [[36, 2, 16], [42, 2, 22], [36, 1, 26], [42, 1, 32], [36, 0, 36], [42, 0, 42]]) {
+  test(`${expectedRail}px rail: caps every glyph with both label lanes and preserves direction`, async ({ page }) => {
     const shapes = ['triangle', 'diamond', 'circle', 'chevron', 'arrow', 'pin'];
     const glyphs = [];
     let result;
@@ -107,6 +107,8 @@ for (const [height, lanes, expectedRail] of [[36, 2, 18], [42, 2, 24], [36, 1, 2
       result = await feature(page).evaluate(element => {
         const root = element.shadowRoot;
         return { rail: root.querySelector('.bar-track').getBoundingClientRect().height,
+          separation: root.querySelector('.floor-inset').getBoundingClientRect().top
+            - root.querySelector('.peak-inset').getBoundingClientRect().bottom,
           glyphs: [...root.querySelectorAll('.target-marker, .peak-marker, .floor-marker, .generic-marker')].filter(node => getComputedStyle(node).display !== 'none').map(node => {
             const glyph = node.querySelector(node.dataset.shape === 'triangle' ? '[class$="-inset"]' : 'svg');
             const rect = glyph.getBoundingClientRect();
@@ -121,7 +123,7 @@ for (const [height, lanes, expectedRail] of [[36, 2, 18], [42, 2, 24], [36, 1, 2
       glyphs.push(...result.glyphs);
     }
     for (const glyph of glyphs) {
-      const compact = expectedRail === 18;
+      const compact = lanes === 2;
       const size = compact ? 8 : glyph.shape === 'triangle' ? 14 : glyph.shape === 'circle' ? 10.24 : 12;
       expect(glyph.width).toBeCloseTo(size, 3);
       expect(glyph.height).toBeCloseTo(glyph.shape === 'triangle' ? compact ? 11 * 8 / 14 : 11 : size, 3);
@@ -129,13 +131,18 @@ for (const [height, lanes, expectedRail] of [[36, 2, 18], [42, 2, 24], [36, 1, 2
       if (glyph.shape === 'triangle') expect(glyph.outset).toBeCloseTo(compact ? 8 : 10);
       expect(glyph.z).toBeGreaterThan(glyph.needleZ);
     }
-    if (expectedRail === 18) {
+    if (lanes === 2) {
+      expect(result.separation).toBeGreaterThan(3);
       const png = PNG.sync.read(await feature(page).locator('.bar-track').screenshot());
-      const center = (9 * png.width + Math.round(png.width / 2)) * 4;
-      // The coincident Peak/Floor leave the magenta Needle visible at rail center.
-      expect(png.data[center]).toBeGreaterThan(240);
-      expect(png.data[center + 1]).toBeLessThan(20);
-      expect(png.data[center + 2]).toBeGreaterThan(240);
+      const center = (Math.floor(expectedRail / 2) * png.width + Math.round(png.width / 2)) * 4;
+      await feature(page).locator('.needle-marker').evaluate(node => { node.style.visibility = 'hidden'; });
+      const withoutNeedle = PNG.sync.read(await feature(page).locator('.bar-track').screenshot());
+      await feature(page).locator('.needle-marker').evaluate(node => { node.style.visibility = ''; });
+      // Shadows tint the narrow central gap; magenta must remain visibly distinct
+      // from both the glyph shadows and the same rail rendered without the Needle.
+      expect(png.data[center]).toBeGreaterThan(png.data[center + 1] + 100);
+      expect(png.data[center + 2]).toBeGreaterThan(png.data[center + 1] + 100);
+      expect(png.data[center + 2]).toBeGreaterThan(withoutNeedle.data[center + 2] + 100);
     }
   });
 }
@@ -163,7 +170,7 @@ test('measured full → value/unit → hidden degradation survives resize and ze
   });
   expect(result.modes.map(item => item.mode)).toEqual(['value', 'hidden', 'hidden', 'full']);
   expect(result.modes[0].text).toBe(result.value);
-  expect(result.modes.every(item => item.rail === 24)).toBe(true);
+  expect(result.modes.every(item => item.rail === 22)).toBe(true);
   expect(result.persistent).toBe(true);
   expect(result.accessible).toContain('label Energy Target 50.00 W');
 });
@@ -268,7 +275,7 @@ test('observer/font lifecycle, config and entity changes keep only current persi
   });
   expect(result.stopped).toBe(true);
   expect(result.restarted).toBe(true);
-  expect(result.replaced).toMatchObject({ count: 1, same: true, text: 'Energy', lane: 'above', rail: 33 });
+  expect(result.replaced).toMatchObject({ count: 1, same: true, text: 'Energy', lane: 'above', rail: 32 });
   expect(result.replaced.accessible).toContain('sensor.other');
   expect(result.cleared).toBe(true);
   expect(result.rail).toBe(42);
@@ -300,7 +307,7 @@ for (const [height, position] of [[42, 'bottom'], [36, 'inline']]) {
           persistent: labels.every((node, index) => node === root.querySelectorAll('.compact-marker-label')[index]),
           labelsVisible: labels.every(node => !node.hidden) };
       });
-      expect(result.rail).toBe(height - 18);
+      expect(result.rail).toBe(height - 20);
       expect(result.paint).toContain('linear-gradient');
       expect(result.needle).toBe(false);
       expect(result.baseline).toBe('50%');
@@ -331,5 +338,5 @@ test('font completion remeasures labels and lane geometry never depends on chang
     return { fontPasses, rails };
   });
   expect(result.fontPasses).toBe(1);
-  expect(result.rails).toEqual([27, 27, 27, 27, 27, 27, 27]);
+  expect(result.rails).toEqual([26, 26, 26, 26, 26, 26, 26]);
 });

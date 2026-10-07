@@ -111,8 +111,8 @@ including text, value, unit and precision. Generic `show_marker: false` anchors
 and independent `label.entity` values work too. Labels remain passive: no hover
 promotion, controls, keyboard stops or tap handlers.
 
-Each configured above/below label lane reserves exactly 9px: 8px text with an
-8px line-height plus a 1px gap to the rail. There is no outer vertical padding.
+Each configured above/below label lane reserves exactly 10px: 9px text with a
+9px line-height plus a 1px gap to the rail. There is no outer vertical padding.
 Reservations persist through unknown/unavailable label or anchor sources.
 Glyphs alone reserve no label space. Height comes from the feature's own CSS
 and dimensions, without inspecting Tile internals or relying on `position`.
@@ -120,18 +120,19 @@ and dimensions, without inspecting Tile internals or relying on `position`.
 | Configured label lanes | Bottom (42px) rail | Inline (36px) rail |
 |---|---:|---:|
 | None | 42px | 36px |
-| One | 33px | 27px |
-| Both | 24px | 18px |
+| One | 32px | 26px |
+| Both | 22px | 16px |
 
-With both lanes, above text occupies y=0..8 and the rail starts at y=9.
-Bottom's rail ends at y=33, with below text at y=34..42. Inline's rail ends at
-y=27, with below text at y=28..36. Dynamic characters never enlarge a lane.
+With both lanes, above text occupies y=0..9 and the rail starts at y=10.
+Bottom's rail ends at y=32, with below text at y=33..42. Inline's rail ends at
+y=26, with below text at y=27..36. Dynamic characters never enlarge a lane.
 The deliberately small font should be checked for readability in your theme.
 
-Only an exactly 18px rail caps glyphs at 8px maximum dimension, uniformly
-scaling each existing shape without changing its anchor or direction. A
-14×11px triangle becomes 8×6.29px; SVG glyph boxes become 8×8px. Other rail
-heights retain their existing glyph geometry. Needle stays 7px wide and behind
+Reserving both label lanes caps glyphs at 8px maximum dimension in both
+Bottom (22px rail) and Inline (16px rail), uniformly scaling each existing
+shape without changing its anchor or direction. A 14×11px triangle becomes
+8×6.29px; SVG glyph boxes become 8×8px. Zero or one reserved label lane retains
+the existing glyph geometry. Needle stays 7px wide and behind
 the marker glyphs; coincident Peak/Floor leave a visible central Needle section.
 
 Within each lane, labels are sorted by physical anchor (model order breaks

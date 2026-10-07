@@ -1,9 +1,9 @@
 // Compact presentation only. Marker semantics and formatting belong to the row model.
 export function getFeatureLabelGeometry(height, occupancy = {}) {
-  const above = occupancy.above ? 9 : 0;
-  const below = occupancy.below ? 9 : 0;
+  const above = occupancy.above ? 10 : 0;
+  const below = occupancy.below ? 10 : 0;
   const railHeight = Math.max(0, height - above - below);
-  return { above, below, railHeight, aboveY: 0, belowY: height - 8, compactGlyphs: railHeight === 18 };
+  return { above, below, railHeight, aboveY: 0, belowY: height - 9, compactGlyphs: above > 0 && below > 0 };
 }
 
 export function layoutFeatureMarkerLabels(markers, width, measureText) {

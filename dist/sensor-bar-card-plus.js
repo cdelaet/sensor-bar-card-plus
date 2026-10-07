@@ -12924,10 +12924,10 @@ ${barMarkerStyles}
 
   // src/feature/marker-label-layout.js
   function getFeatureLabelGeometry(height, occupancy = {}) {
-    const above = occupancy.above ? 9 : 0;
-    const below = occupancy.below ? 9 : 0;
+    const above = occupancy.above ? 10 : 0;
+    const below = occupancy.below ? 10 : 0;
     const railHeight = Math.max(0, height - above - below);
-    return { above, below, railHeight, aboveY: 0, belowY: height - 8, compactGlyphs: railHeight === 18 };
+    return { above, below, railHeight, aboveY: 0, belowY: height - 9, compactGlyphs: above > 0 && below > 0 };
   }
   function layoutFeatureMarkerLabels(markers, width, measureText) {
     const layouts = [];
@@ -13151,15 +13151,15 @@ ${barMarkerStyles}
           --sbcp-row-height: calc(var(--feature-height, 42px) - var(--label-above) - var(--label-below));
         }
         #bar { position: absolute; top: var(--label-above); width: 100%; }
-        .compact-labels { font: inherit; font-size: 8px; line-height: 8px; letter-spacing: normal; pointer-events: none; }
+        .compact-labels { font: inherit; font-size: 9px; line-height: 9px; letter-spacing: normal; pointer-events: none; }
         .compact-marker-label {
-          position: absolute; top: 0; height: 8px; padding: 0 2px; box-sizing: border-box;
+          position: absolute; top: 0; height: 9px; padding: 0 2px; box-sizing: border-box;
           color: var(--primary-text-color, currentColor); white-space: nowrap; overflow: hidden;
           pointer-events: none;
         }
         .compact-marker-label[data-lane="below"] { top: auto; bottom: 0; }
         .surface[data-bar-animated="false"] .compact-marker-label { transition: none !important; }
-        /* Only the 18px rail caps glyphs. Uniform scaling preserves shape and edge anchoring. */
+        /* Both reserved label lanes cap glyphs. Uniform scaling preserves shape and edge anchoring. */
         .surface[data-compact-glyphs="true"] .marker-shape-svg { transform: translateX(-50%) scale(0.5); }
         .surface[data-compact-glyphs="true"] :is(.peak-inset, .target-inset, .floor-inset) {
           transform: translateX(-50%) scale(calc(8 / 14)); transform-origin: 50% 100%;
