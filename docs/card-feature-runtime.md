@@ -175,6 +175,19 @@ including text, value, unit and precision. Generic `show_marker: false` anchors
 and independent `label.entity` values work too. Labels remain passive: no hover
 promotion, controls, keyboard stops or tap handlers.
 
+Marker labels use the same effective presentation color as the marker they
+describe. Compact layout may alter marker/label size or visibility for space,
+but it does not alter their semantic color association. This includes Target,
+Peak, Floor, independent Reference label content and `show_marker: false`.
+
+The shared row marker model carries the normalized/default color. Standalone
+labels (`_getMarkerLabelColorStyle`/`_patchMarkerLabelAppearance`) and glyphs use
+`getEffectiveMarkerColor` from `bar-render-model.js`; CSS variables resolve in the
+active theme. Feature `_syncLabels` now uses that same helper to set each label's
+`--marker-color`, consumed by compact label CSS. Previously the model color was
+ignored and CSS forced `--primary-text-color`, causing the divergence. No color
+resolution, formatting, layout, accessibility, fill or editor rules change.
+
 Each configured above/below label lane reserves exactly 10px: 9px text with a
 9px line-height plus a 1px gap to the rail. There is no outer vertical padding.
 Reservations persist through unknown/unavailable label or anchor sources.

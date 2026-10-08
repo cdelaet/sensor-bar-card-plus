@@ -1,7 +1,7 @@
 import { getFiniteNumber, looksLikeEntityId, normalizeCardConfig } from '../config/normalize.js';
 import { validateNormalizedConfig } from '../config/validate.js';
 import { buildRowViewModel } from '../view-model/row-view-model.js';
-import { buildBarRenderModel, getRevealTransitionDuration } from '../view-model/bar-render-model.js';
+import { buildBarRenderModel, getRevealTransitionDuration, getEffectiveMarkerColor } from '../view-model/bar-render-model.js';
 import { renderBar, patchBar } from '../render/bar-renderer.js';
 import { barTrackStyles, barMarkerStyles, getBarAnimationStyles } from '../render/bar-styles.js';
 import { updateExtremum } from '../utils/extrema.js';
@@ -161,7 +161,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         .compact-labels { font: inherit; font-size: 9px; line-height: 9px; letter-spacing: normal; pointer-events: none; }
         .compact-marker-label {
           position: absolute; top: 0; height: 9px; padding: 0 2px; box-sizing: border-box;
-          color: var(--primary-text-color, currentColor); white-space: nowrap; overflow: hidden;
+          color: var(--marker-color); white-space: nowrap; overflow: hidden;
           pointer-events: none;
         }
         .compact-marker-label[data-lane="below"] { top: auto; bottom: 0; }
@@ -273,7 +273,9 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         this._labels.append(node);
         this._labelNodes.set(marker.id, node);
       }
-      this._labelNodes.get(marker.id).dataset.lane = marker.lane;
+      const node = this._labelNodes.get(marker.id);
+      node.dataset.lane = marker.lane;
+      setStyleIfChanged(node, '--marker-color', getEffectiveMarkerColor(marker));
     }
     this._labels.hidden = Boolean(status);
     const required = row?.markerLabelLaneOccupancy?.above || row?.markerLabelLaneOccupancy?.below;

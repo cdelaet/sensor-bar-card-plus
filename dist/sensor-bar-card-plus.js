@@ -14403,7 +14403,7 @@ ${this._renderFormattingSection({ type: "card" })}
         .compact-labels { font: inherit; font-size: 9px; line-height: 9px; letter-spacing: normal; pointer-events: none; }
         .compact-marker-label {
           position: absolute; top: 0; height: 9px; padding: 0 2px; box-sizing: border-box;
-          color: var(--primary-text-color, currentColor); white-space: nowrap; overflow: hidden;
+          color: var(--marker-color); white-space: nowrap; overflow: hidden;
           pointer-events: none;
         }
         .compact-marker-label[data-lane="below"] { top: auto; bottom: 0; }
@@ -14506,14 +14506,16 @@ ${this._renderFormattingSection({ type: "card" })}
           }
           for (const marker of markers) {
             if (!this._labelNodes.has(marker.id)) {
-              const node = document.createElement("span");
-              node.className = "compact-marker-label";
-              node.dataset.markerId = marker.id;
-              node.hidden = true;
-              this._labels.append(node);
-              this._labelNodes.set(marker.id, node);
+              const node2 = document.createElement("span");
+              node2.className = "compact-marker-label";
+              node2.dataset.markerId = marker.id;
+              node2.hidden = true;
+              this._labels.append(node2);
+              this._labelNodes.set(marker.id, node2);
             }
-            this._labelNodes.get(marker.id).dataset.lane = marker.lane;
+            const node = this._labelNodes.get(marker.id);
+            node.dataset.lane = marker.lane;
+            setStyleIfChanged(node, "--marker-color", getEffectiveMarkerColor(marker));
           }
           this._labels.hidden = Boolean(status);
           const required = ((_b = row == null ? void 0 : row.markerLabelLaneOccupancy) == null ? void 0 : _b.above) || ((_c = row == null ? void 0 : row.markerLabelLaneOccupancy) == null ? void 0 : _c.below);
