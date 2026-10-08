@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "node tools/build-dist.cjs",
+    "verify-dist": "node tools/verify-dist.cjs",
     "test": "npm run build && npm run test:unit && npm run test:visual",
     "test:unit": "vitest run",
     "test:visual": "playwright test",
@@ -23,7 +24,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/cdelaet/sensor-bar-card-plus/issues"
