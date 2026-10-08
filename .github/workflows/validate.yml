@@ -110,11 +110,11 @@ jobs:
 
       - name: Run complete Playwright suite against existing baselines
         if: github.event_name != 'workflow_dispatch' || inputs.generate_snapshots != true
-        run: npm run test:visual -- --workers=3 --update-snapshots=none
+        run: npm run test:visual -- --workers=1 --update-snapshots=none
 
       - name: Generate complete canonical Playwright snapshots
         if: github.event_name == 'workflow_dispatch' && inputs.generate_snapshots
-        run: npm run test:visual -- --workers=3 --update-snapshots
+        run: npm run test:visual -- --workers=1 --update-snapshots
 
       - name: Upload canonical Playwright snapshots
         if: always() && github.event_name == 'workflow_dispatch' && inputs.generate_snapshots
