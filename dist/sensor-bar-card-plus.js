@@ -6791,6 +6791,47 @@ ${barMarkerStyles}
     }
   });
 
+  // src/editor/shared/editor-disclosures.js
+  function renderCardGroup({ group, title, summary, content, inactive = false }, expanded) {
+    return `
+      <div class="override-group card-subgroup${inactive ? " is-inactive" : ""}" data-group="${group}" data-expanded="${expanded ? "true" : "false"}">
+        <button
+          type="button"
+          id="card-group-${group}"
+          class="override-group-toggle"
+          data-action="toggle-card-group"
+          data-group="${group}"
+          aria-expanded="${expanded ? "true" : "false"}"
+        >
+          <span id="card-group-${group}-title" class="override-group-title">${expanded ? "\u25BE" : "\u25B8"} ${title}</span>
+          <span id="card-group-${group}-summary" class="override-group-summary">${escapeAttribute(summary)}</span>
+        </button>
+        <div class="override-group-body" style="display:${expanded ? "grid" : "none"};">
+          ${content}
+        </div>
+      </div>
+    `;
+  }
+  function renderMarkersSection({ renderGroup, target, peak, floor, references }) {
+    return `	        <div class="section">
+          <div class="section-head">
+	            <h3>Markers</h3>
+	            <div class="section-note">Configure Target, Peak, Floor, and custom reference markers.</div>
+	          </div>
+	          <div class="field-grid">
+            ${renderGroup({ group: "marker-target", title: "Target", ...target })}
+            ${renderGroup({ group: "marker-peak", title: "Peak", ...peak })}
+            ${renderGroup({ group: "marker-floor", title: "Floor", ...floor })}
+            ${renderGroup({ group: "generic-markers", title: "Generic Reference Markers", ...references })}
+          </div>
+	        </div>`;
+  }
+  var init_editor_disclosures = __esm({
+    "src/editor/shared/editor-disclosures.js"() {
+      init_editor_controls();
+    }
+  });
+
   // src/editor/sections/scale.js
   function getScaleParts(context, scope, key, effective = false) {
     return context.source(scope, key, effective);
@@ -10925,6 +10966,7 @@ ${indent}                          `;
       init_editor_config();
       init_editor_controls();
       init_editor_styles();
+      init_editor_disclosures();
       init_scale();
       init_formatting();
       init_bar_appearance();
@@ -13286,26 +13328,8 @@ ${indent}                          `;
       </div>
     `;
         }
-        _renderCardGroup({ group, title, summary, content, inactive = false }) {
-          const expanded = this._isCardGroupExpanded(group);
-          return `
-      <div class="override-group card-subgroup${inactive ? " is-inactive" : ""}" data-group="${group}" data-expanded="${expanded ? "true" : "false"}">
-        <button
-          type="button"
-          id="card-group-${group}"
-          class="override-group-toggle"
-          data-action="toggle-card-group"
-          data-group="${group}"
-          aria-expanded="${expanded ? "true" : "false"}"
-        >
-          <span id="card-group-${group}-title" class="override-group-title">${expanded ? "\u25BE" : "\u25B8"} ${title}</span>
-          <span id="card-group-${group}-summary" class="override-group-summary">${this._escapeAttribute(summary)}</span>
-        </button>
-        <div class="override-group-body" style="display:${expanded ? "grid" : "none"};">
-          ${content}
-        </div>
-      </div>
-    `;
+        _renderCardGroup(options) {
+          return renderCardGroup(options, this._isCardGroupExpanded(options.group));
         }
         _renderEntityInput(entry, index) {
           return renderEntityInput(entry, index);
@@ -13646,38 +13670,13 @@ ${indent}                          `;
 
 ${this._renderScaleSection({ type: "card" })}
 
-	        <div class="section">
-          <div class="section-head">
-	            <h3>Markers</h3>
-	            <div class="section-note">Configure Target, Peak, Floor, and custom reference markers.</div>
-	          </div>
-	          <div class="field-grid">
-            ${this._renderCardGroup({
-              group: "marker-target",
-              title: "Target",
-              summary: this._getCardTargetMarkerSummary(),
-              content: this._targetSection.render({ type: "card" })
+${renderMarkersSection({
+              renderGroup: (options) => this._renderCardGroup(options),
+              target: { summary: this._getCardTargetMarkerSummary(), content: this._targetSection.render({ type: "card" }) },
+              peak: { summary: this._getMarkerResetSummary("peak"), content: this._extremaSection.render({ type: "card" }, "peak") },
+              floor: { summary: this._getMarkerResetSummary("floor"), content: this._extremaSection.render({ type: "card" }, "floor") },
+              references: { summary: this._getGenericMarkersSummary({ type: "card" }), content: this._renderGenericMarkersEditor({ type: "card" }) }
             })}
-            ${this._renderCardGroup({
-              group: "marker-peak",
-              title: "Peak",
-              summary: this._getMarkerResetSummary("peak"),
-              content: this._extremaSection.render({ type: "card" }, "peak")
-            })}
-            ${this._renderCardGroup({
-              group: "marker-floor",
-              title: "Floor",
-              summary: this._getMarkerResetSummary("floor"),
-              content: this._extremaSection.render({ type: "card" }, "floor")
-            })}
-            ${this._renderCardGroup({
-              group: "generic-markers",
-              title: "Generic Reference Markers",
-              summary: this._getGenericMarkersSummary({ type: "card" }),
-              content: this._renderGenericMarkersEditor({ type: "card" })
-            })}
-          </div>
-	        </div>
 
 ${renderBarAppearanceSection(this._createSectionContext(), { type: "card" }, () => `${this._baselineSection.render({ type: "card" }, (options) => this._renderCardGroup(options))}${this._needleSection.render({ type: "card" })}`)}
 
@@ -14767,6 +14766,7 @@ ${this._renderFormattingSection({ type: "card" })}
       init_editor_config();
       init_editor_controls();
       init_editor_styles();
+      init_editor_disclosures();
       init_scale();
       init_formatting();
       init_bar_appearance();
@@ -14794,6 +14794,7 @@ ${this._renderFormattingSection({ type: "card" })}
           this._renderEpoch = 0;
           this._updateComplete = Promise.resolve();
           this._cssColorDrafts = /* @__PURE__ */ new Map();
+          this._expandedCardGroups = /* @__PURE__ */ new Set();
           const context = this._createSectionContext();
           const options = { cssText: true, percentSources: true };
           this._needleSection = new NeedleSection(context, options);
@@ -14811,17 +14812,29 @@ ${this._renderFormattingSection({ type: "card" })}
             },
             hass: () => this._hass
           };
-          this._referenceMarkersSection = new ReferenceMarkersSection(context, { root: ui.root, render: () => {
-            this._referenceRenderRequested = true;
-            this._requestRender();
-          } }, options);
+          this._referenceMarkersSection = new ReferenceMarkersSection(context, { root: ui.root, render: () => this._requestRender() }, options);
           this._segmentsSection = new SegmentsSection(context, ui, createFeaturePaletteArray(context, "segments"));
           this._gradientStopsSection = new GradientStopsSection(context, ui, createFeaturePaletteArray(context, "gradient_stops"));
           for (const type of ["click", "keydown"]) this.shadowRoot.addEventListener(type, (event) => {
-            var _a, _b, _c;
-            if (type === "click" && (this._baselineSection.handleClick(event.target) || this._targetSection.handleClick(event.target) || this._referenceMarkersSection.handleClick((_c = (_b = (_a = event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, "[data-action]")) != null ? _c : event.target))) {
-              this._requestRender();
-              return;
+            var _a, _b, _c, _d, _e;
+            if (type === "click") {
+              const target = (_c = (_b = (_a = event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, "[data-action]")) != null ? _c : event.target;
+              if (((_d = target == null ? void 0 : target.dataset) == null ? void 0 : _d.action) === "toggle-card-group") {
+                this._toggleCardGroup(target.dataset.group);
+                return;
+              }
+              if (this._baselineSection.handleClick(target) || this._targetSection.handleClick(target)) {
+                this._requestRender();
+                return;
+              }
+              if (this._referenceMarkersSection.handleClick(target)) {
+                if (((_e = target == null ? void 0 : target.dataset) == null ? void 0 : _e.action) === "add-generic-marker") {
+                  const markers = this._referenceMarkersSection._getGenericMarkers(root);
+                  this._pendingReferenceFocusId = this._referenceMarkersSection._getGenericMarkerUiIds(root, markers.length).at(-1);
+                }
+                this._requestRender();
+                return;
+              }
             }
             this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event);
           });
@@ -14971,7 +14984,7 @@ ${this._renderFormattingSection({ type: "card" })}
         }
         _renderEntitySection() {
           return `<div class="section">
-      <div class="section-head"><h3>Entity</h3></div>
+      <div class="section-head"><h3>Entities</h3></div>
       <div id="feature-entity-status" class="section-note" role="status">${escapeAttribute(this._entityDescription())}</div>
       ${this._context.entity_id || this._explicitEntity ? `<div class="toggle">
         <input id="feature-entity-override" type="checkbox" data-field="feature-entity-override"${this._explicitEntity || this._chooseEntity ? " checked" : ""}>
@@ -14983,21 +14996,60 @@ ${this._renderFormattingSection({ type: "card" })}
       </div>` : ""}
     </div>`;
         }
+        _renderCardGroup(options) {
+          return renderCardGroup(options, this._expandedCardGroups.has(options.group));
+        }
+        _toggleCardGroup(group) {
+          if (this._expandedCardGroups.has(group)) this._expandedCardGroups.delete(group);
+          else this._expandedCardGroups.add(group);
+          this._syncDisclosures();
+        }
+        _syncDisclosures() {
+          var _a;
+          const summaries = {
+            "marker-target": this._targetSection._getCardTargetMarkerSummary(),
+            "marker-peak": this._extremaSection._getMarkerResetSummary("peak"),
+            "marker-floor": this._extremaSection._getMarkerResetSummary("floor"),
+            "generic-markers": this._referenceMarkersSection._getGenericMarkersSummary(root),
+            baseline: this._baselineSection._getCardBaselineSummary(),
+            segments: this._segmentsSection._getSegmentsSummary(root),
+            "gradient-stops": this._gradientStopsSection._getGradientStopsSummary(root)
+          };
+          for (const [group, summary] of Object.entries(summaries)) {
+            const button = this.shadowRoot.querySelector(`#card-group-${group}`);
+            const wrapper = (_a = button == null ? void 0 : button.closest) == null ? void 0 : _a.call(button, ".override-group");
+            const expanded = this._expandedCardGroups.has(group);
+            button == null ? void 0 : button.setAttribute("aria-expanded", String(expanded));
+            wrapper == null ? void 0 : wrapper.setAttribute("data-expanded", String(expanded));
+            const title = this.shadowRoot.querySelector(`#card-group-${group}-title`);
+            if (title == null ? void 0 : title.textContent) title.textContent = `${expanded ? "\u25BE" : "\u25B8"} ${title.textContent.slice(2)}`;
+            const label = this.shadowRoot.querySelector(`#card-group-${group}-summary`);
+            if (label) label.textContent = summary;
+            const body = wrapper == null ? void 0 : wrapper.querySelector(".override-group-body");
+            if (body) body.style.display = expanded ? "grid" : "none";
+          }
+          for (const row of this.shadowRoot.querySelectorAll(".generic-marker-item")) {
+            const expanded = this._referenceMarkersSection._expandedGenericMarkerUiIds.has(row.dataset.markerUiId);
+            row.setAttribute("data-expanded", String(expanded));
+            row.querySelector(".generic-marker-toggle").setAttribute("aria-expanded", String(expanded));
+            row.querySelector(".generic-marker-body").style.display = expanded ? "grid" : "none";
+          }
+        }
         _captureFocus() {
           var _a, _b, _c, _d, _e;
           const active = this.shadowRoot.activeElement;
           if (!active) return null;
           const markerId = (_c = (_b = (_a = active.closest) == null ? void 0 : _a.call(active, ".generic-marker-item")) == null ? void 0 : _b.dataset) == null ? void 0 : _c.markerUiId;
-          const selector = active.id ? `#${active.id}` : active.dataset.field ? `[data-field="${active.dataset.field}"]` : active.dataset.kind ? `[data-kind="${active.dataset.kind}"]` : markerId && active.dataset.action ? `.generic-marker-item[data-marker-ui-id="${markerId}"] [data-action="${active.dataset.action}"]` : null;
+          const selector = active.id ? `#${active.id}` : active.dataset.field ? `[data-field="${active.dataset.field}"]` : active.dataset.kind ? `[data-kind="${active.dataset.kind}"]` : markerId && active.dataset.action ? `.generic-marker-item[data-marker-ui-id="${markerId}"] [data-action="${active.dataset.action}"]` : active.dataset.action ? `[data-action="${active.dataset.action}"]` : null;
           const item = (_e = (_d = active.dataset.segmentIndex) != null ? _d : active.dataset.stopIndex) != null ? _e : active.dataset.index;
           const rowSelector = selector && active.dataset.kind && item !== void 0 ? `${selector}[data-${active.dataset.segmentIndex !== void 0 ? "segment-index" : active.dataset.stopIndex !== void 0 ? "stop-index" : "index"}="${item}"]` : selector;
           return rowSelector ? { selector: rowSelector, start: active.selectionStart, end: active.selectionEnd } : null;
         }
         _render() {
-          var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+          var _a, _b, _c, _d, _e, _f, _g, _h;
           const fillStyle = getEffectiveFillStyleValue(this._createSectionContext(), root);
-          const palette = fillStyle === "gradient" ? this._gradientStopsSection : this._segmentsSection._isSegmentFillStyle(fillStyle) ? this._segmentsSection : null;
-          const paletteRows = palette === this._gradientStopsSection ? palette._getScopedGradientStopsValue(root) : palette ? palette._getScopedSegmentsValue(root) : [];
+          const segmentRows = this._segmentsSection._getScopedSegmentsValue(root);
+          const gradientRows = this._gradientStopsSection._getScopedGradientStopsValue(root);
           const markers = this._referenceMarkersSection._getGenericMarkers(root);
           const markerIds = this._referenceMarkersSection._getGenericMarkerUiIds(root, markers.length);
           const signature = JSON.stringify([
@@ -15005,15 +15057,16 @@ ${this._renderFormattingSection({ type: "card" })}
             this._showEntityPicker,
             ...markers.map((marker, i) => [markerIds[i], this._referenceMarkersSection._getGenericMarkerSource(marker).mode]),
             fillStyle,
-            paletteRows.length,
-            palette === this._gradientStopsSection ? !isHexColorValue(palette._getGradientStopsDraftState(root).color) : false,
-            ...palette === this._gradientStopsSection ? paletteRows.map((row) => !isHexColorValue(row.color)) : [],
+            segmentRows.length,
+            gradientRows.length,
+            !isHexColorValue(this._gradientStopsSection._getGradientStopsDraftState(root).color),
+            ...gradientRows.map((row) => !isHexColorValue(row.color)),
             !!customElements.get("ha-entity-picker")
           ]);
           const activeField = (_b = (_a = this.shadowRoot.activeElement) == null ? void 0 : _a.dataset) == null ? void 0 : _b.field;
           const activeKind = (_d = (_c = this.shadowRoot.activeElement) == null ? void 0 : _c.dataset) == null ? void 0 : _d.kind;
           const defer = (activeKind == null ? void 0 : activeKind.endsWith("-text-fallback")) || (activeField == null ? void 0 : activeField.endsWith("-text-fallback")) || activeField === "feature-entity-override" && !this._context.entity_id && !this._explicitEntity;
-          if ((signature !== this._structureSignature || this._paletteRenderRequested || this._referenceRenderRequested) && !defer) {
+          if ((signature !== this._structureSignature || this._paletteRenderRequested) && !defer) {
             const focus = this._captureFocus();
             const context = this._createSectionContext();
             this.shadowRoot.innerHTML = `<style>${editorStyles}
@@ -15038,39 +15091,36 @@ ${this._renderFormattingSection({ type: "card" })}
       </style><div class="editor">
         ${this._renderEntitySection()}
         ${renderScaleSection(context, root)}
-        ${renderBarAppearanceSection(context, root, void 0, { animation: true, cssText: true })}
-        ${(_e = palette == null ? void 0 : palette.render(root)) != null ? _e : ""}
-        <div class="section"><div class="section-head"><h3>Needle</h3></div>
-          ${this._needleSection.render(root)}
-          <div class="section-note">An active, resolved Baseline takes visual precedence over Needle.</div>
-        </div>
-        <div class="section"><div class="section-head"><h3>Baseline</h3></div>
-          ${this._baselineSection.render(root)}
-        </div>
-        <div class="section"><div class="section-head"><h3>Target</h3></div>
-          ${this._targetSection.render(root)}
-        </div>
-        ${["peak", "floor"].map((key) => `<div class="section"><div class="section-head"><h3>${key === "peak" ? "Peak" : "Floor"}</h3></div>
-          ${this._extremaSection.render(root, key)}
-        </div>`).join("")}
-        <div class="section"><div class="section-head"><h3>Reference markers</h3></div>
-          ${this._referenceMarkersSection.render(root)}
-        </div>
+        ${renderMarkersSection({
+              renderGroup: (options) => this._renderCardGroup(options),
+              target: { summary: this._targetSection._getCardTargetMarkerSummary(), content: this._targetSection.render(root) },
+              peak: { summary: this._extremaSection._getMarkerResetSummary("peak"), content: this._extremaSection.render(root, "peak") },
+              floor: { summary: this._extremaSection._getMarkerResetSummary("floor"), content: this._extremaSection.render(root, "floor") },
+              references: { summary: this._referenceMarkersSection._getGenericMarkersSummary(root), content: this._referenceMarkersSection.render(root) }
+            })}
+        ${renderBarAppearanceSection(context, root, () => `${this._baselineSection.render(root, (options) => this._renderCardGroup(options))}${this._needleSection.render(root)}`, { animation: true, cssText: true })}
+        ${this._segmentsSection.render(root, (options) => this._renderCardGroup(options))}
+        ${this._gradientStopsSection.render(root, (options) => this._renderCardGroup(options))}
         ${renderFormattingSection(context, root)}
       </div>`;
             this._structureSignature = signature;
             this._paletteRenderRequested = false;
-            this._referenceRenderRequested = false;
             this._syncControls();
             const active = focus && this.shadowRoot.querySelector(focus.selector);
-            (_f = active == null ? void 0 : active.focus) == null ? void 0 : _f.call(active);
-            if ((active == null ? void 0 : active.type) === "text" && focus.start != null) (_g = active.setSelectionRange) == null ? void 0 : _g.call(active, focus.start, focus.end);
+            (_e = active == null ? void 0 : active.focus) == null ? void 0 : _e.call(active, { preventScroll: true });
+            if ((active == null ? void 0 : active.type) === "text" && focus.start != null) (_f = active.setSelectionRange) == null ? void 0 : _f.call(active, focus.start, focus.end);
           } else {
             this._syncControls();
           }
           if (this._pendingPaletteFocus) {
-            (_i = (_h = this.shadowRoot.querySelector(this._pendingPaletteFocus)) == null ? void 0 : _h.focus) == null ? void 0 : _i.call(_h);
+            (_h = (_g = this.shadowRoot.querySelector(this._pendingPaletteFocus)) == null ? void 0 : _g.focus) == null ? void 0 : _h.call(_g, { preventScroll: true });
             this._pendingPaletteFocus = null;
+          }
+          if (this._pendingReferenceFocusId) {
+            const heading = this.shadowRoot.querySelector(`.generic-marker-item[data-marker-ui-id="${this._pendingReferenceFocusId}"] .generic-marker-toggle`);
+            heading == null ? void 0 : heading.focus({ preventScroll: true });
+            heading == null ? void 0 : heading.scrollIntoView({ block: "nearest", inline: "nearest" });
+            this._pendingReferenceFocusId = null;
           }
           this._configReplaced = false;
         }
@@ -15202,6 +15252,7 @@ ${this._renderFormattingSection({ type: "card" })}
               }
             }
           }
+          this._syncDisclosures();
           for (const control of this.shadowRoot.querySelectorAll('input[data-css-color="true"]')) {
             const draft = this._cssColorDrafts.get(control.id);
             if (draft !== void 0) control.value = draft;

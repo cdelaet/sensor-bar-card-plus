@@ -1228,3 +1228,147 @@ narrow/mobile; every fill; animation on/off; Needle; percentage Baseline/Target;
 Peak/Floor/Reference; labels and independent Reference label entities; dynamic
 Scale; Auto ends; CSS direct paints; unknown/unavailable sources; echo/reopen;
 and complex combinations. Phase 3K is not started by this change.
+
+## Phase 3K acceptance fixes: canonical editor UX and Reference scrolling
+
+> The standalone Sensor Bar Card Plus editor defines the canonical editor information architecture. The Card Feature editor preserves the same applicable ordering, terminology, disclosure behavior, summaries, and visual hierarchy, omitting only controls that are not applicable to the Card Feature host.
+
+### Pre-change canonical map and comparison
+
+Inspected the current `SensorBarCardPlusEditor._render`, `_renderCardGroup`,
+`_renderOverrideGroup`, state sets, shared section renderers and reference UI,
+not an order from an earlier prompt. Starting state: `feat/card-feature`, clean
+at `ecf9d67`. The root information architecture is:
+
+| Position | Canonical visible heading / group | Visibility and initial state | Summary / hierarchy | Feature before fix |
+|---|---|---|---|---|
+| 1 | Basics | Always visible | Title; standard section shell | Omit: standalone card content |
+| 2 | Entities | Always visible; each entity Overrides initially folded | Entity list/reorder/duplicate, entity-local overrides | Required host difference: one inherited/explicit entity; heading/hierarchy align |
+| 3 | Scale | Always visible | Fixed/entity Min and Max, native picker/fallback | MATCH |
+| 4 | Markers | Always visible section shell | Target → Peak → Floor → Generic Reference Markers | ORDER, DISCLOSURE, SUMMARY, VISUAL/HIERARCHY MISMATCH: separate expanded Feature sections below Bar |
+| 4a | Target | Collapsed card subgroup, regardless of configured source | `_getCardTargetMarkerSummary`; mode/source/shape/direction/color/labels/exceeded fill inside | All controls visible; no canonical group summary |
+| 4b/4c | Peak / Floor | Collapsed card subgroups | `_getMarkerResetSummary`: enabled/reset; shared controls | All controls visible; no canonical group summaries |
+| 4d | Generic Reference Markers | Collapsed card subgroup | Count summary; nested Reference marker N rows initially folded | Separate Reference markers section; nested row folding matches, enclosing group absent |
+| 5 | Bar Appearance | Always visible | Fill/Solid/color → collapsed Baseline → always-visible Needle | ORDER/VISUAL/HIERARCHY MISMATCH: separate Baseline and Needle below palettes |
+| 5a | Baseline | Collapsed card subgroup | `_getCardBaselineSummary`; mode/source/side colors inside | All controls visible; no summary |
+| 5b | Needle | Always visible controls, no root section heading or disclosure | Shared mode/color controls within Bar Appearance | Separate Needle section |
+| 6 | Segments | Always-present section shell; collapsed subgroup | Count/default/inactive summary; inactive note/dimming outside segment fills | DISCLOSURE/SUMMARY mismatch; section omitted for inactive fills |
+| 7 | Gradient Stops | Always-present section shell; collapsed subgroup | Count/default/inactive summary; inactive note/dimming outside gradient | DISCLOSURE/SUMMARY mismatch; section omitted for inactive fills |
+| 8 | Layout | Always visible | Row height, primary label/Hero sizing | Omit: Feature geometry belongs to HA |
+| 9 | Formatting | Always visible | Unit/decimal | MATCH |
+
+All root group state belongs to standalone `_expandedCardGroups`, an initially
+empty local Set. `_renderCardGroup` uses a button, `aria-expanded`, ▸/▾, title and
+escaped summary, then a grid body hidden with `display:none`. Config edits/echo,
+hass updates and rerender keep group state; foreign config does not clear the
+root group Set. Reference rows instead have stable local IDs and their own expanded
+Set, preserved through echo/reorder, reset on foreign config. Add creates and
+expands one new row; fold/expand emits no configuration.
+
+Canonical spacing comes from shared `editorStyles`: editor gap 18px, section gap
+14px/padding 14px/radius 14px; subgroup margin-top 2px, header padding 10px 12px,
+body grid gap 12px/padding 0 12px 12px. Summary truncation, inactive styling and
+chevrons are canonical. Entity scope differs: Overrides contains Scale → Target →
+Peak → Floor → Reference markers → Bar Appearance → Baseline → Needle → Segments →
+Gradient Stops → Layout → Formatting, each its own initially folded override group
+with inheritance summaries. Feature has no multirow/entity override scopes.
+
+The filtered root order must be Entities → Scale → Markers → Bar Appearance →
+Segments → Gradient Stops → Formatting, with the same nested groups/order above.
+Only Basics, Layout, entity-list/row-content/override controls are omitted. The
+Feature parent-context entity UI and already-approved 3J control extensions remain;
+they are genuine host/capability differences, not reasons to rearrange groups.
+
+### Pre-fix Reference interaction evidence
+
+Added page and nested-dialog browser cases in source/dist before production edits.
+Both place the interaction far below the top with nonzero scroll, then expand,
+fold and add. The plain fallback harness retained scroll, but reproduced removal
+of the interacted toggle and whole-editor replacement in all four cases; the
+stable-node regression fails before the fix. Real HA's exact jump to zero is the
+reported acceptance finding, not a claim reproduced by the fallback harness.
+
+`_toggleGenericMarkerExpanded` requests host render. Feature's reference render
+callback sets `_referenceRenderRequested`, so `_render` replaces the complete
+shadow DOM, including unrelated controls/styles. Add changes the marker-ID
+signature and also replaces that DOM. Ordinary `.focus()` restoration may scroll;
+Add has no restoration selector. These are avoidable focus/DOM disruptions to the
+HA editor host. No anchor/default navigation or `scrollIntoView` exists in that
+path. Config echo retains marker IDs/expansion; the identity map is not the cause.
+Standalone uses the same row state, but does not restore arbitrary active controls
+with scrolling focus; its pending focus uses `preventScroll`. No standalone
+scrolling defect was demonstrated, and its lifecycle will not be redesigned.
+
+### Implementation and final interaction behavior
+
+`shared/editor-disclosures.js` extracts the exact root `_renderCardGroup` template
+and the small canonical Markers section composition. Standalone delegates to
+these helpers without changing its state, control content, event routing or
+render lifecycle. Feature uses the same wrappers, section controllers, shared
+styles and existing summary methods. No new summary semantics or configuration
+normalization is introduced; percentage-only Target/Baseline summaries deliberately
+retain the current standalone Automatic/Auto wording.
+
+The final Feature order is Entities → Scale → Markers → Bar Appearance →
+Segments → Gradient Stops → Formatting. Target, Peak, Floor, Generic Reference
+Markers, Baseline, Segments and Gradient Stops start folded, even when configured.
+Needle remains visible within Bar Appearance. Both palettes are mounted with
+canonical inactive styling/notes, rather than conditionally omitted. Feature's
+own `_expandedCardGroups` Set survives edits/echo, context updates, structural
+rerenders and foreign replacement, matching standalone root behavior. Reference
+row expansion uses the shared stable-ID state and resets only on foreign config.
+
+Feature no longer forces whole-editor replacement for Reference disclosure
+changes. `_syncDisclosures` patches expanded attributes, chevrons, summaries and
+body visibility in place. Existing expand/fold retains the interacted DOM node,
+focus and nearby scroll position, with no explicit scroll call and no config
+emission. Structural changes such as Add still render the changed marker list;
+focus restoration uses `preventScroll: true`. Add tracks the newly created stable
+ID, focuses its heading without scrolling, then uses `scrollIntoView` with
+`block: 'nearest', inline: 'nearest'`. No page scroll manipulation, timeout, global
+listener or observer is added. Palette pending focus also uses `preventScroll`.
+
+The one-entity parent-context UI is the required host exception, placed under
+the canonical Entities heading: inherit parent, explicit override, clear back to
+inheritance, and Area/no-parent requirements all remain unchanged. Basics/Title,
+Layout/primary row presentation, multirow entity management and entity-local
+override/inheritance controls remain omitted because they do not apply to this
+Feature. All 3J controls remain available inside the canonical groups, including
+animation, Auto Segment ends, direct CSS paints, percentage sources, all marker
+labels and independent Reference label entities. Raw metadata, aliases, own
+undefined, inactive arrays and source forms remain field-patched and preserved.
+
+### Acceptance verification and targeted HA retest
+
+Four new characterization/parity unit tests and eight browser tests cover
+source/dist, 240/360px order/summaries, all seven disclosures, native keyboard
+activation, no-emission UI changes, edit/echo/context/foreign lifecycles, raw
+metadata and narrow containment. Four of the browser cases use tall page and
+nested overflow-dialog fixtures, nonzero scroll, expand/fold/Add, stable existing
+toggle identity, no jump to top, nearby visibility, new-row expansion/focus and
+exact Add emission count. Their stable-node assertion fails before the fix.
+The fallback harness did not reproduce HA's exact jump to zero; actual HA
+confirmation remains a targeted manual acceptance check.
+
+All nine pre-change standalone HTML matrices remain byte-exact:
+20/32/80/96/128/160/192/256/288, including source/dist and picker/fallback cases.
+Standalone editor/runtime and Card Feature runtime screenshots are unchanged.
+Only Feature editor images are intentionally updated: 22 existing images reflect
+the new canonical composition; six new images show initial, expanded Markers
+and Bar Appearance at 240/360px. The narrow states were visually reviewed and
+header/control containment passes. Native number-input hover arrows are excluded
+from disclosure test captures by moving the pointer away after setup/interaction; screenshot
+tolerance is unchanged.
+
+Final validation: **1,580 unit tests** in 32 files and **271 Playwright tests**
+pass. Normal dist build and working/staged `git diff --check` pass. Complete diff
+review confirms only the editor hosts/shared disclosure helper, focused editor
+tests/images, documentation and regenerated bundle changed; configuration adapters
+and renderer/runtime source are untouched.
+
+For real HA, retest only: Add and expand/fold Reference rows while scrolled down
+(no top jump; new heading remains visible), compare standalone/Feature order,
+expand/fold Target/Peak/Floor/Baseline and edit/echo within an open group, reopen
+the editor, then quick Bottom/Inline and iPhone/narrow sanity checks. No further
+targeted implementation issue is identified by automated acceptance coverage;
+complete real-HA acceptance after these focused checks. Phase 3L is not started.

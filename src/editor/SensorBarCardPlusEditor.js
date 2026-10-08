@@ -12,6 +12,7 @@ import {
   normalizeColorComparisonValue, getColorPickerValue, renderColorInput,
 } from './shared/editor-controls.js';
 import { editorStyles } from './shared/editor-styles.js';
+import { renderCardGroup, renderMarkersSection } from './shared/editor-disclosures.js';
 
 import {
   getScaleFixedValue, getScaleEntityValue, setScalePart,
@@ -2802,26 +2803,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     `;
   }
 
-  _renderCardGroup({ group, title, summary, content, inactive = false }) {
-    const expanded = this._isCardGroupExpanded(group);
-    return `
-      <div class="override-group card-subgroup${inactive ? ' is-inactive' : ''}" data-group="${group}" data-expanded="${expanded ? 'true' : 'false'}">
-        <button
-          type="button"
-          id="card-group-${group}"
-          class="override-group-toggle"
-          data-action="toggle-card-group"
-          data-group="${group}"
-          aria-expanded="${expanded ? 'true' : 'false'}"
-        >
-          <span id="card-group-${group}-title" class="override-group-title">${expanded ? '▾' : '▸'} ${title}</span>
-          <span id="card-group-${group}-summary" class="override-group-summary">${this._escapeAttribute(summary)}</span>
-        </button>
-        <div class="override-group-body" style="display:${expanded ? 'grid' : 'none'};">
-          ${content}
-        </div>
-      </div>
-    `;
+  _renderCardGroup(options) {
+    return renderCardGroup(options, this._isCardGroupExpanded(options.group));
   }
 
   _renderEntityInput(entry, index) {
@@ -3185,38 +3168,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
 ${this._renderScaleSection({ type: 'card' })}
 
-	        <div class="section">
-          <div class="section-head">
-	            <h3>Markers</h3>
-	            <div class="section-note">Configure Target, Peak, Floor, and custom reference markers.</div>
-	          </div>
-	          <div class="field-grid">
-            ${this._renderCardGroup({
-              group: 'marker-target',
-              title: 'Target',
-              summary: this._getCardTargetMarkerSummary(),
-              content: this._targetSection.render({ type: 'card' }),
-            })}
-            ${this._renderCardGroup({
-              group: 'marker-peak',
-              title: 'Peak',
-              summary: this._getMarkerResetSummary('peak'),
-              content: this._extremaSection.render({ type: 'card' }, 'peak'),
-            })}
-            ${this._renderCardGroup({
-              group: 'marker-floor',
-              title: 'Floor',
-              summary: this._getMarkerResetSummary('floor'),
-              content: this._extremaSection.render({ type: 'card' }, 'floor'),
-            })}
-            ${this._renderCardGroup({
-              group: 'generic-markers',
-              title: 'Generic Reference Markers',
-              summary: this._getGenericMarkersSummary({ type: 'card' }),
-              content: this._renderGenericMarkersEditor({ type: 'card' }),
-            })}
-          </div>
-	        </div>
+${renderMarkersSection({
+  renderGroup: options => this._renderCardGroup(options),
+  target: { summary: this._getCardTargetMarkerSummary(), content: this._targetSection.render({ type: 'card' }) },
+  peak: { summary: this._getMarkerResetSummary('peak'), content: this._extremaSection.render({ type: 'card' }, 'peak') },
+  floor: { summary: this._getMarkerResetSummary('floor'), content: this._extremaSection.render({ type: 'card' }, 'floor') },
+  references: { summary: this._getGenericMarkersSummary({ type: 'card' }), content: this._renderGenericMarkersEditor({ type: 'card' }) },
+})}
 
 ${renderBarAppearanceSection(this._createSectionContext(), { type: 'card' }, () => `${this._baselineSection.render({ type: 'card' }, options => this._renderCardGroup(options))}${this._needleSection.render({ type: 'card' })}`)}
 

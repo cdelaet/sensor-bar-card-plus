@@ -158,7 +158,7 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
       expect(editor[key].constructor).toBe(standalone[key].constructor);
       expect(editor.shadowRoot.innerHTML).toContain(editor[key].render(root));
     }
-    expect(editor.shadowRoot.innerHTML).toContain('An active, resolved Baseline takes visual precedence over Needle.');
+    expect(editor.shadowRoot.innerHTML).toContain(editor._baselineSection.render(root, options => editor._renderCardGroup(options)));
     expect(editor.shadowRoot.innerHTML).not.toContain('disabled="disabled"');
   });
   it('leaves visibility precedence to runtime and restores Needle when Baseline fails to resolve', async () => {

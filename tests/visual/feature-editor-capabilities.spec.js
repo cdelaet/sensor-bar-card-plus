@@ -1,3 +1,4 @@
+const { expandFeatureGroups } = require('./feature-editor-test-utils.cjs');
 const {test,expect}=require('@playwright/test');
 const path=require('path');
 const type='custom:sensor-bar-card-plus-feature';
@@ -15,7 +16,7 @@ async function mount(page,source,width=240){
   editor.addEventListener('config-changed',e=>{window.__capabilityEvents.push(structuredClone(e.detail.config));editor.setConfig(e.detail.config);});
   editor.setConfig(config);editor.context={entity_id:'sensor.parent'};editor.hass={states:{}};
   const host=document.querySelector('#mount');host.style.width=`${width}px`;host.style.setProperty('--success-color','green');host.append(editor);await editor.updateComplete;
- },{width,type});return page.locator('sensor-bar-card-plus-feature-editor');
+ },{width,type});const editor=page.locator('sensor-bar-card-plus-feature-editor');await expandFeatureGroups(editor);return editor;
 }
 const saved=editor=>editor.evaluate(el=>structuredClone(el._config));
 const section=(editor,page,name)=>editor.locator('.section').filter({has:page.getByRole('heading',{name,exact:true})});

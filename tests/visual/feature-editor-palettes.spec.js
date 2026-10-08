@@ -1,3 +1,4 @@
+const { expandFeatureGroups } = require('./feature-editor-test-utils.cjs');
 const { test, expect } = require('@playwright/test');
 const path = require('path');
 async function mount(page, source, style, width) {
@@ -19,7 +20,9 @@ async function mount(page, source, style, width) {
     document.querySelector('#mount').style.width = `${width}px`; document.querySelector('#mount').append(editor);
     await editor.updateComplete;
   }, { style, width });
-  return page.locator('sensor-bar-card-plus-feature-editor');
+  const editor = page.locator('sensor-bar-card-plus-feature-editor');
+  await expandFeatureGroups(editor);
+  return editor;
 }
 const saved = editor => editor.evaluate(el => structuredClone(el._config));
 for (const source of ['src', 'dist']) for (const style of ['bands', 'gradient']) for (const width of [360, 240]) {

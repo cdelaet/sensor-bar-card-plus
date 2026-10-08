@@ -206,9 +206,10 @@ for (const source of ['src', 'dist']) describe(`Feature editor foundation (${sou
     standalone.setConfig({ ...config, entity: 'sensor.parent' });
     vi.stubGlobal('customElements', { get: () => undefined });
     try {
-      for (const render of [renderScaleSection, renderFormattingSection, renderBarAppearanceSection]) {
+      for (const render of [renderScaleSection, renderFormattingSection]) {
         expect(editor.shadowRoot.innerHTML).toContain(render(editor._createSectionContext(), { type: 'card' }, undefined, { animation: true, cssText: true }));
       }
+      expect(editor.shadowRoot.innerHTML).toContain(renderBarAppearanceSection(editor._createSectionContext(), { type: 'card' }, () => `${editor._baselineSection.render({ type: 'card' }, options => editor._renderCardGroup(options))}${editor._needleSection.render({ type: 'card' })}`, { animation: true, cssText: true }));
       for (const render of [renderScaleSection, renderFormattingSection]) {
         expect(standalone.shadowRoot.innerHTML).toContain(render(standalone._createSectionContext(), { type: 'card' }));
       }

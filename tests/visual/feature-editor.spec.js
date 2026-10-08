@@ -95,7 +95,7 @@ test('Area/no-parent entity requirement and narrow layout stay usable', async ({
   expect(await editor.evaluate(element => Array.from(element.shadowRoot.querySelectorAll('.section, input, select')).every(node => {
     const host = element.getBoundingClientRect();
     const rect = node.getBoundingClientRect();
-    return rect.left >= host.left - 1 && rect.right <= host.right + 1;
+    return rect.width === 0 || rect.left >= host.left - 1 && rect.right <= host.right + 1;
   }))).toBe(true);
   await expect(editor).toHaveScreenshot('feature-editor-required-narrow.png');
 });

@@ -3,13 +3,27 @@
 The existing `sensor-bar-card-plus.js` resource also registers
 `sensor-bar-card-plus-feature`. No additional resource is required. This preview
 uses Home Assistant's [public custom Card Feature API](https://developers.home-assistant.io/docs/frontend/custom-ui/custom-card-feature/).
-The graphical Feature editor exposes entity inheritance/override, Scale,
-Bar Appearance (fill style, color, solid fill, animation), Segments for segment-based fill
-styles, Gradient Stops for gradient, Needle, Baseline, Target, Peak, Floor,
-Reference markers and Formatting. Palette and reference-marker edits preserve raw
+The graphical Feature editor follows the standalone editor's applicable order:
+Entities → Scale → Markers → Bar Appearance → Segments → Gradient Stops →
+Formatting. Markers contains initially folded Target, Peak, Floor and Generic
+Reference Markers groups. Baseline is initially folded within Bar Appearance;
+Needle controls are always visible there. Both palette sections remain present
+and initially folded, with the canonical inactive note/summary when their fill
+style is not selected. Fill style, color, solid fill and animation remain in Bar
+Appearance. Palette and reference-marker edits preserve raw
 item metadata/order and inactive palettes. The Animated toggle follows the runtime
 default (on) and changes only `bar.animated`. No second resource is required for
 the editor.
+
+Disclosures are local UI state: opening/folding emits no configuration, and edits,
+configuration echoes and parent-context updates keep groups open. Reference rows
+keep their stable identities and expansion through edits/echo; a foreign
+configuration resets those row states. Existing row expansion/folding preserves
+mounted controls and requires no explicit scrolling. Add expands the new row,
+focuses its heading without scrolling, then brings it into view with nearest
+alignment. The parent-entity inheritance/override behavior remains unchanged.
+See [editor architecture](editor-architecture.md#phase-3k-acceptance-fixes-canonical-editor-ux-and-reference-scrolling)
+for the canonical map, host omissions and acceptance evidence.
 
 The editor preserves Needle and Baseline independently. An active, resolved
 Baseline takes visual precedence over Needle at runtime; enabling either in the

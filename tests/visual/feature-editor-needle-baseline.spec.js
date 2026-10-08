@@ -1,3 +1,4 @@
+const { expandFeatureGroups, featureGroup } = require('./feature-editor-test-utils.cjs');
 const { test, expect } = require('@playwright/test');
 const path = require('path');
 async function mount(page, source, width, percentage = false) {
@@ -17,7 +18,9 @@ async function mount(page, source, width, percentage = false) {
     editor.setConfig(config); editor.context = { entity_id: 'sensor.a' }; editor.hass = { states: {} };
     document.querySelector('#mount').style.width = `${width}px`; document.querySelector('#mount').append(editor); await editor.updateComplete;
   }, { width, percentage });
-  return page.locator('sensor-bar-card-plus-feature-editor');
+  const editor = page.locator('sensor-bar-card-plus-feature-editor');
+  await expandFeatureGroups(editor);
+  return editor;
 }
 const saved = editor => editor.evaluate(el => structuredClone(el._config));
 for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feature Needle/Baseline ${width}px (${source}): precedence, raw preservation, focus and echo`, async ({ page }) => {
@@ -25,10 +28,10 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   const original = await page.evaluate(() => window.__physicalOriginal);
   expect(await saved(editor)).toEqual(original); expect(await page.evaluate(() => window.__physicalEvents)).toHaveLength(0);
   for (const name of ['Needle', 'Baseline']) {
-    await expect(editor.locator('.section').filter({ has: page.getByRole('heading', { name, exact: true }) })).toHaveScreenshot(`feature-${name.toLowerCase()}-${width}.png`);
+    await expect(name === 'Baseline' ? featureGroup(editor, 'baseline') : editor.locator('.inline-row').filter({ has: page.locator('#bar-needle-mode') })).toHaveScreenshot(`feature-${name.toLowerCase()}-${width}.png`);
   }
   expect(await editor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-  await expect(editor.getByText('An active, resolved Baseline takes visual precedence over Needle.')).toBeVisible();
+  await expect(featureGroup(editor, 'baseline')).toHaveAttribute('data-expanded', 'true');
   await editor.locator('#baseline-mode').selectOption('enabled');
   expect((await saved(editor)).bar.needle).toBe(true);
   const fallback = editor.locator('#baseline-value');

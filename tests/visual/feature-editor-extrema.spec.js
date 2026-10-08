@@ -1,3 +1,4 @@
+const { expandFeatureGroups, featureGroup } = require('./feature-editor-test-utils.cjs');
 const { test, expect } = require('@playwright/test');
 const path = require('path');
 async function mount(page, source, width, empty = false) {
@@ -17,7 +18,9 @@ async function mount(page, source, width, empty = false) {
     editor.setConfig(config); editor.context = { entity_id: 'sensor.parent' }; editor.hass = { states: {} };
     document.querySelector('#mount').style.width = `${width}px`; document.querySelector('#mount').append(editor); await editor.updateComplete;
   }, { width, empty });
-  return page.locator('sensor-bar-card-plus-feature-editor');
+  const editor = page.locator('sensor-bar-card-plus-feature-editor');
+  await expandFeatureGroups(editor);
+  return editor;
 }
 const saved = editor => editor.evaluate(el => structuredClone(el._config));
 for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feature extrema ${width}px (${source}): labels/reset/preservation/focus/echo`, async ({ page }) => {
@@ -25,7 +28,8 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   expect(await page.evaluate(() => window.__extremaEvents)).toHaveLength(0);
   expect(await editor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   for (const key of ['peak', 'floor']) {
-    const section = editor.locator('.section').filter({ has: page.getByRole('heading', { name: key === 'peak' ? 'Peak' : 'Floor', exact: true }) });
+    const section = featureGroup(editor, `marker-${key}`);
+    await page.mouse.move(0, 0);
     await expect(section).toHaveScreenshot(`feature-${key}-${width}.png`);
     const other = key === 'peak' ? 'floor' : 'peak', before = await saved(editor);
     await editor.locator(`#${key}-show`).uncheck(); await editor.locator(`#${key}-show`).check();

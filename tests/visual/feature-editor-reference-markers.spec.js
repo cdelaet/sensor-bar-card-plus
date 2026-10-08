@@ -1,3 +1,4 @@
+const { expandFeatureGroups, featureGroup } = require('./feature-editor-test-utils.cjs');
 const { test, expect } = require('@playwright/test');
 const path = require('path');
 async function mount(page, source, width, empty = false) {
@@ -17,7 +18,9 @@ async function mount(page, source, width, empty = false) {
     editor.setConfig(config);editor.context={entity_id:'sensor.parent'};editor.hass={states:{}};
     document.querySelector('#mount').style.width=`${width}px`;document.querySelector('#mount').append(editor);await editor.updateComplete;
   },{width,empty});
-  return page.locator('sensor-bar-card-plus-feature-editor');
+  const editor = page.locator('sensor-bar-card-plus-feature-editor');
+  await expandFeatureGroups(editor);
+  return editor;
 }
 const saved = editor => editor.evaluate(el=>structuredClone(el._config));
 const rows = editor => editor.locator('.generic-marker-item');
@@ -25,8 +28,9 @@ const field = (row,name) => row.locator(`[data-kind="generic-marker-${name}"]`);
 for(const source of ['src','dist']) for(const width of [360,240]) test(`Feature Reference markers ${width}px (${source}): sources/labels/reorder/echo/preservation`,async({page})=>{
   const editor=await mount(page,source,width),original=await saved(editor);
   expect(await page.evaluate(()=>window.__referenceEvents)).toHaveLength(0);
-  const section=editor.locator('.section').filter({has:page.getByRole('heading',{name:'Reference markers',exact:true})});
+  const section=featureGroup(editor,'generic-markers');
   await rows(editor).first().getByRole('button',{name:/Reference marker 1/}).click();
+  await page.mouse.move(0, 0);
   await expect(section).toHaveScreenshot(`feature-reference-markers-${width}.png`);
   expect(await editor.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
   expect(await section.evaluate(el=>Array.from(el.querySelectorAll('input,select,button')).filter(node=>node.getBoundingClientRect().width>0).every(node=>node.getBoundingClientRect().right<=el.getBoundingClientRect().right+1&&node.getBoundingClientRect().left>=el.getBoundingClientRect().left-1))).toBe(true);

@@ -1,3 +1,4 @@
+const { expandFeatureGroups, featureGroup } = require('./feature-editor-test-utils.cjs');
 const { test, expect } = require('@playwright/test');
 const path = require('path');
 async function mount(page, source, width, percentage = false) {
@@ -17,13 +18,15 @@ async function mount(page, source, width, percentage = false) {
     editor.setConfig(config); editor.context = { entity_id: 'sensor.a' }; editor.hass = { states: {} };
     document.querySelector('#mount').style.width = `${width}px`; document.querySelector('#mount').append(editor); await editor.updateComplete;
   }, { width, percentage });
-  return page.locator('sensor-bar-card-plus-feature-editor');
+  const editor = page.locator('sensor-bar-card-plus-feature-editor');
+  await expandFeatureGroups(editor);
+  return editor;
 }
 const saved = editor => editor.evaluate(el => structuredClone(el._config));
 for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feature Target ${width}px (${source}): fields, preservation, focus and echo`, async ({ page }) => {
   const editor = await mount(page, source, width), original = await page.evaluate(() => window.__targetOriginal);
   expect(await page.evaluate(() => window.__targetEvents)).toHaveLength(0);
-  const section = editor.locator('.section').filter({ has: page.getByRole('heading', { name: 'Target', exact: true }) });
+  const section = featureGroup(editor, 'marker-target');
   await expect(section).toHaveScreenshot(`feature-target-${width}.png`);
   expect(await editor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   await expect(section.locator('#target-direction option')).toHaveText(['Inward', 'Outward']);

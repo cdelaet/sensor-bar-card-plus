@@ -22,10 +22,10 @@ async function field(editor, kind, index, value, type = 'change') {
   editor._handleField({ type, target: control }); await editor.updateComplete;
 }
 for (const source of ['src', 'dist']) describe(`shared Feature palettes (${source})`, () => {
-  for (const style of ['bands', 'soft_bands', 'band_gradient', 'gradient', 'solid']) it(`only composes the applicable palette for ${style}`, async () => {
+  for (const style of ['bands', 'soft_bands', 'band_gradient', 'gradient', 'solid']) it(`keeps both canonical palette disclosures for ${style}`, async () => {
     const { editor, events } = await setup(source, raw(style));
-    expect(editor.shadowRoot.innerHTML.includes('id="segment-draft-from"')).toBe(['bands', 'soft_bands', 'band_gradient'].includes(style));
-    expect(editor.shadowRoot.innerHTML.includes('id="gradient-draft-pos"')).toBe(style === 'gradient');
+    expect(editor.shadowRoot.innerHTML).toContain('id="segment-draft-from"');
+    expect(editor.shadowRoot.innerHTML).toContain('id="gradient-draft-pos"');
     expect(events).toHaveLength(0);
   });
   for (const [kind, fieldName, value] of [['segment', 'from', '65%'], ['segment', 'to', '95%'], ['segment', 'color', '#333333'], ['gradient', 'pos', '90%'], ['gradient', 'color', 'blue']]) {
@@ -152,7 +152,7 @@ for (const source of ['src', 'dist']) describe(`shared Feature palettes (${sourc
     const segment = editor._segmentsSection, gradient = editor._gradientStopsSection;
     expect(segment.constructor).toBe(standalone._segmentsSection.constructor);
     expect(gradient.constructor).toBe(standalone._gradientStopsSection.constructor);
-    expect(editor.shadowRoot.innerHTML).toContain(segment.render(root));
+    expect(editor.shadowRoot.innerHTML).toContain(segment.render(root, options => editor._renderCardGroup(options)));
     expect(standalone._renderSegmentPreview(root)).toBe(standalone._segmentsSection._renderSegmentPreview(root));
   });
 });
