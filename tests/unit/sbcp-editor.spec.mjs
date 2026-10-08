@@ -1165,7 +1165,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-override-min"]')[0], '');
+    dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-override-min"]')[0], '');
 
     const finalConfig = events.at(-1).detail.config;
     expect(finalConfig.entities).toEqual([
@@ -1199,7 +1199,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-override-min"]')[0], '');
+    dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-override-min"]')[0], '');
 
     expect(events.at(-1).detail.config.entities).toEqual([
       {
@@ -1989,7 +1989,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#scale-min'), '');
+    dispatchChange(editor.shadowRoot.querySelector('#scale-min'), '');
 
     expect(events.at(-1).detail.config.scale).toEqual({
       min: {
@@ -2038,7 +2038,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#scale-min'), '');
+    dispatchChange(editor.shadowRoot.querySelector('#scale-min'), '');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="scale-min-entity-source"]')[0], '');
 
     expect(events.at(-1).detail.config.scale).toEqual({
@@ -2210,7 +2210,7 @@ describe('Sensor Bar Card Plus editor', () => {
       formatting: { unit: 'kW', decimal: 2 },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#formatting-decimal'), '');
+    dispatchChange(editor.shadowRoot.querySelector('#formatting-decimal'), '');
 
     expect(events.at(-1).detail.config.formatting).toEqual({ unit: 'kW' });
   });
@@ -2364,7 +2364,7 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-formatting-unit'), '');
-    dispatchInput(editor.shadowRoot.querySelector('#entity-0-formatting-decimal'), '');
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-formatting-decimal'), '');
 
     expect(events.at(-1).detail.config.entities).toEqual([
       { entity: 'sensor.one' },
@@ -2453,7 +2453,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#target-value'), '');
+    dispatchChange(editor.shadowRoot.querySelector('#target-value'), '');
 
     expect(events.at(-1).detail.config.target).toEqual({
       at: { entity: 'sensor.dynamic_target' },
@@ -2496,7 +2496,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#target-value'), '');
+    dispatchChange(editor.shadowRoot.querySelector('#target-value'), '');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="target-entity-source"]')[0], '');
 
     expect(events.at(-1).detail.config.target).toEqual({
@@ -2710,7 +2710,7 @@ describe('Sensor Bar Card Plus editor', () => {
       label: { show: true, precision: 1 },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#target-label-precision'), '');
+    dispatchChange(editor.shadowRoot.querySelector('#target-label-precision'), '');
     expect(events.at(-1).detail.config.target).toEqual({
       label: { show: true },
     });
@@ -2727,7 +2727,7 @@ describe('Sensor Bar Card Plus editor', () => {
 
     expect(editor.shadowRoot.querySelector('#target-label-precision').value).toBe('0');
 
-    dispatchInput(editor.shadowRoot.querySelector('#target-label-precision'), '');
+    dispatchChange(editor.shadowRoot.querySelector('#target-label-precision'), '');
     expect(events.at(-1).detail.config.target).toEqual({
       label: { show: true },
     });
@@ -2737,7 +2737,7 @@ describe('Sensor Bar Card Plus editor', () => {
       label: { show: true, precision: 0 },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#target-label-precision'), '');
+    dispatchChange(editor.shadowRoot.querySelector('#target-label-precision'), '');
     expect(events.at(-1).detail.config.target).toEqual({
       label: { show: true },
     });
@@ -3127,7 +3127,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-target-value"]')[0], '');
+    dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-target-value"]')[0], '');
 
     expect(events.at(-1).detail.config.entities).toEqual([
       { entity: 'sensor.one', name: 'One', target: { at: { entity: 'sensor.grid_target' } } },
@@ -3172,7 +3172,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-target-value"]')[0], '');
+    dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-target-value"]')[0], '');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-target-entity-source"]')[0], '');
 
     expect(events.at(-1).detail.config.entities).toEqual([
@@ -3666,7 +3666,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#baseline-value'), '');
+    dispatchChange(editor.shadowRoot.querySelector('#baseline-value'), '');
 
     expect(events.at(-1).detail.config.baseline).toEqual({
       at: { entity: 'sensor.dynamic_baseline' },
@@ -3703,7 +3703,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#baseline-value'), '');
+    dispatchChange(editor.shadowRoot.querySelector('#baseline-value'), '');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="baseline-entity-source"]')[0], '');
 
     expect(events.at(-1).detail.config.baseline).toEqual({
@@ -3998,7 +3998,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#baseline-value'), '');
+    dispatchChange(editor.shadowRoot.querySelector('#baseline-value'), '');
 
     expect(events.at(-1).detail.config.baseline).toBeUndefined();
   });
@@ -5990,7 +5990,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#layout-height'), '');
+    dispatchChange(editor.shadowRoot.querySelector('#layout-height'), '');
 
     const finalConfig = events.at(-1).detail.config;
     expect(finalConfig.layout).toEqual({
@@ -6088,7 +6088,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
     expect(events.at(-1).detail.config.layout.hero.value_size).toBe(80);
 
-    dispatchInput(editor.shadowRoot.querySelector('#layout-hero-value-size'), '');
+    dispatchChange(editor.shadowRoot.querySelector('#layout-hero-value-size'), '');
     expect(events.at(-1).detail.config.layout.label.position).toBe('hero');
     expect(events.at(-1).detail.config.layout.label.hero_size).toBe('small');
     expect(events.at(-1).detail.config.layout.hero?.value_size).toBeUndefined();
@@ -6207,7 +6207,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#layout-label-width'), '');
+    dispatchChange(editor.shadowRoot.querySelector('#layout-label-width'), '');
 
     const finalConfig = events.at(-1).detail.config;
     expect(finalConfig.layout).toBeUndefined();
@@ -6232,7 +6232,7 @@ describe('Sensor Bar Card Plus editor', () => {
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-layout'));
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-override-height"]')[0], '');
+    dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-override-height"]')[0], '');
 
     const finalConfig = events.at(-1).detail.config;
     expect(finalConfig.entities).toEqual([

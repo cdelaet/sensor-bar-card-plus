@@ -134,7 +134,7 @@ for (const source of ['src', 'dist']) describe(`Feature editor foundation (${sou
     await edit(editor, '#formatting-decimal', '2');
     expect(editor._config.formatting).toEqual({ future: true, unit: 'kW', decimal: 2 });
     expect(Object.hasOwn(editor._config, 'decimal')).toBe(false);
-    await edit(editor, '#formatting-decimal', '');
+    await edit(editor, '#formatting-decimal', '', 'change');
     await edit(editor, '#formatting-unit', '');
     expect(editor._config.formatting).toEqual({ future: true });
     expect(editor._config.bar).toEqual(config.bar);
@@ -179,7 +179,7 @@ for (const source of ['src', 'dist']) describe(`Feature editor foundation (${sou
     editor.setConfig(events.at(-1).detail.config);
     await editor.updateComplete;
     expect(editor.shadowRoot.querySelector('#scale-min')).toBe(control);
-    await edit(editor, '#scale-min', '');
+    await edit(editor, '#scale-min', '', 'change');
     expect(editor._config.scale.min).toEqual({ entity: 'sensor.minimum', future_metadata: 'keep-me' });
     await edit(editor, 'input[data-kind="scale-min-entity-source"]', '');
     expect(editor._config.scale.min).toEqual({ future_metadata: 'keep-me' });

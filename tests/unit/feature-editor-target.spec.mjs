@@ -64,7 +64,7 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
   });
   it('clears owned label/color fields and aliases without normalizing other defaults', async () => {
     const config = raw(), { editor } = await setup(source, config);
-    await edit(editor, '#target-label-text', ''); await edit(editor, '#target-label-precision', ''); await edit(editor, '#target-color', '#888888');
+    await edit(editor, '#target-label-text', ''); await edit(editor, '#target-label-precision', '', 'change'); await edit(editor, '#target-color', '#888888');
     const expected = structuredClone(config); delete expected.target.label.text; delete expected.target.label.precision; delete expected.target.label.decimal;
     delete expected.target.color; delete expected.target_color;
     expect(editor._config).toEqual(expected);
@@ -72,7 +72,7 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
   });
   for (const [part, value] of [['fixed', '75'], ['fixed', ''], ['entity', 'sensor.changed'], ['entity', '']]) it(`owns only source ${part}=${value}`, async () => {
     const config = raw(), { editor } = await setup(source, config);
-    await edit(editor, part === 'fixed' ? '#target-value' : '#feature-target-entity', value);
+    await edit(editor, part === 'fixed' ? '#target-value' : '#feature-target-entity', value, value === '' ? 'change' : 'input');
     const expected = structuredClone(config); if (value === '') delete expected.target.at[part]; else expected.target.at[part] = part === 'fixed' ? 75 : value;
     expect(editor._config).toEqual(expected);
   });
@@ -80,7 +80,7 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
     const config = raw(); config.target.at = { value: 70, percent: 30, fallback: 10, ...meta() };
     const { editor } = await setup(source, config);
     await edit(editor, '#target-value', '75'); expect(editor._config.target.at).toEqual({ ...config.target.at, value: 75 });
-    await edit(editor, '#feature-target-entity', 'sensor.changed'); await edit(editor, '#target-value', '');
+    await edit(editor, '#feature-target-entity', 'sensor.changed'); await edit(editor, '#target-value', '', 'change');
     expect(editor._config.target.at).toEqual({ percent: 30, fallback: 10, ...meta(), entity: 'sensor.changed' });
   });
   for (const at of [70, 'sensor.t', '70%']) it(`keeps scalar source ${at} and promotes minimally for another component`, async () => {
@@ -91,7 +91,7 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
       await edit(editor, '#feature-target-entity', 'sensor.changed'); expect(editor._config.target.at).toBe('sensor.changed');
       await edit(editor, '#target-value', '75'); expect(editor._config.target.at).toEqual({ entity: 'sensor.changed', fixed: 75 });
     } else {
-      if (at === '70%') { expect(editor.shadowRoot.querySelector('#target-value').value).toBe(''); await edit(editor, '#target-value', ''); expect(editor._config.target.at).toBe(at); }
+      if (at === '70%') { expect(editor.shadowRoot.querySelector('#target-value').value).toBe(''); await edit(editor, '#target-value', '', 'change'); expect(editor._config.target.at).toBe(at); }
       await edit(editor, '#feature-target-entity', 'sensor.changed'); expect(editor._config.target.at).toEqual({ [at === '70%' ? 'percent' : 'fixed']: 70, entity: 'sensor.changed' });
     }
     expect(editor.shadowRoot.innerHTML).toContain('target-percent');
@@ -146,7 +146,7 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
     const config = raw(); config.target.at = '70%';
     const { editor } = await setup(source, config);
     await edit(editor, '#target-value', '75'); expect(editor._config.target.at).toEqual({ percent: 70, fixed: 75 });
-    await edit(editor, '#target-value', ''); expect(editor._config.target.at).toEqual({ percent: 70 });
+    await edit(editor, '#target-value', '', 'change'); expect(editor._config.target.at).toEqual({ percent: 70 });
   });
 });
 

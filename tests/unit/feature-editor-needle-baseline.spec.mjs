@@ -86,7 +86,7 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
   });
   for (const [part, value] of [['fixed', '12'], ['entity', 'sensor.changed'], ['fixed', ''], ['entity', '']]) it(`patches only source ${part}=${value}`, async () => {
     const config = raw(), { editor, events } = await setup(source, config);
-    await edit(editor, part === 'fixed' ? '#baseline-value' : '#feature-baseline-entity', value);
+    await edit(editor, part === 'fixed' ? '#baseline-value' : '#feature-baseline-entity', value, value === '' ? 'change' : 'input');
     const expected = structuredClone(config);
     if (value === '') delete expected.baseline.at[part]; else expected.baseline.at[part] = part === 'fixed' ? 12 : value;
     expect(editor._config).toEqual(expected);
@@ -103,7 +103,7 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
     editor.setConfig({ ...config, baseline: { ...config.baseline, at: { fixed: 10, value: 5, percent: 30, ...metadata() } } }); await editor.updateComplete;
     await edit(editor, '#feature-baseline-entity', 'sensor.c');
     expect(editor._config.baseline.at).toEqual({ fixed: 10, value: 5, percent: 30, ...metadata(), entity: 'sensor.c' });
-    await edit(editor, '#baseline-value', '');
+    await edit(editor, '#baseline-value', '', 'change');
     expect(editor._config.baseline.at).toEqual({ percent: 30, ...metadata(), entity: 'sensor.c' });
   });
   for (const at of [25, 'sensor.b', '50%', { percent: 50, ...metadata() }]) it(`preserves source representation ${JSON.stringify(at)} through unrelated Baseline/Needle edits`, async () => {
@@ -123,7 +123,7 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
     await edit(editor, '#baseline-value', '30'); expect(editor._config.baseline.at).toBe(30);
     await edit(editor, '#feature-baseline-entity', 'sensor.c'); expect(editor._config.baseline.at).toEqual({ fixed: 30, entity: 'sensor.c' });
     editor.setConfig({ ...config, baseline: { ...config.baseline, at: '50%' } }); await editor.updateComplete;
-    await edit(editor, '#baseline-value', ''); expect(editor._config.baseline.at).toBe('50%');
+    await edit(editor, '#baseline-value', '', 'change'); expect(editor._config.baseline.at).toBe('50%');
     await edit(editor, '#feature-baseline-entity', 'sensor.c'); expect(editor._config.baseline.at).toEqual({ percent: 50, entity: 'sensor.c' });
   });
   it('promotes legacy Baseline scalars only for a field that requires an object', async () => {
@@ -168,7 +168,7 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
     feature.hass = { states: { 'sensor.a': { state: '30', attributes: {} }, 'sensor.b': { state: '10', attributes: {} } } };
     await feature.updateComplete;
     expect(feature._row.needle.show).toBe(false); expect(feature._row.baselineVisible).toBe(true);
-    await edit(editor, '#baseline-value', '');
+    await edit(editor, '#baseline-value', '', 'change');
     feature.setConfig(editor._config); feature.hass = { states: { 'sensor.a': { state: '30', attributes: {} }, 'sensor.b': { state: 'unavailable', attributes: {} } } };
     await feature.updateComplete;
     expect(feature._row.needle.show).toBe(true); expect(feature._row.baselineVisible).toBe(false);

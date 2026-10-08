@@ -34,7 +34,8 @@ for (const source of ['src', 'dist']) describe(`Scale/Formatting characterizatio
     expect(editor.shadowRoot.querySelector('#scale-min')).toBe(control);
     expect(events.at(-1).detail.config.scale).toEqual({ min: { fixed: 12, entity: 'sensor.minimum' }, max: { fixed: 100, entity: 'sensor.maximum' } });
     input(editor, 'scale-min', 'not numeric');
-    expect(events.at(-1).detail.config.scale.min).toEqual({ entity: 'sensor.minimum' });
+    expect(events.at(-1).detail.config.scale.min).toEqual({ fixed: 12, entity: 'sensor.minimum' });
+    expect(editor.shadowRoot.querySelector('#scale-min').value).toBe('not numeric');
     expect(events.at(-1).detail.config.extra).toEqual({ keep: true });
   });
 

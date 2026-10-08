@@ -77,10 +77,14 @@ for(const source of ['src','dist']) for(const width of [360,240]) test(`Feature 
 for(const source of ['src','dist']) test(`Feature Reference markers (${source}): empty add/remove, invalid input and foreign draft replacement`,async({page})=>{
   const editor=await mount(page,source,240,true);await expect(rows(editor)).toHaveCount(0);expect(await page.evaluate(()=>window.__referenceEvents)).toHaveLength(0);
   await editor.getByRole('button',{name:'Add reference marker'}).click();const row=rows(editor).first();await expect(row).toHaveAttribute('data-expanded','true');
-  await field(row,'label-text').fill('Local');await field(row,'label-precision').fill('2');await field(row,'label-precision').fill('-1');await expect(field(row,'label-precision')).toBeFocused();
-  expect((await saved(editor)).markers[0].label.precision).toBeUndefined();
+  await field(row,'label-text').fill('Local');await field(row,'label-precision').fill('2');
+  const beforeInvalid = await page.evaluate(()=>window.__referenceEvents.length);
+  await field(row,'label-precision').fill('-1');await expect(field(row,'label-precision')).toBeFocused();
+  expect((await saved(editor)).markers[0].label.precision).toBe(2);
+  expect(await page.evaluate(()=>window.__referenceEvents.length)).toBe(beforeInvalid);
   await editor.evaluate(async el=>{el.setConfig(el._config);el.context={entity_id:'sensor.echo'};await el.updateComplete;});await expect(field(row,'label-precision')).toHaveValue('-1');
-  await field(row,'fixed').fill('');expect((await saved(editor)).markers[0].at).toBeUndefined();
+  await field(row,'fixed').fill('');expect((await saved(editor)).markers[0].at).toEqual({fixed:50});
+  await field(row,'fixed').press('Tab');expect((await saved(editor)).markers[0].at).toBeUndefined();
   const oldId=await row.getAttribute('data-marker-ui-id');
   await editor.evaluate(async el=>{el.setConfig({type:'custom:sensor-bar-card-plus-feature',markers:[{at:'35%',label:{text:'Foreign'}}]});await el.updateComplete;});
   expect(await row.getAttribute('data-marker-ui-id')).not.toBe(oldId);await expect(row).toHaveAttribute('data-expanded','false');

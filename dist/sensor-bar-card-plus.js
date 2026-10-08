@@ -6832,6 +6832,61 @@ ${barMarkerStyles}
     }
   });
 
+  // src/editor/shared/editor-numeric-drafts.js
+  var NumericInputDrafts;
+  var init_editor_numeric_drafts = __esm({
+    "src/editor/shared/editor-numeric-drafts.js"() {
+      init_editor_config();
+      NumericInputDrafts = class {
+        constructor() {
+          this.values = /* @__PURE__ */ new Map();
+        }
+        reset() {
+          this.values.clear();
+        }
+        handle(event, rendering = false) {
+          var _a, _b, _c, _d, _e, _f;
+          const input = event.target;
+          if (rendering && (input == null ? void 0 : input.type) === "number") return true;
+          const route = (_d = (_c = (_a = input == null ? void 0 : input.dataset) == null ? void 0 : _a.field) != null ? _c : (_b = input == null ? void 0 : input.dataset) == null ? void 0 : _b.kind) != null ? _d : "";
+          if (route === "generic-marker-source-mode" && input.id) {
+            for (const suffix of ["fixed", "fallback", "percent"]) this.values.delete(input.id.replace(/source-mode$/, suffix));
+          }
+          if ((input == null ? void 0 : input.type) !== "number" || !input.id || /^(?:entity-)?gradient-/.test(route) || /^(?:target|baseline)-percent$/.test(route)) return false;
+          if (input.isConnected === false) return true;
+          const value = input.value;
+          const percentage = route === "generic-marker-percent";
+          const precision = /(?:precision|decimal)$/.test(route);
+          const number = precision ? normalizeDecimalValue(value) : normalizeNumberValue(value);
+          const complete = number !== null && !((_e = input.validity) == null ? void 0 : _e.badInput) && (!/(?:layout-height|override-height)$/.test(route) || number >= 24);
+          const clear = event.type === "change" && value === "" && !((_f = input.validity) == null ? void 0 : _f.badInput) && !percentage;
+          if (complete || clear) {
+            this.values.delete(input.id);
+            return false;
+          }
+          this.values.set(input.id, value);
+          return true;
+        }
+        captureFocus(root2) {
+          const input = root2.activeElement;
+          return input && this.values.has(input.id) ? input.id : null;
+        }
+        apply(root2, focusId = null) {
+          var _a, _b, _c, _d, _e, _f;
+          for (const [id, value] of this.values) {
+            const input = (_b = (_a = root2.getElementById) == null ? void 0 : _a.call(root2, id)) != null ? _b : root2.querySelector(`#${id}`);
+            if (!input) {
+              this.values.delete(id);
+              continue;
+            }
+            if (input !== root2.activeElement) input.value = value;
+          }
+          if (focusId) (_f = (_e = (_d = (_c = root2.getElementById) == null ? void 0 : _c.call(root2, focusId)) != null ? _d : root2.querySelector(`#${focusId}`)) == null ? void 0 : _e.focus) == null ? void 0 : _f.call(_e, { preventScroll: true });
+        }
+      };
+    }
+  });
+
   // src/editor/sections/scale.js
   function getScaleParts(context, scope, key, effective = false) {
     return context.source(scope, key, effective);
@@ -8013,13 +8068,19 @@ ${barMarkerStyles}
           return applied;
         }
         _commitSegmentBoundaryEdit(scope = { type: "card" }, segmentIndex, field, rawValue, inputEl = null) {
-          var _a, _b, _c, _d;
+          var _a, _b, _c, _d, _e;
           this._setSegmentBoundaryText(scope, segmentIndex, field, rawValue);
+          const parsed = this._parseSegmentBoundaryText(rawValue);
+          if (parsed.state !== "valid" && !(this.array.autoEnds && field === "to" && parsed.state === "empty")) {
+            (_a = inputEl == null ? void 0 : inputEl.setCustomValidity) == null ? void 0 : _a.call(inputEl, "Enter a valid boundary value.");
+            this._refreshSegmentUi(scope);
+            return false;
+          }
           if (this.array.patchOnly) {
             const message2 = this._getSegmentRowValidationMessage(scope, segmentIndex);
             if (message2) {
-              (_a = inputEl == null ? void 0 : inputEl.setCustomValidity) == null ? void 0 : _a.call(inputEl, message2);
-              (_b = inputEl == null ? void 0 : inputEl.reportValidity) == null ? void 0 : _b.call(inputEl);
+              (_b = inputEl == null ? void 0 : inputEl.setCustomValidity) == null ? void 0 : _b.call(inputEl, message2);
+              (_c = inputEl == null ? void 0 : inputEl.reportValidity) == null ? void 0 : _c.call(inputEl);
               this._refreshSegmentUi(scope);
               return false;
             }
@@ -8027,7 +8088,7 @@ ${barMarkerStyles}
           const normalizedText = normalizeTextValue(rawValue).trim();
           const parsedValue = this._parseSegmentBoundaryInput(rawValue);
           const nextValue = this.array.autoEnds && field === "to" && !normalizedText ? void 0 : parsedValue === null ? normalizedText : parsedValue;
-          const currentSegments = (_c = this._getSegmentsUiRows(scope)) != null ? _c : this._getScopedSegmentsValue(scope);
+          const currentSegments = (_d = this._getSegmentsUiRows(scope)) != null ? _d : this._getScopedSegmentsValue(scope);
           const nextSegments = currentSegments.map((segment, currentIndex) => currentIndex === segmentIndex ? { ...segment, [field]: nextValue } : segment);
           this._clearSegmentBoundaryText(scope, segmentIndex, field);
           const applied = this._setScopedSegments(scope, nextSegments, { rerender: true }, { type: "edit", index: segmentIndex, field, value: nextValue });
@@ -8035,7 +8096,7 @@ ${barMarkerStyles}
           if (inputEl == null ? void 0 : inputEl.setCustomValidity) {
             inputEl.setCustomValidity(message || "");
             if (message) {
-              (_d = inputEl.reportValidity) == null ? void 0 : _d.call(inputEl);
+              (_e = inputEl.reportValidity) == null ? void 0 : _e.call(inputEl);
             }
           }
           return applied;
@@ -10967,6 +11028,7 @@ ${indent}                          `;
       init_editor_controls();
       init_editor_styles();
       init_editor_disclosures();
+      init_editor_numeric_drafts();
       init_scale();
       init_formatting();
       init_bar_appearance();
@@ -11033,6 +11095,7 @@ ${indent}                          `;
           this._extremaSection = new ExtremaSection(this._createSectionContext());
           this._referenceMarkersSection = new ReferenceMarkersSection(this._createSectionContext(), this._paletteUi());
           this._config = {};
+          this._numericDrafts = new NumericInputDrafts();
           this._draftConfig = {};
           this._hass = null;
           this._isRendering = false;
@@ -11082,6 +11145,7 @@ ${indent}                          `;
           this._targetSection.reset();
           this._baselineSection.reset();
           this._referenceMarkersSection.reset();
+          this._numericDrafts.reset();
           if (shouldRender) {
             this._render();
           }
@@ -13453,6 +13517,7 @@ ${indent}                          `;
         _render() {
           var _a;
           if (!this.shadowRoot || this._isRendering) return;
+          const numericFocus = this._numericDrafts.captureFocus(this.shadowRoot);
           this._isRendering = true;
           try {
             const entities = this._getEntitiesValue();
@@ -13730,6 +13795,7 @@ ${this._renderFormattingSection({ type: "card" })}
     `;
             this._bindShadowListeners();
             this._syncEntityPickers();
+            this._numericDrafts.apply(this.shadowRoot, numericFocus);
             this._lastRenderedConfigJson = this._serializeConfig(this._draftConfig);
             this._applyPendingFocus();
           } finally {
@@ -13858,6 +13924,7 @@ ${this._renderFormattingSection({ type: "card" })}
           const action = (_d = target == null ? void 0 : target.dataset) == null ? void 0 : _d.action;
           if (!action) return;
           if (target == null ? void 0 : target.disabled) return;
+          if (["move-entity-up", "move-entity-down", "duplicate-entity", "remove-entity"].includes(action)) this._numericDrafts.reset();
           if (action === "add-entity") {
             const nextEntities = [...this._getEntitiesValue(), { entity: "" }];
             const nextEntries = this._buildEntityConfigEntries(nextEntities);
@@ -13914,12 +13981,14 @@ ${this._renderFormattingSection({ type: "card" })}
         }
         _handleChange(event) {
           var _a, _b;
+          if (this._numericDrafts.handle(event, this._isRendering)) return;
           if (this._segmentsSection.handle(event, "change") || this._gradientStopsSection.handle(event, "change")) return;
           const kind = (_b = (_a = event.target) == null ? void 0 : _a.dataset) == null ? void 0 : _b.kind;
           this._handleFieldEvent(event);
         }
         _handleInput(event) {
           var _a;
+          if (this._numericDrafts.handle(event, this._isRendering)) return;
           if (this._segmentsSection.handle(event, "input") || this._gradientStopsSection.handle(event, "input")) return;
           const target = event.target;
           if (!target) return;
@@ -14767,6 +14836,7 @@ ${this._renderFormattingSection({ type: "card" })}
       init_editor_controls();
       init_editor_styles();
       init_editor_disclosures();
+      init_editor_numeric_drafts();
       init_scale();
       init_formatting();
       init_bar_appearance();
@@ -14794,6 +14864,7 @@ ${this._renderFormattingSection({ type: "card" })}
           this._renderEpoch = 0;
           this._updateComplete = Promise.resolve();
           this._cssColorDrafts = /* @__PURE__ */ new Map();
+          this._numericDrafts = new NumericInputDrafts();
           this._expandedCardGroups = /* @__PURE__ */ new Set();
           const context = this._createSectionContext();
           const options = { cssText: true, percentSources: true };
@@ -14851,6 +14922,7 @@ ${this._renderFormattingSection({ type: "card" })}
             this._paletteRenderRequested || (this._paletteRenderRequested = ["bar.segments", "bar.gradient_stops", "segments", "severity", "gradient_stops"].some((path) => serializeConfig(getPathValue(config, path.split("."))) !== serializeConfig(getPathValue(this._config, path.split(".")))));
             this._config = cloneDeep(config);
             this._cssColorDrafts.clear();
+            this._numericDrafts.reset();
             this._baselineSection.reset();
             this._targetSection.reset();
             this._referenceMarkersSection.reset();
@@ -14936,6 +15008,7 @@ ${this._renderFormattingSection({ type: "card" })}
           const target = event.target;
           if (this._configReplaced || (target == null ? void 0 : target.isConnected) === false) return;
           if ((target == null ? void 0 : target.tagName) === "HA-ENTITY-PICKER" && event.type !== "value-changed") return;
+          if (this._numericDrafts.handle(event, this._isRendering)) return;
           const field = (_b = (_a = target == null ? void 0 : target.dataset) == null ? void 0 : _a.field) == null ? void 0 : _b.replace(/-text-fallback$/, "");
           const kind = (_d = (_c = target == null ? void 0 : target.dataset) == null ? void 0 : _c.kind) == null ? void 0 : _d.replace(/-text-fallback$/, "");
           const value = event.type === "value-changed" ? (_e = event.detail) == null ? void 0 : _e.value : (target == null ? void 0 : target.type) === "checkbox" ? target.checked : target == null ? void 0 : target.value;
@@ -15046,7 +15119,7 @@ ${this._renderFormattingSection({ type: "card" })}
           return rowSelector ? { selector: rowSelector, start: active.selectionStart, end: active.selectionEnd } : null;
         }
         _render() {
-          var _a, _b, _c, _d, _e, _f, _g, _h;
+          var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
           const fillStyle = getEffectiveFillStyleValue(this._createSectionContext(), root);
           const segmentRows = this._segmentsSection._getScopedSegmentsValue(root);
           const gradientRows = this._gradientStopsSection._getScopedGradientStopsValue(root);
@@ -15065,11 +15138,13 @@ ${this._renderFormattingSection({ type: "card" })}
           ]);
           const activeField = (_b = (_a = this.shadowRoot.activeElement) == null ? void 0 : _a.dataset) == null ? void 0 : _b.field;
           const activeKind = (_d = (_c = this.shadowRoot.activeElement) == null ? void 0 : _c.dataset) == null ? void 0 : _d.kind;
-          const defer = (activeKind == null ? void 0 : activeKind.endsWith("-text-fallback")) || (activeField == null ? void 0 : activeField.endsWith("-text-fallback")) || activeField === "feature-entity-override" && !this._context.entity_id && !this._explicitEntity;
+          const defer = (activeKind == null ? void 0 : activeKind.endsWith("-text-fallback")) || (activeField == null ? void 0 : activeField.endsWith("-text-fallback")) || activeField === "feature-entity-override" && !this._context.entity_id && !this._explicitEntity || ((_f = (_e = this.shadowRoot.activeElement) == null ? void 0 : _e.validity) == null ? void 0 : _f.badInput) && this._numericDrafts.captureFocus(this.shadowRoot);
           if ((signature !== this._structureSignature || this._paletteRenderRequested) && !defer) {
             const focus = this._captureFocus();
             const context = this._createSectionContext();
-            this.shadowRoot.innerHTML = `<style>${editorStyles}
+            this._isRendering = true;
+            try {
+              this.shadowRoot.innerHTML = `<style>${editorStyles}
         :host { container-type: inline-size; }
         .list-row.gradient-stop-row .field-grid { grid-template-columns: minmax(0, 1fr); }
         .list-row.segment-row > .field-grid { grid-template-columns: minmax(0, 1fr); }
@@ -15092,28 +15167,31 @@ ${this._renderFormattingSection({ type: "card" })}
         ${this._renderEntitySection()}
         ${renderScaleSection(context, root)}
         ${renderMarkersSection({
-              renderGroup: (options) => this._renderCardGroup(options),
-              target: { summary: this._targetSection._getCardTargetMarkerSummary(), content: this._targetSection.render(root) },
-              peak: { summary: this._extremaSection._getMarkerResetSummary("peak"), content: this._extremaSection.render(root, "peak") },
-              floor: { summary: this._extremaSection._getMarkerResetSummary("floor"), content: this._extremaSection.render(root, "floor") },
-              references: { summary: this._referenceMarkersSection._getGenericMarkersSummary(root), content: this._referenceMarkersSection.render(root) }
-            })}
+                renderGroup: (options) => this._renderCardGroup(options),
+                target: { summary: this._targetSection._getCardTargetMarkerSummary(), content: this._targetSection.render(root) },
+                peak: { summary: this._extremaSection._getMarkerResetSummary("peak"), content: this._extremaSection.render(root, "peak") },
+                floor: { summary: this._extremaSection._getMarkerResetSummary("floor"), content: this._extremaSection.render(root, "floor") },
+                references: { summary: this._referenceMarkersSection._getGenericMarkersSummary(root), content: this._referenceMarkersSection.render(root) }
+              })}
         ${renderBarAppearanceSection(context, root, () => `${this._baselineSection.render(root, (options) => this._renderCardGroup(options))}${this._needleSection.render(root)}`, { animation: true, cssText: true })}
         ${this._segmentsSection.render(root, (options) => this._renderCardGroup(options))}
         ${this._gradientStopsSection.render(root, (options) => this._renderCardGroup(options))}
         ${renderFormattingSection(context, root)}
       </div>`;
+            } finally {
+              this._isRendering = false;
+            }
             this._structureSignature = signature;
             this._paletteRenderRequested = false;
             this._syncControls();
             const active = focus && this.shadowRoot.querySelector(focus.selector);
-            (_e = active == null ? void 0 : active.focus) == null ? void 0 : _e.call(active, { preventScroll: true });
-            if ((active == null ? void 0 : active.type) === "text" && focus.start != null) (_f = active.setSelectionRange) == null ? void 0 : _f.call(active, focus.start, focus.end);
+            (_g = active == null ? void 0 : active.focus) == null ? void 0 : _g.call(active, { preventScroll: true });
+            if ((active == null ? void 0 : active.type) === "text" && focus.start != null) (_h = active.setSelectionRange) == null ? void 0 : _h.call(active, focus.start, focus.end);
           } else {
             this._syncControls();
           }
           if (this._pendingPaletteFocus) {
-            (_h = (_g = this.shadowRoot.querySelector(this._pendingPaletteFocus)) == null ? void 0 : _g.focus) == null ? void 0 : _h.call(_g, { preventScroll: true });
+            (_j = (_i = this.shadowRoot.querySelector(this._pendingPaletteFocus)) == null ? void 0 : _i.focus) == null ? void 0 : _j.call(_i, { preventScroll: true });
             this._pendingPaletteFocus = null;
           }
           if (this._pendingReferenceFocusId) {
@@ -15253,6 +15331,7 @@ ${this._renderFormattingSection({ type: "card" })}
             }
           }
           this._syncDisclosures();
+          this._numericDrafts.apply(this.shadowRoot);
           for (const control of this.shadowRoot.querySelectorAll('input[data-css-color="true"]')) {
             const draft = this._cssColorDrafts.get(control.id);
             if (draft !== void 0) control.value = draft;

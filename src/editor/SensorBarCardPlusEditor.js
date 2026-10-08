@@ -13,6 +13,7 @@ import {
 } from './shared/editor-controls.js';
 import { editorStyles } from './shared/editor-styles.js';
 import { renderCardGroup, renderMarkersSection } from './shared/editor-disclosures.js';
+import { NumericInputDrafts } from './shared/editor-numeric-drafts.js';
 
 import {
   getScaleFixedValue, getScaleEntityValue, setScalePart,
@@ -74,6 +75,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._extremaSection = new ExtremaSection(this._createSectionContext());
     this._referenceMarkersSection = new ReferenceMarkersSection(this._createSectionContext(), this._paletteUi());
     this._config = {};
+    this._numericDrafts = new NumericInputDrafts();
     this._draftConfig = {};
     this._hass = null;
     this._isRendering = false;
@@ -128,6 +130,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._targetSection.reset();
     this._baselineSection.reset();
     this._referenceMarkersSection.reset();
+    this._numericDrafts.reset();
 
     if (shouldRender) {
       this._render();
@@ -2953,6 +2956,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _render() {
     if (!this.shadowRoot || this._isRendering) return;
+    const numericFocus = this._numericDrafts.captureFocus(this.shadowRoot);
     this._isRendering = true;
     try {
       const entities = this._getEntitiesValue();
@@ -3229,6 +3233,7 @@ ${this._renderFormattingSection({ type: 'card' })}
 
       this._bindShadowListeners();
       this._syncEntityPickers();
+      this._numericDrafts.apply(this.shadowRoot, numericFocus);
       this._lastRenderedConfigJson = this._serializeConfig(this._draftConfig);
       this._applyPendingFocus();
     } finally {
@@ -3367,6 +3372,9 @@ ${this._renderFormattingSection({ type: 'card' })}
     const action = target?.dataset?.action;
     if (!action) return;
     if (target?.disabled) return;
+    // Entity indices are positional; do not transfer an owned input draft when
+    // an explicit list operation changes the row at that index.
+    if (['move-entity-up', 'move-entity-down', 'duplicate-entity', 'remove-entity'].includes(action)) this._numericDrafts.reset();
 
     if (action === 'add-entity') {
       const nextEntities = [...this._getEntitiesValue(), { entity: '' }];
@@ -3433,12 +3441,14 @@ ${this._renderFormattingSection({ type: 'card' })}
   }
 
   _handleChange(event) {
+    if (this._numericDrafts.handle(event, this._isRendering)) return;
     if (this._segmentsSection.handle(event, 'change') || this._gradientStopsSection.handle(event, 'change')) return;
     const kind = event.target?.dataset?.kind;
     this._handleFieldEvent(event);
   }
 
   _handleInput(event) {
+    if (this._numericDrafts.handle(event, this._isRendering)) return;
     if (this._segmentsSection.handle(event, 'input') || this._gradientStopsSection.handle(event, 'input')) return;
     const target = event.target;
     if (!target) return;

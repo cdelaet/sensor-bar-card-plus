@@ -78,13 +78,16 @@ for (const source of ['src', 'dist']) describe(`Feature Reference markers (${sou
     await field(editor,'source-mode','entity-fallback'); expect(editor._config.markers[0].at).toEqual({ value:25,entity:'',...meta() });
     await field(editor,'source-mode','entity'); expect(editor._config.markers[0].at).toEqual({ entity:'',...meta() });
     await field(editor,'source-mode','percent'); expect(editor._config.markers[0].at).toBe('50%');
-    for (const value of ['0','100','101','']) { await field(editor,'percent',value); expect(editor._config.markers[0].at).toBe(value === '' ? null : `${value}%`); }
+    for (const value of ['0','100','101']) { await field(editor,'percent',value); expect(editor._config.markers[0].at).toBe(`${value}%`); }
+    await field(editor,'percent',''); expect(editor._config.markers[0].at).toBe('101%');
     expect(editor._config.markers[0].label).toEqual(config.markers[0].label); expect(editor._config.markers[1]).toEqual(config.markers[1]);
   });
   it('clears only label entity/text/precision and its decimal alias; label-only anchors remain', async () => {
     const config = raw(), { editor } = await setup(source,config);
     await field(editor,'label-entity',''); await field(editor,'label-text',''); await field(editor,'label-precision','-1');
-    const expected = structuredClone(config); for (const key of ['entity','text','precision','decimal']) delete expected.markers[0].label[key];
+    const expected = structuredClone(config); for (const key of ['entity','text']) delete expected.markers[0].label[key];
+    expect(editor._config).toEqual(expected);
+    await field(editor,'label-precision',''); for (const key of ['precision','decimal']) delete expected.markers[0].label[key];
     expect(editor._config).toEqual(expected); expect(editor._config.markers[0].show_marker).toBe(false);
   });
   it('add/remove/reorder preserve complete raw rows, identities, expansion and independence; no maximum', async () => {

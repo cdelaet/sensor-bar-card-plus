@@ -1372,3 +1372,121 @@ expand/fold Target/Peak/Floor/Baseline and edit/echo within an open group, reope
 the editor, then quick Bottom/Inline and iPhone/narrow sanity checks. No further
 targeted implementation issue is identified by automated acceptance coverage;
 complete real-HA acceptance after these focused checks. Phase 3L is not started.
+
+## Numeric input draft acceptance fix
+
+> Temporary empty or syntactically incomplete numeric input is local draft state. It must not mutate configuration or alter source mode. Valid completed input commits normally; configuration echo preserves the owned draft, while genuine foreign replacement may discard it.
+
+Starting state was clean `feat/card-feature` at `3099cd0`. The native keyboard
+reproduction was added before production edits in both hosts, source and dist:
+Add Reference Marker → Percentage (50) → Backspace (5) → Backspace (empty).
+All four cases failed. Feature switched to Fixed; standalone retained its old
+mounted Percentage controls momentarily but had already mutated `at` to null,
+so a subsequent render would also derive Fixed. This predates 3K: 3K changed
+disclosure DOM handling, not Reference numeric parsing or its source writers.
+
+### Exact Reference path and ownership
+
+Reference `handleField` passes `generic-marker-percent` through
+`_setGenericMarkerField` to the host context's `setSource`. Unlike Target/Baseline's
+`_percentageDraft`, Reference had no incomplete numeric draft owner. Its standalone
+writer `_setGenericMarkerSourcePart` and Feature's
+`patchFeatureReferenceMarkerSource` both normalize empty/invalid numeric input to
+null and write `at: null`. Feature `mutate` emits the changed configuration;
+`setConfig` echo correctly recognizes it as owned, not foreign. The new marker
+source is now Fixed according to `_getGenericMarkerSource`, changing Feature's
+structural signature and replacing the controls. No ID/expansion reset or foreign
+replacement is needed to trigger the bug. Standalone has the same destructive
+mutation even when its current controls remain mounted.
+
+The source's last committed representation and its temporary text are now
+separate. A local empty Reference percentage retains the last valid percentage
+source, so source-mode derivation stays Percentage. Explicit Source conversion
+discards the previous source-field drafts. Valid replacement follows the existing
+writers and cleanup policies; no source schema/default/range rule changes.
+
+### Focused input audit (before fix)
+
+| Input family | Classification | Finding / resulting policy |
+|---|---|---|
+| Reference Percentage | BUG | Empty/invalid input writes null; now owned locally before source mutation. Existing finite-number percentage acceptance is preserved, including out-of-range literals supported before this fix. |
+| Reference Fixed / fixed fallback | BUG | Empty/invalid typing removes the source component. Local entry draft now protects both hosts. |
+| Target / Baseline Percentage | SAFE | Existing section `_percentageDraft` and explicit source mode retain empty/invalid values through echo; their 0–100 graphical range rules and Clear percentage action remain unchanged. These controls are not given a second draft store. |
+| Target / Baseline Fixed | BUG | Empty/incomplete input can remove a committed source component; shared native-entry guard now owns that draft. |
+| Scale Min / Max fixed, root and entity | BUG | Empty or malformed entry reaches deletion/cleanup; shared guard retains the draft without changing bounds or aliases. |
+| Segment from/to editing | SAFE on input; BUG on standalone invalid change/Enter | Existing boundary-text Map already owns typing. Standalone commit previously persisted malformed text such as `-`; commit now retains syntactically incomplete/invalid boundaries locally. Feature already rejects invalid boundaries. Valid commit/sorting behavior is unchanged. |
+| Feature Segment End blank (Auto) | NOT APPLICABLE on deliberate commit | Blank typing remains local; change/Enter intentionally omits `to` using the existing Auto-end behavior. No inferred end is persisted. |
+| Gradient Stop position | SAFE | Existing position-text Map, validation and change/Enter commit retain empty/invalid drafts through both hosts' renders/echo. No new draft store or palette rewrite. |
+| New Segment / Gradient Stop numeric drafts | SAFE | Existing section draft Maps do not save configuration until valid Add/Enter. |
+| Reference label precision | BUG | Invalid precision can delete precision/decimal aliases; now retained locally. |
+| Built-in label / Formatting precision, root and entity | BUG for empty entry; existing invalid-value rejection | Empty typing removes the override; now local. Existing integer/nonnegative validation and committed alias cleanup remain. |
+| Standalone row height, label width, Hero maximum font size, root and entity | BUG for empty entry / missing render persistence | Same native-entry policy; existing height validation and Hero clamp remain unchanged. |
+| Reset presets, source/entity pickers, booleans, colors, semantic text | NOT APPLICABLE | Different input families; existing handling remains unchanged. |
+
+For fields whose blank means reset/inherit, native **change on blur** remains the
+explicit blank commit. Empty **input while typing** never performs that action.
+Bad native numeric input (for example a transient minus sign) is not mistaken for
+an intentional blank reset on change. Reference percentages keep their draft even
+on empty change; conversion uses Source. Target/Baseline retain their explicit
+Clear percentage controls. This preserves established committed clearing and
+canonicalization while fixing the destructive typing lifecycle.
+
+### Shared fix and host lifecycle
+
+`shared/editor-numeric-drafts.js` supplies `NumericInputDrafts` for ordinary native
+entry controls lacking section-owned text drafts. It uses existing number/decimal
+normalizers, a local Map keyed by control ID, and native `validity.badInput`.
+Hosts consult it before invoking field writers, restore owned drafts after render
+or synchronization, and reset it in their existing genuine-foreign replacement
+branches. Echo does not reset it. Palette and Target/Baseline percentage draft
+owners remain authoritative; the four-operation section context is unchanged.
+
+Reference control IDs already contain stable marker UI IDs, so reorder does not
+transfer a draft to another marker. Removed controls discard their entries;
+explicit Reference source conversion discards obsolete source drafts. Standalone
+entity indices are positional, so explicit entity move/duplicate/remove operations
+discard the native-entry drafts rather than transferring them across indices.
+
+Browser testing also established that replacing a focused native number input
+can dispatch `change` before the node detaches. Both hosts now ignore numeric
+entry events during DOM replacement; detached Feature controls also retain their
+existing rejection. That event is not a deliberate blur commit. Standalone
+restores focus with `preventScroll` only for an owned numeric draft; Feature keeps
+its existing focus restoration. Feature defers structural replacement while an
+owned active native bad-input buffer exists, preserving browser text not exposed
+through `.value`. No global observer, timeout or scroll policy is added.
+
+The shared Segment commit check keeps existing boundary text when syntax is
+empty/incomplete/invalid, with the Feature Auto End exception above. Subsequent
+valid change/Enter still uses the previous writer and standalone cleanup. Runtime,
+geometry, scale resolution, YAML, editor ordering/disclosures and registration are
+unchanged. Phase 3L and distribution work are not started.
+
+### Verification and manual acceptance
+
+Five shared-primitive unit tests cover incomplete strings, valid reconciliation,
+native bad input, deliberate blank commit, rendering-generated change suppression,
+precision/height validation, section-owned exclusions, focus/foreign reset and
+removed/converted sources. Sixteen new browser cases cover source/dist and both
+hosts: the exact Reference deletion sequence; empty draft plus echo/forced render;
+valid replacement; foreign replacement; fixed/fallback/Scale/precision families;
+standalone Layout/entity scopes; built-in percentage Clear actions; incomplete
+Segment changes, Feature Auto End and Gradient Stop position drafts. Existing
+cleanup tests now use an explicit change for intentional numeric blank commits;
+invalid Reference precision tests assert preservation with no emission.
+
+Final validation: **1,585 unit tests** in 33 files and **287 Playwright tests**
+pass, including all four 3K page/dialog Reference scroll cases. Marker identity,
+expansion, focus and Add nearest-scroll behavior remain covered. All standalone
+editor/runtime and Feature editor/runtime snapshots are unchanged; no PNGs were
+updated. The nine HTML matrices remain exact (20/32/80/96/128/160/192/256/288),
+including source/dist and picker/fallback cases. Normal dist build and working/
+staged `git diff --check` pass. Diff review confines this change to editor input
+lifecycle, tests, this document and the required regenerated bundle.
+
+Real HA retest: Add a Reference Marker, select Percentage, backspace 50 to empty,
+pause, then type 75; verify Percentage/focus/disclosure remain stable and no empty
+value is saved. Repeat briefly for Target/Baseline Percentage and one Fixed/Scale
+field; verify intended blank reset/inherit on deliberate commit and Auto Segment
+End still work. While scrolled down, Add and expand/fold a Reference row to confirm
+the 3K scroll fix. Reopen the editor and check the saved values.

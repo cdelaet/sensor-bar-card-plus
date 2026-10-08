@@ -638,6 +638,12 @@ export class SegmentsSection extends PaletteSection {
 
   _commitSegmentBoundaryEdit(scope = { type: 'card' }, segmentIndex, field, rawValue, inputEl = null) {
     this._setSegmentBoundaryText(scope, segmentIndex, field, rawValue);
+    const parsed = this._parseSegmentBoundaryText(rawValue);
+    if (parsed.state !== 'valid' && !(this.array.autoEnds && field === 'to' && parsed.state === 'empty')) {
+      inputEl?.setCustomValidity?.('Enter a valid boundary value.');
+      this._refreshSegmentUi(scope);
+      return false;
+    }
     if (this.array.patchOnly) {
       const message = this._getSegmentRowValidationMessage(scope, segmentIndex);
       if (message) {

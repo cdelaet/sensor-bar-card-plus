@@ -6,6 +6,7 @@ import {
 } from '../editor/shared/editor-controls.js';
 import { editorStyles } from '../editor/shared/editor-styles.js';
 import { renderCardGroup, renderMarkersSection } from '../editor/shared/editor-disclosures.js';
+import { NumericInputDrafts } from '../editor/shared/editor-numeric-drafts.js';
 import { renderScaleSection, handleScaleField } from '../editor/sections/scale.js';
 import {
   renderFormattingSection, handleFormattingField, getFormattingValue,
@@ -43,6 +44,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._renderEpoch = 0;
     this._updateComplete = Promise.resolve();
     this._cssColorDrafts = new Map();
+    this._numericDrafts = new NumericInputDrafts();
     this._expandedCardGroups = new Set();
     const context = this._createSectionContext();
     const options = { cssText: true, percentSources: true };
@@ -94,6 +96,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         .some(path => serializeConfig(getPathValue(config, path.split('.'))) !== serializeConfig(getPathValue(this._config, path.split('.'))));
       this._config = cloneDeep(config);
       this._cssColorDrafts.clear();
+      this._numericDrafts.reset();
       this._baselineSection.reset();
       this._targetSection.reset();
       this._referenceMarkersSection.reset();
@@ -161,6 +164,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     if (this._configReplaced || target?.isConnected === false) return;
     // Picker input/change events are internal; HA's value-changed is authoritative.
     if (target?.tagName === 'HA-ENTITY-PICKER' && event.type !== 'value-changed') return;
+    if (this._numericDrafts.handle(event, this._isRendering)) return;
     const field = target?.dataset?.field?.replace(/-text-fallback$/, '');
     const kind = target?.dataset?.kind?.replace(/-text-fallback$/, '');
     const value = event.type === 'value-changed' ? event.detail?.value
@@ -294,10 +298,13 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const activeField = this.shadowRoot.activeElement?.dataset?.field;
     const activeKind = this.shadowRoot.activeElement?.dataset?.kind;
     const defer = activeKind?.endsWith('-text-fallback') || activeField?.endsWith('-text-fallback')
-      || activeField === 'feature-entity-override' && !this._context.entity_id && !this._explicitEntity;
+      || activeField === 'feature-entity-override' && !this._context.entity_id && !this._explicitEntity
+      || this.shadowRoot.activeElement?.validity?.badInput && this._numericDrafts.captureFocus(this.shadowRoot);
     if ((signature !== this._structureSignature || this._paletteRenderRequested) && !defer) {
       const focus = this._captureFocus();
       const context = this._createSectionContext();
+      this._isRendering = true;
+      try {
       this.shadowRoot.innerHTML = `<style>${editorStyles}
         :host { container-type: inline-size; }
         .list-row.gradient-stop-row .field-grid { grid-template-columns: minmax(0, 1fr); }
@@ -332,6 +339,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         ${this._gradientStopsSection.render(root, options => this._renderCardGroup(options))}
         ${renderFormattingSection(context, root)}
       </div>`;
+      } finally { this._isRendering = false; }
       this._structureSignature = signature;
       this._paletteRenderRequested = false;
       this._syncControls();
@@ -477,6 +485,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       }
     }
     this._syncDisclosures();
+    this._numericDrafts.apply(this.shadowRoot);
     for (const control of this.shadowRoot.querySelectorAll('input[data-css-color="true"]')) {
       const draft = this._cssColorDrafts.get(control.id);
       if (draft !== undefined) control.value = draft;
