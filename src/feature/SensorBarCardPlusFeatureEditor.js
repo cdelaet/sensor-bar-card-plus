@@ -286,9 +286,9 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const gradientRows = this._gradientStopsSection._getScopedGradientStopsValue(root);
     const markers = this._referenceMarkersSection._getGenericMarkers(root);
     const markerIds = this._referenceMarkersSection._getGenericMarkerUiIds(root, markers.length);
+    const markerSignature = JSON.stringify(markers.map((marker, index) => [markerIds[index], this._referenceMarkersSection._getGenericMarkerSource(marker).mode]));
     const signature = JSON.stringify([
       !!(this._context.entity_id || this._explicitEntity), this._showEntityPicker,
-      ...markers.map((marker, i) => [markerIds[i], this._referenceMarkersSection._getGenericMarkerSource(marker).mode]),
       fillStyle, segmentRows.length, gradientRows.length,
       !isHexColorValue(this._gradientStopsSection._getGradientStopsDraftState(root).color),
       ...gradientRows.map(row => !isHexColorValue(row.color)),
@@ -300,7 +300,13 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const defer = activeKind?.endsWith('-text-fallback') || activeField?.endsWith('-text-fallback')
       || activeField === 'feature-entity-override' && !this._context.entity_id && !this._explicitEntity
       || this.shadowRoot.activeElement?.validity?.badInput && this._numericDrafts.captureFocus(this.shadowRoot);
-    if ((signature !== this._structureSignature || this._paletteRenderRequested) && !defer) {
+    let replaceReferences = false;
+    if (markerSignature !== this._referenceStructureSignature && !defer) {
+      this._isRendering = true;
+      try { replaceReferences = !this._referenceMarkersSection.syncStructure(root); }
+      finally { this._isRendering = false; }
+    }
+    if ((signature !== this._structureSignature || this._paletteRenderRequested || replaceReferences) && !defer) {
       const focus = this._captureFocus();
       const context = this._createSectionContext();
       this._isRendering = true;
@@ -349,6 +355,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     } else {
       this._syncControls();
     }
+    if (!defer) this._referenceStructureSignature = markerSignature;
     if (this._pendingPaletteFocus) {
       this.shadowRoot.querySelector(this._pendingPaletteFocus)?.focus?.({ preventScroll: true });
       this._pendingPaletteFocus = null;

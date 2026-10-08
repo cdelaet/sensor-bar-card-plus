@@ -73,7 +73,19 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._baselineSection = new BaselineSection(this._createSectionContext());
     this._targetSection = new TargetSection(this._createSectionContext());
     this._extremaSection = new ExtremaSection(this._createSectionContext());
-    this._referenceMarkersSection = new ReferenceMarkersSection(this._createSectionContext(), this._paletteUi());
+    this._referenceMarkersSection = new ReferenceMarkersSection(this._createSectionContext(), {
+      ...this._paletteUi(),
+      render: (scope = { type: 'card' }) => {
+        let synced;
+        this._isRendering = true;
+        try { synced = this._referenceMarkersSection.syncStructure(scope); }
+        finally { this._isRendering = false; }
+        if (!synced) { this._render(); return; }
+        this._referenceMarkersSection.syncControls(this._hass, false, scope);
+        this._syncEntityPickers();
+        this._numericDrafts.apply(this.shadowRoot);
+      },
+    });
     this._config = {};
     this._numericDrafts = new NumericInputDrafts();
     this._draftConfig = {};

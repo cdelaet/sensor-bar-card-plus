@@ -1490,3 +1490,138 @@ value is saved. Repeat briefly for Target/Baseline Percentage and one Fixed/Scal
 field; verify intended blank reset/inherit on deliberate commit and Auto Segment
 End still work. While scrolled down, Add and expand/fold a Reference row to confirm
 the 3K scroll fix. Reopen the editor and check the saved values.
+
+## Reference Marker ownership acceptance fix (Safari/WebKit)
+
+### Reproduction and exact cause
+
+The starting point is `3fb5c1c` (`Fix incomplete numeric editor drafts`). Real HA
+reported opening Marker 1 and Marker 2, then changing Marker 2's Source in Safari
+jumps upward to the Marker 1 section. The regression uses three identical default
+markers, all expanded, a narrow tall editor, immediate `config-changed`/`setConfig`
+echoes, and page plus nested-dialog scrolling. Chromium initially retained the
+viewport; WebKit reproduced the failure before production changes.
+
+In the Feature page fixture, Fixed → Percentage changed scroll from 2680px to
+178px; the dialog fixture changed 2766px to 350px. Marker 2's UI ID, expansion,
+and restored Source focus remained correct. Those final offsets equal the scroll
+limits of the temporarily emptied editor container (850px leading content, with
+page padding or the 500px dialog viewport). This establishes browser scroll
+clamping during whole-editor replacement, rather than an equal-config match or
+focus restoration selecting Marker 1. The browser loses the mounted viewport
+anchor before the correct Source control is focused with `preventScroll`.
+
+Feature's structure signature previously included each Reference marker's UI ID
+and source mode. A Source transition therefore replaced `shadowRoot.innerHTML`.
+Standalone's shared Reference source/list mutations requested its whole-editor
+render too; its Source control lost focus in both engines and WebKit also lost
+the viewport. The pre-fix browser tests reproduce the Feature viewport failure
+and standalone ownership failure from both source and dist.
+
+This is **A: the same underlying whole-editor replacement cause as 3K**, through
+an additional trigger. 3K kept disclosure toggles mounted and corrected Add/focus
+scroll behavior, but left Reference source-mode and list structure changes on
+the destructive render path. The numeric-draft bug is semantically independent:
+its local draft rules remain unchanged. Both fixes meet at the render lifecycle;
+Reference DOM reconciliation uses the existing `_isRendering` guard so native
+numeric `change` events caused by removal/movement cannot commit stale values.
+
+### Identity invariant and shared reconciliation
+
+An interaction in Reference marker N must never transfer focus, expansion, or
+viewport ownership to another marker without explicit user interaction there.
+Configuration content, raw object references, and equality are not UI identity.
+Three equal `{ at: { fixed: 50 } }` markers still own three different rows.
+
+The identity model is unchanged: `ReferenceMarkersSection._genericMarkerUiIds`
+contains monotonic local IDs per `card` or `entity:<index>` scope, and
+`_expandedGenericMarkerUiIds` owns expansion by those IDs. Ordinary mutations and
+owned config echoes retain IDs. Add appends a fresh ID; remove deletes only the
+removed ID; up/down reorder moves IDs with the complete markers. A genuine
+foreign config replacement or explicit inheritance reset still discards local
+Reference identities/expansion. Nothing persists these IDs in YAML.
+
+`ReferenceMarkersSection.syncStructure(scope)` now reconciles the mounted list
+by those IDs. Existing row, disclosure, Source selector, and common field groups
+remain mounted. Direct body groups are keyed by their existing `data-kind`
+routing within the owning row; only newly applicable source controls are inserted
+and obsolete ones removed. Changing Fixed/Entity/Percentage never changes the
+row identity or scope. Add/remove/reorder use the same path, without matching
+configuration values or treating array position as identity. Current positional
+`data-marker-index` routing is updated after reordering.
+
+The Feature separates the Reference structure signature from its outer editor
+signature. Changes to Reference rows use the shared reconciler; unrelated outer
+structure changes retain their existing render policy. Standalone's Reference
+render callback uses the same reconciler for card and entity scopes. Shared
+expand/fold handling patches the existing row disclosure directly. Initial or
+unmounted lists retain full-render fallback; the lightweight unit DOM also uses
+that fallback. Templates, source writers, raw preservation, standalone cleanup,
+public configuration, ordering, information architecture, and runtime rendering
+are unchanged.
+
+`syncControls` accepts the existing scope and assigns picker IDs/accessibility
+and values only within that scope. It continues to preserve the active input.
+Owned numeric drafts are reapplied after standalone reconciliation; Feature uses
+its existing synchronization pass. No new drafts, identity models, observers,
+state subscriptions, animation, or runtime behavior are introduced.
+
+### Focus, viewport, and repeated-control boundaries
+
+The established Source policy is to retain focus on the Source selector, not to
+automatically focus the newly shown Percentage/Entity/Fixed input. Because the
+selector is retained, ordinary edits require no focus restoration or explicit
+viewport manipulation. If moving a row blurs its focused control, recovery is
+restricted to the same surviving UI ID and its field/action, with `preventScroll`.
+Removing that owner has no other-marker focus fallback. Feature Add retains its
+intentional new-row heading focus and nearest scroll behavior from 3K.
+
+There is no global scroll capture/restore, delayed scroll, new timeout, or
+ordinary-edit `scrollIntoView`. Safari's platform policy may leave pointer-clicked
+buttons unfocused; keyboard structural regressions establish ownership by focus
+and Enter. Source transitions exercise native select input/change events and the
+actual mounted editor lifecycle, not mutation helpers.
+
+The brief repeated-control review found no demonstrated first-marker selector or
+configuration-equality identity mechanism in the other sections. Palette rows use
+explicit segment/stop routing and their own pending focus. The correction stops
+at the shared Reference reconciliation boundary; unrelated structural rendering
+is not refactored. Marker-label color parity remains a separate known issue.
+
+### Coverage and validation
+
+`editor-reference-marker-identity.spec.js` covers both hosts and source/dist:
+
+- Three duplicate markers with Marker 1 expanded; Marker 2 and Marker 3 Fixed →
+  Percentage → Fixed → Entity → Percentage; stable physical row/Source nodes,
+  unique IDs, correct expansion/focus, owned echo and nearby page/dialog viewport.
+- Percentage 50 → empty → 75 using actual keys, unchanged Marker 1, local empty
+  draft through echo/hass and the correct committed marker value.
+- Marker 2 color, shape, direction, lane, show-marker, label text/options/entity,
+  fixed and percentage edits, with HA picker and fallback controls.
+- Add Marker 4, remove Marker 1, move the former Marker 2 down; surviving IDs,
+  expansion, mounted row, empty draft and field routing follow the logical marker.
+- Standalone entity-scope duplicates remain separate from root marker state.
+
+The default Playwright project keeps existing Chromium screenshot paths. An
+additional `webkit-reference-identity` project runs this focused file without
+introducing WebKit screenshot baselines. Install both required engines with
+`npx playwright install chromium webkit` when preparing a new test environment.
+The complete unit/Playwright suites include prior numeric drafts and 3K scroll
+regressions, all editor/runtime screenshots, source/dist and picker/fallback
+coverage. All nine existing HTML matrices remain required unchanged. Normal dist
+build and working/staged `git diff --check` complete validation.
+
+For HA retest in Safari: open Marker 1 and Marker 2, switch Marker 2 through all
+four Source transitions, then delete Percentage 50 and type 75. Repeat in Marker
+3, then Add, remove the original Marker 1, and reorder. Confirm the logical row
+stays expanded, edits affect only it, ordinary edits stay nearby, and saved YAML
+is correct after reopening. Retest existing Add/expand/fold behavior; no marker
+label color or other v1.8 work is included.
+
+Final validation: **1,585 unit tests** and **323 Playwright tests** pass (305
+Chromium and 18 focused WebKit cases). All four existing 3K scroll regressions and
+all 16 existing numeric-draft browser cases pass. Existing standalone/Feature
+editor and runtime screenshots are unchanged; no PNG baselines were regenerated.
+The nine exact HTML matrices pass all **1,252** source/dist and picker/fallback
+cases. The normal dist build and both working/staged diff checks pass.

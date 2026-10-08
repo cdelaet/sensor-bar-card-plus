@@ -10819,7 +10819,9 @@ ${indent}                          `;
           return ((_a = target == null ? void 0 : target.dataset) == null ? void 0 : _a.scopeType) === "entity" ? { type: "entity", index: Number(target.dataset.index) } : { type: "card" };
         }
         _setGenericMarkerList(scope, markers, options = {}) {
-          return this.context.mutate(scope, (target) => setPathValue(target, ["markers"], markers), { rerender: false, ...options });
+          const changed = this.context.mutate(scope, (target) => setPathValue(target, ["markers"], markers), { ...options, rerender: false });
+          if (changed && options.rerender) this.ui.render(scope);
+          return changed;
         }
         _updateGenericMarker(scope, markerIndex, update, options = {}) {
           var _a;
@@ -10854,12 +10856,19 @@ ${indent}                          `;
           }, { rerender: true, referenceMarkerEdit: { type: "mode", index: markerIndex, value: mode } });
         }
         _toggleGenericMarkerExpanded(markerUiId) {
+          var _a;
           if (this._expandedGenericMarkerUiIds.has(markerUiId)) {
             this._expandedGenericMarkerUiIds.delete(markerUiId);
           } else {
             this._expandedGenericMarkerUiIds.add(markerUiId);
           }
-          this.ui.render();
+          const row = (_a = this.ui.root()) == null ? void 0 : _a.querySelector(`.generic-marker-item[data-marker-ui-id="${markerUiId}"]`);
+          if (row == null ? void 0 : row.querySelector) {
+            const expanded = this._expandedGenericMarkerUiIds.has(markerUiId);
+            row.setAttribute("data-expanded", String(expanded));
+            row.querySelector(".generic-marker-toggle").setAttribute("aria-expanded", String(expanded));
+            row.querySelector(".generic-marker-body").style.display = expanded ? "grid" : "none";
+          } else this.ui.render();
         }
         // Standalone's historical source writer; Feature supplies its patch-only writer
         // through the existing setSource operation instead.
@@ -10964,10 +10973,76 @@ ${indent}                          `;
           }
           return false;
         }
+        // Reconcile only Reference rows. UI IDs own rows; field routing owns each
+        // direct body group. Keep unchanged controls mounted, including Source, so
+        // Safari never loses the editing row's viewport anchor during a mode change.
+        syncStructure(scope = { type: "card" }) {
+          var _a, _b, _c, _d, _e;
+          const root2 = this.ui.root();
+          const wrapper = root2 == null ? void 0 : root2.querySelector(scope.type === "entity" ? `.entity-shell[data-entity-shell-index="${scope.index}"] .override-group[data-group="markers"]` : '.card-subgroup[data-group="generic-markers"]');
+          const list = (_a = wrapper == null ? void 0 : wrapper.querySelector) == null ? void 0 : _a.call(wrapper, ".generic-marker-list");
+          if (!(list == null ? void 0 : list.ownerDocument)) return false;
+          const markers = this._getGenericMarkers(scope), ids = this._getGenericMarkerUiIds(scope, markers.length);
+          const template = list.ownerDocument.createElement("template");
+          template.innerHTML = this.render(scope);
+          const nextRows = template.content.querySelectorAll(".generic-marker-item");
+          const oldRows = new Map(Array.from(list.children, (row) => [row.dataset.markerUiId, row]));
+          const active = root2.activeElement;
+          const owner = (_b = active == null ? void 0 : active.closest) == null ? void 0 : _b.call(active, ".generic-marker-item");
+          const focus = owner && { id: owner.dataset.markerUiId, kind: active.dataset.kind, action: active.dataset.action };
+          let cursor = list.firstElementChild;
+          for (const next of nextRows) {
+            const id = next.dataset.markerUiId;
+            const row = (_c = oldRows.get(id)) != null ? _c : next;
+            oldRows.delete(id);
+            if (row !== next) {
+              row.querySelector(".generic-marker-title").textContent = next.querySelector(".generic-marker-title").textContent;
+              for (const button of row.querySelectorAll(".generic-marker-actions button")) {
+                const updated = next.querySelector(`[data-action="${button.dataset.action}"]`);
+                button.dataset.markerIndex = updated.dataset.markerIndex;
+                button.disabled = updated.disabled;
+              }
+              const body = row.querySelector(".generic-marker-body");
+              const groupKey = (group) => {
+                var _a2;
+                return (_a2 = group.querySelector("[data-kind]")) == null ? void 0 : _a2.dataset.kind;
+              };
+              const groups = new Map(Array.from(body.children, (group) => [groupKey(group), group]));
+              let fieldCursor = body.firstElementChild;
+              for (const nextGroup of Array.from(next.querySelector(".generic-marker-body").children)) {
+                const field = groupKey(nextGroup);
+                const group = (_d = groups.get(field)) != null ? _d : nextGroup;
+                const oldControl = group.querySelector("[data-kind]"), newControl = nextGroup.querySelector("[data-kind]");
+                const mounted = (oldControl == null ? void 0 : oldControl.tagName) === (newControl == null ? void 0 : newControl.tagName) ? group : nextGroup;
+                groups.delete(field);
+                if (mounted !== fieldCursor) body.insertBefore(mounted, fieldCursor);
+                if (mounted !== group) group.remove();
+                fieldCursor = mounted.nextElementSibling;
+              }
+              for (const group of groups.values()) group.remove();
+            }
+            const index = ids.indexOf(id);
+            for (const control of row.querySelectorAll("[data-marker-index]")) control.dataset.markerIndex = String(index);
+            const expanded = this._expandedGenericMarkerUiIds.has(id);
+            row.setAttribute("data-expanded", String(expanded));
+            row.querySelector(".generic-marker-toggle").setAttribute("aria-expanded", String(expanded));
+            row.querySelector(".generic-marker-body").style.display = expanded ? "grid" : "none";
+            if (row !== cursor) list.insertBefore(row, cursor);
+            cursor = row.nextElementSibling;
+          }
+          for (const row of oldRows.values()) row.remove();
+          if (focus && active !== root2.activeElement) {
+            const row = list.querySelector(`[data-marker-ui-id="${focus.id}"]`);
+            const control = focus.kind ? row == null ? void 0 : row.querySelector(`[data-kind="${focus.kind}"]`) : focus.action ? row == null ? void 0 : row.querySelector(`[data-action="${focus.action}"]`) : null;
+            (_e = control == null ? void 0 : control.focus) == null ? void 0 : _e.call(control, { preventScroll: true });
+          }
+          return true;
+        }
         // Hosts call this during their existing synchronization pass. It does not
         // replace nodes, observe DOM or persist display defaults.
-        syncControls(hass, replaced = false) {
-          const root2 = this.ui.root(), scope = { type: "card" };
+        syncControls(hass, replaced = false, scope = { type: "card" }) {
+          const root2 = this.ui.root();
+          const prefix = `${scope.type}-${scope.type === "entity" ? scope.index : "card"}-generic-`;
           if (!root2) return;
           const markers = this._getGenericMarkers(scope), ids = this._getGenericMarkerUiIds(scope, markers.length);
           markers.forEach((marker, index) => {
@@ -10987,7 +11062,7 @@ ${indent}                          `;
               "label-precision": (_j = (_i = label.precision) != null ? _i : label.decimal) != null ? _j : ""
             };
             for (const [field, value] of Object.entries(values)) {
-              const control = root2.querySelector(`#card-card-generic-${ids[index]}-${field}`);
+              const control = root2.querySelector(`#${prefix}${ids[index]}-${field}`);
               if (control && (control !== root2.activeElement || replaced)) control.value = String(value);
             }
             for (const [field, checked] of [
@@ -10996,12 +11071,12 @@ ${indent}                          `;
               ["label-show-value", label.show_value !== false],
               ["label-show-unit", label.show_unit !== false]
             ]) {
-              const control = root2.querySelector(`#card-card-generic-${ids[index]}-${field}`);
+              const control = root2.querySelector(`#${prefix}${ids[index]}-${field}`);
               if (control) control.checked = checked;
             }
             for (const [field, value, title] of [["entity", (_k = source.entity) != null ? _k : "", "Reference marker entity"], ["label-entity", (_l = label.entity) != null ? _l : "", "Label content entity"]]) {
-              for (const tag of ["input", "ha-entity-picker"]) for (const control of Array.from(root2.querySelectorAll(`${tag}[data-kind="generic-marker-${field}"]`)).filter((control2) => Number(control2.dataset.markerIndex) === index)) {
-                control.id = `card-card-generic-${ids[index]}-${field}`;
+              for (const tag of ["input", "ha-entity-picker"]) for (const control of Array.from(root2.querySelectorAll(`${tag}[data-kind="generic-marker-${field}"]`)).filter((control2) => Number(control2.dataset.markerIndex) === index && control2.dataset.scopeType === scope.type && String(control2.dataset.index) === String(scope.type === "entity" ? scope.index : "card"))) {
+                control.id = `${prefix}${ids[index]}-${field}`;
                 control.setAttribute("aria-label", title);
                 if (control !== root2.activeElement || replaced) control.value = value;
                 if (tag === "ha-entity-picker") {
@@ -11093,7 +11168,25 @@ ${indent}                          `;
           this._baselineSection = new BaselineSection(this._createSectionContext());
           this._targetSection = new TargetSection(this._createSectionContext());
           this._extremaSection = new ExtremaSection(this._createSectionContext());
-          this._referenceMarkersSection = new ReferenceMarkersSection(this._createSectionContext(), this._paletteUi());
+          this._referenceMarkersSection = new ReferenceMarkersSection(this._createSectionContext(), {
+            ...this._paletteUi(),
+            render: (scope = { type: "card" }) => {
+              let synced;
+              this._isRendering = true;
+              try {
+                synced = this._referenceMarkersSection.syncStructure(scope);
+              } finally {
+                this._isRendering = false;
+              }
+              if (!synced) {
+                this._render();
+                return;
+              }
+              this._referenceMarkersSection.syncControls(this._hass, false, scope);
+              this._syncEntityPickers();
+              this._numericDrafts.apply(this.shadowRoot);
+            }
+          });
           this._config = {};
           this._numericDrafts = new NumericInputDrafts();
           this._draftConfig = {};
@@ -15125,10 +15218,10 @@ ${this._renderFormattingSection({ type: "card" })}
           const gradientRows = this._gradientStopsSection._getScopedGradientStopsValue(root);
           const markers = this._referenceMarkersSection._getGenericMarkers(root);
           const markerIds = this._referenceMarkersSection._getGenericMarkerUiIds(root, markers.length);
+          const markerSignature = JSON.stringify(markers.map((marker, index) => [markerIds[index], this._referenceMarkersSection._getGenericMarkerSource(marker).mode]));
           const signature = JSON.stringify([
             !!(this._context.entity_id || this._explicitEntity),
             this._showEntityPicker,
-            ...markers.map((marker, i) => [markerIds[i], this._referenceMarkersSection._getGenericMarkerSource(marker).mode]),
             fillStyle,
             segmentRows.length,
             gradientRows.length,
@@ -15139,7 +15232,16 @@ ${this._renderFormattingSection({ type: "card" })}
           const activeField = (_b = (_a = this.shadowRoot.activeElement) == null ? void 0 : _a.dataset) == null ? void 0 : _b.field;
           const activeKind = (_d = (_c = this.shadowRoot.activeElement) == null ? void 0 : _c.dataset) == null ? void 0 : _d.kind;
           const defer = (activeKind == null ? void 0 : activeKind.endsWith("-text-fallback")) || (activeField == null ? void 0 : activeField.endsWith("-text-fallback")) || activeField === "feature-entity-override" && !this._context.entity_id && !this._explicitEntity || ((_f = (_e = this.shadowRoot.activeElement) == null ? void 0 : _e.validity) == null ? void 0 : _f.badInput) && this._numericDrafts.captureFocus(this.shadowRoot);
-          if ((signature !== this._structureSignature || this._paletteRenderRequested) && !defer) {
+          let replaceReferences = false;
+          if (markerSignature !== this._referenceStructureSignature && !defer) {
+            this._isRendering = true;
+            try {
+              replaceReferences = !this._referenceMarkersSection.syncStructure(root);
+            } finally {
+              this._isRendering = false;
+            }
+          }
+          if ((signature !== this._structureSignature || this._paletteRenderRequested || replaceReferences) && !defer) {
             const focus = this._captureFocus();
             const context = this._createSectionContext();
             this._isRendering = true;
@@ -15190,6 +15292,7 @@ ${this._renderFormattingSection({ type: "card" })}
           } else {
             this._syncControls();
           }
+          if (!defer) this._referenceStructureSignature = markerSignature;
           if (this._pendingPaletteFocus) {
             (_j = (_i = this.shadowRoot.querySelector(this._pendingPaletteFocus)) == null ? void 0 : _i.focus) == null ? void 0 : _j.call(_i, { preventScroll: true });
             this._pendingPaletteFocus = null;

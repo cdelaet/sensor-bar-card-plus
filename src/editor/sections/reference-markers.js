@@ -267,7 +267,9 @@ export class ReferenceMarkersSection {
   }
 
   _setGenericMarkerList(scope, markers, options = {}) {
-    return this.context.mutate(scope, target => setPathValue(target, ['markers'], markers), { rerender: false, ...options });
+    const changed = this.context.mutate(scope, target => setPathValue(target, ['markers'], markers), { ...options, rerender: false });
+    if (changed && options.rerender) this.ui.render(scope);
+    return changed;
   }
 
   _updateGenericMarker(scope, markerIndex, update, options = {}) {
@@ -309,7 +311,13 @@ export class ReferenceMarkersSection {
     } else {
       this._expandedGenericMarkerUiIds.add(markerUiId);
     }
-    this.ui.render();
+    const row = this.ui.root()?.querySelector(`.generic-marker-item[data-marker-ui-id="${markerUiId}"]`);
+    if (row?.querySelector) {
+      const expanded = this._expandedGenericMarkerUiIds.has(markerUiId);
+      row.setAttribute('data-expanded', String(expanded));
+      row.querySelector('.generic-marker-toggle').setAttribute('aria-expanded', String(expanded));
+      row.querySelector('.generic-marker-body').style.display = expanded ? 'grid' : 'none';
+    } else this.ui.render();
   }
   // Standalone's historical source writer; Feature supplies its patch-only writer
   // through the existing setSource operation instead.
@@ -400,10 +408,79 @@ export class ReferenceMarkersSection {
     }
     return false;
   }
+  // Reconcile only Reference rows. UI IDs own rows; field routing owns each
+  // direct body group. Keep unchanged controls mounted, including Source, so
+  // Safari never loses the editing row's viewport anchor during a mode change.
+  syncStructure(scope = { type: 'card' }) {
+    const root = this.ui.root();
+    const wrapper = root?.querySelector(scope.type === 'entity'
+      ? `.entity-shell[data-entity-shell-index="${scope.index}"] .override-group[data-group="markers"]`
+      : '.card-subgroup[data-group="generic-markers"]');
+    const list = wrapper?.querySelector?.('.generic-marker-list');
+    if (!list?.ownerDocument) return false;
+    const markers = this._getGenericMarkers(scope), ids = this._getGenericMarkerUiIds(scope, markers.length);
+    const template = list.ownerDocument.createElement('template');
+    template.innerHTML = this.render(scope);
+    const nextRows = template.content.querySelectorAll('.generic-marker-item');
+    const oldRows = new Map(Array.from(list.children, row => [row.dataset.markerUiId, row]));
+    const active = root.activeElement;
+    const owner = active?.closest?.('.generic-marker-item');
+    const focus = owner && { id: owner.dataset.markerUiId, kind: active.dataset.kind, action: active.dataset.action };
+    let cursor = list.firstElementChild;
+    for (const next of nextRows) {
+      const id = next.dataset.markerUiId;
+      const row = oldRows.get(id) ?? next;
+      oldRows.delete(id);
+      if (row !== next) {
+        row.querySelector('.generic-marker-title').textContent = next.querySelector('.generic-marker-title').textContent;
+        for (const button of row.querySelectorAll('.generic-marker-actions button')) {
+          const updated = next.querySelector(`[data-action="${button.dataset.action}"]`);
+          button.dataset.markerIndex = updated.dataset.markerIndex;
+          button.disabled = updated.disabled;
+        }
+        const body = row.querySelector('.generic-marker-body');
+        const groupKey = group => group.querySelector('[data-kind]')?.dataset.kind;
+        const groups = new Map(Array.from(body.children, group => [groupKey(group), group]));
+        let fieldCursor = body.firstElementChild;
+        for (const nextGroup of Array.from(next.querySelector('.generic-marker-body').children)) {
+          const field = groupKey(nextGroup);
+          const group = groups.get(field) ?? nextGroup;
+          // A late HA picker definition changes the element type, not ownership.
+          const oldControl = group.querySelector('[data-kind]'), newControl = nextGroup.querySelector('[data-kind]');
+          const mounted = oldControl?.tagName === newControl?.tagName ? group : nextGroup;
+          groups.delete(field);
+          if (mounted !== fieldCursor) body.insertBefore(mounted, fieldCursor);
+          if (mounted !== group) group.remove();
+          fieldCursor = mounted.nextElementSibling;
+        }
+        for (const group of groups.values()) group.remove();
+      }
+      const index = ids.indexOf(id);
+      for (const control of row.querySelectorAll('[data-marker-index]')) control.dataset.markerIndex = String(index);
+      const expanded = this._expandedGenericMarkerUiIds.has(id);
+      row.setAttribute('data-expanded', String(expanded));
+      row.querySelector('.generic-marker-toggle').setAttribute('aria-expanded', String(expanded));
+      row.querySelector('.generic-marker-body').style.display = expanded ? 'grid' : 'none';
+      if (row !== cursor) list.insertBefore(row, cursor);
+      cursor = row.nextElementSibling;
+    }
+    for (const row of oldRows.values()) row.remove();
+    // Moving a row can blur its control. Recover within that same surviving UI
+    // ID only; removal intentionally has no other-row focus fallback.
+    if (focus && active !== root.activeElement) {
+      const row = list.querySelector(`[data-marker-ui-id="${focus.id}"]`);
+      const control = focus.kind ? row?.querySelector(`[data-kind="${focus.kind}"]`)
+        : focus.action ? row?.querySelector(`[data-action="${focus.action}"]`) : null;
+      control?.focus?.({ preventScroll: true });
+    }
+    return true;
+  }
+
   // Hosts call this during their existing synchronization pass. It does not
   // replace nodes, observe DOM or persist display defaults.
-  syncControls(hass, replaced = false) {
-    const root = this.ui.root(), scope = { type: 'card' };
+  syncControls(hass, replaced = false, scope = { type: 'card' }) {
+    const root = this.ui.root();
+    const prefix = `${scope.type}-${scope.type === 'entity' ? scope.index : 'card'}-generic-`;
     if (!root) return;
     const markers = this._getGenericMarkers(scope), ids = this._getGenericMarkerUiIds(scope, markers.length);
     markers.forEach((marker, index) => {
@@ -415,17 +492,17 @@ export class ReferenceMarkersSection {
         'label-text': label.text ?? '', 'label-precision': label.precision ?? label.decimal ?? '',
       };
       for (const [field, value] of Object.entries(values)) {
-        const control = root.querySelector(`#card-card-generic-${ids[index]}-${field}`);
+        const control = root.querySelector(`#${prefix}${ids[index]}-${field}`);
         if (control && (control !== root.activeElement || replaced)) control.value = String(value);
       }
       for (const [field, checked] of [['show-marker', marker?.show_marker !== false], ['label-show', label.show === true],
         ['label-show-value', label.show_value !== false], ['label-show-unit', label.show_unit !== false]]) {
-        const control = root.querySelector(`#card-card-generic-${ids[index]}-${field}`);
+        const control = root.querySelector(`#${prefix}${ids[index]}-${field}`);
         if (control) control.checked = checked;
       }
       for (const [field, value, title] of [['entity', source.entity ?? '', 'Reference marker entity'], ['label-entity', label.entity ?? '', 'Label content entity']]) {
-        for (const tag of ['input', 'ha-entity-picker']) for (const control of Array.from(root.querySelectorAll(`${tag}[data-kind="generic-marker-${field}"]`)).filter(control => Number(control.dataset.markerIndex) === index)) {
-          control.id = `card-card-generic-${ids[index]}-${field}`;
+        for (const tag of ['input', 'ha-entity-picker']) for (const control of Array.from(root.querySelectorAll(`${tag}[data-kind="generic-marker-${field}"]`)).filter(control => Number(control.dataset.markerIndex) === index && control.dataset.scopeType === scope.type && String(control.dataset.index) === String(scope.type === 'entity' ? scope.index : 'card'))) {
+          control.id = `${prefix}${ids[index]}-${field}`;
           control.setAttribute('aria-label', title);
           if (control !== root.activeElement || replaced) control.value = value;
           if (tag === 'ha-entity-picker') { control.hass = hass; control.label = title; control.allowCustomEntity = true; }
