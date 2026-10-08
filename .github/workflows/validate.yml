@@ -102,3 +102,14 @@ jobs:
 
       - name: Run complete Playwright suite against existing baselines
         run: npm run test:visual -- --workers=1 --update-snapshots=none
+
+      - name: Preserve Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-failures-${{ github.sha }}
+          path: |
+            test-results/
+            playwright-report/
+          include-hidden-files: true
+          retention-days: 7
