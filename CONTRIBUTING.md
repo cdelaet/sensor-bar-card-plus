@@ -13,11 +13,14 @@ npx playwright install chromium
 
 ## Source and generated bundle
 
-Implement card changes in `src/`. The `dist/sensor-bar-card-plus.js` bundle is generated from the source by `npm run build` (`tools/build-dist.cjs`). Regenerate it after source changes and include the updated bundle when the change is intended for distribution; the Home Assistant resource is the built JavaScript file. Do not edit the generated bundle by hand.
+Implement card changes in `src/`. `npm run build` uses esbuild to generate the minified production bundle at `dist/sensor-bar-card-plus.js`. This file is tracked in Git and is the JavaScript resource distributed for Home Assistant and HACS. When a source or build change affects the distributable, regenerate and include it with `npm run build`. Do not edit the generated bundle by hand.
 
 ~~~sh
 npm run build
+npm run verify-dist
 ~~~
+
+`npm run verify-dist` performs a fresh production build in a temporary location and byte-compares it with the tracked bundle. It reports a missing or stale `dist/sensor-bar-card-plus.js` and does not rewrite that file, so it is the non-mutating check that the committed bundle matches the current source and build configuration.
 
 ## Tests and validation
 
@@ -26,12 +29,13 @@ The package scripts in `package.json` are:
 ~~~sh
 npm run test:unit
 npm run test:visual
+npm run verify-dist
 npm test
 ~~~
 
 `npm test` runs the build, unit tests, and Playwright visual tests in sequence. The unit suite checks configuration normalization, conversion, formatting, and card behavior. The Playwright suite checks rendered behavior including fill and Baseline cases, Target/Peak/Floor and generic reference markers, marker shapes and labels, responsive layouts, and clipping or rounded-edge regressions.
 
-There is no separate lint or YAML-validation script in `package.json`. The repository also has a HACS validation workflow at `.github/workflows/validate.yml`.
+GitHub's `.github/workflows/validate.yml` runs HACS validation, verifies the production bundle and its syntax, runs unit tests, and then runs the Playwright browser suite on macOS for pushes to `main` and pull requests.
 
 ## Visual regression snapshots
 
