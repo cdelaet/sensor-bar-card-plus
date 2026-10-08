@@ -6,14 +6,15 @@ import { join, resolve } from 'node:path';
 
 const repoRoot = resolve(new URL('../..', import.meta.url).pathname);
 const converterPath = join(repoRoot, 'tools', 'convert-legacy-config.py');
-const pythonPath = join(repoRoot, '.venv', 'bin', 'python');
+// PYTHON may name a command on PATH or an explicit interpreter path.
+const pythonCommand = process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
 
 function convertYaml(inputYaml) {
   const tempDir = mkdtempSync(join(tmpdir(), 'sbcp-convert-'));
   const inputPath = join(tempDir, 'input.yaml');
   writeFileSync(inputPath, inputYaml, 'utf8');
 
-  const output = execFileSync(pythonPath, [converterPath, inputPath], {
+  const output = execFileSync(pythonCommand, [converterPath, inputPath], {
     cwd: repoRoot,
     encoding: 'utf8',
   });

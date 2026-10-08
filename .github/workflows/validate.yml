@@ -53,7 +53,20 @@ jobs:
       - name: Check bundle syntax
         run: node --check dist/sensor-bar-card-plus.js
 
+      - name: Set up Python for converter tests
+        id: python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install converter test dependency
+        env:
+          PYTHON: ${{ steps.python.outputs.python-path }}
+        run: '"$PYTHON" -m pip install ruamel.yaml==0.19.1'
+
       - name: Run unit tests
+        env:
+          PYTHON: ${{ steps.python.outputs.python-path }}
         run: npm run test:unit
 
       - name: Confirm tests left committed dist unchanged
