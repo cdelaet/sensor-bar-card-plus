@@ -35,9 +35,9 @@ There is no separate lint or YAML-validation script in `package.json`. The repos
 
 ## Visual regression snapshots
 
-Playwright reference images live in `tests/visual/sbcp.spec.js-snapshots/`. They are automated regression artifacts used by the visual tests, not README or product screenshots.
+Playwright visual baselines are intentionally environment-specific. Local macOS tests use the complete `tests/visual/snapshots/local/` set; GitHub Actions on `macos-26` uses the complete `tests/visual/snapshots/ci/` set. The baseline set is selected centrally by `SBCP_VISUAL_BASELINE` in `playwright.config.cjs`. Normal local and CI validation never updates snapshots.
 
-Run `npm run test:visual` to compare current rendering with the stored snapshots. Update snapshots with `npm run test:visual:update` only when a reviewed visual change intentionally changes the expected rendering. Review the resulting image diff before accepting an update; do not use these images as documentation artwork.
+Run `npm run test:visual` to compare against local baselines. After an intentional visual change, run `npm run test:visual:update` to update only the local set, then review and commit the image changes with the code. Once reviewed, generate the GitHub canonical set by running `gh workflow run validate.yml --ref main -f generate_snapshots=true`; download and review the `canonical-playwright-snapshots-<commit-sha>` artifact, then commit those files under `snapshots/ci/`. Ordinary GitHub validation compares only against that CI set with snapshot updates disabled. When adding a screenshot assertion, update each complete set through these same local and GitHub-specific steps. These automated regression artifacts are not README or product screenshots.
 
 ## Development and demo fixtures
 

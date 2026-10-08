@@ -84,6 +84,8 @@ jobs:
     needs: [validate-dist-unit, validate-hacs]
     # Screenshot baselines are macOS-only; canonical replacements are generated only by explicit manual dispatch.
     runs-on: macos-26
+    env:
+      SBCP_VISUAL_BASELINE: ci
     timeout-minutes: 30
     steps:
       - name: Check out repository
@@ -119,7 +121,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: canonical-playwright-snapshots-${{ github.sha }}
-          path: tests/visual/*-snapshots/*-darwin.png
+          path: tests/visual/snapshots/ci/**/*-darwin.png
           if-no-files-found: error
           retention-days: 7
 
