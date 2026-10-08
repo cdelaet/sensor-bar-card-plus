@@ -14,6 +14,8 @@ The same installed resource provides `custom:sensor-bar-card-plus-feature`. Add 
 
 With no Feature `entity`, SBCP inherits `sensor.battery_charge` from the Tile. The inherited entity is not written into Feature YAML. The default Scale is 0–100; choose explicit bounds when your sensor has a different range.
 
+![The most basic card feature](images/examples/feature-battery.png)
+
 ```yaml
 type: tile
 entity: sensor.battery_charge
@@ -24,6 +26,10 @@ features:
 ### Scale and Segments in Inline placement
 
 This battery gauge uses a fixed 0–100 Scale and soft bands. Needle keeps all ranges visible while indicating the current charge.
+
+![A card feature with soft bands with a needle](images/examples/feature-battery-needle.png)
+
+The screenshot shows Bottom placement; the YAML below uses Inline placement.
 
 ```yaml
 type: tile
@@ -48,6 +54,8 @@ features:
 ### Baseline and marker context
 
 For import/export power, Baseline starts the fill at zero. Target marks an import limit, Peak and Floor track the session range, and a Reference Marker identifies an export threshold. Compact labels use the same text/value/unit configuration as the standalone card and adapt to available width.
+
+![A card feature with baseline and several markers](images/examples/feature-grid.png)
 
 ```yaml
 type: tile
@@ -81,6 +89,10 @@ Peak/Floor are session extrema, not recorded history. Baseline takes precedence 
 
 The Tile represents a heat-pump switch, whose on/off state is nonnumeric. The Feature overrides its entity to visualize the related power sensor; the Tile retains its normal switch interaction and state.
 
+![A card feature with a gradient](images/examples/feature-heat-pump.png)
+
+The screenshot illustrates the gradient Bar with a numeric Tile reading; the YAML below demonstrates a switch Tile with a separate numeric Feature entity.
+
 ```yaml
 type: tile
 entity: switch.heat_pump
@@ -89,7 +101,7 @@ features:
     entity: sensor.heat_pump_power
     scale:
       min: { fixed: 0 }
-      max: { fixed: 5000 }
+      max: { fixed: 100 }
     bar:
       fill_style: gradient
       gradient_stops:

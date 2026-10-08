@@ -70,6 +70,8 @@ The filled track moves with the sensor reading, while the target marks the confi
 
 New in v1.8.0, the native Home Assistant Card Feature puts a compact SBCP Bar inside a Tile card, in either Bottom or Inline placement. The same installed `sensor-bar-card-plus.js` resource provides both presentations; **no second JavaScript resource is needed**.
 
+![Grid power Tile with an SBCP Bar and compact marker labels](docs/images/examples/feature-grid.png)
+
 Add **Sensor Bar Card Plus** in the Tile's feature picker and configure it with the Visual Editor, or use Tile YAML:
 
 ```yaml
