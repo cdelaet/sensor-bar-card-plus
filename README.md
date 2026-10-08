@@ -7,11 +7,11 @@
 [![Validate](https://github.com/cdelaet/sensor-bar-card-plus/actions/workflows/validate.yml/badge.svg)](https://github.com/cdelaet/sensor-bar-card-plus/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/badge/License: MIT-yellow.svg)](https://github.com/cdelaet/sensor-bar-card-plus/blob/main/LICENSE)
 
-Sensor Bar Card Plus (SBCP) is a Home Assistant dashboard card for presenting numeric sensor values as configurable bars or gauges. It is useful when a value needs visual context: its scale, operating range, target, recent extrema, or relationship to a neutral point.
+Sensor Bar Card Plus (SBCP) presents numeric sensor values as configurable bars or gauges in Home Assistant dashboards. Use it as a standalone card or as a native Card Feature inside a Tile card. It is useful when a value needs visual context: its scale, operating range, target, recent extrema, or relationship to a neutral point.
 
 ![Sensor Bar Card Plus showcase](images/hero-v17.gif)
 
-SBCP supports multiple entities, structured YAML, animated reveal fills, Needle gauges, semantic fill styles, five label layouts including Hero, dynamic scales, Baseline fill origins, Target/Peak/Floor markers, generic reference markers, per-entity overrides, and a Visual Editor. Its responsive layout adapts labels and supporting details to the available card width.
+Both presentations support structured YAML, animated reveal fills, Needle gauges, five fill styles, dynamic Scales, Baseline fill origins, Target/Peak/Floor and Reference Markers, and a Visual Editor. The standalone card also supports multiple entities, five label layouts including Hero, per-entity overrides, and responsive row content.
 
 Now you have no excuse not to build that pretty dashboard. Go forth and dash those boards. -Chris (with unapologetic dadhumor)
 
@@ -66,9 +66,29 @@ The filled track moves with the sensor reading, while the target marks the confi
 
 ![Basic example](images/bar-basic.png)
 
+## Card Feature
+
+New in v1.8.0, the native Home Assistant Card Feature puts a compact SBCP Bar inside a Tile card, in either Bottom or Inline placement. The same installed `sensor-bar-card-plus.js` resource provides both presentations; **no second JavaScript resource is needed**.
+
+Add **Sensor Bar Card Plus** in the Tile's feature picker and configure it with the Visual Editor, or use Tile YAML:
+
+```yaml
+type: tile
+entity: sensor.house_power
+features:
+  - type: custom:sensor-bar-card-plus-feature
+    scale:
+      min: { fixed: 0 }
+      max: { fixed: 3000 }
+```
+
+The Feature inherits the Tile's entity when its own `entity` is omitted. An optional `entity: sensor.other_power` inside the Feature overrides that source; the inherited Tile entity is never written into Feature YAML. Use singular `entity`, not `entities`.
+
+The Feature reuses SBCP's Scale, Bar, Segments, Gradient Stops, Needle, Baseline, marker and formatting configuration where applicable. It shows the Bar and compact marker labels; title, multi-row Layouts, Hero and primary-value presentation belong to the standalone card or parent Tile. See [Card Feature Configuration](docs/configuration.md#card-feature-configuration) for applicability and [Card Feature examples](docs/examples.md#card-feature) for complete Tile configurations.
+
 ## How a card works
 
-Each row starts with a sensor value. SBCP compares that value with the row’s effective minimum and maximum to place it on a scale. Those bounds, Baseline, Target, and generic marker values can use live Home Assistant entities as sources. The track represents the scale; the fill or Needle shows the current value. Peak and Floor show observed extrema. Baseline changes where a reveal fill begins. Labels and layout determine how the value and its context fit around the track.
+Each standalone card row starts with a sensor value. SBCP compares that value with the row’s effective minimum and maximum to place it on a scale. Those bounds, Baseline, Target, and generic marker values can use live Home Assistant entities as sources. The track represents the scale; the fill or Needle shows the current value. Peak and Floor show observed extrema. Baseline changes where a reveal fill begins. Labels and layout determine how the value and its context fit around the track.
 
 Card settings provide defaults for supported row settings. Entity rows can override layout, scale, bar, Baseline, Target, Peak, Floor, generic markers, and formatting; card-only settings such as `title` and `entities` are not row overrides. Lists such as markers replace the inherited list. See [Configuration: scope and inheritance](docs/configuration.md#scope-inheritance-and-replacement) for the detailed rules.
 
@@ -100,7 +120,7 @@ Segment boundaries can describe percentages of the track or values on the config
 
 ## Layouts
 
-Choose a label position to suit the dashboard:
+The standalone card offers these label positions:
 
 - **Left** keeps a label beside each bar and works well for aligned multi-row cards.
 - **Above** puts the label above the track, useful when the left column is tight.
@@ -142,11 +162,11 @@ Markers add values worth seeing against a row’s scale. They do not set the fil
 
 ### Target
 
-Target is a configured threshold or reference. It supports fixed, percentage, and entity-driven values, including existing dynamic behavior. Target predates v1.7.0; its default shape is now Diamond. Set `target.shape: triangle` to keep the former triangle appearance. Target labels and above-target fill color are optional.
+Target is a configured threshold or reference. It supports fixed, percentage, and entity-driven values, including existing dynamic behavior. Its default shape is Diamond. Set `target.shape: triangle` to keep the former triangle appearance. Target labels and above-target fill color are optional.
 
 ### Peak and Floor
 
-Peak tracks the highest finite value observed for the card row; Floor tracks the lowest. They complement each other by showing the observed range. Their values are runtime/session state held by the card, not durable historical statistics, and are lost when the card or browser is recreated. Each can be reset using supported duration or local calendar policies; see [Peak and Floor reset behavior](docs/configuration.md#peak-and-floor-reset-behavior).
+Peak tracks the highest finite value observed for the card row; Floor tracks the lowest. They complement each other by showing the observed range. Their values are runtime/session state held by each card row or Card Feature instance, not durable historical statistics, and are lost when that instance or browser is recreated. Each can be reset using supported duration or local calendar policies; see [Peak and Floor reset behavior](docs/configuration.md#peak-and-floor-reset-behavior).
 
 ### Generic Reference Markers
 
@@ -177,7 +197,7 @@ entities:
 
 Markers can occupy the `above` or `below` lane. Their shapes are Circle, Diamond, Triangle, Chevron, Arrow, and Pin. Direction (`inward` or `outward`) affects directional shapes; Circle and Diamond do not change with direction. Marker color and labels can distinguish a forecast, reserve, comfort bound, or other reference.
 
-Up to four markers can appear above the bar and four below it. Peak uses an above slot; Floor and Target use below slots. A marker label can display a different entity with `label.entity`, and `show_marker: false` makes it a label-only information anchor that still uses a slot. Nearby labels can overlap. On pointer-based devices, hovering a marker brings its label to the front when labels overlap. For units, unavailable states, inheritance, clamping, and full syntax, see [Generic Reference Markers](docs/configuration.md#generic-reference-markers).
+Up to four markers can appear above the bar and four below it. Peak uses an above slot; Floor and Target use below slots. A marker label can display a different entity with `label.entity`, and `show_marker: false` makes it a label-only information anchor that still uses a slot. In the standalone card, nearby labels can overlap; hovering a marker on pointer-based devices brings its label to the front. Card Feature labels adapt to available width without hover promotion. For units, unavailable states, inheritance, clamping, and full syntax, see [Generic Reference Markers](docs/configuration.md#generic-reference-markers).
 
 ## Practical examples
 
@@ -192,25 +212,25 @@ The interactive Playground brings feature combinations together in larger workin
 
 ## Visual Editor
 
-The Home Assistant Visual Editor edits ordinary SBCP card configuration and previews the result as you work. Use it to add entities, adjust layout and fill, configure references, or explore a card before editing YAML directly.
+Both presentations have a Home Assistant Visual Editor and live preview. The standalone editor configures entity rows and Layout as well as Scale, Bar and markers. The Card Feature editor offers the applicable shared sections: Entities, Scale, Markers, Bar Appearance, Segments, Gradient Stops and Formatting, with parent-entity inheritance or an explicit override.
 
-Target, Peak, Floor, Generic Reference Markers, and individual generic markers have collapsible editor groups. Baseline is configured under **Bar Appearance**; entity-level Baseline remains with the entity overrides. The editor keeps its local disclosure state out of saved YAML. You can continue editing the same structured configuration manually at any time.
+Target, Peak, Floor, Generic Reference Markers, and individual generic markers have collapsible editor groups. Baseline is configured under **Bar Appearance**; entity-level Baseline remains with the standalone entity overrides. The editor keeps its local disclosure state out of saved YAML. You can continue editing the same structured configuration manually at any time.
 
-![Visual Editor screenshot — pending v1.7.0 replacement](images/visual-editor.png)
+![Standalone Visual Editor screenshot](images/visual-editor.png)
 
 ## Responsive behavior and data details
 
-SBCP adapts label and icon placement to available width, while keeping the bar and value useful where possible. Click or tap an entity row to open Home Assistant’s standard more-info dialog. If an entity is missing, its row shows an error while other rows remain available. Dynamic scales and reference values update as their source entities change. When a primary reading is unknown or unavailable, the card cannot place a new numeric value; Peak and Floor retain the last finite sample until reset or reconfiguration.
+The standalone card adapts label and icon placement to available width, while keeping the bar and value useful where possible. Click or tap an entity row to open Home Assistant’s standard more-info dialog. If an entity is missing, its row shows an error while other rows remain available. Dynamic scales and reference values update as their source entities change. When a primary reading is unknown or unavailable, the card cannot place a new numeric value; Peak and Floor retain the last finite sample until reset or reconfiguration.
 
-Peak and Floor are session state rather than long-term history. Marker labels can overlap when references are close together, and a dynamic marker’s source unit is not converted to the row unit. These details and other boundary behavior are covered in the [configuration reference](docs/configuration.md).
+Peak and Floor are session state rather than long-term history. Standalone marker labels can overlap when references are close together. Compact Card Feature labels shorten or hide according to available width; full resolved marker information remains in the accessible description. A dynamic marker’s source unit is not converted to the displayed unit. These details and other boundary behavior are covered in the [configuration reference](docs/configuration.md).
 
 ## Compatibility
 
-Existing dashboards do not require a configuration migration for v1.7.0. Target’s default appearance changed to Diamond; set `target.shape: triangle` to retain the former triangle. Legacy flat configuration remains supported. See [Legacy compatibility and migration](docs/configuration.md#legacy-compatibility-and-migration) for aliases and the converter.
+Existing standalone dashboards do not require a configuration migration for v1.8.0. Target’s default appearance changed to Diamond; set `target.shape: triangle` to retain the former triangle. Legacy flat configuration remains supported. See [Legacy compatibility and migration](docs/configuration.md#legacy-compatibility-and-migration) for aliases and the converter.
 
 ## Documentation and examples
 
-- [Configuration Reference](docs/configuration.md) — complete syntax, options, and defaults.
+- [Configuration Reference](docs/configuration.md) — shared syntax, options, defaults, and Card Feature applicability.
 - [Examples Guide](docs/examples.md) — compare layouts, fills, and references with focused, copyable YAML.
 - [Recipe Catalogue](examples/recipes/README.md) — practical, copyable configurations for common use cases.
 - [Example Dashboards](examples/dashboards/sensor-bar-card-plus-playground.yaml) — larger working configurations and feature demonstrations in the interactive Playground.
