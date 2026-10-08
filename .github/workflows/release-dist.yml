@@ -1,44 +1,96 @@
-name: Build release artifact
+name: Prepare release artifact
 
 on:
   push:
-    branches: [main]
-  pull_request:
-  release:
-    types: [published]
+    tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag (for example, v1.8.0)
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
+  actions: read
 
+# Release preparation runs independently; do not cancel another tag's run.
 jobs:
-  build-dist:
+  prepare-release:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 15
     steps:
-      - name: Check out repository
+      - name: Check release tag name
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          if [[ "$RELEASE_TAG" != v* ]]; then
+            echo "Release preparation requires an existing v* tag." >&2
+            exit 1
+          fi
+
+      - name: Check out exact release tag
         uses: actions/checkout@v5
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
+
+      - name: Read tagged commit
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Require complete main validation for the tagged commit
+        uses: actions/github-script@v8
+        env:
+          RELEASE_SHA: ${{ steps.commit.outputs.sha }}
+        with:
+          script: |
+            const sha = process.env.RELEASE_SHA;
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              ...context.repo,
+              workflow_id: 'validate.yml',
+              branch: 'main',
+              event: 'push',
+              head_sha: sha,
+              status: 'success',
+              per_page: 1,
+            });
+            const run = data.workflow_runs.find(run =>
+              run.head_sha === sha && run.head_branch === 'main' &&
+              run.event === 'push' && run.conclusion === 'success');
+            if (!run) throw new Error(`No successful main validation for ${sha}. Wait for Validate to pass, then rerun release preparation.`);
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
+            });
+            for (const name of ['HACS', 'Dist and unit tests', 'Playwright (macOS)']) {
+              if (!jobs.some(job => job.name === name && job.conclusion === 'success')) {
+                throw new Error(`Required validation job did not pass: ${name}`);
+              }
+            }
+            await core.summary.addHeading('Validated release commit')
+              .addRaw(`Commit: ${sha}\n\nValidation: ${run.html_url}\n`).write();
 
       - name: Set up Node
         uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
-      
+
       - name: Install dependencies
         run: npm ci
-      
-      - name: Build dist
-        run: npm run build
-      
-      - name: Verify dist is bundled
+
+      - name: Verify tagged committed dist without rebuilding it
+        run: npm run verify-dist
+
+      - name: Check exact tracked release artifact
         run: |
-          test -f dist/sensor-bar-card-plus.js
-          ! grep -q "from './card/SensorBarCard.js'" dist/sensor-bar-card-plus.js
-          ! grep -q "from './editor/SensorBarCardPlusEditor.js'" dist/sensor-bar-card-plus.js
-      
-      - name: Upload release asset
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
+          test -s dist/sensor-bar-card-plus.js
+          git diff --exit-code HEAD -- dist/sensor-bar-card-plus.js
+          sha256sum dist/sensor-bar-card-plus.js >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Expose validated release artifact for manual publication
+        uses: actions/upload-artifact@v4
         with:
-          files: dist/sensor-bar-card-plus.js
+          name: sensor-bar-card-plus-${{ steps.commit.outputs.sha }}
+          path: dist/sensor-bar-card-plus.js
+          if-no-files-found: error

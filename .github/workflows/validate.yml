@@ -2,18 +2,90 @@ name: Validate
 
 on:
   push:
+    branches: [main]
   pull_request:
   schedule:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref_type == 'tag' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 jobs:
   validate-hacs:
+    name: HACS
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: HACS validation
         uses: hacs/action@main
         with:
           category: plugin
+          comment: false
+
+  validate-dist-unit:
+    name: Dist and unit tests
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify committed dist before tests can rebuild it
+        run: npm run verify-dist
+
+      - name: Check bundle syntax
+        run: node --check dist/sensor-bar-card-plus.js
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Confirm tests left committed dist unchanged
+        run: git diff --exit-code -- dist/sensor-bar-card-plus.js
+
+  validate-browser:
+    name: Playwright (macOS)
+    if: github.event_name != 'schedule'
+    needs: [validate-dist-unit, validate-hacs]
+    # Existing screenshot baselines are macOS-only; do not generate replacements in CI.
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify committed dist
+        run: npm run verify-dist
+
+      - name: Install required Playwright browsers
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Run complete Playwright suite against existing baselines
+        run: npm run test:visual -- --workers=1 --update-snapshots=none

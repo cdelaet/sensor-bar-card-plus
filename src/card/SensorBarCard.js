@@ -1,3 +1,4 @@
+import { barTrackStyles, barMarkerStyles, getBarAnimationStyles } from '../render/bar-styles.js';
 import {
   clampSupportedRowHeight,
   colorModeToFillStyle,
@@ -38,41 +39,16 @@ import {
   buildMarkerModels,
   getMarkerLabelLaneOccupancy,
   getMarkerLaneOccupancy,
-  normalizeMarkerShape,
 } from '../view-model/marker-view-model.js';
-import { escapeHtml } from '../utils/dom.js';
+import { escapeHtml, setStyleIfChanged, setStyleTextIfChanged, setDatasetIfChanged, setClassNameIfChanged } from '../utils/dom.js';
 import {
   formatDisplayWithUnit,
   formatNumericDisplay,
   isTightUnit,
 } from '../utils/format.js';
 import { updateExtremum } from '../utils/extrema.js';
-
-function getRevealTransitionDuration(previousGeometry, nextGeometry) {
-  if (!previousGeometry || !nextGeometry
-    || !Number.isFinite(previousGeometry.valuePercent)
-    || !Number.isFinite(nextGeometry.valuePercent)) {
-    return 600;
-  }
-
-  const previousBaseline = Number.isFinite(previousGeometry.baselinePercent)
-    ? previousGeometry.baselinePercent
-    : 0;
-  const nextBaseline = Number.isFinite(nextGeometry.baselinePercent)
-    ? nextGeometry.baselinePercent
-    : 0;
-  const delta = Math.max(
-    Math.abs(nextGeometry.valuePercent - previousGeometry.valuePercent),
-    Math.abs(nextBaseline - previousBaseline),
-  );
-  const ordinaryDuration = Math.round(Math.min(600, Math.max(150, 600 - 15 * Math.max(0, delta - 5))));
-  const crossesBaseline = Number.isFinite(previousGeometry.baselinePercent)
-    && Number.isFinite(nextGeometry.baselinePercent)
-    && (previousGeometry.valuePercent - previousGeometry.baselinePercent)
-      * (nextGeometry.valuePercent - nextGeometry.baselinePercent) < 0;
-
-  return crossesBaseline ? Math.min(ordinaryDuration, 300) : ordinaryDuration;
-}
+import * as barRenderModel from '../view-model/bar-render-model.js';
+import * as barRenderer from '../render/bar-renderer.js';
 
 /**
  * sensor-bar-card-plus - A polished, configurable sensor bar card for Home Assistant
@@ -389,22 +365,7 @@ export class SensorBarCard extends HTMLElement {
   }
 
   inferSegmentEndValues(segments, fallbackEnd = null) {
-    const sorted = [...segments].sort((a, b) => a.from - b.from);
-    return sorted.map((segment, index) => {
-      let to = Number.isFinite(segment.to) ? segment.to : null;
-      if (!Number.isFinite(to) && index < sorted.length - 1) {
-        to = sorted[index + 1].from;
-      }
-      if (!Number.isFinite(to) && Number.isFinite(fallbackEnd)) {
-        to = fallbackEnd;
-      }
-      return {
-        from: segment.from,
-        to,
-        color: segment.color,
-        label: segment.label ?? null,
-      };
-    });
+    return barRenderModel.inferSegmentEndValues(segments, fallbackEnd);
   }
 
   normalizeSeverityToSegments(input) {
@@ -606,35 +567,11 @@ export class SensorBarCard extends HTMLElement {
   }
 
   _setStyleIfChanged(el, prop, value) {
-    if (!el?.style) return false;
-    const nextValue = value == null ? '' : String(value);
-
-    if (prop.startsWith('--')) {
-      const currentValue = typeof el.style.getPropertyValue === 'function'
-        ? el.style.getPropertyValue(prop)
-        : (el.style[prop] ?? '');
-      if (currentValue === nextValue) return false;
-      if (typeof el.style.setProperty === 'function') {
-        el.style.setProperty(prop, nextValue);
-      } else {
-        el.style[prop] = nextValue;
-      }
-      return true;
-    }
-
-    const currentValue = el.style[prop] ?? '';
-    if (currentValue === nextValue) return false;
-    el.style[prop] = nextValue;
-    return true;
+    return setStyleIfChanged(el, prop, value);
   }
 
   _setStyleTextIfChanged(el, value) {
-    if (!el?.style) return false;
-    const nextValue = value == null ? '' : String(value);
-    const currentValue = el.style.cssText ?? '';
-    if (currentValue === nextValue) return false;
-    el.style.cssText = nextValue;
-    return true;
+    return setStyleTextIfChanged(el, value);
   }
 
   _setTextIfChanged(el, value) {
@@ -646,20 +583,11 @@ export class SensorBarCard extends HTMLElement {
   }
 
   _setDatasetIfChanged(el, key, value) {
-    if (!el?.dataset) return false;
-    const nextValue = value == null ? '' : String(value);
-    const currentValue = el.dataset[key] ?? '';
-    if (currentValue === nextValue) return false;
-    el.dataset[key] = nextValue;
-    return true;
+    return setDatasetIfChanged(el, key, value);
   }
 
   _setClassNameIfChanged(el, value) {
-    if (!el) return false;
-    const nextValue = value == null ? '' : String(value);
-    if ((el.className ?? '') === nextValue) return false;
-    el.className = nextValue;
-    return true;
+    return setClassNameIfChanged(el, value);
   }
   
   _repositionAllTargetLabels() {
@@ -795,315 +723,83 @@ export class SensorBarCard extends HTMLElement {
   }
 
   _hexToRgb(color) {
-    if (!color || typeof color !== 'string') return null;
-    const hex = color.replace('#', '').trim();
-    const full = hex.length === 3
-      ? hex.split('').map(c => c + c).join('')
-      : hex;
-    if (!/^[0-9a-fA-F]{6}$/.test(full)) return null;
-    return {
-      r: parseInt(full.slice(0, 2), 16),
-      g: parseInt(full.slice(2, 4), 16),
-      b: parseInt(full.slice(4, 6), 16),
-    };
+    return barRenderModel.hexToRgb(color);
   }
 
   _getSeverityInterpolationStops(ecfg, minValue = 0, maxValue = 100) {
-    const bands = this._getSegmentsForRendering(ecfg, minValue, maxValue);
-    const sorted = bands
-      .filter(s => Number.isFinite(s?.from) && Number.isFinite(s?.to) && s?.color)
-      .sort((a, b) => a.from - b.from);
-
-    if (!sorted.length) return [];
-
-    const stops = [];
-    for (let i = 0; i < sorted.length; i++) {
-      const band = sorted[i];
-      const rgb = this._hexToRgb(band.color);
-      if (!rgb) continue;
-      let anchor;
-      if (i === 0) {
-        anchor = band.from;
-      } else if (i === sorted.length - 1) {
-        anchor = band.to;
-      } else {
-        anchor = band.from + ((band.to - band.from) / 2);
-      }
-      if (!stops.length || stops[stops.length - 1].p !== anchor) {
-        stops.push({ p: anchor, ...rgb });
-      }
-    }
-
-    return stops;
+    return barRenderModel.getSeverityInterpolationStops(ecfg, minValue, maxValue);
   }
 
   _getSeverityBandGradientCss(ecfg, minValue = 0, maxValue = 100) {
-    const bands = this._getSegmentsForRendering(ecfg, minValue, maxValue);
-    const sorted = bands
-      .filter(s => Number.isFinite(s?.from) && Number.isFinite(s?.to) && s?.color)
-      .sort((a, b) => a.from - b.from);
-
-    if (!sorted.length) return null;
-
-    const stops = [];
-    for (const band of sorted) {
-      stops.push(`${band.color} ${band.from}%`, `${band.color} ${band.to}%`);
-    }
-    return `linear-gradient(to right, ${stops.join(', ')})`;
+    return barRenderModel.getSeverityBandGradientCss(ecfg, minValue, maxValue);
   }
 
   _getSoftBandBlendWidthPct() {
-    return 1.5;
+    return barRenderModel.getSoftBandBlendWidthPct();
   }
 
   _pushGradientColorStop(stops, pos, color) {
-    if (!Array.isArray(stops) || !color) return;
-    const clampedPos = Math.min(100, Math.max(0, pos));
-    const last = stops[stops.length - 1];
-    if (last && last.color === color && Math.abs(last.p - clampedPos) < 0.0001) return;
-    stops.push({ p: clampedPos, color });
+    return barRenderModel.pushGradientColorStop(stops, pos, color);
   }
 
   _getSoftBandGradientStops(ecfg, minValue = 0, maxValue = 100) {
-    const bands = this._getSegmentsForRendering(ecfg, minValue, maxValue);
-    const sorted = bands
-      .filter(s => Number.isFinite(s?.from) && Number.isFinite(s?.to) && s?.color)
-      .sort((a, b) => a.from - b.from);
-
-    if (!sorted.length) return [];
-
-    const blendWidth = this._getSoftBandBlendWidthPct();
-    const blendHalf = blendWidth / 2;
-    const stops = [];
-    this._pushGradientColorStop(stops, sorted[0].from, sorted[0].color);
-
-    for (let i = 0; i < sorted.length - 1; i++) {
-      const current = sorted[i];
-      const next = sorted[i + 1];
-      const boundary = current.to;
-      const currentWidth = current.to - current.from;
-      const nextWidth = next.to - next.from;
-      const soften = currentWidth >= blendWidth && nextWidth >= blendWidth;
-
-      if (soften) {
-        this._pushGradientColorStop(stops, Math.max(current.from, boundary - blendHalf), current.color);
-        this._pushGradientColorStop(stops, Math.min(next.to, boundary + blendHalf), next.color);
-      } else {
-        this._pushGradientColorStop(stops, boundary, current.color);
-        this._pushGradientColorStop(stops, boundary, next.color);
-      }
-    }
-
-    this._pushGradientColorStop(stops, sorted[sorted.length - 1].to, sorted[sorted.length - 1].color);
-    return stops;
+    return barRenderModel.getSoftBandGradientStops(ecfg, minValue, maxValue);
   }
 
   _getSoftBandGradientCss(ecfg, minValue = 0, maxValue = 100) {
-    const stops = this._getSoftBandGradientStops(ecfg, minValue, maxValue);
-    if (!stops.length) return null;
-    return `linear-gradient(to right, ${stops.map((stop) => `${stop.color} ${stop.p}%`).join(', ')})`;
+    return barRenderModel.getSoftBandGradientCss(ecfg, minValue, maxValue);
   }
 
   _resolveSegmentBoundaryPct(boundary, minValue, maxValue) {
-    if (boundary === null || boundary === undefined) return null;
-
-    if (typeof boundary === 'object' && !Array.isArray(boundary)) {
-      const fixed = this._getFiniteNumber(boundary.fixed);
-      if (Number.isFinite(fixed)) {
-        return this._toScalePct(fixed, minValue, maxValue);
-      }
-      if (Number.isFinite(boundary.percent)) {
-        return boundary.percent;
-      }
-      return null;
-    }
-
-    const percent = this._parsePercentLiteral(boundary);
-    if (Number.isFinite(percent)) {
-      return percent;
-    }
-
-    const fixed = this._getFiniteNumber(boundary);
-    return Number.isFinite(fixed) ? this._toScalePct(fixed, minValue, maxValue) : null;
+    return barRenderModel.resolveSegmentBoundaryPct(boundary, minValue, maxValue);
   }
 
   _getEffectiveFillStyle(ecfg) {
-    return ecfg?.bar?.fill_style
-      ?? this._colorModeToFillStyle(ecfg?.bar?.color_mode)
-      ?? 'bands';
+    return barRenderModel.getEffectiveFillStyle(ecfg);
   }
 
   _segmentsNeedBoundaryResolution(segments) {
-    return Array.isArray(segments) && segments.some((segment) => (
-      (segment?.from && typeof segment.from === 'object' && !Array.isArray(segment.from))
-      || (segment?.to && typeof segment.to === 'object' && !Array.isArray(segment.to))
-    ));
+    return barRenderModel.segmentsNeedBoundaryResolution(segments);
   }
   
   _getSegmentsForRendering(ecfg, minValue = 0, maxValue = 100) {
-    const safeMin = Number.isFinite(minValue) ? minValue : 0;
-    const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
-    const rawSegments = (Array.isArray(ecfg.bar?.segments) ? ecfg.bar.segments : [])
-      .filter((segment) => !segment?.invalidBoundary);
-    if (ecfg.bar?.segment_space === 'scale' || this._segmentsNeedBoundaryResolution(rawSegments)) {
-      const resolvedSegments = rawSegments
-        .map((segment) => ({
-          from: this._resolveSegmentBoundaryPct(segment.from, safeMin, safeMax),
-          to: this._resolveSegmentBoundaryPct(segment.to, safeMin, safeMax),
-          color: segment.color,
-          label: segment.label ?? null,
-        }))
-        .filter((segment) => Number.isFinite(segment.from) && segment.color);
-
-      return this.inferSegmentEndValues(resolvedSegments, 100)
-        .filter((segment) => Number.isFinite(segment.from) && Number.isFinite(segment.to) && segment.color);
-    }
-
-    return this.inferSegmentEndValues(rawSegments, 100)
-      .filter((segment) => Number.isFinite(segment.from) && Number.isFinite(segment.to) && segment.color);
+    return barRenderModel.getSegmentsForRendering(ecfg, minValue, maxValue);
   }
 
   _getColor(pct, ecfg, minValue = 0, maxValue = 100) {
-    const fillStyle = this._getEffectiveFillStyle(ecfg);
-    if (fillStyle === 'solid') return ecfg.bar.color;
-
-    if (fillStyle === 'gradient' || fillStyle === 'band_gradient' || fillStyle === 'soft_bands') {
-      let stops;
-      if (fillStyle === 'band_gradient') {
-        stops = this._getSeverityInterpolationStops(ecfg, minValue, maxValue);
-      } else if (fillStyle === 'soft_bands') {
-        stops = this._getSoftBandGradientStops(ecfg, minValue, maxValue)
-          .map((stop) => {
-            const rgb = this._hexToRgb(stop.color);
-            return rgb ? { p: stop.p, ...rgb } : null;
-          })
-          .filter(Boolean);
-      } else if (ecfg.bar.gradient_stops && ecfg.bar.gradient_stops.length >= 2) {
-        stops = ecfg.bar.gradient_stops.map(s => {
-          const hex = s.color.replace('#','');
-          const full = hex.length === 3
-            ? hex.split('').map(c => c+c).join('')
-            : hex;
-          return { p: s.pos, r: parseInt(full.slice(0,2),16), g: parseInt(full.slice(2,4),16), b: parseInt(full.slice(4,6),16) };
-        });
-        stops.sort((a,b) => a.p - b.p);
-      } else {
-        stops = [
-          { p: 0,   r: 76,  g: 175, b: 80  },
-          { p: 50,  r: 255, g: 152, b: 0   },
-          { p: 100, r: 244, g: 67,  b: 54  },
-        ];
-      }
-      if (!stops || !stops.length) return ecfg.bar.color;
-      let lo = stops[0], hi = stops[stops.length - 1];
-      for (let i = 0; i < stops.length - 1; i++) {
-        if (pct >= stops[i].p && pct <= stops[i + 1].p) {
-          lo = stops[i]; hi = stops[i + 1]; break;
-        }
-      }
-      const t = lo.p === hi.p ? 0 : (pct - lo.p) / (hi.p - lo.p);
-      return `rgb(${Math.round(lo.r + t*(hi.r-lo.r))},${Math.round(lo.g + t*(hi.g-lo.g))},${Math.round(lo.b + t*(hi.b-lo.b))})`;
-    }
-
-    // Bands mode
-    for (const s of this._getSegmentsForRendering(ecfg, minValue, maxValue)) {
-      if (pct >= s.from && pct <= s.to) return s.color;
-    }
-    return ecfg.bar.color;
+    return barRenderModel.getColor(pct, ecfg, minValue, maxValue);
   }
 
   _buildFullScaleGradientStyle(stops) {
-    if (!Array.isArray(stops) || !stops.length) return null;
-    const cssStops = stops.map((stop) => {
-      const cssColor = stop.color ?? this._rgbToCss(stop);
-      return cssColor ? `${cssColor} ${stop.p}%` : null;
-    }).filter(Boolean);
-    if (!cssStops.length) return null;
-    return `background:linear-gradient(to right,${cssStops.join(',')});background-repeat:no-repeat;`;
+    return barRenderModel.buildFullScaleGradientStyle(stops);
   }
 
   _getGradientInterpolationStops(ecfg, minValue = 0, maxValue = 100) {
-    const fillStyle = this._getEffectiveFillStyle(ecfg);
-    if (fillStyle === 'band_gradient') {
-      return this._getSeverityInterpolationStops(ecfg, minValue, maxValue);
-    }
-
-    if (fillStyle === 'soft_bands') {
-      return this._getSoftBandGradientStops(ecfg, minValue, maxValue)
-        .map((stop) => {
-          const rgb = this._hexToRgb(stop.color);
-          return rgb ? { p: stop.p, ...rgb } : null;
-        })
-        .filter(Boolean)
-        .sort((a, b) => a.p - b.p);
-    }
-
-    if (ecfg.bar.gradient_stops && ecfg.bar.gradient_stops.length >= 2) {
-      return ecfg.bar.gradient_stops
-        .map((s) => {
-          const rgb = this._hexToRgb(s.color);
-          return rgb ? { p: s.pos, ...rgb } : null;
-        })
-        .filter(Boolean)
-        .sort((a, b) => a.p - b.p);
-    }
-
-    return [
-      { p: 0,   r: 76,  g: 175, b: 80  },
-      { p: 50,  r: 255, g: 152, b: 0   },
-      { p: 100, r: 244, g: 67,  b: 54  },
-    ];
+    return barRenderModel.getGradientInterpolationStops(ecfg, minValue, maxValue);
   }
 
   _rgbToCss(rgb) {
-    if (!rgb) return null;
-    return `rgb(${rgb.r},${rgb.g},${rgb.b})`;
+    return barRenderModel.rgbToCss(rgb);
   }
 
   _buildSolidGradientStyle(color) {
-    return `linear-gradient(to right,${color} 0%,${color} 100%)`;
+    return barRenderModel.buildSolidGradientStyle(color);
   }
 
   _getBasePaintGradient(color, ecfg, minValue = 0, maxValue = 100) {
-    const fillStyle = this._getEffectiveFillStyle(ecfg);
-    if (ecfg.bar.solid_fill) {
-      return this._buildSolidGradientStyle(color);
-    }
-
-    if (fillStyle === 'bands') {
-      return this._getSeverityBandGradientCss(ecfg, minValue, maxValue);
-    }
-
-    if (fillStyle === 'soft_bands') {
-      return this._getSoftBandGradientCss(ecfg, minValue, maxValue);
-    }
-
-    if (fillStyle === 'gradient' || fillStyle === 'band_gradient') {
-      const stops = this._getGradientInterpolationStops(ecfg, minValue, maxValue);
-      return this._buildFullScaleGradientStyle(stops)?.replace(/^background:/, '').replace(/;background-repeat:no-repeat;$/, '');
-    }
-
-    return this._buildSolidGradientStyle(color);
+    return barRenderModel.getBasePaintGradient(color, ecfg, minValue, maxValue);
   }
 
   _getOverlayGradient(startPct, endPct, color) {
-    if (!color) return null;
-    const start = Math.min(100, Math.max(0, startPct));
-    const end = Math.min(100, Math.max(0, endPct));
-    if (end <= start) return null;
-    return `linear-gradient(to right,transparent 0%,transparent ${start}%,${color} ${start}%,${color} ${end}%,transparent ${end}%,transparent 100%)`;
+    return barRenderModel.getOverlayGradient(startPct, endPct, color);
   }
 
   _toScalePct(value, minValue, maxValue) {
-    if (!Number.isFinite(value)) return null;
-    const safeMin = Number.isFinite(minValue) ? minValue : 0;
-    const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
-    const range = safeMax - safeMin || 1;
-    return Math.min(100, Math.max(0, ((value - safeMin) / range) * 100));
+    return barRenderModel.toScalePct(value, minValue, maxValue);
   }
 
   _getRevealTransitionDuration(previousGeometry, nextGeometry) {
-    return getRevealTransitionDuration(previousGeometry, nextGeometry);
+    return barRenderModel.getRevealTransitionDuration(previousGeometry, nextGeometry);
   }
 
   _resolveBaselinePct(ecfg, safeMin, safeMax) {
@@ -1118,201 +814,47 @@ export class SensorBarCard extends HTMLElement {
   }
 
   _getNormalizedPercent(valuePct, baselinePct = null) {
-    const clampedValue = Math.min(100, Math.max(0, valuePct));
-    if (!Number.isFinite(baselinePct)) {
-      return {
-        usesBaseline: false,
-        start: 0,
-        end: clampedValue,
-        positive: true,
-        baseline: null,
-        hidden: clampedValue <= 0,
-      };
-    }
-
-    const clampedBaseline = Math.min(100, Math.max(0, baselinePct));
-    return {
-      usesBaseline: true,
-      start: Math.min(clampedValue, clampedBaseline),
-      end: Math.max(clampedValue, clampedBaseline),
-      positive: clampedValue >= clampedBaseline,
-      baseline: clampedBaseline,
-      hidden: clampedValue === clampedBaseline,
-    };
+    return barRenderModel.getNormalizedPercent(valuePct, baselinePct);
   }
 
   _getEndpointSemantics(geometry) {
-    if (geometry?.endpointSemantics) {
-      return geometry.endpointSemantics;
-    }
-    if (!geometry?.usesBaseline) {
-      return {
-        left: 'scale',
-        right: 'value',
-      };
-    }
-
-    return geometry.positive
-      ? { left: 'baseline', right: 'value' }
-      : { left: 'value', right: 'baseline' };
+    return barRenderModel.getEndpointSemantics(geometry);
   }
 
   _getRevealCornerRadii(geometry) {
-    const endpoints = this._getEndpointSemantics(geometry);
-    const isRounded = (endpointType) => endpointType === 'value' || endpointType === 'range' || endpointType === 'scale';
-    const leftRadius = isRounded(endpoints.left) ? '6px' : '0';
-    const rightRadius = isRounded(endpoints.right) ? '6px' : '0';
-    return `${leftRadius} ${rightRadius} ${rightRadius} ${leftRadius}`;
+    return barRenderModel.getRevealCornerRadii(geometry);
   }
 
-_getAboveTargetOverlayInterval(targetPct = null) {
-  if (!Number.isFinite(targetPct)) return null;
+  _getAboveTargetOverlayInterval(targetPct = null) {
+    return barRenderModel.getAboveTargetOverlayInterval(targetPct);
+  }
 
-  const start = Math.min(100, Math.max(0, targetPct));
-  if (start >= 100) return null;
-
-  return {
-    start,
-    end: 100,
-  };
-}
-
-_getAboveTargetLayerGeometry(targetPct = null) {
-  const interval = this._getAboveTargetOverlayInterval(targetPct);
-  if (!interval) return null;
-
-  return {
-    start: interval.start,
-    end: interval.end,
-    hidden: false,
-  };
-}
+  _getAboveTargetLayerGeometry(targetPct = null) {
+    return barRenderModel.getAboveTargetLayerGeometry(targetPct);
+  }
 
   _getFullScalePaintStyle(ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100) {
-    const layers = [];
-    const basePaint = this._getBasePaintGradient(color, ecfg, minValue, maxValue);
-    const clampedBaseline = Number.isFinite(baselinePct)
-      ? Math.min(100, Math.max(0, baselinePct))
-      : null;
-
-    if (Number.isFinite(clampedBaseline)) {
-      const belowColor = ecfg.baseline?.below?.color ?? null;
-      const aboveColor = ecfg.baseline?.above?.color ?? null;
-      const belowOverlay = this._getOverlayGradient(0, clampedBaseline, belowColor);
-      const aboveOverlay = this._getOverlayGradient(clampedBaseline, 100, aboveColor);
-      if (belowOverlay) layers.push(belowOverlay);
-      if (aboveOverlay) layers.push(aboveOverlay);
-    }
-
-    if (basePaint) layers.push(basePaint);
-    if (!layers.length) return 'display:none;';
-
-    return `display:block;inset:0;background-image:${layers.join(',')};background-repeat:no-repeat;background-size:100% 100%;`;
+    return barRenderModel.getFullScalePaintStyle(ecfg, color, targetPct, baselinePct, minValue, maxValue);
   }
 
   _getRevealShapeStyle(geometry, h) {
-    const heightValue = typeof h === 'number' ? `${h}px` : h;
-    const start = Math.min(100, Math.max(0, geometry?.start ?? 0));
-    const end = Math.min(100, Math.max(0, geometry?.end ?? 0));
-
-    if (geometry?.hidden) {
-      return `display:none;height:${heightValue};clip-path:inset(0 100% 0 0 round 0);`;
-    }
-
-    const topInset = '0';
-    const rightInset = `${Math.max(0, 100 - end)}%`;
-    const bottomInset = '0';
-    const leftInset = `${start}%`;
-    const radii = this._getRevealCornerRadii(geometry);
-    return `display:block;height:${heightValue};clip-path:inset(${topInset} ${rightInset} ${bottomInset} ${leftInset} round ${radii});`;
+    return barRenderModel.getRevealShapeStyle(geometry, h);
   }
 
   _getStaticLayerRevealStyle(geometry) {
-    if (!geometry?.hidden && Number.isFinite(geometry?.start) && Number.isFinite(geometry?.end) && geometry.end > geometry.start) {
-      const start = Math.min(100, Math.max(0, geometry.start));
-      const end = Math.min(100, Math.max(0, geometry.end));
-      return `display:block;clip-path:inset(0 ${Math.max(0, 100 - end)}% 0 ${start}% round 0);`;
-    }
-    return 'display:none;clip-path:inset(0 100% 0 0 round 0);';
+    return barRenderModel.getStaticLayerRevealStyle(geometry);
   }
 
   _getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100) {
-    const basePaintStyle = this._getFullScalePaintStyle(ecfg, color, targetPct, baselinePct, minValue, maxValue);
-    const baseLayer = {
-      id: 'base',
-      zIndex: 1,
-      visible: true,
-      paintStyle: basePaintStyle,
-      revealStyle: 'display:block;',
-    };
-
-    const aboveTargetGeometry = this._getAboveTargetLayerGeometry(targetPct);
-    const aboveTargetLayer = {
-      id: 'above-target',
-      zIndex: 2,
-      visible: !!(ecfg?.bar?.above_target_color && aboveTargetGeometry),
-      paintStyle: ecfg?.bar?.above_target_color
-        ? `display:block;inset:0;background:${ecfg.bar.above_target_color};`
-        : 'display:none;',
-      revealStyle: aboveTargetGeometry
-        ? this._getStaticLayerRevealStyle(aboveTargetGeometry)
-        : this._getStaticLayerRevealStyle({ start: 0, end: 0, hidden: true }),
-    };
-
-    return [baseLayer, aboveTargetLayer];
+    return barRenderModel.getFillPaintLayers(geometry, h, ecfg, color, targetPct, baselinePct, minValue, maxValue);
   }
 
   _getFillRenderState(pct, h, ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, needleActive = false) {
-    const geometry = needleActive
-      ? this._getNormalizedPercent(100, null)
-      : this._getNormalizedPercent(pct, baselinePct);
-    const paintLayers = this._getFillPaintLayers(geometry, h, ecfg, color, targetPct, baselinePct, minValue, maxValue);
-    return {
-      geometry,
-      paintLayers,
-      paintStyle: paintLayers[0]?.paintStyle ?? 'display:none;',
-      revealStyle: this._getRevealShapeStyle(geometry, h),
-    };
+    return barRenderModel.getFillRenderState(pct, h, ecfg, color, targetPct, baselinePct, minValue, maxValue, needleActive);
   }
 
   _getNeedleRenderState(rawValue, ecfg, minValue = 0, maxValue = 100, baselinePct = null) {
-    const needle = ecfg?.bar?.needle;
-    if (!needle?.show) {
-      return {
-        show: false,
-        pct: null,
-        color: needle?.color ?? '#ffffff',
-        borderColor: this._getNeedleBorderColor(needle?.color ?? '#ffffff'),
-        edge: 'middle',
-      };
-    }
-    if (Number.isFinite(baselinePct)) {
-      return {
-        show: false,
-        pct: null,
-        color: needle.color ?? '#ffffff',
-        borderColor: this._getNeedleBorderColor(needle.color ?? '#ffffff'),
-        edge: 'middle',
-      };
-    }
-    if (!Number.isFinite(rawValue)) {
-      return {
-        show: false,
-        pct: null,
-        color: needle.color ?? '#ffffff',
-        borderColor: this._getNeedleBorderColor(needle.color ?? '#ffffff'),
-        edge: 'middle',
-      };
-    }
-
-    const pct = Math.min(100, Math.max(0, this._toScalePct(rawValue, minValue, maxValue)));
-    return {
-      show: true,
-      pct,
-      color: needle.color ?? '#ffffff',
-      borderColor: this._getNeedleBorderColor(needle.color ?? '#ffffff'),
-      edge: pct <= 0 ? 'left' : (pct >= 100 ? 'right' : 'middle'),
-    };
+    return barRenderModel.getNeedleRenderState(rawValue, ecfg, minValue, maxValue, baselinePct);
   }
 
   _ensureBaseDom() {
@@ -1324,9 +866,9 @@ _getAboveTargetLayerGeometry(targetPct = null) {
 
     this.shadowRoot.innerHTML = `
       <style>
-        :host { 
-          display: block; 
-          font-family: 'Segoe UI', system-ui, sans-serif; 
+        :host {
+          display: block;
+          font-family: 'Segoe UI', system-ui, sans-serif;
           position: relative;
           z-index: 0;
           isolation: isolate;
@@ -1559,52 +1101,8 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           min-width: var(--sbcp-bar-min-width);
           position: relative;
         }
-        .bar-track {
-          position: relative;
-          width: 100%;
-          height: var(--sbcp-row-height);
-          border-radius: 6px;
-          background: var(--secondary-background-color, #e8e8e8);
-          overflow: hidden;
-        }
-        .bar-fill-reveal {
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          transition: clip-path var(--sbcp-reveal-duration, 600ms) cubic-bezier(0.4,0,0.2,1);
-          z-index: 1;
-        }
-        .bar-paint-layer {
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          z-index: 1;
-        }
-        .bar-paint-layer[data-layer="above-target"] {
-          z-index: 2;
-        }
-        .bar-fill-reveal.no-anim {
-          transition: none;
-        }
-        .baseline-indicator {
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          width: 1px;
-          transform: translateX(-50%);
-          background-color: var(--primary-text-color, currentColor);
-          opacity: 0.6;
-          pointer-events: none;
-          transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
-          z-index: 3;
-        }
-        .row[data-bar-animated="false"] .bar-fill-reveal,
-        .row[data-bar-animated="false"] .needle-marker,
-        .row[data-bar-animated="false"] .target-marker,
-        .row[data-bar-animated="false"] .peak-marker,
-        .row[data-bar-animated="false"] .floor-marker,
-        .row[data-bar-animated="false"] .generic-marker,
-        .row[data-bar-animated="false"] .baseline-indicator,
+${barTrackStyles}
+${getBarAnimationStyles('.row[data-bar-animated="false"]')}
         .row[data-bar-animated="false"] .target-value-label,
         .row[data-bar-animated="false"] .peak-value-label,
         .row[data-bar-animated="false"] .floor-value-label,
@@ -2014,277 +1512,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
           overflow: visible;
           text-overflow: clip;
         }
-        /* ── Shared marker base ── */
-        .peak-marker, .target-marker, .floor-marker, .generic-marker {
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          width: 0;
-          transform: translateX(-50%);
-          pointer-events: none;
-          transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
-          --marker-color: #888;
-          --marker-contrast-color: #f3f4f6;
-        }
-        .peak-marker .peak-inset,
-        .peak-marker .peak-outset,
-        .target-marker .target-inset,
-        .target-marker .target-outset,
-        .floor-marker .floor-inset,
-        .floor-marker .floor-outset,
-        .generic-marker .peak-inset,
-        .generic-marker .peak-outset,
-        .generic-marker .target-inset,
-        .generic-marker .target-outset {
-          pointer-events: auto;
-        }
-        .peak-marker .peak-inset:hover,
-        .peak-marker .peak-outset:hover,
-        .target-marker .target-inset:hover,
-        .target-marker .target-outset:hover,
-        .floor-marker .floor-inset:hover,
-        .floor-marker .floor-outset:hover,
-        .generic-marker .peak-inset:hover,
-        .generic-marker .peak-outset:hover,
-        .generic-marker .target-inset:hover,
-        .generic-marker .target-outset:hover,
-        .marker-shape-svg path[data-shape]:hover {
-          cursor: none;
-        }
-        .target-marker {
-          z-index: 6;
-        }
-        .floor-marker {
-          z-index: 6;
-        }
-        .generic-marker[data-lane="below"] {
-          z-index: 6;
-        }
-        .peak-marker {
-          z-index: 7;
-        }
-        .generic-marker[data-lane="above"] {
-          z-index: 7;
-        }
-        .needle-layer {
-          position: absolute;
-          inset: 0;
-          overflow: hidden;
-          border-radius: inherit;
-          pointer-events: none;
-          z-index: 5;
-        }
-        .needle-marker {
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          width: 7px;
-          transform: translateX(-50%);
-          pointer-events: none;
-          transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
-          background: linear-gradient(
-            to right,
-            var(--needle-border-color, #000000) 0 1px,
-            var(--needle-color, #ffffff) 1px 6px,
-            var(--needle-border-color, #000000) 6px 7px
-          );
-          border-radius: 0;
-          box-shadow:
-            0 0 3px var(--needle-color, #ffffff),
-            0 0 6px var(--needle-color, #ffffff);
-        }
-        .needle-layer .needle-marker[data-edge="right"] {
-          transform: translateX(-100%);
-        }
-        .peak-marker .peak-inset,
-        .peak-marker .peak-outset,
-        .target-marker .target-inset,
-        .target-marker .target-outset,
-        .floor-marker .floor-inset,
-        .floor-marker .floor-outset,
-        .generic-marker[data-lane="above"] .peak-inset,
-        .generic-marker[data-lane="above"] .peak-outset,
-        .generic-marker[data-lane="below"] .target-inset,
-        .generic-marker[data-lane="below"] .target-outset {
-          position: absolute;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 0;
-          height: 0;
-        }
-        /* Peak marker: large triangle intrudes into the bar, small one sits just above it. */
-        .peak-marker .peak-inset,
-        .generic-marker[data-lane="above"] .peak-inset {
-          top: 0;
-          border-left: 7px solid transparent;
-          border-right: 7px solid transparent;
-          border-top: 11px solid var(--marker-color);
-          z-index: 2;
-          filter:
-            drop-shadow(0 0 1.2px var(--marker-contrast-color))
-            drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
-        }
-        .peak-marker[data-direction="outward"] .peak-inset,
-        .generic-marker[data-lane="above"][data-direction="outward"] .peak-inset {
-          border-top-width: 0;
-          border-top-color: transparent;
-          border-bottom: 11px solid var(--marker-color);
-        }
-        .peak-marker .peak-outset,
-        .generic-marker[data-lane="above"] .peak-outset {
-          top: -4px;
-          border-left: 5px solid transparent;
-          border-right: 5px solid transparent;
-          border-bottom: 4px solid var(--marker-color);
-          z-index: 3;
-        }
-        /* Target marker: large triangle intrudes into the bar, small one sits just below it. */
-        .target-marker .target-inset,
-        .generic-marker[data-lane="below"] .target-inset {
-          bottom: 0;
-          border-left: 7px solid transparent;
-          border-right: 7px solid transparent;
-          border-bottom: 11px solid var(--marker-color);
-          z-index: 2;
-          filter:
-            drop-shadow(0 0 1.2px var(--marker-contrast-color))
-            drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
-        }
-        .target-marker .target-outset,
-        .generic-marker[data-lane="below"] .target-outset {
-          bottom: -4px;
-          border-left: 5px solid transparent;
-          border-right: 5px solid transparent;
-          border-top: 4px solid var(--marker-color);
-          z-index: 3;
-        }
-        .floor-marker .floor-inset {
-          bottom: 0;
-          border-left: 7px solid transparent;
-          border-right: 7px solid transparent;
-          border-bottom: 11px solid var(--marker-color);
-          z-index: 2;
-          filter:
-            drop-shadow(0 0 1.2px var(--marker-contrast-color))
-            drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
-        }
-        .target-marker[data-direction="outward"] .target-inset,
-        .floor-marker[data-direction="outward"] .floor-inset,
-        .generic-marker[data-lane="below"][data-direction="outward"] .target-inset {
-          border-bottom-width: 0;
-          border-bottom-color: transparent;
-          border-top: 11px solid var(--marker-color);
-        }
-        .floor-marker .floor-outset {
-          bottom: -4px;
-          border-left: 5px solid transparent;
-          border-right: 5px solid transparent;
-          border-top: 4px solid var(--marker-color);
-          z-index: 3;
-        }
-        /* Shared non-triangle marker shapes. Triangle keeps the original CSS geometry. */
-        .marker-shape-svg {
-          display: none;
-          position: absolute;
-          left: 50%;
-          width: 16px;
-          height: 16px;
-          overflow: visible;
-          color: var(--marker-color);
-          pointer-events: none;
-          z-index: 2;
-          transform: translateX(-50%);
-          filter:
-            drop-shadow(0 0 1.2px var(--marker-contrast-color))
-            drop-shadow(0 0 3px color-mix(in srgb, var(--marker-contrast-color) 78%, transparent));
-        }
-        .peak-marker .marker-shape-svg {
-          top: 0;
-        }
-        .target-marker .marker-shape-svg {
-          bottom: 0;
-        }
-        .floor-marker .marker-shape-svg {
-          bottom: 0;
-        }
-        .generic-marker[data-lane="above"] .marker-shape-svg {
-          top: 0;
-        }
-        .generic-marker[data-lane="below"] .marker-shape-svg {
-          bottom: 0;
-        }
-        .marker-shape-svg[data-lane="above"] {
-          transform-origin: 50% 0;
-        }
-        .marker-shape-svg[data-lane="below"] {
-          transform-origin: 50% 100%;
-        }
-        .marker-shape-svg[data-shape="diamond"],
-        .marker-shape-svg[data-shape="arrow"],
-        .marker-shape-svg[data-shape="chevron"],
-        .marker-shape-svg[data-shape="pin"] {
-          transform: translateX(-50%) scale(0.75);
-        }
-        .marker-shape-svg[data-shape="circle"] {
-          transform: translateX(-50%) scale(0.64);
-        }
-        .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-inset,
-        .peak-marker[data-shape]:not([data-shape="triangle"]) .peak-outset,
-        .target-marker[data-shape]:not([data-shape="triangle"]) .target-inset,
-        .target-marker[data-shape]:not([data-shape="triangle"]) .target-outset,
-        .floor-marker[data-shape]:not([data-shape="triangle"]) .floor-inset,
-        .floor-marker[data-shape]:not([data-shape="triangle"]) .floor-outset,
-        .generic-marker[data-shape]:not([data-shape="triangle"]) .peak-inset,
-        .generic-marker[data-shape]:not([data-shape="triangle"]) .peak-outset,
-        .generic-marker[data-shape]:not([data-shape="triangle"]) .target-inset,
-        .generic-marker[data-shape]:not([data-shape="triangle"]) .target-outset {
-          display: none;
-        }
-        .peak-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg,
-        .target-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
-          display: block;
-        }
-        .floor-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
-          display: block;
-        }
-        .generic-marker[data-shape]:not([data-shape="triangle"]) .marker-shape-svg {
-          display: block;
-        }
-        .generic-marker[data-show-marker="false"][data-shape] .peak-inset,
-        .generic-marker[data-show-marker="false"][data-shape] .peak-outset,
-        .generic-marker[data-show-marker="false"][data-shape] .target-inset,
-        .generic-marker[data-show-marker="false"][data-shape] .target-outset,
-        .generic-marker[data-show-marker="false"][data-shape] .marker-shape-svg {
-          display: none;
-        }
-        .marker-shape-svg path {
-          display: none;
-          fill: currentColor;
-        }
-        .marker-shape-svg path[data-shape] {
-          pointer-events: visiblePainted;
-        }
-        .marker-shape-svg[data-shape="circle"] path[data-shape="circle"],
-        .marker-shape-svg[data-shape="diamond"] path[data-shape="diamond"],
-        .marker-shape-svg[data-shape="chevron"] path[data-shape="chevron"],
-        .marker-shape-svg[data-shape="arrow"] path[data-shape="arrow"],
-        .marker-shape-svg[data-shape="pin"] path[data-shape="pin"] {
-          display: block;
-        }
-        .marker-shape-svg[data-shape="chevron"] path[data-shape="chevron"] {
-          fill: none;
-        }
-        .marker-shape-svg[data-shape="chevron"][data-lane="below"][data-direction="inward"] .marker-shape-paths,
-        .marker-shape-svg[data-shape="arrow"][data-lane="below"][data-direction="inward"] .marker-shape-paths,
-        .marker-shape-svg[data-shape="pin"][data-lane="below"][data-direction="inward"] .marker-shape-paths,
-        .marker-shape-svg[data-shape="chevron"][data-lane="above"][data-direction="outward"] .marker-shape-paths,
-        .marker-shape-svg[data-shape="arrow"][data-lane="above"][data-direction="outward"] .marker-shape-paths,
-        .marker-shape-svg[data-shape="pin"][data-lane="above"][data-direction="outward"] .marker-shape-paths {
-          transform-box: view-box;
-          transform-origin: 0 0;
-          transform: translateY(16px) scaleY(-1);
-        }
-
+${barMarkerStyles}
         .value-right {
           position: relative;
           z-index: 10;
@@ -3667,80 +2895,19 @@ _getAboveTargetLayerGeometry(targetPct = null) {
   }
 
   _parseColorToRgb(color) {
-    const value = String(color || '').trim();
-    if (!value) return null;
-
-    const hexMatch = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
-    if (hexMatch) {
-      const hex = hexMatch[1];
-      const full = hex.length === 3
-        ? hex.split('').map(c => c + c).join('')
-        : hex;
-      return {
-        r: parseInt(full.slice(0, 2), 16),
-        g: parseInt(full.slice(2, 4), 16),
-        b: parseInt(full.slice(4, 6), 16),
-      };
-    }
-
-    const rgbMatch = value.match(/^rgba?\(([^)]+)\)$/i);
-    if (rgbMatch) {
-      const parts = rgbMatch[1].split(',').map(p => p.trim());
-      if (parts.length >= 3) {
-        return {
-          r: Math.max(0, Math.min(255, parseFloat(parts[0]))),
-          g: Math.max(0, Math.min(255, parseFloat(parts[1]))),
-          b: Math.max(0, Math.min(255, parseFloat(parts[2]))),
-        };
-      }
-    }
-
-    return null;
+    return barRenderModel.parseColorToRgb(color);
   }
 
   _rgbToHsl({ r, g, b }) {
-    const rn = r / 255;
-    const gn = g / 255;
-    const bn = b / 255;
-    const max = Math.max(rn, gn, bn);
-    const min = Math.min(rn, gn, bn);
-    const l = (max + min) / 2;
-
-    if (max === min) {
-      return { h: 0, s: 0, l: l * 100 };
-    }
-
-    const d = max - min;
-    const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    let h;
-
-    switch (max) {
-      case rn:
-        h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6;
-        break;
-      case gn:
-        h = ((bn - rn) / d + 2) / 6;
-        break;
-      default:
-        h = ((rn - gn) / d + 4) / 6;
-        break;
-    }
-
-    return { h: h * 360, s: s * 100, l: l * 100 };
+    return barRenderModel.rgbToHsl({ r, g, b });
   }
 
   _getMarkerContrastColor(color) {
-    const rgb = this._parseColorToRgb(color);
-    if (!rgb) return '#f3f4f6';
-
-    const { h, s, l } = this._rgbToHsl(rgb);
-    const contrastL = Math.abs(l - 90) >= Math.abs(l - 10) ? 90 : 10;
-    const contrastS = Math.max(40, Math.min(100, s));
-    return `hsl(${Math.round(h)} ${Math.round(contrastS)}% ${Math.round(contrastL)}%)`;
+    return barRenderModel.getMarkerContrastColor(color);
   }
 
   _getEffectiveMarkerColor(marker) {
-    return marker?.color ?? '#888888';
+    return barRenderModel.getEffectiveMarkerColor(marker);
   }
 
   _getMarkerLabelColorStyle(marker) {
@@ -3749,18 +2916,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
   }
 
   _getNeedleBorderColor(color) {
-    const rgb = this._parseColorToRgb(color);
-    if (!rgb) return '#000000';
-    const toLinear = (channel) => {
-      const srgb = channel / 255;
-      return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
-    };
-    const luminance = (
-      0.2126 * toLinear(rgb.r)
-      + 0.7152 * toLinear(rgb.g)
-      + 0.0722 * toLinear(rgb.b)
-    );
-    return luminance < 0.22 ? '#ffffff' : '#000000';
+    return barRenderModel.getNeedleBorderColor(color);
   }
 
   _formatDisplayWithUnit(display, unit) {
@@ -3838,78 +2994,12 @@ _getAboveTargetLayerGeometry(targetPct = null) {
   }
 
   _renderMarker(marker) {
-    if (!marker) return '';
-    const position = Number.isFinite(marker.position) ? marker.position : 0;
-    const color = this._getEffectiveMarkerColor(marker);
-    const contrastColor = this._getMarkerContrastColor(color);
-    const display = marker.visible ? '' : 'none';
-    const defaultShape = marker.type === 'target' ? 'diamond' : marker.type === 'generic' ? 'circle' : 'triangle';
-    const shape = normalizeMarkerShape(marker.shape, defaultShape);
-    const lane = marker.lane ?? (marker.type === 'peak' ? 'above' : 'below');
-    const shapePaths = `<g class="marker-shape-paths">
-      <path data-shape="circle" d="M8 1A7 7 0 1 0 8 15A7 7 0 1 0 8 1Z"></path>
-      <path data-shape="diamond" d="M8 1L15 8L8 15L1 8Z"></path>
-      <path data-shape="chevron" d="M2 2L8 8L14 2 M2 8L8 14L14 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-      <path data-shape="arrow" d="M8 15 L3 3 H6 L8 7 L10 3 H13 Z"></path>
-      <path data-shape="pin" fill-rule="evenodd" d="M8 15.5 C7.1 14 3 9.7 3 6 A5 5 0 1 1 13 6 C13 9.7 8.9 14 8 15.5 Z M8 4.2 A1.8 1.8 0 1 0 8 7.8 A1.8 1.8 0 1 0 8 4.2 Z"></path>
-    </g>`;
-
-    if (marker.type === 'generic') {
-      const triangleClasses = lane === 'above'
-        ? ['peak-inset', 'peak-outset']
-        : ['target-inset', 'target-outset'];
-      return `
-      <div class="generic-marker" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" data-show-marker="${marker.showMarker === false ? 'false' : 'true'}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
-        <div class="${triangleClasses[0]}"></div>
-        <div class="${triangleClasses[1]}"></div>
-        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
-      </div>`;
-    }
-
-    if (marker.type === 'target' || marker.type === 'floor') {
-      const markerClass = `${marker.type}-marker`;
-      return `
-      <div class="${markerClass}" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
-        <div class="${marker.type}-inset"></div>
-        <div class="${marker.type}-outset"></div>
-        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
-      </div>`;
-    }
-
-    return `
-      <div class="peak-marker" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
-        <div class="peak-outset"></div>
-        <div class="peak-inset"></div>
-        <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
-      </div>`;
+    return barRenderer.renderMarker(marker);
   }
 
   _patchMarker(markerEl, marker) {
-    if (!markerEl || !marker) return;
-    if (!marker.visible) this._clearMarkerHover(markerEl);
-
-    const defaultShape = marker.type === 'generic' ? 'circle' : marker.type === 'peak' || marker.type === 'floor' ? 'triangle' : 'diamond';
-    const shape = normalizeMarkerShape(marker.shape, defaultShape);
-    this._setDatasetIfChanged(markerEl, 'shape', shape);
-    this._setDatasetIfChanged(markerEl, 'lane', marker.lane ?? (marker.type === 'peak' ? 'above' : 'below'));
-    this._setDatasetIfChanged(markerEl, 'direction', marker.direction ?? 'inward');
-    if (marker.type === 'generic') {
-      this._setDatasetIfChanged(markerEl, 'showMarker', marker.showMarker === false ? 'false' : 'true');
-    }
-    const shapeSvg = markerEl.querySelector?.('.marker-shape-svg');
-    if (shapeSvg) {
-      this._setDatasetIfChanged(shapeSvg, 'shape', shape);
-      this._setDatasetIfChanged(shapeSvg, 'lane', marker.lane ?? (marker.type === 'peak' ? 'above' : 'below'));
-      this._setDatasetIfChanged(shapeSvg, 'direction', marker.direction ?? 'inward');
-    }
-
-    this._setStyleIfChanged(markerEl, 'display', marker.visible ? '' : 'none');
-    if (marker.visible && Number.isFinite(marker.position)) {
-      this._setStyleIfChanged(markerEl, 'left', `${marker.position}%`);
-    }
-    const markerColor = this._getEffectiveMarkerColor(marker);
-    this._setStyleIfChanged(markerEl, '--marker-color', markerColor);
-    this._setStyleIfChanged(markerEl, '--marker-contrast-color', this._getMarkerContrastColor(markerColor));
+    if (markerEl && marker && !marker.visible) this._clearMarkerHover(markerEl);
+    return barRenderer.patchMarker(markerEl, marker);
   }
 
   _patchMarkerLabelAppearance(labelEl, marker) {
@@ -3961,21 +3051,11 @@ _getAboveTargetLayerGeometry(targetPct = null) {
     const markerLabelLaneOccupancy = rowViewModel?.markerLabelLaneOccupancy ?? getMarkerLabelLaneOccupancy(ecfg);
     const rawValue = rowViewModel?.numericValue ?? this._getFiniteNumber(stateDisplay);
     const needleState = rowViewModel?.needle ?? this._getNeedleRenderState(rawValue, ecfg, safeMin, safeMax, baselinePct);
-    const fillState = this._getFillRenderState(pct, 'var(--sbcp-row-height)', ecfg, color, targetPct, baselinePct, safeMin, safeMax, needleState.show);
-    const baselineAt = ecfg.baseline?.at;
-    const baselineConfigured = ecfg.baseline?.enabled !== false && (
-      Number.isFinite(baselinePct)
-      || Boolean(baselineAt?.entity)
-      || baselineAt?.fixed !== null && baselineAt?.fixed !== undefined
-      || Number.isFinite(baselineAt?.percent)
-    );
-    const baselineIndicator = baselineConfigured
-      ? `<div class="baseline-indicator" aria-hidden="true" style="${Number.isFinite(baselinePct) ? `left:${baselinePct}%;display:block;` : 'display:none;'}"></div>`
-      : '';
-
-    const peakMarker = this._renderMarker(peakMarkerModel);
-    const targetMarker = this._renderMarker(targetMarkerModel);
-    const floorMarker = this._renderMarker(floorMarkerModel);
+    const barModel = barRenderModel.buildBarRenderModel({
+      percent: pct, min: safeMin, max: safeMax,
+      targetPercent: targetPct, baselinePercent: baselinePct,
+      needle: needleState, markers: markerModels,
+    }, ecfg, { height: 'var(--sbcp-row-height)', color });
     const targetValueLabel = targetMarkerModel?.labelVisible ? `
       <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;visibility:${targetMarkerModel.visible && targetMarkerModel.label?.text ? 'visible' : 'hidden'};${this._getMarkerLabelColorStyle(targetMarkerModel)}">
         ${targetMarkerModel.label?.text ? escapeHtml(targetMarkerModel.label.text) : ''}
@@ -3988,7 +3068,6 @@ _getAboveTargetLayerGeometry(targetPct = null) {
       <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;visibility:${floorMarkerModel.visible && floorMarkerModel.label?.text ? 'visible' : 'hidden'};${this._getMarkerLabelColorStyle(floorMarkerModel)}">
         ${floorMarkerModel.visible && floorMarkerModel.label?.text ? escapeHtml(floorMarkerModel.label.text) : ''}
       </div>` : '';
-    const genericMarkers = genericMarkerModels.map((marker) => this._renderMarker(marker)).join('');
     const genericValueLabels = genericMarkerModels
       .filter((marker) => marker.labelVisible)
       .map((marker) => `
@@ -3996,12 +3075,6 @@ _getAboveTargetLayerGeometry(targetPct = null) {
         ${marker.visible && marker.label?.text ? escapeHtml(marker.label.text) : ''}
       </div>`)
       .join('');
-    const needleMarker = ecfg.bar?.needle?.show && !Number.isFinite(baselinePct) ? `
-      <div class="needle-layer">
-        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${needleState.pct ?? 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? 'block' : 'none'};"></div>
-      </div>` : '';
-    const paintLayers = fillState.paintLayers.map(layer => `
-                  <div class="bar-paint-layer" data-layer="${layer.id}" style="z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}"></div>`).join('');
     const aboveLabel = lp === 'above' ? `
       <div class="above-line">
         ${ecfg.icon && ecfg.icon !== false ? `<div class="above-icon-spacer"></div>` : ''}
@@ -4049,18 +3122,7 @@ _getAboveTargetLayerGeometry(targetPct = null) {
             ${mainIcon}
             ${leftLabel}
             <div class="bar-wrap">
-              <div class="bar-track">
-                <div class="bar-fill-reveal${bar.animated ? '' : ' no-anim'}" style="${fillState.revealStyle}">
-${paintLayers}
-                </div>
-                ${baselineIndicator}
-                ${innerLabel}
-                ${peakMarker}
-                ${targetMarker}
-                ${floorMarker}
-                ${genericMarkers}
-                ${needleMarker}
-              </div>
+              ${barRenderer.renderBar(barModel, { insideContent: innerLabel })}
               ${peakValueLabel}
               ${targetValueLabel}
               ${floorValueLabel}
@@ -4086,13 +3148,8 @@ ${paintLayers}
     const display = rowViewModel.primaryPresentation.number;
     const displayUnit = rowViewModel.primaryPresentation.unit;
 
-    const fillReveal = row.querySelector('.bar-fill-reveal');
-    const baselineIndicator = row.querySelector('.baseline-indicator');
-    const paintLayer = row.querySelector('.bar-paint-layer[data-layer="base"]');
-    const liveTargetPct = rowViewModel.targetPercent;
     const liveBaselinePct = rowViewModel.baselinePercent;
-    const needleState = rowViewModel.needle;
-    const fillState = this._getFillRenderState(pct, 'var(--sbcp-row-height)', ecfg, color, liveTargetPct, liveBaselinePct, safeMin, safeMax, needleState.show);
+    const barModel = barRenderModel.buildBarRenderModel(rowViewModel, ecfg, { height: 'var(--sbcp-row-height)', color });
     const previousStateObj = previousHass?.states?.[entityCfg.entity] ?? null;
     const previousViewModel = previousStateObj
       ? buildRowViewModel({
@@ -4113,37 +3170,15 @@ ${paintLayers}
         : null,
     );
 
-    if (fillReveal) {
-      this._setStyleTextIfChanged(fillReveal, `${fillState.revealStyle};--sbcp-reveal-duration:${revealDuration}ms`);
-      this._setClassNameIfChanged(fillReveal, `bar-fill-reveal${ecfg.bar.animated ? '' : ' no-anim'}`);
+    // Hover belongs to the card's external labels, never to the shared renderer.
+    const hoveredMarker = this._markerHover?.marker;
+    if (hoveredMarker && row.contains(hoveredMarker)) {
+      const marker = barModel.markers.find(candidate => candidate.type === 'generic'
+        ? hoveredMarker.dataset.markerId === candidate.id
+        : hoveredMarker.matches(`.${candidate.type}-marker`));
+      if (marker && !marker.visible) this._clearMarkerHover(hoveredMarker);
     }
-    if (baselineIndicator) {
-      this._setStyleIfChanged(baselineIndicator, 'display', Number.isFinite(liveBaselinePct) ? 'block' : 'none');
-      if (Number.isFinite(liveBaselinePct)) {
-        this._setStyleIfChanged(baselineIndicator, 'left', `${liveBaselinePct}%`);
-      }
-    }
-    if (paintLayer) {
-      const baseLayerState = fillState.paintLayers.find(layer => layer.id === 'base');
-      if (baseLayerState) {
-        this._setStyleTextIfChanged(paintLayer, `z-index:${baseLayerState.zIndex};${baseLayerState.paintStyle}${baseLayerState.revealStyle}`);
-      }
-    }
-    const aboveTargetLayer = row.querySelector('.bar-paint-layer[data-layer="above-target"]');
-    if (aboveTargetLayer) {
-      const aboveTargetState = fillState.paintLayers.find(layer => layer.id === 'above-target');
-      if (aboveTargetState) {
-        this._setStyleTextIfChanged(aboveTargetLayer, `z-index:${aboveTargetState.zIndex};${aboveTargetState.paintStyle}${aboveTargetState.revealStyle}`);
-      }
-    }
-    const needleEl = row.querySelector('.needle-marker');
-    if (needleEl) {
-      this._setStyleIfChanged(needleEl, 'display', needleState.show ? 'block' : 'none');
-      this._setStyleIfChanged(needleEl, 'left', `${needleState.pct ?? 0}%`);
-      this._setStyleIfChanged(needleEl, '--needle-color', needleState.color);
-      this._setStyleIfChanged(needleEl, '--needle-border-color', needleState.borderColor);
-      this._setDatasetIfChanged(needleEl, 'edge', needleState.edge);
-    }
+    barRenderer.patchBar(row, barModel, { revealDuration });
     this._setDatasetIfChanged(row, 'baseHeight', rowViewModel.attributes.baseHeight);
     this._setDatasetIfChanged(row, 'heightExplicit', rowViewModel.attributes.heightExplicit ? 'true' : 'false');
     this._setDatasetIfChanged(row, 'barAnimated', rowViewModel.attributes.barAnimated ? 'true' : 'false');
@@ -4188,18 +3223,13 @@ ${paintLayers}
       aboveLabel.innerHTML = `<span class="above-bar-label-name label-left-text">${escapeHtml(rowViewModel.name)}</span>${this._formatAboveValueMarkup(display, displayUnit, false)}`;
     }
 
-    const targetEl = row.querySelector('.target-marker');
     const targetLabelEl = row.querySelector('.target-value-label');
     const peakLabelEl = row.querySelector('.peak-value-label');
     const floorLabelEl = row.querySelector('.floor-value-label');
     const markerModels = rowViewModel.markers ?? [];
-    this._patchMarker(targetEl, this._getMarkerModel(markerModels, 'target'));
-    this._patchMarker(row.querySelector('.peak-marker'), this._getMarkerModel(markerModels, 'peak'));
-    this._patchMarker(row.querySelector('.floor-marker'), this._getMarkerModel(markerModels, 'floor'));
     (row.querySelectorAll?.('.generic-marker[data-marker-id]') ?? []).forEach((markerEl) => {
       const markerId = markerEl.dataset.markerId;
       const marker = this._getMarkerModel(markerModels, markerId);
-      this._patchMarker(markerEl, marker);
       const labelEl = [...(row.querySelectorAll?.('.generic-value-label[data-marker-id]') ?? [])]
         .find((label) => label.dataset.markerId === markerId);
       if (!labelEl) return;

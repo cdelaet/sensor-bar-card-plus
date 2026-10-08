@@ -111,6 +111,11 @@ function createShadowRoot() {
           element.tagName === String(tagName).toUpperCase() && element.dataset.action === action
         ));
       }
+      const dataMatch = selector.match(/^([a-z0-9-]+)\[data-([a-z-]+)="([^"]+)"\]$/i);
+      if (dataMatch) {
+        const [, tagName, key, value] = dataMatch;
+        return state._elements.filter(element => element.tagName === tagName.toUpperCase() && element.getAttribute(`data-${key}`) === value);
+      }
       return [];
     },
   };
@@ -152,6 +157,7 @@ function loadCardClass(options = {}) {
   const registry = new Map();
   const sandbox = {
     console,
+    CSS: options.CSS ?? { supports: () => true },
     setTimeout,
     clearTimeout,
     requestAnimationFrame: (cb) => {
@@ -174,6 +180,7 @@ function loadCardClass(options = {}) {
     },
     customElements: {
       define(name, ctor) {
+        if (registry.has(name)) throw new Error(`Duplicate element: ${name}`);
         registry.set(name, ctor);
       },
       get(name) {
@@ -209,6 +216,11 @@ function loadCardClass(options = {}) {
   return {
     card: sandbox.customElements.get('sensor-bar-card-plus'),
     editor: sandbox.customElements.get('sensor-bar-card-plus-editor'),
+    feature: sandbox.customElements.get('sensor-bar-card-plus-feature'),
+    featureEditor: sandbox.customElements.get('sensor-bar-card-plus-feature-editor'),
+    customCards: sandbox.window.customCards,
+    customCardFeatures: sandbox.window.customCardFeatures,
+    reload: () => vm.runInNewContext(source, sandbox, { filename: filePath }),
   };
 }
 

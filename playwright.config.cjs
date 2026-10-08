@@ -4,6 +4,11 @@ module.exports = {
   testDir: path.join(__dirname, 'tests/visual'),
   fullyParallel: false,
   retries: 0,
+  projects: [
+    { name: '', use: { browserName: 'chromium' } },
+    { name: 'webkit-editor-acceptance', testMatch: /acceptance\/editor-acceptance\.spec\.js/, use: { browserName: 'webkit' } },
+    { name: 'webkit-reference-identity', testMatch: /editor-reference-marker-identity\.spec\.js/, use: { browserName: 'webkit' } },
+  ],
   use: {
     headless: true,
     baseURL: 'http://127.0.0.1:4173',

@@ -1,10 +1,115 @@
 # Examples Guide
 
-These practical examples show useful Sensor Bar Card Plus combinations rather than every option. Replace the example entity IDs with your own entities and adjust the Scale to match their values. The card uses the sensor's unit by default; it does not convert values between units. The [Configuration Reference](configuration.md) covers all options, defaults, and advanced behavior.
+These practical examples show useful Sensor Bar Card Plus combinations rather than every option. Replace the example entity IDs with your own entities and adjust the Scale to match their values. Both the standalone card and Card Feature use the sensor's unit by default; neither converts values between units. The [Configuration Reference](configuration.md) covers all options, defaults, and advanced behavior.
 
-The comparisons follow the **Visual Examples** view in the [example dashboard](../examples/dashboards/sensor-bar-card-plus-screenshots.yaml). To try its live controls, load the [playground package](../examples/packages/sensor_bar_card_plus_playground_package.yaml) as well. The comparison sensor is `sensor.sbcp_examples_primary`, initially **7200 W** on a **0–10000 W** Scale. The fixed-Scale cards below also work with your own power sensor without those helpers.
+The standalone comparisons below follow the **Visual Examples** view in the [example dashboard](../examples/dashboards/sensor-bar-card-plus-screenshots.yaml). To try its live controls, load the [playground package](../examples/packages/sensor_bar_card_plus_playground_package.yaml) as well. The comparison sensor is `sensor.sbcp_examples_primary`, initially **7200 W** on a **0–10000 W** Scale. The fixed-Scale cards below also work with your own power sensor without those helpers.
 
 Each YAML block is a complete card unless introduced as a replacement or an addition to an existing card.
+
+## Card Feature
+
+The same installed resource provides `custom:sensor-bar-card-plus-feature`. Add it to a Tile's `features` list, using the Visual Editor or YAML. These complete Tile examples use the shared [Configuration Reference](configuration.md#card-feature-configuration); `entities`, standalone Layouts, Hero and card titles do not belong inside a Feature.
+
+### Minimal: inherit the Tile entity
+
+With no Feature `entity`, SBCP inherits `sensor.battery_charge` from the Tile. The inherited entity is not written into Feature YAML. The default Scale is 0–100; choose explicit bounds when your sensor has a different range.
+
+![The most basic card feature](images/examples/feature-battery.png)
+
+```yaml
+type: tile
+entity: sensor.battery_charge
+features:
+  - type: custom:sensor-bar-card-plus-feature
+```
+
+### Scale and Segments in Inline placement
+
+This battery gauge uses a fixed 0–100 Scale and soft bands. Needle keeps all ranges visible while indicating the current charge.
+
+![A card feature with soft bands with a needle](images/examples/feature-battery-needle.png)
+
+The screenshot shows Bottom placement; the YAML below uses Inline placement.
+
+```yaml
+type: tile
+entity: sensor.battery_charge
+features_position: inline
+features:
+  - type: custom:sensor-bar-card-plus-feature
+    scale:
+      min: { fixed: 0 }
+      max: { fixed: 100 }
+    bar:
+      fill_style: soft_bands
+      needle: true
+      segments:
+        - { from: 0%, to: 20%, color: "#ef4444" }
+        - { from: 20%, to: 80%, color: "#eab308" }
+        - { from: 80%, to: 100%, color: "#22c55e" }
+```
+
+`features_position` belongs to the Tile, not the SBCP Feature. Home Assistant supports `bottom` (default) and `inline`; Inline places the first feature beside the Tile's name. See the [Tile documentation](https://www.home-assistant.io/dashboards/tile/) for placement rules. Both placements support SBCP marker labels.
+
+### Baseline and marker context
+
+For import/export power, Baseline starts the fill at zero. Target marks an import limit, Peak and Floor track the session range, and a Reference Marker identifies an export threshold. Compact labels use the same text/value/unit configuration as the standalone card and adapt to available width.
+
+![A card feature with baseline and several markers](images/examples/feature-grid.png)
+
+```yaml
+type: tile
+entity: sensor.grid_power
+features:
+  - type: custom:sensor-bar-card-plus-feature
+    scale:
+      min: { fixed: -3000 }
+      max: { fixed: 3000 }
+    baseline:
+      at: { fixed: 0 }
+      above: { color: "#22c55e" }
+      below: { color: "#3b82f6" }
+    target:
+      at: { fixed: 2500 }
+      label: { show: true, text: Limit, precision: 0 }
+    peak: { enabled: true, reset: daily }
+    floor: { enabled: true, reset: daily }
+    markers:
+      - at: -1500
+        lane: above
+        shape: diamond
+        color: "#3b82f6"
+        label: { show: true, text: Export, precision: 0 }
+    formatting: { unit: W, decimal: 0 }
+```
+
+Peak/Floor are session extrema, not recorded history. Baseline takes precedence over a configured Needle while it resolves. See [Baseline](configuration.md#baseline), [Reference Markers](configuration.md#generic-reference-markers) and [compact labels](configuration.md#compact-card-feature-marker-labels) for details.
+
+### Explicit entity override: power beside a switch
+
+The Tile represents a heat-pump switch, whose on/off state is nonnumeric. The Feature overrides its entity to visualize the related power sensor; the Tile retains its normal switch interaction and state.
+
+![A card feature with a gradient](images/examples/feature-heat-pump.png)
+
+The screenshot illustrates the gradient Bar with a numeric Tile reading; the YAML below demonstrates a switch Tile with a separate numeric Feature entity.
+
+```yaml
+type: tile
+entity: switch.heat_pump
+features:
+  - type: custom:sensor-bar-card-plus-feature
+    entity: sensor.heat_pump_power
+    scale:
+      min: { fixed: 0 }
+      max: { fixed: 100 }
+    bar:
+      fill_style: gradient
+      gradient_stops:
+        - { pos: 0, color: "#22c55e" }
+        - { pos: 100, color: "#ef4444" }
+```
+
+The explicit override is saved inside the Feature. Remove it to return to parent-entity inheritance; this particular nonnumeric parent then produces a Feature status rather than a Bar. No extra JavaScript resource is needed. See the [README Card Feature guide](../README.md#card-feature).
 
 ## Label Layouts
 
@@ -16,7 +121,7 @@ Each YAML block is a complete card unless introduced as a replacement or an addi
 | Off | A surrounding title already identifies the metric. | No name is displayed; the icon and reading can still provide context. |
 | Hero | One prominent reading should be easy to scan. | Larger typography needs room and shrinks to fit. |
 
-**Hero does not display an entity icon.** This is intentional at every width. The other layouts can show an entity icon and may hide it responsively when space is constrained. Use `icon: false` on a row to remove it explicitly.
+These label Layouts apply to the standalone card. **Hero does not display an entity icon.** This is intentional at every width. The other layouts can show an entity icon and may hide it responsively when space is constrained. Use `icon: false` on a row to remove it explicitly.
 
 This comparison repeats the same sensor so only the layout changes. Leave rail height implicit to let responsive density adapt.
 
