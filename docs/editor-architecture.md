@@ -1625,3 +1625,133 @@ all 16 existing numeric-draft browser cases pass. Existing standalone/Feature
 editor and runtime screenshots are unchanged; no PNG baselines were regenerated.
 The nine exact HTML matrices pass all **1,252** source/dist and picker/fallback
 cases. The normal dist build and both working/staged diff checks pass.
+
+## Visual editor acceptance layer
+
+`tests/visual/acceptance/` tests the mounted standalone and Feature editors as a
+user edits them. It complements unit/section characterization, component tests,
+existing appearance snapshots and real-HA smoke testing. It is control/lifecycle
+coverage, not a combinatorial configuration matrix. No production testing API or
+new screenshot matrix is introduced.
+
+### Inventory and coverage guard
+
+`control-manifest.cjs` is the concrete control inventory and executable metadata.
+Entries identify the existing `data-field`, `data-kind` or `data-action` routing,
+section, host applicability, control type, draft policy, conditional presentation,
+config echo, structural behavior and owning acceptance journey. Shared root
+controls expand into explicit standalone entity-scope controls where applicable;
+Feature-only Percentage/Animated/entity controls and standalone-only title/Layout/
+entity management remain separate. Print the inventory with
+`npm run test:acceptance:inventory`.
+
+The browser guard discovers all interactive controls from populated editor
+fixtures, including hidden disclosure bodies, conditional Reference source modes,
+non-hex color fallbacks, explicit Feature entity selection and entity overrides.
+Both directions are checked: an undeclared control fails, and a declared control
+not mounted by inventory fixtures fails. Unrouted interactive elements fail too.
+A negative probe verifies that an added routed input is rejected. Buttons are
+explicit entries assigned to disclosure/collection journeys, not ignored by a
+broad allowlist. Decorative elements are excluded by querying only inputs,
+selects, buttons and HA entity pickers.
+
+For a new control, add its manifest entry with a concrete config path/example and
+applicable host/scope, then extend its real interaction journey. Ordinary field
+journeys execute directly from the manifest and verify the emitted field path,
+echoed UI and saved reconstruction. Specialized journeys own source, palette,
+inheritance, entity, picker, disclosure and collection controls. Add an inventory
+fixture state when introducing a new conditional branch; runtime discovery cannot
+exercise a condition that the fixtures never mount. Do not merely assign a
+journey name without adding the corresponding interaction/assertions.
+
+### Interaction and HA lifecycle
+
+`editor-driver.cjs` provides mount, disclosure open/close, text replacement,
+numeric drafts, commit/echo, picker and color input, saved-config reads,
+foreign replacement and destroy/recreate helpers. Edits use mounted DOM controls,
+Playwright keyboard/fill/select/check/click operations and normal browser events;
+no internal mutation methods are called. Native OS color dialogs are unavailable
+to headless Playwright, so their input/change event boundary is exercised. CSS
+text controls are edited directly. The small HA picker fixture has an editable
+shadow input emitting the normal `value-changed` event; it tests our boundary,
+not the implementation of HA's picker.
+
+Every emitted `config-changed` is cloned, captured and immediately returned to the
+host's public `setConfig`. Drivers wait for event counts, echo completion and UI
+conditions. Owned echoes during incomplete drafts also pass through public
+`setConfig`. Saved state comes from captured events, not internal config reads.
+Reopen destroys/recreates the editor with the captured config, parent context and
+hass state. Foreign replacement uses a different public config and verifies
+intentional draft/Reference row-state reset without a spurious emission.
+
+Numeric families exercise valid → focused empty → owned echo → replacement →
+commit → echo/reopen. Native incomplete `-`, `.` and `-.` buffers are checked
+without assuming that number inputs expose their raw editing buffer in `.value`.
+Palette boundaries/positions use their existing blur/Enter draft policies,
+including Feature Auto ends; explicit percentage clearing remains distinct.
+Feature CSS invalid drafts remain local; standalone non-hex fallbacks retain
+existing semantics. Gradient Stop fallback tests replace an existing raw non-hex
+value with interpolation-compatible hex paint; they do not add arbitrary CSS
+Gradient Stop support.
+
+### Identity, focus, viewport and host policies
+
+The named **Journey A** (Marker 2 Percentage 50 → empty → 75), **Journey B**
+(Marker 2/3 Source transitions with Marker 1 expanded) and **Journey C**
+(Add/expand/fold while scrolled) run in page and nested-dialog scenarios, in both
+hosts and engines. Duplicate Reference configurations have separate local UI
+identities. Remove/reorder journeys verify surviving IDs and correct config field
+routing, followed by saved reconstruction. Source transitions check applicable
+controls, disclosure ownership, focus and nearby viewport position.
+
+Ordinary numeric/text edits verify focused-control ownership; source changes do
+not demand focus on newly inserted fields. Scroll assertions use visibility and
+broad no-top-jump bounds, not exact pixels. No scroll compensation, arbitrary
+sleep, observer or timing workaround is added to production or tests.
+
+Tests preserve host differences: Feature entity inheritance never persists the
+parent entity, Feature Needle keeps Baseline, standalone Needle retains its
+cleanup policy, and standalone palettes retain their canonicalization. Existing
+standalone Target inheritance is a selective reset: label text/precision and
+unknown keys remain, as established by characterization tests; a dedicated
+acceptance journey records that behavior instead of redefining it.
+
+### Running and browser/distribution strategy
+
+```sh
+npm run test:acceptance
+npm run test:acceptance:chromium
+npm run test:acceptance:webkit
+npm run test:acceptance -- --grep 'Journey A'
+npm run test:acceptance:inventory
+```
+
+The existing unnamed Chromium project includes the new layer in the full
+Playwright suite. `webkit-editor-acceptance` runs the entire acceptance file;
+`webkit-reference-identity` remains unchanged. Both engines must be installed
+(`npx playwright install chromium webkit`). The full acceptance matrix is small
+enough to run in WebKit, so lifecycle coverage is not restricted to a few probes.
+Each field starts from an isolated mounted fixture, avoiding dependence on edits
+from previous controls. Event/UI waits replace sleeps; retries remain disabled.
+
+Acceptance journeys use source. Existing source/dist component regressions,
+runtime/editor snapshots, picker/fallback coverage and all nine exact HTML
+matrices continue to validate the generated bundle. Run the normal build and the
+complete unit/Playwright baseline before committing; this layer does not replace
+any existing check. Real HA smoke remains necessary for actual picker/dropdown
+UI, dashboard/dialog integration, Safari and saved YAML reconstruction.
+
+The initial harness also exposed two related WebKit pointer lifecycle defects.
+Feature focusout synchronization rewrote an unchanged Reference summary's text
+node between pointer press and release. WebKit delivered mouseup but cancelled
+click, so folding after a label edit could fail. The shared summary updater now
+writes `textContent` only when the summary changes. Separately, refreshing the
+whole Feature after the newly added marker's button lost focus moved the pending
+click target to the surrounding header in narrow layouts. Feature focusout now
+requests reconciliation only for editable inputs, selects and entity pickers;
+buttons already reconcile through their own action handlers. Journey C clicks
+visible summary text (or the button in narrow layouts), and disclosure echo tests
+cover folding after an ordinary edit. The focused regressions also pass repeated
+WebKit runs with retries disabled. These fixes change neither configuration
+semantics nor visible appearance; no scroll compensation or production testing
+hook is required.

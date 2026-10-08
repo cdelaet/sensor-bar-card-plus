@@ -99,7 +99,9 @@ export class ReferenceMarkersSection {
     const summary = this._getShadowElementById(`generic-${uiId}-summary`);
     if (marker && summary) {
       const text = this._getGenericMarkerSummary(marker);
-      summary.textContent = text;
+      // Keep the pressed text node mounted through focusout synchronization.
+      // WebKit can cancel the following click if that text is replaced.
+      if (summary.textContent !== text) summary.textContent = text;
       summary.setAttribute('title', text);
     }
   }

@@ -10651,7 +10651,7 @@ ${indent}                          `;
           const summary = this._getShadowElementById(`generic-${uiId}-summary`);
           if (marker && summary) {
             const text = this._getGenericMarkerSummary(marker);
-            summary.textContent = text;
+            if (summary.textContent !== text) summary.textContent = text;
             summary.setAttribute("title", text);
           }
         }
@@ -15006,7 +15006,10 @@ ${this._renderFormattingSection({ type: "card" })}
           });
           const handleField = (event) => this._handleField(event);
           for (const type of ["input", "change", "value-changed"]) this.shadowRoot.addEventListener(type, handleField);
-          this.shadowRoot.addEventListener("focusout", () => this._requestRender());
+          this.shadowRoot.addEventListener("focusout", (event) => {
+            var _a, _b;
+            if ((_b = (_a = event.target) == null ? void 0 : _a.matches) == null ? void 0 : _b.call(_a, "input, select, ha-entity-picker")) this._requestRender();
+          });
           customElements.whenDefined("ha-entity-picker").then(() => {
             if (this.isConnected) this._requestRender();
           });

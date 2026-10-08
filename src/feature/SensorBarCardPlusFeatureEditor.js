@@ -82,7 +82,11 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     });
     const handleField = event => this._handleField(event);
     for (const type of ['input', 'change', 'value-changed']) this.shadowRoot.addEventListener(type, handleField);
-    this.shadowRoot.addEventListener('focusout', () => this._requestRender());
+    this.shadowRoot.addEventListener('focusout', event => {
+      // Only editable controls can defer reconciliation until blur. Refreshing
+      // after a button loses focus can move WebKit's pending click target.
+      if (event.target?.matches?.('input, select, ha-entity-picker')) this._requestRender();
+    });
     // HA may load its picker after the editor. No polling or global observers.
     customElements.whenDefined('ha-entity-picker').then(() => {
       if (this.isConnected) this._requestRender();
