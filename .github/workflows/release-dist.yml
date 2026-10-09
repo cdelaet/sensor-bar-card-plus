@@ -1,74 +1,114 @@
-name: Prepare release artifact
+name: Release
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
     inputs:
-      tag:
-        description: Existing release tag (for example, v1.8.0)
+      version:
+        description: Release version without the v prefix (for example, 1.8.0)
+        required: true
+        type: string
+      title:
+        description: Descriptive GitHub Release title
         required: true
         type: string
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
-# Release preparation runs independently; do not cancel another tag's run.
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   prepare-release:
+    name: Prepare draft release
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
-      - name: Check release tag name
+      - name: Check out release candidate
+        uses: actions/checkout@v5
+
+      - name: Validate release inputs and package version
+        id: version
         env:
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_TITLE: ${{ inputs.title }}
         run: |
-          if [[ "$RELEASE_TAG" != v* ]]; then
-            echo "Release preparation requires an existing v* tag." >&2
+          if [[ ! "$RELEASE_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Version must be semantic MAJOR.MINOR.PATCH without a v prefix." >&2
             exit 1
           fi
+          if [[ -z "$RELEASE_TITLE" || ${#RELEASE_TITLE} -gt 255 || "$RELEASE_TITLE" == *$'\n'* || "$RELEASE_TITLE" == *$'\r'* ]]; then
+            echo "Title must be a non-empty, single-line value of at most 255 characters." >&2
+            exit 1
+          fi
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          if [[ "$PACKAGE_VERSION" != "$RELEASE_VERSION" ]]; then
+            echo "Requested version $RELEASE_VERSION does not match package.json version $PACKAGE_VERSION." >&2
+            exit 1
+          fi
+          echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Check out exact release tag
-        uses: actions/checkout@v5
-        with:
-          ref: refs/tags/${{ inputs.tag || github.ref_name }}
-          persist-credentials: false
-
-      - name: Read tagged commit
-        id: commit
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Require complete main validation for the tagged commit
+      - name: Require the current main commit and successful Full Validation
+        id: validation
         uses: actions/github-script@v8
         env:
-          RELEASE_SHA: ${{ steps.commit.outputs.sha }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
         with:
           script: |
             const sha = process.env.RELEASE_SHA;
-            const { data } = await github.rest.actions.listWorkflowRuns({
+            const tag = process.env.RELEASE_TAG;
+            const { data: main } = await github.rest.repos.getBranch({
+              ...context.repo, branch: 'main',
+            });
+            if (main.commit.sha !== sha) {
+              throw new Error(`Release run SHA ${sha} is not the current main SHA ${main.commit.sha}.`);
+            }
+
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
               ...context.repo,
-              workflow_id: 'validate.yml',
+              workflow_id: 'full-validation.yml',
               branch: 'main',
-              event: 'push',
+              event: 'workflow_dispatch',
               head_sha: sha,
               status: 'success',
-              per_page: 1,
+              per_page: 100,
             });
-            const run = data.workflow_runs.find(run =>
-              run.head_sha === sha && run.head_branch === 'main' &&
-              run.event === 'push' && run.conclusion === 'success');
-            if (!run) throw new Error(`No successful main validation for ${sha}. Wait for Validate to pass, then rerun release preparation.`);
+            const run = runs.find(candidate =>
+              candidate.head_sha === sha && candidate.head_branch === 'main' &&
+              candidate.event === 'workflow_dispatch' && candidate.conclusion === 'success');
+            if (!run) {
+              throw new Error(`No successful Full Validation run exists for exact main commit ${sha}. Fast Validation does not qualify.`);
+            }
             const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
               ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
             });
             for (const name of ['HACS', 'Dist and unit tests', 'Playwright (macOS)']) {
               if (!jobs.some(job => job.name === name && job.conclusion === 'success')) {
-                throw new Error(`Required validation job did not pass: ${name}`);
+                throw new Error(`Full Validation run ${run.id} lacks a successful required job: ${name}`);
               }
             }
-            await core.summary.addHeading('Validated release commit')
-              .addRaw(`Commit: ${sha}\n\nValidation: ${run.html_url}\n`).write();
+
+            for (const [label, check] of [
+              ['tag', () => github.rest.git.getRef({ ...context.repo, ref: `tags/${tag}` })],
+              ['release', () => github.rest.repos.getReleaseByTag({ ...context.repo, tag })],
+            ]) {
+              try {
+                await check();
+                throw new Error(`Refusing to reuse existing ${label} for ${tag}.`);
+              } catch (error) {
+                if (error.message.startsWith('Refusing to reuse existing')) throw error;
+                if (error.status !== 404) throw error;
+              }
+            }
+
+            core.setOutput('run_id', String(run.id));
+            core.setOutput('run_url', run.html_url);
+            await core.summary.addHeading('Full Validation evidence')
+              .addRaw(`Commit: ${sha}\n\nRun: ${run.html_url}\n`).write();
 
       - name: Set up Node
         uses: actions/setup-node@v5
@@ -79,18 +119,149 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify tagged committed dist without rebuilding it
+      - name: Verify committed dist
         run: npm run verify-dist
 
-      - name: Check exact tracked release artifact
+      - name: Check exact tracked release artifact and checksum
+        id: artifact
         run: |
-          test -s dist/sensor-bar-card-plus.js
-          git diff --exit-code HEAD -- dist/sensor-bar-card-plus.js
-          sha256sum dist/sensor-bar-card-plus.js >> "$GITHUB_STEP_SUMMARY"
+          ARTIFACT=dist/sensor-bar-card-plus.js
+          git ls-files --error-unmatch "$ARTIFACT" >/dev/null
+          test -s "$ARTIFACT"
+          git diff --exit-code "$GITHUB_SHA" -- "$ARTIFACT"
+          echo "sha256=$(sha256sum "$ARTIFACT" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+          echo "size=$(wc -c < "$ARTIFACT" | tr -d ' ')" >> "$GITHUB_OUTPUT"
 
-      - name: Expose validated release artifact for manual publication
-        uses: actions/upload-artifact@v4
+      - name: Recheck main and release name immediately before tag creation
+        uses: actions/github-script@v8
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
         with:
-          name: sensor-bar-card-plus-${{ steps.commit.outputs.sha }}
-          path: dist/sensor-bar-card-plus.js
-          if-no-files-found: error
+          script: |
+            const sha = process.env.RELEASE_SHA;
+            const tag = process.env.RELEASE_TAG;
+            const { data: main } = await github.rest.repos.getBranch({
+              ...context.repo, branch: 'main',
+            });
+            if (main.commit.sha !== sha) {
+              throw new Error(`main advanced from ${sha} to ${main.commit.sha}; no release tag was created.`);
+            }
+            for (const [label, check] of [
+              ['tag', () => github.rest.git.getRef({ ...context.repo, ref: `tags/${tag}` })],
+              ['release', () => github.rest.repos.getReleaseByTag({ ...context.repo, tag })],
+            ]) {
+              try {
+                await check();
+                throw new Error(`Refusing to reuse existing ${label} for ${tag}.`);
+              } catch (error) {
+                if (error.message.startsWith('Refusing to reuse existing')) throw error;
+                if (error.status !== 404) throw error;
+              }
+            }
+
+      - name: Create and push annotated release tag
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git tag -a "$RELEASE_TAG" "$GITHUB_SHA" -m "Sensor Bar Card Plus $RELEASE_TAG"
+          git push origin "refs/tags/$RELEASE_TAG"
+
+      - name: Verify the remote annotated tag target and message
+        uses: actions/github-script@v8
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        with:
+          script: |
+            const tag = process.env.RELEASE_TAG;
+            const ref = await github.rest.git.getRef({ ...context.repo, ref: `tags/${tag}` });
+            if (ref.data.object.type !== 'tag') {
+              throw new Error(`${tag} is not an annotated tag.`);
+            }
+            const annotated = await github.rest.git.getTag({
+              ...context.repo, tag_sha: ref.data.object.sha,
+            });
+            if (annotated.data.object.type !== 'commit' ||
+                annotated.data.object.sha !== process.env.RELEASE_SHA ||
+                annotated.data.message.trim() !== `Sensor Bar Card Plus ${tag}`) {
+              throw new Error(`${tag} does not point to the validated commit with the required tag message.`);
+            }
+
+      - name: Create empty GitHub draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_TITLE: ${{ inputs.title }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
+            -f "tag_name=$RELEASE_TAG" \
+            -f "target_commitish=$GITHUB_SHA" \
+            -f "name=$RELEASE_TITLE" \
+            -f body= \
+            -F draft=true \
+            -F prerelease=false
+
+      - name: Attach the exact tracked JavaScript bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: gh release upload "$RELEASE_TAG" dist/sensor-bar-card-plus.js
+
+      - name: Verify draft state and uploaded asset
+        id: draft
+        uses: actions/github-script@v8
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_TITLE: ${{ inputs.title }}
+          ARTIFACT_SIZE: ${{ steps.artifact.outputs.size }}
+        with:
+          script: |
+            const tag = process.env.RELEASE_TAG;
+            const { data: release } = await github.rest.repos.getReleaseByTag({
+              ...context.repo, tag,
+            });
+            if (!release.draft || release.prerelease || release.name !== process.env.RELEASE_TITLE) {
+              throw new Error('Release did not remain a draft with the requested title.');
+            }
+            const asset = release.assets.find(candidate => candidate.name === 'sensor-bar-card-plus.js');
+            if (!asset || asset.size !== Number(process.env.ARTIFACT_SIZE)) {
+              throw new Error('The expected tracked JavaScript asset is missing or has the wrong size.');
+            }
+            core.setOutput('release_url', release.html_url);
+
+      - name: Verify downloaded release asset SHA-256
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          EXPECTED_SHA256: ${{ steps.artifact.outputs.sha256 }}
+        run: |
+          DOWNLOAD_DIR="$(mktemp -d)"
+          trap 'rm -rf "$DOWNLOAD_DIR"' EXIT
+          gh release download "$RELEASE_TAG" --pattern sensor-bar-card-plus.js --dir "$DOWNLOAD_DIR"
+          ACTUAL_SHA256="$(sha256sum "$DOWNLOAD_DIR/sensor-bar-card-plus.js" | cut -d ' ' -f 1)"
+          if [[ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]]; then
+            echo "Uploaded release asset SHA-256 does not match the validated tracked bundle." >&2
+            exit 1
+          fi
+
+      - name: Summarize prepared draft release
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_SHA: ${{ github.sha }}
+          VALIDATION_RUN_URL: ${{ steps.validation.outputs.run_url }}
+          ARTIFACT_SHA256: ${{ steps.artifact.outputs.sha256 }}
+          RELEASE_URL: ${{ steps.draft.outputs.release_url }}
+        run: |
+          {
+            echo "## Release draft prepared"
+            echo "Version: $RELEASE_VERSION"
+            echo "Tag: $RELEASE_TAG"
+            echo "Commit: $RELEASE_SHA"
+            echo "Full Validation run: $VALIDATION_RUN_URL"
+            echo "Artifact: dist/sensor-bar-card-plus.js"
+            echo "SHA-256: $ARTIFACT_SHA256 (downloaded release asset verified)"
+            echo "Draft GitHub Release: $RELEASE_URL"
+            echo "Status: DRAFT. Add and review notes from private/WHATS-NEW.md, then publish manually."
+          } >> "$GITHUB_STEP_SUMMARY"

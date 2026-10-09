@@ -35,13 +35,33 @@ npm test
 
 `npm test` runs the build, unit tests, and Playwright visual tests in sequence. The unit suite checks configuration normalization, conversion, formatting, and card behavior. The Playwright suite checks rendered behavior including fill and Baseline cases, Target/Peak/Floor and generic reference markers, marker shapes and labels, responsive layouts, and clipping or rounded-edge regressions.
 
-GitHub's `.github/workflows/validate.yml` runs HACS validation, verifies the production bundle and its syntax, runs unit tests, and then runs the Playwright browser suite on macOS for pushes to `main` and pull requests.
+GitHub's **Fast Validation** (`.github/workflows/validate.yml`) runs HACS validation, verifies the production bundle and its syntax, and runs unit tests on pushes to `main` and pull requests. It does not run the complete Playwright suite on ordinary pushes or pull requests.
+
+Before preparing a release, explicitly run **Full Validation** for the intended commit:
+
+~~~sh
+gh workflow run full-validation.yml --ref main
+~~~
+
+Full Validation runs HACS validation, dist verification, unit tests, and the complete Chromium and WebKit Playwright suite on macOS. The workflow run is tied to the exact `main` commit selected at dispatch; its run page and job summaries identify that SHA. Release preparation requires this successful Full Validation result for the exact same SHA; a successful Fast Validation run alone is insufficient.
 
 ## Visual regression snapshots
 
 Playwright visual baselines are intentionally environment-specific. Local macOS tests use the complete `tests/visual/snapshots/local/` set; GitHub Actions on `macos-26` uses the complete `tests/visual/snapshots/ci/` set. The baseline set is selected centrally by `SBCP_VISUAL_BASELINE` in `playwright.config.cjs`. Normal local and CI validation never updates snapshots.
 
-Run `npm run test:visual` to compare against local baselines. After an intentional visual change, run `npm run test:visual:update` to update only the local set, then review and commit the image changes with the code. Once reviewed, generate the GitHub canonical set by running `gh workflow run validate.yml --ref main -f generate_snapshots=true`; download and review the `canonical-playwright-snapshots-<commit-sha>` artifact, then commit those files under `snapshots/ci/`. Ordinary GitHub validation compares only against that CI set with snapshot updates disabled. When adding a screenshot assertion, update each complete set through these same local and GitHub-specific steps. These automated regression artifacts are not README or product screenshots.
+Run `npm run test:visual` to compare against local baselines. After an intentional visual change, run `npm run test:visual:update` to update only the local set, then review and commit the image changes with the code. Once reviewed, generate the GitHub canonical set by running `gh workflow run validate.yml --ref main -f generate_snapshots=true`; download and review the `canonical-playwright-snapshots-<commit-sha>` artifact, then commit those files under `snapshots/ci/`. The manually dispatched snapshot-generation run selects and updates only the CI set. Fast and Full Validation compare against their selected baselines with snapshot updates disabled. When adding a screenshot assertion, update each complete set through these same local and GitHub-specific steps. These automated regression artifacts are not README or product screenshots.
+
+## Release preparation
+
+After Full Validation succeeds for the current `main` commit, prepare the release draft:
+
+~~~sh
+gh workflow run release-dist.yml --ref main -f version=1.8.0 -f title="Native Card Feature for Home Assistant Tile cards"
+~~~
+
+The Release workflow checks that its commit is still the tip of `main`, requires successful Full Validation for that exact SHA, checks that the requested version matches `package.json`, refuses an existing tag or release, verifies the tracked `dist/sensor-bar-card-plus.js`, and checks the bundle's SHA-256. It then creates and pushes the annotated `vX.Y.Z` tag, creates a DRAFT GitHub Release with the supplied title, and attaches that exact tracked JavaScript file. The workflow never publishes the release.
+
+After the workflow succeeds, open the draft GitHub Release, paste and review the canonical release notes from the private `private/WHATS-NEW.md`, verify the title, notes, tag, and attached JavaScript, then manually click **Publish release**.
 
 ## Development and demo fixtures
 
