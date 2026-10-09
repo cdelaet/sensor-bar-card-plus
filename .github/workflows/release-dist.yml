@@ -191,39 +191,74 @@ jobs:
             }
 
       - name: Create empty GitHub draft release
+        id: create_release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
           RELEASE_TITLE: ${{ inputs.title }}
         run: |
-          gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
+          RELEASE_ID="$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
             -f "tag_name=$RELEASE_TAG" \
             -f "target_commitish=$GITHUB_SHA" \
             -f "name=$RELEASE_TITLE" \
             -f body= \
             -F draft=true \
-            -F prerelease=false
+            -F prerelease=false \
+            --jq '.id')"
+          if [[ ! "$RELEASE_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "GitHub did not return a valid draft release ID." >&2
+            exit 1
+          fi
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
 
       - name: Attach the exact tracked JavaScript bundle
+        uses: actions/github-script@v8
         env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: gh release upload "$RELEASE_TAG" dist/sensor-bar-card-plus.js
+          RELEASE_ID: ${{ steps.create_release.outputs.release_id }}
+        with:
+          script: |
+            const fs = require('fs');
+            const releaseId = Number(process.env.RELEASE_ID);
+            if (!Number.isSafeInteger(releaseId) || releaseId <= 0) {
+              throw new Error('The created GitHub Release ID is invalid.');
+            }
+            const path = 'dist/sensor-bar-card-plus.js';
+            const size = fs.statSync(path).size;
+            const data = fs.readFileSync(path);
+            const { data: asset } = await github.rest.repos.uploadReleaseAsset({
+              ...context.repo,
+              release_id: releaseId,
+              name: 'sensor-bar-card-plus.js',
+              data,
+              headers: {
+                'content-type': 'application/javascript',
+                'content-length': String(size),
+              },
+            });
+            if (asset.name !== 'sensor-bar-card-plus.js' || asset.size !== size) {
+              throw new Error('The uploaded JavaScript asset does not match the tracked bundle size.');
+            }
 
       - name: Verify draft state and uploaded asset
         id: draft
         uses: actions/github-script@v8
         env:
+          RELEASE_ID: ${{ steps.create_release.outputs.release_id }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
           RELEASE_TITLE: ${{ inputs.title }}
           ARTIFACT_SIZE: ${{ steps.artifact.outputs.size }}
         with:
           script: |
+            const releaseId = Number(process.env.RELEASE_ID);
+            if (!Number.isSafeInteger(releaseId) || releaseId <= 0) {
+              throw new Error('The created GitHub Release ID is invalid.');
+            }
             const tag = process.env.RELEASE_TAG;
-            const { data: release } = await github.rest.repos.getReleaseByTag({
-              ...context.repo, tag,
+            const { data: release } = await github.rest.repos.getRelease({
+              ...context.repo, release_id: releaseId,
             });
-            if (!release.draft || release.prerelease || release.name !== process.env.RELEASE_TITLE) {
+            if (!release.draft || release.prerelease || release.name !== process.env.RELEASE_TITLE ||
+                release.tag_name !== tag) {
               throw new Error('Release did not remain a draft with the requested title.');
             }
             const asset = release.assets.find(candidate => candidate.name === 'sensor-bar-card-plus.js');
@@ -231,16 +266,19 @@ jobs:
               throw new Error('The expected tracked JavaScript asset is missing or has the wrong size.');
             }
             core.setOutput('release_url', release.html_url);
+            core.setOutput('asset_id', String(asset.id));
 
       - name: Verify downloaded release asset SHA-256
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_ASSET_ID: ${{ steps.draft.outputs.asset_id }}
           EXPECTED_SHA256: ${{ steps.artifact.outputs.sha256 }}
         run: |
           DOWNLOAD_DIR="$(mktemp -d)"
           trap 'rm -rf "$DOWNLOAD_DIR"' EXIT
-          gh release download "$RELEASE_TAG" --pattern sensor-bar-card-plus.js --dir "$DOWNLOAD_DIR"
+          gh api --header "Accept: application/octet-stream" \
+            "repos/$GITHUB_REPOSITORY/releases/assets/$RELEASE_ASSET_ID" \
+            > "$DOWNLOAD_DIR/sensor-bar-card-plus.js"
           ACTUAL_SHA256="$(sha256sum "$DOWNLOAD_DIR/sensor-bar-card-plus.js" | cut -d ' ' -f 1)"
           if [[ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]]; then
             echo "Uploaded release asset SHA-256 does not match the validated tracked bundle." >&2
