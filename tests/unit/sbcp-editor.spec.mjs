@@ -61,6 +61,11 @@ function dispatchValueChanged(el, value) {
   });
 }
 
+function iconModeRadio(editor, mode) {
+  return editor.shadowRoot.querySelectorAll('input[data-kind="entity-icon-mode"]')
+    .find((radio) => radio.value === mode);
+}
+
 function expectNoDeprecatedEditedKeys(target) {
   expect(target.min).toBeUndefined();
   expect(target.max).toBeUndefined();
@@ -147,41 +152,18 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('entity icon input emits changed config through the real input path', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
+  it.each([
+    [{ entity: 'sensor.one' }, 'default'],
+    [{ entity: 'sensor.one', icon: 'mdi:battery' }, 'custom'],
+    [{ entity: 'sensor.one', icon: false }, 'off'],
+  ])('maps entity icon config to the %s mode', (entity, mode) => {
+    const editor = createEditor({ withIconPicker: true });
+    editor.setConfig({ entities: [entity] });
 
-    editor.setConfig({
-      entities: [{ entity: 'sensor.one', icon: 'mdi:flash', custom_key: 'keep' }],
-    });
-
-    const iconInput = editor.shadowRoot.querySelectorAll('input[data-kind="entity-icon"]')[0];
-    dispatchInput(iconInput, 'mdi:thermometer');
-
-    expect(events).toHaveLength(1);
-    expect(events[0].detail.config.entities).toEqual([
-      { entity: 'sensor.one', icon: 'mdi:thermometer', custom_key: 'keep' },
-    ]);
-  });
-
-  it('icon and entity-id-like inputs disable autocapitalization helpers', () => {
-    const editor = createEditor();
-
-    editor.setConfig({
-      entities: [{ entity: 'sensor.one', icon: 'mdi:flash' }],
-    });
-
-    const entityInput = editor.shadowRoot.querySelectorAll('input[data-kind="entity-input"]')[0];
-    const iconInput = editor.shadowRoot.querySelectorAll('input[data-kind="entity-icon"]')[0];
-
-    expect(entityInput.getAttribute('autocapitalize')).toBe('none');
-    expect(entityInput.getAttribute('autocomplete')).toBe('off');
-    expect(entityInput.getAttribute('autocorrect')).toBe('off');
-    expect(entityInput.getAttribute('spellcheck')).toBe('false');
-    expect(iconInput.getAttribute('autocapitalize')).toBe('none');
-    expect(iconInput.getAttribute('autocomplete')).toBe('off');
-    expect(iconInput.getAttribute('autocorrect')).toBe('off');
-    expect(iconInput.getAttribute('spellcheck')).toBe('false');
+    expect(iconModeRadio(editor, mode).checked).toBe(true);
+    const picker = editor.shadowRoot.querySelectorAll('ha-icon-picker[data-kind="entity-icon-picker"]')[0];
+    expect(picker.disabled).toBe(mode !== 'custom');
+    expect(picker.value).toBe(mode === 'custom' ? entity.icon : '');
   });
 
   it('empty entity name is suppressed from emitted config', () => {
@@ -214,34 +196,65 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('empty entity icon is suppressed from emitted config', () => {
-    const editor = createEditor();
+  it('selecting Default removes the entity icon property', () => {
+    const editor = createEditor({ withIconPicker: true });
     const events = trackConfigEvents(editor);
+    editor.setConfig({ entities: [{ entity: 'sensor.one', icon: 'mdi:flash' }] });
 
-    editor.setConfig({
-      entities: [{ entity: 'sensor.one', icon: 'mdi:flash', custom_key: 'keep' }],
-    });
+    dispatchChange(iconModeRadio(editor, 'default'), 'default');
 
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-icon"]')[0], '');
+    expect(events.at(-1).detail.config.entities).toEqual([{ entity: 'sensor.one' }]);
+  });
+
+  it('selecting Off emits boolean false, never the string "false"', () => {
+    const editor = createEditor({ withIconPicker: true });
+    const events = trackConfigEvents(editor);
+    editor.setConfig({ entities: [{ entity: 'sensor.one' }] });
+
+    dispatchChange(iconModeRadio(editor, 'off'), 'off');
+
+    expect(events.at(-1).detail.config.entities).toEqual([{ entity: 'sensor.one', icon: false }]);
+    expect(typeof events.at(-1).detail.config.entities[0].icon).toBe('boolean');
+  });
+
+  it('Custom enables the HA icon picker and emits its selected icon string', async () => {
+    const editor = createEditor({ withIconPicker: true });
+    const events = trackConfigEvents(editor);
+    editor.setConfig({ entities: [{ entity: 'sensor.one' }] });
+
+    dispatchChange(iconModeRadio(editor, 'custom'), 'custom');
+    await flushTimers();
+    const picker = editor.shadowRoot.querySelectorAll('ha-icon-picker[data-kind="entity-icon-picker"]')[0];
+    expect(picker.disabled).toBe(false);
+    expect(events).toHaveLength(0);
+    dispatchValueChanged(picker, 'mdi:transmission-tower');
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', custom_key: 'keep' },
+      { entity: 'sensor.one', icon: 'mdi:transmission-tower' },
     ]);
   });
 
-  it('whitespace-only entity icon is suppressed from emitted config', () => {
-    const editor = createEditor();
+  it('switches among Default, Custom, and Off without losing their config semantics', async () => {
+    const editor = createEditor({ withIconPicker: true });
     const events = trackConfigEvents(editor);
+    editor.setConfig({ entities: [{ entity: 'sensor.one', icon: 'mdi:battery' }] });
 
-    editor.setConfig({
-      entities: [{ entity: 'sensor.one', icon: 'mdi:flash', custom_key: 'keep' }],
-    });
+    dispatchChange(iconModeRadio(editor, 'off'), 'off');
+    expect(events.at(-1).detail.config.entities[0].icon).toBe(false);
+    await flushTimers();
 
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-icon"]')[0], '   ');
+    dispatchChange(iconModeRadio(editor, 'custom'), 'custom');
+    await flushTimers();
+    expect(iconModeRadio(editor, 'custom').checked).toBe(true);
+    const picker = editor.shadowRoot.querySelectorAll('ha-icon-picker[data-kind="entity-icon-picker"]')[0];
+    expect(picker.disabled).toBe(false);
+    expect(picker.value).toBe('');
+    dispatchValueChanged(picker, 'mdi:flash');
+    expect(events.at(-1).detail.config.entities[0].icon).toBe('mdi:flash');
+    await flushTimers();
 
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', custom_key: 'keep' },
-    ]);
+    dispatchChange(iconModeRadio(editor, 'default'), 'default');
+    expect(events.at(-1).detail.config.entities[0].icon).toBeUndefined();
   });
 
   it('preserves icon false during unrelated editor serialization', () => {

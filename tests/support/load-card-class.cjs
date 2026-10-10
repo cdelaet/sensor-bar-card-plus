@@ -41,6 +41,13 @@ function createShadowRoot() {
       type: attrs.type ?? '',
       value: attrs.value ?? '',
       checked: Object.prototype.hasOwnProperty.call(attrs, 'checked'),
+      disabled: Object.prototype.hasOwnProperty.call(attrs, 'disabled'),
+      _listeners: new Map(),
+      addEventListener(type, listener) {
+        const bucket = this._listeners.get(type) ?? [];
+        bucket.push(listener);
+        this._listeners.set(type, bucket);
+      },
       getAttribute(name) {
         return this.attributes[name] ?? null;
       },
@@ -50,6 +57,7 @@ function createShadowRoot() {
       dispatchEvent(event) {
         event.target = this;
         event.currentTarget = this;
+        (this._listeners.get(event.type) ?? []).forEach((listener) => listener.call(this, event));
         return shadowRoot.dispatchEvent(event);
       },
     };
@@ -212,6 +220,9 @@ function loadCardClass(options = {}) {
   vm.runInNewContext(source, sandbox, { filename: filePath });
   if (options.withEntityPicker) {
     registry.set('ha-entity-picker', class extends sandbox.HTMLElement {});
+  }
+  if (options.withIconPicker) {
+    registry.set('ha-icon-picker', class extends sandbox.HTMLElement {});
   }
   return {
     card: sandbox.customElements.get('sensor-bar-card-plus'),

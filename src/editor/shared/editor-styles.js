@@ -307,6 +307,30 @@ export const editorStyles = `
 	          gap: 10px;
 	          min-width: 0;
 	        }
+	        .entity-icon-field {
+	          display: grid;
+	          gap: 6px;
+	          min-width: 0;
+	        }
+	        .entity-icon-modes {
+	          display: flex;
+	          align-items: center;
+	          flex-wrap: wrap;
+	          gap: 10px 14px;
+	        }
+	        .entity-icon-mode-option {
+	          display: inline-flex;
+	          align-items: center;
+	          gap: 5px;
+	          cursor: pointer;
+	          font-size: 0.85rem;
+	        }
+	        .entity-icon-mode-option input[type="radio"] {
+	          width: 16px;
+	          height: 16px;
+	          margin: 0;
+	          accent-color: var(--primary-color, #03a9f4);
+	        }
 	        .override-toggle {
 	          display: inline-flex;
 	          align-items: center;
@@ -476,6 +500,11 @@ export const editorStyles = `
 	          min-width: 0;
 	        }
 	        ha-entity-picker {
+	          min-width: 0;
+	          width: 100%;
+	        }
+	        ha-icon-picker {
+	          display: block;
 	          min-width: 0;
 	          width: 100%;
 	        }

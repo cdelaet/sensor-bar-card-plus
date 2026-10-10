@@ -96,6 +96,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._lastEmittedConfigJson = null;
     this._shadowListenersAttached = false;
     this._expandedEntityOverrides = new Set();
+    this._entityIconCustomPending = new Set();
     this._expandedOverrideGroups = new Set();
     this._expandedCardGroups = new Set();
     this._targetSection.reset();
@@ -135,6 +136,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
     const shouldRender = !this.shadowRoot?.innerHTML || nextConfigJson !== this._lastRenderedConfigJson;
     this._lastEmittedConfigJson = null;
+    this._entityIconCustomPending.clear();
     this._config = nextConfig;
     this._draftConfig = this._cloneDeep(nextConfig);
     this._segmentsSection.reset();
@@ -519,6 +521,22 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return entries;
     });
     return this._applyUserConfig(nextConfig);
+  }
+
+  _setEntityIcon(index, value) {
+    const nextConfig = this._withEntityScopeConfig((entries) => {
+      if (!entries[index]) return entries;
+      if (value === undefined) delete entries[index].icon;
+      else entries[index].icon = value;
+      return entries;
+    });
+    return this._applyUserConfig(nextConfig, { rerender: true });
+  }
+
+  _getEntityIconMode(entry, index) {
+    if (entry?.icon === false) return 'off';
+    if (typeof entry?.icon === 'string' && entry.icon.trim()) return 'custom';
+    return this._entityIconCustomPending.has(index) ? 'custom' : 'default';
   }
 
   _cleanupEntityIdentityForEmit(target) {
@@ -3020,7 +3038,21 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                      <div class="entity-fields">
 	                        ${this._renderEntityInput(entry, index)}
 	                        <input type="text" data-kind="entity-name" data-index="${index}" value="${this._escapeAttribute(entry.name ?? '')}" placeholder="Name">
-	                        <input type="text" data-kind="entity-icon" data-index="${index}" value="${this._escapeAttribute(entry.icon ?? '')}" placeholder="mdi:flash" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false">
+                        ${(() => {
+                          const iconMode = this._getEntityIconMode(entry, index);
+                          const iconPicker = customElements.get?.('ha-icon-picker')
+                            ? `<ha-icon-picker data-kind="entity-icon-picker" data-index="${index}" label="Select an icon" placeholder="Search icons"${iconMode !== 'custom' ? ' disabled' : ''}></ha-icon-picker>`
+                            : `<input type="text" data-kind="entity-icon-value" data-index="${index}" value="${this._escapeAttribute(typeof entry.icon === 'string' ? entry.icon : '')}" placeholder="Select an icon"${iconMode !== 'custom' ? ' disabled' : ''} autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false">`;
+                          return `<div class="entity-icon-field">
+                            <label>Icon</label>
+                            <div class="entity-icon-modes" role="radiogroup" aria-label="Entity ${index + 1} icon mode">
+                              ${[['default', 'Default'], ['custom', 'Custom'], ['off', 'Off']].map(([mode, label]) => `
+                                <label class="entity-icon-mode-option"><input type="radio" data-kind="entity-icon-mode" data-index="${index}" name="entity-icon-mode-${index}" value="${mode}"${iconMode === mode ? ' checked' : ''}>${label}</label>
+                              `).join('')}
+                            </div>
+                            ${iconPicker}
+                          </div>`;
+                        })()}
 	                      </div>
 	                    </div>
 	                    <button type="button" class="override-toggle" data-action="toggle-entity-overrides" data-index="${index}" aria-expanded="${this._isEntityOverrideExpanded(index) ? 'true' : 'false'}">
@@ -3245,6 +3277,7 @@ ${this._renderFormattingSection({ type: 'card' })}
 
       this._bindShadowListeners();
       this._syncEntityPickers();
+      this._syncEntityIconPickers();
       this._numericDrafts.apply(this.shadowRoot, numericFocus);
       this._lastRenderedConfigJson = this._serializeConfig(this._draftConfig);
       this._applyPendingFocus();
@@ -3378,12 +3411,33 @@ ${this._renderFormattingSection({ type: 'card' })}
     }
   }
 
+  _syncEntityIconPickers() {
+    if (!this.shadowRoot) return;
+    const entities = this._getEntitiesValue();
+    this.shadowRoot.querySelectorAll('ha-icon-picker[data-kind="entity-icon-picker"]').forEach((picker) => {
+      const index = Number(picker.dataset.index);
+      const entry = entities[index];
+      const mode = this._getEntityIconMode(entry, index);
+      picker.value = mode === 'custom' && typeof entry?.icon === 'string' ? entry.icon : '';
+      picker.disabled = mode !== 'custom';
+      if (!picker._sbcpIconChangeHandler && typeof picker.addEventListener === 'function') {
+        picker._sbcpIconChangeHandler = (event) => {
+          const selectedIcon = event.detail?.value;
+          this._entityIconCustomPending.delete(index);
+          this._setEntityIcon(index, typeof selectedIcon === 'string' && selectedIcon.trim() ? selectedIcon.trim() : undefined);
+        };
+        picker.addEventListener('value-changed', picker._sbcpIconChangeHandler);
+      }
+    });
+  }
+
   _handleClick(event) {
     if (this._segmentsSection.handle(event, 'click') || this._gradientStopsSection.handle(event, 'click')) return;
     const target = event.target?.closest?.('[data-action]') ?? event.target;
     const action = target?.dataset?.action;
     if (!action) return;
     if (target?.disabled) return;
+    if (['move-entity-up', 'move-entity-down', 'duplicate-entity', 'remove-entity'].includes(action)) this._entityIconCustomPending.clear();
     // Entity indices are positional; do not transfer an owned input draft when
     // an explicit list operation changes the row at that index.
     if (['move-entity-up', 'move-entity-down', 'duplicate-entity', 'remove-entity'].includes(action)) this._numericDrafts.reset();
@@ -3465,7 +3519,7 @@ ${this._renderFormattingSection({ type: 'card' })}
     const target = event.target;
     if (!target) return;
     if (target.tagName === 'HA-ENTITY-PICKER') return;
-    if (target.tagName === 'INPUT' && target.type === 'checkbox') return;
+    if (target.tagName === 'INPUT' && ['checkbox', 'radio'].includes(target.type)) return;
     const kind = target.dataset?.kind;
     this._handleFieldEvent(event);
   }
@@ -3523,8 +3577,35 @@ ${this._renderFormattingSection({ type: 'card' })}
       return void this._setEntityField(Number(target.dataset.index), 'name', value);
     }
 
-    if (kind === 'entity-icon') {
-      return void this._setEntityField(Number(target.dataset.index), 'icon', value);
+    if (kind === 'entity-icon-mode') {
+      const index = Number(target.dataset.index);
+      if (value === 'default') {
+        this._entityIconCustomPending.delete(index);
+        if (!this._setEntityIcon(index, undefined)) this._render();
+      } else if (value === 'off') {
+        this._entityIconCustomPending.delete(index);
+        this._setEntityIcon(index, false);
+      } else if (value === 'custom') {
+        const entry = this._getEntitiesValue()[index];
+        if (typeof entry?.icon === 'string' && entry.icon.trim()) {
+          this._entityIconCustomPending.delete(index);
+        } else {
+          this._entityIconCustomPending.add(index);
+          const rawEntry = this._getEntityRawEntries()[index];
+          if (rawEntry && Object.prototype.hasOwnProperty.call(rawEntry, 'icon')) {
+            if (!this._setEntityIcon(index, undefined)) this._render();
+          } else {
+            this._render();
+          }
+        }
+      }
+      return;
+    }
+
+    if (kind === 'entity-icon-value') {
+      const selectedIcon = typeof value === 'string' ? value.trim() : '';
+      this._entityIconCustomPending.delete(Number(target.dataset.index));
+      return void this._setEntityIcon(Number(target.dataset.index), selectedIcon || undefined);
     }
 
     if (handleScaleField(this._createSectionContext(), { kind: kind?.startsWith('scale-') ? kind : undefined, value })) return;
