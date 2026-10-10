@@ -1406,6 +1406,9 @@ ${getBarAnimationStyles('.row[data-bar-animated="false"]')}
           overflow: hidden;
           margin-bottom: clamp(2px, calc(var(--sbcp-row-height) * 0.08), 4px);
         }
+        .row[data-marker-label-lane-above="true"] .hero-header {
+          margin-bottom: calc(clamp(2px, calc(var(--sbcp-row-height) * 0.08), 4px) + 4px);
+        }
         .row[data-marker-label-lane-above="false"] .hero-header {
           margin-bottom: 0;
         }

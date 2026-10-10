@@ -952,6 +952,93 @@ test('above marker labels reserve responsive space while Hero spacing follows la
   expect([...observedLabelFontSizes].sort((a, b) => a - b)).toEqual([10, 11, 12]);
 });
 
+test('Hero occupied above-marker lane adds 4px below the header', async ({ page }) => {
+  const markers = (showAboveLabels) => [
+    { at: '0%', lane: 'above', label: { show: showAboveLabels, text: '-1,000 W', show_value: false, show_unit: false } },
+    { at: '100%', lane: 'above', label: { show: showAboveLabels, text: '3,000 W', show_value: false, show_unit: false } },
+    { at: 34, lane: 'below', label: { show: true, text: 'L1 34 W', show_value: false, show_unit: false } },
+    { at: 334, lane: 'below', label: { show: true, text: 'L3 334 W', show_value: false, show_unit: false } },
+  ];
+  await render(page, {
+    width: 520,
+    config: {
+      type: 'custom:sensor-bar-card-plus', min: -1000, max: 3000,
+      layout: { label: { position: 'hero' }, hero: { size: 'small' } },
+      entities: [
+        { entity: 'sensor.hero_no_above', markers: markers(false) },
+        { entity: 'sensor.hero_above', markers: markers(true) },
+      ],
+    },
+    states: Object.fromEntries(['sensor.hero_no_above', 'sensor.hero_above']
+      .map((entity) => [entity, sensor(2423, { friendly_name: 'Grid Power' })])),
+  });
+
+  const [plain, occupied] = await page.locator('sensor-bar-card-plus').evaluate((card) => {
+    const round = (value) => Math.round(value * 10) / 10;
+    return ['sensor.hero_no_above', 'sensor.hero_above'].map((entity) => {
+      const row = card.shadowRoot.querySelector(`.row[data-entity="${entity}"]`);
+      const rowBox = row.getBoundingClientRect();
+      const track = row.querySelector('.bar-track').getBoundingClientRect();
+      const relative = (element, box = track) => {
+        const rect = element.getBoundingClientRect();
+        return { x: round(rect.left - box.left), y: round(rect.top - box.top) };
+      };
+      return {
+        occupancy: row.dataset.markerLabelLaneAbove,
+        rowHeight: rowBox.height,
+        headerTop: row.querySelector('.hero-header').getBoundingClientRect().top - rowBox.top,
+        valueTop: row.querySelector('.hero-value').getBoundingClientRect().top - rowBox.top,
+        mainTop: row.querySelector('.main-line').getBoundingClientRect().top - rowBox.top,
+        trackTop: track.top - rowBox.top,
+        trackWidth: track.width,
+        trackHeight: track.height,
+        rowHeightVariable: parseFloat(getComputedStyle(row).getPropertyValue('--sbcp-row-height')),
+        margin: parseFloat(getComputedStyle(row.querySelector('.hero-header')).marginBottom),
+        markers: [...row.querySelectorAll('.generic-marker')].map((marker) => ({
+          lane: marker.dataset.lane,
+          point: round(marker.getBoundingClientRect().left - track.left),
+          graphic: relative(marker.querySelector('.marker-shape-svg')),
+        })),
+        labels: [...row.querySelectorAll('.generic-value-label')]
+          .filter((label) => getComputedStyle(label).visibility === 'visible')
+          .map((label) => {
+            const rect = label.getBoundingClientRect();
+            return {
+              lane: label.dataset.lane,
+              text: label.textContent.trim(),
+              gap: round(label.dataset.lane === 'above' ? track.top - rect.bottom : rect.top - track.bottom),
+            };
+          }),
+      };
+    });
+  });
+  expect(plain.occupancy).toBe('false');
+  expect(plain.margin).toBe(0);
+  expect(occupied.occupancy).toBe('true');
+
+  const responsiveMargin = Math.min(4, Math.max(2, occupied.rowHeightVariable * 0.08));
+  expect(occupied.margin - responsiveMargin).toBeCloseTo(4, 2);
+  expect(occupied.headerTop).toBeCloseTo(plain.headerTop, 2);
+  expect(occupied.valueTop).toBeCloseTo(plain.valueTop, 2);
+  for (const property of ['mainTop', 'trackTop', 'rowHeight']) {
+    expect(occupied[property] - plain[property]).toBeCloseTo(responsiveMargin + 4, 1);
+  }
+  expect(occupied.trackWidth).toBe(plain.trackWidth);
+  expect(occupied.trackHeight).toBe(plain.trackHeight);
+  expect(occupied.markers).toEqual(plain.markers);
+  expect(occupied.markers.slice(0, 2).map(({ point }) => point)).toEqual([0, occupied.trackWidth]);
+  expect(occupied.labels).toEqual([
+    { lane: 'above', text: '-1,000 W', gap: 1 },
+    { lane: 'above', text: '3,000 W', gap: 1 },
+    { lane: 'below', text: 'L1 34 W', gap: 2 },
+    { lane: 'below', text: 'L3 334 W', gap: 2 },
+  ]);
+  expect(plain.labels).toEqual([
+    { lane: 'below', text: 'L1 34 W', gap: 2 },
+    { lane: 'below', text: 'L3 334 W', gap: 2 },
+  ]);
+});
+
 test('marker labels use a compact card surface with asymmetric offsets and unchanged row geometry', async ({ page }) => {
   await render(page, {
     width: 720,
