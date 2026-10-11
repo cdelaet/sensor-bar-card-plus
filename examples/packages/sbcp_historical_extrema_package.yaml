@@ -1,0 +1,499 @@
+# Reusable historical extrema for Sensor Bar Card Plus.
+# Requires Recorder statistics on source sensors (state_class: measurement).
+# All six rooms share one period selector. Update every 5 minutes.
+# 5-minute stats for <= 7 days; hourly stats for longer periods.
+# Long-term hourly stats are approximate for absolute extrema.
+# See companion README for limitations and instructions.
+input_select:
+  sbcp_extrema_period:
+    name: SBCP extrema period
+    options:
+      - "Today"
+      - "Yesterday"
+      - "This week"
+      - "This month"
+      - "This year"
+      - "Last hour"
+      - "Last 12 hours"
+      - "Last 24 hours"
+      - "Last 7 days"
+      - "Last 30 days"
+    icon: mdi:calendar-clock
+
+template:
+  - triggers:
+      - trigger: time_pattern
+        minutes: "/5"
+      - trigger: state
+        entity_id: input_select.sbcp_extrema_period
+      - trigger: homeassistant
+        event: start
+    actions:
+      - variables:
+          selected_period: "{{ states('input_select.sbcp_extrema_period') }}"
+          window_start: >-
+            {% set p = selected_period %}
+            {% set t = now() %}
+            {% set midnight = today_at() %}
+            {% if p == "Yesterday" %}{{ (midnight - timedelta(days=1)).isoformat() }}
+            {% elif p == "This week" %}{{ (midnight - timedelta(days=t.weekday())).isoformat() }}
+            {% elif p == "This month" %}{{ midnight.replace(day=1).isoformat() }}
+            {% elif p == "This year" %}{{ midnight.replace(month=1, day=1).isoformat() }}
+            {% elif p == "Last hour" %}{{ (t - timedelta(hours=1)).isoformat() }}
+            {% elif p == "Last 12 hours" %}{{ (t - timedelta(hours=12)).isoformat() }}
+            {% elif p == "Last 24 hours" %}{{ (t - timedelta(hours=24)).isoformat() }}
+            {% elif p == "Last 7 days" %}{{ (t - timedelta(days=7)).isoformat() }}
+            {% elif p == "Last 30 days" %}{{ (t - timedelta(days=30)).isoformat() }}
+            {% else %}{{ midnight.isoformat() }}{% endif %}
+          window_end: >-
+            {% if selected_period == "Yesterday" %}{{ today_at().isoformat() }}
+            {% else %}{{ now().isoformat() }}{% endif %}
+          stats_granularity: >-
+            {% if (as_timestamp(window_end) - as_timestamp(window_start)) > 9 * 86400 %}hour
+            {% else %}5minute{% endif %}
+      - action: recorder.get_statistics
+        data:
+          statistic_ids:
+            - sensor.keuken_temperature
+            - sensor.bureau_temperature
+            - sensor.berging_temperature
+            - sensor.nachthal_boven_temperature
+            - sensor.zolder_onder_cv_temperature
+            - sensor.garage_onder_pomp_temperature
+          start_time: "{{ window_start }}"
+          end_time: "{{ window_end }}"
+          period: "{{ stats_granularity }}"
+          types:
+            - min
+            - max
+        response_variable: extrema_stats
+    sensor:
+      - name: "SBCP Kitchen Historical Minimum"
+        unique_id: sbcp_kitchen_historical_min
+        default_entity_id: sensor.sbcp_kitchen_historical_min
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (extrema_stats is defined and (extrema_stats.get("statistics", {}).get("sensor.keuken_temperature", []) | count > 0 or (selected_period != "Yesterday" and is_number(states("sensor.keuken_temperature"))))) }}
+        state: >-
+          {% set source = "sensor.keuken_temperature" %}
+          {% set values = extrema_stats.get("statistics", {}).get(source, []) | map(attribute="min") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set values = values + [states(source) | float] %}
+          {% endif %}
+          {{ (values | min) if values else "unknown" }}
+      - name: "SBCP Kitchen Historical Maximum"
+        unique_id: sbcp_kitchen_historical_max
+        default_entity_id: sensor.sbcp_kitchen_historical_max
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (extrema_stats is defined and (extrema_stats.get("statistics", {}).get("sensor.keuken_temperature", []) | count > 0 or (selected_period != "Yesterday" and is_number(states("sensor.keuken_temperature"))))) }}
+        state: >-
+          {% set source = "sensor.keuken_temperature" %}
+          {% set values = extrema_stats.get("statistics", {}).get(source, []) | map(attribute="max") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set values = values + [states(source) | float] %}
+          {% endif %}
+          {{ (values | max) if values else "unknown" }}
+      - name: "SBCP Office Downstairs Historical Minimum"
+        unique_id: sbcp_office_downstairs_historical_min
+        default_entity_id: sensor.sbcp_office_downstairs_historical_min
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (extrema_stats is defined and (extrema_stats.get("statistics", {}).get("sensor.bureau_temperature", []) | count > 0 or (selected_period != "Yesterday" and is_number(states("sensor.bureau_temperature"))))) }}
+        state: >-
+          {% set source = "sensor.bureau_temperature" %}
+          {% set values = extrema_stats.get("statistics", {}).get(source, []) | map(attribute="min") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set values = values + [states(source) | float] %}
+          {% endif %}
+          {{ (values | min) if values else "unknown" }}
+      - name: "SBCP Office Downstairs Historical Maximum"
+        unique_id: sbcp_office_downstairs_historical_max
+        default_entity_id: sensor.sbcp_office_downstairs_historical_max
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (extrema_stats is defined and (extrema_stats.get("statistics", {}).get("sensor.bureau_temperature", []) | count > 0 or (selected_period != "Yesterday" and is_number(states("sensor.bureau_temperature"))))) }}
+        state: >-
+          {% set source = "sensor.bureau_temperature" %}
+          {% set values = extrema_stats.get("statistics", {}).get(source, []) | map(attribute="max") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set values = values + [states(source) | float] %}
+          {% endif %}
+          {{ (values | max) if values else "unknown" }}
+      - name: "SBCP Storage Room Historical Minimum"
+        unique_id: sbcp_storage_room_historical_min
+        default_entity_id: sensor.sbcp_storage_room_historical_min
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (extrema_stats is defined and (extrema_stats.get("statistics", {}).get("sensor.berging_temperature", []) | count > 0 or (selected_period != "Yesterday" and is_number(states("sensor.berging_temperature"))))) }}
+        state: >-
+          {% set source = "sensor.berging_temperature" %}
+          {% set values = extrema_stats.get("statistics", {}).get(source, []) | map(attribute="min") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set values = values + [states(source) | float] %}
+          {% endif %}
+          {{ (values | min) if values else "unknown" }}
+      - name: "SBCP Storage Room Historical Maximum"
+        unique_id: sbcp_storage_room_historical_max
+        default_entity_id: sensor.sbcp_storage_room_historical_max
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (extrema_stats is defined and (extrema_stats.get("statistics", {}).get("sensor.berging_temperature", []) | count > 0 or (selected_period != "Yesterday" and is_number(states("sensor.berging_temperature"))))) }}
+        state: >-
+          {% set source = "sensor.berging_temperature" %}
+          {% set values = extrema_stats.get("statistics", {}).get(source, []) | map(attribute="max") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set values = values + [states(source) | float] %}
+          {% endif %}
+          {{ (values | max) if values else "unknown" }}
+      - name: "SBCP Hallway Upstairs Historical Minimum"
+        unique_id: sbcp_hallway_upstairs_historical_min
+        default_entity_id: sensor.sbcp_hallway_upstairs_historical_min
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (extrema_stats is defined and (extrema_stats.get("statistics", {}).get("sensor.nachthal_boven_temperature", []) | count > 0 or (selected_period != "Yesterday" and is_number(states("sensor.nachthal_boven_temperature"))))) }}
+        state: >-
+          {% set source = "sensor.nachthal_boven_temperature" %}
+          {% set values = extrema_stats.get("statistics", {}).get(source, []) | map(attribute="min") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set values = values + [states(source) | float] %}
+          {% endif %}
+          {{ (values | min) if values else "unknown" }}
+      - name: "SBCP Hallway Upstairs Historical Maximum"
+        unique_id: sbcp_hallway_upstairs_historical_max
+        default_entity_id: sensor.sbcp_hallway_upstairs_historical_max
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (extrema_stats is defined and (extrema_stats.get("statistics", {}).get("sensor.nachthal_boven_temperature", []) | count > 0 or (selected_period != "Yesterday" and is_number(states("sensor.nachthal_boven_temperature"))))) }}
+        state: >-
+          {% set source = "sensor.nachthal_boven_temperature" %}
+          {% set values = extrema_stats.get("statistics", {}).get(source, []) | map(attribute="max") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set values = values + [states(source) | float] %}
+          {% endif %}
+          {{ (values | max) if values else "unknown" }}
+      - name: "SBCP Attic Historical Minimum"
+        unique_id: sbcp_attic_historical_min
+        default_entity_id: sensor.sbcp_attic_historical_min
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (extrema_stats is defined and (extrema_stats.get("statistics", {}).get("sensor.zolder_onder_cv_temperature", []) | count > 0 or (selected_period != "Yesterday" and is_number(states("sensor.zolder_onder_cv_temperature"))))) }}
+        state: >-
+          {% set source = "sensor.zolder_onder_cv_temperature" %}
+          {% set values = extrema_stats.get("statistics", {}).get(source, []) | map(attribute="min") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set values = values + [states(source) | float] %}
+          {% endif %}
+          {{ (values | min) if values else "unknown" }}
+      - name: "SBCP Attic Historical Maximum"
+        unique_id: sbcp_attic_historical_max
+        default_entity_id: sensor.sbcp_attic_historical_max
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (extrema_stats is defined and (extrema_stats.get("statistics", {}).get("sensor.zolder_onder_cv_temperature", []) | count > 0 or (selected_period != "Yesterday" and is_number(states("sensor.zolder_onder_cv_temperature"))))) }}
+        state: >-
+          {% set source = "sensor.zolder_onder_cv_temperature" %}
+          {% set values = extrema_stats.get("statistics", {}).get(source, []) | map(attribute="max") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set values = values + [states(source) | float] %}
+          {% endif %}
+          {{ (values | max) if values else "unknown" }}
+      - name: "SBCP Garage Historical Minimum"
+        unique_id: sbcp_garage_historical_min
+        default_entity_id: sensor.sbcp_garage_historical_min
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (extrema_stats is defined and (extrema_stats.get("statistics", {}).get("sensor.garage_onder_pomp_temperature", []) | count > 0 or (selected_period != "Yesterday" and is_number(states("sensor.garage_onder_pomp_temperature"))))) }}
+        state: >-
+          {% set source = "sensor.garage_onder_pomp_temperature" %}
+          {% set values = extrema_stats.get("statistics", {}).get(source, []) | map(attribute="min") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set values = values + [states(source) | float] %}
+          {% endif %}
+          {{ (values | min) if values else "unknown" }}
+      - name: "SBCP Garage Historical Maximum"
+        unique_id: sbcp_garage_historical_max
+        default_entity_id: sensor.sbcp_garage_historical_max
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (extrema_stats is defined and (extrema_stats.get("statistics", {}).get("sensor.garage_onder_pomp_temperature", []) | count > 0 or (selected_period != "Yesterday" and is_number(states("sensor.garage_onder_pomp_temperature"))))) }}
+        state: >-
+          {% set source = "sensor.garage_onder_pomp_temperature" %}
+          {% set values = extrema_stats.get("statistics", {}).get(source, []) | map(attribute="max") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set values = values + [states(source) | float] %}
+          {% endif %}
+          {{ (values | max) if values else "unknown" }}
+      - name: "SBCP Kitchen Historical Delta"
+        unique_id: sbcp_kitchen_historical_delta
+        default_entity_id: sensor.sbcp_kitchen_historical_delta
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ extrema_stats is defined and
+              (extrema_stats.get("statistics", {}).get("sensor.keuken_temperature", []) | count > 0
+               or
+               (selected_period != "Yesterday" and is_number(states("sensor.keuken_temperature")))) }}
+        state: >-
+          {% set source = "sensor.keuken_temperature" %}
+          {% set rows = extrema_stats.get("statistics", {}).get(source, []) %}
+          {% set mins = rows | map(attribute="min") | select("number") | list %}
+          {% set maxs = rows | map(attribute="max") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set current = states(source) | float %}
+            {% set mins = mins + [current] %}
+            {% set maxs = maxs + [current] %}
+          {% endif %}
+          {% if mins and maxs %}
+            {{ ((maxs | max) - (mins | min)) | round(1) }}
+          {% else %}
+            unknown
+          {% endif %}
+      - name: "SBCP Office Downstairs Historical Delta"
+        unique_id: sbcp_office_downstairs_historical_delta
+        default_entity_id: sensor.sbcp_office_downstairs_historical_delta
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ extrema_stats is defined and
+              (extrema_stats.get("statistics", {}).get("sensor.bureau_temperature", []) | count > 0
+               or
+               (selected_period != "Yesterday" and is_number(states("sensor.bureau_temperature")))) }}
+        state: >-
+          {% set source = "sensor.bureau_temperature" %}
+          {% set rows = extrema_stats.get("statistics", {}).get(source, []) %}
+          {% set mins = rows | map(attribute="min") | select("number") | list %}
+          {% set maxs = rows | map(attribute="max") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set current = states(source) | float %}
+            {% set mins = mins + [current] %}
+            {% set maxs = maxs + [current] %}
+          {% endif %}
+          {% if mins and maxs %}
+            {{ ((maxs | max) - (mins | min)) | round(1) }}
+          {% else %}
+            unknown
+          {% endif %}
+      - name: "SBCP Storage Room Historical Delta"
+        unique_id: sbcp_storage_room_historical_delta
+        default_entity_id: sensor.sbcp_storage_room_historical_delta
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ extrema_stats is defined and
+              (extrema_stats.get("statistics", {}).get("sensor.berging_temperature", []) | count > 0
+               or
+               (selected_period != "Yesterday" and is_number(states("sensor.berging_temperature")))) }}
+        state: >-
+          {% set source = "sensor.berging_temperature" %}
+          {% set rows = extrema_stats.get("statistics", {}).get(source, []) %}
+          {% set mins = rows | map(attribute="min") | select("number") | list %}
+          {% set maxs = rows | map(attribute="max") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set current = states(source) | float %}
+            {% set mins = mins + [current] %}
+            {% set maxs = maxs + [current] %}
+          {% endif %}
+          {% if mins and maxs %}
+            {{ ((maxs | max) - (mins | min)) | round(1) }}
+          {% else %}
+            unknown
+          {% endif %}
+      - name: "SBCP Hallway Upstairs Historical Delta"
+        unique_id: sbcp_hallway_upstairs_historical_delta
+        default_entity_id: sensor.sbcp_hallway_upstairs_historical_delta
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ extrema_stats is defined and
+              (extrema_stats.get("statistics", {}).get("sensor.nachthal_boven_temperature", []) | count > 0
+               or
+               (selected_period != "Yesterday" and is_number(states("sensor.nachthal_boven_temperature")))) }}
+        state: >-
+          {% set source = "sensor.nachthal_boven_temperature" %}
+          {% set rows = extrema_stats.get("statistics", {}).get(source, []) %}
+          {% set mins = rows | map(attribute="min") | select("number") | list %}
+          {% set maxs = rows | map(attribute="max") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set current = states(source) | float %}
+            {% set mins = mins + [current] %}
+            {% set maxs = maxs + [current] %}
+          {% endif %}
+          {% if mins and maxs %}
+            {{ ((maxs | max) - (mins | min)) | round(1) }}
+          {% else %}
+            unknown
+          {% endif %}
+      - name: "SBCP Attic Historical Delta"
+        unique_id: sbcp_attic_historical_delta
+        default_entity_id: sensor.sbcp_attic_historical_delta
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ extrema_stats is defined and
+              (extrema_stats.get("statistics", {}).get("sensor.zolder_onder_cv_temperature", []) | count > 0
+               or
+               (selected_period != "Yesterday" and is_number(states("sensor.zolder_onder_cv_temperature")))) }}
+        state: >-
+          {% set source = "sensor.zolder_onder_cv_temperature" %}
+          {% set rows = extrema_stats.get("statistics", {}).get(source, []) %}
+          {% set mins = rows | map(attribute="min") | select("number") | list %}
+          {% set maxs = rows | map(attribute="max") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set current = states(source) | float %}
+            {% set mins = mins + [current] %}
+            {% set maxs = maxs + [current] %}
+          {% endif %}
+          {% if mins and maxs %}
+            {{ ((maxs | max) - (mins | min)) | round(1) }}
+          {% else %}
+            unknown
+          {% endif %}
+      - name: "SBCP Garage Historical Delta"
+        unique_id: sbcp_garage_historical_delta
+        default_entity_id: sensor.sbcp_garage_historical_delta
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ extrema_stats is defined and
+              (extrema_stats.get("statistics", {}).get("sensor.garage_onder_pomp_temperature", []) | count > 0
+               or
+               (selected_period != "Yesterday" and is_number(states("sensor.garage_onder_pomp_temperature")))) }}
+        state: >-
+          {% set source = "sensor.garage_onder_pomp_temperature" %}
+          {% set rows = extrema_stats.get("statistics", {}).get(source, []) %}
+          {% set mins = rows | map(attribute="min") | select("number") | list %}
+          {% set maxs = rows | map(attribute="max") | select("number") | list %}
+          {% if selected_period != "Yesterday" and is_number(states(source)) %}
+            {% set current = states(source) | float %}
+            {% set mins = mins + [current] %}
+            {% set maxs = maxs + [current] %}
+          {% endif %}
+          {% if mins and maxs %}
+            {{ ((maxs | max) - (mins | min)) | round(1) }}
+          {% else %}
+            unknown
+          {% endif %}
+
+
+# ---------------------------------------------------------------------------
+# Shared dynamic scale for the Home Temperatures SBCP card
+#
+# Default scale: 15 .. 25 °C
+#
+# Upper boundary:
+# - Historical peak above 23 °C -> ceil(peak + 3)
+# - Current value above 23 °C   -> ceil(value + 5)
+# - Highest resulting boundary wins
+#
+# Lower boundary:
+# - Historical floor below 15 °C -> floor(floor - 1)
+# - Current value below 17 °C     -> floor(value - 5)
+# - Lowest resulting boundary wins
+#
+# All rooms therefore use exactly the same scale.
+# ---------------------------------------------------------------------------
+
+      - name: "SBCP Home Temperature Scale Max"
+        unique_id: sbcp_home_temperature_scale_max
+        unit_of_measurement: "°C"
+        state: >-
+          {% set peaks = [
+            states('sensor.sbcp_kitchen_historical_max'),
+            states('sensor.sbcp_office_downstairs_historical_max'),
+            states('sensor.sbcp_storage_room_historical_max'),
+            states('sensor.sbcp_hallway_upstairs_historical_max'),
+            states('sensor.sbcp_attic_historical_max'),
+            states('sensor.sbcp_garage_historical_max')
+          ] | select('is_number') | map('float') | list %}
+  
+          {% set values = [
+            states('sensor.keuken_temperature'),
+            states('sensor.bureau_temperature'),
+            states('sensor.berging_temperature'),
+            states('sensor.nachthal_boven_temperature'),
+            states('sensor.zolder_onder_cv_temperature'),
+            states('sensor.garage_onder_pomp_temperature')
+          ] | select('is_number') | map('float') | list %}
+  
+          {% set peak = peaks | max if peaks else none %}
+          {% set value = values | max if values else none %}
+  
+          {% set candidates = [25] %}
+  
+          {% if peak is not none and peak > 23 %}
+            {% set candidates = candidates + [(peak + 3) | round(0, 'ceil')] %}
+          {% endif %}
+  
+          {% if value is not none and value > 23 %}
+            {% set candidates = candidates + [(value + 5) | round(0, 'ceil')] %}
+          {% endif %}
+  
+          {{ candidates | max | int }}
+  
+      - name: "SBCP Home Temperature Scale Min"
+        unique_id: sbcp_home_temperature_scale_min
+        unit_of_measurement: "°C"
+        state: >-
+          {% set floors = [
+            states('sensor.sbcp_kitchen_historical_min'),
+            states('sensor.sbcp_office_downstairs_historical_min'),
+            states('sensor.sbcp_storage_room_historical_min'),
+            states('sensor.sbcp_hallway_upstairs_historical_min'),
+            states('sensor.sbcp_attic_historical_min'),
+            states('sensor.sbcp_garage_historical_min')
+          ] | select('is_number') | map('float') | list %}
+  
+          {% set values = [
+            states('sensor.keuken_temperature'),
+            states('sensor.bureau_temperature'),
+            states('sensor.berging_temperature'),
+            states('sensor.nachthal_boven_temperature'),
+            states('sensor.zolder_onder_cv_temperature'),
+            states('sensor.garage_onder_pomp_temperature')
+          ] | select('is_number') | map('float') | list %}
+  
+          {% set floor = floors | min if floors else none %}
+          {% set value = values | min if values else none %}
+  
+          {% set candidates = [15] %}
+  
+          {% if floor is not none and floor < 15 %}
+            {% set candidates = candidates + [(floor - 1) | round(0, 'floor')] %}
+          {% endif %}
+  
+          {% if value is not none and value < 17 %}
+            {% set candidates = candidates + [(value - 5) | round(0, 'floor')] %}
+          {% endif %}
+  
+          {{ candidates | min | int }}
