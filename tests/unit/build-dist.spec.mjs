@@ -8,6 +8,44 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const names = ['sensor-bar-card-plus.js', 'sensor-bar-card-plus-editor.js'];
 
+it('keeps build identity and both artifacts invariant to root and nested source metadata', () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sbcp-metadata-test-'));
+  try {
+    for (const directory of ['tools', 'src/nested']) fs.mkdirSync(path.join(workspace, directory), { recursive: true });
+    for (const file of ['build-dist.cjs', 'verify-dist.cjs']) fs.copyFileSync(path.join(root, 'tools', file), path.join(workspace, 'tools', file));
+    for (const file of ['package.json', 'package-lock.json']) fs.copyFileSync(path.join(root, file), path.join(workspace, file));
+    fs.writeFileSync(path.join(workspace, 'src', names[0]), `window.identity = __SBCP_BUILD_ID__; window.editorURL = new URL(__SBCP_EDITOR_FILE__, import.meta.url); window.editorURL.searchParams.set('sbcp_build', __SBCP_EDITOR_DIGEST__);`);
+    fs.writeFileSync(path.join(workspace, 'src', names[1]), 'export const buildIdentity = __SBCP_BUILD_ID__;');
+    const options = { cwd: workspace, encoding: 'utf8', env: { ...process.env, NODE_PATH: path.join(root, 'node_modules') } };
+    const build = () => {
+      const result = spawnSync(process.execPath, ['-e', "console.log(JSON.stringify(require('./tools/build-dist.cjs').buildDist()))"], options);
+      expect(result.status, result.stderr).toBe(0);
+      return JSON.parse(result.stdout);
+    };
+    const read = () => names.map(name => fs.readFileSync(path.join(workspace, 'dist', name)));
+    const identity = build();
+    const artifacts = read();
+    const verify = () => {
+      const result = spawnSync(process.execPath, ['tools/verify-dist.cjs'], options);
+      expect(result.status, result.stderr).toBe(0);
+      expect(read()).toEqual(artifacts);
+    };
+    verify();
+    for (const relative of ['src/.DS_Store', 'src/nested/.DS_Store']) {
+      for (const contents of ['Finder metadata', 'Changed Finder metadata with different bytes']) {
+        fs.writeFileSync(path.join(workspace, relative), contents);
+        // Verification must succeed against the original pair before rebuilding.
+        verify();
+        expect(build()).toEqual(identity);
+        expect(read()).toEqual(artifacts);
+        verify();
+      }
+    }
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
+}, 30_000);
+
 it('builds an exact deterministic ESM pair, fingerprints same-version inputs, and verifies without mutations', () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sbcp-build-test-'));
   try {
@@ -52,7 +90,7 @@ it('builds an exact deterministic ESM pair, fingerprints same-version inputs, an
     }).status).toBe(0);
     expect(names.map(name => fs.readFileSync(path.join(relocated, 'dist', name)))).toEqual(first);
     // Same-version source, build and toolchain lockfile edits invalidate both.
-    for (const relative of ['src/' + names[0], 'src/' + names[1], 'tools/build-dist.cjs', 'package-lock.json']) {
+    for (const relative of ['src/' + names[0], 'src/' + names[1], 'tools/build-dist.cjs', 'package.json', 'package-lock.json']) {
       fs.appendFileSync(path.join(project, relative), '\n ');
       verify(1);
       const before = read();

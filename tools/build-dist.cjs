@@ -19,7 +19,7 @@ const buildOptions = {
 function sourceFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
     const filename = path.join(directory, entry.name);
-    return entry.isDirectory() ? sourceFiles(filename) : [filename];
+    return entry.isDirectory() ? sourceFiles(filename) : entry.name.endsWith('.js') ? [filename] : [];
   });
 }
 
