@@ -81,9 +81,12 @@ for(const source of ['src','dist']) describe(`Feature capability closure (${sour
   const config=raw();config.bar.segments=[{from:0,to:null,color:'red',...metadata()},{from:50,to:75,color:'orange',...metadata()}];config.scale={min:0,max:100};
   const {editor,events}=await setup(source,config),section=editor._segmentsSection;
   expect(section._getSegmentRowValidationMessage(root,0)).toBe('');expect(editor._config.bar.segments[0].to).toBeNull();
+  const committedPreview=section._getSegmentPreviewRows(root);
   section._setSegmentDraftField(root,'from','80');section._setSegmentDraftField(root,'to','');section._setSegmentDraftField(root,'color','var(--high)');
+  expect(section._getSegmentPreviewRows(root)).toEqual(committedPreview);
   expect(section._getValidSegmentDraft(root)).toEqual({from:80,color:'var(--high)'});section._commitSegmentDraft(root);await editor.updateComplete;
   expect(editor._config.bar.segments).toEqual([...config.bar.segments,{from:80,color:'var(--high)'}]);
+  expect(section._getSegmentPreviewRows(root)).not.toEqual(committedPreview);
   section.handle({type:'click',target:{dataset:{action:'remove-segment',index:'2'}}});await editor.updateComplete;expect(editor._config).toEqual(config);
   const count=events.length;await segment(editor,'to',0,'70');expect(editor._config).toEqual(config);expect(section._getSegmentRowValidationMessage(root,0)).toBe('Segments overlap.');expect(events).toHaveLength(count);
   await segment(editor,'to',0,'-1');expect(editor._config).toEqual(config);

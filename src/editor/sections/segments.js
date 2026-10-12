@@ -478,21 +478,40 @@ export class SegmentsSection extends PaletteSection {
   }
 
   _getSegmentPreviewRows(scope = { type: 'card' }) {
+    const committedSegments = this._getSegmentsUiRows(scope) ?? this._getScopedSegmentsValue(scope);
     if (this.array.autoEnds) {
-      const draft = this._getValidSegmentDraft(scope);
-      return this._resolveAutomaticEndRows(scope, [...this._getAutomaticEndInputRows(scope), ...(draft ? [draft] : [])]);
+      return this._resolveAutomaticEndRows(scope, this._getAutomaticEndInputRows(scope));
     }
-    const baseSegments = this._getSegmentsUiRows(scope) ?? this._getScopedSegmentsValue(scope);
-    const previewSegments = this._sortSegmentsForEditor(baseSegments);
-    const validDraft = this._getValidSegmentDraft(scope);
-    if (validDraft) {
-      previewSegments.push(validDraft);
-    }
-    return this._sortSegmentsForEditor(previewSegments).filter((segment) => {
+    const previewSegments = this._sortSegmentsForEditor(committedSegments).filter((segment) => {
       const from = this._getSegmentPreviewBoundaryValue(segment?.from);
       const to = this._getSegmentPreviewBoundaryValue(segment?.to);
       return from !== null && to !== null && typeof segment?.color === 'string' && segment.color.trim();
     });
+    if (!previewSegments.length) {
+      return previewSegments;
+    }
+    const hasOnlyNumericBoundaries = previewSegments.every((segment) => [segment.from, segment.to].every((boundary) => (
+      typeof boundary === 'number' && Number.isFinite(boundary)
+      || isObject(boundary) && !Number.isFinite(boundary.percent) && Number.isFinite(this._getFiniteNumber(boundary.fixed))
+    )));
+    if (!hasOnlyNumericBoundaries) {
+      return previewSegments;
+    }
+    const boundaries = previewSegments.flatMap((segment) => [
+      this._getSegmentPreviewBoundaryValue(segment.from),
+      this._getSegmentPreviewBoundaryValue(segment.to),
+    ]);
+    const domainMin = boundaries.reduce((min, boundary) => Math.min(min, boundary), Infinity);
+    const domainMax = boundaries.reduce((max, boundary) => Math.max(max, boundary), -Infinity);
+    const domainWidth = domainMax - domainMin;
+    if (!Number.isFinite(domainWidth) || domainWidth <= 0) {
+      return previewSegments;
+    }
+    return previewSegments.map((segment) => ({
+      ...segment,
+      from: ((this._getSegmentPreviewBoundaryValue(segment.from) - domainMin) / domainWidth) * 100,
+      to: ((this._getSegmentPreviewBoundaryValue(segment.to) - domainMin) / domainWidth) * 100,
+    }));
   }
 
   _buildEditorSegmentPreviewStyle(scope = { type: 'card' }) {
