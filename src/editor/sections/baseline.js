@@ -1,6 +1,6 @@
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue,
   pruneEmptyObjectsInTarget, normalizeTextValue, hasResolvableOverride } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeEditorColorValue, normalizeScalePercentageInput, renderMarkerPercentageControls, getMarkerSourceMode, renderColorInput, renderEntitySourceInput } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeEditorColorValue, normalizeScalePercentageInput, renderMarkerPercentageControls, getMarkerSourceMode, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput } from '../shared/editor-controls.js';
 
 export class BaselineSection {
   constructor(context, options = {}) { this.options = options;
@@ -225,6 +225,7 @@ export class BaselineSection {
     if (control === 'baseline-mode') { this._setBaselineMode(scope, value); return true; }
     if (control === 'baseline-value') { this._setBaselineResolvablePart(scope, 'fixed', value); return true; }
     if (control === 'baseline-entity-source') { this._setBaselineResolvablePart(scope, 'entity', value); return true; }
+    if (control === 'baseline-attribute') { this._setBaselineResolvablePart(scope, 'attribute', value); return true; }
     for (const direction of ['above', 'below']) {
       if (control === `baseline-${direction}-color`) { this._setBaselineDirectionalColor(scope, direction, value); return true; }
       if (control === `baseline-${direction}-color-enabled`) { this._setBaselineDirectionalColorEnabled(scope, direction, value); return true; }
@@ -275,6 +276,10 @@ export class BaselineSection {
                         <label>Baseline entity</label>
                         ${renderEntitySourceInput('entity-baseline-entity-source', index, baselineParts.entity, 'inherit card default')}
                       </div>
+                      ${baselineParts.entity ? `<div class="field-row">
+                        <label>Baseline attribute</label>
+                        ${renderEntityAttributeInput('entity-baseline-attribute', index, baselineParts.attribute, baselineParts.entity, this.context.hass)}
+                      </div>` : ''}
                       <div class="field-row">
                         <div class="toggle">
                           <input id="entity-${index}-baseline-above-color-enabled" type="checkbox" data-kind="entity-baseline-above-color-enabled" data-index="${index}"${this._isBaselineDirectionalColorEnabled(scope, 'above') ? ' checked' : ''}>
@@ -344,6 +349,10 @@ export class BaselineSection {
               <label>Baseline entity</label>
               ${renderEntitySourceInput('baseline-entity-source', 'card', baseline.entity)}
             </div>
+            ${baseline.entity ? `<div class="field-row">
+              <label>Baseline attribute</label>
+              ${renderEntityAttributeInput('baseline-attribute', 'card', baseline.attribute, baseline.entity, this.context.hass)}
+            </div>` : ''}
             <div class="field-row">
               <div class="toggle">
                 <input id="baseline-above-color-enabled" type="checkbox" data-field="baseline-above-color-enabled"${this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'above') ? ' checked' : ''}>

@@ -13,8 +13,9 @@ export function getFeatureReferenceMarkerSource(marker) {
 export function patchFeatureReferenceMarkerSource(config, index, part, rawValue) {
   if (!Array.isArray(config.markers) || !config.markers[index]) return config;
   const base = ['markers', index, 'at'], at = config.markers[index]?.at;
-  const value = part === 'entity' ? normalizeTextValue(rawValue).trim() : normalizeNumberValue(rawValue);
-  const empty = part === 'entity' ? !value : value === null;
+  const isTextPart = ['entity', 'attribute'].includes(part);
+  const value = isTextPart ? normalizeTextValue(rawValue).trim() : normalizeNumberValue(rawValue);
+  const empty = isTextPart ? !value : value === null;
   // Generic percentage anchors have only string syntax; object percent is invalid.
   if (part === 'percent') return setPathValue(config, base, empty ? null : `${value}%`);
   // Apply the existing object-source patcher to one item: its delete helper
@@ -48,14 +49,16 @@ export function patchFeatureReferenceMarker(config, operation) {
         delete at.percent;
         if (value === 'fixed') {
           delete at.entity;
+          delete at.attribute;
           if (at.fixed === undefined && at.value === undefined) at.fixed = 50;
         } else {
-          if (!at.entity) at.entity = '';
+          if (!at.entity) delete at.entity;
           if (value === 'entity') { delete at.fixed; delete at.value; }
           if (value === 'entity-fallback' && at.fixed === undefined && at.value === undefined) at.fixed = 50;
         }
       }
-      rows[index] = setPathValue(rows[index], ['at'], at);
+      if (value === 'entity' && !at.entity && !Object.keys(at).length) rows[index] = deletePathValue(rows[index], ['at']);
+      else rows[index] = setPathValue(rows[index], ['at'], at);
     }
   }
   return setPathValue(config, ['markers'], rows);

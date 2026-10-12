@@ -19,6 +19,31 @@ export function renderEntitySourceInput(kind, index, value, placeholder = 'senso
   return `<input type="text" data-kind="${kind}" data-index="${index}"${extraAttrs ? ` ${extraAttrs}` : ''} value="${escapeAttribute(value)}" placeholder="${escapeAttribute(placeholder)}" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false">`;
 }
 
+export function getEntityAttributeSuggestions(hass, entityId) {
+  const attributes = hass?.states?.[entityId]?.attributes;
+  if (!attributes || typeof attributes !== 'object' || Array.isArray(attributes)) return [];
+  return Object.entries(attributes)
+    .filter(([, value]) => ['string', 'number', 'boolean'].includes(typeof value))
+    .map(([key]) => key);
+}
+
+export function renderEntityAttributeInput(kind, index, value, entityId, hass, extraDataset = {}) {
+  const extraAttrs = Object.entries(extraDataset)
+    .map(([key, entry]) => `data-${key}="${escapeAttribute(entry)}"`)
+    .join(' ');
+  const indexAttr = index === null || index === undefined ? '' : ` data-index="${escapeAttribute(index)}"`;
+  const dataset = `data-kind="${escapeAttribute(kind)}"${indexAttr}${extraAttrs ? ` ${extraAttrs}` : ''}`;
+  if (globalThis.customElements?.get?.('ha-entity-attribute-picker')) {
+    return `<ha-entity-attribute-picker ${dataset}></ha-entity-attribute-picker>`;
+  }
+  const listId = `attribute-suggestions-${kind}-${index ?? 'card'}-${extraDataset['scope-type'] ?? ''}-${extraDataset['marker-index'] ?? ''}`
+    .replace(/[^a-zA-Z0-9_-]/g, '-');
+  const options = getEntityAttributeSuggestions(hass, entityId)
+    .map(attribute => `<option value="${escapeAttribute(attribute)}"></option>`)
+    .join('');
+  return `<input type="text" ${dataset} list="${listId}" value="${escapeAttribute(value ?? '')}" placeholder="attribute key" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false"><datalist id="${listId}">${options}</datalist>`;
+}
+
 export function renderBuiltinMarkerLabelControls(scope, key, title, options) {
   const isEntity = scope?.type === 'entity';
   const prefix = isEntity ? `entity-${scope.index}-${key}` : key;

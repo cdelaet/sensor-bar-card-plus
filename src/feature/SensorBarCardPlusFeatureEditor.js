@@ -2,7 +2,7 @@ import {
   cloneDeep, serializeConfig, isObject, getPathValue, setPathValue, deletePathValue,
 } from '../editor/shared/editor-config.js';
 import {
-  escapeAttribute, renderEntitySourceInput, getColorPickerValue, isHexColorValue,
+  escapeAttribute, renderEntitySourceInput, renderEntityAttributeInput, getEntityAttributeSuggestions, getColorPickerValue, isHexColorValue,
 } from '../editor/shared/editor-controls.js';
 import { editorStyles } from '../editor/shared/editor-styles.js';
 import { renderCardGroup, renderMarkersSection } from '../editor/shared/editor-disclosures.js';
@@ -59,6 +59,9 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       hass: () => this._hass,
     };
     this._referenceMarkersSection = new ReferenceMarkersSection(context, { root: ui.root, render: () => this._requestRender() }, options);
+    customElements.whenDefined('ha-entity-attribute-picker').then(() => {
+      if (this.isConnected && this.shadowRoot.querySelector('input[data-kind$="-attribute"]')) this._requestRender();
+    });
     this._segmentsSection = new SegmentsSection(context, ui, createFeaturePaletteArray(context, 'segments'));
     this._gradientStopsSection = new GradientStopsSection(context, ui, createFeaturePaletteArray(context, 'gradient_stops'));
     for (const type of ['click', 'keydown']) this.shadowRoot.addEventListener(type, event => {
@@ -80,12 +83,15 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       }
       this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event);
     });
-    const handleField = event => this._handleField(event);
+    const handleField = event => {
+      if (event._sbcpEntityPickerHandled || event.target?.tagName === 'HA-ENTITY-PICKER') return;
+      this._handleField(event);
+    };
     for (const type of ['input', 'change', 'value-changed']) this.shadowRoot.addEventListener(type, handleField);
     this.shadowRoot.addEventListener('focusout', event => {
       // Only editable controls can defer reconciliation until blur. Refreshing
       // after a button loses focus can move WebKit's pending click target.
-      if (event.target?.matches?.('input, select, ha-entity-picker')) this._requestRender();
+      if (event.target?.matches?.('input, select, ha-entity-picker, ha-entity-attribute-picker')) this._requestRender();
     });
     // HA may load its picker after the editor. No polling or global observers.
     customElements.whenDefined('ha-entity-picker').then(() => {
@@ -136,7 +142,8 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
   }
 
   _createSectionContext() {
-    return {
+    const editor = this;
+    const context = {
       read: (_scope, path) => getPathValue(this._config, path),
       mutate: (_scope, mutation, options) => this._mutate(config => options?.referenceMarkerEdit ? patchFeatureReferenceMarker(config, options.referenceMarkerEdit) : options?.needleEdit
         ? patchFeatureNeedle(config, options.needleEdit)
@@ -146,6 +153,8 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       source: (_scope, key) => key?.type === 'reference-marker' ? getFeatureReferenceMarkerSource(key.marker) : key === 'baseline' ? getFeatureBaselineSource(this._config) : key === 'target' ? getFeatureTargetSource(this._config) : getFeatureScaleSource(this._config, key),
       setSource: (_scope, key, part, value) => this._mutate(config => key?.type === 'reference-marker' ? patchFeatureReferenceMarkerSource(config, key.index, part, value) : key === 'baseline' ? patchFeatureBaselineSource(config, part, value) : key === 'target' ? patchFeatureTargetSource(config, part, value) : patchFeatureScaleSource(config, key, part, value)),
     };
+    Object.defineProperty(context, 'hass', { get: () => editor._hass });
+    return context;
   }
 
   _mutate(mutation) {
@@ -167,7 +176,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     // Replacing focused native controls can dispatch change from the old DOM.
     if (this._configReplaced || target?.isConnected === false) return;
     // Picker input/change events are internal; HA's value-changed is authoritative.
-    if (target?.tagName === 'HA-ENTITY-PICKER' && event.type !== 'value-changed') return;
+    if (['HA-ENTITY-PICKER', 'HA-ENTITY-ATTRIBUTE-PICKER'].includes(target?.tagName) && event.type !== 'value-changed') return;
     if (this._numericDrafts.handle(event, this._isRendering)) return;
     const field = target?.dataset?.field?.replace(/-text-fallback$/, '');
     const kind = target?.dataset?.kind?.replace(/-text-fallback$/, '');
@@ -192,6 +201,13 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       this._chooseEntity = false;
       this._mutate(config => entity ? setPathValue(config, ['entity'], entity) : deletePathValue(config, ['entity']));
       this._requestRender();
+      return;
+    }
+    if (kind === 'feature-attribute') {
+      this._mutate(config => {
+        const attribute = typeof value === 'string' ? value.trim() : '';
+        return attribute ? setPathValue(config, ['attribute'], attribute) : deletePathValue(config, ['attribute']);
+      });
       return;
     }
     if (kind?.startsWith('generic-marker-')) {
@@ -228,6 +244,14 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         <label for="feature-entity">Entity override</label>
         ${renderEntitySourceInput('feature-entity-source', 'feature', this._explicitEntity)}
       </div>` : ''}
+      ${this._effectiveEntity ? `<div class="field-row">
+        <label>Attribute</label>
+        ${renderEntityAttributeInput('feature-attribute', null, this._config.attribute, this._effectiveEntity, this._hass).replace('data-kind="feature-attribute"', 'id="feature-attribute" data-kind="feature-attribute"')}
+      </div>` : ''}
+      <div class="field-row">
+        <label for="formatting-unit">Unit</label>
+        <input id="formatting-unit" type="text" data-field="formatting-unit" value="${escapeAttribute(getFormattingValue(this._createSectionContext(), root, 'unit'))}">
+      </div>
     </div>`;
   }
 
@@ -290,13 +314,15 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const gradientRows = this._gradientStopsSection._getScopedGradientStopsValue(root);
     const markers = this._referenceMarkersSection._getGenericMarkers(root);
     const markerIds = this._referenceMarkersSection._getGenericMarkerUiIds(root, markers.length);
-    const markerSignature = JSON.stringify(markers.map((marker, index) => [markerIds[index], this._referenceMarkersSection._getGenericMarkerSource(marker).mode]));
+    const markerSignature = JSON.stringify(markers.map((marker, index) => [markerIds[index], this._referenceMarkersSection._getGenericMarkerSource(marker, root, index).mode]));
     const signature = JSON.stringify([
       !!(this._context.entity_id || this._explicitEntity), this._showEntityPicker,
+      !!getFeatureScaleSource(this._config, 'min').entity, !!getFeatureScaleSource(this._config, 'max').entity,
+      !!getFeatureBaselineSource(this._config).entity, !!getFeatureTargetSource(this._config).entity,
       fillStyle, segmentRows.length, gradientRows.length,
       !isHexColorValue(this._gradientStopsSection._getGradientStopsDraftState(root).color),
       ...gradientRows.map(row => !isHexColorValue(row.color)),
-      !!customElements.get('ha-entity-picker'),
+      !!customElements.get('ha-entity-picker'), !!customElements.get('ha-entity-attribute-picker'),
     ]);
     // Keep active controls mounted through their native input/change sequence.
     const activeField = this.shadowRoot.activeElement?.dataset?.field;
@@ -347,7 +373,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         ${renderBarAppearanceSection(context, root, () => `${this._baselineSection.render(root, options => this._renderCardGroup(options))}${this._needleSection.render(root)}`, { animation: true, cssText: true })}
         ${this._segmentsSection.render(root, options => this._renderCardGroup(options))}
         ${this._gradientStopsSection.render(root, options => this._renderCardGroup(options))}
-        ${renderFormattingSection(context, root)}
+        ${renderFormattingSection(context, root, { includeUnit: false })}
       </div>`;
       } finally { this._isRendering = false; }
       this._structureSignature = signature;
@@ -374,6 +400,16 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
   }
 
   _syncControls() {
+    for (const picker of this.shadowRoot.querySelectorAll('ha-entity-picker')) {
+      if (!picker._sbcpEntityChangeHandler && typeof picker.addEventListener === 'function') {
+        picker._sbcpEntityChangeHandler = event => {
+          if (!event.detail || !Object.prototype.hasOwnProperty.call(event.detail, 'value')) return;
+          event._sbcpEntityPickerHandled = true;
+          this._handleField(event);
+        };
+        picker.addEventListener('value-changed', picker._sbcpEntityChangeHandler);
+      }
+    }
     const context = this._createSectionContext();
     const color = getBarColorValue(context, root);
     const values = {
@@ -493,6 +529,31 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
             control.allowCustomEntity = true;
           }
         }
+      }
+    }
+    const sourceForKind = kind => {
+      if (kind === 'scale-min-attribute') return { entity: getFeatureScaleSource(this._config, 'min').entity, attribute: getFeatureScaleSource(this._config, 'min').attribute, label: 'Min attribute' };
+      if (kind === 'scale-max-attribute') return { entity: getFeatureScaleSource(this._config, 'max').entity, attribute: getFeatureScaleSource(this._config, 'max').attribute, label: 'Max attribute' };
+      if (kind === 'baseline-attribute') return { entity: getFeatureBaselineSource(this._config).entity, attribute: getFeatureBaselineSource(this._config).attribute, label: 'Baseline attribute' };
+      if (kind === 'target-attribute') return { entity: getFeatureTargetSource(this._config).entity, attribute: getFeatureTargetSource(this._config).attribute, label: 'Target attribute' };
+      return null;
+    };
+    for (const control of this.shadowRoot.querySelectorAll('[data-kind$="-attribute"]')) {
+      let source = control.dataset.kind === 'feature-attribute'
+        ? { entity: this._effectiveEntity, attribute: this._config.attribute ?? '', label: 'Entity attribute' }
+        : sourceForKind(control.dataset.kind);
+      if (!source) continue;
+      if (control !== this.shadowRoot.activeElement || this._configReplaced) control.value = source.attribute ?? '';
+      if (control.tagName === 'HA-ENTITY-ATTRIBUTE-PICKER') {
+        control.hass = this._hass;
+        control.entityId = source.entity || undefined;
+        if (control !== this.shadowRoot.activeElement || this._configReplaced) control.value = source.attribute ?? '';
+        control.label = source.label;
+        control.allowCustomValue = true;
+        const attrs = this._hass?.states?.[source.entity]?.attributes ?? {};
+        control.hideAttributes = Object.entries(attrs).filter(([, item]) => !['string', 'number', 'boolean'].includes(typeof item)).map(([key]) => key);
+      } else if (control.list) {
+        control.list.innerHTML = getEntityAttributeSuggestions(this._hass, source.entity).map(key => `<option value="${escapeAttribute(key)}"></option>`).join('');
       }
     }
     this._syncDisclosures();

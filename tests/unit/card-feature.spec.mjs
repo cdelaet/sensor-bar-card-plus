@@ -180,8 +180,44 @@ describe('independent input reconciliation', () => {
   });
 });
 
+describe('textual Feature primary presentation', () => {
+  for (const source of ['src', 'dist']) {
+    it(`${source}: displays textual primary values and keeps numeric/unavailable presentation`, async () => {
+      const { feature: Feature } = loadCardClass({ source });
+      const element = new Feature();
+      element.style = { setProperty() {}, removeProperty() {} };
+      element.setConfig({ entity: 'weather.forecast_home' });
+      element.context = {};
+      element.hass = { states: { 'weather.forecast_home': { state: 'partlycloudy', attributes: { temperature: 20 } } } };
+      await element.updateComplete;
+      expect(element._status).toBeNull();
+      expect(element._textValue).toBe('partlycloudy');
+      expect(element._row.numericValue).toBeNull();
+      expect(element._statusEl.textContent).toBe('partlycloudy');
+      expect(element._bar.hidden).toBe(true);
+      expect(element._surface.dataset.state).toBe('text');
+      expect(element._surface.getAttribute('aria-label')).toContain('partlycloudy');
+
+      element.setConfig({ entity: 'weather.forecast_home', attribute: 'temperature' });
+      element.hass = { states: { 'weather.forecast_home': { state: 'partlycloudy', attributes: { temperature: 20 } } } };
+      await element.updateComplete;
+      expect(element._textValue).toBeNull();
+      expect(element._row.numericValue).toBe(20);
+      expect(element._bar.hidden).toBe(false);
+      expect(element._surface.dataset.state).toBe('numeric');
+
+      element.hass = { states: { 'weather.forecast_home': { state: 'unavailable', attributes: { temperature: 20 } } } };
+      await element.updateComplete;
+      expect(element._status).toBe('Unavailable');
+      expect(element._textValue).toBeNull();
+      expect(element._statusEl.textContent).toBe('Unavailable');
+      expect(element._surface.dataset.state).toBe('unavailable');
+    });
+  }
+});
+
 describe('unavailable states and recovery', () => {
-  it.each(['unknown', 'unavailable', 'on', '', 'NaN', 'Infinity'])('does not render %s as zero', async value => {
+  it.each(['unknown', 'unavailable', '', 'NaN', 'Infinity'])('does not render %s as zero', async value => {
     const element = feature({ entity });
     await update(element, value);
     expect(element._status).not.toBeNull();

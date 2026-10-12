@@ -89,7 +89,7 @@ export function handleFormattingField(context, { field, kind, index, value }) {
   return false;
 }
 
-export function renderFormattingSection(context, scope) {
+export function renderFormattingSection(context, scope, { includeUnit = true } = {}) {
   if (scope?.type === 'entity') {
     const index = scope.index;
     const formattingInherited = !hasFormattingOverride(context, scope);
@@ -100,10 +100,10 @@ export function renderFormattingSection(context, scope) {
                           <label for="entity-${index}-formatting-inherit">Inherit card settings</label>
                         </div>
                       </div>
-                      <div class="field-row">
+                      ${includeUnit ? `<div class="field-row">
                         <label for="entity-${index}-formatting-unit">Unit</label>
                         <input id="entity-${index}-formatting-unit" type="text" data-kind="entity-formatting-unit" data-index="${index}" value="${escapeAttribute(getEffectiveFormattingValue(context, scope, 'unit'))}" placeholder="inherit card default">
-                      </div>
+                      </div>` : ''}
                       <div class="field-row">
                         <label for="entity-${index}-formatting-decimal">Decimals</label>
                         <input id="entity-${index}-formatting-decimal" type="number" min="0" step="1" data-kind="entity-formatting-decimal" data-index="${index}" value="${escapeAttribute(getEffectiveFormattingValue(context, scope, 'decimal'))}" placeholder="inherit card default">
@@ -117,10 +117,10 @@ export function renderFormattingSection(context, scope) {
 	            <h3>Formatting</h3>
 	          </div>
 	          <div class="inline-row editor-grid">
-            <div class="field-row">
+            ${includeUnit ? `<div class="field-row">
               <label for="formatting-unit">Unit</label>
               <input id="formatting-unit" type="text" data-field="formatting-unit" value="${escapeAttribute(formattingUnit)}">
-            </div>
+            </div>` : ''}
             <div class="field-row">
               <label for="formatting-decimal">Decimals</label>
               <input id="formatting-decimal" type="number" min="0" step="1" data-field="formatting-decimal" value="${escapeAttribute(formattingDecimal)}">

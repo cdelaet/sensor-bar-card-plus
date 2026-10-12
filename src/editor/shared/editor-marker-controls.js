@@ -4,7 +4,7 @@ import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue,
 
 export function normalizeMarkerLabelField(field, value) {
   if (field === 'text') return normalizeTextValue(value).replace(/\s+/g, ' ').trim();
-  if (field === 'entity') return normalizeTextValue(value).trim();
+  if (field === 'entity' || field === 'attribute') return normalizeTextValue(value).trim();
   if (['show', 'showValue', 'showUnit', 'show_value', 'show_unit'].includes(field)) return value === true;
   return normalizeDecimalValue(value);
 }

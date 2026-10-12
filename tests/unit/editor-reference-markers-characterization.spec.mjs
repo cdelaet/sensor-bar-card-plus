@@ -22,8 +22,9 @@ for (const source of ['src', 'dist']) describe(`standalone Reference Marker char
   it('source modes preserve object unknown fields but replace scalar sources, with percent exposed as a string', () => {
     const editor = createEditor({ source }); editor.setConfig({ markers: [{ at: { fixed: 25, entity: 'sensor.a', future: true } }] });
     edit(editor, 'source-mode', 'fixed'); expect(editor._draftConfig.markers[0].at).toEqual({ fixed: 25, future: true });
-    edit(editor, 'source-mode', 'entity'); expect(editor._draftConfig.markers[0].at).toEqual({ entity: '', future: true });
-    edit(editor, 'source-mode', 'entity-fallback'); expect(editor._draftConfig.markers[0].at).toEqual({ entity: '', fixed: 50, future: true });
+    edit(editor, 'source-mode', 'entity'); expect(editor._draftConfig.markers[0].at).toEqual({ future: true });
+    expect(editor._getGenericMarkerSource(editor._draftConfig.markers[0], root, 0).mode).toBe('entity');
+    edit(editor, 'source-mode', 'entity-fallback'); expect(editor._draftConfig.markers[0].at).toEqual({ future: true, fixed: 50 });
     edit(editor, 'source-mode', 'percent'); expect(editor._draftConfig.markers[0].at).toBe('50%');
     edit(editor, 'percent', '101'); expect(editor._draftConfig.markers[0].at).toBe('101%');
     edit(editor, 'source-mode', 'fixed'); expect(editor._draftConfig.markers[0].at).toEqual({ fixed: 50 });

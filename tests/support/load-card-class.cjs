@@ -58,7 +58,7 @@ function createShadowRoot() {
         event.target = this;
         event.currentTarget = this;
         (this._listeners.get(event.type) ?? []).forEach((listener) => listener.call(this, event));
-        return shadowRoot.dispatchEvent(event);
+        return event.bubbles === false ? true : shadowRoot.dispatchEvent(event);
       },
     };
   }
@@ -100,6 +100,9 @@ function createShadowRoot() {
       return null;
     },
     querySelectorAll(selector) {
+      if (selector === 'ha-entity-picker') {
+        return state._elements.filter(element => element.tagName === 'HA-ENTITY-PICKER');
+      }
       if (selector === 'ha-entity-picker[data-kind="entity-picker"]') {
         return state._elements.filter((element) => (
           element.tagName === 'HA-ENTITY-PICKER' && element.dataset.kind === 'entity-picker'

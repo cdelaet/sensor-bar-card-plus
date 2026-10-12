@@ -7,9 +7,9 @@ import {
   getScopedPath, normalizePath, removePathsFromTarget, pruneEmptyObjectsInTarget,
 } from './shared/editor-config.js';
 import {
-  renderEntityInput, renderEntitySourceInput, renderBuiltinMarkerLabelControls,
+  renderEntityAttributeInput, renderEntityInput, renderEntitySourceInput, renderBuiltinMarkerLabelControls,
   renderResetOptions, escapeAttribute, isHexColorValue, expandHexColor,
-  normalizeColorComparisonValue, getColorPickerValue, renderColorInput,
+  normalizeColorComparisonValue, getColorPickerValue, renderColorInput, getEntityAttributeSuggestions,
 } from './shared/editor-controls.js';
 import { editorStyles } from './shared/editor-styles.js';
 import { renderCardGroup, renderMarkersSection } from './shared/editor-disclosures.js';
@@ -107,6 +107,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._boundHandleInput = (event) => this._handleInput(event);
     this._boundHandleValueChanged = (event) => this._handleValueChanged(event);
     this._boundHandleKeydown = (event) => this._handleKeydown(event);
+    customElements.whenDefined?.('ha-entity-attribute-picker').then(() => {
+      if (this.shadowRoot?.querySelector('input[data-kind$="-attribute"]')) this._render();
+    }).catch(() => {});
   }
 
   setConfig(config) {
@@ -114,7 +117,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const nextConfigJson = this._serializeConfig(nextConfig);
     const currentConfigJson = this._serializeConfig(this._config);
     const currentDraftJson = this._serializeConfig(this._draftConfig);
-
     if (nextConfigJson === currentConfigJson) {
       return;
     }
@@ -158,6 +160,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return;
     }
     this._syncEntityPickers();
+    this._syncEntityAttributePickers();
   }
 
   _cloneContainer(value) {
@@ -235,6 +238,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
             entity: entry?.entity ?? '',
             name: entry?.name ?? '',
             icon: entry?.icon ?? '',
+            attribute: entry?.attribute ?? '',
           }
       ));
     }
@@ -243,6 +247,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         entity: this._draftConfig.entity,
         name: this._draftConfig.name ?? '',
         icon: this._draftConfig.icon ?? '',
+        attribute: this._draftConfig.attribute ?? '',
       }];
     }
     return [];
@@ -253,7 +258,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return this._cloneDeep(this._draftConfig.entities);
     }
     if (this._draftConfig.entity !== undefined) {
-      const hasTopLevelIdentity = this._draftConfig.name !== undefined || this._draftConfig.icon !== undefined;
+      const hasTopLevelIdentity = this._draftConfig.name !== undefined || this._draftConfig.icon !== undefined || this._draftConfig.attribute !== undefined;
       if (!hasTopLevelIdentity) {
         return [this._draftConfig.entity];
       }
@@ -261,6 +266,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         entity: this._draftConfig.entity,
         ...(this._draftConfig.name !== undefined ? { name: this._draftConfig.name } : {}),
         ...(this._draftConfig.icon !== undefined ? { icon: this._draftConfig.icon } : {}),
+        ...(this._draftConfig.attribute !== undefined ? { attribute: this._draftConfig.attribute } : {}),
       }];
     }
     return [];
@@ -275,6 +281,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           entity: this._draftConfig.entity,
           ...(this._draftConfig.name !== undefined ? { name: this._draftConfig.name } : {}),
           ...(this._draftConfig.icon !== undefined ? { icon: this._draftConfig.icon } : {}),
+          ...(this._draftConfig.attribute !== undefined ? { attribute: this._draftConfig.attribute } : {}),
         }]
         : [];
 
@@ -1176,7 +1183,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         return value;
       };
       return this._serializeConfig(canonical({ card: scope(normalized), entities: normalized.entities.map(row => ({
-        entity: row.entity, name: row.name, icon: row.icon, ...scope(row),
+        entity: row.entity, name: row.name, icon: row.icon, attribute: row.attribute, ...scope(row),
       })) }));
     };
     try {
@@ -1207,6 +1214,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         entity: this._draftConfig.entity,
         ...(this._draftConfig.name !== undefined ? { name: this._draftConfig.name } : {}),
         ...(this._draftConfig.icon !== undefined ? { icon: this._draftConfig.icon } : {}),
+        ...(this._draftConfig.attribute !== undefined ? { attribute: this._draftConfig.attribute } : {}),
       }];
     }
     return [];
@@ -1224,6 +1232,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       if (this._draftConfig.icon !== undefined) {
         nextConfig = this._deletePathValue(nextConfig, ['icon']);
       }
+      if (this._draftConfig.attribute !== undefined) {
+        nextConfig = this._deletePathValue(nextConfig, ['attribute']);
+      }
     }
     return nextConfig;
   }
@@ -1236,6 +1247,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         nextConfig = this._deletePathValue(nextConfig, ['entity']);
         nextConfig = this._deletePathValue(nextConfig, ['name']);
         nextConfig = this._deletePathValue(nextConfig, ['icon']);
+        nextConfig = this._deletePathValue(nextConfig, ['attribute']);
       }
       return this._applyUserConfig(nextConfig, options);
     }
@@ -1245,6 +1257,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       let nextConfig = this._setPathValue(this._draftConfig, ['entity'], row);
       nextConfig = this._deletePathValue(nextConfig, ['name']);
       nextConfig = this._deletePathValue(nextConfig, ['icon']);
+      nextConfig = this._deletePathValue(nextConfig, ['attribute']);
       return this._applyUserConfig(nextConfig, options);
     }
 
@@ -1258,6 +1271,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       nextConfig = this._setPathValue(nextConfig, ['icon'], row.icon);
     } else {
       nextConfig = this._deletePathValue(nextConfig, ['icon']);
+    }
+    if (row && Object.prototype.hasOwnProperty.call(row, 'attribute')) {
+      nextConfig = this._setPathValue(nextConfig, ['attribute'], row.attribute);
+    } else {
+      nextConfig = this._deletePathValue(nextConfig, ['attribute']);
     }
     return this._applyUserConfig(nextConfig, options);
   }
@@ -1425,6 +1443,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       });
       return {
         fixed: source.fixed ?? '', entity: source.entity ?? '',
+        ...(source.attribute ? { attribute: source.attribute } : {}),
         ...(Number.isFinite(source.percent) ? { percent: source.percent } : {}),
       };
     }
@@ -1450,12 +1469,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const target = this._getEntityRawEntries()[scope.index];
     if (this._getPathValue(target, options.canonicalBasePath ?? ['scale', field]) !== undefined) {
       return this._getResolvablePartsFromTarget(target, field, { ...options,
-        inheritedSource: { fixed: inheritedValue.fixed === '' ? null : inheritedValue.fixed, entity: inheritedValue.entity || null, percent: inheritedValue.percent ?? null },
+        inheritedSource: { fixed: inheritedValue.fixed === '' ? null : inheritedValue.fixed, entity: inheritedValue.entity || null, ...(inheritedValue.attribute ? { attribute: inheritedValue.attribute } : {}), percent: inheritedValue.percent ?? null },
       });
     }
     return {
       fixed: this._hasExplicitOverrideValue(localValue.fixed) ? localValue.fixed : inheritedValue.fixed,
       entity: this._hasExplicitOverrideValue(localValue.entity) ? localValue.entity : inheritedValue.entity,
+      ...((this._hasExplicitOverrideValue(localValue.attribute) ? localValue.attribute : inheritedValue.attribute)
+        ? { attribute: this._hasExplicitOverrideValue(localValue.attribute) ? localValue.attribute : inheritedValue.attribute } : {}),
     };
   }
 
@@ -1482,10 +1503,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           nextParts.fixed = normalizedValue;
         }
       } else if (!normalizedValue) {
-        delete nextParts.entity;
+        delete nextParts[part];
       } else {
-        nextParts.entity = normalizedValue;
+        nextParts[part] = normalizedValue;
       }
+      if (part === 'entity' && !nextParts.entity) delete nextParts.attribute;
 
       let nextTarget = this._cloneDeep(target);
       nextTarget = this._deletePathValue(nextTarget, legacyEntityPath);
@@ -1497,11 +1519,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
       const hasFixed = nextParts.fixed !== undefined && nextParts.fixed !== null && nextParts.fixed !== '';
       const hasEntity = nextParts.entity !== undefined && nextParts.entity !== null && nextParts.entity !== '';
+      const hasAttribute = hasEntity && nextParts.attribute !== undefined && nextParts.attribute !== null && nextParts.attribute !== '';
       const hasPercent = Number.isFinite(nextParts.percent);
       if (hasFixed || hasEntity || hasPercent) {
         const nextValue = {};
         if (hasFixed) nextValue.fixed = nextParts.fixed;
         if (hasEntity) nextValue.entity = nextParts.entity;
+        if (hasAttribute) nextValue.attribute = nextParts.attribute;
         if (hasPercent) nextValue.percent = nextParts.percent;
         nextTarget = this._setPathValue(nextTarget, canonicalBasePath, nextValue);
       }
@@ -1583,6 +1607,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _createSectionContext() {
+    const editor = this;
     return {
       read: (scope, path) => this._getScopedValue(scope, path),
       mutate: (scope, mutation, options) => this._applySectionMutation(scope, mutation, options),
@@ -1595,6 +1620,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         ? this._referenceMarkersSection._setGenericMarkerSourcePart(scope, key.index, part, value) : key === 'baseline'
         ? this._persistBaselineSourcePart(scope, part, value)
         : this._setCanonicalResolvablePart(scope, key, part, value, key === 'target' ? { canonicalBasePath: ['target', 'at'], legacyFixedPath: ['target'], legacyEntityPath: ['target_entity'], prunePaths: [['target', 'at'], ['target']] } : {}),
+      get hass() { return editor._hass; },
     };
   }
 
@@ -1602,8 +1628,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return renderScaleSection(this._createSectionContext(), scope);
   }
 
-  _renderFormattingSection(scope) {
-    return renderFormattingSection(this._createSectionContext(), scope);
+  _renderFormattingSection(scope, options) {
+    return renderFormattingSection(this._createSectionContext(), scope, options);
   }
 
   _getScopedFormattingValue(scope, key) {
@@ -2590,20 +2616,23 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           nextParts.fixed = normalizedValue;
         }
       } else if (!normalizedValue) {
-        delete nextParts.entity;
+        delete nextParts[part];
       } else {
-        nextParts.entity = normalizedValue;
+        nextParts[part] = normalizedValue;
       }
+      if (part === 'entity' && !nextParts.entity) delete nextParts.attribute;
 
       let nextTarget = this._cloneDeep(target);
       nextTarget = this._deletePathValue(nextTarget, ['baseline', 'at']);
 
       const hasFixed = nextParts.fixed !== undefined && nextParts.fixed !== null && nextParts.fixed !== '';
       const hasEntity = nextParts.entity !== undefined && nextParts.entity !== null && nextParts.entity !== '';
+      const hasAttribute = hasEntity && nextParts.attribute !== undefined && nextParts.attribute !== null && nextParts.attribute !== '';
       if (hasFixed || hasEntity) {
         const nextValue = {};
         if (hasFixed) nextValue.fixed = nextParts.fixed;
         if (hasEntity) nextValue.entity = nextParts.entity;
+        if (hasAttribute) nextValue.attribute = nextParts.attribute;
         nextTarget = this._setPathValue(nextTarget, ['baseline', 'at'], nextValue);
       }
 
@@ -3038,6 +3067,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                      <div class="entity-fields">
 	                        ${this._renderEntityInput(entry, index)}
 	                        <input type="text" data-kind="entity-name" data-index="${index}" value="${this._escapeAttribute(entry.name ?? '')}" placeholder="Name">
+                        <div class="field-row">
+                          <label>Attribute</label>
+                          ${renderEntityAttributeInput('entity-attribute', index, entry.attribute, entry.entity, this._hass)}
+                        </div>
+                        <div class="field-row">
+                          <label for="entity-${index}-formatting-unit">Unit</label>
+                          <input id="entity-${index}-formatting-unit" type="text" data-kind="entity-formatting-unit" data-index="${index}" value="${this._escapeAttribute(this._getEffectiveScopedFormattingValue({ type: 'entity', index }, 'unit'))}" placeholder="inherit card default">
+                        </div>
                         ${(() => {
                           const iconMode = this._getEntityIconMode(entry, index);
                           const iconPicker = customElements.get?.('ha-icon-picker')
@@ -3140,7 +3177,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                          group: 'formatting',
 	                          title: 'Formatting',
 	                          summary: this._getFormattingSummary(scope),
-	                          content: this._renderFormattingSection(scope),
+	                          content: renderFormattingSection(this._createSectionContext(), scope, { includeUnit: false }),
 	                        });
                         const peakGroup = this._renderOverrideGroup({
 	                          index,
@@ -3277,6 +3314,7 @@ ${this._renderFormattingSection({ type: 'card' })}
 
       this._bindShadowListeners();
       this._syncEntityPickers();
+      this._syncEntityAttributePickers();
       this._syncEntityIconPickers();
       this._numericDrafts.apply(this.shadowRoot, numericFocus);
       this._lastRenderedConfigJson = this._serializeConfig(this._draftConfig);
@@ -3301,6 +3339,13 @@ ${this._renderFormattingSection({ type: 'card' })}
     const entities = this._getEntitiesValue();
     const syncPicker = (picker) => {
       const kind = picker.dataset.kind;
+      if (!picker._sbcpEntityChangeHandler && typeof picker.addEventListener === 'function') {
+        picker._sbcpEntityChangeHandler = (event) => {
+          event._sbcpEntityPickerHandled = true;
+          this._handleFieldEvent(event);
+        };
+        picker.addEventListener('value-changed', picker._sbcpEntityChangeHandler);
+      }
       const indexValue = picker.dataset.index;
       const index = Number(indexValue);
       picker.hass = this._hass;
@@ -3364,7 +3409,7 @@ ${this._renderFormattingSection({ type: 'card' })}
       if (kind === 'generic-marker-entity') {
         const scope = this._getGenericMarkerScope(picker);
         const marker = this._getGenericMarkers(scope)[Number(picker.dataset.markerIndex)];
-        picker.value = this._getGenericMarkerSource(marker).entity ?? '';
+        picker.value = this._getGenericMarkerSource(marker, scope, Number(picker.dataset.markerIndex)).entity ?? '';
         picker.label = 'Reference marker entity';
       }
       if (kind === 'generic-marker-label-entity') {
@@ -3411,6 +3456,70 @@ ${this._renderFormattingSection({ type: 'card' })}
     }
   }
 
+  _syncEntityAttributePickers() {
+    if (!this.shadowRoot) return;
+    const entities = this._getEntitiesValue();
+    const cardSource = (key) => this._createSectionContext().source({ type: 'card' }, key);
+    const scopedSource = (index, key) => this._createSectionContext().source({ type: 'entity', index }, key, true);
+    const resolve = (control) => {
+      const { kind } = control.dataset;
+      const index = Number(control.dataset.index);
+      if (kind === 'entity-attribute') {
+        return { entity: entities[index]?.entity, attribute: entities[index]?.attribute, label: `Entity ${index + 1} attribute` };
+      }
+      const sourceKey = kind.includes('min-attribute') ? 'min' : kind.includes('max-attribute') ? 'max' : null;
+      if (sourceKey && kind.startsWith('entity-override-')) {
+        const source = scopedSource(index, sourceKey);
+        return { entity: source.entity, attribute: source.attribute, label: `Entity ${index + 1} ${sourceKey} attribute` };
+      }
+      if (sourceKey && kind.startsWith('scale-')) {
+        const source = cardSource(sourceKey);
+        return { entity: source.entity, attribute: source.attribute, label: `${sourceKey} attribute` };
+      }
+      if (kind === 'baseline-attribute' || kind === 'entity-baseline-attribute') {
+        const source = kind.startsWith('entity-') ? scopedSource(index, 'baseline') : cardSource('baseline');
+        return { entity: source.entity, attribute: source.attribute, label: 'Baseline attribute' };
+      }
+      if (kind === 'target-attribute' || kind === 'entity-target-attribute') {
+        const source = kind.startsWith('entity-') ? scopedSource(index, 'target') : cardSource('target');
+        return { entity: source.entity, attribute: source.attribute, label: 'Target attribute' };
+      }
+      if (kind === 'generic-marker-attribute' || kind === 'generic-marker-label-attribute') {
+        const scope = control.dataset.scopeType === 'entity' ? { type: 'entity', index } : { type: 'card' };
+        const marker = this._getGenericMarkers(scope)[Number(control.dataset.markerIndex)];
+        const source = this._getGenericMarkerSource(marker, scope, Number(control.dataset.markerIndex));
+        const isLabel = kind === 'generic-marker-label-attribute';
+        return {
+          entity: isLabel ? marker?.label?.entity : source.entity,
+          attribute: isLabel ? marker?.label?.attribute : source.attribute,
+          label: isLabel ? 'Label content attribute' : 'Reference marker attribute',
+        };
+      }
+      return null;
+    };
+    this.shadowRoot.querySelectorAll('[data-kind$="-attribute"]').forEach((control) => {
+      const source = resolve(control);
+      if (!source) return;
+      const attribute = source.attribute ?? '';
+      const suggestions = getEntityAttributeSuggestions(this._hass, source.entity);
+      if (control.tagName === 'HA-ENTITY-ATTRIBUTE-PICKER') {
+        control.hass = this._hass;
+        control.entityId = source.entity || undefined;
+        control.value = attribute;
+        control.label = source.label;
+        control.allowCustomValue = true;
+        const attributes = this._hass?.states?.[source.entity]?.attributes ?? {};
+        control.hideAttributes = Object.entries(attributes)
+          .filter(([, value]) => !['string', 'number', 'boolean'].includes(typeof value))
+          .map(([key]) => key);
+      } else if (control.tagName === 'INPUT') {
+        if (control !== this.shadowRoot.activeElement) control.value = attribute;
+        const list = control.list;
+        if (list) list.innerHTML = suggestions.map(key => `<option value="${this._escapeAttribute(key)}"></option>`).join('');
+      }
+    });
+  }
+
   _syncEntityIconPickers() {
     if (!this.shadowRoot) return;
     const entities = this._getEntitiesValue();
@@ -3455,6 +3564,9 @@ ${this._renderFormattingSection({ type: 'card' })}
           }
           if (this._draftConfig.icon !== undefined) {
             nextConfig = this._deletePathValue(nextConfig, ['icon']);
+          }
+          if (this._draftConfig.attribute !== undefined) {
+            nextConfig = this._deletePathValue(nextConfig, ['attribute']);
           }
         }
         this._applyUserConfig(nextConfig, { rerender: true });
@@ -3507,6 +3619,7 @@ ${this._renderFormattingSection({ type: 'card' })}
   }
 
   _handleChange(event) {
+    if (['HA-ENTITY-PICKER', 'HA-ENTITY-ATTRIBUTE-PICKER'].includes(event.target?.tagName)) return;
     if (this._numericDrafts.handle(event, this._isRendering)) return;
     if (this._segmentsSection.handle(event, 'change') || this._gradientStopsSection.handle(event, 'change')) return;
     const kind = event.target?.dataset?.kind;
@@ -3518,14 +3631,15 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (this._segmentsSection.handle(event, 'input') || this._gradientStopsSection.handle(event, 'input')) return;
     const target = event.target;
     if (!target) return;
-    if (target.tagName === 'HA-ENTITY-PICKER') return;
+    if (target.tagName === 'HA-ENTITY-PICKER' || target.tagName === 'HA-ENTITY-ATTRIBUTE-PICKER') return;
     if (target.tagName === 'INPUT' && ['checkbox', 'radio'].includes(target.type)) return;
     const kind = target.dataset?.kind;
     this._handleFieldEvent(event);
   }
 
   _handleValueChanged(event) {
-    if (event.target?.tagName === 'HA-ENTITY-PICKER') {
+    if (event._sbcpEntityPickerHandled) return;
+    if (['HA-ENTITY-PICKER', 'HA-ENTITY-ATTRIBUTE-PICKER'].includes(event.target?.tagName)) {
       this._handleFieldEvent(event);
     }
   }
@@ -3543,8 +3657,10 @@ ${this._renderFormattingSection({ type: 'card' })}
     const kind = rawKind?.endsWith('-text-fallback') ? rawKind.slice(0, -14) : rawKind;
     const detailValue = event.detail?.value;
     const value = detailValue ?? (target?.type === 'checkbox' ? target.checked : target?.value);
-
-    if (this._referenceMarkersSection.handleField({ target, kind, value })) return;
+    if (this._referenceMarkersSection.handleField({ target, kind, value })) {
+      if (['generic-marker-entity', 'generic-marker-label-entity'].includes(kind)) this._render();
+      return;
+    }
 
     if (field === 'title') return void this._setTitle(value);
     if (handleFormattingField(this._createSectionContext(), { field, value })) return;
@@ -3555,10 +3671,16 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (field === 'layout-label-width') return void this._setScopedLayoutLabelWidth({ type: 'card' }, value);
     if (handleScaleField(this._createSectionContext(), { field, value })) return;
     if (handleBarAppearanceField(this._createSectionContext(), { field, value })) return;
-    if (this._needleSection.handleField({ field, kind, index: target.dataset?.index, value })
-      || this._baselineSection.handleField({ field, kind, index: target.dataset?.index, value })
-      || this._targetSection.handleField({ field, kind, index: target.dataset?.index, value })
-      || this._extremaSection.handleField({ field, kind, index: target.dataset?.index, value })) return;
+    if (this._needleSection.handleField({ field, kind, index: target.dataset?.index, value })) return;
+    if (this._baselineSection.handleField({ field, kind, index: target.dataset?.index, value })) {
+      if (kind?.endsWith('-entity-source')) this._render();
+      return;
+    }
+    if (this._targetSection.handleField({ field, kind, index: target.dataset?.index, value })) {
+      if (kind?.endsWith('-entity-source')) this._render();
+      return;
+    }
+    if (this._extremaSection.handleField({ field, kind, index: target.dataset?.index, value })) return;
     if (kind === 'entity-picker' || kind === 'entity-input') {
       const index = Number(target.dataset.index);
       const nextEntities = this._getEntitiesValue().map((entry, entryIndex) => (
@@ -3566,9 +3688,9 @@ ${this._renderFormattingSection({ type: 'card' })}
       ));
       const nextEntries = this._buildEntityConfigEntries(nextEntities);
       if (Array.isArray(this._draftConfig.entities) || nextEntries.length > 1 || !this._draftConfig.entity) {
-        this._setValueAtPath(['entities'], nextEntries);
+        this._setValueAtPath(['entities'], nextEntries, { rerender: true });
       } else {
-        this._setValueAtPath(['entity'], nextEntities[0]?.entity ?? '');
+        this._setValueAtPath(['entity'], nextEntities[0]?.entity ?? '', { rerender: true });
       }
       return;
     }
@@ -3608,9 +3730,17 @@ ${this._renderFormattingSection({ type: 'card' })}
       return void this._setEntityIcon(Number(target.dataset.index), selectedIcon || undefined);
     }
 
-    if (handleScaleField(this._createSectionContext(), { kind: kind?.startsWith('scale-') ? kind : undefined, value })) return;
+    if (kind === 'entity-attribute') return void this._setEntityField(Number(target.dataset.index), 'attribute', value);
 
-    if (handleScaleField(this._createSectionContext(), { kind, index: target?.dataset?.index, value })) return;
+    if (handleScaleField(this._createSectionContext(), { kind: kind?.startsWith('scale-') ? kind : undefined, value })) {
+      if (kind?.endsWith('-entity-source')) this._render();
+      return;
+    }
+
+    if (handleScaleField(this._createSectionContext(), { kind, index: target?.dataset?.index, value })) {
+      if (kind?.endsWith('-entity-source')) this._render();
+      return;
+    }
 
     if (kind === 'entity-override-height') {
       return void this._setScopedLayoutHeight({ type: 'entity', index: Number(target.dataset.index) }, value);

@@ -1,5 +1,5 @@
 import { deletePathValue, pruneEmptyObjectsInTarget } from '../shared/editor-config.js';
-import { escapeAttribute, renderEntitySourceInput } from '../shared/editor-controls.js';
+import { escapeAttribute, renderEntityAttributeInput, renderEntitySourceInput } from '../shared/editor-controls.js';
 
 // The host supplies source reading/canonicalization and a scoped mutation sink.
 // No session, entities array, cleanup policy or full editor instance is required.
@@ -61,13 +61,18 @@ export function handleScaleField(context, { field, kind, index, value }) {
     setScalePart(context, { type: 'card' }, kind.split('-')[1], 'entity', value);
     return true;
   }
+  if (kind === 'scale-min-attribute' || kind === 'scale-max-attribute') {
+    setScalePart(context, { type: 'card' }, kind.split('-')[1], 'attribute', value);
+    return true;
+  }
   const scope = { type: 'entity', index: Number(index) };
   if (kind === 'entity-scale-inherit') {
     if (value) clearScaleOverride(context, scope);
     return true;
   }
-  if (['entity-override-min', 'entity-override-max', 'entity-override-min-entity-source', 'entity-override-max-entity-source'].includes(kind)) {
-    setScalePart(context, scope, kind.split('-')[2], kind.endsWith('-entity-source') ? 'entity' : 'fixed', value);
+  if (['entity-override-min', 'entity-override-max', 'entity-override-min-entity-source', 'entity-override-max-entity-source', 'entity-override-min-attribute', 'entity-override-max-attribute'].includes(kind)) {
+    const part = kind.endsWith('-entity-source') ? 'entity' : kind.endsWith('-attribute') ? 'attribute' : 'fixed';
+    setScalePart(context, scope, kind.split('-')[2], part, value);
     return true;
   }
   return false;
@@ -95,6 +100,10 @@ export function renderScaleSection(context, scope) {
                         <label>Min entity</label>
                         ${renderEntitySourceInput('entity-override-min-entity-source', index, minParts.entity, 'inherit card default')}
                       </div>
+                      ${minParts.entity ? `<div class="field-row">
+                        <label>Min attribute</label>
+                        ${renderEntityAttributeInput('entity-override-min-attribute', index, minParts.attribute, minParts.entity, context.hass)}
+                      </div>` : ''}
                       <div class="field-row">
                         <label for="entity-${index}-max">Max fallback</label>
                         <input id="entity-${index}-max" type="number" step="any" data-kind="entity-override-max" data-index="${index}" value="${escapeAttribute(maxParts.fixed)}" placeholder="inherit card default">
@@ -103,6 +112,10 @@ export function renderScaleSection(context, scope) {
                         <label>Max entity</label>
                         ${renderEntitySourceInput('entity-override-max-entity-source', index, maxParts.entity, 'inherit card default')}
                       </div>
+                      ${maxParts.entity ? `<div class="field-row">
+                        <label>Max attribute</label>
+                        ${renderEntityAttributeInput('entity-override-max-attribute', index, maxParts.attribute, maxParts.entity, context.hass)}
+                      </div>` : ''}
 	                          `;
   }
   const scaleMin = getScaleFixedValue(context, 'min');
@@ -123,6 +136,10 @@ export function renderScaleSection(context, scope) {
               <label>Min entity</label>
               ${renderEntitySourceInput('scale-min-entity-source', 'card', scaleMinEntity)}
             </div>
+            ${scaleMinEntity ? `<div class="field-row">
+              <label>Min attribute</label>
+              ${renderEntityAttributeInput('scale-min-attribute', 'card', getScaleParts(context, { type: 'card' }, 'min').attribute, scaleMinEntity, context.hass)}
+            </div>` : ''}
             <div class="field-row">
               <label for="scale-max">Max fallback</label>
               <input id="scale-max" type="number" step="any" data-field="scale-max" value="${escapeAttribute(scaleMax)}">
@@ -131,6 +148,10 @@ export function renderScaleSection(context, scope) {
               <label>Max entity</label>
               ${renderEntitySourceInput('scale-max-entity-source', 'card', scaleMaxEntity)}
             </div>
+            ${scaleMaxEntity ? `<div class="field-row">
+              <label>Max attribute</label>
+              ${renderEntityAttributeInput('scale-max-attribute', 'card', getScaleParts(context, { type: 'card' }, 'max').attribute, scaleMaxEntity, context.hass)}
+            </div>` : ''}
           </div>
 	        </div>`;
 }

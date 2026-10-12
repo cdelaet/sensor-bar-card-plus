@@ -67,7 +67,8 @@ for (const source of ['src', 'dist']) describe(`Feature Reference markers (${sou
     const config = raw(); config.markers[0].at = 25;
     const { editor } = await setup(source,config); expect(editor._referenceMarkersSection._getGenericMarkerSource(editor._config.markers[0])).toEqual({ mode:'fixed',fixed:25 });
     await field(editor,'fixed','30'); expect(editor._config.markers[0].at).toBe(30);
-    await field(editor,'source-mode','entity-fallback'); expect(editor._config.markers[0].at).toEqual({ fixed:30,entity:'' });
+    await field(editor,'source-mode','entity-fallback'); expect(editor._config.markers[0].at).toEqual({ fixed:30 });
+    expect(editor._referenceMarkersSection._getGenericMarkerSource(editor._config.markers[0],root,0).mode).toBe('entity-fallback');
     await field(editor,'entity','sensor.changed'); expect(editor._config.markers[0].at).toEqual({ fixed:30,entity:'sensor.changed' });
     const replacement = raw(); replacement.markers[0].at = 'sensor.reference'; editor.setConfig(replacement); await editor.updateComplete;
     await field(editor,'entity','sensor.changed'); expect(editor._config.markers[0].at).toBe('sensor.changed');
@@ -75,8 +76,10 @@ for (const source of ['src', 'dist']) describe(`Feature Reference markers (${sou
   it('mode changes own source fields only, preserve object metadata, and percentage mode uses supported string syntax', async () => {
     const config = raw(), { editor } = await setup(source,config);
     await field(editor,'source-mode','fixed'); expect(editor._config.markers[0].at).toEqual({ value:25,...meta() });
-    await field(editor,'source-mode','entity-fallback'); expect(editor._config.markers[0].at).toEqual({ value:25,entity:'',...meta() });
-    await field(editor,'source-mode','entity'); expect(editor._config.markers[0].at).toEqual({ entity:'',...meta() });
+    await field(editor,'source-mode','entity-fallback'); expect(editor._config.markers[0].at).toEqual({ value:25,...meta() });
+    expect(editor._referenceMarkersSection._getGenericMarkerSource(editor._config.markers[0],root,0).mode).toBe('entity-fallback');
+    await field(editor,'source-mode','entity'); expect(editor._config.markers[0].at).toEqual(meta());
+    expect(editor._referenceMarkersSection._getGenericMarkerSource(editor._config.markers[0],root,0).mode).toBe('entity');
     await field(editor,'source-mode','percent'); expect(editor._config.markers[0].at).toBe('50%');
     for (const value of ['0','100','101']) { await field(editor,'percent',value); expect(editor._config.markers[0].at).toBe(`${value}%`); }
     await field(editor,'percent',''); expect(editor._config.markers[0].at).toBe('101%');

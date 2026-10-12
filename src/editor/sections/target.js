@@ -1,7 +1,7 @@
 import { normalizeTargetMarkerShape } from '../../config/normalize.js';
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue, removePathsFromTarget,
   pruneEmptyObjectsInTarget, normalizeTextValue, normalizeDecimalValue, hasResolvableOverride, getEffectiveDisplayValue } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeEditorColorValue, normalizeScalePercentageInput, renderMarkerPercentageControls, getMarkerSourceMode, normalizeColorComparisonValue, renderColorInput, renderEntitySourceInput, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeEditorColorValue, normalizeScalePercentageInput, renderMarkerPercentageControls, getMarkerSourceMode, normalizeColorComparisonValue, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from '../shared/editor-marker-controls.js';
 
 export class TargetSection {
@@ -364,6 +364,7 @@ export class TargetSection {
     if (control === 'target-mode') { this._setTargetMode(scope, value); return true; }
     if (control === 'target-value') { this._setTargetResolvablePart(scope, 'fixed', value); return true; }
     if (control === 'target-entity-source') { this._setTargetResolvablePart(scope, 'entity', value); return true; }
+    if (control === 'target-attribute') { this._setTargetResolvablePart(scope, 'attribute', value); return true; }
     if (control === 'target-shape') { this._setTargetShape(scope, value); return true; }
     if (control === 'target-direction') { this._setMarkerDirection(scope, 'target', value); return true; }
     if (control === 'target-color') { this._setTargetColor(scope, value); return true; }
@@ -431,6 +432,10 @@ export class TargetSection {
                         <label>Target entity</label>
                         ${renderEntitySourceInput('entity-target-entity-source', index, targetParts.entity, 'inherit card default')}
                       </div>
+                      ${targetParts.entity ? `<div class="field-row">
+                        <label>Target attribute</label>
+                        ${renderEntityAttributeInput('entity-target-attribute', index, targetParts.attribute, targetParts.entity, this.context.hass)}
+                      </div>` : ''}
                       <div class="field-row">
                         <label for="entity-${index}-target-color">Target color</label>
                         ${renderColorInput({ cssText: this.options.cssText, label: 'Target color',
@@ -500,6 +505,10 @@ export class TargetSection {
               <label>Target entity</label>
               ${renderEntitySourceInput('target-entity-source', 'card', target.entity)}
             </div>
+            ${target.entity ? `<div class="field-row">
+              <label>Target attribute</label>
+              ${renderEntityAttributeInput('target-attribute', 'card', target.attribute, target.entity, this.context.hass)}
+            </div>` : ''}
             <div class="field-row">
               <label for="target-color">Target color</label>
               ${renderColorInput({ cssText: this.options.cssText, label: 'Target color',

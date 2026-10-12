@@ -8898,7 +8898,7 @@ describe('Sensor Bar Card Plus editor', () => {
     await flushTimers();
     expect(editor.shadowRoot.innerHTML).toContain('Reference marker entity');
     expect(editor.shadowRoot.innerHTML).toContain(`id="card-card-generic-${markerUiId}-fallback"`);
-    expect(editor._draftConfig.markers[0].at).toEqual({ entity: '', fixed: 50 });
+    expect(editor._draftConfig.markers[0].at).toEqual({ fixed: 50 });
 
     dispatchChange(editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-source-mode`), 'entity');
     await flushTimers();

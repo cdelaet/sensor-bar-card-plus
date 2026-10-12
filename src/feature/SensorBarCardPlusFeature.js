@@ -109,6 +109,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       : !this._hass ? 'Waiting for Home Assistant'
       : !state ? 'Entity not found'
       : null;
+    let textValue = null;
     if (state && this._normalized?.entities[0]) {
       const appearance = this._normalized.entities[0];
       const sample = source.available && source.attributeFound ? getFiniteNumber(source.value) : null;
@@ -131,15 +132,20 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       });
       this._scaleHistory = { min: row.min, max: row.max };
       if (row.numericValue === null) {
-        status = state.state === 'unknown' ? 'Unknown'
-          : state.state === 'unavailable' ? 'Unavailable' : 'Not numeric';
+        const stateText = String(row.state ?? '').trim();
+        const nonFiniteNumberText = /^[+-]?(?:nan|infinity)$/i.test(stateText);
+        if (state.state === 'unknown') status = 'Unknown';
+        else if (state.state === 'unavailable') status = 'Unavailable';
+        else if (stateText && !nonFiniteNumberText) textValue = row.primaryPresentation.text;
+        else status = 'Not numeric';
       }
     }
     this._row = row;
     this._status = status;
+    this._textValue = textValue;
     this._render(row, status);
     // Recovery starts a fresh transition, without animating from a fictitious zero.
-    this._previousRow = status ? null : row;
+    this._previousRow = status || textValue !== null ? null : row;
   }
 
   _ensureDom() {
@@ -217,17 +223,18 @@ export class SensorBarCardPlusFeature extends HTMLElement {
 
   _render(row, status) {
     this._ensureDom();
+    const textValue = !status ? this._textValue : null;
     if (typeof this._color === 'string' && this._color) this.style.setProperty('--feature-color', this._color);
     else this.style.removeProperty('--feature-color');
-    this._bar.hidden = Boolean(status);
-    this._statusEl.hidden = !status;
-    this._statusEl.textContent = status ?? '';
-    this._surface.dataset.state = status ? 'unavailable' : 'numeric';
+    this._bar.hidden = Boolean(status || textValue !== null);
+    this._statusEl.hidden = !status && textValue === null;
+    this._statusEl.textContent = status ?? textValue ?? '';
+    this._surface.dataset.state = status ? 'unavailable' : textValue !== null ? 'text' : 'numeric';
     const occupancy = row?.markerLabelLaneOccupancy ?? {};
     const geometry = getFeatureLabelGeometry(0, occupancy);
     setStyleIfChanged(this._surface, '--label-above', `${geometry.above}px`);
     setStyleIfChanged(this._surface, '--label-below', `${geometry.below}px`);
-    this._syncLabels(row, status);
+    this._syncLabels(row, status || textValue !== null);
     const name = row?.name || this._entity || 'Sensor Bar Card Plus';
     const markerDescription = (row?.markers ?? [])
       .filter(marker => marker.visible && (marker.showMarker || marker.labelVisible))
@@ -238,8 +245,9 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       }).join(' ');
     this._surface.setAttribute('aria-label', status
       ? `${name}${this._entity && name !== this._entity ? ` (${this._entity})` : ''}: ${status}${row ? ` (${row.state})` : ''}`
+      : textValue !== null ? `${name}${this._entity && name !== this._entity ? ` (${this._entity})` : ''}: ${textValue}`
       : `${name} (${this._entity}): ${row.primaryPresentation.text}. Range ${formatNumericDisplay(row.min)} to ${formatNumericDisplay(row.max)}${row.displayUnit ? ` ${row.displayUnit}` : ''}.${markerDescription ? ` ${markerDescription}` : ''}`);
-    if (status) return;
+    if (status || textValue !== null) return;
 
     const model = buildBarRenderModel(row, this._normalized.entities[0], { height: 'var(--sbcp-row-height)' });
     // No initial/recovery motion; subsequent numeric updates use the shared timing.
