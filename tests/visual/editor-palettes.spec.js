@@ -2,8 +2,8 @@ const { test, expect } = require('@playwright/test');
 async function mount(page, style) {
   await page.goto('/tests/visual/fixtures/harness.html');
   await page.evaluate(async style => {
-    await customElements.whenDefined('sensor-bar-card-plus-editor');
-    const editor = document.createElement('sensor-bar-card-plus-editor');
+    await customElements.whenDefined('sensor-bar-card-plus');
+    const editor = await customElements.get('sensor-bar-card-plus').getConfigElement();
     editor.setConfig({ entities: [{ entity: 'sensor.a' }], bar: { fill_style: style,
       segments: [{ from: '0%', to: '50%', color: '#123456' }],
       gradient_stops: [{ pos: 0, color: 'red' }, { pos: 60, color: '#123456' }],

@@ -1,13 +1,12 @@
 import { SensorBarCard } from './card/SensorBarCard.js';
-import { SensorBarCardPlusEditor } from './editor/SensorBarCardPlusEditor.js';
 import { SensorBarCardPlusFeature, supportsSensorBarFeature } from './feature/SensorBarCardPlusFeature.js';
-import { SensorBarCardPlusFeatureEditor } from './feature/SensorBarCardPlusFeatureEditor.js';
+import { setEditorRuntimeOwners } from './editor-loader.js';
+
+setEditorRuntimeOwners(SensorBarCard, SensorBarCardPlusFeature);
 
 for (const [name, element] of [
   ['sensor-bar-card-plus', SensorBarCard],
-  ['sensor-bar-card-plus-editor', SensorBarCardPlusEditor],
   ['sensor-bar-card-plus-feature', SensorBarCardPlusFeature],
-  ['sensor-bar-card-plus-feature-editor', SensorBarCardPlusFeatureEditor],
 ]) {
   if (!customElements.get(name)) customElements.define(name, element);
 }

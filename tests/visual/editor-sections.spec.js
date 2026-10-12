@@ -3,8 +3,8 @@ const { test, expect } = require('@playwright/test');
 async function mountEditor(page) {
   await page.goto('/tests/visual/fixtures/harness.html');
   await page.evaluate(async () => {
-    await customElements.whenDefined('sensor-bar-card-plus-editor');
-    const editor = document.createElement('sensor-bar-card-plus-editor');
+    await customElements.whenDefined('sensor-bar-card-plus');
+    const editor = await customElements.get('sensor-bar-card-plus').getConfigElement();
     editor.setConfig({
       entities: [{ entity: 'sensor.power', scale: { min: { entity: 'sensor.minimum' } }, formatting: { decimal: 0 } }],
       scale: { min: 10, max: 100 }, formatting: { unit: 'W', decimal: 2 },

@@ -1,14 +1,12 @@
 const { test, expect } = require('@playwright/test');
-const path = require('path');
 
 async function mount(page, source, host, nested = false, picker = false) {
-  if (source === 'dist') await page.route('**/src/sensor-bar-card-plus.js', route => route.fulfill({ path: path.resolve(__dirname, '../../dist/sensor-bar-card-plus.js'), contentType: 'text/javascript' }));
   if (picker) await page.addInitScript(() => customElements.define('ha-entity-picker', class extends HTMLElement {}));
-  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({ host, nested }) => {
-    const tag = host === 'feature' ? 'sensor-bar-card-plus-feature-editor' : 'sensor-bar-card-plus-editor';
-    await customElements.whenDefined(tag);
-    const editor = document.createElement(tag);
+    const runtimeTag = host === 'feature' ? 'sensor-bar-card-plus-feature' : 'sensor-bar-card-plus';
+    await customElements.whenDefined(runtimeTag);
+    const editor = await customElements.get(runtimeTag).getConfigElement();
     window.__identityEvents = [];
     editor.addEventListener('config-changed', e => { window.__identityEvents.push(structuredClone(e.detail.config)); editor.setConfig(e.detail.config); });
     editor.setConfig({ type: `custom:${host === 'feature' ? 'sensor-bar-card-plus-feature' : 'sensor-bar-card-plus'}`, entities: ['sensor.parent'], markers: Array.from({ length: 3 }, () => ({ at: { fixed: 50 } })) });

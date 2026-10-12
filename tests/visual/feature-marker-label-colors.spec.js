@@ -1,5 +1,4 @@
 const { test, expect } = require('@playwright/test');
-const path = require('path');
 const textOnly = text => ({ show: true, text, show_value: false, show_unit: false });
 const frames = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 const feature = page => page.locator('sensor-bar-card-plus-feature');
@@ -11,8 +10,7 @@ const markerConfig = color => ({
   markers: [{ at: 80, lane: 'above', ...(color === undefined ? {} : { color }), label: { show: true, show_unit: false } }],
 });
 async function mount(page, source, height, position, config, extraStates = {}) {
-  if (source === 'dist') await page.route('**/src/sensor-bar-card-plus.js', route => route.fulfill({ path: path.resolve(__dirname, '../../dist/sensor-bar-card-plus.js'), contentType: 'text/javascript' }));
-  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({ config, height, position, extraStates }) => {
     const states = { 'sensor.power': { state: '50', attributes: { unit_of_measurement: 'W' } }, ...extraStates };
     const card = document.createElement('sensor-bar-card-plus');

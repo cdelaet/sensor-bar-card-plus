@@ -1,13 +1,11 @@
 const { test, expect } = require('@playwright/test');
-const path = require('path');
 
 async function mount(page, source, host, config = {}) {
-  if (source === 'dist') await page.route('**/src/sensor-bar-card-plus.js', route => route.fulfill({ path: path.resolve(__dirname, '../../dist/sensor-bar-card-plus.js'), contentType: 'text/javascript' }));
-  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({ host, config }) => {
-    const tag = host === 'feature' ? 'sensor-bar-card-plus-feature-editor' : 'sensor-bar-card-plus-editor';
-    await customElements.whenDefined(tag);
-    const editor = document.createElement(tag);
+    const runtimeTag = host === 'feature' ? 'sensor-bar-card-plus-feature' : 'sensor-bar-card-plus';
+    await customElements.whenDefined(runtimeTag);
+    const editor = await customElements.get(runtimeTag).getConfigElement();
     window.__numericEvents = [];
     editor.addEventListener('config-changed', event => {
       window.__numericEvents.push(structuredClone(event.detail.config));

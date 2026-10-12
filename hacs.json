@@ -1,6 +1,7 @@
 {
   "name": "Sensor Bar Card Plus",
   "filename": "sensor-bar-card-plus.js",
+  "hacs": "2.0.5",
   "hide_default_branch": true,
   "render_readme": true
 }

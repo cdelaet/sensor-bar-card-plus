@@ -1,12 +1,10 @@
 const { expandFeatureGroups, featureGroup } = require('./feature-editor-test-utils.cjs');
 const { test, expect } = require('@playwright/test');
-const path = require('path');
 async function mount(page, source, width, percentage = false) {
-  if (source === 'dist') await page.route('**/src/sensor-bar-card-plus.js', route => route.fulfill({ path: path.resolve(__dirname, '../../dist/sensor-bar-card-plus.js'), contentType: 'text/javascript' }));
-  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({ width, percentage }) => {
-    await customElements.whenDefined('sensor-bar-card-plus-feature-editor');
-    const editor = document.createElement('sensor-bar-card-plus-feature-editor');
+    await customElements.whenDefined('sensor-bar-card-plus-feature');
+    const editor = await customElements.get('sensor-bar-card-plus-feature').getConfigElement();
     const config = { type: 'custom:sensor-bar-card-plus-feature', future: { keep: true },
       target: { at: percentage ? '70%' : { entity: 'sensor.t', value: 70, future: true }, color: 'red', shape: 'triangle', direction: 'outward',
         label: { show: true, text: 'Target energy', show_value: true, show_unit: true, precision: 1, entity: 'sensor.unsupported', future: true },

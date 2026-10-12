@@ -15,6 +15,7 @@ module.exports = {
     { name: '', use: { browserName: 'chromium' } },
     { name: 'webkit-editor-acceptance', testMatch: /acceptance\/editor-acceptance\.spec\.js/, use: { browserName: 'webkit' } },
     { name: 'webkit-reference-identity', testMatch: /editor-reference-marker-identity\.spec\.js/, use: { browserName: 'webkit' } },
+    { name: 'webkit-lazy-editors', testMatch: /lazy-editor-loading\.spec\.js/, use: { browserName: 'webkit' } },
   ],
   use: {
     headless: true,

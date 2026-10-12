@@ -24,8 +24,18 @@ async function mount(page, host, config = seed(host), options = {}) {
       set value(value) { this.shadowRoot.querySelector('input').value=value??''; }
       get value() { return this.shadowRoot.querySelector('input').value; }
     });
+    if (options.iconPicker) customElements.define('ha-icon-picker', class extends HTMLElement {
+      constructor() { super(); const root = this.attachShadow({mode:'open'}); root.innerHTML='<input aria-label="Icon picker">';
+        root.querySelector('input').addEventListener('input',e=>this.dispatchEvent(new CustomEvent('value-changed',{bubbles:true,composed:true,detail:{value:e.target.value}}))); }
+      set value(value) { this.shadowRoot.querySelector('input').value=value??''; }
+      get value() { return this.shadowRoot.querySelector('input').value; }
+      set disabled(value) { this.shadowRoot.querySelector('input').disabled=!!value; this.toggleAttribute('disabled',!!value); }
+      get disabled() { return this.shadowRoot.querySelector('input').disabled; }
+    });
     const tag = host === 'feature' ? 'sensor-bar-card-plus-feature-editor' : 'sensor-bar-card-plus-editor';
-    await customElements.whenDefined(tag); window.__acceptance={host,tag,saved:structuredClone(config),events:[],echoes:0};
+    const runtimeTag = host === 'feature' ? 'sensor-bar-card-plus-feature' : 'sensor-bar-card-plus';
+    await customElements.whenDefined(runtimeTag);
+    const editor = await customElements.get(runtimeTag).getConfigElement(); window.__acceptance={host,tag,saved:structuredClone(config),events:[],echoes:0};
     window.__acceptanceAttach = editor => {
       editor.addEventListener('config-changed',e=> {
         const state=window.__acceptance; state.saved=structuredClone(e.detail.config); state.events.push(structuredClone(e.detail.config));
@@ -34,7 +44,7 @@ async function mount(page, host, config = seed(host), options = {}) {
       });
       editor.setConfig(structuredClone(window.__acceptance.saved)); editor.context={entity_id:'sensor.power'}; editor.hass={states:{'sensor.power':{state:'50',attributes:{unit_of_measurement:'W'}}}};
     };
-    const editor=document.createElement(tag); window.__acceptanceAttach(editor);
+    window.__acceptanceAttach(editor);
     const container=document.querySelector('#mount'); container.style.width=options.tall?'240px':'600px';
     if(options.nested){container.style.height='500px';container.style.overflow='auto';}
     if(options.tall){const spacer=document.createElement('div');spacer.style.height='850px';container.append(spacer);}
@@ -108,8 +118,47 @@ function expectedValue(entry,value,config) {
  }
  return [actual,value];
 }
-async function fieldJourney(page,host,entry) {
- const editor=await mount(page,host);await openSection(editor,entry);const input=control(editor,entry),before=await saved(page);
+async function fieldJourney(page,host,entry,options={}) {
+ const editor=await mount(page,host,seed(host),options);await openSection(editor,entry);const before=await saved(page);
+ if(['entity-icon-mode','entity-icon-value','entity-icon-picker'].includes(entry.name)) {
+  const mode=value=>editor.locator(`input[data-kind="entity-icon-mode"][data-index="0"][value="${value}"]`);
+  const input=options.iconPicker?editor.locator('ha-icon-picker[data-kind="entity-icon-picker"][data-index="0"] input'):editor.locator('input[data-kind="entity-icon-value"][data-index="0"]');
+  async function assertMode(selected,icon) {
+   await expect(editor.locator('input[data-kind="entity-icon-mode"][data-index="0"]')).toHaveCount(3);
+   for(const value of ['default','custom','off'])await expect(mode(value)).toBeChecked({checked:value===selected});
+   await expect(input).toBeEnabled({enabled:selected==='custom'});
+   await expect(input).toHaveValue(typeof icon==='string'?icon:'');
+   const config=await saved(page);
+   expect(Object.hasOwn(config.entities[0],'icon')).toBe(icon!==undefined);
+   expect(config.entities[0].icon).toBe(icon);
+   expect(config.entities[1]).toEqual(before.entities[1]);expect(config.future).toEqual(before.future);
+  }
+  await assertMode('default');
+  const events=await count(page);
+  await mode('custom').check();await assertMode('custom');
+  await echo(page,editor);await assertMode('custom');expect(await count(page)).toBe(events);
+  // Pending Custom is UI-only: config echo retains it; a fresh editor starts Default.
+  await reopen(page,editor);await assertMode('default');expect(await count(page)).toBe(events);
+  await mode('custom').check();
+  // Icon commits deliberately rerender the controls; verify focus at the edit
+  // boundary, then config echo and fresh-editor persistence after committing.
+  await input.focus();await expect(input).toBeFocused();
+  await commit(page,editor,()=>input.fill('mdi:flash'));await assertMode('custom','mdi:flash');
+  await reopen(page,editor);await assertMode('custom','mdi:flash');
+  await commit(page,editor,()=>mode('off').check());await assertMode('off',false);
+  await reopen(page,editor);await assertMode('off',false);
+  await commit(page,editor,()=>mode('custom').check());await assertMode('custom');
+  await input.focus();await expect(input).toBeFocused();
+  await commit(page,editor,()=>input.fill('mdi:battery'));await assertMode('custom','mdi:battery');
+  await commit(page,editor,()=>input.fill(''));await assertMode('default');
+  await reopen(page,editor);await assertMode('default');
+  await mode('custom').check();
+  await commit(page,editor,()=>input.fill('mdi:flash'));await assertMode('custom','mdi:flash');
+  await commit(page,editor,()=>mode('default').check());await assertMode('default');
+  await reopen(page,editor);await assertMode('default');
+  return entry.id;
+ }
+ const input=control(editor,entry);
  let value=entry.value;
  if(entry.type==='number') await replaceNumericDraft(page,editor,input,value,entry.drafts);
  else if(entry.type==='checkbox') {
@@ -153,7 +202,7 @@ async function fieldJourney(page,host,entry) {
  return entry.id;
 }
 async function discover(editor) {
- return editor.evaluate(el=>[...el.shadowRoot.querySelectorAll('input,select,button,ha-entity-picker')].map(n=>{
+ return editor.evaluate(el=>[...el.shadowRoot.querySelectorAll('input,select,button,ha-entity-picker,ha-icon-picker')].map(n=>{
   const route=n.dataset.field?'field':n.dataset.kind?'kind':n.dataset.action?'action':null;
   return route?`${route}:${n.dataset[route]}`:`UNROUTED:${n.tagName}:${n.id}`;
  }));

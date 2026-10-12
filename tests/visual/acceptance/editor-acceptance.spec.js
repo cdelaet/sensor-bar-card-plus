@@ -30,7 +30,7 @@ for(const host of hosts) {
    await d.openDisclosure(editor.locator('#entity-0-group-markers'));
    await collect();
   }
-  await d.mount(page,host,d.seed(host),{picker:true});await collect();
+  await d.mount(page,host,d.seed(host),{picker:true,iconPicker:host==='standalone'});await collect();
   const declared=new Set(inventory.filter(c=>c.hosts.includes(host)).map(c=>c.id));
   expect([...discovered].filter(id=>!declared.has(id)),'new controls need manifest entries and real journeys').toEqual([]);
   expect([...declared].filter(id=>!discovered.has(id)), 'conditional inventory fixture must mount every declared ID').toEqual([]);
@@ -188,6 +188,22 @@ test('standalone: every entity inheritance control restores the canonical card v
   await d.commit(page,editor,()=>input.check());await expect(input).toBeChecked();const sectionPath={'Bar Appearance':'bar','Gradient Stops':'bar.gradient_stops','Segments':'bar.segments','References':'markers','Needle':'bar.needle'}[entry.section]??entry.section.toLowerCase();
   if(entry.section==='Bar Appearance'){for(const part of ['fill_style','color','solid_fill'])expect(d.read(await d.saved(page),`entities.0.bar.${part}`)).toBeUndefined();expect((await d.saved(page)).entities[0].bar.needle).toEqual(config.entities[0].bar.needle);}
   else expect(d.read(await d.saved(page),`entities.0.${sectionPath}`),entry.id).toBeUndefined();await d.reopen(page,editor);await d.openSection(editor,entry);await expect(d.control(editor,entry)).toBeChecked();
+ }
+});
+test('standalone: entity Icon YAML modes and HA icon picker lifecycle',async({page})=>{
+ for(const [icon,mode] of [[undefined,'default'],['mdi:battery','custom'],[false,'off']]){
+  const config=d.seed('standalone');if(icon!==undefined)config.entities[0].icon=icon;
+  const editor=await d.mount(page,'standalone',config,{iconPicker:true});
+  const radio=editor.locator(`input[data-kind="entity-icon-mode"][data-index="0"][value="${mode}"]`),picker=editor.locator('ha-icon-picker[data-kind="entity-icon-picker"][data-index="0"] input');
+  await expect(editor.locator('input[data-kind="entity-icon-value"]')).toHaveCount(0);
+  for(const reopen of [false,true]){
+   if(reopen)await d.reopen(page,editor);
+   await expect(radio).toBeChecked();await expect(picker).toBeEnabled({enabled:mode==='custom'});await expect(picker).toHaveValue(typeof icon==='string'?icon:'');
+   expect((await d.saved(page)).entities[0].icon).toBe(icon);expect(Object.hasOwn((await d.saved(page)).entities[0],'icon')).toBe(icon!==undefined);expect(await d.count(page)).toBe(0);
+  }
+ }
+ for(const id of ['kind:entity-icon-mode','kind:entity-icon-picker']){
+  const entry=inventory.find(c=>c.id===id);expect(await d.fieldJourney(page,'standalone',entry,{iconPicker:true})).toBe(id);
  }
 });
 for(const host of hosts)test(`${host}: HA picker event boundary supports entity/source and label controls`,async({page})=>{

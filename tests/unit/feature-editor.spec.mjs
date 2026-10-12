@@ -49,7 +49,7 @@ for (const source of ['src', 'dist']) describe(`Feature editor foundation (${sou
     const previous = [classes.card, classes.editor, classes.feature, classes.featureEditor];
     classes.reload();
     expect([classes.card, classes.editor, classes.feature, classes.featureEditor]).toEqual(previous);
-    expect(classes.feature.getConfigElement()).toBeInstanceOf(classes.featureEditor);
+    expect(await classes.feature.getConfigElement()).toBeInstanceOf(classes.featureEditor);
     expect(classes.feature.getStubConfig()).toEqual({ type });
     expect(classes.customCardFeatures).toHaveLength(1);
     expect(classes.customCardFeatures[0]).toMatchObject({ configurable: true, type: 'sensor-bar-card-plus-feature' });

@@ -1,12 +1,10 @@
 const { expandFeatureGroups, featureGroup } = require('./feature-editor-test-utils.cjs');
 const { test, expect } = require('@playwright/test');
-const path = require('path');
 async function mount(page, source, width, empty = false) {
-  if (source === 'dist') await page.route('**/src/sensor-bar-card-plus.js', route => route.fulfill({ path: path.resolve(__dirname, '../../dist/sensor-bar-card-plus.js'), contentType: 'text/javascript' }));
-  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({width,empty}) => {
-    await customElements.whenDefined('sensor-bar-card-plus-feature-editor');
-    const editor = document.createElement('sensor-bar-card-plus-feature-editor');
+    await customElements.whenDefined('sensor-bar-card-plus-feature');
+    const editor = await customElements.get('sensor-bar-card-plus-feature').getConfigElement();
     const config = empty ? { type:'custom:sensor-bar-card-plus-feature' } : { type:'custom:sensor-bar-card-plus-feature', future:true,
       markers:[{ at:25, show_marker:false, shape:'pin', lane:'above', direction:'outward', color:'var(--accent-color)', future:{keep:true}, label:{show:true,text:'Reference energy',entity:'sensor.label',decimal:1,show_value:true,show_unit:true,future:{keep:true}} },
         { at:{entity:'sensor.reference',value:50,future:{keep:true}}, shape:'arrow', future:{keep:true}, label:{show:true,text:'Other',entity:'sensor.other'} },

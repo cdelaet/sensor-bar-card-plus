@@ -48,8 +48,10 @@ jobs:
       - name: Verify committed dist before tests can rebuild it
         run: npm run verify-dist
 
-      - name: Check bundle syntax
-        run: node --check dist/sensor-bar-card-plus.js
+      - name: Check both ESM bundles
+        run: |
+          node --input-type=module --check < dist/sensor-bar-card-plus.js
+          node --input-type=module --check < dist/sensor-bar-card-plus-editor.js
 
       - name: Set up Python for converter tests
         id: python
@@ -68,7 +70,7 @@ jobs:
         run: npm run test:unit
 
       - name: Confirm tests left committed dist unchanged
-        run: git diff --exit-code -- dist/sensor-bar-card-plus.js
+        run: git diff --exit-code -- dist/sensor-bar-card-plus.js dist/sensor-bar-card-plus-editor.js
 
   validate-browser:
     name: Playwright (macOS)

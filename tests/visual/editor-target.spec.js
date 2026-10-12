@@ -2,8 +2,8 @@ const { test, expect } = require('@playwright/test');
 test('standalone Target root/entity controls, labels and focus retain their appearance', async ({ page }) => {
   await page.goto('/tests/visual/fixtures/harness.html');
   await page.evaluate(async () => {
-    await customElements.whenDefined('sensor-bar-card-plus-editor');
-    const editor = document.createElement('sensor-bar-card-plus-editor');
+    await customElements.whenDefined('sensor-bar-card-plus');
+    const editor = await customElements.get('sensor-bar-card-plus').getConfigElement();
     editor.setConfig({ entities: ['sensor.a'], target: { at: { entity: 'sensor.t', fixed: 70 }, shape: 'triangle', direction: 'outward', color: 'red', label: { show: true, text: 'Goal', show_unit: false, precision: 1 }, when_exceeded: { fill_color: 'var(--accent-color)' } } });
     editor.addEventListener('config-changed', event => editor.setConfig(event.detail.config));
     document.querySelector('#mount').style.width = '360px'; document.querySelector('#mount').append(editor);

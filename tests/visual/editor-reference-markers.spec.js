@@ -2,8 +2,8 @@ const { test, expect } = require('@playwright/test');
 for (const width of [360, 240]) test(`standalone Reference markers ${width}px retain root/entity appearance, focus and identity`, async ({ page }) => {
   await page.goto('/tests/visual/fixtures/harness.html');
   await page.evaluate(async width => {
-    await customElements.whenDefined('sensor-bar-card-plus-editor');
-    const editor = document.createElement('sensor-bar-card-plus-editor');
+    await customElements.whenDefined('sensor-bar-card-plus');
+    const editor = await customElements.get('sensor-bar-card-plus').getConfigElement();
     editor.setConfig({ entities: [{ entity: 'sensor.a', markers: [{ at: '35%', shape: 'pin', lane: 'above', label: { show: true, entity: 'sensor.label', decimal: 2 } }] }],
       markers: [{ at: { entity: 'sensor.reference', fixed: 25 }, show_marker: false, shape: 'arrow', direction: 'outward', color: 'var(--accent-color)', label: { show: true, text: 'Reference energy', entity: 'sensor.label', precision: 1 } }, { at: { fixed: 75 }, lane: 'above' }] });
     editor.addEventListener('config-changed', event => editor.setConfig(event.detail.config));

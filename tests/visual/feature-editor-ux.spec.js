@@ -1,11 +1,9 @@
 const { test, expect } = require('@playwright/test');
-const path = require('path');
 async function mount(page, source = 'src', width = 360, nested = false) {
-  if (source === 'dist') await page.route('**/src/sensor-bar-card-plus.js', route => route.fulfill({ path: path.resolve(__dirname, '../../dist/sensor-bar-card-plus.js'), contentType: 'text/javascript' }));
-  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({width,nested}) => {
-    await customElements.whenDefined('sensor-bar-card-plus-feature-editor');
-    const editor = document.createElement('sensor-bar-card-plus-feature-editor');
+    await customElements.whenDefined('sensor-bar-card-plus-feature');
+    const editor = await customElements.get('sensor-bar-card-plus-feature').getConfigElement();
     const config = { type:'custom:sensor-bar-card-plus-feature', bar:{fill_style:'bands',animated:false,segments:[{from:0,color:'red'},{from:50,color:'orange'}],gradient_stops:[{pos:0,color:'#abc'}]},
       target:{at:'75%',label:{show:true,text:'Limit'}},baseline:{at:{percent:35,future:true}},peak:{enabled:true},floor:{enabled:true},markers:[{at:25,label:{text:'First'}},{at:'75%'}],future:{keep:true,unset:undefined} };
     window.__uxEvents=[];window.__uxOriginal=structuredClone(config);

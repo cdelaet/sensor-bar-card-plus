@@ -30,7 +30,7 @@ For focused, copyable configurations and visual comparisons, see the [Examples G
 
 ## Card Feature Configuration
 
-The standalone card uses `type: custom:sensor-bar-card-plus`. To put a compact Bar in a Home Assistant Tile, add `type: custom:sensor-bar-card-plus-feature` under the Tile's `features` list. Both use the same installed `sensor-bar-card-plus.js` resource and have a Visual Editor.
+The standalone card uses `type: custom:sensor-bar-card-plus`. To put a compact Bar in a Home Assistant Tile, add `type: custom:sensor-bar-card-plus-feature` under the Tile's `features` list. Both use the same installed `sensor-bar-card-plus.js` Module resource and have a Visual Editor. Keep its matching `sensor-bar-card-plus-editor.js` companion in the same directory; the editors load when opened.
 
 Omit the Feature's `entity` to inherit the parent Tile entity, or set a singular `entity` inside the Feature to override it. Inheritance is transient: the parent entity is not saved into Feature YAML. The Feature rejects `entities`; it displays one entity.
 

@@ -11,16 +11,22 @@ npm install
 npx playwright install chromium
 ~~~
 
-## Source and generated bundle
+## Source and generated bundles
 
-Implement card changes in `src/`. `npm run build` uses esbuild to generate the minified production bundle at `dist/sensor-bar-card-plus.js`. This file is tracked in Git and is the JavaScript resource distributed for Home Assistant and HACS. When a source or build change affects the distributable, regenerate and include it with `npm run build`. Do not edit the generated bundle by hand.
+Implement card changes in `src/`. `npm run build` uses two independent esbuild builds to generate the tracked, self-contained ESM artifacts `dist/sensor-bar-card-plus.js` and `dist/sensor-bar-card-plus-editor.js`. Install both in the same directory; register only the core as a Home Assistant JavaScript Module resource. Card and Card Feature runtimes load immediately; their async `getConfigElement()` factories share one lazy editor import and return fresh editor instances. When source or build inputs change, regenerate and include both files. Do not edit generated bundles by hand.
+
+The build retains ES2018 lowering while preserving native dynamic import and `import.meta`. A deterministic pair identity hashes source, build script, package metadata, lockfile and esbuild version/options, excluding checkout paths. The companion exports that identity and its two constructors without registering elements. The core imports the fixed companion filename relative to its own module URL with a SHA-256 of final companion bytes in `sbcp_build`. It validates exact identity, runtime ownership and both editor tags before registering either. An explicit failed editor attempt can retry once using `sbcp_retry=1`; further failures require refresh. Display remains available if editor loading fails.
 
 ~~~sh
 npm run build
 npm run verify-dist
 ~~~
 
-`npm run verify-dist` performs a fresh production build in a temporary location and byte-compares it with the tracked bundle. It reports a missing or stale `dist/sensor-bar-card-plus.js` and does not rewrite that file, so it is the non-mutating check that the committed bundle matches the current source and build configuration.
+`npm run verify-dist` builds into a fresh temporary directory and verifies the exact two production filenames and bytes against tracked dist. Missing, stale or unexpected SBCP production artifacts fail verification. It never rewrites dist or deletes unrelated files. There are no generated chunks, hashed installed filenames, manifest requests or ZIP assets.
+
+For source-mode browser development, run `node tests/visual/server.cjs` and open `http://127.0.0.1:4173/tests/visual/fixtures/harness.html`. The server supplies a current source fingerprint to the loader and companion, with distinct provenance from production. Refresh after source edits; a changed companion cannot be accepted by an older source runtime. Raw source files served without these development defines cannot open visual editors. Add `?source=dist` to test the installed production pair. For development in Home Assistant, copy both built files to the same development directory and register only that directory's core module.
+
+Do not load regular and development SBCP resources together. The first registered runtime wins; unproven or mixed editor ownership fails with a refresh/conflict message. Custom elements cannot be replaced within a page. On manual upgrade, replace editor first, then core, and refresh Home Assistant. HACS 2.0.5 or newer uses normal release assets; upload/install ordering does not make installation atomic. Fixed filenames need no stale-hash cleanup.
 
 ## Tests and validation
 
@@ -35,7 +41,7 @@ npm test
 
 `npm test` runs the build, unit tests, and Playwright visual tests in sequence. The unit suite checks configuration normalization, conversion, formatting, and card behavior. The Playwright suite checks rendered behavior including fill and Baseline cases, Target/Peak/Floor and generic reference markers, marker shapes and labels, responsive layouts, and clipping or rounded-edge regressions.
 
-GitHub's **Fast Validation** (`.github/workflows/validate.yml`) runs HACS validation, verifies the production bundle and its syntax, and runs unit tests on pushes to `main` and pull requests. It does not run the complete Playwright suite on ordinary pushes or pull requests.
+GitHub's **Fast Validation** (`.github/workflows/validate.yml`) runs HACS validation, verifies both production bundles and their ESM syntax, runs focused native-browser lazy-loading checks, and runs unit tests on pushes to `main` and pull requests. It does not run the complete Playwright suite on ordinary pushes or pull requests.
 
 Before preparing a release, explicitly run **Full Validation** for the intended commit:
 
@@ -59,9 +65,9 @@ After Full Validation succeeds for the current `main` commit, prepare the releas
 gh workflow run release-dist.yml --ref main -f version=1.8.0 -f title="Native Card Feature for Home Assistant Tile cards"
 ~~~
 
-The Release workflow checks that its commit is still the tip of `main`, requires successful Full Validation for that exact SHA, checks that the requested version matches `package.json`, refuses an existing tag or release, verifies the tracked `dist/sensor-bar-card-plus.js`, and checks the bundle's SHA-256. It then creates and pushes the annotated `vX.Y.Z` tag, creates a DRAFT GitHub Release with the supplied title, and attaches that exact tracked JavaScript file. The workflow never publishes the release.
+The Release workflow checks that its commit is still the tip of `main`, requires successful Full Validation for that exact SHA, checks that the requested version matches `package.json`, refuses an existing tag or release, verifies both tracked dist files, and records each SHA-256 and size. It then creates and pushes the annotated `vX.Y.Z` tag, creates a DRAFT GitHub Release with the supplied title, and uploads the editor followed by the core. It verifies the exact two-asset set and downloads both to check bytes, hashes and sizes. The workflow never publishes the release.
 
-After the workflow succeeds, open the draft GitHub Release, paste and review the canonical release notes from the private `private/WHATS-NEW.md`, verify the title, notes, tag, and attached JavaScript, then manually click **Publish release**.
+After the workflow succeeds, open the draft GitHub Release, paste and review the canonical release notes from the private `private/WHATS-NEW.md`, verify the title, notes, tag, and both attached JavaScript files, then manually click **Publish release**. Never publish an incomplete draft or a draft from a failed preparation run; repair and verify both matching assets first.
 
 ## Development and demo fixtures
 

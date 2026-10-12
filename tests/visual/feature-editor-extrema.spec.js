@@ -1,12 +1,10 @@
 const { expandFeatureGroups, featureGroup } = require('./feature-editor-test-utils.cjs');
 const { test, expect } = require('@playwright/test');
-const path = require('path');
 async function mount(page, source, width, empty = false) {
-  if (source === 'dist') await page.route('**/src/sensor-bar-card-plus.js', route => route.fulfill({ path: path.resolve(__dirname, '../../dist/sensor-bar-card-plus.js'), contentType: 'text/javascript' }));
-  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({ width, empty }) => {
-    await customElements.whenDefined('sensor-bar-card-plus-feature-editor');
-    const editor = document.createElement('sensor-bar-card-plus-feature-editor');
+    await customElements.whenDefined('sensor-bar-card-plus-feature');
+    const editor = await customElements.get('sensor-bar-card-plus-feature').getConfigElement();
     const marker = color => ({ enabled: true, color, direction: 'outward', reset: '15m', future: { keep: true },
       label: { show: true, text: 'Energy', show_value: true, show_unit: true, decimal: 1, entity: 'sensor.unsupported', future: { keep: true } } });
     const config = empty ? { type: 'custom:sensor-bar-card-plus-feature' } : { type: 'custom:sensor-bar-card-plus-feature', future: true,

@@ -146,25 +146,34 @@ function loadCardClass(options = {}) {
   const distPath = path.resolve(__dirname, '../../dist/sensor-bar-card-plus.js');
   const filePath = options.source === 'dist' ? distPath : sourcePath;
   const cacheKey = options.source === 'dist' ? 'dist' : 'src';
-  let source = bundledSourceCache.get(cacheKey);
-  if (!source) {
-    source = options.source === 'dist'
-      ? fs.readFileSync(distPath, 'utf8')
-      : buildSync({
-        entryPoints: [sourcePath],
-        bundle: true,
-        format: 'iife',
-        platform: 'browser',
-        target: ['es2018'],
-        write: false,
-        logLevel: 'silent',
-      }).outputFiles[0].text;
-    bundledSourceCache.set(cacheKey, source);
+  let bundles = bundledSourceCache.get(cacheKey);
+  if (!bundles) {
+    // VM fixtures isolate behavior tests from native ESM mechanics. The browser
+    // suite exercises the actual unmodified production and source loaders.
+    const bundle = (filename, editor = false) => buildSync({
+      ...(options.source === 'dist'
+        ? { stdin: { contents: fs.readFileSync(filename, 'utf8'), resolveDir: path.dirname(filename) } }
+        : { entryPoints: [filename] }),
+      bundle: true, format: 'iife', platform: 'browser', target: ['es2018'],
+      ...(editor ? { globalName: '__editorCompanion' } : {}),
+      define: {
+        'import.meta.url': JSON.stringify('https://unit.test/sensor-bar-card-plus.js'),
+        __SBCP_BUILD_ID__: JSON.stringify('unit-fixture'),
+        __SBCP_EDITOR_DIGEST__: JSON.stringify('unit-fixture'),
+      },
+      write: false, logLevel: 'silent',
+    }).outputFiles[0].text;
+    bundles = {
+      core: bundle(filePath).replace(/\bimport\(/g, '__loadEditorCompanion('),
+      editor: bundle(path.join(path.dirname(filePath), 'sensor-bar-card-plus-editor.js'), true),
+    };
+    bundledSourceCache.set(cacheKey, bundles);
   }
 
   const registry = new Map();
   const sandbox = {
     console,
+    URL,
     CSS: options.CSS ?? { supports: () => true },
     setTimeout,
     clearTimeout,
@@ -217,7 +226,9 @@ function loadCardClass(options = {}) {
     },
   };
 
-  vm.runInNewContext(source, sandbox, { filename: filePath });
+  vm.runInNewContext(bundles.editor, sandbox, { filename: 'editor-behavior-fixture.js' });
+  sandbox.__loadEditorCompanion = async () => sandbox.__editorCompanion;
+  vm.runInNewContext(bundles.core, sandbox, { filename: filePath });
   if (options.withEntityPicker) {
     registry.set('ha-entity-picker', class extends sandbox.HTMLElement {});
   }
@@ -226,12 +237,12 @@ function loadCardClass(options = {}) {
   }
   return {
     card: sandbox.customElements.get('sensor-bar-card-plus'),
-    editor: sandbox.customElements.get('sensor-bar-card-plus-editor'),
+    editor: sandbox.__editorCompanion.SensorBarCardPlusEditor,
     feature: sandbox.customElements.get('sensor-bar-card-plus-feature'),
-    featureEditor: sandbox.customElements.get('sensor-bar-card-plus-feature-editor'),
+    featureEditor: sandbox.__editorCompanion.SensorBarCardPlusFeatureEditor,
     customCards: sandbox.window.customCards,
     customCardFeatures: sandbox.window.customCardFeatures,
-    reload: () => vm.runInNewContext(source, sandbox, { filename: filePath }),
+    reload: () => vm.runInNewContext(bundles.core, sandbox, { filename: filePath }),
   };
 }
 

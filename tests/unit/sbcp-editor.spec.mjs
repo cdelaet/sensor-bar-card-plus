@@ -87,9 +87,9 @@ function expectNoDeprecatedEditedKeys(target) {
 }
 
 describe('Sensor Bar Card Plus editor', () => {
-  it('exposes a Lovelace config editor element', () => {
+  it('exposes an asynchronous Lovelace config editor element', async () => {
     const CardClass = loadElementClass('card');
-    const editor = CardClass.getConfigElement();
+    const editor = await CardClass.getConfigElement();
 
     expect(editor.constructor.name).toBe('SensorBarCardPlusEditor');
   });

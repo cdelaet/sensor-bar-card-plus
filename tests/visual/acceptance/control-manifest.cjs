@@ -101,7 +101,10 @@ for (const section of ['Scale','Target','Peak','Floor','References','Bar Appeara
  const slug = {'References':'markers','Bar Appearance':'bar','Gradient Stops':'gradient-stops'}[section] ?? section.toLowerCase();
  kind(`entity-${slug}-inherit`,section,'checkbox',null,null,{hosts:['standalone'],scope:'entity',journey:'inheritance',structural:true});
 }
-for (const [name,path,value] of [['entity-input','entity','sensor.changed'],['entity-name','name','Power source'],['entity-icon','icon','mdi:flash']]) kind(name,'Entities','text',`entities.0.${path}`,value,{hosts:['standalone']});
+for (const [name,path,value] of [['entity-input','entity','sensor.changed'],['entity-name','name','Power source']]) kind(name,'Entities','text',`entities.0.${path}`,value,{hosts:['standalone']});
+kind('entity-icon-mode','Entities','radio','entities.0.icon',['default','custom','off'],{hosts:['standalone']});
+kind('entity-icon-value','Entities','text','entities.0.icon','mdi:flash',{hosts:['standalone'],conditional:true,clear:true});
+kind('entity-icon-picker','Entities','icon','entities.0.icon','mdi:flash',{hosts:['standalone'],journey:'pickers',conditional:true,clear:true});
 kind('entity-picker','Entities','entity','entities.0.entity','sensor.changed',{hosts:['standalone'],journey:'pickers',conditional:true});
 field('feature-entity-override','Entities','checkbox','entity',null,{hosts:['feature'],journey:'entities',conditional:true});
 kind('feature-entity-source','Entities','entity','entity','sensor.changed',{hosts:['feature'],journey:'entities',conditional:true});

@@ -1,16 +1,12 @@
 const { test, expect } = require('@playwright/test');
-const path = require('path');
 
 const type = 'custom:sensor-bar-card-plus-feature';
 async function mountEditor(page, { source = 'src', width = 360, context = { entity_id: 'sensor.parent' }, config = { type } } = {}) {
-  if (source === 'dist') {
-    await page.route('**/src/sensor-bar-card-plus.js', route => route.fulfill({ path: path.resolve(__dirname, '../../dist/sensor-bar-card-plus.js'), contentType: 'text/javascript' }));
-  }
-  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({ width, context, config }) => {
     await customElements.whenDefined('sensor-bar-card-plus-feature');
     const Feature = customElements.get('sensor-bar-card-plus-feature');
-    const editor = Feature.getConfigElement();
+    const editor = await Feature.getConfigElement();
     window.__featureEditorEvents = [];
     editor.addEventListener('config-changed', event => {
       window.__featureEditorEvents.push({ config: structuredClone(event.detail.config), bubbles: event.bubbles, composed: event.composed });

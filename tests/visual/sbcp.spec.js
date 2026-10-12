@@ -226,8 +226,8 @@ test('left responsive layout converges across config rebuilds and fresh renderin
 test('marker editor keeps focused inputs mounted and disclosures usable at narrow width', async ({ page }) => {
   await page.goto('/tests/visual/fixtures/harness.html');
   await page.evaluate(async () => {
-    await customElements.whenDefined('sensor-bar-card-plus-editor');
-    const editor = document.createElement('sensor-bar-card-plus-editor');
+    await customElements.whenDefined('sensor-bar-card-plus');
+    const editor = await customElements.get('sensor-bar-card-plus').getConfigElement();
     editor.setConfig({
       target: { at: { fixed: 65 }, shape: 'diamond' },
       peak: { enabled: true, reset: 'hourly' },

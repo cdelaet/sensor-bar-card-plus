@@ -1,3 +1,4 @@
+import { createConfigEditor } from '../editor-loader.js';
 import { barTrackStyles, barMarkerStyles, getBarAnimationStyles } from '../render/bar-styles.js';
 import {
   clampSupportedRowHeight,
@@ -178,8 +179,8 @@ import * as barRenderer from '../render/bar-renderer.js';
  */
 
 export class SensorBarCard extends HTMLElement {
-  static getConfigElement() {
-    return document.createElement('sensor-bar-card-plus-editor');
+  static async getConfigElement() {
+    return createConfigEditor('sensor-bar-card-plus-editor');
   }
 
   constructor() {

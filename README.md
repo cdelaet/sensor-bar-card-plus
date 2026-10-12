@@ -19,7 +19,7 @@ Now you have no excuse not to build that pretty dashboard. Go forth and dash tho
 
 ### HACS
 
-1. Open **HACS** in Home Assistant.
+1. Open **HACS 2.0.5 or newer** in Home Assistant.
 2. Search for **Sensor Bar Card Plus** and select **Download**.
 3. Refresh your browser.
 
@@ -27,10 +27,12 @@ Now you have no excuse not to build that pretty dashboard. Go forth and dash tho
 
 ### Manual
 
-1. Download `sensor-bar-card-plus.js` from the [latest release](https://github.com/cdelaet/sensor-bar-card-plus/releases).
-2. Copy it to `/config/www/`.
-3. Under **Settings → Dashboards → Resources**, add `/local/sensor-bar-card-plus.js` as a JavaScript module.
+1. Download both `sensor-bar-card-plus.js` and `sensor-bar-card-plus-editor.js` from the same [release](https://github.com/cdelaet/sensor-bar-card-plus/releases).
+2. Copy both files to the same directory, for example `/config/www/`.
+3. Under **Settings → Dashboards → Resources**, add only `/local/sensor-bar-card-plus.js` as a JavaScript Module resource.
 4. Refresh your browser.
+
+On upgrade, replace the editor file first, then the core file, and refresh Home Assistant. The filenames stay fixed; no manual stale-hash cleanup is required. The visual editors load when opened. If an update leaves a visual editor unavailable, refresh Home Assistant; if the problem persists, download both matching files again.
 
 ## Your first card
 

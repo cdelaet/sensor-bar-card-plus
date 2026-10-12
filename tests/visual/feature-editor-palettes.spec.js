@@ -1,12 +1,10 @@
 const { expandFeatureGroups } = require('./feature-editor-test-utils.cjs');
 const { test, expect } = require('@playwright/test');
-const path = require('path');
 async function mount(page, source, style, width) {
-  if (source === 'dist') await page.route('**/src/sensor-bar-card-plus.js', route => route.fulfill({ path: path.resolve(__dirname, '../../dist/sensor-bar-card-plus.js'), contentType: 'text/javascript' }));
-  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({ style, width }) => {
-    await customElements.whenDefined('sensor-bar-card-plus-feature-editor');
-    const editor = document.createElement('sensor-bar-card-plus-feature-editor');
+    await customElements.whenDefined('sensor-bar-card-plus-feature');
+    const editor = await customElements.get('sensor-bar-card-plus-feature').getConfigElement();
     const config = { type: 'custom:sensor-bar-card-plus-feature', extra: { keep: true }, target: { at: '80%' }, bar: {
       fill_style: style, animated: false, extra: { keep: true },
       segments: [{ from: '60%', to: '100%', color: '#123456', metadata: { keep: [1, 2] } }, { from: 0, to: 40, color: '#abcdef', flag: true }],

@@ -1,3 +1,4 @@
+import { createConfigEditor } from '../editor-loader.js';
 import { getFiniteNumber, looksLikeEntityId, normalizeCardConfig } from '../config/normalize.js';
 import { validateNormalizedConfig } from '../config/validate.js';
 import { buildRowViewModel } from '../view-model/row-view-model.js';
@@ -31,8 +32,8 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     return { type: 'custom:sensor-bar-card-plus-feature' };
   }
 
-  static getConfigElement() {
-    return document.createElement('sensor-bar-card-plus-feature-editor');
+  static async getConfigElement() {
+    return createConfigEditor('sensor-bar-card-plus-feature-editor');
   }
 
   setConfig(config) {
