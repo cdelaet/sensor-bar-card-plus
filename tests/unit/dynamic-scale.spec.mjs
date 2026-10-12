@@ -356,4 +356,50 @@ describe('dynamic scale through the card update path', () => {
     card.hass = snapshot(900, 'unavailable', 1400);
     expect(model()).toMatchObject({ min: 0, max: 100 });
   });
+
+  it('resolves dynamic Scale, Baseline, Target and Reference Marker attributes with existing numeric semantics', () => {
+    const initial = snapshot(20, 'not numeric', 'not numeric', 'not numeric');
+    initial.states['sensor.min'].attributes.lower = '10';
+    initial.states['sensor.max'].attributes.upper = 50;
+    initial.states['sensor.baseline'].attributes.zero_point = '15';
+    initial.states['sensor.limit'] = { state: 'ignored', attributes: { threshold: '35' } };
+    initial.states['sensor.reference'] = { state: 'ignored', attributes: { value: 30 } };
+    const { model } = setup({
+      scale: {
+        min: { entity: 'sensor.min', attribute: 'lower' },
+        max: { entity: 'sensor.max', attribute: 'upper' },
+      },
+      baseline: { at: { entity: 'sensor.baseline', attribute: 'zero_point' } },
+      target: { at: { entity: 'sensor.limit', attribute: 'threshold' } },
+      markers: [{ at: { entity: 'sensor.reference', attribute: 'value' } }],
+    }, initial);
+
+    expect(model()).toMatchObject({ min: 10, max: 50, baseline: 15, target: 35 });
+    expect(model().markers.find(marker => marker.type === 'generic')).toMatchObject({ value: 30, visible: true });
+  });
+
+  it('uses existing fixed/default fallback behavior when a selected dynamic attribute is missing', () => {
+    const initial = snapshot(50, 0, 200);
+    initial.states['sensor.max'].attributes.upper = 200;
+    const { card, model } = setup({
+      scale: {
+        min: { entity: 'sensor.min', attribute: 'lower', fixed: 10 },
+        max: { entity: 'sensor.max', attribute: 'upper', fixed: 100 },
+      },
+      baseline: { at: { entity: 'sensor.baseline', attribute: 'zero_point', fixed: 25 } },
+      target: { at: { entity: 'sensor.limit', attribute: 'threshold', fixed: 75 } },
+      markers: [{ at: { entity: 'sensor.reference', attribute: 'value', fixed: 60 } }],
+    }, initial);
+    card.hass = { states: {
+      'sensor.value': state(50),
+      'sensor.min': { state: '40', attributes: {} },
+      'sensor.max': { state: 'bad', attributes: {} },
+      'sensor.baseline': { state: 'bad', attributes: {} },
+      'sensor.limit': { state: 'bad', attributes: {} },
+      'sensor.reference': { state: 'bad', attributes: {} },
+    } };
+
+    expect(model()).toMatchObject({ min: 10, max: 100, baseline: 25, target: 75 });
+    expect(model().markers.find(marker => marker.type === 'generic')).toMatchObject({ value: 60, visible: true });
+  });
 });

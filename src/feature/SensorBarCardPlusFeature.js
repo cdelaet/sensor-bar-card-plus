@@ -1,5 +1,6 @@
 import { createConfigEditor } from '../editor-loader.js';
 import { getFiniteNumber, looksLikeEntityId, normalizeCardConfig } from '../config/normalize.js';
+import { resolveEntitySource } from '../config/resolve.js';
 import { validateNormalizedConfig } from '../config/validate.js';
 import { buildRowViewModel } from '../view-model/row-view-model.js';
 import { buildBarRenderModel, getRevealTransitionDuration, getEffectiveMarkerColor } from '../view-model/bar-render-model.js';
@@ -95,12 +96,13 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         ...this._config,
         type: 'custom:sensor-bar-card-plus',
         entity: undefined,
-        entities: entity ? [{ entity }] : [],
+        entities: entity ? [{ entity, ...(this._config.attribute !== undefined ? { attribute: this._config.attribute } : {}) }] : [],
       }) : null;
       this._diagnostics = validateNormalizedConfig(this._normalized);
     }
 
-    const state = this._hass?.states?.[entity];
+    const source = resolveEntitySource(this._hass, entity, this._normalized?.entities?.[0]?.attribute);
+    const state = source.stateObj;
     let row = null;
     let status = !this._config ? 'Not configured'
       : !entity ? 'Configure an entity'
@@ -109,7 +111,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       : null;
     if (state && this._normalized?.entities[0]) {
       const appearance = this._normalized.entities[0];
-      const sample = getFiniteNumber(state.state);
+      const sample = source.available && source.attributeFound ? getFiniteNumber(source.value) : null;
       if (sample !== null && (state !== this._sampleState || sample !== this._sampleValue)) {
         this._sampleState = state;
         this._sampleValue = sample;

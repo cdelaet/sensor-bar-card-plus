@@ -1,4 +1,4 @@
-import { getNormalizedResolvableNumericValue, getResolvedScale } from '../config/resolve.js';
+import { getNormalizedResolvableNumericValue, getResolvedScale, resolveEntitySource, resolveEntityState } from '../config/resolve.js';
 import { getFiniteNumber } from '../config/normalize.js';
 import {
   createNumericPresentation,
@@ -172,8 +172,19 @@ export function buildRowViewModel(options) {
   void cardConfig;
 
   const entityId = entityConfig?.entity ?? null;
-  const rawState = entityState?.state ?? '';
-  const numericValue = getFiniteNumber(rawState);
+  const primarySource = resolveEntityState(entityState, entityConfig?.attribute);
+  const unavailableText = primarySource.found && !primarySource.available
+    ? primarySource.stateObj?.state
+    : null;
+  const selectedValue = unavailableText ?? (primarySource.available && primarySource.attributeFound
+    ? primarySource.value
+    : '');
+  const rawState = typeof selectedValue === 'string' || typeof selectedValue === 'number' || typeof selectedValue === 'boolean'
+    ? selectedValue
+    : '';
+  const numericValue = primarySource.available && primarySource.attributeFound
+    ? getFiniteNumber(primarySource.value)
+    : null;
   const rawUnit = entityState?.attributes?.unit_of_measurement ?? '';
   const configuredUnit = entityConfig?.formatting?.unit;
   const targetUnit = configuredUnit ?? rawUnit ?? '';
@@ -259,16 +270,19 @@ export function buildRowViewModel(options) {
       const value = getNormalizedResolvableNumericValue(hass, marker.source, safeMin, safeMax);
       const visible = Number.isFinite(value);
       const markerPrecision = marker.label.precision ?? decimal;
-      const labelStateObj = marker.label.entity ? hass?.states?.[marker.label.entity] : null;
-      const rawLabelState = labelStateObj?.state;
-      const cleanLabelState = typeof rawLabelState === 'string' ? rawLabelState.trim() : '';
-      const usableLabelState = labelStateObj && cleanLabelState
-        && !['unknown', 'unavailable'].includes(cleanLabelState.toLowerCase());
+      const labelSource = marker.label.entity
+        ? resolveEntitySource(hass, marker.label.entity, marker.label.attribute)
+        : null;
+      const rawLabelValue = labelSource?.value;
+      const cleanLabelValue = typeof rawLabelValue === 'string' ? rawLabelValue.trim() : rawLabelValue;
+      const usableLabelValue = labelSource?.found && labelSource.available && labelSource.attributeFound
+        && cleanLabelValue !== null && cleanLabelValue !== undefined && cleanLabelValue !== ''
+        && !(['unknown', 'unavailable'].includes(String(cleanLabelValue).trim().toLowerCase()));
       const labelValue = marker.label.entity
-        ? usableLabelState ? getFiniteNumber(cleanLabelState) ?? cleanLabelState : null
+        ? usableLabelValue ? getFiniteNumber(cleanLabelValue) ?? String(cleanLabelValue) : null
         : value;
       const labelUnit = marker.label.entity
-        ? (usableLabelState ? labelStateObj?.attributes?.unit_of_measurement ?? '' : '')
+        ? (usableLabelValue ? labelSource.stateObj?.attributes?.unit_of_measurement ?? '' : '')
         : targetUnit;
       const label = marker.label.show
         ? createMarkerLabelPresentation(labelValue, labelUnit, markerPrecision, {

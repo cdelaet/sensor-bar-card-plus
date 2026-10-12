@@ -1,6 +1,14 @@
 import { isValidReset, normalizeReset } from '../utils/extrema.js';
 
-export function normalizeResolvableValue(value, entityValue, percentValue = null) {
+function normalizeAttribute(value) {
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+function hasInvalidAttribute(value) {
+  return value !== undefined && value !== null && value !== '' && typeof value !== 'string';
+}
+
+export function normalizeResolvableValue(value, entityValue, percentValue = null, attribute = null) {
   const normalized = {
     fixed: value ?? null,
     entity: entityValue ?? null,
@@ -8,6 +16,9 @@ export function normalizeResolvableValue(value, entityValue, percentValue = null
   if (Number.isFinite(percentValue)) {
     normalized.percent = percentValue;
   }
+  const normalizedAttribute = normalizeAttribute(attribute);
+  if (normalizedAttribute !== null) normalized.attribute = normalizedAttribute;
+  if (hasInvalidAttribute(attribute)) normalized.attribute_invalid = true;
   return normalized;
 }
 
@@ -49,7 +60,7 @@ export function normalizeStructuredResolvableValue(input, inheritedResolvable = 
     const value = input.fixed ?? input.value ?? null;
     const entity = input.entity ?? null;
     const percent = allowPercent ? getFiniteNumber(input.percent) : null;
-    return normalizeResolvableValue(value, entity, percent);
+    return normalizeResolvableValue(value, entity, percent, input.attribute);
   }
   if (looksLikeEntityId(input)) {
     return normalizeResolvableValue(
@@ -160,6 +171,8 @@ export function normalizeGenericMarkerList(input, capacityConfig = null) {
         show: label.show === true,
         text: labelConfig.label_text,
         entity: validLabelEntity,
+        ...(normalizeAttribute(label.attribute) !== null ? { attribute: normalizeAttribute(label.attribute) } : {}),
+        ...(hasInvalidAttribute(label.attribute) ? { attribute_invalid: true } : {}),
         showValue: labelConfig.label_show_value,
         showUnit: labelConfig.label_show_unit,
         precision: labelConfig.label_precision,
@@ -374,7 +387,9 @@ export function normalizeScaleBound(entityConfig, cardConfig, key, defaultValue)
   const inherited = cardBound
     ? normalizeResolvableValue(
       cardBound.fixed ?? cardBound.value ?? null,
-      cardBound.entity ?? null
+      cardBound.entity ?? null,
+      null,
+      cardBound.attribute
     )
     : normalizeResolvableValue(
       cardConfig?.[key] ?? defaultValue,
@@ -417,7 +432,7 @@ export function normalizeScaleBound(entityConfig, cardConfig, key, defaultValue)
     ?? inherited.entity
     ?? null;
 
-  return withFixedExplicit(normalizeResolvableValue(value, entity),
+  return withFixedExplicit(normalizeResolvableValue(value, entity, inherited.percent ?? null, inherited.attribute),
     (entityConfig[key] !== null && entityConfig[key] !== undefined)
       || (!hasEntityOverride && inheritedFixedExplicit));
 }
@@ -818,9 +833,12 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
   const percent = entityConfig.target === undefined && entityConfig.target_entity === undefined
     ? inheritedTarget.source?.percent ?? null
     : null;
+  const attribute = entityConfig.target === undefined && entityConfig.target_entity === undefined
+    ? inheritedTarget.source?.attribute ?? null
+    : null;
   const normalizedTarget = {
     enabled: inheritedTarget.enabled ?? null,
-    source: normalizeResolvableValue(value, entity, percent),
+    source: normalizeResolvableValue(value, entity, percent, attribute),
     color: entityConfig.target_color ?? inheritedTarget.color ?? cardConfig?.target_color ?? '#888',
     show_label: entityConfig.show_target_label ?? inheritedTarget.show_label ?? cardConfig?.show_target_label ?? false,
     shape: inheritedTarget.shape,
@@ -955,6 +973,14 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
     icon: entityConfig.icon,
   };
 
+  if (entityConfig.attribute !== undefined) {
+    const attribute = normalizeAttribute(entityConfig.attribute);
+    if (attribute !== null) normalizedEntity.attribute = attribute;
+    else delete normalizedEntity.attribute;
+    if (hasInvalidAttribute(entityConfig.attribute)) normalizedEntity.attribute_invalid = true;
+    else delete normalizedEntity.attribute_invalid;
+  }
+
   normalizedEntity.layout = normalizeLayoutConfig(entityConfig, cardConfig);
   normalizedEntity.scale = normalizeScaleConfig(entityConfig, cardConfig);
   normalizedEntity.bar = normalizeBarConfig(entityConfig, cardConfig, {
@@ -1039,6 +1065,7 @@ export function normalizeCardConfig(rawConfig) {
   if (baseConfig.entity && !baseConfig.entities) {
     baseConfig.entities = [{
       entity: baseConfig.entity,
+      ...(baseConfig.attribute !== undefined ? { attribute: baseConfig.attribute } : {}),
       ...(baseConfig.name !== undefined ? { name: baseConfig.name } : {}),
     }];
   }

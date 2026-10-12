@@ -1506,4 +1506,121 @@ describe('buildRowViewModel', () => {
     expect(row.floorPercent).toBe(0);
     expect(row.floorPresentation.text).toBe('-20 W');
   });
+
+  it('uses a primary scalar attribute throughout numeric presentation and keeps the entity unit metadata', () => {
+    const hass = { states: { 'sensor.weather': {
+      state: 'sunny',
+      attributes: { temperature: '18.25', unit_of_measurement: '°C' },
+    } } };
+    const entityConfig = createNormalizedEntity({
+      min: 0, max: 40, formatting: { decimal: 1 },
+      entities: [{ entity: 'sensor.weather', attribute: 'temperature' }],
+    });
+    const row = buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.weather'] });
+
+    expect(row).toMatchObject({ state: '18.25', numericValue: 18.25, percent: 45.625, rawUnit: '°C', displayUnit: '°C' });
+    expect(row.primaryPresentation.text).toBe('18.3 °C');
+  });
+
+  it('does not fall back to primary state for missing, null, or invalid attributes', () => {
+    const state = { state: '73', attributes: { empty: null, text: 'warm' } };
+    const hass = { states: { 'sensor.value': state } };
+    const getRow = (attribute) => buildRowViewModel({
+      hass,
+      entityConfig: createNormalizedEntity({ entities: [{ entity: 'sensor.value', attribute }] }),
+      entityState: state,
+    });
+
+    expect(getRow('missing')).toMatchObject({ state: '', numericValue: null, percent: 0, displayUnit: '' });
+    expect(getRow('empty')).toMatchObject({ state: '', numericValue: null, displayUnit: '' });
+    expect(getRow('text')).toMatchObject({ state: 'warm', numericValue: null, displayUnit: '' });
+    expect(getRow('missing').primaryPresentation.text).toBe('');
+  });
+
+  it('keeps unavailable entity state semantics even when its selected attribute has a stale scalar', () => {
+    const state = { state: 'unavailable', attributes: { temperature: 19 } };
+    const hass = { states: { 'sensor.weather': state } };
+    const entityConfig = createNormalizedEntity({ entities: [{ entity: 'sensor.weather', attribute: 'temperature' }] });
+    const row = buildRowViewModel({ hass, entityConfig, entityState: state });
+    expect(row).toMatchObject({ state: 'unavailable', numericValue: null, displayUnit: '' });
+  });
+
+  it('samples Peak and Floor from the selected primary attribute instead of the entity state', () => {
+    const card = createCard();
+    const config = card.normalizeCardConfig({ entities: [{
+      entity: 'sensor.power', attribute: 'watts',
+      peak: { enabled: true }, floor: { enabled: true },
+    }] });
+    const entityConfig = config.entities[0];
+    const state = { state: '900', attributes: { watts: '40' } };
+
+    card._updateExtrema(entityConfig, entityConfig, state);
+    state.state = '10';
+    state.attributes.watts = '60';
+    card._updateExtrema(entityConfig, entityConfig, state);
+
+    expect(card._extrema.get(entityConfig)).toMatchObject({ peak: { value: 60 }, floor: { value: 40 } });
+  });
+
+  it('resolves attribute-backed Baseline, Target, Reference Marker position and textual label independently', () => {
+    const hass = { states: {
+      'sensor.power': sensor(40),
+      'sensor.references': { state: 'not numeric', attributes: { baseline: '10', target: 30, marker: 20 } },
+      'sensor.status': { state: 'busy', attributes: { description: ' Charging ', unit_of_measurement: 'mode' } },
+    } };
+    const entityConfig = createNormalizedEntity({
+      baseline: { at: { entity: 'sensor.references', attribute: 'baseline' } },
+      target: { at: { entity: 'sensor.references', attribute: 'target' }, label: { show: true } },
+      markers: [{
+        at: { entity: 'sensor.references', attribute: 'marker' },
+        label: { show: true, entity: 'sensor.status', attribute: 'description' },
+      }],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.power'] });
+    const generic = row.markers.find((marker) => marker.type === 'generic');
+
+    expect(row).toMatchObject({ baseline: 10, target: 30 });
+    expect(generic).toMatchObject({ value: 20, visible: true, label: { text: 'Charging mode' } });
+  });
+
+  it('omits an unresolved attribute label but retains configured static label text', () => {
+    const hass = { states: {
+      'sensor.power': sensor(40),
+      'sensor.status': { state: 'Charging', attributes: { details: null } },
+    } };
+    const entityConfig = createNormalizedEntity({
+      markers: [{ at: 20, label: { show: true, text: 'Mode', entity: 'sensor.status', attribute: 'details' } }],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.power'] });
+    expect(row.markers.find((marker) => marker.type === 'generic').label.text).toBe('Mode');
+  });
+
+  it('formats a numeric Reference Marker label attribute using its source entity unit', () => {
+    const hass = { states: {
+      'sensor.power': sensor(40),
+      'sensor.status': { state: 'busy', attributes: { temperature: 19.75, unit_of_measurement: '°C' } },
+    } };
+    const entityConfig = createNormalizedEntity({
+      formatting: { decimal: 1 },
+      markers: [{ at: 20, label: { show: true, text: 'Outside', entity: 'sensor.status', attribute: 'temperature' } }],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.power'] });
+    expect(row.markers.find((marker) => marker.type === 'generic').label.text).toBe('Outside 19.8 °C');
+  });
+
+  it.each(['unknown', 'unavailable'])('ignores stale Reference Marker label attributes for %s source entities', (stateValue) => {
+    const hass = { states: {
+      'sensor.power': sensor(40),
+      'sensor.status': { state: stateValue, attributes: { description: 'stale' } },
+    } };
+    const entityConfig = createNormalizedEntity({
+      markers: [{ at: 20, label: { show: true, text: 'Mode', entity: 'sensor.status', attribute: 'description' } }],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.power'] });
+    expect(row.markers.find((marker) => marker.type === 'generic').label.text).toBe('Mode');
+  });
 });

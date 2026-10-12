@@ -32,6 +32,7 @@ import {
   getEntityNumericValue,
   getNormalizedResolvableNumericValue,
   getNumericValue,
+  resolveEntityState,
   resolvePercentValue,
 } from '../config/resolve.js';
 import { validateNormalizedConfig } from '../config/validate.js';
@@ -479,7 +480,8 @@ export class SensorBarCard extends HTMLElement {
   }
 
   _updateExtrema(entityCfg, normalizedEntity, stateObj) {
-    const sample = getFiniteNumber(stateObj?.state);
+    const source = resolveEntityState(stateObj, normalizedEntity?.attribute);
+    const sample = source.available && source.attributeFound ? getFiniteNumber(source.value) : null;
     if (!Number.isFinite(sample)) return;
 
     const current = this._extrema.get(entityCfg) ?? {};

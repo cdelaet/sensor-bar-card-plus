@@ -112,6 +112,42 @@ describe('independent input reconciliation', () => {
     await element.updateComplete;
     expect(element._row.entityId).toBe(entity);
   });
+  it('uses the selected attribute consistently for inherited and explicit Feature entities', async () => {
+    const inherited = feature({ attribute: 'temperature', peak: { enabled: true }, floor: { enabled: true } });
+    inherited.context = { entity_id: 'sensor.weather' };
+    inherited.hass = { states: { 'sensor.weather': {
+      state: 'sunny', attributes: { temperature: '22.5', unit_of_measurement: '°C' },
+    } } };
+    await inherited.updateComplete;
+    expect(inherited._status).toBeNull();
+    expect(inherited._row).toMatchObject({ entityId: 'sensor.weather', numericValue: 22.5, displayUnit: '°C' });
+    expect(inherited._extrema).toMatchObject({ peak: { value: 22.5 }, floor: { value: 22.5 } });
+
+    const explicit = feature({ entity: 'sensor.explicit', attribute: 'watts' });
+    explicit.context = { entity_id: 'sensor.parent' };
+    explicit.hass = { states: {
+      'sensor.parent': sensor(90),
+      'sensor.explicit': { state: 'unavailable', attributes: { watts: 50 } },
+    } };
+    await explicit.updateComplete;
+    expect(explicit._row.entityId).toBe('sensor.explicit');
+    expect(explicit._status).toBe('Unavailable');
+    explicit.hass = { states: {
+      'sensor.parent': sensor(90),
+      'sensor.explicit': { state: 'not numeric', attributes: { watts: '51' } },
+    } };
+    await explicit.updateComplete;
+    expect(explicit._status).toBeNull();
+    expect(explicit._row.numericValue).toBe(51);
+  });
+  it('does not fall back to primary state when a Feature attribute is missing', async () => {
+    const element = feature({ entity, attribute: 'missing', peak: { enabled: true } });
+    element.hass = { states: { [entity]: { state: '42', attributes: {} } } };
+    await element.updateComplete;
+    expect(element._status).toBe('Not numeric');
+    expect(element._row.numericValue).toBeNull();
+    expect(element._extrema).toEqual({});
+  });
   it('rejects malformed configs and multiple entities', () => {
     const element = feature(null);
     for (const config of [null, false, [], { entity: 3 }, { entity: 'bad' }, { entities: [entity] }]) {

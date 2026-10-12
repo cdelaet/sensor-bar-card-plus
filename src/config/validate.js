@@ -15,6 +15,12 @@ function addWarning(diagnostics, code, message, path, entity = null) {
   diagnostics.warnings.push(createDiagnostic(code, message, path, entity));
 }
 
+function validateAttribute(diagnostics, source, path, entity = null) {
+  if (source?.attribute_invalid) {
+    addWarning(diagnostics, 'source.invalid_attribute', 'Attribute must be a non-empty string; using the entity state.', path, entity);
+  }
+}
+
 function validateScaleBounds(diagnostics, scale, path, entity = null) {
   if (scale?.min?.entity && scale?.max?.entity) {
     const hasFixed = (bound) => bound.fixed_explicit !== false
@@ -127,6 +133,7 @@ function validateGenericMarkers(diagnostics, markers, invalidList, path, entity 
       addWarning(diagnostics, 'markers.invalid_item', 'Marker must be an object; ignoring this item.', markerPath, entity);
       continue;
     }
+    validateAttribute(diagnostics, marker.source, `${markerPath}.at`, entity);
     if (marker.invalidSource && !marker.invalidPercentage && !marker.unsupportedPercentField) {
       addWarning(diagnostics, 'markers.invalid_source', 'Marker requires a valid fixed value, percentage, or entity source.', `${markerPath}.at`, entity);
     }
@@ -147,6 +154,7 @@ function validateGenericMarkers(diagnostics, markers, invalidList, path, entity 
     }
     if (marker.invalidShowMarker) addWarning(diagnostics, 'markers.invalid_show_marker', 'Marker show_marker must be a boolean; using true.', `${markerPath}.show_marker`, entity);
     if (marker.label?.invalidEntity) addWarning(diagnostics, 'markers.invalid_label_entity', 'Marker label entity must be a valid entity ID; ignoring it.', `${markerPath}.label.entity`, entity);
+    validateAttribute(diagnostics, marker.label, `${markerPath}.label.attribute`, entity);
     if (marker.label?.invalidShow) addWarning(diagnostics, 'markers.invalid_label_show', 'Marker label show must be a boolean; using the existing fallback.', `${markerPath}.label.show`, entity);
     if (marker.label?.invalidText) addWarning(diagnostics, 'markers.invalid_label_text', 'Marker label text must be a string; ignoring it.', `${markerPath}.label.text`, entity);
     if (marker.label?.invalidShowValue) addWarning(diagnostics, 'markers.invalid_label_show_value', 'Marker label show_value must be a boolean; using the inherited or default value.', `${markerPath}.label.show_value`, entity);
@@ -248,6 +256,11 @@ function validateGradientStops(diagnostics, stops, path, entity = null) {
 }
 
 function validateConfigScope(diagnostics, config, path, entity = null) {
+  validateAttribute(diagnostics, config, `${path}.attribute`, entity);
+  validateAttribute(diagnostics, config?.scale?.min, `${path}.scale.min.attribute`, entity);
+  validateAttribute(diagnostics, config?.scale?.max, `${path}.scale.max.attribute`, entity);
+  validateAttribute(diagnostics, config?.baseline?.at, `${path}.baseline.at.attribute`, entity);
+  validateAttribute(diagnostics, config?.target_marker?.source, `${path}.target.at.attribute`, entity);
   const scaleBounds = validateScaleBounds(diagnostics, config?.scale, path, entity);
   validateTargetRange(diagnostics, config, scaleBounds, path, entity);
   validateBaselineRange(diagnostics, config, scaleBounds, path, entity);

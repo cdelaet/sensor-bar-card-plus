@@ -8,6 +8,47 @@ function normalize(rawConfig) {
 }
 
 describe('validateNormalizedConfig', () => {
+  it('preserves primary and nested source attributes through normalization, including legacy root entity config', () => {
+    const config = normalize({
+      entity: 'sensor.primary', attribute: 'custom.temperature',
+      scale: { min: { entity: 'sensor.bounds', attribute: 'lower' }, max: { entity: 'sensor.bounds', attribute: 'upper' } },
+      baseline: { at: { entity: 'sensor.reference', attribute: 'origin' } },
+      target: { at: { entity: 'sensor.limit', attribute: 'threshold' } },
+      markers: [{
+        at: { entity: 'sensor.reference', attribute: 'marker' },
+        label: { entity: 'sensor.status', attribute: 'description' },
+      }],
+    });
+    const row = config.entities[0];
+
+    expect(row).toMatchObject({ entity: 'sensor.primary', attribute: 'custom.temperature' });
+    expect(row.scale).toMatchObject({
+      min: { entity: 'sensor.bounds', attribute: 'lower' },
+      max: { entity: 'sensor.bounds', attribute: 'upper' },
+    });
+    expect(row.baseline.at).toMatchObject({ entity: 'sensor.reference', attribute: 'origin' });
+    expect(row.target_marker.source).toMatchObject({ entity: 'sensor.limit', attribute: 'threshold' });
+    expect(row.generic_markers[0]).toMatchObject({
+      source: { entity: 'sensor.reference', attribute: 'marker' },
+      label: { entity: 'sensor.status', attribute: 'description' },
+    });
+  });
+
+  it('keeps entity-ID shorthand state-only and accepts unknown non-empty attribute names', () => {
+    expect(normalize({ entities: ['sensor.one'] }).entities[0]).not.toHaveProperty('attribute');
+    const config = normalize({ entities: [{ entity: 'sensor.one', attribute: 'not_currently_present' }] });
+    expect(config.entities[0].attribute).toBe('not_currently_present');
+    expect(validateNormalizedConfig(config).warnings).toEqual([]);
+  });
+
+  it('warns non-fatally for a non-string attribute value', () => {
+    const diagnostics = validateNormalizedConfig(normalize({ entities: [{ entity: 'sensor.one', attribute: 12 }] }));
+    expect(diagnostics.errors).toEqual([]);
+    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
+      code: 'source.invalid_attribute', path: 'entities[0].attribute',
+    }));
+  });
+
   it.each(['min', 'max'])('warns non-fatally for a two-dynamic-bound pair with only %s.fixed', (key) => {
     const scale = { min: { entity: 'sensor.min' }, max: { entity: 'sensor.max' } };
     scale[key].fixed = key === 'min' ? 0 : 1000;

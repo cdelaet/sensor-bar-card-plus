@@ -1,8 +1,38 @@
 import { getFiniteNumber } from './normalize.js';
 
-export function getEntityNumericValue(hass, entityId) {
-  if (!entityId || !hass?.states?.[entityId]) return null;
-  const raw = hass.states[entityId].state;
+export function resolveEntityState(stateObj, attribute = null) {
+  if (!stateObj) {
+    return { stateObj: null, value: undefined, found: false, available: false, attributeFound: false };
+  }
+
+  const available = !['unknown', 'unavailable'].includes(
+    String(stateObj.state ?? '').trim().toLowerCase()
+  );
+  if (typeof attribute !== 'string' || attribute === '') {
+    return { stateObj, value: stateObj.state, found: true, available, attributeFound: true };
+  }
+
+  const attributes = stateObj.attributes;
+  const attributeFound = attributes != null
+    && Object.prototype.hasOwnProperty.call(attributes, attribute);
+  return {
+    stateObj,
+    value: attributeFound ? attributes[attribute] : undefined,
+    found: true,
+    available,
+    attributeFound,
+  };
+}
+
+export function resolveEntitySource(hass, entityId, attribute = null) {
+  const stateObj = entityId ? hass?.states?.[entityId] ?? null : null;
+  return resolveEntityState(stateObj, attribute);
+}
+
+export function getEntityNumericValue(hass, entityId, attribute = null) {
+  const source = resolveEntitySource(hass, entityId, attribute);
+  if (!source.found || !source.available || !source.attributeFound) return null;
+  const raw = source.value;
   const num = parseFloat(raw);
   return Number.isFinite(num) ? num : null;
 }
@@ -26,7 +56,7 @@ export function resolvePercentValue(percent, minValue, maxValue) {
 
 export function getNormalizedResolvableNumericValue(hass, resolvable, minValue = null, maxValue = null) {
   if (!resolvable) return null;
-  const entityValue = getEntityNumericValue(hass, resolvable.entity);
+  const entityValue = getEntityNumericValue(hass, resolvable.entity, resolvable.attribute);
   if (entityValue !== null) return entityValue;
 
   const fixedValue = getNumericValue(hass, resolvable.fixed ?? resolvable.value, null);
@@ -49,8 +79,8 @@ export function getResolvedScale(hass, scale, previousScale = null) {
 
   if (scale?.min?.entity && scale?.max?.entity) {
     const dynamic = {
-      min: getEntityNumericValue(hass, scale.min.entity),
-      max: getEntityNumericValue(hass, scale.max.entity),
+      min: getEntityNumericValue(hass, scale.min.entity, scale.min.attribute),
+      max: getEntityNumericValue(hass, scale.max.entity, scale.max.attribute),
     };
     if (isValid(dynamic)) return dynamic;
     // History protects numeric transient inversions, never missing sources.
