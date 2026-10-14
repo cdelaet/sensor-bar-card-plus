@@ -61,18 +61,18 @@ for (const source of ['src', 'dist']) describe(`Entity attributes (${source})`, 
   it('edits and clears nested Scale, Baseline, and Target attributes without losing siblings', () => {
     const editor = createEditor({ source });
     const events = track(editor);
-    editor.setConfig({ scale: { min: { entity: 'sensor.min', attribute: 'lower', future: 1 }, max: { entity: 'sensor.max' } },
-      baseline: { at: { entity: 'sensor.base', attribute: 'zero' }, above: { color: 'red' } },
-      target: { at: { entity: 'sensor.target', attribute: 'limit' }, label: { text: 'Limit' } } });
+    editor.setConfig({ scale: { min: { entity: { id: 'sensor.min', attribute: 'lower' }, future: 1 }, max: { entity: 'sensor.max' } },
+      baseline: { at: { entity: { id: 'sensor.base', attribute: 'zero' } }, above: { color: 'red' } },
+      target: { at: { entity: { id: 'sensor.target', attribute: 'limit' } }, label: { text: 'Limit' } } });
     const set = (selector, value) => dispatch(editor, editor.shadowRoot.querySelectorAll(selector)[0], value);
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="scale-min-attribute"]')[0].value).toBe('lower');
     set('input[data-kind="scale-min-attribute"]', 'bottom');
     set('input[data-kind="scale-max-attribute"]', 'ceiling');
     set('input[data-kind="baseline-attribute"]', 'origin');
     set('input[data-kind="target-attribute"]', 'threshold');
-    expect(events.at(-1).scale).toEqual({ min: { entity: 'sensor.min', attribute: 'bottom' }, max: { entity: 'sensor.max', attribute: 'ceiling' } });
-    expect(events.at(-1).baseline).toEqual({ at: { entity: 'sensor.base', attribute: 'origin' }, above: { color: 'red' } });
-    expect(events.at(-1).target).toEqual({ at: { entity: 'sensor.target', attribute: 'threshold' }, label: { text: 'Limit' } });
+    expect(events.at(-1).scale).toEqual({ min: { entity: { id: 'sensor.min', attribute: 'bottom' } }, max: { entity: { id: 'sensor.max', attribute: 'ceiling' } } });
+    expect(events.at(-1).baseline).toEqual({ at: { entity: { id: 'sensor.base', attribute: 'origin' } }, above: { color: 'red' } });
+    expect(events.at(-1).target).toEqual({ at: { entity: { id: 'sensor.target', attribute: 'threshold' } }, label: { text: 'Limit' } });
     set('input[data-kind="scale-min-attribute"]', '');
     expect(Object.hasOwn(events.at(-1).scale.min, 'attribute')).toBe(false);
   });
@@ -101,16 +101,16 @@ for (const source of ['src', 'dist']) describe(`Entity attributes (${source})`, 
     const editor = createEditor({ source });
     const events = track(editor);
     editor.setConfig({ entities: [
-      { entity: 'sensor.one', attribute: 'state_attr', scale: { min: { entity: 'sensor.row_min', attribute: 'row_lower' }, max: { entity: 'sensor.row_max', attribute: 'row_upper' } } },
-      { entity: 'sensor.two', attribute: 'other_state_attr', scale: { max: { entity: 'sensor.row_max', attribute: 'row_upper' } } },
+      { entity: 'sensor.one', attribute: 'state_attr', scale: { min: { entity: { id: 'sensor.row_min', attribute: 'row_lower' } }, max: { entity: { id: 'sensor.row_max', attribute: 'row_upper' } } } },
+      { entity: 'sensor.two', attribute: 'other_state_attr', scale: { max: { entity: { id: 'sensor.row_max', attribute: 'row_upper' } } } },
     ] });
     const min = editor.shadowRoot.querySelectorAll('input[data-kind="entity-override-min-attribute"]')[0];
     const max = editor.shadowRoot.querySelectorAll('input[data-kind="entity-override-max-attribute"]')[0];
     expect(min.value).toBe('row_lower');
     expect(max.value).toBe('row_upper');
     dispatch(editor, min, 'lower_bound');
-    expect(events.at(-1).entities[0].scale.min).toEqual({ entity: 'sensor.row_min', attribute: 'lower_bound' });
-    expect(events.at(-1).entities[0].scale.max).toEqual({ entity: 'sensor.row_max', attribute: 'row_upper' });
+    expect(events.at(-1).entities[0].scale.min).toEqual({ entity: { id: 'sensor.row_min', attribute: 'lower_bound' } });
+    expect(events.at(-1).entities[0].scale.max).toEqual({ entity: { id: 'sensor.row_max', attribute: 'row_upper' } });
     expect(events.at(-1).entities[0].attribute).toBe('state_attr');
   });
 
@@ -137,22 +137,22 @@ for (const source of ['src', 'dist']) describe(`Entity attributes (${source})`, 
     expect(editor.shadowRoot.querySelectorAll(`input[data-kind="${attributeKind}"]`)).toHaveLength(1);
     const attribute = editor.shadowRoot.querySelectorAll(`input[data-kind="${attributeKind}"]`)[0];
     dispatch(editor, attribute, 'temperature');
-    expect(getStoredSource(events.at(-1))).toEqual({ entity: 'weather.forecast_home', attribute: 'temperature' });
+    expect(getStoredSource(events.at(-1))).toEqual({ entity: { id: 'weather.forecast_home', attribute: 'temperature' } });
   });
 
   it('edits marker position and general label attributes while preserving independent label data', () => {
     const editor = createEditor({ source });
     const events = track(editor);
-    editor.setConfig({ markers: [{ at: { entity: 'sensor.position', attribute: 'unknown_position' },
-      label: { text: 'Static label', entity: 'sensor.label', attribute: 'description', unit: 'W' }, metadata: true }] });
+    editor.setConfig({ markers: [{ at: { entity: { id: 'sensor.position', attribute: 'unknown_position' } },
+      label: { text: 'Static label', entity: { id: 'sensor.label', attribute: 'description' }, unit: 'W' }, metadata: true }] });
     const get = selector => editor.shadowRoot.querySelectorAll(selector)[0];
     expect(get('input[data-kind="generic-marker-label-attribute"]').value).toBe('description');
     dispatch(editor, get('input[data-kind="generic-marker-attribute"]'), 'threshold');
     dispatch(editor, get('input[data-kind="generic-marker-label-attribute"]'), 'status');
-    expect(events.at(-1).markers[0]).toEqual({ at: { entity: 'sensor.position', attribute: 'threshold' },
-      label: { text: 'Static label', entity: 'sensor.label', attribute: 'status', unit: 'W' }, metadata: true });
+    expect(events.at(-1).markers[0]).toEqual({ at: { entity: { id: 'sensor.position', attribute: 'threshold' } },
+      label: { text: 'Static label', entity: { id: 'sensor.label', attribute: 'status' }, unit: 'W' }, metadata: true });
     dispatch(editor, get('input[data-kind="generic-marker-label-attribute"]'), '');
-    expect(Object.hasOwn(events.at(-1).markers[0].label, 'attribute')).toBe(false);
+    expect(events.at(-1).markers[0].label.entity).toBe('sensor.label');
     expect(events.at(-1).markers[0].label.text).toBe('Static label');
     expect(events.at(-1).markers[0].label.entity).toBe('sensor.label');
   });
@@ -186,7 +186,7 @@ for (const source of ['src', 'dist']) describe(`Entity attributes (${source})`, 
     dispatch(editor, attribute, 'temperature');
     const finalConfig = events.at(-1);
     const finalMarker = scope.type === 'entity' ? finalConfig.entities[0].markers[0] : finalConfig.markers[0];
-    expect(finalMarker.at).toEqual({ entity: 'weather.forecast_home', attribute: 'temperature' });
+    expect(finalMarker.at).toEqual({ entity: { id: 'weather.forecast_home', attribute: 'temperature' } });
   });
 
   it('moves the existing row Unit control beside Attribute without duplicating its binding', () => {
@@ -267,20 +267,20 @@ describe('Feature entity attributes', () => {
     const { editor } = await featureEditor({ type: 'custom:sensor-bar-card-plus-feature', min: 0, min_entity: 'sensor.min', target: 75, target_entity: 'sensor.target' });
     const scale = editor._createSectionContext();
     scale.setSource({ type: 'card' }, 'min', 'attribute', 'lower');
-    expect(editor._config.scale.min).toEqual({ fixed: 0, entity: 'sensor.min', attribute: 'lower' });
+    expect(editor._config.scale.min).toEqual({ fixed: 0, entity: { id: 'sensor.min', attribute: 'lower' } });
     expect(editor._config.min).toBeUndefined();
     scale.setSource({ type: 'card' }, 'target', 'attribute', 'limit');
-    expect(editor._config.target.at).toEqual({ fixed: 75, entity: 'sensor.target', attribute: 'limit' });
+    expect(editor._config.target.at).toEqual({ fixed: 75, entity: { id: 'sensor.target', attribute: 'limit' } });
     scale.setSource({ type: 'card' }, 'target', 'mode', 'entity-fallback');
-    expect(editor._config.target.at.attribute).toBe('limit');
+    expect(editor._config.target.at.entity).toEqual({ id: 'sensor.target', attribute: 'limit' });
     scale.setSource({ type: 'card' }, 'target', 'mode', 'fixed');
-    expect(editor._config.target.at.attribute).toBeUndefined();
+    expect(editor._config.target.at).toEqual({ fixed: 75 });
   });
 
   it('edits Feature Reference Marker position and free-text label attributes independently', async () => {
     const { editor } = await featureEditor({ type: 'custom:sensor-bar-card-plus-feature', markers: [{
-      at: { entity: 'sensor.position', attribute: 'unknown_position' },
-      label: { text: 'Static label', entity: 'sensor.label', attribute: 'description', show_unit: false },
+      at: { entity: { id: 'sensor.position', attribute: 'unknown_position' } },
+      label: { text: 'Static label', entity: { id: 'sensor.label', attribute: 'description' }, show_unit: false },
     }] });
     const position = editor.shadowRoot.querySelectorAll('input[data-kind="generic-marker-attribute"]')[0];
     const label = editor.shadowRoot.querySelectorAll('input[data-kind="generic-marker-label-attribute"]')[0];
@@ -289,13 +289,13 @@ describe('Feature entity attributes', () => {
     label.value = 'status';
     label.dispatchEvent({ type: 'input', bubbles: true, composed: true });
     await editor.updateComplete;
-    expect(editor._config.markers[0]).toEqual({ at: { entity: 'sensor.position', attribute: 'unknown_position' },
-      label: { text: 'Static label', entity: 'sensor.label', attribute: 'status', show_unit: false } });
+    expect(editor._config.markers[0]).toEqual({ at: { entity: { id: 'sensor.position', attribute: 'unknown_position' } },
+      label: { text: 'Static label', entity: { id: 'sensor.label', attribute: 'status' }, show_unit: false } });
     position.value = '';
     position.dispatchEvent({ type: 'input', bubbles: true, composed: true });
     await editor.updateComplete;
     expect(editor._config.markers[0].at).toEqual({ entity: 'sensor.position' });
-    expect(editor._config.markers[0].label.attribute).toBe('status');
+    expect(editor._config.markers[0].label.entity).toEqual({ id: 'sensor.label', attribute: 'status' });
   });
 
   it('keeps Entity mode transient in Feature Reference Markers until a real entity is selected', async () => {

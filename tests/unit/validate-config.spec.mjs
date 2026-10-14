@@ -11,12 +11,12 @@ describe('validateNormalizedConfig', () => {
   it('preserves primary and nested source attributes through normalization, including legacy root entity config', () => {
     const config = normalize({
       entity: 'sensor.primary', attribute: 'custom.temperature',
-      scale: { min: { entity: 'sensor.bounds', attribute: 'lower' }, max: { entity: 'sensor.bounds', attribute: 'upper' } },
-      baseline: { at: { entity: 'sensor.reference', attribute: 'origin' } },
-      target: { at: { entity: 'sensor.limit', attribute: 'threshold' } },
+      scale: { min: { entity: { id: 'sensor.bounds', attribute: 'lower' } }, max: { entity: { id: 'sensor.bounds', attribute: 'upper' } } },
+      baseline: { at: { entity: { id: 'sensor.reference', attribute: 'origin' } } },
+      target: { at: { entity: { id: 'sensor.limit', attribute: 'threshold' } } },
       markers: [{
-        at: { entity: 'sensor.reference', attribute: 'marker' },
-        label: { entity: 'sensor.status', attribute: 'description' },
+        at: { entity: { id: 'sensor.reference', attribute: 'marker' } },
+        label: { entity: { id: 'sensor.status', attribute: 'description' } },
       }],
     });
     const row = config.entities[0];
@@ -32,6 +32,56 @@ describe('validateNormalizedConfig', () => {
       source: { entity: 'sensor.reference', attribute: 'marker' },
       label: { entity: 'sensor.status', attribute: 'description' },
     });
+  });
+
+  it('accepts structured EntitySources and rejects malformed or provisional sibling attributes', () => {
+    const valid = normalize({
+      entities: [{ entity: 'sensor.primary' }],
+      scale: { min: { entity: { id: 'sensor.minimum', attribute: 'low' }, fixed: 0 } },
+      target: { at: { entity: { id: 'sensor.target', attribute: 'value' }, fixed: 10 } },
+    });
+    expect(valid.scale.min).toMatchObject({ entity: 'sensor.minimum', attribute: 'low', fixed: 0 });
+    expect(valid.target_marker.source).toMatchObject({ entity: 'sensor.target', attribute: 'value', fixed: 10 });
+
+    for (const entity of [{}, { id: '' }, { id: 'sensor.valid', attribute: '' }, { id: 42, attribute: 'value' }, { id: 'sensor.valid', attribute: ['value'] }]) {
+      const invalid = normalize({ entities: [{ entity: 'sensor.primary' }], scale: { min: { entity } } });
+      expect(invalid.scale.min.entity).toBeNull();
+      expect(validateNormalizedConfig(invalid).warnings.map(item => item.code)).toContain('source.invalid_entity_source');
+    }
+
+    const provisional = normalize({ entities: [{ entity: 'sensor.primary' }], target: { at: { entity: 'sensor.target', attribute: 'value' } } });
+    expect(provisional.target_marker.source.entity).toBeNull();
+    expect(validateNormalizedConfig(provisional).warnings.map(item => item.code)).toContain('source.invalid_entity_source');
+
+    const marker = normalize({
+      entities: [{ entity: 'sensor.primary' }],
+      markers: [{ at: { entity: 'sensor.anchor', attribute: 'position' } }],
+    });
+    expect(marker.generic_markers[0]).toMatchObject({ valid: false, invalidSource: true });
+    expect(validateNormalizedConfig(marker).warnings.map(item => item.code)).toContain('markers.invalid_source');
+
+    const markerLabel = normalize({
+      entities: [{ entity: 'sensor.primary' }],
+      markers: [{ at: 50, label: { entity: 'sensor.status', attribute: 'description' } }],
+    });
+    expect(markerLabel.generic_markers[0].label).toMatchObject({ entity: null, invalidEntity: true });
+    expect(validateNormalizedConfig(markerLabel).warnings.map(item => item.code)).toContain('markers.invalid_label_entity');
+  });
+
+  it('keeps released v1.8 state-source and fixed-fallback forms state-based', () => {
+    const config = normalize({
+      entities: [{ entity: 'sensor.primary' }],
+      scale: { min: { entity: 'sensor.minimum', fixed: 0 } },
+      baseline: { at: { entity: 'sensor.baseline', fixed: 5 } },
+      target: { at: { entity: 'sensor.target', fixed: 10 } },
+      markers: [{ at: { entity: 'sensor.marker', fixed: 15 } }],
+    });
+    const row = config.entities[0];
+    expect(row.scale.min).toMatchObject({ entity: 'sensor.minimum', fixed: 0 });
+    expect(row.scale.min).not.toHaveProperty('attribute');
+    expect(row.baseline.at).toMatchObject({ entity: 'sensor.baseline', fixed: 5 });
+    expect(row.target_marker.source).toMatchObject({ entity: 'sensor.target', fixed: 10 });
+    expect(row.generic_markers[0].source).toMatchObject({ entity: 'sensor.marker', fixed: 15 });
   });
 
   it('keeps entity-ID shorthand state-only and accepts unknown non-empty attribute names', () => {

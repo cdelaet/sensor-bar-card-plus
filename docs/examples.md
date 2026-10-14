@@ -401,6 +401,25 @@ The Pin follows the reference helper. The Chevron stays at three-quarters of the
 
 Labels can overlap when references are close or the card is narrow. Each lane has four slots shared with built-in markers; a label-only reference still consumes one. See [Generic Reference Markers](configuration.md#generic-reference-markers) for capacity and label options.
 
+For an attribute-backed value source, put the entity ID and one scalar attribute under `entity`. `fixed` can provide a fallback while that dynamic attribute is missing or non-numeric:
+
+```yaml
+scale:
+  min: { fixed: 0 }
+  max: { fixed: 40 }
+target:
+  at:
+    entity: { id: climate.living_room, attribute: temperature }
+    fixed: 20
+markers:
+  - at: { entity: { id: climate.living_room, attribute: temperature } }
+    label:
+      show: true
+      entity: { id: sensor.weather_summary, attribute: condition }
+```
+
+The state shorthand `entity: sensor.temperature` remains supported. Do not put `attribute` beside `entity` in a source object.
+
 ## Complete practical cards
 
 ### Battery percentage at a glance

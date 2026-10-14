@@ -18,8 +18,32 @@ export function getFeatureScaleSource(config, key) {
 // never becomes the persisted object; untouched source parts/metadata stay raw.
 export function patchSource(config, base, bound, part, value, empty, allowPercent = false) {
   const patch = (target, path) => empty ? deletePathValue(target, path) : setPathValue(target, path, value);
+  if (typeof bound === 'string' && looksLikeEntityId(bound) && part === 'entity') {
+    return empty ? deletePathValue(config, base) : setPathValue(config, base, value);
+  }
+  if (part === 'entity' || part === 'attribute') {
+    const source = normalizeStructuredResolvableValue(bound, null, null, { allowPercent });
+    const entity = part === 'entity' ? (empty ? '' : value) : source.entity ?? '';
+    const attribute = part === 'attribute' ? (empty ? '' : value) : source.attribute ?? '';
+    if (part === 'entity' && empty) {
+      if (isObject(bound)) return deletePathValue(deletePathValue(config, [...base, 'entity']), [...base, 'attribute']);
+      return config;
+    }
+    const entityValue = entity ? (attribute ? { id: entity, attribute } : entity) : undefined;
+    if (isObject(bound)) {
+      let next = config;
+      next = deletePathValue(next, [...base, 'attribute']);
+      if (entityValue === undefined) next = deletePathValue(next, [...base, 'entity']);
+      else next = setPathValue(next, [...base, 'entity'], entityValue);
+      return next;
+    }
+    const nextBound = {};
+    if (source.fixed !== null && source.fixed !== undefined) nextBound.fixed = source.fixed;
+    if (entityValue !== undefined) nextBound.entity = entityValue;
+    if (Number.isFinite(source.percent)) nextBound.percent = source.percent;
+    return Object.keys(nextBound).length ? setPathValue(config, base, nextBound) : config;
+  }
   if (isObject(bound)) {
-    if (part === 'entity' && empty) return deletePathValue(deletePathValue(config, [...base, 'entity']), [...base, 'attribute']);
     if (part === 'fixed' && empty) return deletePathValue(deletePathValue(config, [...base, 'fixed']), [...base, 'value']);
     const storedPart = part === 'fixed' && bound.fixed === undefined && bound.value !== undefined ? 'value' : part;
     return patch(config, [...base, storedPart]);
@@ -31,7 +55,9 @@ export function patchSource(config, base, bound, part, value, empty, allowPercen
     if (empty) return config;
     return setPathValue(config, base, { [storedPart]: storedPart === 'percent' ? percent : bound, [part]: value });
   }
-  return empty ? config : setPathValue(config, [...base, part], value);
+  if (empty) return config;
+  if (part === 'fixed') return setPathValue(config, [...base, 'fixed'], value);
+  return setPathValue(config, base, { entity: part === 'attribute' ? { id: '', attribute: value } : value });
 }
 
 export function patchFeatureScaleSource(config, key, part, rawValue) {
@@ -43,8 +69,9 @@ export function patchFeatureScaleSource(config, key, part, rawValue) {
       if (empty) return config;
       const source = {};
       if (config[key] !== undefined) source.fixed = config[key];
-      if (config[`${key}_entity`] !== undefined) source.entity = config[`${key}_entity`];
-      source.attribute = value;
+      if (config[`${key}_entity`] !== undefined) {
+        source.entity = { id: config[`${key}_entity`], attribute: value };
+      }
       config = deletePathValue(config, [key]);
       config = deletePathValue(config, [`${key}_entity`]);
       return setPathValue(config, ['scale', key], source);
@@ -134,7 +161,9 @@ function patchFeatureMarkerSourceMode(config, key, mode) {
     at = isObject(raw) ? { ...at, percent } : `${percent}%`;
   } else {
     if (mode !== 'entity') at.fixed = source.fixed !== '' && source.fixed !== undefined ? source.fixed : 50;
-    if (mode !== 'fixed') at.entity = source.entity || '';
+    if (mode !== 'fixed') at.entity = source.entity
+      ? (source.attribute ? { id: source.entity, attribute: source.attribute } : source.entity)
+      : '';
     if (!isObject(raw) && mode === 'fixed') at = at.fixed;
     if (!isObject(raw) && mode === 'entity' && at.entity) at = at.entity;
   }

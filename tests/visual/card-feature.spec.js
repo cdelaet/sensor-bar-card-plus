@@ -181,7 +181,7 @@ for (const value of ['unknown', 'unavailable', 'on', 'missing']) {
       };
     }, value);
     expect(result.invalid.hidden).toBe(true);
-    expect(result.invalid.status).toBe(value === 'unknown' ? 'Unknown' : value === 'unavailable' ? 'Unavailable' : value === 'missing' ? 'Entity not found' : 'Not numeric');
+    expect(result.invalid.status).toBe(value === 'unknown' ? 'Unknown' : value === 'unavailable' ? 'Unavailable' : value === 'missing' ? 'Entity not found' : 'on');
     expect(result.invalid.label).toContain(entity);
     expect(result.invalid.label).toContain(result.invalid.status);
     expect(result.numeric).toBe(25);

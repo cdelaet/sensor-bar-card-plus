@@ -1,13 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const repoRoot = resolve(new URL('../..', import.meta.url).pathname);
 const converterPath = join(repoRoot, 'tools', 'convert-legacy-config.py');
 // PYTHON may name a command on PATH or an explicit interpreter path.
-const pythonCommand = process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
+const localPython = join(
+  repoRoot,
+  '.venv',
+  process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
+);
+const defaultPython = process.platform === 'win32' ? 'python' : 'python3';
+const pythonCommand = process.env.PYTHON || (existsSync(localPython) ? localPython : defaultPython);
 
 function convertYaml(inputYaml) {
   const tempDir = mkdtempSync(join(tmpdir(), 'sbcp-convert-'));

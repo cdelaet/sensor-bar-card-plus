@@ -366,12 +366,12 @@ describe('dynamic scale through the card update path', () => {
     initial.states['sensor.reference'] = { state: 'ignored', attributes: { value: 30 } };
     const { model } = setup({
       scale: {
-        min: { entity: 'sensor.min', attribute: 'lower' },
-        max: { entity: 'sensor.max', attribute: 'upper' },
+        min: { entity: { id: 'sensor.min', attribute: 'lower' } },
+        max: { entity: { id: 'sensor.max', attribute: 'upper' } },
       },
-      baseline: { at: { entity: 'sensor.baseline', attribute: 'zero_point' } },
-      target: { at: { entity: 'sensor.limit', attribute: 'threshold' } },
-      markers: [{ at: { entity: 'sensor.reference', attribute: 'value' } }],
+      baseline: { at: { entity: { id: 'sensor.baseline', attribute: 'zero_point' } } },
+      target: { at: { entity: { id: 'sensor.limit', attribute: 'threshold' } } },
+      markers: [{ at: { entity: { id: 'sensor.reference', attribute: 'value' } } }],
     }, initial);
 
     expect(model()).toMatchObject({ min: 10, max: 50, baseline: 15, target: 35 });
@@ -383,12 +383,12 @@ describe('dynamic scale through the card update path', () => {
     initial.states['sensor.max'].attributes.upper = 200;
     const { card, model } = setup({
       scale: {
-        min: { entity: 'sensor.min', attribute: 'lower', fixed: 10 },
-        max: { entity: 'sensor.max', attribute: 'upper', fixed: 100 },
+        min: { entity: { id: 'sensor.min', attribute: 'lower' }, fixed: 10 },
+        max: { entity: { id: 'sensor.max', attribute: 'upper' }, fixed: 100 },
       },
-      baseline: { at: { entity: 'sensor.baseline', attribute: 'zero_point', fixed: 25 } },
-      target: { at: { entity: 'sensor.limit', attribute: 'threshold', fixed: 75 } },
-      markers: [{ at: { entity: 'sensor.reference', attribute: 'value', fixed: 60 } }],
+      baseline: { at: { entity: { id: 'sensor.baseline', attribute: 'zero_point' }, fixed: 25 } },
+      target: { at: { entity: { id: 'sensor.limit', attribute: 'threshold' }, fixed: 75 } },
+      markers: [{ at: { entity: { id: 'sensor.reference', attribute: 'value' }, fixed: 60 } }],
     }, initial);
     card.hass = { states: {
       'sensor.value': state(50),

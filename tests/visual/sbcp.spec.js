@@ -1545,8 +1545,8 @@ test('Floor shares the below lane with Target and renders extrema labels', async
     floorLane: 'below',
     targetLane: 'below',
     peakLabel: '42 W',
-    floorLabel: '42.0 W',
-    targetLabel: '60.0 W',
+    floorLabel: '42,0 W',
+    targetLabel: '60,0 W',
     peakShape: 'triangle',
     floorShape: 'triangle',
   });
@@ -1604,7 +1604,7 @@ test('generic reference markers share both lanes with built-in markers', async (
     { id: 'generic-2', shape: 'circle', lane: 'below', left: '0%' },
     { id: 'generic-3', shape: 'chevron', lane: 'below', left: '12%' },
   ]);
-  expect(result.labels).toEqual(['65 W', '85.0 W', '-20 W', '12']);
+  expect(result.labels).toEqual(['65 W', '85,0 W', '-20 W', '12']);
   expect(result.builtins).toEqual([true, true, true]);
   await expect(mount).toHaveScreenshot('generic-reference-markers.png');
 });
@@ -1646,10 +1646,10 @@ test('marker semantic labels compose safely and update without changing generic 
     };
   });
   expect(initial).toEqual({
-    target: 'Target 25.0 W',
-    peak: 'Max 42.0 W',
+    target: 'Target 25,0 W',
+    peak: 'Max 42,0 W',
     floor: 'Min W',
-    generic: ['Prediction 10 W', 'Previous max 30.0', 'Trigger W', 'Low'],
+    generic: ['Prediction 10 W', 'Previous max 30,0', 'Trigger W', 'Low'],
     genericHasMarkup: false,
   });
 
@@ -1835,7 +1835,7 @@ test('generic marker label entities update independently and hidden glyph labels
   const row = card.locator('.row[data-entity="sensor.information_row"]');
   await expect(row.locator('.generic-marker')).toHaveCount(8);
   await expect(row.locator('.generic-value-label')).toHaveCount(4);
-  await expect(row.locator('.generic-value-label[data-marker-id="generic-0"]')).toHaveText('12.4 kWh');
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-0"]')).toHaveText('12,4 kWh');
   await expect(row.locator('.generic-value-label[data-marker-id="generic-1"]')).toHaveText('Mode Charging');
   await expect(row.locator('.generic-value-label[data-marker-id="generic-2"]')).toHaveText('Anchor A Ready');
   await expect(row.locator('.generic-value-label[data-marker-id="generic-3"]')).toHaveText('Anchor B Waiting');
@@ -1893,7 +1893,7 @@ test('generic marker label entities update independently and hidden glyph labels
       'sensor.daily_energy': { state: '15.88', attributes: { unit_of_measurement: 'kWh' } },
     } };
   });
-  await expect(row.locator('.generic-value-label[data-marker-id="generic-0"]')).toHaveText('15.9 kWh');
+  await expect(row.locator('.generic-value-label[data-marker-id="generic-0"]')).toHaveText('15,9 kWh');
   expect(await row.locator('.generic-marker[data-marker-id="generic-0"]').evaluate((marker) => marker.style.left)).toBe('100%');
 
   await card.evaluate((element) => {
@@ -3543,13 +3543,13 @@ test('off mode keeps narrow long values inside the row before hiding the unit', 
     expect.objectContaining({
       entity: 'sensor.long_value',
       hideUnit: 'true',
-      numberText: '1,234,567.89',
+      numberText: '1.234.567,89',
       unitText: '',
       targetVisible: true,
       peakVisible: true,
     }),
-    expect.objectContaining({ entity: 'sensor.zero_value', numberText: '0.00' }),
-    expect.objectContaining({ entity: 'sensor.negative_value', numberText: '-95.00' }),
+    expect.objectContaining({ entity: 'sensor.zero_value', numberText: '0,00' }),
+    expect.objectContaining({ entity: 'sensor.negative_value', numberText: '-95,00' }),
     expect.objectContaining({ entity: 'sensor.unavailable_value', numberText: 'unavailable' }),
   ]));
 
@@ -3942,24 +3942,24 @@ test('presentation update path keeps target recovery and peak maximum intact', a
   });
 
   expect(result.initial).toEqual({
-    value: '20.0',
+    value: '20,0',
     targetDisplay: '',
     targetLabelVisibility: 'visible',
-    targetLabelText: '60.0 W',
+    targetLabelText: '60,0 W',
     peakLeft: '20%',
   });
   expect(result.unavailableTarget).toEqual({
-    value: '80.0',
+    value: '80,0',
     targetDisplay: 'none',
     targetLabelVisibility: 'hidden',
-    targetLabelText: '60.0 W',
+    targetLabelText: '60,0 W',
     peakLeft: '80%',
   });
   expect(result.recoveredTarget).toEqual({
-    value: '40.0',
+    value: '40,0',
     targetDisplay: '',
     targetLabelVisibility: 'visible',
-    targetLabelText: '60.0 W',
+    targetLabelText: '60,0 W',
     peakLeft: '80%',
   });
 });
@@ -4040,22 +4040,22 @@ test('target label precision override stays separate from primary precision', as
   });
 
   expect(result.initial).toEqual({
-    value: '42.00',
-    target: '55.3 W',
+    value: '42,00',
+    target: '55,3 W',
     targetDisplay: '',
     targetLeft: '55.25%',
     peakLeft: '42%',
   });
   expect(result.unavailable).toEqual({
-    value: '42.00',
-    target: '55.3 W',
+    value: '42,00',
+    target: '55,3 W',
     targetDisplay: 'none',
     targetLeft: '55.25%',
     peakLeft: '42%',
   });
   expect(result.recovered).toEqual({
-    value: '42.00',
-    target: '55.3 W',
+    value: '42,00',
+    target: '55,3 W',
     targetDisplay: '',
     targetLeft: '55.25%',
     peakLeft: '42%',

@@ -66,7 +66,7 @@ describe('buildRowViewModel', () => {
       value: 42.5,
       number: row.displayValue,
       unit: 'W',
-      text: '42.5 W',
+      text: '42,5 W',
     });
     expect(row.attributes.entity).toBe('sensor.power');
   });
@@ -295,9 +295,9 @@ describe('buildRowViewModel', () => {
       peaks: { 'sensor.power': 48 },
     });
 
-    expect(row.primaryPresentation.text).toBe('42.00 kW');
-    expect(row.targetPresentation.text).toBe('55.00 kW');
-    expect(row.peakPresentation.text).toBe('48.00 kW');
+    expect(row.primaryPresentation.text).toBe('42,00 kW');
+    expect(row.targetPresentation.text).toBe('55,00 kW');
+    expect(row.peakPresentation.text).toBe('48,00 kW');
   });
 
   it('builds shared target and peak marker models with canonical lanes', () => {
@@ -372,7 +372,7 @@ describe('buildRowViewModel', () => {
       { value: 170, position: 35 },
       { value: 300, position: 100 },
     ]);
-    expect(markers.map((marker) => marker.label?.text)).toEqual(['100.0 W', '170 W', '300.0']);
+    expect(markers.map((marker) => marker.label?.text)).toEqual(['100,0 W', '170 W', '300,0']);
 
     const changedScaleConfig = createNormalizedEntity({
       ...config,
@@ -394,12 +394,12 @@ describe('buildRowViewModel', () => {
   it('composes marker label text, value, and unit independently with defaults and precision', () => {
     const hass = { states: { 'sensor.power': sensor(42, { unit_of_measurement: 'W' }) } };
     const cases = [
-      [{ show: true }, '8.8 W'],
-      [{ show: true, text: 'Max', precision: 1 }, 'Max 8.8 W'],
-      [{ show: true, text: 'Trigger', show_unit: false }, 'Trigger 8.8'],
+      [{ show: true }, '8,8 W'],
+      [{ show: true, text: 'Max', precision: 1 }, 'Max 8,8 W'],
+      [{ show: true, text: 'Trigger', show_unit: false }, 'Trigger 8,8'],
       [{ show: true, text: 'Low', show_value: false }, 'Low W'],
       [{ show: true, text: 'Prediction', show_value: false, show_unit: false }, 'Prediction'],
-      [{ show: true, show_unit: false, precision: 3 }, '8.765'],
+      [{ show: true, show_unit: false, precision: 3 }, '8,765'],
       [{ show: true, show_value: false, text: '', show_unit: true }, 'W'],
       [{ show: true, show_value: false, show_unit: false }, ''],
     ];
@@ -440,7 +440,7 @@ describe('buildRowViewModel', () => {
     const markers = row.markers.filter((marker) => marker.type === 'generic');
 
     expect(markers.map((marker) => marker.label?.text)).toEqual([
-      'Today 12.4 kWh',
+      'Today 12,4 kWh',
       'Charging',
       'kWh',
       'Last report',
@@ -469,7 +469,7 @@ describe('buildRowViewModel', () => {
     expect(marker).toMatchObject({
       value: 73.5,
       position: 73.5,
-      label: { text: 'Reference 73.5 W' },
+      label: { text: 'Reference 73,5 W' },
     });
   });
 
@@ -546,7 +546,7 @@ describe('buildRowViewModel', () => {
       entityState: hass.states['sensor.power'],
       extrema: { peak: { value: 80 }, floor: { value: 12 } },
     });
-    expect(row.markers.find((marker) => marker.type === 'target').label.text).toBe('Target 34.6 kW');
+    expect(row.markers.find((marker) => marker.type === 'target').label.text).toBe('Target 34,6 kW');
     expect(row.markers.find((marker) => marker.type === 'peak').label.text).toBe('Max 80 kW');
     expect(row.markers.find((marker) => marker.type === 'floor').label.text).toBe('Min kW');
 
@@ -619,9 +619,9 @@ describe('buildRowViewModel', () => {
     const markers = row.markers.filter((marker) => marker.type === 'generic');
 
     expect(markers.map(({ value, position, label }) => ({ value, position, label: label?.text }))).toEqual([
-      { value: -20, position: 0, label: '-20.0 kW' },
-      { value: 140, position: 100, label: '140.0 kW' },
-      { value: 25, position: 25, label: '25.0 kW' },
+      { value: -20, position: 0, label: '-20,0 kW' },
+      { value: 140, position: 100, label: '140,0 kW' },
+      { value: 25, position: 25, label: '25,0 kW' },
     ]);
 
     const fallbackHass = {
@@ -637,7 +637,7 @@ describe('buildRowViewModel', () => {
     expect(fallbackRow.markers.find((marker) => marker.id === 'generic-2')).toMatchObject({
       value: 75,
       position: 75,
-      label: { text: '75.0 kW' },
+      label: { text: '75,0 kW' },
     });
   });
 
@@ -864,7 +864,7 @@ describe('buildRowViewModel', () => {
     expect(row.target).toBe(75.6);
     expect(row.targetPercent).toBe(75.6);
     expect(row.targetVisible).toBe(true);
-    expect(row.displayValue).toBe('42.0');
+    expect(row.displayValue).toBe('42,0');
     expect(row.targetDisplay).toBe('76 W');
   });
 
@@ -892,12 +892,12 @@ describe('buildRowViewModel', () => {
 
     expect(row.target).toBe(55.25);
     expect(row.targetPercent).toBe(55.25);
-    expect(row.targetDisplay).toBe('55.3 W');
+    expect(row.targetDisplay).toBe('55,3 W');
   });
 
   it.each([
-    [-42.567, '-42.57 W'],
-    [0, '0.00 W'],
+    [-42.567, '-42,57 W'],
+    [0, '0,00 W'],
   ])('formats %s target labels with the explicit fixed precision', (target, expectedDisplay) => {
     const hass = {
       states: {
@@ -947,7 +947,7 @@ describe('buildRowViewModel', () => {
 
     expect(row.target).toBeNull();
     expect(row.targetPresentation).toBeNull();
-    expect(row.primaryPresentation.text).toBe('42.00 W');
+    expect(row.primaryPresentation.text).toBe('42,00 W');
   });
 
   it('applies fixed precision consistently to primary, target, and peak presentations', () => {
@@ -977,21 +977,21 @@ describe('buildRowViewModel', () => {
 
     expect(row.primaryPresentation).toEqual({
       value: 42,
-      number: '42.00',
+      number: '42,00',
       unit: 'kWh',
-      text: '42.00 kWh',
+      text: '42,00 kWh',
     });
     expect(row.targetPresentation).toEqual({
       value: 55.25,
-      number: '55.25',
+      number: '55,25',
       unit: 'kWh',
-      text: '55.25 kWh',
+      text: '55,25 kWh',
     });
     expect(row.peakPresentation).toEqual({
       value: 42.5,
-      number: '42.50',
+      number: '42,50',
       unit: 'kWh',
-      text: '42.50 kWh',
+      text: '42,50 kWh',
     });
   });
 
@@ -1020,8 +1020,8 @@ describe('buildRowViewModel', () => {
 
     expect(row.target).toBe(55);
     expect(row.targetPercent).toBeCloseTo(55);
-    expect(row.primaryPresentation.text).toBe('42.00 W');
-    expect(row.targetPresentation.text).toBe('55.0 W');
+    expect(row.primaryPresentation.text).toBe('42,00 W');
+    expect(row.targetPresentation.text).toBe('55,0 W');
   });
 
   it('applies fixed precision through structured card and entity formatting inheritance', () => {
@@ -1048,9 +1048,9 @@ describe('buildRowViewModel', () => {
 
     expect(row.primaryPresentation).toEqual({
       value: 100.8,
-      number: '100.80',
+      number: '100,80',
       unit: 'kW',
-      text: '100.80 kW',
+      text: '100,80 kW',
     });
   });
 
@@ -1474,7 +1474,7 @@ describe('buildRowViewModel', () => {
     expect(row.peak).toBe(80);
     expect(row.floor).toBe(20);
     expect(row.peakPresentation.text).toBe('80 W');
-    expect(row.floorPresentation.text).toBe('20.0 W');
+    expect(row.floorPresentation.text).toBe('20,0 W');
     expect(row.markers.find((marker) => marker.type === 'peak')).toMatchObject({
       lane: 'above',
       labelVisible: true,
@@ -1519,7 +1519,7 @@ describe('buildRowViewModel', () => {
     const row = buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.weather'] });
 
     expect(row).toMatchObject({ state: '18.25', numericValue: 18.25, percent: 45.625, rawUnit: '°C', displayUnit: '°C' });
-    expect(row.primaryPresentation.text).toBe('18.3 °C');
+    expect(row.primaryPresentation.text).toBe('18,3 °C');
   });
 
   it('does not fall back to primary state for missing, null, or invalid attributes', () => {
@@ -1569,11 +1569,11 @@ describe('buildRowViewModel', () => {
       'sensor.status': { state: 'busy', attributes: { description: ' Charging ', unit_of_measurement: 'mode' } },
     } };
     const entityConfig = createNormalizedEntity({
-      baseline: { at: { entity: 'sensor.references', attribute: 'baseline' } },
-      target: { at: { entity: 'sensor.references', attribute: 'target' }, label: { show: true } },
+      baseline: { at: { entity: { id: 'sensor.references', attribute: 'baseline' } } },
+      target: { at: { entity: { id: 'sensor.references', attribute: 'target' } }, label: { show: true } },
       markers: [{
-        at: { entity: 'sensor.references', attribute: 'marker' },
-        label: { show: true, entity: 'sensor.status', attribute: 'description' },
+        at: { entity: { id: 'sensor.references', attribute: 'marker' } },
+        label: { show: true, entity: { id: 'sensor.status', attribute: 'description' } },
       }],
       entities: [{ entity: 'sensor.power' }],
     });
@@ -1590,7 +1590,7 @@ describe('buildRowViewModel', () => {
       'sensor.status': { state: 'Charging', attributes: { details: null } },
     } };
     const entityConfig = createNormalizedEntity({
-      markers: [{ at: 20, label: { show: true, text: 'Mode', entity: 'sensor.status', attribute: 'details' } }],
+      markers: [{ at: 20, label: { show: true, text: 'Mode', entity: { id: 'sensor.status', attribute: 'details' } } }],
       entities: [{ entity: 'sensor.power' }],
     });
     const row = buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.power'] });
@@ -1604,11 +1604,11 @@ describe('buildRowViewModel', () => {
     } };
     const entityConfig = createNormalizedEntity({
       formatting: { decimal: 1 },
-      markers: [{ at: 20, label: { show: true, text: 'Outside', entity: 'sensor.status', attribute: 'temperature' } }],
+      markers: [{ at: 20, label: { show: true, text: 'Outside', entity: { id: 'sensor.status', attribute: 'temperature' } } }],
       entities: [{ entity: 'sensor.power' }],
     });
     const row = buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.power'] });
-    expect(row.markers.find((marker) => marker.type === 'generic').label.text).toBe('Outside 19.8 °C');
+    expect(row.markers.find((marker) => marker.type === 'generic').label.text).toBe('Outside 19,8 °C');
   });
 
   it.each(['unknown', 'unavailable'])('ignores stale Reference Marker label attributes for %s source entities', (stateValue) => {
@@ -1617,7 +1617,7 @@ describe('buildRowViewModel', () => {
       'sensor.status': { state: stateValue, attributes: { description: 'stale' } },
     } };
     const entityConfig = createNormalizedEntity({
-      markers: [{ at: 20, label: { show: true, text: 'Mode', entity: 'sensor.status', attribute: 'description' } }],
+      markers: [{ at: 20, label: { show: true, text: 'Mode', entity: { id: 'sensor.status', attribute: 'description' } } }],
       entities: [{ entity: 'sensor.power' }],
     });
     const row = buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.power'] });

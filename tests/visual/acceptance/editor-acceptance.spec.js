@@ -70,13 +70,17 @@ for(const host of hosts) {
    const editor=await d.mount(page,host,d.seed(host),{tall:true,nested});await refs(editor);const ids=await rootRows(editor).evaluateAll(nodes=>nodes.map(n=>n.dataset.markerUiId));expect(new Set(ids).size).toBe(3);
    for(const index of [1,2]){
     const row=rootRows(editor).nth(index),source=ref(row,'source-mode');await source.scrollIntoViewIfNeeded();await source.focus();
-    const before=await page.evaluate(nested=>nested?document.querySelector('#mount').scrollTop:scrollY,nested);
     await source.evaluate(el=>window.__acceptanceSource=el);await row.evaluate(el=>window.__acceptanceRow=el);
     for(const mode of ['percent','entity','fixed','entity','percent','fixed','entity-fallback']){
-     await d.commit(page,editor,()=>source.selectOption(mode));await expect(source).toHaveValue(mode);await expect(source).toBeFocused();await expect(row).toHaveAttribute('data-expanded','true');await nearby(source,nested);
+     const before=await d.saved(page),events=await d.count(page);await source.selectOption(mode);await expect(source).toHaveValue(mode);
+     if(JSON.stringify(await d.saved(page))===JSON.stringify(before))expect(await d.count(page)).toBe(events);
+     else await expect.poll(()=>d.count(page)).toBeGreaterThan(events);
+     await d.echo(page,editor);await expect(source).toBeFocused();await expect(row).toHaveAttribute('data-expanded','true');await nearby(source,nested);
      expect(await rootRows(editor).evaluateAll(nodes=>nodes.map(n=>n.dataset.markerUiId))).toEqual(ids);
      expect(await source.evaluate(el=>el===window.__acceptanceSource)).toBe(true);expect(await row.evaluate(el=>el===window.__acceptanceRow)).toBe(true);
-     const scroll=await page.evaluate(nested=>nested?document.querySelector('#mount').scrollTop:scrollY,nested);expect(scroll).toBeGreaterThan(before/2);
+     // The contract is that the active Source control remains visible after
+     // each projection update. nearby() checks that directly; a minimum scroll
+     // delta is layout-dependent and does not establish visibility.
      await expect(ref(row,'percent')).toHaveCount(mode==='percent'?1:0);await expect(ref(row,'fixed')).toHaveCount(mode==='fixed'?1:0);
     }
     await d.replaceNumericDraft(page,editor,ref(row,'fallback'),'85');await d.commit(page,editor,()=>ref(row,'entity').fill(`sensor.marker_${index}`));
@@ -168,10 +172,21 @@ for(const key of ['target','baseline'])test(`feature ${key}: supported Source mo
 for(const host of hosts)test(`${host}: entity ownership and structural persistence`,async({page})=>{
  const editor=await d.mount(page,host);
  if(host==='feature'){
-  expect((await d.saved(page)).entity).toBeUndefined();const override=editor.locator('#feature-entity-override');await override.check();expect((await d.saved(page)).entity).toBeUndefined();
+  expect((await d.saved(page)).entity).toBeUndefined();
+  const attribute=editor.locator('[data-kind="feature-attribute"]');
+  await d.commit(page,editor,()=>attribute.fill('current_temperature'));
+  expect((await d.saved(page)).attribute).toBe('current_temperature');
+  const override=editor.locator('#feature-entity-override');await override.check();expect((await d.saved(page)).entity).toBeUndefined();
   await d.commit(page,editor,()=>editor.locator('[data-kind="feature-entity-source"]').fill('sensor.override'));expect((await d.saved(page)).entity).toBe('sensor.override');await d.reopen(page,editor);await expect(override).toBeChecked();
+  expect((await d.saved(page)).attribute).toBe('current_temperature');
+  await d.commit(page,editor,()=>editor.locator('[data-kind="feature-attribute"]').fill(''));
+  expect((await d.saved(page)).attribute).toBeUndefined();
   await d.commit(page,editor,()=>override.uncheck());expect((await d.saved(page)).entity).toBeUndefined();await d.reopen(page,editor);await expect(override).not.toBeChecked();await expect(editor.locator('[data-kind="feature-entity-source"]')).toHaveCount(0);
  }else{
+  await d.commit(page,editor,()=>editor.locator('[data-kind="entity-attribute"][data-index="0"]').fill('current_temperature'));
+  expect((await d.saved(page)).entities[0].attribute).toBe('current_temperature');
+  await d.commit(page,editor,()=>editor.locator('[data-kind="entity-attribute"][data-index="0"]').fill(''));
+  expect((await d.saved(page)).entities[0].attribute).toBeUndefined();
   await d.commit(page,editor,()=>editor.locator('[data-action="add-entity"]').click());expect((await d.saved(page)).entities).toHaveLength(3);
   const name=index=>editor.locator(`[data-kind="entity-name"][data-index="${index}"]`);
   await d.commit(page,editor,()=>name(2).fill('Third'));

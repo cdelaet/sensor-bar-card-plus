@@ -63,10 +63,10 @@ for (const [height, position] of [[42, 'bottom'], [36, 'inline']]) {
       accessible: element.shadowRoot.querySelector('#surface').getAttribute('aria-label'),
     }));
     expect(result.labels).toEqual(result.expected);
-    expect(result.accessible).toContain('Target at 20 W; label Target 20.0 W');
+    expect(result.accessible).toContain('Target at 20 W; label Target 20,0 W');
     expect(result.accessible).toContain('Peak at 50 W; label High');
     expect(result.accessible).toContain('Floor at 50 W; label 50 W');
-    expect(result.accessible).toContain('Reference marker at 80 W; label Energy 80.0 W');
+    expect(result.accessible).toContain('Reference marker at 80 W; label Energy 80,0 W');
   });
 
   test(`${position}: independent numeric/text label updates, unavailable content and label-only anchors`, async ({ page }) => {
@@ -74,7 +74,7 @@ for (const [height, position] of [[42, 'bottom'], [36, 'inline']]) {
       { at: 25, lane: 'above', show_marker: false, label: { show: true, entity: 'sensor.label', precision: 1 } },
       { at: 75, lane: 'below' },
     ] }, { height, position, states: { [entity]: state(50), 'sensor.label': state(99.9, 'kWh') } });
-    await expect(label(page, 'generic-0')).toHaveText('99.9 kWh');
+    await expect(label(page, 'generic-0')).toHaveText('99,9 kWh');
     const result = await feature(page).evaluate(async element => {
       const root = element.shadowRoot;
       const node = root.querySelector('[data-marker-id="generic-0"].compact-marker-label');
@@ -97,12 +97,12 @@ for (const [height, position] of [[42, 'bottom'], [36, 'inline']]) {
       { value: 'Charging', text: 'Charging', hidden: false, rail: height - 10, compact: 'true', width: 8 },
       { value: 'unknown', text: 'Charging', hidden: true, rail: height - 10, compact: 'true', width: 8 },
       { value: 'unavailable', text: 'Charging', hidden: true, rail: height - 10, compact: 'true', width: 8 },
-      { value: '42.7', text: '42.7 kWh', hidden: false, rail: height - 10, compact: 'true', width: 8 },
+      { value: '42.7', text: '42,7 kWh', hidden: false, rail: height - 10, compact: 'true', width: 8 },
     ]);
     expect(result.persistent).toBe(true);
     expect(result.glyph).toBe('none');
     expect(result.anchor).toBe('25%');
-    expect(result.accessible).toContain('Reference marker at 25 W; label 42.7 kWh');
+    expect(result.accessible).toContain('Reference marker at 25 W; label 42,7 kWh');
   });
 }
 
@@ -194,7 +194,7 @@ test('measured full → value/unit → hidden degradation survives resize and ze
   expect(result.modes[0].text).toBe(result.value);
   expect(result.modes.every(item => item.rail === 32 && item.compact === 'true' && item.width === 8)).toBe(true);
   expect(result.persistent).toBe(true);
-  expect(result.accessible).toContain('label Energy Target 50.00 W');
+  expect(result.accessible).toContain('label Energy Target 50,00 W');
 });
 
 test('close and coincident labels use non-overlapping slots, clamp endpoints and keep glyph anchors', async ({ page }) => {

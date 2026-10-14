@@ -180,9 +180,9 @@ Use this overview to find a field by YAML path. Exact scope and behavior are des
 | Path | Default | Values | Description | Card Feature |
 |---|---:|---|---|---|
 | `scale.min.fixed` | `0` for an unspecified bound | number | Fixed lower bound or explicitly configured fallback. With two dynamic bounds, configure both fixed fallbacks together. | Yes |
-| `scale.min.entity` | absent | entity ID | Live source for the lower bound. | Yes |
+| `scale.min.entity` | absent | entity ID or `{ id, attribute }` | Live lower-bound source, using the entity state or one top-level scalar attribute. | Yes |
 | `scale.max.fixed` | `100` for an unspecified bound | number | Fixed upper bound or explicitly configured fallback. With two dynamic bounds, configure both fixed fallbacks together. | Yes |
-| `scale.max.entity` | absent | entity ID | Live source for the upper bound. | Yes |
+| `scale.max.entity` | absent | entity ID or `{ id, attribute }` | Live upper-bound source, using the entity state or one top-level scalar attribute. | Yes |
 
 The Scale must have a minimum below its maximum. Two dynamic bounds are resolved as a pair, rather than mixing one live bound with a fallback. See [Scale and live sources](#scale-and-dynamic-value-sources) for fallback and temporary invalid-pair behavior. Values outside the effective Scale are drawn at the nearest rail endpoint; their displayed numeric value is unchanged.
 
@@ -211,7 +211,7 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | `baseline.enabled` | auto | `true`, `false`, omitted | Controls baseline behavior. Omitted means automatic based on configured baseline source. | Yes |
 | `baseline.at` | absent | number, percentage string, entity ID, or source object | Baseline position as a Scale value, visible-Scale percentage, or source with `fixed`, `entity` and/or `percent`. | Yes |
 | `baseline.at.fixed` | `null` | number | Fixed baseline value; fallback when the entity does not provide a usable number. | Yes |
-| `baseline.at.entity` | `null` | entity id | Dynamic baseline entity; its usable numeric state takes precedence over `fixed`. | Yes |
+| `baseline.at.entity` | `null` | entity ID or `{ id, attribute }` | Dynamic baseline source; its usable numeric state/attribute takes precedence over `fixed`. | Yes |
 | `baseline.at.percent` | absent | number | Percentage across the visible Scale in a source object; alternatively use `baseline.at: 50%`. | Yes |
 | `baseline.above.color` | ordinary fill | CSS color | Optional color for the Scale region above Baseline. | Yes |
 | `baseline.below.color` | ordinary fill | CSS color | Optional color for the Scale region below Baseline. | Yes |
@@ -223,7 +223,7 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | `target.enabled` | auto | `true`, `false`, omitted | Controls target marker behavior. Omitted means automatic based on configured target source. | Yes |
 | `target.at` | absent | number, percentage string, entity ID, or source object | Target position as a Scale value, visible-Scale percentage, or source with `fixed`, `entity` and/or `percent`. | Yes |
 | `target.at.fixed` | `null` | number | Fixed target value; fallback when the entity does not provide a usable number. | Yes |
-| `target.at.entity` | `null` | entity id | Dynamic target entity; its usable numeric state takes precedence over `fixed`. | Yes |
+| `target.at.entity` | `null` | entity ID or `{ id, attribute }` | Dynamic target source; its usable numeric state/attribute takes precedence over `fixed`. | Yes |
 | `target.at.percent` | absent | number | Percentage across the visible Scale in a source object; alternatively use `target.at: 50%`. | Yes |
 | `target.shape` | `diamond` | `diamond`, `triangle` | Target marker shape. | Yes |
 | `target.color` | `#888888` | CSS color | Target marker color. | Yes |
@@ -270,7 +270,7 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | `markers[]` | `[]` | marker entries | Card-level markers are inherited; an entity-level list replaces them, and `markers: []` clears them. | Yes |
 | `markers[].at` | required | number, percentage string, entity ID, or source object | Marker position. Use a `%` string for a percentage of the visible row Scale. | Yes |
 | `markers[].at.fixed` | absent | number | Marker anchor value on the active scale; fallback for an entity source. | Yes |
-| `markers[].at.entity` | absent | entity ID | Live marker anchor; a usable entity value takes precedence over `fixed`. | Yes |
+| `markers[].at.entity` | absent | entity ID or `{ id, attribute }` | Live marker anchor; a usable entity value/attribute takes precedence over `fixed`. | Yes |
 | `markers[].show_marker` | `true` | boolean | Hides only the marker shape when false. The anchor position, lane, and label remain active. | Yes |
 | `markers[].lane` | `below` | `above`, `below` | Selects the lane immediately above or below the rail. Inward shapes point into it; labels sit outside. | Yes |
 | `markers[].shape` | `circle` | `circle`, `diamond`, `triangle`, `chevron`, `arrow`, `pin` | Marker shape. | Yes |
@@ -279,7 +279,7 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | `markers[].label` | hidden | object | Optional text/value/unit label settings. | Yes — compact |
 | `markers[].label.show` | `false` | boolean | Enables the generic marker label. `label.entity` does not implicitly enable it. | Yes — compact |
 | `markers[].label.text` | absent | string | Optional text component in the label. | Yes |
-| `markers[].label.entity` | absent | entity ID | Optional independent content source. It supplies label state and its own unit without affecting `at`. | Yes |
+| `markers[].label.entity` | absent | entity ID or `{ id, attribute }` | Optional independent content source. It supplies label state/attribute and the source entity's unit without affecting `at`. | Yes |
 | `markers[].label.show_value` | `true` | boolean | Includes or omits the formatted value component. | Yes |
 | `markers[].label.show_unit` | `true` | boolean | Includes or omits the effective source/row unit. | Yes |
 | `markers[].label.precision` | inherited | number | Numeric label precision; defaults to the row's `formatting.decimal`. | Yes |
@@ -340,6 +340,7 @@ Entity-level configuration supports the per-row groups and legacy aliases listed
 | Option | Type | Default | Description | Card Feature |
 |---|---|---|---|---|
 | `entities[].entity` | string | required | Home Assistant entity ID for the row | — |
+| `entities[].attribute` | string | absent | Uses one top-level scalar entity attribute as the row's value; omitted keeps using entity state. No domain-specific unit inference is applied. | — |
 | `entities[].name` | string | HA friendly name, then entity ID | Overrides the displayed name | — |
 | `entities[].icon` | string or `false` | HA icon, then supported device-class/domain fallback | Overrides the icon; `false` removes it. Hero never shows an icon. | — |
 | `entities[].layout` | object | inherits card layout | Per-row layout override | — |
@@ -535,6 +536,30 @@ entities:
 The Scale defines which values appear at the rail's left and right ends. Use fixed bounds for a known range, or entity-backed bounds when helpers or sensors define the current range.
 
 Entity-backed sources are live. Home Assistant state changes recalculate the relevant row; changing a source entity does not require reloading or recreating the card. This applies to `scale.min.entity`, `scale.max.entity`, `baseline.at.entity`, `target.at.entity`, `markers[].at.entity`, and `markers[].label.entity`.
+
+Entity sources keep the released state shorthand (`entity: sensor.temperature`). To read one top-level scalar attribute, use the structured EntitySource form `entity: { id: climate.living_room, attribute: temperature }`. A source may also use `fixed` alone as a literal or alongside an entity as its fallback. The entity state/attribute is tried first; `fixed` applies only when that dynamic value is missing, unavailable, or non-numeric. Zero is a valid dynamic value, and an out-of-Scale numeric value does not trigger fallback. Object and array attributes are not suggested by the editor, but manually entered attribute names are retained.
+
+```yaml
+scale:
+  min:
+    entity:
+      id: climate.living_room
+      attribute: temperature
+    fixed: 0
+  max: { fixed: 40 }
+baseline:
+  at:
+    entity: { id: climate.living_room, attribute: temperature }
+    fixed: 20
+target:
+  at: { fixed: 24 }
+markers:
+  - at:
+      entity: { id: climate.living_room, attribute: temperature }
+      fixed: 22
+```
+
+An entity attribute belongs inside `entity` as `{ id, attribute }`; the provisional sibling form `entity: climate.living_room` plus `attribute: temperature` is invalid. Each source reads either the entity state or one attribute.
 
 Source units are not converted. Use entities whose numeric values already match the row's Scale/unit; an independent marker-label source can display its own unit.
 

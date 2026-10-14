@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveEntitySource, getEntityNumericValue } from '../../src/config/resolve.js';
+import { resolveEntitySource, getEntityNumericValue, getNormalizedResolvableNumericValue } from '../../src/config/resolve.js';
 
 describe('resolveEntitySource', () => {
   const hass = { states: {
@@ -46,5 +46,16 @@ describe('resolveEntitySource', () => {
     const numericText = { states: { 'sensor.text': { state: 'state', attributes: { value: '12.5' } } } };
     expect(resolveEntitySource(numericText, 'sensor.text', 'value').value).toBe('12.5');
     expect(getEntityNumericValue(numericText, 'sensor.text', 'value')).toBe(12.5);
+  });
+
+  it('treats an attribute value of zero as present and applies fixed only to unusable values', () => {
+    const sources = { states: {
+      'sensor.zero': { state: 'ready', attributes: { value: 0 } },
+      'sensor.text': { state: 'unavailable', attributes: { value: 'not numeric' } },
+    } };
+    const resolvable = { entity: 'sensor.zero', attribute: 'value', fixed: 20 };
+    expect(getNormalizedResolvableNumericValue(sources, resolvable)).toBe(0);
+    expect(getNormalizedResolvableNumericValue(sources, { ...resolvable, entity: 'sensor.text' })).toBe(20);
+    expect(getNormalizedResolvableNumericValue(sources, { ...resolvable, entity: 'sensor.missing' })).toBe(20);
   });
 });

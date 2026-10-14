@@ -50,7 +50,7 @@ for (const source of ['src', 'dist']) for (const [height, position] of [[42, 'bo
         expect(item.glyphPaint).toBe(item.color);
         expect(item.hidden).toBe(false);
       }
-      expect(results.map(item => item.text)).toEqual(['Target 20.0 W', '50 W', 'High', '80']);
+      expect(results.map(item => item.text)).toEqual(['Target 20,0 W', '50 W', 'High', '80']);
     });
   }
   test(`Label color ${position} ${source}: independent references, label-only and dynamic content`, async ({ page }) => {

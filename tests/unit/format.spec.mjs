@@ -6,16 +6,20 @@ import {
 } from '../../src/utils/format.js';
 
 describe('numeric presentation formatting', () => {
+  it('uses the canonical test locale', () => {
+    expect(new Intl.NumberFormat().resolvedOptions().locale).toBe('nl-BE');
+  });
+
   it('formats explicit decimals with fixed trailing zeroes', () => {
-    expect(formatNumericDisplay(42, 2)).toBe('42.00');
-    expect(formatNumericDisplay(100.8, 2)).toBe('100.80');
-    expect(formatNumericDisplay(35.01, 2)).toBe('35.01');
+    expect(formatNumericDisplay(42, 2)).toBe('42,00');
+    expect(formatNumericDisplay(100.8, 2)).toBe('100,80');
+    expect(formatNumericDisplay(35.01, 2)).toBe('35,01');
   });
 
   it('rounds explicit decimals for negative values and zero', () => {
-    expect(formatNumericDisplay(42.567, 2)).toBe('42.57');
-    expect(formatNumericDisplay(-42.567, 2)).toBe('-42.57');
-    expect(formatNumericDisplay(0, 2)).toBe('0.00');
+    expect(formatNumericDisplay(42.567, 2)).toBe('42,57');
+    expect(formatNumericDisplay(-42.567, 2)).toBe('-42,57');
+    expect(formatNumericDisplay(0, 2)).toBe('0,00');
     expect(formatNumericDisplay(42.6, 0)).toBe('43');
   });
 
@@ -33,9 +37,9 @@ describe('numeric presentation formatting', () => {
   it('keeps numeric values, numbers, and units separate', () => {
     expect(createNumericPresentation(42, 'W', 2)).toEqual({
       value: 42,
-      number: '42.00',
+      number: '42,00',
       unit: 'W',
-      text: '42.00 W',
+      text: '42,00 W',
     });
     expect(createNumericPresentation(43, 's', null).text).toBe('43s');
   });

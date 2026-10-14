@@ -24,6 +24,23 @@ export function patchFeatureReferenceMarkerSource(config, index, part, rawValue)
   return setPathValue(config, ['markers', index], marker);
 }
 
+export function patchFeatureReferenceMarkerLabelSource(config, index, part, rawValue) {
+  if (!Array.isArray(config.markers) || !config.markers[index]) return config;
+  const raw = normalizeTextValue(rawValue).trim();
+  const marker = cloneDeep(config.markers[index]);
+  const label = isObject(marker.label) ? marker.label : {};
+  const current = isObject(label.entity) ? label.entity : { id: label.entity ?? '', attribute: '' };
+  const entity = part === 'entity' ? raw : current.id;
+  const attribute = part === 'attribute' ? raw : current.attribute;
+  const nextLabel = { ...label };
+  delete nextLabel.attribute;
+  if (entity) nextLabel.entity = attribute ? { id: entity, attribute } : entity;
+  else delete nextLabel.entity;
+  if (Object.keys(nextLabel).length) marker.label = nextLabel;
+  else delete marker.label;
+  return setPathValue(config, ['markers', index], marker);
+}
+
 export function patchFeatureReferenceMarker(config, operation) {
   const rows = Array.isArray(config.markers) ? [...config.markers] : [];
   const { type, index, path, value } = operation;

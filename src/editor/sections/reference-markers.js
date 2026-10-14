@@ -13,14 +13,25 @@ export function getReferenceMarkerSource(marker) {
     }
     const source = isObject(at) ? at : {};
     if (Object.prototype.hasOwnProperty.call(source, 'entity')) {
+      const entitySource = isObject(source.entity) ? source.entity : {};
+      const entity = isObject(source.entity) ? entitySource.id : source.entity;
+      const attribute = isObject(source.entity) ? entitySource.attribute : undefined;
       return {
         mode: source.fixed !== undefined && source.fixed !== null && source.fixed !== '' ? 'entity-fallback' : 'entity',
-        entity: source.entity ?? '',
+        entity: entity ?? '',
         fixed: source.fixed ?? '',
-        ...(source.attribute ? { attribute: source.attribute } : {}),
+        ...(attribute ? { attribute } : {}),
       };
     }
     return { mode: 'fixed', fixed: source.fixed ?? '' };
+}
+
+export function getMarkerLabelSource(label = {}) {
+  const entitySource = isObject(label.entity) ? label.entity : null;
+  return {
+    entity: entitySource ? entitySource.id ?? '' : label.entity ?? '',
+    attribute: entitySource?.attribute ?? '',
+  };
 }
 
 // Array semantics and local UI identity; hosts retain persistence/render policy.
@@ -128,6 +139,7 @@ export class ReferenceMarkersSection {
     const override = this._hasMarkersOverride(scope);
     const rows = markers.map((marker, markerIndex) => {
       const source = this._getGenericMarkerSource(marker, scope, markerIndex);
+      const labelSource = getMarkerLabelSource(marker?.label);
       const markerUiId = markerUiIds[markerIndex];
       const rowId = `${scopeType}-${scopeIndex}-generic-${markerUiId}`;
       const expanded = this._expandedGenericMarkerUiIds.has(markerUiId);
@@ -138,7 +150,7 @@ export class ReferenceMarkersSection {
         })
         : '';
       const labelEntitySource = renderEntitySourceInput(
-        'generic-marker-label-entity', scopeIndex, marker?.label?.entity ?? '', 'sensor.information', {
+        'generic-marker-label-entity', scopeIndex, labelSource.entity, 'sensor.information', {
           'scope-type': scopeType,
           'marker-index': markerIndex,
         }
@@ -147,7 +159,7 @@ export class ReferenceMarkersSection {
         'scope-type': scopeType,
         'marker-index': markerIndex,
       }) : '';
-      const labelAttribute = marker?.label?.entity ? renderEntityAttributeInput('generic-marker-label-attribute', scopeIndex, marker.label.attribute, marker.label.entity, this.context.hass, {
+      const labelAttribute = labelSource.entity ? renderEntityAttributeInput('generic-marker-label-attribute', scopeIndex, labelSource.attribute, labelSource.entity, this.context.hass, {
         'scope-type': scopeType,
         'marker-index': markerIndex,
       }) : '';
@@ -317,7 +329,7 @@ export class ReferenceMarkersSection {
     const modeKey = this._getGenericMarkerSourceModeKey(scope, markerIndex);
     if (['entity', 'entity-fallback'].includes(mode) && !source.entity) this._genericMarkerSourceModes.set(modeKey, mode);
     else this._genericMarkerSourceModes.delete(modeKey);
-    return this._updateGenericMarker(scope, markerIndex, (marker) => {
+    const changed = this._updateGenericMarker(scope, markerIndex, (marker) => {
       if (mode === 'percent') {
         marker.at = '50%';
         return marker;
@@ -325,7 +337,6 @@ export class ReferenceMarkersSection {
       const oldAt = isObject(marker.at) ? cloneDeep(marker.at) : {};
       if (mode === 'fixed') {
         delete oldAt.entity;
-        delete oldAt.attribute;
         delete oldAt.percent;
         if (oldAt.fixed === undefined) oldAt.fixed = 50;
       } else {
@@ -337,6 +348,8 @@ export class ReferenceMarkersSection {
       marker.at = Object.keys(oldAt).length ? oldAt : null;
       return marker;
     }, { rerender: true, referenceMarkerEdit: { type: 'mode', index: markerIndex, value: mode } });
+    if (!changed) this.ui.render(scope);
+    return changed;
   }
 
   _toggleGenericMarkerExpanded(markerUiId) {
@@ -366,14 +379,38 @@ export class ReferenceMarkersSection {
       const value = ['entity', 'attribute'].includes(part) ? normalizeTextValue(rawValue).trim() || undefined : normalizeNumberValue(rawValue) ?? undefined;
       if (part === 'percent') { marker.at = value === undefined ? null : `${value}%`; return marker; }
       const at = isObject(marker.at) ? cloneDeep(marker.at) : {};
-      if (value === undefined) {
-        delete at[part];
-        if (part === 'entity') delete at.attribute;
-      } else at[part] = value;
+      if (part === 'entity' || part === 'attribute') {
+        const entitySource = isObject(at.entity) ? { ...at.entity } : { id: at.entity ?? '' };
+        if (part === 'entity') {
+          if (value === undefined) { delete at.entity; }
+          else entitySource.id = value;
+        } else if (value === undefined) delete entitySource.attribute;
+        else entitySource.attribute = value;
+        if (part !== 'entity' || value !== undefined) {
+          if (entitySource.attribute) at.entity = { id: entitySource.id, attribute: entitySource.attribute };
+          else at.entity = entitySource.id;
+        }
+      } else if (value === undefined) delete at[part];
+      else at[part] = value;
       marker.at = Object.keys(at).length ? at : null;
       return marker;
     });
     return changed;
+  }
+
+  _setGenericMarkerLabelSourcePart(scope, markerIndex, part, rawValue) {
+    const raw = normalizeTextValue(rawValue).trim();
+    return this._updateGenericMarker(scope, markerIndex, marker => {
+      const label = isObject(marker.label) ? cloneDeep(marker.label) : {};
+      const source = getMarkerLabelSource(label);
+      const entity = part === 'entity' ? raw : source.entity;
+      const attribute = part === 'attribute' ? raw : source.attribute;
+      if (!entity) delete label.entity;
+      else label.entity = attribute ? { id: entity, attribute } : entity;
+      delete label.attribute;
+      marker.label = label;
+      return marker;
+    });
   }
 
   _setGenericMarkerField(scope, markerIndex, kind, value) {
@@ -387,6 +424,9 @@ export class ReferenceMarkersSection {
       }
       return this.context.setSource(scope, { type: 'reference-marker', index: markerIndex }, field === 'fallback' ? 'fixed' : field, value);
     }
+    if (field === 'label-entity' || field === 'label-attribute') {
+      return this.context.setSource(scope, { type: 'reference-marker-label', index: markerIndex }, field === 'label-entity' ? 'entity' : 'attribute', value);
+    }
     let path, normalized;
     if (field === 'show-marker') { path = ['show_marker']; normalized = value === false ? false : undefined; }
     else if (['lane', 'shape', 'direction'].includes(field)) { path = [field]; normalized = field === 'direction' ? normalizeMarkerDirection(value) : value; }
@@ -394,13 +434,15 @@ export class ReferenceMarkersSection {
     else if (field.startsWith('label-')) {
       const labelField = field.slice(6).replace('show-value', 'show_value').replace('show-unit', 'show_unit');
       if (!['show', 'text', 'entity', 'attribute', 'show_value', 'show_unit', 'precision'].includes(labelField)) return false;
-      path = ['label', labelField]; normalized = normalizeMarkerLabelField(labelField, value);
+      path = ['label', labelField];
+      normalized = normalizeMarkerLabelField(labelField, value);
       if ((['text', 'entity', 'attribute'].includes(labelField) && !normalized) || normalized === null) normalized = undefined;
     } else return false;
     return this._updateGenericMarker(scope, markerIndex, marker => {
       if (path[0] === 'label') {
         const label = isObject(marker.label) ? cloneDeep(marker.label) : {};
-        if (normalized === undefined) delete label[path[1]]; else label[path[1]] = normalized;
+        if (normalized === undefined) delete label[path[1]];
+        else label[path[1]] = normalized;
         if (path[1] === 'precision') delete label.decimal;
         marker.label = label;
       } else if (normalized === undefined) delete marker[path[0]]; else marker[path[0]] = normalized;
@@ -549,7 +591,8 @@ export class ReferenceMarkersSection {
         const control = root.querySelector(`#${prefix}${ids[index]}-${field}`);
         if (control) control.checked = checked;
       }
-      for (const [field, value, title] of [['entity', source.entity ?? '', 'Reference marker entity'], ['label-entity', label.entity ?? '', 'Label content entity']]) {
+      const labelSource = getMarkerLabelSource(label);
+      for (const [field, value, title] of [['entity', source.entity ?? '', 'Reference marker entity'], ['label-entity', labelSource.entity, 'Label content entity']]) {
         for (const tag of ['input', 'ha-entity-picker']) for (const control of Array.from(root.querySelectorAll(`${tag}[data-kind="generic-marker-${field}"]`)).filter(control => Number(control.dataset.markerIndex) === index && control.dataset.scopeType === scope.type && String(control.dataset.index) === String(scope.type === 'entity' ? scope.index : 'card'))) {
           control.id = `${prefix}${ids[index]}-${field}`;
           control.setAttribute('aria-label', title);
@@ -559,7 +602,7 @@ export class ReferenceMarkersSection {
       }
       for (const [field, entityId, value, title] of [
         ['attribute', source.entity, source.attribute ?? '', 'Reference marker attribute'],
-        ['label-attribute', label.entity, label.attribute ?? '', 'Label content attribute'],
+        ['label-attribute', labelSource.entity, labelSource.attribute, 'Label content attribute'],
       ]) {
         const kind = `generic-marker-${field}`;
         const controls = Array.from(root.querySelectorAll(`input[data-kind="${kind}"], ha-entity-attribute-picker[data-kind="${kind}"]`))

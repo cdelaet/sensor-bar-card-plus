@@ -58,9 +58,46 @@ export function normalizeStructuredResolvableValue(input, inheritedResolvable = 
   }
   if (typeof input === 'object' && !Array.isArray(input)) {
     const value = input.fixed ?? input.value ?? null;
-    const entity = input.entity ?? null;
+    const rawEntity = input.entity;
+    let entity = null;
+    let attribute = null;
+    let entityInvalid = false;
+    // `entity: id` is the released state-source form. Attribute-backed
+    // sources use the structured `entity: { id, attribute }` form.
+    if (rawEntity !== undefined && rawEntity !== null && rawEntity !== '') {
+      if (typeof rawEntity === 'string') {
+        entity = rawEntity.trim();
+        if (entity && !looksLikeEntityId(entity)) {
+          entity = null;
+          entityInvalid = true;
+        }
+      } else if (rawEntity && typeof rawEntity === 'object' && !Array.isArray(rawEntity)) {
+        const keys = Object.keys(rawEntity);
+        const id = rawEntity.id;
+        const hasAttribute = Object.prototype.hasOwnProperty.call(rawEntity, 'attribute');
+        if (typeof id !== 'string' || !looksLikeEntityId(id.trim())
+          || (hasAttribute && (typeof rawEntity.attribute !== 'string' || !rawEntity.attribute.trim()))
+          || keys.some((key) => !['id', 'attribute'].includes(key))) {
+          entityInvalid = true;
+        } else {
+          entity = id.trim();
+          if (hasAttribute) attribute = rawEntity.attribute.trim();
+        }
+      } else {
+        entityInvalid = true;
+      }
+    }
+    // The former v1.9 sibling form was never released. Reject it instead of
+    // quietly degrading to a state source.
+    if (Object.prototype.hasOwnProperty.call(input, 'attribute')) {
+      entityInvalid = true;
+      entity = null;
+      attribute = null;
+    }
     const percent = allowPercent ? getFiniteNumber(input.percent) : null;
-    return normalizeResolvableValue(value, entity, percent, input.attribute);
+    const normalized = normalizeResolvableValue(value, entity, percent, attribute);
+    if (entityInvalid) normalized.entity_invalid = true;
+    return normalized;
   }
   if (looksLikeEntityId(input)) {
     return normalizeResolvableValue(
@@ -116,10 +153,10 @@ export function normalizeGenericMarkerList(input, capacityConfig = null) {
     const atInput = typeof rawAt === 'string' ? rawAt.trim() : rawAt;
     const source = normalizeStructuredResolvableValue(atInput, null, null, { allowPercent: true });
     const explicitEntity = rawAt && typeof rawAt === 'object' && rawAt.entity !== undefined
-      ? rawAt.entity
+      ? source.entity
       : (typeof atInput === 'string' && looksLikeEntityId(atInput) ? atInput : null);
-    const invalidEntity = explicitEntity !== null && explicitEntity !== undefined && explicitEntity !== ''
-      && !looksLikeEntityId(explicitEntity);
+    const invalidEntity = source.entity_invalid === true || (explicitEntity !== null && explicitEntity !== undefined && explicitEntity !== ''
+      && !looksLikeEntityId(explicitEntity));
     const invalidFixed = rawAt && typeof rawAt === 'object'
       && rawAt.fixed !== undefined && rawAt.fixed !== null
       && getFiniteNumber(rawAt.fixed) === null;
@@ -147,10 +184,19 @@ export function normalizeGenericMarkerList(input, capacityConfig = null) {
       : {};
     const labelConfig = normalizeMarkerLabelConfig(label);
     const labelEntityInput = label.entity;
-    const labelEntity = typeof labelEntityInput === 'string' ? labelEntityInput.trim() : '';
-    const invalidLabelEntity = labelEntityInput !== undefined && labelEntityInput !== null && labelEntityInput !== ''
-      && !looksLikeEntityId(labelEntity);
-    const validLabelEntity = labelEntity && looksLikeEntityId(labelEntity) ? labelEntity : null;
+    const labelEntityObject = labelEntityInput && typeof labelEntityInput === 'object' && !Array.isArray(labelEntityInput)
+      ? labelEntityInput : null;
+    const labelEntity = typeof labelEntityInput === 'string'
+      ? labelEntityInput.trim()
+      : typeof labelEntityObject?.id === 'string' ? labelEntityObject.id.trim() : '';
+    const labelAttribute = labelEntityObject?.attribute;
+    const invalidLabelEntity = (labelEntityInput !== undefined && labelEntityInput !== null && labelEntityInput !== ''
+      && !looksLikeEntityId(labelEntity))
+      || (labelEntityObject && (Object.keys(labelEntityObject).some((key) => !['id', 'attribute'].includes(key))
+        || (Object.prototype.hasOwnProperty.call(labelEntityObject, 'attribute')
+          && (typeof labelAttribute !== 'string' || !labelAttribute.trim()))))
+      || Object.prototype.hasOwnProperty.call(label, 'attribute');
+    const validLabelEntity = labelEntity && looksLikeEntityId(labelEntity) && !invalidLabelEntity ? labelEntity : null;
     const showMarker = typeof rawMarker.show_marker === 'boolean' ? rawMarker.show_marker : true;
 
     return {
@@ -171,8 +217,7 @@ export function normalizeGenericMarkerList(input, capacityConfig = null) {
         show: label.show === true,
         text: labelConfig.label_text,
         entity: validLabelEntity,
-        ...(normalizeAttribute(label.attribute) !== null ? { attribute: normalizeAttribute(label.attribute) } : {}),
-        ...(hasInvalidAttribute(label.attribute) ? { attribute_invalid: true } : {}),
+        ...(normalizeAttribute(labelAttribute) !== null ? { attribute: normalizeAttribute(labelAttribute) } : {}),
         showValue: labelConfig.label_show_value,
         showUnit: labelConfig.label_show_unit,
         precision: labelConfig.label_precision,
@@ -385,12 +430,9 @@ export function normalizeScaleBound(entityConfig, cardConfig, key, defaultValue)
   const cardBound = cardScale?.[key];
 
   const inherited = cardBound
-    ? normalizeResolvableValue(
-      cardBound.fixed ?? cardBound.value ?? null,
-      cardBound.entity ?? null,
-      null,
-      cardBound.attribute
-    )
+    ? (Object.prototype.hasOwnProperty.call(cardBound, 'fixed_explicit')
+      ? normalizeResolvableValue(cardBound.fixed ?? cardBound.value ?? null, cardBound.entity ?? null, cardBound.percent ?? null, cardBound.attribute)
+      : normalizeStructuredResolvableValue(cardBound))
     : normalizeResolvableValue(
       cardConfig?.[key] ?? defaultValue,
       cardConfig?.[entityKey] ?? null

@@ -40,7 +40,7 @@ import { NeedleSection } from './sections/needle.js';
 import { BaselineSection } from './sections/baseline.js';
 import { TargetSection } from './sections/target.js';
 import { ExtremaSection } from './sections/extrema.js';
-import { ReferenceMarkersSection, getReferenceMarkerSource } from './sections/reference-markers.js';
+import { ReferenceMarkersSection, getReferenceMarkerSource, getMarkerLabelSource } from './sections/reference-markers.js';
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from './shared/editor-marker-controls.js';
 
 export class SensorBarCardPlusEditor extends HTMLElement {
@@ -1524,8 +1524,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       if (hasFixed || hasEntity || hasPercent) {
         const nextValue = {};
         if (hasFixed) nextValue.fixed = nextParts.fixed;
-        if (hasEntity) nextValue.entity = nextParts.entity;
-        if (hasAttribute) nextValue.attribute = nextParts.attribute;
+        if (hasEntity) nextValue.entity = hasAttribute
+          ? { id: nextParts.entity, attribute: nextParts.attribute }
+          : nextParts.entity;
         if (hasPercent) nextValue.percent = nextParts.percent;
         nextTarget = this._setPathValue(nextTarget, canonicalBasePath, nextValue);
       }
@@ -1613,11 +1614,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       mutate: (scope, mutation, options) => this._applySectionMutation(scope, mutation, options),
       source: (scope, key, effective = false) => {
         if (key?.type === 'reference-marker') return getReferenceMarkerSource(key.marker);
+        if (key?.type === 'reference-marker-label') return getMarkerLabelSource(this._getGenericMarkers(scope)[key.index]?.label);
         const options = ['baseline', 'target'].includes(key) ? { canonicalBasePath: [key, 'at'], legacyFixedPath: [key], legacyEntityPath: key === 'target' ? ['target_entity'] : ['baseline', 'at', 'entity'] } : {};
         return effective ? this._getEffectiveResolvableScopedValue(scope, key, options) : this._getResolvableScopedValue(scope, key, options);
       },
       setSource: (scope, key, part, value) => key?.type === 'reference-marker'
-        ? this._referenceMarkersSection._setGenericMarkerSourcePart(scope, key.index, part, value) : key === 'baseline'
+        ? this._referenceMarkersSection._setGenericMarkerSourcePart(scope, key.index, part, value)
+        : key?.type === 'reference-marker-label'
+          ? this._referenceMarkersSection._setGenericMarkerLabelSourcePart(scope, key.index, part, value) : key === 'baseline'
         ? this._persistBaselineSourcePart(scope, part, value)
         : this._setCanonicalResolvablePart(scope, key, part, value, key === 'target' ? { canonicalBasePath: ['target', 'at'], legacyFixedPath: ['target'], legacyEntityPath: ['target_entity'], prunePaths: [['target', 'at'], ['target']] } : {}),
       get hass() { return editor._hass; },
@@ -2631,8 +2635,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       if (hasFixed || hasEntity) {
         const nextValue = {};
         if (hasFixed) nextValue.fixed = nextParts.fixed;
-        if (hasEntity) nextValue.entity = nextParts.entity;
-        if (hasAttribute) nextValue.attribute = nextParts.attribute;
+        if (hasEntity) nextValue.entity = hasAttribute
+          ? { id: nextParts.entity, attribute: nextParts.attribute }
+          : nextParts.entity;
         nextTarget = this._setPathValue(nextTarget, ['baseline', 'at'], nextValue);
       }
 
@@ -2947,11 +2952,20 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       if (this._isObject(marker.at)) {
         const at = this._cloneDeep(marker.at);
         const fixed = this._normalizeNumberValue(at.fixed);
-        const entity = this._normalizeTextValue(at.entity).trim();
+        const entity = this._isObject(at.entity)
+          ? { ...at.entity, id: this._normalizeTextValue(at.entity.id).trim() }
+          : this._normalizeTextValue(at.entity).trim();
+        if (this._isObject(entity)) {
+          const attribute = this._normalizeTextValue(entity.attribute).trim();
+          if (attribute) entity.attribute = attribute;
+          else delete entity.attribute;
+          if (!entity.id) delete at.entity;
+          else at.entity = attribute ? entity : entity.id;
+        }
         if (fixed !== null) at.fixed = fixed;
         else delete at.fixed;
-        if (entity) at.entity = entity;
-        else delete at.entity;
+        if (!this._isObject(entity) && entity) at.entity = entity;
+        else if (!this._isObject(entity)) delete at.entity;
         if (Object.keys(at).length) marker.at = at;
         else delete marker.at;
       }
@@ -3415,7 +3429,7 @@ ${this._renderFormattingSection({ type: 'card' })}
       if (kind === 'generic-marker-label-entity') {
         const scope = this._getGenericMarkerScope(picker);
         const marker = this._getGenericMarkers(scope)[Number(picker.dataset.markerIndex)];
-        picker.value = marker?.label?.entity ?? '';
+        picker.value = getMarkerLabelSource(marker?.label).entity;
         picker.label = 'Label content entity';
       }
     };
@@ -3490,8 +3504,8 @@ ${this._renderFormattingSection({ type: 'card' })}
         const source = this._getGenericMarkerSource(marker, scope, Number(control.dataset.markerIndex));
         const isLabel = kind === 'generic-marker-label-attribute';
         return {
-          entity: isLabel ? marker?.label?.entity : source.entity,
-          attribute: isLabel ? marker?.label?.attribute : source.attribute,
+          entity: isLabel ? getMarkerLabelSource(marker?.label).entity : source.entity,
+          attribute: isLabel ? getMarkerLabelSource(marker?.label).attribute : source.attribute,
           label: isLabel ? 'Label content attribute' : 'Reference marker attribute',
         };
       }
@@ -3518,6 +3532,36 @@ ${this._renderFormattingSection({ type: 'card' })}
         if (list) list.innerHTML = suggestions.map(key => `<option value="${this._escapeAttribute(key)}"></option>`).join('');
       }
     });
+  }
+
+  _syncEntityAttributeSource(control) {
+    const kind = control?.dataset?.kind;
+    const scope = kind?.startsWith('entity-')
+      ? { type: 'entity', index: Number(control.dataset.index) }
+      : { type: 'card' };
+    const key = kind?.includes('min') ? 'min'
+      : kind?.includes('max') ? 'max'
+        : kind?.includes('baseline') ? 'baseline' : 'target';
+    const source = this._createSectionContext().source(scope, key, scope.type === 'entity');
+    const attributeKind = kind.replace(/-entity-source$/, '-attribute');
+    const attributeIndex = control.dataset.index;
+    const sourceRow = control.closest?.('.field-row');
+    if (!sourceRow) {
+      this._syncEntityAttributePickers();
+      return;
+    }
+    const existing = Array.from(this.shadowRoot.querySelectorAll(`[data-kind="${attributeKind}"]`))
+      .find(element => element.dataset.index === attributeIndex)?.closest('.field-row');
+    if (!source.entity) {
+      existing?.remove();
+    } else if (!existing) {
+      const label = key === 'min' ? 'Min attribute' : key === 'max' ? 'Max attribute'
+        : `${key === 'baseline' ? 'Baseline' : 'Target'} attribute`;
+      const template = this.ownerDocument.createElement('template');
+      template.innerHTML = `<div class="field-row"><label>${label}</label>${renderEntityAttributeInput(attributeKind, attributeIndex, source.attribute, source.entity, this._hass)}</div>`;
+      sourceRow.after(template.content.firstElementChild);
+    }
+    this._syncEntityAttributePickers();
   }
 
   _syncEntityIconPickers() {
@@ -3658,7 +3702,9 @@ ${this._renderFormattingSection({ type: 'card' })}
     const detailValue = event.detail?.value;
     const value = detailValue ?? (target?.type === 'checkbox' ? target.checked : target?.value);
     if (this._referenceMarkersSection.handleField({ target, kind, value })) {
-      if (['generic-marker-entity', 'generic-marker-label-entity'].includes(kind)) this._render();
+      if (['generic-marker-entity', 'generic-marker-label-entity'].includes(kind)) {
+        this._referenceMarkersSection.ui.render(this._referenceMarkersSection._getGenericMarkerScope(target));
+      }
       return;
     }
 
@@ -3673,11 +3719,11 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (handleBarAppearanceField(this._createSectionContext(), { field, value })) return;
     if (this._needleSection.handleField({ field, kind, index: target.dataset?.index, value })) return;
     if (this._baselineSection.handleField({ field, kind, index: target.dataset?.index, value })) {
-      if (kind?.endsWith('-entity-source')) this._render();
+      if (kind?.endsWith('-entity-source')) this._syncEntityAttributeSource(target);
       return;
     }
     if (this._targetSection.handleField({ field, kind, index: target.dataset?.index, value })) {
-      if (kind?.endsWith('-entity-source')) this._render();
+      if (kind?.endsWith('-entity-source')) this._syncEntityAttributeSource(target);
       return;
     }
     if (this._extremaSection.handleField({ field, kind, index: target.dataset?.index, value })) return;
@@ -3688,10 +3734,14 @@ ${this._renderFormattingSection({ type: 'card' })}
       ));
       const nextEntries = this._buildEntityConfigEntries(nextEntities);
       if (Array.isArray(this._draftConfig.entities) || nextEntries.length > 1 || !this._draftConfig.entity) {
-        this._setValueAtPath(['entities'], nextEntries, { rerender: true });
+        this._setValueAtPath(['entities'], nextEntries);
       } else {
-        this._setValueAtPath(['entity'], nextEntities[0]?.entity ?? '', { rerender: true });
+        this._setValueAtPath(['entity'], nextEntities[0]?.entity ?? '');
       }
+      const entity = this._getEntitiesValue()[index]?.entity ?? '';
+      const subtitle = this.shadowRoot.querySelector(`.entity-shell[data-entity-shell-index="${index}"] .entity-subtitle`);
+      if (subtitle) subtitle.textContent = entity || 'Configure entity';
+      this._syncEntityAttributePickers();
       return;
     }
 
@@ -3733,12 +3783,12 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (kind === 'entity-attribute') return void this._setEntityField(Number(target.dataset.index), 'attribute', value);
 
     if (handleScaleField(this._createSectionContext(), { kind: kind?.startsWith('scale-') ? kind : undefined, value })) {
-      if (kind?.endsWith('-entity-source')) this._render();
+      if (kind?.endsWith('-entity-source')) this._syncEntityAttributeSource(target);
       return;
     }
 
     if (handleScaleField(this._createSectionContext(), { kind, index: target?.dataset?.index, value })) {
-      if (kind?.endsWith('-entity-source')) this._render();
+      if (kind?.endsWith('-entity-source')) this._syncEntityAttributeSource(target);
       return;
     }
 

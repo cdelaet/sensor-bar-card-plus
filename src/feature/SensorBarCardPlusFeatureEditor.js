@@ -27,7 +27,7 @@ import { BaselineSection } from '../editor/sections/baseline.js';
 import { TargetSection } from '../editor/sections/target.js';
 import { ExtremaSection } from '../editor/sections/extrema.js';
 import { ReferenceMarkersSection } from '../editor/sections/reference-markers.js';
-import { getFeatureReferenceMarkerSource, patchFeatureReferenceMarkerSource, patchFeatureReferenceMarker } from './feature-editor-reference-markers.js';
+import { getFeatureReferenceMarkerSource, patchFeatureReferenceMarkerSource, patchFeatureReferenceMarkerLabelSource, patchFeatureReferenceMarker } from './feature-editor-reference-markers.js';
 import { patchFeatureExtremumField } from './feature-editor-extrema.js';
 import { patchFeatureTargetField } from './feature-editor-target.js';
 import { patchFeatureNeedle, patchFeatureBaselineField } from './feature-editor-needle-baseline.js';
@@ -151,7 +151,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
           : options?.targetEdit || options?.markerEdit?.key === 'target' ? patchFeatureTargetField(config, options.targetEdit ?? options.markerEdit)
             : options?.extremumEdit || ['peak', 'floor'].includes(options?.markerEdit?.key) ? patchFeatureExtremumField(config, options.extremumEdit ?? options.markerEdit) : mutation(config)),
       source: (_scope, key) => key?.type === 'reference-marker' ? getFeatureReferenceMarkerSource(key.marker) : key === 'baseline' ? getFeatureBaselineSource(this._config) : key === 'target' ? getFeatureTargetSource(this._config) : getFeatureScaleSource(this._config, key),
-      setSource: (_scope, key, part, value) => this._mutate(config => key?.type === 'reference-marker' ? patchFeatureReferenceMarkerSource(config, key.index, part, value) : key === 'baseline' ? patchFeatureBaselineSource(config, part, value) : key === 'target' ? patchFeatureTargetSource(config, part, value) : patchFeatureScaleSource(config, key, part, value)),
+      setSource: (_scope, key, part, value) => this._mutate(config => key?.type === 'reference-marker' ? patchFeatureReferenceMarkerSource(config, key.index, part, value) : key?.type === 'reference-marker-label' ? patchFeatureReferenceMarkerLabelSource(config, key.index, part, value) : key === 'baseline' ? patchFeatureBaselineSource(config, part, value) : key === 'target' ? patchFeatureTargetSource(config, part, value) : patchFeatureScaleSource(config, key, part, value)),
     };
     Object.defineProperty(context, 'hass', { get: () => editor._hass });
     return context;

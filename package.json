@@ -10,7 +10,7 @@
     "build": "node tools/build-dist.cjs",
     "verify-dist": "node tools/verify-dist.cjs",
     "test": "npm run build && npm run test:unit && npm run test:visual",
-    "test:unit": "vitest run",
+    "test:unit": "node tools/run-vitest.cjs",
     "test:visual": "playwright test",
     "test:visual:update": "SBCP_VISUAL_BASELINE=local playwright test --update-snapshots",
     "test:acceptance": "playwright test acceptance",
