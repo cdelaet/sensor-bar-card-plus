@@ -5128,6 +5128,22 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#card-segment-preview-track').getAttribute('style')).not.toBe(originalStyle);
   });
 
+  it('bands segment preview uses the effective bar color for uncovered ranges', () => {
+    const editor = createEditor();
+    editor.setConfig({
+      entity: 'sensor.one',
+      bar: {
+        fill_style: 'bands',
+        color: '#4a9eff',
+        segments: [{ from: '0%', to: '50%', color: '#123456' }],
+      },
+    });
+
+    expect(editor.shadowRoot.querySelector('#card-segment-preview-track').getAttribute('style')).toBe(
+      'background:linear-gradient(to right, #123456 0%, #123456 50%, #4a9eff 50%, #4a9eff 100%);background-repeat:no-repeat;',
+    );
+  });
+
   it('card segment preview ignores its draft and normalizes numeric rows to the committed extent', async () => {
     const editor = createEditor();
     const boundaries = [5, 10, 15, 18, 20, 22, 24, 26, 28, 30, 33, 36, 40];

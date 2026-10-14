@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeCardConfig } from '../../src/config/normalize.js';
 import { buildRowViewModel } from '../../src/view-model/row-view-model.js';
-import { buildBarRenderModel, getRevealTransitionDuration } from '../../src/view-model/bar-render-model.js';
+import { buildBarRenderModel, getBandsGradientCss, getRevealTransitionDuration } from '../../src/view-model/bar-render-model.js';
 import { renderBar } from '../../src/render/bar-renderer.js';
 
 const entity = 'sensor.power';
@@ -12,6 +12,32 @@ function resolvedRow(appearance, value, options = {}) {
 }
 
 describe('shared bar presentation without a card instance', () => {
+  it.each([
+    ['single segment from zero', [{ from: 0, to: 50, color: '#123456' }], 'linear-gradient(to right, #123456 0%, #123456 50%, #4a9eff 50%, #4a9eff 100%)'],
+    ['single segment with leading and trailing gaps', [{ from: 20, to: 80, color: '#123456' }], 'linear-gradient(to right, #4a9eff 0%, #4a9eff 20%, #123456 20%, #123456 80%, #4a9eff 80%, #4a9eff 100%)'],
+    ['separated segments', [{ from: 0, to: 20, color: '#123456' }, { from: 40, to: 60, color: '#abcdef' }], 'linear-gradient(to right, #123456 0%, #123456 20%, #4a9eff 20%, #4a9eff 40%, #abcdef 40%, #abcdef 60%, #4a9eff 60%, #4a9eff 100%)'],
+    ['adjacent segments', [{ from: 0, to: 50, color: '#123456' }, { from: 50, to: 100, color: '#abcdef' }], 'linear-gradient(to right, #123456 0%, #123456 50%, #abcdef 50%, #abcdef 100%)'],
+    ['full-range segment', [{ from: 0, to: 100, color: '#123456' }], 'linear-gradient(to right, #123456 0%, #123456 100%)'],
+  ])('fills uncovered ranges with the bar color for %s', (_name, bands, expected) => {
+    expect(getBandsGradientCss(bands, '#4a9eff')).toBe(expected);
+  });
+
+  it('paints uncovered runtime band ranges with the effective bar color', () => {
+    const appearance = normalizeCardConfig({
+      entity,
+      bar: {
+        fill_style: 'bands',
+        color: '#4a9eff',
+        segments: [{ from: '0%', to: '50%', color: '#123456' }],
+      },
+    });
+    const model = buildBarRenderModel(resolvedRow(appearance, 75), appearance, { height: 28 });
+
+    expect(model.fill.paintLayers[0].paintStyle).toContain(
+      'background-image:linear-gradient(to right, #123456 0%, #123456 50%, #4a9eff 50%, #4a9eff 100%);',
+    );
+  });
+
   it.each(['solid', 'bands', 'soft_bands', 'gradient', 'band_gradient'])('%s uses resolved rows without changing input or retaining previous values', fillStyle => {
     const appearance = normalizeCardConfig({ entities: [{
       entity,

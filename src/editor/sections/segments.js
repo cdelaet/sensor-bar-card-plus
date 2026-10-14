@@ -3,8 +3,9 @@ import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumb
 import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, normalizeEditorColorValue } from '../shared/editor-controls.js';
 import { normalizeGaugeSegments, normalizeScaleConfig } from '../../config/normalize.js';
 import { getResolvedScale } from '../../config/resolve.js';
-import { getSegmentsForRendering } from '../../view-model/bar-render-model.js';
+import { getBandsGradientCss, getSegmentsForRendering } from '../../view-model/bar-render-model.js';
 import { PaletteSection } from '../shared/palette-section.js';
+import { getEffectiveBarColorValue } from './bar-appearance.js';
 
 export class SegmentsSection extends PaletteSection {
   constructor(context, ui, array) {
@@ -520,15 +521,21 @@ export class SegmentsSection extends PaletteSection {
       return '';
     }
     const fillStyle = this.fillStyle(scope);
+    if (fillStyle === 'bands') {
+      const bands = segments.map((segment) => ({
+        ...segment,
+        from: Math.max(0, Math.min(100, this._getSegmentPreviewBoundaryValue(segment.from))),
+        to: Math.max(0, Math.min(100, this._getSegmentPreviewBoundaryValue(segment.to))),
+      }));
+      const gradient = getBandsGradientCss(bands, getEffectiveBarColorValue(this.context, scope));
+      return gradient ? `background:${gradient};background-repeat:no-repeat;` : '';
+    }
     const stops = [];
     segments.forEach((segment) => {
       const from = Math.max(0, Math.min(100, this._getSegmentPreviewBoundaryValue(segment.from)));
       const to = Math.max(0, Math.min(100, this._getSegmentPreviewBoundaryValue(segment.to)));
       stops.push(`${segment.color} ${from}%`, `${segment.color} ${to}%`);
     });
-    if (fillStyle === 'bands') {
-      return `background:linear-gradient(to right,${stops.join(',')});background-repeat:no-repeat;`;
-    }
     return `background:linear-gradient(to right,${stops.join(',')});background-repeat:no-repeat;`;
   }
 

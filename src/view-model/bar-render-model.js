@@ -91,8 +91,7 @@ export function getSeverityInterpolationStops(ecfg, minValue = 0, maxValue = 100
   return stops;
 }
 
-export function getSeverityBandGradientCss(ecfg, minValue = 0, maxValue = 100) {
-  const bands = getSegmentsForRendering(ecfg, minValue, maxValue);
+export function getBandsGradientCss(bands, fallbackColor = '#4a9eff') {
   const sorted = bands
     .filter(s => Number.isFinite(s?.from) && Number.isFinite(s?.to) && s?.color)
     .sort((a, b) => a.from - b.from);
@@ -100,10 +99,20 @@ export function getSeverityBandGradientCss(ecfg, minValue = 0, maxValue = 100) {
   if (!sorted.length) return null;
 
   const stops = [];
+  let coveredTo = 0;
   for (const band of sorted) {
+    if (band.from > coveredTo) {
+      stops.push(`${fallbackColor} ${coveredTo}%`, `${fallbackColor} ${band.from}%`);
+    }
     stops.push(`${band.color} ${band.from}%`, `${band.color} ${band.to}%`);
+    coveredTo = Math.max(coveredTo, band.to);
   }
+  if (coveredTo < 100) stops.push(`${fallbackColor} ${coveredTo}%`, `${fallbackColor} 100%`);
   return `linear-gradient(to right, ${stops.join(', ')})`;
+}
+
+export function getSeverityBandGradientCss(ecfg, minValue = 0, maxValue = 100) {
+  return getBandsGradientCss(getSegmentsForRendering(ecfg, minValue, maxValue), ecfg.bar?.color ?? '#4a9eff');
 }
 
 export function getSoftBandBlendWidthPct() {
