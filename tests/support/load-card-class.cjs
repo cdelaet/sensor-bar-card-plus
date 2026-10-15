@@ -100,6 +100,9 @@ function createShadowRoot() {
       return null;
     },
     querySelectorAll(selector) {
+      if (selector.includes(',')) {
+        return [...new Set(selector.split(',').flatMap(part => shadowRoot.querySelectorAll(part.trim())))];
+      }
       if (selector === 'ha-entity-picker') {
         return state._elements.filter(element => element.tagName === 'HA-ENTITY-PICKER');
       }
@@ -107,6 +110,10 @@ function createShadowRoot() {
         return state._elements.filter((element) => (
           element.tagName === 'HA-ENTITY-PICKER' && element.dataset.kind === 'entity-picker'
         ));
+      }
+      if (selector === 'ha-selector[data-kind="card-action"]' || selector === 'ha-selector[data-kind="entity-action"]') {
+        const kind = selector.match(/data-kind="([^"]+)"/)?.[1];
+        return state._elements.filter(element => element.tagName === 'HA-SELECTOR' && element.dataset.kind === kind);
       }
       const dataKindMatch = selector.match(/^([a-z0-9-]+)\[data-kind="([^"]+)"\]$/i);
       if (dataKindMatch) {

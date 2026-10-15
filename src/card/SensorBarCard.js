@@ -51,6 +51,7 @@ import {
 import { updateExtremum } from '../utils/extrema.js';
 import * as barRenderModel from '../view-model/bar-render-model.js';
 import * as barRenderer from '../render/bar-renderer.js';
+import { attachRowActionHandlers, resolveRowAction } from '../actions/row-actions.js';
 
 /**
  * sensor-bar-card-plus - A polished, configurable sensor bar card for Home Assistant
@@ -189,6 +190,7 @@ export class SensorBarCard extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     this._baseDomReady = false;
     this._config = {};
+    this._actionConfig = {};
     this._diagnostics = { warnings: [], errors: [] };
     this._lastDiagnosticsSignature = null;
     this._hass = null;
@@ -198,6 +200,7 @@ export class SensorBarCard extends HTMLElement {
     this._rowPresence = [];
     this._leftModeResponsiveHistory = new WeakMap();
     this._rendered = false;
+    this._rowActionCleanup = [];
     this._resizeObserver = null;
     this._densityPassScheduled = false;
     this._densityPassDirty = false;
@@ -218,6 +221,7 @@ export class SensorBarCard extends HTMLElement {
 
   disconnectedCallback() {
     this._rowGeneration += 1;
+    this._clearRowActionHandlers();
     window.removeEventListener('resize', this._boundWindowResize);
     this._clearMarkerHover();
     this._disconnectResizeObserver();
@@ -234,8 +238,10 @@ export class SensorBarCard extends HTMLElement {
       throw new Error('You must define entities or entity');
     }
     this._rendered = false; // force full rebuild on config change
+    this._clearRowActionHandlers();
     this._rowGeneration += 1;
     const previousConfig = this._config;
+    this._actionConfig = config;
     this._config = this.normalizeCardConfig(config);
     this._rowScales = new WeakMap();
     this._reconcileRowHistory(previousConfig?.entities ?? []);
@@ -310,6 +316,11 @@ export class SensorBarCard extends HTMLElement {
     }
     this._extrema = extrema;
     this._leftModeResponsiveHistory = responsive;
+  }
+
+  _clearRowActionHandlers() {
+    this._rowActionCleanup.forEach((cleanup) => cleanup());
+    this._rowActionCleanup = [];
   }
 
   _logDiagnostics() {
@@ -3313,6 +3324,7 @@ ${barMarkerStyles}
         html += this._buildRow(entityCfg, display, displayUnit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, ecfg.peak_marker.color, ecfg.target_marker.color, safeMin, safeMax, entityIndex);
       }
       this._clearMarkerHover();
+      this._clearRowActionHandlers();
       rowsEl.innerHTML = html;
       this._rendered = true;
 
@@ -3326,13 +3338,35 @@ ${barMarkerStyles}
       });
       this._runPostLayoutPasses(builtRows);
       
-      // Attach click handlers
+      // Attach the row gesture adapter after rebuilding present rows. Missing
+      // entity warning rows are deliberately absent from this selector.
       builtRows.forEach(row => {
-        row.addEventListener('click', () => {
-          const entityId = row.dataset.entity;
-          const event = new CustomEvent('hass-more-info', { composed: true, detail: { entityId } });
-          this.dispatchEvent(event);
+        const entityIndex = Number(row.dataset.rowIndex);
+        const entityId = row.dataset.entity;
+        const resolveAction = (slot) => {
+          const rowConfig = Array.isArray(this._actionConfig?.entities)
+            ? this._actionConfig.entities[entityIndex]
+            : null;
+          return resolveRowAction(this._actionConfig, rowConfig, slot);
+        };
+        const cleanup = attachRowActionHandlers(row, {
+          resolveAction,
+          label: row.getAttribute?.('aria-label') ?? entityId,
+          dispatchAction: ({ config: actionConfig, action }) => {
+            const eventConfig = {
+              ...this._actionConfig,
+              entity: entityId,
+              [action === 'double_tap' ? 'double_tap_action' : `${action}_action`]: actionConfig,
+            };
+            const event = new CustomEvent('hass-action', {
+              bubbles: true,
+              composed: true,
+              detail: { config: eventConfig, action },
+            });
+            this.dispatchEvent(event);
+          },
         });
+        this._rowActionCleanup.push(cleanup);
       });
       return;
     }

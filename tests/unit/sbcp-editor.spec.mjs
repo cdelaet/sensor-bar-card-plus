@@ -87,6 +87,56 @@ function expectNoDeprecatedEditedKeys(target) {
 }
 
 describe('Sensor Bar Card Plus editor', () => {
+  it('exposes card and row action selectors without materializing defaults', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    const advanced = { action: 'perform-action', perform_action: 'light.turn_on', target: { entity_id: 'light.room' }, custom_field: { keep: true } };
+    editor.setConfig({
+      tap_action: advanced,
+      custom_top_level: 'keep',
+      entities: [
+        { entity: 'sensor.one', custom_row_key: 7 },
+        { entity: 'sensor.two', hold_action: { action: 'none', custom_none_field: true } },
+      ],
+    });
+
+    const cardTap = editor.shadowRoot.querySelectorAll('ha-selector[data-kind="card-action"]')[0];
+    const rowTap = editor.shadowRoot.querySelectorAll('ha-selector[data-kind="entity-action"]')[0];
+    expect(cardTap.value).toEqual(advanced);
+    expect(cardTap.selector.ui_action.default_action).toEqual({ action: 'more-info' });
+    expect(rowTap.value).toBeUndefined();
+    expect(rowTap.selector.ui_action.default_action).toEqual(advanced);
+    expect(editor._draftConfig.tap_action).toEqual(advanced);
+    expect(editor._draftConfig.hold_action).toBeUndefined();
+    expect(events).toHaveLength(0);
+
+    dispatchValueChanged(cardTap, { ...advanced, custom_field: { keep: false } });
+    expect(editor.shadowRoot.querySelectorAll('ha-selector[data-kind="card-action"]')[0]).toBe(cardTap);
+    expect(events.at(-1).detail.config.tap_action.custom_field).toEqual({ keep: false });
+    expect(events.at(-1).detail.config.custom_top_level).toBe('keep');
+    expect(events.at(-1).detail.config.entities[0].custom_row_key).toBe(7);
+
+    dispatchValueChanged(rowTap, { action: 'toggle', custom_row_action: 'keep' });
+    expect(editor.shadowRoot.querySelectorAll('ha-selector[data-kind="entity-action"]')[0]).toBe(rowTap);
+    expect(events.at(-1).detail.config.entities[0].tap_action).toEqual({ action: 'toggle', custom_row_action: 'keep' });
+    expect(events.at(-1).detail.config.entities[1].hold_action).toEqual({ action: 'none', custom_none_field: true });
+  });
+
+  it('edits a shorthand row action by promoting it to an entity override and can clear it back to inheritance', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({ entity: 'sensor.one', name: 'One', tap_action: { action: 'toggle' }, custom_top_level: true });
+    const rowTap = editor.shadowRoot.querySelectorAll('ha-selector[data-kind="entity-action"]')[0];
+    dispatchValueChanged(rowTap, { action: 'none' });
+    expect(events.at(-1).detail.config.entity).toBeUndefined();
+    expect(events.at(-1).detail.config.entities[0]).toEqual({ entity: 'sensor.one', name: 'One', tap_action: { action: 'none' } });
+    expect(events.at(-1).detail.config.tap_action).toEqual({ action: 'toggle' });
+    const nextSelector = editor.shadowRoot.querySelectorAll('ha-selector[data-kind="entity-action"]')[0];
+    dispatchValueChanged(nextSelector, undefined);
+    expect(events.at(-1).detail.config.entities[0].tap_action).toBeUndefined();
+    expect(events.at(-1).detail.config.custom_top_level).toBe(true);
+  });
+
   it('exposes an asynchronous Lovelace config editor element', async () => {
     const CardClass = loadElementClass('card');
     const editor = await CardClass.getConfigElement();

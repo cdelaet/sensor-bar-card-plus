@@ -17,7 +17,7 @@ async function render(page, rows, states) {
   await page.goto('/tests/visual/fixtures/harness.html');
   await page.evaluate(async ({ rows, states }) => {
     await window.__sbcpRenderCard({ width: 720, config: { layout: { label: { position: 'above' } }, scale: { min: 0, max: 100 }, bar: { animated: false }, entities: rows }, states });
-    document.querySelector('sensor-bar-card-plus').addEventListener('hass-more-info', e => { window.__clickedEntity = e.detail.entityId; });
+    document.querySelector('sensor-bar-card-plus').addEventListener('hass-action', e => { window.__clickedEntity = e.detail.config.entity; });
   }, { rows, states });
 }
 async function update(page, states) {
@@ -305,7 +305,7 @@ for (const order of ['normal', 'reverse']) {
       card.hass = hass;
       const inert = card.shadowRoot.querySelector('.rows').children.length === 0;
       if (order === 'reverse') card.setConfig(config);
-      card.addEventListener('hass-more-info', e => { window.__clickedEntity = e.detail.entityId; });
+      card.addEventListener('hass-action', e => { window.__clickedEntity = e.detail.config.entity; });
       window.__initializedRow = card.shadowRoot.querySelector('.row');
       return { inert, retained: card._hass === hass };
     }, { order, rows, latest });

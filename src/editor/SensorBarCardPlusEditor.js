@@ -161,6 +161,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     }
     this._syncEntityPickers();
     this._syncEntityAttributePickers();
+    this._syncActionSelectors();
   }
 
   _cloneContainer(value) {
@@ -418,6 +419,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     }
     this._refreshCardDerivedUi();
     this._refreshEntityDerivedUi();
+    this._syncActionSelectors();
   }
 
   _refreshCardDerivedUi() {
@@ -525,6 +527,56 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         nextEntry[key] = normalizedValue.trim();
       }
       entries[index] = nextEntry;
+      return entries;
+    });
+    return this._applyUserConfig(nextConfig);
+  }
+
+  _actionLabel(slot) {
+    return ({ tap_action: 'Tap action', hold_action: 'Hold action', double_tap_action: 'Double tap action' })[slot] ?? 'Action';
+  }
+
+  _renderActionSelector(slot, scope = { type: 'card' }) {
+    const entity = scope.type === 'entity';
+    const rawValue = entity ? this._getEntityRawEntries()[scope.index]?.[slot] : this._draftConfig[slot];
+    return `<div class="field-row">
+      <label>${this._actionLabel(slot)}</label>
+      <ha-selector data-kind="${entity ? 'entity-action' : 'card-action'}" data-slot="${slot}"${entity ? ` data-index="${scope.index}"` : ''}></ha-selector>
+      ${entity && rawValue === undefined ? '<div class="section-note">Inherit the card action.</div>' : ''}
+    </div>`;
+  }
+
+  _syncActionSelectors() {
+    if (!this.shadowRoot) return;
+    this.shadowRoot.querySelectorAll('ha-selector[data-kind="card-action"], ha-selector[data-kind="entity-action"]').forEach((selector) => {
+      const kind = selector.dataset?.kind;
+      const slot = selector.dataset?.slot;
+      const index = Number(selector.dataset?.index);
+      const explicit = kind === 'entity-action' ? this._getEntityRawEntries()[index]?.[slot] : this._draftConfig[slot];
+      const fallback = { action: slot === 'tap_action' ? 'more-info' : 'none' };
+      const inheritedDefault = Object.prototype.hasOwnProperty.call(this._draftConfig, slot)
+        ? this._draftConfig[slot]
+        : fallback;
+      const defaultAction = kind === 'entity-action' ? inheritedDefault : fallback;
+      const schema = { ui_action: { default_action: this._cloneDeep(defaultAction) } };
+      selector.hass = this._hass;
+      if (!selector._sbcpActionSelectorSchema || this._serializeConfig(selector._sbcpActionSelectorSchema) !== this._serializeConfig(schema)) {
+        selector._sbcpActionSelectorSchema = schema;
+        selector.selector = schema;
+      }
+      selector.label = kind === 'entity-action' ? `Entity ${index + 1} ${this._actionLabel(slot)}` : this._actionLabel(slot);
+      if (this._serializeConfig(selector.value) !== this._serializeConfig(explicit)) {
+        selector.value = explicit === undefined ? undefined : this._cloneDeep(explicit);
+      }
+    });
+  }
+
+  _setEntityAction(index, slot, value) {
+    const nextConfig = this._withEntityScopeConfig((entries) => {
+      const entry = entries[index] ?? { entity: '' };
+      if (value === undefined || value === null || value === '') delete entry[slot];
+      else entry[slot] = this._cloneDeep(value);
+      entries[index] = entry;
       return entries;
     });
     return this._applyUserConfig(nextConfig);
@@ -3242,7 +3294,15 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                          summary: this._getTargetOverrideSummary(scope),
 	                          content: this._targetSection.render(scope),
 	                        });
+                        const actionsGroup = this._renderOverrideGroup({
+                          index,
+                          group: 'actions',
+                          title: 'Actions',
+                          summary: this._getEntityRawEntries()[index] && ['tap_action', 'hold_action', 'double_tap_action'].some(slot => Object.prototype.hasOwnProperty.call(this._getEntityRawEntries()[index], slot)) ? 'Custom row actions' : 'Inherit card actions',
+                          content: ['tap_action', 'hold_action', 'double_tap_action'].map(slot => this._renderActionSelector(slot, scope)).join(''),
+                        });
 	                        return `
+                          ${actionsGroup}
                           ${scaleGroup}
                           ${targetGroup}
                           ${peakGroup}
@@ -3264,6 +3324,16 @@ export class SensorBarCardPlusEditor extends HTMLElement {
               </div>
           </div>
 	        </div>
+
+        <div class="section">
+          <div class="section-head">
+            <h3>Actions</h3>
+            <div class="section-note">Configure the default action for entity rows. Entity overrides inherit these settings.</div>
+          </div>
+          <div class="field-grid">
+            ${['tap_action', 'hold_action', 'double_tap_action'].map(slot => this._renderActionSelector(slot)).join('')}
+          </div>
+        </div>
 
 ${this._renderScaleSection({ type: 'card' })}
 
@@ -3330,6 +3400,7 @@ ${this._renderFormattingSection({ type: 'card' })}
       this._syncEntityPickers();
       this._syncEntityAttributePickers();
       this._syncEntityIconPickers();
+      this._syncActionSelectors();
       this._numericDrafts.apply(this.shadowRoot, numericFocus);
       this._lastRenderedConfigJson = this._serializeConfig(this._draftConfig);
       this._applyPendingFocus();
@@ -3683,7 +3754,7 @@ ${this._renderFormattingSection({ type: 'card' })}
 
   _handleValueChanged(event) {
     if (event._sbcpEntityPickerHandled) return;
-    if (['HA-ENTITY-PICKER', 'HA-ENTITY-ATTRIBUTE-PICKER'].includes(event.target?.tagName)) {
+    if (['HA-ENTITY-PICKER', 'HA-ENTITY-ATTRIBUTE-PICKER', 'HA-SELECTOR'].includes(event.target?.tagName)) {
       this._handleFieldEvent(event);
     }
   }
@@ -3701,6 +3772,16 @@ ${this._renderFormattingSection({ type: 'card' })}
     const kind = rawKind?.endsWith('-text-fallback') ? rawKind.slice(0, -14) : rawKind;
     const detailValue = event.detail?.value;
     const value = detailValue ?? (target?.type === 'checkbox' ? target.checked : target?.value);
+    if (kind === 'card-action') {
+      const actionValue = event.detail && Object.prototype.hasOwnProperty.call(event.detail, 'value') ? detailValue : target?.value;
+      const normalizedAction = actionValue === null || actionValue === '' ? undefined : actionValue;
+      return void this._setValueAtPath([target.dataset.slot], normalizedAction);
+    }
+    if (kind === 'entity-action') {
+      const actionValue = event.detail && Object.prototype.hasOwnProperty.call(event.detail, 'value') ? detailValue : target?.value;
+      const normalizedAction = actionValue === null || actionValue === '' ? undefined : actionValue;
+      return void this._setEntityAction(Number(target.dataset.index), target.dataset.slot, normalizedAction);
+    }
     if (this._referenceMarkersSection.handleField({ target, kind, value })) {
       if (['generic-marker-entity', 'generic-marker-label-entity'].includes(kind)) {
         this._referenceMarkersSection.ui.render(this._referenceMarkersSection._getGenericMarkerScope(target));

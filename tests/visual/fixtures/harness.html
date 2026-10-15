@@ -28,8 +28,16 @@
         customElements.define('ha-icon', class HaIcon extends HTMLElement {});
       }
       window.__lastMoreInfo = null;
+      window.__lastHassAction = null;
       window.addEventListener('hass-more-info', (event) => {
         window.__lastMoreInfo = event.detail;
+      });
+      window.addEventListener('hass-action', (event) => {
+        window.__lastHassAction = {
+          detail: event.detail,
+          bubbles: event.bubbles,
+          composed: event.composed,
+        };
       });
     </script>
     <script type="module" src="/src/sensor-bar-card-plus.js"></script>

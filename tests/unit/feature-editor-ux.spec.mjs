@@ -4,7 +4,7 @@ const root={type:'card'};
 for(const source of ['src','dist'])it(`canonical standalone structure and disclosure lifecycle (${source})`,()=>{
  const editor=createEditor({source});editor.setConfig({entities:['sensor.a'],target:{at:'75%'},baseline:{at:'35%'},markers:[{at:25}],bar:{fill_style:'solid'}});
  const html=editor.shadowRoot.innerHTML;
- expect([...html.matchAll(/<h3>([^<]+)<\/h3>/g)].map(m=>m[1])).toEqual(['Basics','Entities','Scale','Markers','Bar Appearance','Segments','Gradient Stops','Layout','Formatting']);
+ expect([...html.matchAll(/<h3>([^<]+)<\/h3>/g)].map(m=>m[1])).toEqual(['Basics','Entities','Actions','Scale','Markers','Bar Appearance','Segments','Gradient Stops','Layout','Formatting']);
  const cardGroups=[...html.matchAll(/id="card-group-([^"]+)"\s+class="override-group-toggle"/g)].map(m=>m[1]);
  expect(cardGroups).toEqual(['marker-target','marker-peak','marker-floor','generic-markers','baseline','segments','gradient-stops']);
  expect(editor._expandedCardGroups.size).toBe(0);editor._toggleCardGroupExpanded('marker-target');editor._render();expect(editor._isCardGroupExpanded('marker-target')).toBe(true);
@@ -17,7 +17,7 @@ for(const source of ['src','dist'])it(`Feature is the filtered canonical structu
  const config={type:'custom:sensor-bar-card-plus-feature',target:{at:'75%'},baseline:{at:{percent:35,future:true}},peak:{enabled:true,reset:'daily'},floor:{enabled:true},markers:[{at:'25%'}],bar:{animated:false,fill_style:'solid'},future:{unset:undefined}};
  const standalone=new classes.editor();standalone.setConfig({...config,entities:['sensor.a']});
  const editor=new classes.featureEditor(),events=[];editor.dispatchEvent=e=>{events.push(e.detail.config);editor.setConfig(e.detail.config);return true;};editor.setConfig(config);editor.context={entity_id:'sensor.parent'};await editor.updateComplete;
- const headings=html=>[...html.matchAll(/<h3>([^<]+)<\/h3>/g)].map(m=>m[1]);expect(headings(editor.shadowRoot.innerHTML)).toEqual(headings(standalone.shadowRoot.innerHTML).filter(name=>!['Basics','Layout'].includes(name)));
+ const headings=html=>[...html.matchAll(/<h3>([^<]+)<\/h3>/g)].map(m=>m[1]);expect(headings(editor.shadowRoot.innerHTML)).toEqual(headings(standalone.shadowRoot.innerHTML).filter(name=>!['Basics','Actions','Layout'].includes(name)));
  const groups=html=>[...html.matchAll(/id="card-group-([^"]+)"\s+class="override-group-toggle"/g)].map(m=>m[1]);expect(groups(editor.shadowRoot.innerHTML)).toEqual(groups(standalone.shadowRoot.innerHTML));
  for(const [group,title,summary] of [
   ['marker-target','Target',editor._targetSection._getCardTargetMarkerSummary()],['marker-peak','Peak',editor._extremaSection._getMarkerResetSummary('peak')],['marker-floor','Floor',editor._extremaSection._getMarkerResetSummary('floor')],['generic-markers','Generic Reference Markers',editor._referenceMarkersSection._getGenericMarkersSummary(root)],['baseline','Baseline',editor._baselineSection._getCardBaselineSummary()],['segments','Segments',editor._segmentsSection._getSegmentsSummary(root)],['gradient-stops','Gradient Stops',editor._gradientStopsSection._getGradientStopsSummary(root)]]){

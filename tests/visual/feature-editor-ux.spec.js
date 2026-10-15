@@ -46,7 +46,7 @@ for(const source of ['src','dist'])for(const width of [360,240])test(`Canonical 
   const standalone=document.createElement('sensor-bar-card-plus-editor');standalone.setConfig({...el._config,type:'custom:sensor-bar-card-plus',entities:['sensor.parent']});document.querySelector('#mount').append(standalone);
   const headings=root=>Array.from(root.querySelectorAll('.editor > .section > .section-head > h3')).map(n=>n.textContent.trim());
   const groups=root=>Array.from(root.querySelectorAll('.card-subgroup')).map(n=>({group:n.dataset.group,title:n.querySelector('.override-group-title').textContent,summary:n.querySelector('.override-group-summary').textContent}));
-  const result={standalone:headings(standalone.shadowRoot).filter(n=>!['Basics','Layout'].includes(n)),feature:headings(el.shadowRoot),groups:groups(standalone.shadowRoot),featureGroups:groups(el.shadowRoot)};standalone.remove();return result;
+  const result={standalone:headings(standalone.shadowRoot).filter(n=>!['Basics','Actions','Layout'].includes(n)),feature:headings(el.shadowRoot),groups:groups(standalone.shadowRoot),featureGroups:groups(el.shadowRoot)};standalone.remove();return result;
  });
  expect(canonical.feature).toEqual(canonical.standalone);expect(canonical.featureGroups).toEqual(canonical.groups);
  await expect(editor.locator('.card-subgroup[data-expanded="true"]')).toHaveCount(0);expect(await page.evaluate(()=>window.__uxEvents)).toHaveLength(0);

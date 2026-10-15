@@ -15,7 +15,18 @@ for (const key of ['peak', 'floor']) test(`standalone ${key} root/entity control
   await expect(editor.locator(`#${key}-reset`)).toBeFocused();
   await editor.locator(`#${key}-label-text`).fill('Changed energy'); await expect(editor.locator(`#${key}-label-text`)).toBeFocused();
   await editor.locator('button[data-action="toggle-entity-overrides"]').click(); await editor.locator(`#entity-0-group-${key}`).click();
-  await expect(editor.locator(`.override-group:not(.card-subgroup)[data-group="${key}"]`)).toHaveScreenshot(`${key}-entity.png`);
+  const entityGroup = editor.locator(`.override-group:not(.card-subgroup)[data-group="${key}"]`);
+  await entityGroup.scrollIntoViewIfNeeded();
+  await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
+  if (key === 'floor') {
+    // The existing floor baseline includes the browser-native number spinner.
+    const precision = editor.locator(`#entity-0-${key}-label-precision`);
+    const precisionBox = await precision.boundingBox();
+    await page.mouse.move(precisionBox.x + precisionBox.width - 8, precisionBox.y + precisionBox.height / 2);
+  } else {
+    await page.mouse.move(0, 0);
+  }
+  await expect(entityGroup).toHaveScreenshot(`${key}-entity.png`);
   await editor.locator(`#entity-0-${key}-reset`).focus();
   await editor.locator(`#entity-0-${key}-reset`).selectOption('never'); await expect(editor.locator(`#entity-0-${key}-reset`)).toBeFocused();
 });
