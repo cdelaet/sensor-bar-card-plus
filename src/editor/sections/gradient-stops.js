@@ -519,7 +519,7 @@ export class GradientStopsSection extends PaletteSection {
     return this.array.write(scope, rows, options, operation);
   }
 
-  render(scope = { type: 'card' }, renderGroup = ({ content }) => content) {
+  render(scope = { type: 'card' }, renderGroup = ({ content }) => content, { section = true } = {}) {
     if (scope?.type === 'entity') {
       const index = scope.index;
       const entityGradientStops = this._getScopedGradientStopsValue(scope);
@@ -586,12 +586,7 @@ export class GradientStopsSection extends PaletteSection {
     const gradientDraftMessage = this._getGradientDraftValidationMessage(scope);
     const gradientStopsSummary = this._getGradientStopsSummary(scope);
     const gradientStopsInactive = this.fillStyle(scope) !== 'gradient';
-    return `	        <div class="section">
-	          <div class="section-head">
-	            <h3>Gradient Stops</h3>
-	            <div class="section-note">Gradient stops define a smooth color transition from 0 to 100%.</div>
-	          </div>
-	          ${renderGroup({
+    const group = renderGroup({
 	            group: 'gradient-stops',
 	            title: 'Gradient Stops',
 	            summary: gradientStopsSummary,
@@ -643,7 +638,14 @@ export class GradientStopsSection extends PaletteSection {
 	                </div>
 	              </div>
 	            `,
-	          })}
+    });
+    if (!section) return group;
+    return `	        <div class="section">
+	          <div class="section-head">
+	            <h3>Gradient Stops</h3>
+	            <div class="section-note">Gradient stops define a smooth color transition from 0 to 100%.</div>
+	          </div>
+	          ${group}
 	        </div>`;
   }
 }

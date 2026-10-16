@@ -732,7 +732,7 @@ export class SegmentsSection extends PaletteSection {
     return this.array.write(scope, rows, options, operation);
   }
 
-  render(scope = { type: 'card' }, renderGroup = ({ content }) => content) {
+  render(scope = { type: 'card' }, renderGroup = ({ content }) => content, { section = true } = {}) {
     if (scope?.type === 'entity') {
       const index = scope.index;
       const entitySegments = this._getScopedSegmentsValue(scope);
@@ -779,40 +779,35 @@ export class SegmentsSection extends PaletteSection {
     const fillStyle = this.fillStyle(scope);
     const segments = this._getScopedSegmentsValue(scope);
     const defaultSegmentsVisible = !this._hasSegmentsOverride(scope) && this._isSegmentFillStyle(fillStyle);
-    return `	        <div class="section">
-	          <div class="section-head">
-	            <h3>Segments</h3>
-	            <div class="section-note">Segments define colored value ranges.</div>
-	          </div>
-	          ${renderGroup({
-	            group: 'segments',
-	            title: 'Segments',
-	            summary: this._getSegmentsSummary({ type: 'card' }),
-	            inactive: !this._isSegmentFillStyle(fillStyle),
-	            content: `
-	              ${this._isSegmentFillStyle(fillStyle)
-	                ? ''
-	                : '<div class="section-note">Only used with segment-based fill styles.</div>'
-	              }
+    const group = renderGroup({
+      group: 'segments',
+      title: 'Segments',
+      summary: this._getSegmentsSummary({ type: 'card' }),
+      inactive: !this._isSegmentFillStyle(fillStyle),
+      content: `
+              ${this._isSegmentFillStyle(fillStyle)
+                ? ''
+                : '<div class="section-note">Only used with segment-based fill styles.</div>'
+              }
                 ${this._renderSegmentPreview({ type: 'card' })}
-	              <div class="field-row">
-	                <label>Segments</label>
-	                <div class="list">
-	                  ${defaultSegmentsVisible
-	                    ? '<div class="section-note">Default bands</div>'
-	                    : ''
-	                  }
-	                  ${this._renderListRows(segments, (segment, index) => `
-	                    <div class="segment-editor-row">
-	                    <div class="list-row triple segment-row">
-	                      <input type="text"${this.array.autoEnds ? ` aria-label="Segment ${index + 1} start"` : ''} data-kind="segment-from" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: 'card' }, index, 'from', segment?.from))}" placeholder="0%">
-	                      <input type="text"${this.array.autoEnds ? ` aria-label="Segment ${index + 1} end (blank = Auto)"` : ''} data-kind="segment-to" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: 'card' }, index, 'to', segment?.to))}" placeholder="${this.array.autoEnds ? 'Auto' : '100%'}">
-	                      ${this.array.cssText ? renderColorInput({ id: `segment-color-${index}`, kind: 'segment-color', index, value: segment?.color ?? '#4a9eff', fallbackHex: '#4a9eff', cssText: true, label: `Segment ${index + 1} color` }) : `<input type="color" data-kind="segment-color" data-index="${index}" value="${escapeAttribute(segment?.color ?? '#4a9eff')}">`}
-	                      <button type="button" data-action="remove-segment" data-index="${index}" aria-label="Remove" title="Remove">🗑</button>
-	                    </div>
+              <div class="field-row">
+                <label>Segments</label>
+                <div class="list">
+                  ${defaultSegmentsVisible
+                    ? '<div class="section-note">Default bands</div>'
+                    : ''
+                  }
+                  ${this._renderListRows(segments, (segment, index) => `
+                    <div class="segment-editor-row">
+                    <div class="list-row triple segment-row">
+                      <input type="text"${this.array.autoEnds ? ` aria-label="Segment ${index + 1} start"` : ''} data-kind="segment-from" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: 'card' }, index, 'from', segment?.from))}" placeholder="0%">
+                      <input type="text"${this.array.autoEnds ? ` aria-label="Segment ${index + 1} end (blank = Auto)"` : ''} data-kind="segment-to" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: 'card' }, index, 'to', segment?.to))}" placeholder="${this.array.autoEnds ? 'Auto' : '100%'}">
+                      ${this.array.cssText ? renderColorInput({ id: `segment-color-${index}`, kind: 'segment-color', index, value: segment?.color ?? '#4a9eff', fallbackHex: '#4a9eff', cssText: true, label: `Segment ${index + 1} color` }) : `<input type="color" data-kind="segment-color" data-index="${index}" value="${escapeAttribute(segment?.color ?? '#4a9eff')}">`}
+                      <button type="button" data-action="remove-segment" data-index="${index}" aria-label="Remove" title="Remove">🗑</button>
+                    </div>
                       <div id="segment-row-hint-${index}" class="section-note"${this._getSegmentRowValidationMessage({ type: 'card' }, index) ? '' : ' style="display:none"'}>${escapeAttribute(this._getSegmentRowValidationMessage({ type: 'card' }, index))}</div>
                       </div>
-	                  `)}
+                  `)}
                     <div class="segment-draft">
                       <div class="list-row triple segment-row">
                         <input id="segment-draft-from" type="text"${this.array.autoEnds ? ' aria-label="New segment start"' : ''} data-kind="segment-draft-from" value="${escapeAttribute(this._getSegmentDraftState({ type: 'card' }).from)}" placeholder="0%">
@@ -822,10 +817,16 @@ export class SegmentsSection extends PaletteSection {
                       </div>
                       <div id="segment-draft-hint" class="section-note"${this._getSegmentDraftValidationMessage({ type: 'card' }) ? '' : ' style="display:none"'}>${escapeAttribute(this._getSegmentDraftValidationMessage({ type: 'card' }))}</div>
                     </div>
-	                </div>
-	              </div>
-	            `,
-	          })}
+                </div>
+              </div>`,
+    });
+    if (!section) return group;
+    return `	        <div class="section">
+	          <div class="section-head">
+	            <h3>Segments</h3>
+	            <div class="section-note">Segments define colored value ranges.</div>
+	          </div>
+	          ${group}
 	        </div>`;
   }
 }

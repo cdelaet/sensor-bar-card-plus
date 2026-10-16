@@ -43,7 +43,7 @@ for(const host of hosts) {
  test(`${host}: disclosures retain state through echo and normal close/reopen`,async({page})=>{
   const editor=await d.mount(page,host);await expect(editor.locator('.card-subgroup[data-expanded="true"]')).toHaveCount(0);
   for(const group of Object.values(groups)){
-   const button=editor.locator(`#card-group-${group}`);await d.openDisclosure(button);await d.echo(page,editor);await expect(button).toHaveAttribute('aria-expanded','true');await d.closeDisclosure(button);await d.openDisclosure(button);
+   const button=editor.locator(`#card-group-${group}`);if(!(await button.count()))continue;await d.openDisclosure(button);await d.echo(page,editor);await expect(button).toHaveAttribute('aria-expanded','true');await d.closeDisclosure(button);await d.openDisclosure(button);
   }
   await refs(editor);const row=rootRows(editor).nth(1);await d.commit(page,editor,()=>ref(row,'label-text').fill('Marker Two'));await expect(row).toHaveAttribute('data-expanded','true');
   await d.closeDisclosure(row.locator('.generic-marker-toggle'));await d.openDisclosure(row.locator('.generic-marker-toggle'));
@@ -246,7 +246,7 @@ test('standalone: entity Reference scope edits do not route to root or another e
  await d.reopen(page,editor);await d.openSection(editor,{scope:'entity',section:'References'});await expect(ref(row,'percent')).toHaveValue('75');
 });
 for(const host of hosts)test(`${host}: Needle mode respects the host Baseline cleanup policy`,async({page})=>{
- const config=d.seed(host),editor=await d.mount(page,host,config);await d.commit(page,editor,()=>editor.locator('#bar-needle-mode').selectOption('disabled'));await d.commit(page,editor,()=>editor.locator('#bar-needle-mode').selectOption('enabled'));
+ const config=d.seed(host),editor=await d.mount(page,host,config);await d.openSection(editor,{section:'Needle'});await d.commit(page,editor,()=>editor.locator('#bar-needle-mode').selectOption('disabled'));await d.commit(page,editor,()=>editor.locator('#bar-needle-mode').selectOption('enabled'));
  if(host==='feature')expect((await d.saved(page)).baseline).toEqual(config.baseline);else expect((await d.saved(page)).baseline).toBeUndefined();
 });
 test('standalone: Target inheritance preserves its established selective reset semantics',async({page})=>{

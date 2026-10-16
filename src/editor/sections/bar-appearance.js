@@ -149,7 +149,7 @@ export function handleBarAppearanceField(context, { field, kind, index, value },
 }
 
 // The root's existing nested Baseline/Needle content is supplied by its host.
-// Shared Segments/Gradient Stops are composed separately as sibling sections.
+// Shared Segments/Gradient Stops can be composed as children by the standalone host.
 // Entity content still belongs inside the host-owned override disclosure.
 export function renderBarAppearanceSection(context, scope, renderChildren = () => '', options = {}) {
   if (scope?.type === 'entity') {
@@ -196,7 +196,7 @@ export function renderBarAppearanceSection(context, scope, renderChildren = () =
   const barSolidFill = getBarSolidFillValue(context, { type: 'card' });
   return `	        <div class="section">
 	          <div class="section-head">
-	            <h3>Bar Appearance</h3>
+	            <h3>${escapeAttribute(options.heading ?? 'Bar Appearance')}</h3>
 	            <div class="section-note">Choose the bar rendering mode and base bar colors.</div>
 	          </div>
           <div class="inline-row editor-grid">

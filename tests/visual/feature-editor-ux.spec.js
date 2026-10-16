@@ -46,9 +46,9 @@ for(const source of ['src','dist'])for(const width of [360,240])test(`Canonical 
   const standalone=document.createElement('sensor-bar-card-plus-editor');standalone.setConfig({...el._config,type:'custom:sensor-bar-card-plus',entities:['sensor.parent']});document.querySelector('#mount').append(standalone);
   const headings=root=>Array.from(root.querySelectorAll('.editor > .section > .section-head > h3')).map(n=>n.textContent.trim());
   const groups=root=>Array.from(root.querySelectorAll('.card-subgroup')).map(n=>({group:n.dataset.group,title:n.querySelector('.override-group-title').textContent,summary:n.querySelector('.override-group-summary').textContent}));
-  const result={standalone:headings(standalone.shadowRoot).filter(n=>!['Basics','Actions','Layout'].includes(n)),feature:headings(el.shadowRoot),groups:groups(standalone.shadowRoot),featureGroups:groups(el.shadowRoot)};standalone.remove();return result;
+  const result={standalone:headings(standalone.shadowRoot),feature:headings(el.shadowRoot),groups:groups(standalone.shadowRoot).filter(g=>g.group!=='needle').sort((a,b)=>a.group.localeCompare(b.group)),featureGroups:groups(el.shadowRoot).sort((a,b)=>a.group.localeCompare(b.group))};standalone.remove();return result;
  });
- expect(canonical.feature).toEqual(canonical.standalone);expect(canonical.featureGroups).toEqual(canonical.groups);
+ expect(canonical.standalone).toEqual(['Basics','Entities','Layout','Scale','Bar','Markers','Formatting','Actions']);expect(canonical.feature).toEqual(['Entities','Scale','Markers','Bar Appearance','Segments','Gradient Stops','Formatting']);expect(canonical.featureGroups).toEqual(canonical.groups);
  await expect(editor.locator('.card-subgroup[data-expanded="true"]')).toHaveCount(0);expect(await page.evaluate(()=>window.__uxEvents)).toHaveLength(0);
  await expect(editor).toHaveScreenshot(`feature-ux-initial-${width}.png`);
  for(const group of canonical.groups){const button=editor.locator(`#card-group-${group.group}`);await button.evaluate(el=>window.__uxDisclosure=el);await button.click();await expect(button).toHaveAttribute('aria-expanded','true');expect(await button.evaluate(el=>el===window.__uxDisclosure)).toBe(true);await button.press('Enter');await expect(button).toHaveAttribute('aria-expanded','false');}

@@ -424,6 +424,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _refreshCardDerivedUi() {
     this._setElementText('card-group-marker-target-summary', this._getCardTargetMarkerSummary());
+    this._setElementText('card-group-needle-summary', this._getNeedleSummary({ type: 'card' }));
     this._setElementText('card-group-marker-peak-summary', this._getMarkerResetSummary('peak'));
     this._setElementText('card-group-marker-floor-summary', this._getMarkerResetSummary('floor'));
     this._setElementText('card-group-baseline-summary', this._getCardBaselineSummary());
@@ -3085,7 +3086,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._isRendering = true;
     try {
       const entities = this._getEntitiesValue();
-      const fillStyle = this._getFillStyleValue();
       const layoutLabelPosition = this._getScopedLayoutValue({ type: 'card' }, 'position') || 'left';
       const layoutHeroSize = this._getScopedLayoutValue({ type: 'card' }, 'hero_size') || 'medium';
       const layoutHeroValueSize = this._getScopedLayoutValue({ type: 'card' }, 'value_size');
@@ -3136,10 +3136,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                         <div class="field-row">
                           <label>Attribute</label>
                           ${renderEntityAttributeInput('entity-attribute', index, entry.attribute, entry.entity, this._hass)}
-                        </div>
-                        <div class="field-row">
-                          <label for="entity-${index}-formatting-unit">Unit</label>
-                          <input id="entity-${index}-formatting-unit" type="text" data-kind="entity-formatting-unit" data-index="${index}" value="${this._escapeAttribute(this._getEffectiveScopedFormattingValue({ type: 'entity', index }, 'unit'))}" placeholder="inherit card default">
                         </div>
                         ${(() => {
                           const iconMode = this._getEntityIconMode(entry, index);
@@ -3243,7 +3239,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                          group: 'formatting',
 	                          title: 'Formatting',
 	                          summary: this._getFormattingSummary(scope),
-	                          content: renderFormattingSection(this._createSectionContext(), scope, { includeUnit: false }),
+                          content: renderFormattingSection(this._createSectionContext(), scope, { includeUnit: true }),
 	                        });
                         const peakGroup = this._renderOverrideGroup({
 	                          index,
@@ -3302,19 +3298,19 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                           content: ['tap_action', 'hold_action', 'double_tap_action'].map(slot => this._renderActionSelector(slot, scope)).join(''),
                         });
 	                        return `
-                          ${actionsGroup}
+                          ${layoutGroup}
                           ${scaleGroup}
-                          ${targetGroup}
-                          ${peakGroup}
-                          ${floorGroup}
-                          ${markersGroup}
                           ${barGroup}
                           ${baselineGroup}
                           ${needleGroup}
 	                          ${segmentsGroup}
 	                          ${gradientStopsGroup}
-	                          ${layoutGroup}
+	                          ${targetGroup}
+	                          ${peakGroup}
+	                          ${floorGroup}
+	                          ${markersGroup}
 	                          ${formattingGroup}
+	                          ${actionsGroup}
 	                        `;
 	                      })()}
 	                    </div>
@@ -3325,37 +3321,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           </div>
 	        </div>
 
+
         <div class="section">
-          <div class="section-head">
-            <h3>Actions</h3>
-            <div class="section-note">Configure the default action for entity rows. Entity overrides inherit these settings.</div>
-          </div>
-          <div class="field-grid">
-            ${['tap_action', 'hold_action', 'double_tap_action'].map(slot => this._renderActionSelector(slot)).join('')}
-          </div>
-        </div>
-
-${this._renderScaleSection({ type: 'card' })}
-
-${renderMarkersSection({
-  renderGroup: options => this._renderCardGroup(options),
-  target: { summary: this._getCardTargetMarkerSummary(), content: this._targetSection.render({ type: 'card' }) },
-  peak: { summary: this._getMarkerResetSummary('peak'), content: this._extremaSection.render({ type: 'card' }, 'peak') },
-  floor: { summary: this._getMarkerResetSummary('floor'), content: this._extremaSection.render({ type: 'card' }, 'floor') },
-  references: { summary: this._getGenericMarkersSummary({ type: 'card' }), content: this._renderGenericMarkersEditor({ type: 'card' }) },
-})}
-
-${renderBarAppearanceSection(this._createSectionContext(), { type: 'card' }, () => `${this._baselineSection.render({ type: 'card' }, options => this._renderCardGroup(options))}${this._needleSection.render({ type: 'card' })}`)}
-
-${this._segmentsSection.render({ type: 'card' }, options => this._renderCardGroup(options))}
-
-${this._gradientStopsSection.render({ type: 'card' }, options => this._renderCardGroup(options))}
-
-	        <div class="section">
-	          <div class="section-head">
-	            <h3>Layout</h3>
-	          </div>
-	          <div class="inline-row editor-grid">
+          <div class="section-head"><h3>Layout</h3></div>
+          <div class="inline-row editor-grid">
             <div class="field-row">
               <label for="layout-height">Row height</label>
               <input id="layout-height" type="number" min="24" step="1" data-field="layout-height" value="${this._escapeAttribute(layoutHeight)}">
@@ -3390,9 +3359,30 @@ ${this._gradientStopsSection.render({ type: 'card' }, options => this._renderCar
               <input id="layout-label-width" type="number" step="1" data-field="layout-label-width" value="${this._escapeAttribute(layoutLabelWidth)}">
             </div>
           </div>
-	        </div>
+        </div>
+${this._renderScaleSection({ type: 'card' })}
+
+${renderBarAppearanceSection(this._createSectionContext(), { type: 'card' }, () => `${this._baselineSection.render({ type: 'card' }, options => this._renderCardGroup(options))}${this._renderCardGroup({ group: 'needle', title: 'Needle', summary: this._getNeedleSummary({ type: 'card' }), content: this._needleSection.render({ type: 'card' }) })}${this._segmentsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false })}${this._gradientStopsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false })}`, { heading: 'Bar' })}
+
+${renderMarkersSection({
+  renderGroup: options => this._renderCardGroup(options),
+  target: { summary: this._getCardTargetMarkerSummary(), content: this._targetSection.render({ type: 'card' }) },
+  peak: { summary: this._getMarkerResetSummary('peak'), content: this._extremaSection.render({ type: 'card' }, 'peak') },
+  floor: { summary: this._getMarkerResetSummary('floor'), content: this._extremaSection.render({ type: 'card' }, 'floor') },
+  references: { summary: this._getGenericMarkersSummary({ type: 'card' }), content: this._renderGenericMarkersEditor({ type: 'card' }) },
+})}
 
 ${this._renderFormattingSection({ type: 'card' })}
+
+        <div class="section">
+          <div class="section-head">
+            <h3>Actions</h3>
+            <div class="section-note">Configure the default action for entity rows. Entity overrides inherit these settings.</div>
+          </div>
+          <div class="field-grid">
+            ${['tap_action', 'hold_action', 'double_tap_action'].map(slot => this._renderActionSelector(slot)).join('')}
+          </div>
+        </div>
       </div>
     `;
 

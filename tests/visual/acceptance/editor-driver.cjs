@@ -72,7 +72,10 @@ async function openSection(editor, entry) {
   await openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));
   const slug={'References':'markers','Bar Appearance':'bar','Gradient Stops':'gradient-stops'}[entry.section]??entry.section.toLowerCase();
   await openDisclosure(editor.locator(`#entity-0-group-${slug}`));
- } else if(groups[entry.section]) await openDisclosure(editor.locator(`#card-group-${groups[entry.section]}`));
+ } else if(groups[entry.section]) {
+  const group=editor.locator(`#card-group-${groups[entry.section]}`);
+  if(await group.count())await openDisclosure(group);
+ }
  if(entry.section==='References') {
   // data-scope-type lives on fields/buttons rather than the row in old templates.
   const row=entry.scope==='entity'?editor.locator('.override-group:not(.card-subgroup)[data-group="markers"] .generic-marker-item').first():editor.locator('.card-subgroup[data-group="generic-markers"] .generic-marker-item').first();

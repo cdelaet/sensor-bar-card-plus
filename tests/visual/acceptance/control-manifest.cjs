@@ -122,7 +122,7 @@ for (const [section,names,hosts,journey] of [
 ]) for (const name of names) add('action',name,section,'button',null,null,{hosts:name.includes('-entity-')?['standalone']:hosts,journey,structural:true,echo:journey!=='disclosures'});
 const inventory = controls.filter(c=>c.hosts.length);
 const selector = entry => `[data-${entry.route}="${entry.name}"]${entry.scope==='entity'?'[data-index="0"]':''}`;
-const groups = { Target:'marker-target',Peak:'marker-peak',Floor:'marker-floor',References:'generic-markers',Baseline:'baseline',Segments:'segments','Gradient Stops':'gradient-stops' };
+const groups = { Target:'marker-target',Peak:'marker-peak',Floor:'marker-floor',References:'generic-markers',Baseline:'baseline',Needle:'needle',Segments:'segments','Gradient Stops':'gradient-stops' };
 module.exports={ inventory, selector, groups };
 if (require.main === module) {
  for (const c of inventory) console.log(`${c.id}\t${c.scope??'root'}\t${c.hosts.length===2?'Both':c.hosts[0]}\t${c.section}\t${c.type}\tdraft=${c.drafts}\tconditional=${c.conditional}\techo=${c.echo}\tstructural=${c.structural}\t${c.journey}	path=${c.path??'journey-owned'}	example=${JSON.stringify(c.value)}`);

@@ -16,7 +16,7 @@ async function mountEditor(page) {
   return page.locator('sensor-bar-card-plus-editor');
 }
 
-test('Bar Appearance retains inherited controls, focus, echoes and host-owned palette presentation', async ({ page }) => {
+test('Bar Appearance controls retain inherited behavior inside the Bar section', async ({ page }) => {
   const editor = await mountEditor(page);
   await editor.locator('[data-field="bar-color-text-fallback"]').fill('red');
   await expect.poll(() => editor.evaluate(element => element.shadowRoot.activeElement?.dataset.field)).toBe('bar-color-text-fallback');
@@ -39,10 +39,13 @@ test('Bar Appearance retains inherited controls, focus, echoes and host-owned pa
   await expect(editor.locator('#entity-0-group-bar')).toHaveAttribute('aria-expanded', 'true');
 });
 
-test('Bar Appearance root and override retain their pre-extraction appearance', async ({ page }) => {
+test('Bar root and Bar Appearance override preserve their controls', async ({ page }) => {
   const editor = await mountEditor(page);
-  await expect(editor.locator('.section').filter({ has: page.getByRole('heading', { name: 'Bar Appearance', exact: true }) })).toHaveScreenshot('editor-bar-appearance-root.png');
+  await page.mouse.move(0, 0);
+  await expect(editor.locator('.section').filter({ has: page.getByRole('heading', { name: 'Bar', exact: true }) })).toHaveScreenshot('editor-bar-appearance-root.png');
   await editor.locator('button[data-action="toggle-entity-overrides"]').click();
   await editor.locator('#entity-0-group-bar').click();
+  await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
+  await page.mouse.move(0, 0);
   await expect(editor.locator('.override-group[data-group="bar"]')).toHaveScreenshot('editor-bar-appearance-override.png');
 });

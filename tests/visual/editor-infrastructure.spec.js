@@ -37,6 +37,8 @@ test('editor drafts, focus and disclosures survive echo and a structural render'
 test('standalone shared controls retain their pre-extraction appearance', async ({ page }) => {
   const editor = await mountEditor(page);
   await editor.locator('#card-group-marker-target').click();
+  await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
+  await page.mouse.move(0, 0);
   await expect(editor.locator('.section').filter({ has: page.getByRole('heading', { name: 'Scale', exact: true }) })).toHaveScreenshot('editor-scale-controls.png');
   await expect(editor.locator('.card-subgroup[data-group="marker-target"]')).toHaveScreenshot('editor-target-controls.png');
 });

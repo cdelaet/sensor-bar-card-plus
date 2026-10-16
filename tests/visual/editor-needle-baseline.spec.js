@@ -15,13 +15,17 @@ async function mount(page) {
 for (const section of ['needle', 'baseline']) test(`standalone ${section} root/entity controls and focus retain their appearance`, async ({ page }) => {
   const editor = await mount(page);
   if (section === 'baseline') await editor.locator('#card-group-baseline').click();
-  const root = section === 'baseline' ? editor.locator('.card-subgroup[data-group="baseline"]')
-    : editor.locator('.inline-row').filter({ has: page.locator('#bar-needle-mode') });
+  if (section === 'needle') await editor.locator('#card-group-needle').click();
+  const root = editor.locator(`.card-subgroup[data-group="${section}"]`);
+  if (section === 'needle') await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
+  await page.mouse.move(0, 0);
   await expect(root).toHaveScreenshot(`${section}-root.png`);
   const control = editor.locator(section === 'baseline' ? '#baseline-value' : '[data-field="bar-needle-color-text-fallback"]');
   await control.fill(section === 'baseline' ? '12.5' : 'red');
   await expect(control).toBeFocused();
   await editor.locator('button[data-action="toggle-entity-overrides"]').click();
   await editor.locator(`#entity-0-group-${section}`).click();
+  await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
+  await page.mouse.move(0, 0);
   await expect(editor.locator(`.override-group:not(.card-subgroup)[data-group="${section}"]`)).toHaveScreenshot(`${section}-entity.png`);
 });

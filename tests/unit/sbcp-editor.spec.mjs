@@ -346,7 +346,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     const markup = editor.shadowRoot.innerHTML;
-    const headings = ['Basics', 'Entities', 'Scale', 'Markers', 'Bar Appearance', 'Segments', 'Gradient Stops', 'Layout', 'Formatting'];
+    const headings = ['Basics', 'Entities', 'Layout', 'Scale', 'Bar', 'Markers', 'Formatting', 'Actions'];
     const positions = headings.map((heading) => markup.indexOf(`<h3>${heading}</h3>`));
 
     expect(positions.every((position) => position >= 0)).toBe(true);
@@ -404,23 +404,48 @@ describe('Sensor Bar Card Plus editor', () => {
 
     const markup = editor.shadowRoot.innerHTML;
     const groups = [
+      'entity-0-group-layout',
       'entity-0-group-scale',
-      'entity-0-group-target',
-      'entity-0-group-peak',
-      'entity-0-group-floor',
-      'entity-0-group-markers',
       'entity-0-group-bar',
       'entity-0-group-baseline',
       'entity-0-group-needle',
       'entity-0-group-segments',
       'entity-0-group-gradient-stops',
-      'entity-0-group-layout',
+      'entity-0-group-target',
+      'entity-0-group-peak',
+      'entity-0-group-floor',
+      'entity-0-group-markers',
       'entity-0-group-formatting',
+      'entity-0-group-actions',
     ];
     const positions = groups.map((groupId) => markup.indexOf(`id="${groupId}"`));
 
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect([...positions].sort((left, right) => left - right)).toEqual(positions);
+  });
+
+  it('places entity Unit only in Formatting and preserves its config path and row scope', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({
+      formatting: { unit: 'W' },
+      entities: [
+        { entity: 'sensor.one' },
+        { entity: 'sensor.two', formatting: { unit: 'kW' } },
+      ],
+    });
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+
+    const unit = editor.shadowRoot.querySelector('#entity-0-formatting-unit');
+    const markup = editor.shadowRoot.innerHTML;
+    expect(unit).not.toBeNull();
+    expect(markup.indexOf('id="entity-0-group-formatting"')).toBeLessThan(markup.indexOf('id="entity-0-formatting-unit"'));
+    expect(markup.indexOf('id="entity-0-formatting-unit"')).toBeLessThan(markup.indexOf('id="entity-0-group-actions"'));
+    expect(editor.shadowRoot.querySelector('#entity-1-formatting-unit')).not.toBeNull();
+    expect(unit.value).toBe('W');
+    dispatchInput(unit, 'Wh');
+    expect(events.at(-1).detail.config.entities[0].formatting).toEqual({ unit: 'Wh' });
+    expect(events.at(-1).detail.config.entities[1].formatting).toEqual({ unit: 'kW' });
   });
 
   it('uses marker shape wording in the generic marker editor', () => {
@@ -3626,17 +3651,16 @@ describe('Sensor Bar Card Plus editor', () => {
 
     const baselineGroup = editor.shadowRoot.querySelector('#card-group-baseline');
     const markup = editor.shadowRoot.innerHTML;
+    const barStart = markup.indexOf('<h3>Bar</h3>');
     const markersStart = markup.indexOf('<h3>Markers</h3>');
-    const barAppearanceStart = markup.indexOf('<h3>Bar Appearance</h3>');
     expect(baselineGroup).not.toBeNull();
     expect(baselineGroup.getAttribute('aria-expanded')).toBe('false');
     expect(markup).toContain('id="card-group-baseline-summary" class="override-group-summary">Auto · 0</span>');
-    expect(markersStart).toBeGreaterThanOrEqual(0);
-    expect(barAppearanceStart).toBeGreaterThan(markersStart);
-    expect(markup.indexOf('id="card-group-baseline"')).toBeGreaterThan(barAppearanceStart);
-    expect(markup.slice(markersStart, barAppearanceStart)).not.toContain('baseline-mode');
-    expect(markup.slice(markersStart, barAppearanceStart)).not.toContain('baseline-value');
-    expect(markup.slice(markersStart, barAppearanceStart)).not.toContain('card-group-baseline');
+    expect(barStart).toBeGreaterThanOrEqual(0);
+    expect(markersStart).toBeGreaterThan(barStart);
+    expect(markup.indexOf('id="bar-fill-style"')).toBeGreaterThan(barStart);
+    expect(markup.indexOf('id="card-group-baseline"')).toBeGreaterThan(markup.indexOf('id="bar-color"'));
+    expect(markup.indexOf('id="card-group-baseline"')).toBeLessThan(markersStart);
     expect(markup).toContain('Configure Target, Peak, Floor, and custom reference markers.');
     expect(events).toHaveLength(0);
 
@@ -3689,7 +3713,7 @@ describe('Sensor Bar Card Plus editor', () => {
     const markup = editor.shadowRoot.innerHTML;
     expect(entityBaseline).not.toBeNull();
     expect(markup.indexOf('<h3>Entities</h3>')).toBeLessThan(markup.indexOf('id="entity-0-group-baseline"'));
-    expect(markup.indexOf('id="entity-0-group-baseline"')).toBeLessThan(markup.indexOf('<h3>Scale</h3>'));
+    expect(markup.indexOf('id="entity-0-group-scale"')).toBeLessThan(markup.indexOf('id="entity-0-group-baseline"'));
     expect(editor.shadowRoot.querySelector('#card-group-baseline')).not.toBeNull();
   });
 
