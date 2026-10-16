@@ -107,7 +107,7 @@ export function attachRowActionHandlers(row, { resolveAction, dispatchAction, la
     if (event.button !== undefined && event.button !== 0) return;
     if (isInteractivePath(event, row)) return;
     clearCompletedPointerClick();
-    activePointer = { id: event.pointerId, held: false };
+    activePointer = { id: event.pointerId, held: false, startedAt: event.timeStamp };
     clearHold();
     // Classify the physical gesture independently of whether its hold action
     // is enabled. `fire` suppresses the configured `none` consequence.
@@ -122,6 +122,12 @@ export function attachRowActionHandlers(row, { resolveAction, dispatchAction, la
   const onPointerUp = (event) => {
     if (!activePointer || (activePointer.id !== undefined && event.pointerId !== activePointer.id)) return;
     const pointer = activePointer;
+    const holdThresholdReached = event.timeStamp - pointer.startedAt >= HOLD_DELAY_MS;
+    if (holdThresholdReached && !pointer.held) {
+      pointer.held = true;
+      clearPendingTap();
+      fire('hold_action');
+    }
     activePointer = null;
     clearHold();
     consumePointerClick();

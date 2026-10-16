@@ -14,12 +14,13 @@ class FakeRow extends EventTarget {
   matches() { return false; }
 }
 
-function pointer(type, pointerId = 1) {
+function pointer(type, pointerId = 1, timeStamp) {
   const event = new Event(type, { bubbles: true, cancelable: true });
   Object.defineProperties(event, {
     pointerId: { value: pointerId },
     button: { value: 0 },
   });
+  if (timeStamp !== undefined) Object.defineProperty(event, 'timeStamp', { value: timeStamp });
   return event;
 }
 
@@ -110,6 +111,40 @@ describe('standalone row actions', () => {
     vi.advanceTimersByTime(500);
     row.dispatchEvent(pointer('pointerup'));
     expect(calls.map(call => call.action)).toEqual(['hold']);
+  });
+
+  it('classifies a long press at release when the hold timer is delayed', () => {
+    vi.useFakeTimers();
+    const { row, calls } = fixture({ hold_action: { action: 'perform-action' } });
+    row.dispatchEvent(pointer('pointerdown', 1, 1000));
+    row.dispatchEvent(pointer('pointerup', 1, 1501));
+
+    expect(calls.map(call => call.action)).toEqual(['hold']);
+    vi.runOnlyPendingTimers();
+    expect(calls.map(call => call.action)).toEqual(['hold']);
+  });
+
+  it.each([
+    {
+      name: 'explicit none',
+      card: { tap_action: { action: 'toggle' }, hold_action: { action: 'none' }, double_tap_action: { action: 'navigate' } },
+    },
+    {
+      name: 'omitted hold action',
+      card: { tap_action: { action: 'toggle' }, double_tap_action: { action: 'navigate' } },
+    },
+  ])('consumes a delayed-timer long press with $name without dispatching tap', ({ card }) => {
+    vi.useFakeTimers();
+    const { row, calls } = configuredFixture(card);
+    row.dispatchEvent(pointer('pointerdown', 1, 2000));
+    row.dispatchEvent(pointer('pointerup', 1, 2501));
+    vi.advanceTimersByTime(500);
+    expect(calls).toHaveLength(0);
+
+    row.dispatchEvent(pointer('pointerdown', 2, 3000));
+    row.dispatchEvent(pointer('pointerup', 2, 3010));
+    vi.advanceTimersByTime(250);
+    expect(calls.map(call => call.action)).toEqual(['tap']);
   });
 
   it.each(['mouse', 'touch'])('consumes a completed %s hold through release and its compatibility click', (pointerType) => {

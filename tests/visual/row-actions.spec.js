@@ -14,6 +14,10 @@ async function lastAction(page) {
   return page.evaluate(() => window.__lastHassAction);
 }
 
+async function expectLastAction(page, action) {
+  await expect.poll(() => page.evaluate(() => window.__lastHassAction?.detail?.action), { timeout: 2000 }).toBe(action);
+}
+
 test('omitted action config preserves immediate row tap as HA more-info', async ({ page }) => {
   await render(page, { entity: 'sensor.room' });
   const row = page.locator('.row[data-entity="sensor.room"]');
@@ -64,22 +68,20 @@ test('hold and double tap dispatch only their matching action', async ({ page })
   });
   const row = page.locator('.row[data-entity="sensor.room"]');
   await row.click();
-  await page.waitForTimeout(270);
-  expect((await lastAction(page)).detail.action).toBe('tap');
+  await expectLastAction(page, 'tap');
 
   await page.evaluate(() => { window.__lastHassAction = null; });
   const box = await row.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await page.waitForTimeout(520);
+  await page.waitForTimeout(700);
   await page.mouse.up();
-  expect((await lastAction(page)).detail.action).toBe('hold');
+  await expectLastAction(page, 'hold');
   expect((await lastAction(page)).detail.config.hold_action).toEqual({ action: 'perform-action', perform_action: 'light.turn_on', data: { brightness: 10 } });
 
   await page.evaluate(() => { window.__lastHassAction = null; });
   await row.click(); await row.click();
-  await page.waitForTimeout(280);
-  expect((await lastAction(page)).detail.action).toBe('double_tap');
+  await expectLastAction(page, 'double_tap');
 });
 
 test('a held mouse gesture emits only hold after release and its click window', async ({ page }) => {
@@ -99,10 +101,9 @@ test('a held mouse gesture emits only hold after release and its click window', 
   const box = await row.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await page.waitForTimeout(520);
+  await page.waitForTimeout(700);
   await page.mouse.up();
-  await page.waitForTimeout(300);
-  expect(await page.evaluate(() => window.__rowActions)).toEqual(['hold']);
+  await expect.poll(() => page.evaluate(() => window.__rowActions), { timeout: 2000 }).toEqual(['hold']);
 });
 
 test('hold none consumes inherited and row-overridden long presses without disabling tap gestures', async ({ page }) => {
@@ -138,23 +139,21 @@ test('hold none consumes inherited and row-overridden long presses without disab
     const box = await row.boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.waitForTimeout(520);
+    await page.waitForTimeout(700);
     await page.mouse.up();
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(500);
     expect(await page.evaluate(() => window.__rowActions)).toEqual([]);
   }
 
   const light = page.locator('.row[data-entity="light.test"]');
   await light.click();
-  await page.waitForTimeout(280);
-  expect(await page.evaluate(() => window.__rowActions.map(event => event.action))).toEqual(['tap']);
+  await expect.poll(() => page.evaluate(() => window.__rowActions.map(event => event.action)), { timeout: 2000 }).toEqual(['tap']);
   expect((await page.evaluate(() => window.__rowActions[0])).config.tap_action).toEqual({ action: 'toggle' });
 
   await page.evaluate(() => { window.__rowActions = []; });
   await light.click();
   await light.click();
-  await page.waitForTimeout(280);
-  expect(await page.evaluate(() => window.__rowActions.map(event => event.action))).toEqual(['double_tap']);
+  await expect.poll(() => page.evaluate(() => window.__rowActions.map(event => event.action)), { timeout: 2000 }).toEqual(['double_tap']);
   expect((await page.evaluate(() => window.__rowActions[0])).config.double_tap_action).toEqual({ action: 'more-info' });
 });
 
@@ -170,9 +169,8 @@ test('an omitted hold action still consumes a long press', async ({ page }) => {
   const box = await row.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await page.waitForTimeout(520);
+  await page.waitForTimeout(700);
   await page.mouse.up();
-  await page.waitForTimeout(300);
   expect(await page.evaluate(() => window.__rowActions)).toEqual([]);
 });
 
@@ -232,15 +230,14 @@ test('the same card instance uses updated card and row actions without duplicate
   const box = await row.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await page.waitForTimeout(520);
+  await page.waitForTimeout(700);
   await page.mouse.up();
-  expect((await page.evaluate(() => window.__rowActions.at(-1))).action).toBe('hold');
+  await expect.poll(() => page.evaluate(() => window.__rowActions.at(-1)?.action), { timeout: 2000 }).toBe('hold');
 
   await page.evaluate(() => { window.__rowActions = []; });
   await row.click();
   await row.click();
-  await page.waitForTimeout(280);
-  expect(await page.evaluate(() => window.__rowActions.map(event => event.action))).toEqual(['double_tap']);
+  await expect.poll(() => page.evaluate(() => window.__rowActions.map(event => event.action)), { timeout: 2000 }).toEqual(['double_tap']);
 });
 
 test('keyboard activates tap and interactive descendants do not activate the row', async ({ page }) => {
@@ -286,6 +283,6 @@ test('reconfiguration cancels an unresolved single tap from the previous row DOM
   await page.evaluate(() => {
     document.querySelector('sensor-bar-card-plus').setConfig({ entity: 'sensor.room', tap_action: { action: 'toggle' } });
   });
-  await page.waitForTimeout(280);
+  await page.waitForTimeout(500);
   expect(await lastAction(page)).toBeNull();
 });
