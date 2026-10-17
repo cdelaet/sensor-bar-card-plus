@@ -55,7 +55,26 @@ Full Validation runs HACS validation, dist verification, unit tests, and the com
 
 Playwright visual baselines are intentionally environment-specific. Local macOS tests use the complete `tests/visual/snapshots/local/` set; GitHub Actions on `macos-26` uses the complete `tests/visual/snapshots/ci/` set. The baseline set is selected centrally by `SBCP_VISUAL_BASELINE` in `playwright.config.cjs`. Normal local and CI validation never updates snapshots.
 
-Run `npm run test:visual` to compare against local baselines. After an intentional visual change, run `npm run test:visual:update` to update only the local set, then review and commit the image changes with the code. Once reviewed, generate the GitHub canonical set by running `gh workflow run validate.yml --ref main -f generate_snapshots=true`; download and review the `canonical-playwright-snapshots-<commit-sha>` artifact, then commit those files under `snapshots/ci/`. The manually dispatched snapshot-generation run selects and updates only the CI set. Fast and Full Validation compare against their selected baselines with snapshot updates disabled. When adding a screenshot assertion, update each complete set through these same local and GitHub-specific steps. These automated regression artifacts are not README or product screenshots.
+Run `npm run test:visual` to compare against local baselines. After an intentional visual change, run `npm run test:visual:update` to update only the local set, then review and commit the image changes with the code. Local snapshots remain local and developer-specific. Canonical CI snapshots are generated on GitHub's `macos-26` runner. Full Validation checks the committed canonical set with snapshot updates disabled.
+
+After the canonical snapshot-update workflow is merged to `main`, the preferred workflow for an intentional visual change is to dispatch it from trusted `main` and provide the source branch:
+
+~~~sh
+gh workflow run update-snapshots.yml \
+  --ref main \
+  -f source_branch=<branch>
+~~~
+
+For intentional snapshot additions, deletions, or renames, explicitly allow snapshot-set changes:
+
+~~~sh
+gh workflow run update-snapshots.yml \
+  --ref main \
+  -f source_branch=<branch> \
+  -f allow_snapshot_set_changes=true
+~~~
+
+The workflow generates the complete CI snapshot set and creates or updates a dedicated pull request targeting the source branch. The generated image changes still require human visual review before merging. Full Validation is dispatched separately for the generated branch. The earlier `gh workflow run validate.yml --ref <branch> -f generate_snapshots=true` artifact workflow remains available for diagnostics or as a fallback; it uploads the full `canonical-playwright-snapshots-<commit-sha>` artifact for manual comparison. When adding a screenshot assertion, update each complete set through these same local and GitHub-specific steps. These automated regression artifacts are not README or product screenshots.
 
 ## Release preparation
 
