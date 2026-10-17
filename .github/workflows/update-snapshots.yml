@@ -97,8 +97,14 @@ jobs:
           import hashlib
           import subprocess
           import os
+          import base64
 
           prefix = b"tests/visual/snapshots/ci/"
+          # Playwright's built-in LastRunReporter creates this one routine runtime file.
+          playwright_last_run = b"test-results/.last-run.json"
+          # Dependency contents are setup inputs and would make step outputs unbounded.
+          dependency_component = b"node_modules"
+          max_inventory_bytes = 128 * 1024
 
           def paths(*args):
               return sorted(path for path in subprocess.check_output(["git", *args]).split(b"\0") if path)
@@ -109,12 +115,31 @@ jobs:
           if ignored_ci:
               raise SystemExit("Unexpected ignored files already exist in the canonical CI snapshot tree.")
 
+          def outside_inventory(items):
+              return [
+                  path for path in items
+                  if not path.startswith(prefix)
+                  and path != playwright_last_run
+                  and dependency_component not in path.split(b"/")
+              ]
+
           def digest(items):
               return hashlib.sha256(b"\0".join(items)).hexdigest()
 
+          ignored_outside = outside_inventory(ignored)
+          untracked_outside = outside_inventory(untracked)
+          encoded = {}
+          for name, items in (("ignored", ignored_outside), ("untracked", untracked_outside)):
+              raw = b"\0".join(items)
+              if len(raw) > max_inventory_bytes:
+                  raise SystemExit(f"The {name} path inventory exceeds the safe GitHub output limit.")
+              encoded[name] = base64.b64encode(raw).decode("ascii")
+
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
-              stream.write(f"ignored_outside_sha256={digest([p for p in ignored if not p.startswith(prefix)])}\n")
-              stream.write(f"untracked_outside_sha256={digest([p for p in untracked if not p.startswith(prefix)])}\n")
+              stream.write(f"ignored_outside_b64={encoded['ignored']}\n")
+              stream.write(f"ignored_outside_sha256={digest(ignored_outside)}\n")
+              stream.write(f"untracked_outside_b64={encoded['untracked']}\n")
+              stream.write(f"untracked_outside_sha256={digest(untracked_outside)}\n")
           PY
 
       - name: Generate complete canonical Playwright snapshots
@@ -127,12 +152,15 @@ jobs:
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
           ALLOW_SET_CHANGES: ${{ inputs.allow_snapshot_set_changes }}
           DISPATCHER_SHA: ${{ github.sha }}
+          BASELINE_IGNORED_OUTSIDE_B64: ${{ steps.baseline.outputs.ignored_outside_b64 }}
           BASELINE_IGNORED_OUTSIDE_SHA256: ${{ steps.baseline.outputs.ignored_outside_sha256 }}
+          BASELINE_UNTRACKED_OUTSIDE_B64: ${{ steps.baseline.outputs.untracked_outside_b64 }}
           BASELINE_UNTRACKED_OUTSIDE_SHA256: ${{ steps.baseline.outputs.untracked_outside_sha256 }}
         run: |
           python3 - <<'PY'
           import json
           import hashlib
+          import base64
           import os
           import shutil
           import subprocess
@@ -143,6 +171,11 @@ jobs:
           snapshot_root = Path("tests/visual/snapshots/ci")
           artifact_root = Path("snapshot-artifact")
           prefix = "tests/visual/snapshots/ci/"
+          prefix_bytes = prefix.encode()
+          # Playwright's built-in LastRunReporter creates this one routine runtime file.
+          playwright_last_run = b"test-results/.last-run.json"
+          # Dependency contents are setup inputs and would make step outputs unbounded.
+          dependency_component = b"node_modules"
 
           def git(*args):
               return subprocess.check_output(["git", *args])
@@ -161,14 +194,39 @@ jobs:
           def digest(items):
               return hashlib.sha256(b"\0".join(sorted(items))).hexdigest()
 
-          ignored_outside = [p for p in ignored if not p.startswith(prefix.encode())]
-          untracked_outside = [p for p in untracked if p and not p.startswith(prefix.encode())]
-          if digest(ignored_outside) != os.environ["BASELINE_IGNORED_OUTSIDE_SHA256"]:
-              invalid_inventory = "<ignored-file inventory changed outside canonical CI snapshots>"
-              changed.add(invalid_inventory)
-          if digest(untracked_outside) != os.environ["BASELINE_UNTRACKED_OUTSIDE_SHA256"]:
-              invalid_inventory = "<untracked-file inventory changed outside canonical CI snapshots>"
-              changed.add(invalid_inventory)
+          def outside_inventory(items):
+              return sorted(
+                  path for path in items
+                  if path
+                  and not path.startswith(prefix_bytes)
+                  and path != playwright_last_run
+                  and dependency_component not in path.split(b"/")
+              )
+
+          def decode_inventory(name):
+              raw = base64.b64decode(os.environ[name], validate=True)
+              return [path for path in raw.split(b"\0") if path]
+
+          def display_path(path):
+              value = os.fsdecode(path)
+              if any(ord(char) < 32 or ord(char) == 127 for char in value):
+                  return json.dumps(value, ensure_ascii=True)
+              return value.encode("utf-8", "backslashreplace").decode("utf-8")
+
+          inventory_deltas = {}
+          for name, current in (
+              ("ignored", outside_inventory(ignored)),
+              ("untracked", outside_inventory(untracked)),
+          ):
+              baseline = decode_inventory(f"BASELINE_{name.upper()}_OUTSIDE_B64")
+              baseline_digest = os.environ[f"BASELINE_{name.upper()}_OUTSIDE_SHA256"]
+              if digest(baseline) != baseline_digest:
+                  raise SystemExit(f"The trusted baseline {name} path inventory failed its digest check.")
+              added_paths = sorted(set(current) - set(baseline))
+              removed_paths = sorted(set(baseline) - set(current))
+              inventory_deltas[name] = (added_paths, removed_paths)
+              if digest(current) != baseline_digest:
+                  changed.update(path.decode("utf-8", "surrogateescape") for path in added_paths + removed_paths)
 
           invalid = sorted(p for p in changed if not (p.startswith(prefix) and p.endswith(".png")))
           candidates = sorted(p for p in snapshot_root.rglob("*") if p.suffix == ".png")
@@ -254,13 +312,35 @@ jobs:
               stream.write(f"Snapshot-set changes allowed: **{str(allowed).lower()}** · artifact: `{artifact_name}`\n")
               if invalid:
                   stream.write("\n### File-safety failure\n\nUnexpected paths:\n" + "\n".join(f"- `{p}`" for p in invalid) + "\n")
+              for name, (added_paths, removed_paths) in inventory_deltas.items():
+                  if added_paths:
+                      stream.write(f"\n{name.title()} paths added outside canonical CI snapshots:\n" + "\n".join(f"- `{display_path(p)}`" for p in added_paths) + "\n")
+                  if removed_paths:
+                      stream.write(f"\n{name.title()} paths removed outside canonical CI snapshots:\n" + "\n".join(f"- `{display_path(p)}`" for p in removed_paths) + "\n")
               if set_changes and not allowed:
                   stream.write("\n### Snapshot-set changes rejected\n\nSet `allow_snapshot_set_changes=true` for an intentional addition, deletion, or rename.\n")
               if set_changes and allowed:
                   stream.write(f"\n### Snapshot-set changes explicitly allowed\n\n**{added} added · {deleted} deleted · {renamed} renamed**\n")
 
           if invalid:
-              print("Snapshot generation changed paths outside the canonical CI PNG tree:", *invalid, sep="\n- ", file=sys.stderr)
+              print("Snapshot generation changed paths outside the canonical CI PNG tree:", file=sys.stderr)
+              inventory_paths = {
+                  path.decode("utf-8", "surrogateescape")
+                  for added_paths, removed_paths in inventory_deltas.values()
+                  for path in added_paths + removed_paths
+              }
+              for name, (added_paths, removed_paths) in inventory_deltas.items():
+                  if added_paths:
+                      print(f"{name.title()} paths added outside canonical CI snapshots:", file=sys.stderr)
+                      for path in added_paths:
+                          print(f"- {display_path(path)}", file=sys.stderr)
+                  if removed_paths:
+                      print(f"{name.title()} paths removed outside canonical CI snapshots:", file=sys.stderr)
+                      for path in removed_paths:
+                          print(f"- {display_path(path)}", file=sys.stderr)
+              for path in invalid:
+                  if path not in inventory_paths:
+                      print(f"- {path}", file=sys.stderr)
               sys.exit(1)
           if set_changes and not allowed:
               print("Canonical snapshot additions, deletions, and renames require allow_snapshot_set_changes=true.", file=sys.stderr)
