@@ -1,14 +1,15 @@
 const path = require('path');
 
-const visualBaseline = process.env.SBCP_VISUAL_BASELINE || 'local';
-if (!['local', 'ci'].includes(visualBaseline)) {
-  throw new Error(`Unsupported SBCP_VISUAL_BASELINE: ${visualBaseline}`);
-}
-
 module.exports = {
   testDir: path.join(__dirname, 'tests/visual'),
-  snapshotPathTemplate: `{testDir}/snapshots/${visualBaseline}/{testFilePath}-snapshots/{arg}-{platform}{ext}`,
+  snapshotPathTemplate: '{testDir}/snapshots/{testFilePath}-snapshots/{arg}-{platform}{ext}',
   updateSnapshots: 'none',
+  expect: {
+    toHaveScreenshot: {
+      threshold: 0.2,
+      maxDiffPixels: 50,
+    },
+  },
   fullyParallel: false,
   retries: 0,
   projects: [

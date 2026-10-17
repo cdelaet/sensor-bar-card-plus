@@ -6,13 +6,6 @@ on:
   pull_request:
   schedule:
     - cron: "0 0 * * *"
-  workflow_dispatch:
-    inputs:
-      generate_snapshots:
-        description: Generate canonical macOS visual snapshots
-        required: true
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -85,56 +78,3 @@ jobs:
 
       - name: Confirm tests left committed dist unchanged
         run: git diff --exit-code -- dist/sensor-bar-card-plus.js dist/sensor-bar-card-plus-editor.js
-
-  validate-browser:
-    name: Playwright (macOS)
-    if: github.event_name == 'workflow_dispatch' && inputs.generate_snapshots == true
-    needs: [validate-dist-unit, validate-hacs]
-    # Screenshot baselines are macOS-only; canonical replacements are generated only by explicit manual dispatch.
-    runs-on: macos-26
-    env:
-      SBCP_VISUAL_BASELINE: ci
-    timeout-minutes: 30
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-
-      - name: Set up Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Verify committed dist
-        run: npm run verify-dist
-
-      - name: Install required Playwright browsers
-        run: npx playwright install --with-deps chromium webkit
-
-      - name: Generate complete canonical Playwright snapshots
-        run: npm run test:visual -- --workers=1 --update-snapshots
-
-      - name: Upload canonical Playwright snapshots
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: canonical-playwright-snapshots-${{ github.sha }}
-          path: tests/visual/snapshots/ci/**/*-darwin.png
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Preserve Playwright failure artifacts
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: playwright-failures-${{ github.sha }}
-          path: |
-            test-results/
-            playwright-report/
-          include-hidden-files: true
-          retention-days: 7
