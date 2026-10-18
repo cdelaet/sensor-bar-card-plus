@@ -8,6 +8,7 @@ import { editorStyles } from '../editor/shared/editor-styles.js';
 import { renderCardGroup, renderMarkersSection } from '../editor/shared/editor-disclosures.js';
 import { NumericInputDrafts } from '../editor/shared/editor-numeric-drafts.js';
 import { renderScaleSection, handleScaleField } from '../editor/sections/scale.js';
+import { getDirectionSelection } from '../editor/shared/direction-control.js';
 import {
   renderFormattingSection, handleFormattingField, getFormattingValue,
 } from '../editor/sections/formatting.js';
@@ -415,7 +416,9 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const values = {
       'scale-min': getFeatureScaleSource(this._config, 'min').fixed,
       'scale-max': getFeatureScaleSource(this._config, 'max').fixed,
+      'scale-direction': getDirectionSelection(context, root, ['scale', 'direction']),
       'bar-fill-style': getEffectiveFillStyleValue(context, root),
+      'bar-direction': getDirectionSelection(context, root, ['bar', 'direction']),
       'bar-color': getColorPickerValue(color, '#4a9eff'),
       'bar-color-text-fallback': color,
       'bar-needle-mode': this._needleSection._getScopedNeedleConfig(root).mode,

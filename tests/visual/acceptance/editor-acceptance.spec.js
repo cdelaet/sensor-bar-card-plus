@@ -37,8 +37,27 @@ for(const host of hosts) {
   // A new routed control cannot silently pass discovery.
   await editor.evaluate(el=>{const input=document.createElement('input');input.dataset.field='uncovered-example';el.shadowRoot.append(input);});
   expect((await d.discover(editor)).filter(id=>!declared.has(id))).toEqual(['field:uncovered-example']);
-  const journeys=new Set(['fields','sources','palettes','inheritance','entities','pickers','disclosures','references']);
+  const journeys=new Set(['fields','sources','palettes','inheritance','entities','pickers','disclosures','references','direction']);
   for(const entry of inventory.filter(c=>c.hosts.includes(host)))expect(journeys.has(entry.journey),entry.id).toBe(true);
+ });
+ test(`${host}: Scale and Bar Direction default, edit and canonicalize only their owned keys`,async({page})=>{
+  const config=d.seed(host),before=structuredClone(config),editor=await d.mount(page,host,config);
+  for(const name of ['scale-direction','bar-direction']){
+   const entry=inventory.find(c=>c.hosts.includes(host)&&(c.scope??'root')==='root'&&c.name===name);
+   const eventsBeforeOpen=await d.count(page);
+   await d.openSection(editor,entry);const input=d.control(editor,entry);
+   await expect(input).toHaveValue('normal');
+   expect(await d.count(page)).toBe(eventsBeforeOpen);
+   expect(d.read(await d.saved(page),entry.path)).toBeUndefined();
+   await d.commit(page,editor,()=>input.selectOption('reverse'));
+   expect(d.read(await d.saved(page),entry.path)).toBe('reverse');
+   await d.commit(page,editor,()=>input.selectOption('normal'));
+   const after=await d.saved(page);
+   expect(d.read(after,entry.path)).toBeUndefined();
+   const expected=structuredClone(before);delete expected.scale.direction;delete expected.bar.direction;
+   expect(after).toEqual(expected);
+   await d.reopen(page,editor);await d.openSection(editor,entry);await expect(d.control(editor,entry)).toHaveValue('normal');
+  }
  });
  test(`${host}: disclosures retain state through echo and normal close/reopen`,async({page})=>{
   const editor=await d.mount(page,host);await expect(editor.locator('.card-subgroup[data-expanded="true"]')).toHaveCount(0);
@@ -194,6 +213,27 @@ for(const host of hosts)test(`${host}: entity ownership and structural persisten
   await d.commit(page,editor,()=>editor.locator('[data-action="move-entity-up"][data-index="2"]').click());await expect(name(1)).toHaveValue('Third');
   await d.commit(page,editor,()=>editor.locator('[data-action="move-entity-down"][data-index="1"]').click());
   await d.commit(page,editor,()=>editor.locator('[data-action="remove-entity"][data-index="0"]').click());await d.reopen(page,editor);await expect(name(0)).toHaveValue('Other');
+ }
+});
+test('standalone: Scale and Bar Direction entity overrides preserve Inherit, Normal and Reverse',async({page})=>{
+ for(const name of ['entity-scale-direction','entity-bar-direction']){
+  const entry=inventory.find(c=>c.hosts.includes('standalone')&&c.scope==='entity'&&c.name===name);
+  const config=d.seed('standalone'),parentKey=entry.section==='Scale'?'scale':'bar';
+  config[parentKey].direction='reverse';
+  const before=structuredClone(config),editor=await d.mount(page,'standalone',config);
+  await d.openSection(editor,entry);const input=d.control(editor,entry);
+  await expect(input).toHaveValue('inherit');expect(await d.count(page)).toBe(0);
+  expect(d.read(await d.saved(page),entry.path)).toBeUndefined();
+  await d.commit(page,editor,()=>input.selectOption('normal'));
+  expect(d.read(await d.saved(page),entry.path)).toBe('normal');
+  expect(d.read(await d.saved(page),`${parentKey}.direction`)).toBe('reverse');
+  await d.commit(page,editor,()=>input.selectOption('reverse'));
+  expect(d.read(await d.saved(page),entry.path)).toBe('reverse');
+  await d.commit(page,editor,()=>input.selectOption('inherit'));
+  const after=await d.saved(page),expected=structuredClone(before);
+  delete expected.entities[0][parentKey].direction;
+  expect(after).toEqual(expected);
+  await d.reopen(page,editor);await d.openSection(editor,entry);await expect(d.control(editor,entry)).toHaveValue('inherit');
  }
 });
 test('standalone: every entity inheritance control restores the canonical card value',async({page})=>{

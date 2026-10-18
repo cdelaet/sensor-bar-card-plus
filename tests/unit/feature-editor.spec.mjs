@@ -71,6 +71,53 @@ for (const source of ['src', 'dist']) describe(`Feature editor foundation (${sou
     expect(editor._config.entity).toBeUndefined();
   });
 
+  it('edits Scale and Bar Direction while preserving Feature raw configuration', async () => {
+    const config = {
+      ...raw(),
+      scale: { ...raw().scale, direction: 'reverse', future_scale_key: { keep: true } },
+      bar: {
+        needle: true,
+        fill_style: 'gradient',
+        unknown_future_key: { preserve: 'me' },
+        nested_future: { enabled: true },
+      },
+    };
+    const { editor, events } = await setup(source, config);
+    expect(editor.shadowRoot.querySelector('#scale-direction').value).toBe('reverse');
+    expect(editor.shadowRoot.querySelector('#bar-direction').value).toBe('normal');
+
+    await edit(editor, '#bar-direction', 'reverse', 'change');
+    expect(events.at(-1).detail.config.bar).toEqual({ ...config.bar, direction: 'reverse' });
+    expect(events.at(-1).detail.config.scale).toEqual(config.scale);
+    await edit(editor, '#scale-direction', 'normal', 'change');
+    expect(events.at(-1).detail.config.scale).toEqual({ min: config.scale.min, max: config.scale.max, extra: true, future_scale_key: { keep: true } });
+    expect(events.at(-1).detail.config.bar).toEqual({ ...config.bar, direction: 'reverse' });
+    expect(events.at(-1).detail.config.formatting).toEqual(config.formatting);
+    expect(events.at(-1).detail.config.markers).toEqual(config.markers);
+
+    editor.setConfig({ ...editor._config, scale: { ...editor._config.scale, direction: 'reverse' } });
+    await editor.updateComplete;
+    expect(editor.shadowRoot.querySelector('#scale-direction').value).toBe('reverse');
+  });
+
+  it('preserves explicitly authored card-level Normal directions through sync and unrelated edits', async () => {
+    const config = {
+      ...raw(),
+      scale: { ...raw().scale, direction: 'normal' },
+      bar: { ...raw().bar, direction: 'normal', needle: true, fill_style: 'gradient' },
+    };
+    const { editor, events } = await setup(source, config);
+    editor.setConfig(structuredClone(config));
+    await editor.updateComplete;
+
+    expect(events).toHaveLength(0);
+    expect(editor.shadowRoot.querySelector('#scale-direction').value).toBe('normal');
+    expect(editor.shadowRoot.querySelector('#bar-direction').value).toBe('normal');
+    await edit(editor, '#formatting-unit', 'kWh');
+    expect(events.at(-1).detail.config.scale.direction).toBe('normal');
+    expect(events.at(-1).detail.config.bar.direction).toBe('normal');
+  });
+
   it('chooses an explicit override, survives context changes and clears back to inheritance', async () => {
     const { editor, events } = await setup(source);
     await edit(editor, '#feature-entity-override', true, 'change');

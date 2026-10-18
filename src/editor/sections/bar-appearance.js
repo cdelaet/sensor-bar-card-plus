@@ -4,6 +4,7 @@ import {
   removePathsFromTarget, pruneEmptyObjectsInTarget,
 } from '../shared/editor-config.js';
 import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, normalizeEditorColorValue } from '../shared/editor-controls.js';
+import { getDirectionSelection, renderDirectionControl, setDirectionValue } from '../shared/direction-control.js';
 
 export function getFillStyleFromColorMode(colorMode) {
   switch (colorMode) {
@@ -103,7 +104,7 @@ export function setBarAnimated(context, scope, value) {
 export function clearBarAppearanceOverride(context, scope) {
   return context.mutate(scope, target => {
     const nextTarget = removePathsFromTarget(target, [
-      ['bar', 'fill_style'], ['bar', 'color'], ['bar', 'solid_fill'], ['color_mode'], ['color'],
+      ['bar', 'fill_style'], ['bar', 'color'], ['bar', 'solid_fill'], ['bar', 'direction'], ['color_mode'], ['color'],
     ]);
     return pruneEmptyObjectsInTarget(nextTarget, ['bar']);
   }, { rerender: true });
@@ -115,6 +116,7 @@ export function hasBarAppearanceOverride(context, scope) {
     Object.prototype.hasOwnProperty.call(bar, 'fill_style')
     || Object.prototype.hasOwnProperty.call(bar, 'color')
     || Object.prototype.hasOwnProperty.call(bar, 'solid_fill')
+    || Object.prototype.hasOwnProperty.call(bar, 'direction')
   )) return true;
   return context.read(scope, ['color_mode']) !== undefined || context.read(scope, ['color']) !== undefined;
 }
@@ -123,12 +125,22 @@ export function getBarAppearanceSummary(context, scope) {
   const parts = [];
   const fillStyle = getFillStyleValue(context, scope);
   const color = context.read(scope, ['bar', 'color']) ?? context.read(scope, ['color']);
+  const direction = context.read(scope, ['bar', 'direction']);
   if (fillStyle && fillStyle !== 'bands') parts.push(fillStyle.replace(/_/g, ' '));
   if (color && normalizeColorComparisonValue(color) !== normalizeColorComparisonValue('#4a9eff')) parts.push('Custom color');
+  if (direction !== undefined) parts.push(`Direction ${direction === 'reverse' ? 'Reverse' : 'Normal'}`);
   return parts.length ? parts.join(' • ') : 'Inherited';
 }
 
 export function handleBarAppearanceField(context, { field, kind, index, value }, options = {}) {
+  if (field === 'bar-direction') {
+    setDirectionValue(context, { type: 'card' }, ['bar', 'direction'], value);
+    return true;
+  }
+  if (kind === 'entity-bar-direction') {
+    setDirectionValue(context, { type: 'entity', index: Number(index) }, ['bar', 'direction'], value);
+    return true;
+  }
   if (options.animation && field === 'bar-animated') { setBarAnimated(context, { type: 'card' }, value); return true; }
   const rootSetters = { 'bar-fill-style': setBarFillStyle, 'bar-color': setBarColor, 'bar-solid-fill': setBarSolidFill };
   if (Object.prototype.hasOwnProperty.call(rootSetters, field)) {
@@ -189,6 +201,10 @@ export function renderBarAppearanceSection(context, scope, renderChildren = () =
                           placeholder: 'inherit card default',
                         })}
                       </div>
+                      ${renderDirectionControl(context, scope, {
+                        path: ['bar', 'direction'], id: `entity-${index}-bar-direction`,
+                        kind: 'entity-bar-direction', label: 'Bar Direction',
+                      })}
 	                          `;
   }
   const fillStyle = getEffectiveFillStyleValue(context, { type: 'card' });
@@ -197,7 +213,7 @@ export function renderBarAppearanceSection(context, scope, renderChildren = () =
   return `	        <div class="section">
 	          <div class="section-head">
 	            <h3>${escapeAttribute(options.heading ?? 'Bar Appearance')}</h3>
-	            <div class="section-note">Choose the bar rendering mode and base bar colors.</div>
+	            <div class="section-note">Choose the bar rendering mode and base bar colors. Direction sets the fill origin.</div>
 	          </div>
           <div class="inline-row editor-grid">
             <div class="field-row">
@@ -230,6 +246,10 @@ export function renderBarAppearanceSection(context, scope, renderChildren = () =
                 placeholder: '#4a9eff',
               })}
             </div>
+            ${renderDirectionControl(context, scope, {
+              path: ['bar', 'direction'], id: 'bar-direction',
+              field: 'bar-direction', label: 'Bar Direction',
+            })}
           </div>${renderChildren()}
 	        </div>`;
 }

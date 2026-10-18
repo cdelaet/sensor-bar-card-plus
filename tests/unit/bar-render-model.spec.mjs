@@ -51,7 +51,7 @@ describe('shared bar presentation without a card instance', () => {
     const row = resolvedRow(appearance, 10);
     const before = JSON.stringify({ row, appearance });
     const model = buildBarRenderModel(row, appearance, { height: 28 });
-    expect(model.baseline).toEqual({ configured: true, percent: 50 });
+    expect(model.baseline).toEqual({ configured: true, percent: 50, positionPercent: 50, scalePercent: 50 });
     expect(model.fill.geometry).toMatchObject({ start: 50, end: 75 });
     expect(model.fill.revealStyle).toContain('height:28px');
     const html = renderBar(model);

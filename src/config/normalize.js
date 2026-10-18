@@ -480,9 +480,20 @@ export function normalizeScaleBound(entityConfig, cardConfig, key, defaultValue)
 }
 
 export function normalizeScaleConfig(entityConfig, cardConfig) {
+  const entityDirection = entityConfig?.scale?.direction;
+  const inheritedDirection = cardConfig?.scale?.direction;
+  const validDirection = (direction) => direction === 'normal' || direction === 'reverse';
+  const hasEntityDirection = entityDirection !== undefined;
+  const direction = validDirection(entityDirection)
+    ? entityDirection
+    : validDirection(inheritedDirection) ? inheritedDirection : 'normal';
   return {
     min: normalizeScaleBound(entityConfig, cardConfig, 'min', 0),
     max: normalizeScaleBound(entityConfig, cardConfig, 'max', 100),
+    direction,
+    ...(hasEntityDirection && !validDirection(entityDirection)
+      ? { direction_invalid: true }
+      : {}),
   };
 }
 
@@ -675,6 +686,13 @@ export function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
   );
 
   const normalizedBar = {
+    direction: ['normal', 'reverse'].includes(entityBar?.direction)
+      ? entityBar.direction
+      : ['normal', 'reverse'].includes(cardBar?.direction) ? cardBar.direction : 'normal',
+    ...(entityBar?.direction !== undefined
+      && !['normal', 'reverse'].includes(entityBar.direction)
+      ? { direction_invalid: true }
+      : {}),
     fill_style: normalizedMode.fill_style,
     color_mode: normalizedMode.color_mode,
     needle: normalizeNeedleConfig(entityBar?.needle, cardBar?.needle),

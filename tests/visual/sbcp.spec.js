@@ -44,6 +44,13 @@ const severity = [
   { from: 75, to: 100, color: '#14b8a6' },
 ];
 
+function revealInterval(clipPath) {
+  const inset = clipPath.match(/^inset\(([^)]*)\)/)?.[1]?.split(' round ')[0];
+  if (!inset) return null;
+  const [, right, , left] = inset.split(/\s+/).map(value => Number.parseFloat(value));
+  return { left, right };
+}
+
 async function render(page, { width = 720, config, states = baseStates }) {
   await page.goto('/tests/visual/fixtures/harness.html');
   await page.evaluate(async ({ width, config, states }) => {
@@ -113,6 +120,194 @@ for (const animated of [false, true]) {
     await update(states(900, 500, 1300, 700), [0, 50, 0, 25], 25, 0, 900);
   });
 }
+
+test('Direction visual: four Scale and Bar reveal combinations', async ({ page }) => {
+  const entities = [
+    { entity: 'sensor.direction_value', name: 'Normal Scale · Normal Bar', scale: { direction: 'normal' }, bar: { direction: 'normal' } },
+    { entity: 'sensor.direction_value', name: 'Reverse Scale · Normal Bar', scale: { direction: 'reverse' }, bar: { direction: 'normal' } },
+    { entity: 'sensor.direction_value', name: 'Normal Scale · Reverse Bar', scale: { direction: 'normal' }, bar: { direction: 'reverse' } },
+    { entity: 'sensor.direction_value', name: 'Reverse Scale · Reverse Bar', scale: { direction: 'reverse' }, bar: { direction: 'reverse' } },
+  ];
+  const mount = await render(page, {
+    config: {
+      title: 'Direction: projected value and reveal origin',
+      scale: { min: 0, max: 100 },
+      layout: { height: 42, label: { position: 'above' } },
+      bar: { fill_style: 'bands', animated: false, segments: [
+        { from: 0, to: 50, color: '#16a34a' },
+        { from: 50, to: 100, color: '#dc2626' },
+      ] },
+      entities,
+    },
+    states: { 'sensor.direction_value': sensor(30, { friendly_name: 'Direction value', unit_of_measurement: '%' }) },
+  });
+  const geometry = await page.locator('sensor-bar-card-plus').evaluate(card => [...card.shadowRoot.querySelectorAll('.row[data-entity]')].map(row => ({
+    clip: row.querySelector('.bar-fill-reveal').style.clipPath,
+    paint: getComputedStyle(row.querySelector('[data-layer="base"]')).backgroundImage,
+  })));
+  expect(geometry).toHaveLength(4);
+  expect(geometry.map(({ clip }) => revealInterval(clip))).toEqual([
+    { left: 0, right: 70 }, { left: 0, right: 30 },
+    { left: 30, right: 0 }, { left: 70, right: 0 },
+  ]);
+  expect(geometry[0].paint).toBe(geometry[2].paint);
+  expect(geometry[1].paint).toBe(geometry[3].paint);
+  expect(geometry[0].paint).toContain('rgb(22, 163, 74) 0%');
+  expect(geometry[1].paint).toContain('rgb(220, 38, 38) 0%');
+  await expect(mount).toHaveScreenshot('direction-four-reveal-combinations.png');
+});
+
+test('Direction visual: reverse Scale projects continuous Gradient Paint', async ({ page }) => {
+  const mount = await render(page, {
+    config: {
+      title: 'Direction: reverse Gradient projection',
+      scale: { min: 0, max: 100, direction: 'reverse' },
+      layout: { height: 52, label: { position: 'above' } },
+      bar: { fill_style: 'gradient', direction: 'reverse', animated: false,
+        gradient_stops: [{ pos: 0, color: '#2563eb' }, { pos: 100, color: '#dc2626' }] },
+      entities: [{ entity: 'sensor.direction_value', name: 'Value 80' }],
+    },
+    states: { 'sensor.direction_value': sensor(80, { friendly_name: 'Direction value', unit_of_measurement: '%' }) },
+  });
+  const result = await page.locator('sensor-bar-card-plus').evaluate(card => {
+    const row = card.shadowRoot.querySelector('.row[data-entity]');
+    return {
+      clip: row.querySelector('.bar-fill-reveal').style.clipPath,
+      paint: getComputedStyle(row.querySelector('[data-layer="base"]')).backgroundImage,
+    };
+  });
+  expect(revealInterval(result.clip)).toEqual({ left: 20, right: 0 });
+  expect(result.paint).toContain('rgb(220, 38, 38) 0%');
+  expect(result.paint).toContain('rgb(37, 99, 235) 100%');
+  await expect(mount).toHaveScreenshot('direction-reverse-gradient-projection.png');
+});
+
+test('Direction visual: Needle position and rail ignore Bar direction', async ({ page }) => {
+  const mount = await render(page, {
+    config: {
+      title: 'Direction: Needle follows Scale',
+      scale: { min: 0, max: 100, direction: 'reverse' },
+      layout: { height: 48, label: { position: 'above' } },
+      bar: { fill_style: 'bands', needle: true, animated: false, segments: [
+        { from: 0, to: 50, color: '#16a34a' }, { from: 50, to: 100, color: '#dc2626' },
+      ] },
+      entities: [
+        { entity: 'sensor.direction_value', name: 'Bar normal', bar: { direction: 'normal' } },
+        { entity: 'sensor.direction_value', name: 'Bar reverse', bar: { direction: 'reverse' } },
+      ],
+    },
+    states: { 'sensor.direction_value': sensor(30, { friendly_name: 'Direction value', unit_of_measurement: '%' }) },
+  });
+  const geometry = await page.locator('sensor-bar-card-plus').evaluate(card => [...card.shadowRoot.querySelectorAll('.row[data-entity]')].map(row => ({
+    needle: row.querySelector('.needle-marker').style.left,
+    clip: row.querySelector('.bar-fill-reveal').style.clipPath,
+    paint: getComputedStyle(row.querySelector('[data-layer="base"]')).backgroundImage,
+  })));
+  expect(geometry[0].needle).toBe(geometry[1].needle);
+  expect(geometry[0].needle).toBe('70%');
+  expect(geometry[0].clip).toBe(geometry[1].clip);
+  expect(geometry[0].paint).toBe(geometry[1].paint);
+  await expect(mount).toHaveScreenshot('direction-reverse-needle.png');
+});
+
+test('Direction visual: asymmetric Baseline owns reveal origin on both semantic sides', async ({ page }) => {
+  const entities = [
+    { entity: 'sensor.direction_above', name: 'Above · Bar normal', bar: { direction: 'normal' } },
+    { entity: 'sensor.direction_above', name: 'Above · Bar reverse', bar: { direction: 'reverse' } },
+    { entity: 'sensor.direction_below', name: 'Below · Bar normal', bar: { direction: 'normal' } },
+    { entity: 'sensor.direction_below', name: 'Below · Bar reverse', bar: { direction: 'reverse' } },
+  ];
+  const mount = await render(page, {
+    config: {
+      title: 'Direction: semantic Baseline on an asymmetric Scale',
+      scale: { min: -2000, max: 3000, direction: 'reverse' },
+      baseline: { at: 0, above: { color: '#2563eb' }, below: { color: '#f97316' } },
+      layout: { height: 42, label: { position: 'above' } },
+      bar: { fill_style: 'solid', color: '#94a3b8', animated: false },
+      entities,
+    },
+    states: {
+      'sensor.direction_above': sensor(1500, { friendly_name: 'Semantic above', unit_of_measurement: 'W' }),
+      'sensor.direction_below': sensor(-1000, { friendly_name: 'Semantic below', unit_of_measurement: 'W' }),
+    },
+  });
+  const geometry = await page.locator('sensor-bar-card-plus').evaluate(card => [...card.shadowRoot.querySelectorAll('.row[data-entity]')].map(row => ({
+    baseline: row.querySelector('.baseline-indicator').style.left,
+    clip: row.querySelector('.bar-fill-reveal').style.clipPath,
+    paint: getComputedStyle(row.querySelector('[data-layer="base"]')).backgroundColor,
+  })));
+  expect(geometry.map(({ baseline }) => baseline)).toEqual(['60%', '60%', '60%', '60%']);
+  expect(geometry[0].clip).toBe(geometry[1].clip);
+  expect(geometry[2].clip).toBe(geometry[3].clip);
+  expect(revealInterval(geometry[0].clip)).toEqual({ left: 30, right: 40 });
+  expect(revealInterval(geometry[2].clip)).toEqual({ left: 60, right: 20 });
+  await expect(mount).toHaveScreenshot('direction-asymmetric-baseline.png');
+});
+
+test('Direction visual: reverse Scale projects Target and reference markers inside labels', async ({ page }) => {
+  const mount = await render(page, {
+    config: {
+      title: 'Direction: inside labels and semantic markers',
+      scale: { min: 0, max: 100, direction: 'reverse' },
+      layout: { height: 58, label: { position: 'inside' } },
+      target: { at: 60, label: { show: true } },
+      markers: [{ at: 15, lane: 'above', shape: 'diamond', label: { show: true, text: 'Reference' } }],
+      bar: { fill_style: 'bands', animated: false, segments: [
+        { from: 0, to: 50, color: '#16a34a' }, { from: 50, to: 100, color: '#dc2626' },
+      ] },
+      entities: [{ entity: 'sensor.direction_value', name: 'Inside · current 30' }],
+    },
+    states: { 'sensor.direction_value': sensor(30, { friendly_name: 'Direction value', unit_of_measurement: '%' }) },
+  });
+  const geometry = await page.locator('sensor-bar-card-plus').evaluate(card => {
+    const row = card.shadowRoot.querySelector('.row[data-entity]');
+    return {
+      current: row.querySelector('.bar-fill-reveal').style.clipPath,
+      target: row.querySelector('.target-marker').style.left,
+      reference: row.querySelector('.generic-marker').style.left,
+      inside: !!row.querySelector('.bar-inner-label'),
+    };
+  });
+  expect(revealInterval(geometry.current)).toEqual({ left: 0, right: 30 });
+  expect(geometry).toMatchObject({ target: '40%', reference: '85%', inside: true });
+  await expect(mount).toHaveScreenshot('direction-reverse-inside-markers.png');
+});
+
+test('dynamic reverse Scale projects current value, Baseline, and Target as bounds change', async ({ page }) => {
+  const states = (value, max, baseline) => ({
+    'sensor.dynamic_direction': sensor(value),
+    'sensor.direction_max': sensor(max),
+    'sensor.direction_baseline': sensor(baseline),
+  });
+  await render(page, {
+    config: {
+      scale: { min: 0, max: { entity: 'sensor.direction_max' }, direction: 'reverse' },
+      baseline: { at: { entity: 'sensor.direction_baseline' } },
+      target: { at: 75 },
+      bar: { animated: false },
+      entities: [{ entity: 'sensor.dynamic_direction' }],
+    },
+    states: states(50, 100, 25),
+  });
+  const card = page.locator('sensor-bar-card-plus');
+  const read = () => card.evaluate(element => {
+    const row = element.shadowRoot.querySelector('.row[data-entity]');
+    return {
+      clip: row.querySelector('.bar-fill-reveal').style.clipPath,
+      baseline: row.querySelector('.baseline-indicator').style.left,
+      target: row.querySelector('.target-marker').style.left,
+    };
+  });
+  await expect.poll(async () => {
+    const geometry = await read();
+    return { interval: revealInterval(geometry.clip), baseline: geometry.baseline, target: geometry.target };
+  }).toEqual({ interval: { left: 50, right: 25 }, baseline: '75%', target: '25%' });
+  await card.evaluate((element, nextStates) => { element.hass = { states: nextStates }; }, states(50, 200, 25));
+  await expect.poll(async () => {
+    const geometry = await read();
+    return { interval: revealInterval(geometry.clip), baseline: geometry.baseline, target: geometry.target };
+  }).toEqual({ interval: { left: 75, right: 12.5 }, baseline: '87.5%', target: '62.5%' });
+});
 
 test('left responsive layout converges across config rebuilds and fresh rendering per entity', async ({ page }) => {
   const config = {

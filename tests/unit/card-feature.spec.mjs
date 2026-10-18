@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { loadCardClass } from '../support/load-card-class.cjs';
 import { normalizeCardConfig } from '../../src/config/normalize.js';
+import { buildBarRenderModel } from '../../src/view-model/bar-render-model.js';
 
 const entity = 'sensor.power';
 const sensor = (value, attributes = {}, last_updated) => ({ state: String(value), attributes, last_updated });
@@ -51,6 +52,39 @@ describe('native feature registration', () => {
 });
 
 describe('independent input reconciliation', () => {
+  it('uses the shared reverse Scale and reverse Bar runtime projection', async () => {
+    const config = {
+      entity,
+      scale: { min: 0, max: 100, direction: 'reverse' },
+      bar: {
+        direction: 'reverse',
+        fill_style: 'bands',
+        segments: [
+          { from: '0%', to: '50%', color: '#00ff00' },
+          { from: '50%', to: '100%', color: '#ff0000' },
+        ],
+      },
+      target: { at: 25 },
+    };
+    const element = feature(config);
+    element.context = { entity_id: entity };
+    await update(element, 30);
+
+    const row = element._row;
+    const model = buildBarRenderModel(row, element._normalized.entities[0], { height: 30 });
+    expect(row).toMatchObject({ percent: 30, positionPercent: 70, targetPositionPercent: 75 });
+    expect(row.markers.find(marker => marker.type === 'target').position).toBe(75);
+    expect(model.fill.geometry).toMatchObject({ start: 70, end: 100 });
+    expect(model.fill.paintLayers[0].paintStyle)
+      .toContain('#ff0000 0%, #ff0000 50%, #00ff00 50%, #00ff00 100%');
+
+    element.setConfig({ ...config, baseline: { at: 100 } });
+    await element.updateComplete;
+    const baselineModel = buildBarRenderModel(element._row, element._normalized.entities[0], { height: 30 });
+    expect(element._row.baselinePositionPercent).toBe(0);
+    expect(baselineModel.fill.geometry).toMatchObject({ usesBaseline: true, start: 0, end: 70 });
+  });
+
   for (const order of [
     ['config', 'hass', 'context'], ['config', 'context', 'hass'],
     ['hass', 'config', 'context'], ['hass', 'context', 'config'],

@@ -87,6 +87,161 @@ function expectNoDeprecatedEditedKeys(target) {
 }
 
 describe('Sensor Bar Card Plus editor', () => {
+  it('exposes Normal by default and edits only the card-level direction paths', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({ entity: 'sensor.one' });
+
+    expect(editor.shadowRoot.querySelector('#scale-direction').value).toBe('normal');
+    expect(editor.shadowRoot.querySelector('#bar-direction').value).toBe('normal');
+    expect(editor.shadowRoot.innerHTML.indexOf('id="scale-direction"'))
+      .toBeGreaterThan(editor.shadowRoot.innerHTML.indexOf('id="scale-max"'));
+    expect(editor.shadowRoot.innerHTML.indexOf('id="bar-direction"'))
+      .toBeGreaterThan(editor.shadowRoot.innerHTML.indexOf('id="bar-color"'));
+    expect(events).toHaveLength(0);
+
+    dispatchChange(editor.shadowRoot.querySelector('#scale-direction'), 'reverse');
+    expect(events.at(-1).detail.config.scale).toEqual({ direction: 'reverse' });
+    expect(events.at(-1).detail.config.bar).toBeUndefined();
+    dispatchChange(editor.shadowRoot.querySelector('#bar-direction'), 'reverse');
+    expect(events.at(-1).detail.config).toMatchObject({
+      scale: { direction: 'reverse' }, bar: { direction: 'reverse' },
+    });
+
+    dispatchChange(editor.shadowRoot.querySelector('#scale-direction'), 'normal');
+    expect(events.at(-1).detail.config.scale).toBeUndefined();
+    expect(events.at(-1).detail.config.bar.direction).toBe('reverse');
+    dispatchChange(editor.shadowRoot.querySelector('#bar-direction'), 'normal');
+    expect(events.at(-1).detail.config.bar).toBeUndefined();
+  });
+
+  it('preserves explicitly authored card-level Normal directions through sync and unrelated edits', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    const config = {
+      entity: 'sensor.one',
+      scale: { min: 0, max: 100, direction: 'normal' },
+      bar: { direction: 'normal', needle: true, fill_style: 'gradient' },
+      formatting: { decimal: 1 },
+    };
+    editor.setConfig(config);
+    editor.setConfig(structuredClone(config));
+
+    expect(events).toHaveLength(0);
+    expect(editor.shadowRoot.querySelector('#scale-direction').value).toBe('normal');
+    expect(editor.shadowRoot.querySelector('#bar-direction').value).toBe('normal');
+    dispatchChange(editor.shadowRoot.querySelector('#formatting-unit'), 'kWh');
+    expect(events.at(-1).detail.config.scale.direction).toBe('normal');
+    expect(events.at(-1).detail.config.bar.direction).toBe('normal');
+    expect(events.at(-1).detail.config.formatting).toEqual({ ...config.formatting, unit: 'kWh' });
+  });
+
+  it('preserves unrelated raw syntax and unknown keys when editing either direction', () => {
+    const config = {
+      entity: 'sensor.one',
+      scale: { min: 0, future_scale: { keep: true } },
+      bar: {
+        needle: true,
+        fill_style: 'gradient',
+        unknown_future_key: { preserve: 'me' },
+        nested_future: { enabled: true },
+      },
+      formatting: { unit: 'W', future: true },
+      markers: [{ at: '25%', future_marker_key: 'keep' }],
+      tap_action: { action: 'more-info', future_action_key: true },
+    };
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig(config);
+
+    dispatchChange(editor.shadowRoot.querySelector('#bar-direction'), 'reverse');
+    expect(events.at(-1).detail.config.bar).toEqual({ ...config.bar, direction: 'reverse' });
+    expect(events.at(-1).detail.config.scale).toEqual(config.scale);
+    expect(events.at(-1).detail.config.formatting).toEqual(config.formatting);
+    expect(events.at(-1).detail.config.markers).toEqual(config.markers);
+    expect(events.at(-1).detail.config.tap_action).toEqual(config.tap_action);
+
+    dispatchChange(editor.shadowRoot.querySelector('#scale-direction'), 'reverse');
+    expect(events.at(-1).detail.config.scale).toEqual({ ...config.scale, direction: 'reverse' });
+    expect(events.at(-1).detail.config.bar).toEqual({ ...config.bar, direction: 'reverse' });
+    dispatchChange(editor.shadowRoot.querySelector('#bar-direction'), 'normal');
+    expect(events.at(-1).detail.config.bar).toEqual(config.bar);
+    expect(events.at(-1).detail.config.scale.direction).toBe('reverse');
+    dispatchChange(editor.shadowRoot.querySelector('#scale-direction'), 'normal');
+    expect(events.at(-1).detail.config.scale).toEqual(config.scale);
+  });
+
+  it('supports inherited and explicit entity Scale and Bar directions', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({
+      scale: { direction: 'reverse' },
+      bar: { direction: 'reverse', fill_style: 'gradient' },
+      entities: [
+        { entity: 'sensor.inherit', custom: 'keep' },
+        { entity: 'sensor.normal', scale: { direction: 'normal' }, bar: { direction: 'normal' } },
+      ],
+    });
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+
+    expect(editor.shadowRoot.querySelector('#entity-0-scale-direction').value).toBe('inherit');
+    expect(editor.shadowRoot.querySelector('#entity-0-bar-direction').value).toBe('inherit');
+    expect(editor.shadowRoot.querySelector('#entity-1-scale-direction').value).toBe('normal');
+    expect(editor.shadowRoot.querySelector('#entity-1-bar-direction').value).toBe('normal');
+
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-scale-direction'), 'normal');
+    expect(events.at(-1).detail.config.entities[0].scale.direction).toBe('normal');
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-bar-direction'), 'normal');
+    expect(events.at(-1).detail.config.entities[0].bar.direction).toBe('normal');
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-scale-direction'), 'inherit');
+    expect(events.at(-1).detail.config.entities[0]).toEqual({
+      entity: 'sensor.inherit', custom: 'keep', bar: { direction: 'normal' },
+    });
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-bar-direction'), 'inherit');
+    expect(events.at(-1).detail.config.entities[0]).toEqual({ entity: 'sensor.inherit', custom: 'keep' });
+    expect(events.at(-1).detail.config.scale.direction).toBe('reverse');
+    expect(events.at(-1).detail.config.bar).toEqual({ direction: 'reverse', fill_style: 'gradient' });
+
+    dispatchChange(editor.shadowRoot.querySelector('#scale-direction'), 'normal');
+    dispatchChange(editor.shadowRoot.querySelector('#bar-direction'), 'normal');
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-scale-direction'), 'reverse');
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-bar-direction'), 'reverse');
+    expect(events.at(-1).detail.config.scale).toBeUndefined();
+    expect(events.at(-1).detail.config.bar).toEqual({ fill_style: 'gradient' });
+    expect(events.at(-1).detail.config.entities[0]).toMatchObject({
+      scale: { direction: 'reverse' }, bar: { direction: 'reverse' },
+    });
+  });
+
+  it.each([
+    ['Scale', 'scale'],
+    ['Bar', 'bar'],
+  ])('preserves shorthand and mixed entity entries when editing entity %s Direction', (label, field) => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({ entities: ['sensor.one', 'sensor.two'] });
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+
+    dispatchChange(editor.shadowRoot.querySelector(`#entity-0-${field}-direction`), 'reverse');
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', [field]: { direction: 'reverse' } },
+      'sensor.two',
+    ]);
+
+    const objectSibling = {
+      entity: 'sensor.two', name: 'Second', custom_row_key: { retain: true },
+      scale: { min: 0, unknown_scale_key: 'keep' },
+      bar: { fill_style: 'gradient', unknown_bar_key: 'keep' },
+    };
+    editor.setConfig({ entities: ['sensor.one', objectSibling] });
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchChange(editor.shadowRoot.querySelector(`#entity-0-${field}-direction`), 'reverse');
+    expect(events.at(-1).detail.config.entities).toEqual([
+      { entity: 'sensor.one', [field]: { direction: 'reverse' } },
+      objectSibling,
+    ]);
+  });
+
   it('exposes card and row action selectors without materializing defaults', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);

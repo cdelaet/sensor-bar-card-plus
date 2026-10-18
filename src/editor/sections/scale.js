@@ -1,5 +1,6 @@
 import { deletePathValue, pruneEmptyObjectsInTarget } from '../shared/editor-config.js';
 import { escapeAttribute, renderEntityAttributeInput, renderEntitySourceInput } from '../shared/editor-controls.js';
+import { getDirectionSelection, renderDirectionControl, setDirectionValue } from '../shared/direction-control.js';
 
 // The host supplies source reading/canonicalization and a scoped mutation sink.
 // No session, entities array, cleanup policy or full editor instance is required.
@@ -21,7 +22,7 @@ export function setScalePart(context, scope, key, part, value) {
 
 export function hasScaleOverride(context, scope) {
   const explicit = value => value !== '' && value !== undefined && value !== null;
-  return ['min', 'max'].some(key => {
+  return explicit(context.read(scope, ['scale', 'direction'])) || ['min', 'max'].some(key => {
     const parts = getScaleParts(context, scope, key);
     return explicit(parts?.fixed) || explicit(parts?.entity);
   });
@@ -31,10 +32,12 @@ export function getScaleOverrideSummary(context, scope) {
   const parts = [];
   const min = getScaleParts(context, scope, 'min');
   const max = getScaleParts(context, scope, 'max');
+  const direction = context.read(scope, ['scale', 'direction']);
   if (min.entity) parts.push('Min entity');
   else if (min.fixed !== '' && min.fixed !== undefined) parts.push(`Min ${min.fixed}`);
   if (max.entity) parts.push('Max entity');
   else if (max.fixed !== '' && max.fixed !== undefined) parts.push(`Max ${max.fixed}`);
+  if (direction !== undefined) parts.push(`Direction ${direction === 'reverse' ? 'Reverse' : 'Normal'}`);
   return parts.length ? parts.join(' • ') : 'Inherited';
 }
 
@@ -42,6 +45,7 @@ export function clearScaleOverride(context, scope) {
   return context.mutate(scope, target => {
     let nextTarget = deletePathValue(target, ['scale', 'min']);
     nextTarget = deletePathValue(nextTarget, ['scale', 'max']);
+    nextTarget = deletePathValue(nextTarget, ['scale', 'direction']);
     nextTarget = deletePathValue(nextTarget, ['min']);
     nextTarget = deletePathValue(nextTarget, ['max']);
     nextTarget = deletePathValue(nextTarget, ['min_entity']);
@@ -53,6 +57,14 @@ export function clearScaleOverride(context, scope) {
 // Events are already decoded by the host; true means the field was handled,
 // including no-op/invalid edits. The host retains delegated event lifecycle.
 export function handleScaleField(context, { field, kind, index, value }) {
+  if (field === 'scale-direction') {
+    setDirectionValue(context, { type: 'card' }, ['scale', 'direction'], value);
+    return true;
+  }
+  if (kind === 'entity-scale-direction') {
+    setDirectionValue(context, { type: 'entity', index: Number(index) }, ['scale', 'direction'], value);
+    return true;
+  }
   if (field === 'scale-min' || field === 'scale-max') {
     setScalePart(context, { type: 'card' }, field.slice(6), 'fixed', value);
     return true;
@@ -116,7 +128,11 @@ export function renderScaleSection(context, scope) {
                         <label>Max attribute</label>
                         ${renderEntityAttributeInput('entity-override-max-attribute', index, maxParts.attribute, maxParts.entity, context.hass)}
                       </div>` : ''}
-	                          `;
+                      ${renderDirectionControl(context, scope, {
+                        path: ['scale', 'direction'], id: `entity-${index}-scale-direction`,
+                        kind: 'entity-scale-direction', label: 'Scale Direction',
+                      })}
+                          `;
   }
   const scaleMin = getScaleFixedValue(context, 'min');
   const scaleMax = getScaleFixedValue(context, 'max');
@@ -125,7 +141,7 @@ export function renderScaleSection(context, scope) {
   return `	        <div class="section">
 	          <div class="section-head">
 	            <h3>Scale</h3>
-	            <div class="section-note">Entity values take precedence. Fixed values are used as fallback.</div>
+	            <div class="section-note">Entity values take precedence; fixed values are fallback. Direction reverses minimum and maximum positions.</div>
 	          </div>
 	          <div class="inline-row editor-grid">
             <div class="field-row">
@@ -152,6 +168,10 @@ export function renderScaleSection(context, scope) {
               <label>Max attribute</label>
               ${renderEntityAttributeInput('scale-max-attribute', 'card', getScaleParts(context, { type: 'card' }, 'max').attribute, scaleMaxEntity, context.hass)}
             </div>` : ''}
+            ${renderDirectionControl(context, scope, {
+              path: ['scale', 'direction'], id: 'scale-direction',
+              field: 'scale-direction', label: 'Scale Direction',
+            })}
           </div>
 	        </div>`;
 }

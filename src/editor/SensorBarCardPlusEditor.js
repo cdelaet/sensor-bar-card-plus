@@ -17,7 +17,7 @@ import { NumericInputDrafts } from './shared/editor-numeric-drafts.js';
 
 import {
   getScaleFixedValue, getScaleEntityValue, setScalePart,
-  clearScaleOverride, getScaleOverrideSummary, renderScaleSection, handleScaleField,
+  clearScaleOverride, getScaleOverrideSummary, hasScaleOverride, renderScaleSection, handleScaleField,
 } from './sections/scale.js';
 import {
   getFormattingValue, getEffectiveFormattingValue, setFormattingUnit, setFormattingDecimal,
@@ -348,8 +348,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._draftConfig = this._cloneDeep(nextConfig);
   }
 
-  _emitConfigChanged() {
-    const emittedConfig = this._cleanupEditorEmittedConfig(this._cloneDeep(this._draftConfig));
+  _emitConfigChanged({ preserveRawConfig = false } = {}) {
+    const draft = this._cloneDeep(this._draftConfig);
+    const emittedConfig = preserveRawConfig ? draft : this._cleanupEditorEmittedConfig(draft);
     const nextConfigJson = this._serializeConfig(emittedConfig);
     if (nextConfigJson === this._lastEmittedConfigJson) {
       return false;
@@ -382,7 +383,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     }
 
     this._updateConfig(nextConfig);
-    this._emitConfigChanged();
+    this._emitConfigChanged(options);
     this._refreshDerivedEditorUi();
     if (rerender) {
       this._scheduleRender();
@@ -441,8 +442,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const count = this._getEntitiesValue().length;
     for (let index = 0; index < count; index += 1) {
       const scope = { type: 'entity', index };
-      this._setElementChecked(`entity-${index}-scale-inherit`, !this._hasResolvableOverride(this._getResolvableScopedValue(scope, 'min'))
-        && !this._hasResolvableOverride(this._getResolvableScopedValue(scope, 'max')));
+      this._setElementChecked(`entity-${index}-scale-inherit`, !hasScaleOverride(this._createSectionContext(), scope));
       this._setElementChecked(`entity-${index}-target-inherit`, !this._hasTargetOverride(scope));
       this._setElementChecked(`entity-${index}-baseline-inherit`, !this._hasBaselineOverride(scope));
       this._setElementChecked(`entity-${index}-needle-inherit`, !this._hasNeedleOverride(scope));
@@ -1392,6 +1392,16 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _applyScopedMutation(scope, mutator, options = {}) {
     if (scope?.type === 'entity') {
+      if (options.preserveRawConfig && Array.isArray(this._draftConfig.entities)) {
+        const entries = this._cloneDeep(this._draftConfig.entities);
+        const rawEntry = entries[scope.index];
+        const entry = this._isObject(rawEntry)
+          ? this._cloneDeep(rawEntry)
+          : { entity: typeof rawEntry === 'string' ? rawEntry : rawEntry?.entity ?? '' };
+        entries[scope.index] = mutator(entry);
+        const nextConfig = this._setPathValue(this._draftConfig, ['entities'], entries);
+        return this._applyUserConfig(nextConfig, options);
+      }
       const nextConfig = this._withEntityScopeConfig((entries) => {
         const rawEntry = entries[scope.index];
         const entry = this._isObject(rawEntry) ? this._cloneDeep(rawEntry) : { entity: rawEntry?.entity ?? '' };

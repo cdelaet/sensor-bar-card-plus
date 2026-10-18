@@ -11,6 +11,56 @@ async function mount(page, options = {}) {
 }
 const feature = page => page.locator('sensor-bar-card-plus-feature').first();
 
+test('Direction visual: standalone and Card Feature rendering stay in parity', async ({ page }) => {
+  await page.goto('/tests/visual/fixtures/harness.html');
+  const config = {
+    scale: { min: 0, max: 100, direction: 'reverse' },
+    bar: { fill_style: 'bands', direction: 'reverse', animated: false, segments: [
+      { from: 0, to: 50, color: '#16a34a' }, { from: 50, to: 100, color: '#dc2626' },
+    ] },
+    target: { at: 55 },
+    markers: [{ at: 15, lane: 'above', shape: 'diamond' }],
+  };
+  await page.evaluate(async config => {
+    const states = { 'sensor.power': window.__sbcpCreateState(30, { friendly_name: 'Power', unit_of_measurement: 'W' }) };
+    await window.__sbcpRenderCard({ width: 640, config: { ...config, entities: [{ entity: 'sensor.power' }] }, states });
+    await window.__sbcpRenderFeature({ config, states, context: { entity_id: 'sensor.power' }, width: 390, height: 42, position: 'bottom' });
+  }, config);
+  await page.evaluate(() => {
+    const mount = document.querySelector('#mount');
+    const card = mount.querySelector('sensor-bar-card-plus');
+    const host = mount.querySelector('.feature-host');
+    host.style.width = '390px';
+    for (const [element, label] of [[card, 'Standalone'], [host, 'Card Feature']]) {
+      const heading = document.createElement('h3');
+      heading.textContent = label;
+      heading.style.cssText = 'margin:12px 0 4px 164px;font:600 14px system-ui;color:#cbd5e1';
+      element.before(heading);
+    }
+    host.style.marginLeft = '164px';
+  });
+  const result = await page.evaluate(() => {
+    const read = root => {
+      return {
+        clip: root.querySelector('.bar-fill-reveal').style.clipPath,
+        paint: getComputedStyle(root.querySelector('[data-layer="base"]')).backgroundImage,
+        target: root.querySelector('.target-marker').style.left,
+        reference: root.querySelector('.generic-marker').style.left,
+        trackWidth: root.querySelector('.bar-track').getBoundingClientRect().width,
+      };
+    };
+    return {
+      card: read(document.querySelector('sensor-bar-card-plus').shadowRoot),
+      feature: read(document.querySelector('sensor-bar-card-plus-feature').shadowRoot),
+    };
+  });
+  expect(result.card).toEqual(result.feature);
+  expect(result.card.clip).toContain('70%');
+  expect(result.card.target).toBe('45%');
+  expect(result.card.reference).toBe('85%');
+  await expect(page.locator('#mount')).toHaveScreenshot('direction-card-feature-parity.png');
+});
+
 for (const [width, height, position] of [[640, 42, 'bottom'], [96, 24, 'inline']]) {
   test(`band_gradient with named Segment colors paints the same as standalone in ${position} placement`, async ({ page }) => {
     await page.goto('/tests/visual/fixtures/harness.html');
@@ -279,7 +329,11 @@ test('config and inherited entity replacements reconcile scale, glyph structure 
 for (const reducedMotion of ['no-preference', 'reduce']) {
   test(`feature respects ${reducedMotion} motion preference and keeps marker nodes`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion });
-    await mount(page, { config: { bar: { needle: true }, target: { at: 50 }, markers: [{ at: '25%' }] } });
+    await mount(page, { config: {
+      scale: { min: 0, max: 100, direction: 'reverse' },
+      bar: { needle: true, direction: 'reverse' },
+      target: { at: 50 }, markers: [{ at: '25%' }],
+    } });
     const result = await feature(page).evaluate(async element => {
       const root = element.shadowRoot;
       const needle = root.querySelector('.needle-marker');

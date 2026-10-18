@@ -18,6 +18,7 @@ for (const edge of ['min', 'max']) {
   field(`scale-${edge}`, 'Scale', 'number', `scale.${edge}.fixed`, edge === 'min' ? '-75' : '125');
   kind(`scale-${edge}-entity-source`, 'Scale', 'entity', `scale.${edge}.entity`, 'sensor.changed');
 }
+field('scale-direction', 'Scale', 'select', 'scale.direction', ['normal', 'reverse'], { journey: 'direction' });
 for (const marker of ['target', 'peak', 'floor']) {
   const section = marker === 'target' ? 'Target' : marker === 'peak' ? 'Peak' : 'Floor';
   if (marker === 'target') {
@@ -43,6 +44,7 @@ for (const marker of ['target', 'peak', 'floor']) {
 }
 field('bar-fill-style', 'Bar Appearance', 'select', 'bar.fill_style', ['gradient', 'soft_bands', 'band_gradient', 'solid']);
 field('bar-solid-fill', 'Bar Appearance', 'checkbox', 'bar.solid_fill', null);
+field('bar-direction', 'Bar Appearance', 'select', 'bar.direction', ['normal', 'reverse'], { journey: 'direction' });
 field('bar-animated', 'Bar Appearance', 'checkbox', 'bar.animated', null, { hosts: ['feature'] });
 color('field', 'bar-color', 'Bar Appearance', 'bar.color');
 field('bar-needle-mode', 'Needle', 'select', 'bar.needle.show', ['disabled', 'enabled']);
@@ -84,6 +86,7 @@ for (const family of ['segment','gradient']) {
 for (const entry of controls.filter(c=>c.section==='Segments' && c.type==='css')) entry.hosts=['feature'];
 for(const entry of controls.filter(c=>c.section==='Gradient Stops'&&c.type==='css')) entry.type='legacy-color';
 const entityNames = {
+ 'scale-direction':'entity-scale-direction','bar-direction':'entity-bar-direction',
  'scale-min':'entity-override-min','scale-max':'entity-override-max',
  'scale-min-entity-source':'entity-override-min-entity-source','scale-max-entity-source':'entity-override-max-entity-source',
  'target-mode':'entity-target-mode','peak-show':'entity-peak-enabled','floor-show':'entity-floor-enabled',

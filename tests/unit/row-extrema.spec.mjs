@@ -69,6 +69,18 @@ describe('row-owned extrema', () => {
     card.setConfig({ entities: [row('C', both), row('D', both)] });
     expect(values(sample(card, 70))).toEqual([[70, 70], [70, 70]]);
   });
+  it('keeps duplicate history with the matching Scale Direction when inserting and reordering', () => {
+    const normal = { entity: 'sensor.power', ...both };
+    const card = fixture([normal]);
+    [50, 90, 10, 30].forEach(value => sample(card, value));
+
+    const reverse = { entity: 'sensor.power', ...both, scale: { direction: 'reverse' } };
+    card.setConfig({ entities: [reverse, normal] });
+    expect(values(sample(card, 30))).toEqual([[30, 30], [90, 10]]);
+
+    card.setConfig({ entities: [normal, reverse] });
+    expect(values(sample(card, 40))).toEqual([[90, 10], [40, 30]]);
+  });
   it('copies retained mutable trackers into new row ownership', () => {
     const card = fixture([row('A', both), row('B', both)]); sequence(card);
     const oldRows = card._config.entities;

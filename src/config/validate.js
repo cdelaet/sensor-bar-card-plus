@@ -263,6 +263,16 @@ function validateGradientStops(diagnostics, stops, path, entity = null) {
 }
 
 function validateConfigScope(diagnostics, config, path, entity = null) {
+  if (config?.scale?.direction_invalid) {
+    addWarning(diagnostics, 'scale.invalid_direction',
+      'Scale direction must be `normal` or `reverse`; using the inherited or default direction.',
+      `${path}.scale.direction`, entity);
+  }
+  if (config?.bar?.direction_invalid) {
+    addWarning(diagnostics, 'bar.invalid_direction',
+      'Bar direction must be `normal` or `reverse`; using the inherited or default direction.',
+      `${path}.bar.direction`, entity);
+  }
   validateAttribute(diagnostics, config, `${path}.attribute`, entity);
   validateAttribute(diagnostics, config?.scale?.min, `${path}.scale.min.attribute`, entity);
   validateAttribute(diagnostics, config?.scale?.max, `${path}.scale.max.attribute`, entity);

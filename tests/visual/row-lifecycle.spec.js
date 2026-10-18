@@ -60,6 +60,88 @@ async function checkRows(page, rows, states) {
     expect(await page.evaluate(() => window.__clickedEntity)).toBe(rows[index].entity);
   }
 }
+
+test('Direction config replacement snaps, then ordinary value changes still animate', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/tests/visual/fixtures/harness.html');
+  const config = direction => ({
+    scale: { min: 0, max: 100, direction },
+    bar: { direction: 'normal', animated: true },
+    entities: [{ entity: 'sensor.direction_lifecycle' }],
+  });
+  await page.evaluate(async initial => {
+    await window.__sbcpRenderCard({ width: 720, config: initial, states: { 'sensor.direction_lifecycle': window.__sbcpCreateState(25) } });
+  }, config('normal'));
+
+  const changedConfig = await page.locator('sensor-bar-card-plus').evaluate(card => {
+    const previous = card.shadowRoot.querySelector('.bar-fill-reveal');
+    card.setConfig({ scale: { min: 0, max: 100, direction: 'reverse' }, bar: { direction: 'normal', animated: true }, entities: [{ entity: 'sensor.direction_lifecycle' }] });
+    const reveal = card.shadowRoot.querySelector('.bar-fill-reveal');
+    return {
+      replaced: reveal !== previous,
+      clip: reveal.style.clipPath,
+      transition: getComputedStyle(reveal).transitionDuration,
+    };
+  });
+  expect(changedConfig.replaced).toBe(true);
+  expect(changedConfig.clip).toContain('25%'); // value 25 projects to 75% on the reversed Scale
+
+  await page.locator('sensor-bar-card-plus').evaluate(card => {
+    const reveal = card.shadowRoot.querySelector('.bar-fill-reveal');
+    window.__directionSamples = [];
+    window.__directionTransitionEnded = false;
+    reveal.addEventListener('transitionrun', event => {
+      if (event.propertyName === 'clip-path') window.__directionTransitionStarted = true;
+    }, { once: true });
+    reveal.addEventListener('transitionend', event => {
+      if (event.propertyName === 'clip-path') window.__directionTransitionEnded = true;
+    }, { once: true });
+    card.hass = { states: { 'sensor.direction_lifecycle': window.__sbcpCreateState(75) } };
+    window.__directionTransitionStarted = false;
+    const sample = () => {
+      window.__directionSamples.push(getComputedStyle(reveal).clipPath);
+      if (!window.__directionTransitionEnded) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  await expect.poll(() => page.evaluate(() => window.__directionTransitionEnded)).toBe(true);
+  const transition = await page.locator('sensor-bar-card-plus').evaluate(card => ({
+    started: window.__directionTransitionStarted,
+    samples: window.__directionSamples,
+    finalInline: card.shadowRoot.querySelector('.bar-fill-reveal').style.clipPath,
+    duration: getComputedStyle(card.shadowRoot.querySelector('.bar-fill-reveal')).transitionDuration,
+  }));
+  expect(transition.started).toBe(true);
+  expect(transition.duration).not.toBe('0s');
+  expect(new Set(transition.samples).size).toBeGreaterThan(1);
+  expect(transition.finalInline).toContain('75%');
+
+  const noMotion = await page.locator('sensor-bar-card-plus').evaluate(card => {
+    const disabled = { scale: { min: 0, max: 100, direction: 'reverse' }, bar: { direction: 'normal', animated: false }, entities: [{ entity: 'sensor.direction_lifecycle' }] };
+    card.setConfig(disabled);
+    card.hass = { states: { 'sensor.direction_lifecycle': window.__sbcpCreateState(30) } };
+    const reveal = card.shadowRoot.querySelector('.bar-fill-reveal');
+    return { duration: getComputedStyle(reveal).transitionDuration, clip: reveal.style.clipPath };
+  });
+  expect(noMotion.duration).toBe('0s');
+  expect(noMotion.clip).toContain('30%');
+
+  // The Card Feature's existing reduced-motion rule is the animation surface
+  // that honors prefers-reduced-motion. Exercise it with Direction enabled.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const reduced = await page.evaluate(async () => {
+    const feature = await window.__sbcpRenderFeature({
+      config: { scale: { min: 0, max: 100, direction: 'reverse' }, bar: { direction: 'reverse', animated: true } },
+      states: { 'sensor.power': window.__sbcpCreateState(30) },
+      context: { entity_id: 'sensor.power' }, width: 640, height: 42,
+    });
+    const reveal = feature.shadowRoot.querySelector('.bar-fill-reveal');
+    return { duration: getComputedStyle(reveal).transitionDuration, clip: reveal.style.clipPath };
+  });
+  expect(reduced.duration).toBe('0s');
+  expect(reduced.clip).toContain('70%');
+});
+
 for (const missing of [[0], [1], [2], [0, 2], [0, 1, 2]]) {
   test(`missing indices ${missing} recover without mixing row content`, async ({ page }) => {
     const rows = ids.map(configRow), states = Object.fromEntries(ids.filter((_, i) => !missing.includes(i)).map(id => [id, state(ids.indexOf(id))]));

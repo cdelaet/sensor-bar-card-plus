@@ -88,9 +88,10 @@ export function patchBar(root, model, { revealDuration = 600 } = {}) {
     setClassNameIfChanged(fillReveal, `bar-fill-reveal${model.animated ? '' : ' no-anim'}`);
   }
   if (baselineIndicator) {
-    setStyleIfChanged(baselineIndicator, 'display', Number.isFinite(model.baseline.percent) ? 'block' : 'none');
-    if (Number.isFinite(model.baseline.percent)) {
-      setStyleIfChanged(baselineIndicator, 'left', `${model.baseline.percent}%`);
+    const baselinePosition = model.baseline.positionPercent ?? model.baseline.percent;
+    setStyleIfChanged(baselineIndicator, 'display', Number.isFinite(baselinePosition) ? 'block' : 'none');
+    if (Number.isFinite(baselinePosition)) {
+      setStyleIfChanged(baselineIndicator, 'left', `${baselinePosition}%`);
     }
   }
   if (paintLayer) {
@@ -127,7 +128,7 @@ export function patchBar(root, model, { revealDuration = 600 } = {}) {
 /** The optional inside content is rendered and owned by the card adapter. */
 export function renderBar(model, { insideContent = '' } = {}) {
   const fillState = model.fill;
-  const baselinePct = model.baseline.percent;
+  const baselinePct = model.baseline.positionPercent ?? model.baseline.percent;
   const needleState = model.needle;
   const baselineIndicator = model.baseline.configured
     ? `<div class="baseline-indicator" aria-hidden="true" style="${Number.isFinite(baselinePct) ? `left:${baselinePct}%;display:block;` : 'display:none;'}"></div>`

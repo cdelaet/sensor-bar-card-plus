@@ -1,5 +1,6 @@
 import { getNormalizedResolvableNumericValue, getResolvedScale, resolveEntitySource, resolveEntityState } from '../config/resolve.js';
 import { getFiniteNumber } from '../config/normalize.js';
+import { projectScalePercent } from './scale-projection.js';
 import {
   createNumericPresentation,
   createMarkerLabelPresentation,
@@ -101,7 +102,7 @@ function getNeedleBorderColor(color) {
   return luminance < 0.22 ? '#ffffff' : '#000000';
 }
 
-function getNeedleState(entityConfig, numericValue, minValue, maxValue, baselinePercent) {
+function getNeedleState(entityConfig, numericValue, minValue, maxValue, baselinePercent, scaleDirection) {
   const needle = entityConfig?.bar?.needle;
   if (!needle?.show || Number.isFinite(baselinePercent) || !Number.isFinite(numericValue)) {
     const color = needle?.color ?? '#ffffff';
@@ -116,14 +117,16 @@ function getNeedleState(entityConfig, numericValue, minValue, maxValue, baseline
   }
 
   const color = needle.color ?? '#ffffff';
-  const percent = Math.min(100, Math.max(0, toScalePct(numericValue, minValue, maxValue)));
+  const scalePercent = toScalePct(numericValue, minValue, maxValue);
+  const positionPercent = projectScalePercent(scalePercent, scaleDirection);
   return {
     show: true,
-    percent,
-    pct: percent,
+    percent: scalePercent,
+    pct: positionPercent,
+    positionPercent,
     color,
     borderColor: getNeedleBorderColor(color),
-    edge: percent <= 0 ? 'left' : (percent >= 100 ? 'right' : 'middle'),
+    edge: positionPercent <= 0 ? 'left' : (positionPercent >= 100 ? 'right' : 'middle'),
   };
 }
 
@@ -192,7 +195,9 @@ export function buildRowViewModel(options) {
     ? targetUnit
     : '';
   const { min: safeMin, max: safeMax } = getResolvedScale(hass, entityConfig?.scale, previousScale);
+  const scaleDirection = entityConfig?.scale?.direction ?? 'normal';
   const percent = numericValue !== null ? toScalePct(numericValue, safeMin, safeMax) : 0;
+  const positionPercent = numericValue !== null ? projectScalePercent(percent, scaleDirection) : null;
   const decimal = entityConfig?.formatting?.decimal ?? null;
   const primaryPresentation = numericValue === null
     ? createTextPresentation(rawState)
@@ -202,6 +207,7 @@ export function buildRowViewModel(options) {
     ? null
     : getNormalizedResolvableNumericValue(hass, entityConfig?.target_marker?.source, safeMin, safeMax);
   const targetPercent = targetValue !== null ? toScalePct(targetValue, safeMin, safeMax) : null;
+  const targetPositionPercent = projectScalePercent(targetPercent, scaleDirection);
   const targetVisible = targetValue !== null;
   const targetDecimal = entityConfig?.target_marker?.label_decimal ?? decimal;
   const targetPresentation = targetValue !== null
@@ -219,6 +225,7 @@ export function buildRowViewModel(options) {
     ? null
     : getNormalizedResolvableNumericValue(hass, entityConfig?.baseline?.at, safeMin, safeMax);
   const baselinePercent = Number.isFinite(baselineValue) ? toScalePct(baselineValue, safeMin, safeMax) : null;
+  const baselinePositionPercent = projectScalePercent(baselinePercent, scaleDirection);
   const baselineVisible = Number.isFinite(baselineValue);
 
   const legacyPeak = Number.isFinite(getFiniteNumber(peaks?.[entityId]))
@@ -294,7 +301,8 @@ export function buildRowViewModel(options) {
       return {
         id: marker.id,
         value,
-        position: visible ? toScalePct(value, safeMin, safeMax) : null,
+        scalePercent: visible ? toScalePct(value, safeMin, safeMax) : null,
+        position: visible ? projectScalePercent(toScalePct(value, safeMin, safeMax), scaleDirection) : null,
         lane: marker.lane,
         visible,
         color: marker.color,
@@ -308,17 +316,17 @@ export function buildRowViewModel(options) {
   const markers = buildMarkerModels({
     entityConfig,
     targetValue,
-    targetPosition: targetPercent,
+    targetPosition: targetPositionPercent,
     targetPresentation,
     targetLabelPresentation,
     targetVisible,
     peakValue: peakState.value,
-    peakPosition: peakState.percent,
+    peakPosition: projectScalePercent(peakState.percent, scaleDirection),
     peakPresentation,
     peakLabelPresentation,
     peakVisible: peakState.visible,
     floorValue: floorState.value,
-    floorPosition: floorState.percent,
+    floorPosition: projectScalePercent(floorState.percent, scaleDirection),
     floorPresentation,
     floorLabelPresentation,
     floorVisible: floorState.visible,
@@ -337,6 +345,7 @@ export function buildRowViewModel(options) {
     min: safeMin,
     max: safeMax,
     percent,
+    positionPercent,
     displayValue: primaryPresentation.number,
     displayUnit: primaryPresentation.unit,
     primaryPresentation,
@@ -345,12 +354,14 @@ export function buildRowViewModel(options) {
     fillStyle: entityConfig?.bar?.fill_style ?? null,
     target: targetValue,
     targetPercent,
+    targetPositionPercent,
     targetDisplay: targetPresentation?.text ?? null,
     targetPresentation,
     targetLabelPresentation,
     targetVisible,
     baseline: baselineValue,
     baselinePercent,
+    baselinePositionPercent,
     baselineVisible,
     peak: peakState.value,
     peakPercent: peakState.percent,
@@ -369,7 +380,7 @@ export function buildRowViewModel(options) {
     markerLabelLaneOccupancy: getMarkerLabelLaneOccupancy(entityConfig),
     segments: entityConfig?.bar?.segments ?? null,
     gradientStops: entityConfig?.bar?.gradient_stops ?? null,
-    needle: getNeedleState(entityConfig, numericValue, safeMin, safeMax, baselinePercent),
+    needle: getNeedleState(entityConfig, numericValue, safeMin, safeMax, baselinePercent, scaleDirection),
     classes: {
       labelPosition: entityConfig?.layout?.label?.position ?? 'left',
       animated: entityConfig?.bar?.animated !== false,

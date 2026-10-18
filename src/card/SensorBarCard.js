@@ -268,9 +268,12 @@ export class SensorBarCard extends HTMLElement {
     const signature = row => JSON.stringify(canonical({
       entity: row.entity, name: row.name, icon: row.icon ?? null,
       layout: row.layout,
-      scale: Object.fromEntries(['min', 'max'].map(key => [key, {
-        ...row.scale[key], fixed_explicit: row.scale[key].fixed_explicit !== false,
-      }])),
+      scale: {
+        direction: row.scale.direction,
+        ...Object.fromEntries(['min', 'max'].map(key => [key, {
+          ...row.scale[key], fixed_explicit: row.scale[key].fixed_explicit !== false,
+        }])),
+      },
       bar: row.bar, baseline: row.baseline, formatting: row.formatting,
       target_marker: row.target_marker, peak_marker: row.peak_marker,
       floor_marker: row.floor_marker, generic_markers: row.generic_markers,
@@ -2971,7 +2974,7 @@ ${barMarkerStyles}
         if (marker.type === 'target') {
           return {
             ...marker,
-            position: targetPct === undefined ? marker.position : targetPct,
+            position: marker.position,
             visible: targetPct !== null && targetPct !== undefined,
             color: targetColor || marker.color,
             label: marker.label ?? (targetDisplay === null ? null : { text: targetDisplay }),
@@ -2983,7 +2986,7 @@ ${barMarkerStyles}
         if (marker.type !== 'peak') return marker;
         return {
           ...marker,
-          position: peakPct === undefined ? marker.position : peakPct,
+          position: marker.position,
           visible: peakPct !== null && peakPct !== undefined && ecfg.peak_marker.show === true,
           color: peakColor || marker.color,
           label: marker.label ?? (peakDisplay === null ? null : { text: peakDisplay }),
