@@ -9948,49 +9948,45 @@ views:
   dense_section_placement: false
   sections:
   - type: grid
-    column_span: 3
     cards:
     - type: vertical-stack
       cards:
-        - type: markdown
-          content: |
-            # Sensor Bar Card Plus — Direction Test
-            Manual regression view for `scale.direction` and `bar.direction`. Load `examples/packages/sensor_bar_card_plus_playground_package.yaml` first. Ordinary test cards are kept full width within their dashboard column; only the explicitly labelled Narrow section pairs cards to constrain their width.
-        - type: entities
-          title: Shared Direction Test Controls
-          show_header_toggle: false
-          entities:
-          - entity: input_number.sbcp_current_value
-            name: Current value
-          - entity: input_number.sbcp_scale_min_value
-            name: Scale minimum
-          - entity: input_number.sbcp_scale_max_value
-            name: Scale maximum
-          - entity: input_number.sbcp_baseline_value
-            name: Baseline
-          - entity: input_number.sbcp_target_value
-            name: Target
-          - entity: input_number.sbcp_marker_primary_value
-            name: Reference A
-          - entity: input_number.sbcp_marker_target_value
-            name: Reference B
-          - entity: input_boolean.sbcp_wave_enabled
-            name: Wave Driver
-          - entity: input_select.sbcp_wave_target
-            name: Animate current, Target, or Baseline
-          - entity: input_select.sbcp_waveform
-            name: Waveform
-          - entity: input_number.sbcp_wave_period
-            name: Wave period
-          - entity: input_number.sbcp_min_value
-            name: Wave minimum
-          - entity: input_number.sbcp_max_value
-            name: Wave maximum
-
-  - type: grid
-    cards:
-    - type: vertical-stack
-      cards:
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: |
+              # Sensor Bar Card Plus — Direction Test
+              Manual regression view for `scale.direction` and `bar.direction`. Load `examples/packages/sensor_bar_card_plus_playground_package.yaml` first. Ordinary test cards are kept full width within their dashboard column; only the explicitly labelled Narrow section pairs cards to constrain their width.
+          - type: entities
+            title: Shared Direction Test Controls
+            show_header_toggle: false
+            entities:
+            - entity: input_number.sbcp_current_value
+              name: Current value
+            - entity: input_number.sbcp_scale_min_value
+              name: Scale minimum
+            - entity: input_number.sbcp_scale_max_value
+              name: Scale maximum
+            - entity: input_number.sbcp_baseline_value
+              name: Baseline
+            - entity: input_number.sbcp_target_value
+              name: Target
+            - entity: input_number.sbcp_marker_primary_value
+              name: Reference A
+            - entity: input_number.sbcp_marker_target_value
+              name: Reference B
+            - entity: input_boolean.sbcp_wave_enabled
+              name: Wave Driver
+            - entity: input_select.sbcp_wave_target
+              name: Animate current, Target, or Baseline
+            - entity: input_select.sbcp_waveform
+              name: Waveform
+            - entity: input_number.sbcp_wave_period
+              name: Wave period
+            - entity: input_number.sbcp_min_value
+              name: Wave minimum
+            - entity: input_number.sbcp_max_value
+              name: Wave maximum
       - type: vertical-stack
         cards:
         - type: markdown
