@@ -4,809 +4,1125 @@ views:
   path: sensor-bar-card-plus-playground
   icon: mdi:tune-vertical
   badges: []
-  cards:
-  - type: markdown
-    content: |
-      # Sensor Bar Card Plus Playground
-      A self-contained Home Assistant demo for `custom:sensor-bar-card-plus`.
-
-      This view is the clean showcase surface. All controls drive helper-backed template sensors, and every bar card still consumes normal `sensor.*` entities.
-  - type: vertical-stack
-    cards:
-    - type: entities
-      title: Scenario Controls
-      show_header_toggle: false
-      entities:
-      - entity: input_number.sbcp_current_value
-        name: Current value
-      - entity: input_number.sbcp_target_value
-        name: Target value
-      - entity: input_number.sbcp_baseline_value
-        name: Baseline value
-      - entity: input_number.sbcp_scale_min_value
-        name: Scale minimum
-      - entity: input_number.sbcp_scale_max_value
-        name: Scale maximum
-      - entity: input_number.sbcp_min_value
-        name: Wave minimum
-      - entity: input_number.sbcp_max_value
-        name: Wave maximum
-      - entity: input_number.sbcp_current_quick
-        name: Current quick slider (-100 to 100)
-      - entity: input_number.sbcp_target_quick
-        name: Target quick slider (-100 to 100)
-      - entity: input_number.sbcp_baseline_quick
-        name: Baseline quick slider (-100 to 100)
-      - entity: input_boolean.sbcp_wave_enabled
-        name: Wave drive helper
-      - entity: input_select.sbcp_wave_target
-        name: Wave target
-      - entity: input_select.sbcp_waveform
-        name: Waveform
-      - entity: input_number.sbcp_wave_period
-        name: Wave period
-      - entity: input_select.sbcp_baseline_semantic_mode
-        name: Semantic fill mode
-      - entity: input_select.sbcp_baseline_interval_profile
-        name: Interval profile
-      - entity: input_text.sbcp_custom_raw_state
-        name: Custom text state
-    - type: entities
-      title: Rendering Controls
-      show_header_toggle: false
-      entities:
-      - entity: input_number.sbcp_bar_height
-        name: Bar height
-      - entity: input_number.sbcp_decimal_precision
-        name: Decimal precision
-      - entity: input_boolean.sbcp_animated
-        name: Animated
-      - entity: input_boolean.sbcp_target_enabled
-        name: Show target marker
-      - entity: input_boolean.sbcp_above_target_enabled
-        name: Enable above-target color
-      - entity: input_boolean.sbcp_show_target_label
-        name: Show target label
-      - entity: input_boolean.sbcp_show_peak
-        name: Show peak
-      - entity: input_select.sbcp_color_mode
-        name: Active fill style preview
-      - entity: input_select.sbcp_label_mode
-        name: Active label mode preview
-  - type: entities
-    title: Live Sensor Snapshot
-    show_header_toggle: false
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Primary sensor
-    - entity: sensor.sbcp_playground_scale_min
-      name: Min sensor
-    - entity: sensor.sbcp_playground_scale_max
-      name: Max sensor
-    - entity: sensor.sbcp_playground_target
-      name: Target sensor
-    - entity: sensor.sbcp_playground_baseline
-      name: Baseline sensor
-    - entity: sensor.sbcp_playground_negative
-      name: Negative sensor
-    - entity: sensor.sbcp_playground_text_state
-      name: Text-state sensor
-  - type: markdown
-    content: |
-      ## Animation Preview
-      Enable `Wave drive helper`, choose whether it targets the current value, the target value, or the baseline value, and select `sine`, `triangle`, or `random` for continuous motion. `Random` uses the full helper range instead of the active min/max scale.
-  - type: custom:sensor-bar-card-plus
-    title: Animated sensor preview
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Sensor
-    layout:
-      label:
-        position: left
-        width: 150
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-      label:
-        show: true
-    peak:
-      enabled: true
-    bar:
-      animated: true
-      fill_style: gradient
-  - type: markdown
-    content: |
-      ## Target And Highlight Toggles
-      Use the helper switches to verify target marker on/off behavior and above-target highlighting on/off on a normal-width card.
-  - type: vertical-stack
-    cards:
-    - type: conditional
-      conditions:
-      - entity: input_boolean.sbcp_target_enabled
-        state: "on"
-      - entity: input_boolean.sbcp_above_target_enabled
-        state: "on"
-      card:
-        type: custom:sensor-bar-card-plus
-        title: Target on / Above-target color on
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Sensor
-        layout:
-          label:
-            position: left
-            width: 160
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          label:
-            show: true
-          when_exceeded:
-            fill_color: '#dc2626'
-        bar:
-          color: '#2563eb'
-          fill_style: solid
-    - type: conditional
-      conditions:
-      - entity: input_boolean.sbcp_target_enabled
-        state: "on"
-      - entity: input_boolean.sbcp_above_target_enabled
-        state: "off"
-      card:
-        type: custom:sensor-bar-card-plus
-        title: Target on / Above-target color off
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Sensor
-        layout:
-          label:
-            position: left
-            width: 160
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          label:
-            show: true
-          when_exceeded:
-            fill_color:
-        bar:
-          color: '#2563eb'
-          fill_style: solid
-    - type: conditional
-      conditions:
-      - entity: input_boolean.sbcp_target_enabled
-        state: "off"
-      - entity: input_boolean.sbcp_above_target_enabled
-        state: "on"
-      card:
-        type: custom:sensor-bar-card-plus
-        title: Target off / Above-target color on
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Sensor
-        layout:
-          label:
-            position: left
-            width: 160
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at: {}
-          label:
-            show: false
-          when_exceeded:
-            fill_color: '#dc2626'
-        bar:
-          color: '#2563eb'
-          fill_style: solid
-    - type: conditional
-      conditions:
-      - entity: input_boolean.sbcp_target_enabled
-        state: "off"
-      - entity: input_boolean.sbcp_above_target_enabled
-        state: "off"
-      card:
-        type: custom:sensor-bar-card-plus
-        title: Target off / Above-target color off
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Sensor
-        layout:
-          label:
-            position: left
-            width: 160
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at: {}
-          label:
-            show: false
-          when_exceeded:
-            fill_color:
-        bar:
-          color: '#2563eb'
-          fill_style: solid
-  - type: markdown
-    content: |
-      ## Interactive Playground
-      These cards respond directly to the active helper settings and are intended to be the main debugging and screenshot surface.
-  - type: custom:sensor-bar-card-plus
-    entity: sensor.sbcp_playground_sensor
-    card_mod:
-      style: |
-        ha-card {
-          background: red !important;
-          border: 6px solid yellow !important;
-          border-radius: 24px !important;
-          padding: 16px !important;
-        }
-  - type: vertical-stack
-    cards:
-    - type: markdown
-      content: |
-        **Live Fill Style Preview**
-        Switch the helper and compare the currently selected color algorithm on the same sensor and same scale.
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_color_mode
-        state: gradient
-      card:
-        type: custom:sensor-bar-card-plus
-        title: "Active fill style: gradient"
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Sensor
-        layout:
-          label:
-            position: left
-            width: 150
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          label:
-            show: true
-          when_exceeded:
-            fill_color: '#991b1b'
-        bar:
-          gradient_stops:
-          - pos: 0
-            color: '#2563eb'
-          - pos: 45
-            color: '#06b6d4'
-          - pos: 75
-            color: '#f59e0b'
-          - pos: 100
-            color: '#dc2626'
-          fill_style: gradient
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_color_mode
-        state: severity
-      card:
-        type: custom:sensor-bar-card-plus
-        title: "Active fill style: bands"
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Sensor
-        layout:
-          label:
-            position: left
-            width: 150
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          label:
-            show: true
-        bar:
-          segments:
-          - from: 0%
-            to: 35%
-            color: '#22c55e'
-          - from: 35%
-            to: 70%
-            color: '#f59e0b'
-          - from: 70%
-            to: 100%
-            color: '#ef4444'
-          fill_style: bands
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_color_mode
-        state: severity_gradient
-      card:
-        type: custom:sensor-bar-card-plus
-        title: "Active fill style: band_gradient"
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Sensor
-        layout:
-          label:
-            position: left
-            width: 150
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          label:
-            show: true
-        bar:
-          segments:
-          - from: 0%
-            to: 35%
-            color: '#22c55e'
-          - from: 35%
-            to: 70%
-            color: '#f59e0b'
-          - from: 70%
-            to: 100%
-            color: '#ef4444'
-          fill_style: band_gradient
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_color_mode
-        state: single
-      card:
-        type: custom:sensor-bar-card-plus
-        title: "Active fill style: solid"
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Sensor
-        layout:
-          label:
-            position: left
-            width: 150
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          label:
-            show: true
-          when_exceeded:
-            fill_color: '#ef4444'
-        bar:
-          color: '#0f766e'
-          fill_style: solid
-  - type: vertical-stack
-    cards:
-    - type: markdown
-      content: |
-        **Live Label Mode Preview**
-        Switch the helper and verify the same sensor under each label placement mode.
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_label_mode
-        state: left
-      card:
-        type: custom:sensor-bar-card-plus
-        title: "Active label mode: left"
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Sensor
-        layout:
-          label:
-            position: left
-            width: 150
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          label:
-            show: true
-        bar:
-          fill_style: gradient
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_label_mode
-        state: above
-      card:
-        type: custom:sensor-bar-card-plus
-        title: "Active label mode: above"
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Sensor
-        layout:
-          label:
-            position: above
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          label:
-            show: true
-        bar:
-          fill_style: gradient
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_label_mode
-        state: inside
-      card:
-        type: custom:sensor-bar-card-plus
-        title: "Active label mode: inside"
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Sensor
-        layout:
-          label:
-            position: inside
-          height: 52
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          label:
-            show: true
-        bar:
-          fill_style: gradient
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_label_mode
-        state: "off"
-      card:
-        type: custom:sensor-bar-card-plus
-        title: "Active label mode: off"
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-        layout:
-          label:
-            position: "off"
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          label:
-            show: true
-        bar:
-          fill_style: gradient
+  type: sections
+  max_columns: 3
+  dense_section_placement: false
+  sections:
   - type: grid
-    columns: 2
-    square: false
     cards:
     - type: vertical-stack
       cards:
-      - type: markdown
-        content: |
-          **Height And Decimal Preview**
-          The current helper combination selects one matching card configuration.
-      - type: conditional
-        conditions:
-        - entity: sensor.sbcp_playground_bar_height
-          state: "24"
-        - entity: sensor.sbcp_playground_decimal_precision
-          state: "0"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Height 24px / Decimal 0
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            # Sensor Bar Card Plus Playground
+            A self-contained Home Assistant demo for `custom:sensor-bar-card-plus`.
+
+            This view is the clean showcase surface. All controls drive helper-backed template sensors, and every bar card still consumes normal `sensor.*` entities.
+        - type: vertical-stack
+          cards:
+          - type: entities
+            title: Scenario Controls
+            show_header_toggle: false
+            entities:
+            - entity: input_number.sbcp_current_value
+              name: Current value
+            - entity: input_number.sbcp_target_value
+              name: Target value
+            - entity: input_number.sbcp_baseline_value
+              name: Baseline value
+            - entity: input_number.sbcp_scale_min_value
+              name: Scale minimum
+            - entity: input_number.sbcp_scale_max_value
+              name: Scale maximum
+            - entity: input_number.sbcp_min_value
+              name: Wave minimum
+            - entity: input_number.sbcp_max_value
+              name: Wave maximum
+            - entity: input_number.sbcp_current_quick
+              name: Current quick slider (-100 to 100)
+            - entity: input_number.sbcp_target_quick
+              name: Target quick slider (-100 to 100)
+            - entity: input_number.sbcp_baseline_quick
+              name: Baseline quick slider (-100 to 100)
+            - entity: input_boolean.sbcp_wave_enabled
+              name: Wave drive helper
+            - entity: input_select.sbcp_wave_target
+              name: Wave target
+            - entity: input_select.sbcp_waveform
+              name: Waveform
+            - entity: input_number.sbcp_wave_period
+              name: Wave period
+            - entity: input_select.sbcp_baseline_semantic_mode
+              name: Semantic fill mode
+            - entity: input_select.sbcp_baseline_interval_profile
+              name: Interval profile
+            - entity: input_text.sbcp_custom_raw_state
+              name: Custom text state
+          - type: entities
+            title: Rendering Controls
+            show_header_toggle: false
+            entities:
+            - entity: input_number.sbcp_bar_height
+              name: Bar height
+            - entity: input_number.sbcp_decimal_precision
+              name: Decimal precision
+            - entity: input_boolean.sbcp_animated
+              name: Animated
+            - entity: input_boolean.sbcp_target_enabled
+              name: Show target marker
+            - entity: input_boolean.sbcp_above_target_enabled
+              name: Enable above-target color
+            - entity: input_boolean.sbcp_show_target_label
+              name: Show target label
+            - entity: input_boolean.sbcp_show_peak
+              name: Show peak
+            - entity: input_select.sbcp_color_mode
+              name: Active fill style preview
+            - entity: input_select.sbcp_label_mode
+              name: Active label mode preview
+        - type: entities
+          title: Live Sensor Snapshot
+          show_header_toggle: false
           entities:
           - entity: sensor.sbcp_playground_sensor
-            name: Active preset
+            name: Primary sensor
+          - entity: sensor.sbcp_playground_scale_min
+            name: Min sensor
+          - entity: sensor.sbcp_playground_scale_max
+            name: Max sensor
+          - entity: sensor.sbcp_playground_target
+            name: Target sensor
+          - entity: sensor.sbcp_playground_baseline
+            name: Baseline sensor
+          - entity: sensor.sbcp_playground_negative
+            name: Negative sensor
+          - entity: sensor.sbcp_playground_text_state
+            name: Text-state sensor
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Animation Preview
+            Enable `Wave drive helper`, choose whether it targets the current value, the target value, or the baseline value, and select `sine`, `triangle`, or `random` for continuous motion. `Random` uses the full helper range instead of the active min/max scale.
+        - type: custom:sensor-bar-card-plus
+          title: Animated sensor preview
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Sensor
           layout:
             label:
               position: left
               width: 150
-            height: 24
           scale:
             min:
               entity: sensor.sbcp_playground_scale_min
             max:
               entity: sensor.sbcp_playground_scale_max
-          formatting:
-            decimal: 0
           target:
             at:
               entity: sensor.sbcp_playground_target
-          bar:
-            fill_style: gradient
-      - type: conditional
-        conditions:
-        - entity: sensor.sbcp_playground_bar_height
-          state: "24"
-        - entity: sensor.sbcp_playground_decimal_precision
-          state: "1"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Height 24px / Decimal 1
-          entities:
-          - entity: sensor.sbcp_playground_sensor
-            name: Active preset
-          layout:
             label:
-              position: left
-              width: 150
-            height: 24
-          scale:
-            min:
-              entity: sensor.sbcp_playground_scale_min
-            max:
-              entity: sensor.sbcp_playground_scale_max
-          formatting:
-            decimal: 1
-          target:
-            at:
-              entity: sensor.sbcp_playground_target
+              show: true
+          peak:
+            enabled: true
           bar:
+            animated: true
             fill_style: gradient
-      - type: conditional
-        conditions:
-        - entity: sensor.sbcp_playground_bar_height
-          state: "24"
-        - entity: sensor.sbcp_playground_decimal_precision
-          state: "2"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Height 24px / Decimal 2
-          entities:
-          - entity: sensor.sbcp_playground_sensor
-            name: Active preset
-          layout:
-            label:
-              position: left
-              width: 150
-            height: 24
-          scale:
-            min:
-              entity: sensor.sbcp_playground_scale_min
-            max:
-              entity: sensor.sbcp_playground_scale_max
-          formatting:
-            decimal: 2
-          target:
-            at:
-              entity: sensor.sbcp_playground_target
-          bar:
-            fill_style: gradient
-      - type: conditional
-        conditions:
-        - entity: sensor.sbcp_playground_bar_height
-          state: "38"
-        - entity: sensor.sbcp_playground_decimal_precision
-          state: "0"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Height 38px / Decimal 0
-          entities:
-          - entity: sensor.sbcp_playground_sensor
-            name: Active preset
-          layout:
-            label:
-              position: left
-              width: 150
-            height: 38
-          scale:
-            min:
-              entity: sensor.sbcp_playground_scale_min
-            max:
-              entity: sensor.sbcp_playground_scale_max
-          formatting:
-            decimal: 0
-          target:
-            at:
-              entity: sensor.sbcp_playground_target
-          bar:
-            fill_style: gradient
-      - type: conditional
-        conditions:
-        - entity: sensor.sbcp_playground_bar_height
-          state: "38"
-        - entity: sensor.sbcp_playground_decimal_precision
-          state: "1"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Height 38px / Decimal 1
-          entities:
-          - entity: sensor.sbcp_playground_sensor
-            name: Active preset
-          layout:
-            label:
-              position: left
-              width: 150
-            height: 38
-          scale:
-            min:
-              entity: sensor.sbcp_playground_scale_min
-            max:
-              entity: sensor.sbcp_playground_scale_max
-          formatting:
-            decimal: 1
-          target:
-            at:
-              entity: sensor.sbcp_playground_target
-          bar:
-            fill_style: gradient
-      - type: conditional
-        conditions:
-        - entity: sensor.sbcp_playground_bar_height
-          state: "38"
-        - entity: sensor.sbcp_playground_decimal_precision
-          state: "2"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Height 38px / Decimal 2
-          entities:
-          - entity: sensor.sbcp_playground_sensor
-            name: Active preset
-          layout:
-            label:
-              position: left
-              width: 150
-            height: 38
-          scale:
-            min:
-              entity: sensor.sbcp_playground_scale_min
-            max:
-              entity: sensor.sbcp_playground_scale_max
-          formatting:
-            decimal: 2
-          target:
-            at:
-              entity: sensor.sbcp_playground_target
-          bar:
-            fill_style: gradient
-      - type: conditional
-        conditions:
-        - entity: sensor.sbcp_playground_bar_height
-          state: "52"
-        - entity: sensor.sbcp_playground_decimal_precision
-          state: "0"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Height 52px / Decimal 0
-          entities:
-          - entity: sensor.sbcp_playground_sensor
-            name: Active preset
-          layout:
-            label:
-              position: left
-              width: 150
-            height: 52
-          scale:
-            min:
-              entity: sensor.sbcp_playground_scale_min
-            max:
-              entity: sensor.sbcp_playground_scale_max
-          formatting:
-            decimal: 0
-          target:
-            at:
-              entity: sensor.sbcp_playground_target
-          bar:
-            fill_style: gradient
-      - type: conditional
-        conditions:
-        - entity: sensor.sbcp_playground_bar_height
-          state: "52"
-        - entity: sensor.sbcp_playground_decimal_precision
-          state: "1"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Height 52px / Decimal 1
-          entities:
-          - entity: sensor.sbcp_playground_sensor
-            name: Active preset
-          layout:
-            label:
-              position: left
-              width: 150
-            height: 52
-          scale:
-            min:
-              entity: sensor.sbcp_playground_scale_min
-            max:
-              entity: sensor.sbcp_playground_scale_max
-          formatting:
-            decimal: 1
-          target:
-            at:
-              entity: sensor.sbcp_playground_target
-          bar:
-            fill_style: gradient
-      - type: conditional
-        conditions:
-        - entity: sensor.sbcp_playground_bar_height
-          state: "52"
-        - entity: sensor.sbcp_playground_decimal_precision
-          state: "2"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Height 52px / Decimal 2
-          entities:
-          - entity: sensor.sbcp_playground_sensor
-            name: Active preset
-          layout:
-            label:
-              position: left
-              width: 150
-            height: 52
-          scale:
-            min:
-              entity: sensor.sbcp_playground_scale_min
-            max:
-              entity: sensor.sbcp_playground_scale_max
-          formatting:
-            decimal: 2
-          target:
-            at:
-              entity: sensor.sbcp_playground_target
-          bar:
-            fill_style: gradient
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Target And Highlight Toggles
+            Use the helper switches to verify target marker on/off behavior and above-target highlighting on/off on a normal-width card.
+        - type: vertical-stack
+          cards:
+          - type: conditional
+            conditions:
+            - entity: input_boolean.sbcp_target_enabled
+              state: "on"
+            - entity: input_boolean.sbcp_above_target_enabled
+              state: "on"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Target on / Above-target color on
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Sensor
+              layout:
+                label:
+                  position: left
+                  width: 160
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#dc2626'
+              bar:
+                color: '#2563eb'
+                fill_style: solid
+          - type: conditional
+            conditions:
+            - entity: input_boolean.sbcp_target_enabled
+              state: "on"
+            - entity: input_boolean.sbcp_above_target_enabled
+              state: "off"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Target on / Above-target color off
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Sensor
+              layout:
+                label:
+                  position: left
+                  width: 160
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color:
+              bar:
+                color: '#2563eb'
+                fill_style: solid
+          - type: conditional
+            conditions:
+            - entity: input_boolean.sbcp_target_enabled
+              state: "off"
+            - entity: input_boolean.sbcp_above_target_enabled
+              state: "on"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Target off / Above-target color on
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Sensor
+              layout:
+                label:
+                  position: left
+                  width: 160
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at: {}
+                label:
+                  show: false
+                when_exceeded:
+                  fill_color: '#dc2626'
+              bar:
+                color: '#2563eb'
+                fill_style: solid
+          - type: conditional
+            conditions:
+            - entity: input_boolean.sbcp_target_enabled
+              state: "off"
+            - entity: input_boolean.sbcp_above_target_enabled
+              state: "off"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Target off / Above-target color off
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Sensor
+              layout:
+                label:
+                  position: left
+                  width: 160
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at: {}
+                label:
+                  show: false
+                when_exceeded:
+                  fill_color:
+              bar:
+                color: '#2563eb'
+                fill_style: solid
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Interactive Playground
+            These cards respond directly to the active helper settings and are intended to be the main debugging and screenshot surface.
+        - type: custom:sensor-bar-card-plus
+          entity: sensor.sbcp_playground_sensor
+          card_mod:
+            style: |
+              ha-card {
+                background: red !important;
+                border: 6px solid yellow !important;
+                border-radius: 24px !important;
+                padding: 16px !important;
+              }
+      - type: vertical-stack
+        cards:
+        - type: vertical-stack
+          cards:
+          - type: markdown
+            content: |
+              **Live Fill Style Preview**
+              Switch the helper and compare the currently selected color algorithm on the same sensor and same scale.
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_color_mode
+              state: gradient
+            card:
+              type: custom:sensor-bar-card-plus
+              title: "Active fill style: gradient"
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Sensor
+              layout:
+                label:
+                  position: left
+                  width: 150
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#991b1b'
+              bar:
+                gradient_stops:
+                - pos: 0
+                  color: '#2563eb'
+                - pos: 45
+                  color: '#06b6d4'
+                - pos: 75
+                  color: '#f59e0b'
+                - pos: 100
+                  color: '#dc2626'
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_color_mode
+              state: severity
+            card:
+              type: custom:sensor-bar-card-plus
+              title: "Active fill style: bands"
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Sensor
+              layout:
+                label:
+                  position: left
+                  width: 150
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                label:
+                  show: true
+              bar:
+                segments:
+                - from: 0%
+                  to: 35%
+                  color: '#22c55e'
+                - from: 35%
+                  to: 70%
+                  color: '#f59e0b'
+                - from: 70%
+                  to: 100%
+                  color: '#ef4444'
+                fill_style: bands
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_color_mode
+              state: severity_gradient
+            card:
+              type: custom:sensor-bar-card-plus
+              title: "Active fill style: band_gradient"
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Sensor
+              layout:
+                label:
+                  position: left
+                  width: 150
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                label:
+                  show: true
+              bar:
+                segments:
+                - from: 0%
+                  to: 35%
+                  color: '#22c55e'
+                - from: 35%
+                  to: 70%
+                  color: '#f59e0b'
+                - from: 70%
+                  to: 100%
+                  color: '#ef4444'
+                fill_style: band_gradient
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_color_mode
+              state: single
+            card:
+              type: custom:sensor-bar-card-plus
+              title: "Active fill style: solid"
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Sensor
+              layout:
+                label:
+                  position: left
+                  width: 150
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#ef4444'
+              bar:
+                color: '#0f766e'
+                fill_style: solid
+      - type: vertical-stack
+        cards:
+        - type: vertical-stack
+          cards:
+          - type: markdown
+            content: |
+              **Live Label Mode Preview**
+              Switch the helper and verify the same sensor under each label placement mode.
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_label_mode
+              state: left
+            card:
+              type: custom:sensor-bar-card-plus
+              title: "Active label mode: left"
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Sensor
+              layout:
+                label:
+                  position: left
+                  width: 150
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                label:
+                  show: true
+              bar:
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_label_mode
+              state: above
+            card:
+              type: custom:sensor-bar-card-plus
+              title: "Active label mode: above"
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Sensor
+              layout:
+                label:
+                  position: above
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                label:
+                  show: true
+              bar:
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_label_mode
+              state: inside
+            card:
+              type: custom:sensor-bar-card-plus
+              title: "Active label mode: inside"
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Sensor
+              layout:
+                label:
+                  position: inside
+                height: 52
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                label:
+                  show: true
+              bar:
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_label_mode
+              state: "off"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: "Active label mode: off"
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+              layout:
+                label:
+                  position: "off"
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                label:
+                  show: true
+              bar:
+                fill_style: gradient
+      - type: vertical-stack
+        cards:
+        - type: vertical-stack
+          cards:
+          - type: markdown
+            content: |
+              **Height And Decimal Preview**
+              The current helper combination selects one matching card configuration.
+          - type: conditional
+            conditions:
+            - entity: sensor.sbcp_playground_bar_height
+              state: "24"
+            - entity: sensor.sbcp_playground_decimal_precision
+              state: "0"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Height 24px / Decimal 0
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Active preset
+              layout:
+                label:
+                  position: left
+                  width: 150
+                height: 24
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              formatting:
+                decimal: 0
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+              bar:
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: sensor.sbcp_playground_bar_height
+              state: "24"
+            - entity: sensor.sbcp_playground_decimal_precision
+              state: "1"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Height 24px / Decimal 1
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Active preset
+              layout:
+                label:
+                  position: left
+                  width: 150
+                height: 24
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              formatting:
+                decimal: 1
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+              bar:
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: sensor.sbcp_playground_bar_height
+              state: "24"
+            - entity: sensor.sbcp_playground_decimal_precision
+              state: "2"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Height 24px / Decimal 2
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Active preset
+              layout:
+                label:
+                  position: left
+                  width: 150
+                height: 24
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              formatting:
+                decimal: 2
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+              bar:
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: sensor.sbcp_playground_bar_height
+              state: "38"
+            - entity: sensor.sbcp_playground_decimal_precision
+              state: "0"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Height 38px / Decimal 0
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Active preset
+              layout:
+                label:
+                  position: left
+                  width: 150
+                height: 38
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              formatting:
+                decimal: 0
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+              bar:
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: sensor.sbcp_playground_bar_height
+              state: "38"
+            - entity: sensor.sbcp_playground_decimal_precision
+              state: "1"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Height 38px / Decimal 1
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Active preset
+              layout:
+                label:
+                  position: left
+                  width: 150
+                height: 38
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              formatting:
+                decimal: 1
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+              bar:
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: sensor.sbcp_playground_bar_height
+              state: "38"
+            - entity: sensor.sbcp_playground_decimal_precision
+              state: "2"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Height 38px / Decimal 2
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Active preset
+              layout:
+                label:
+                  position: left
+                  width: 150
+                height: 38
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              formatting:
+                decimal: 2
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+              bar:
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: sensor.sbcp_playground_bar_height
+              state: "52"
+            - entity: sensor.sbcp_playground_decimal_precision
+              state: "0"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Height 52px / Decimal 0
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Active preset
+              layout:
+                label:
+                  position: left
+                  width: 150
+                height: 52
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              formatting:
+                decimal: 0
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+              bar:
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: sensor.sbcp_playground_bar_height
+              state: "52"
+            - entity: sensor.sbcp_playground_decimal_precision
+              state: "1"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Height 52px / Decimal 1
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Active preset
+              layout:
+                label:
+                  position: left
+                  width: 150
+                height: 52
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              formatting:
+                decimal: 1
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+              bar:
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: sensor.sbcp_playground_bar_height
+              state: "52"
+            - entity: sensor.sbcp_playground_decimal_precision
+              state: "2"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Height 52px / Decimal 2
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Active preset
+              layout:
+                label:
+                  position: left
+                  width: 150
+                height: 52
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              formatting:
+                decimal: 2
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+              bar:
+                fill_style: gradient
+  - type: grid
+    cards:
     - type: vertical-stack
       cards:
-      - type: markdown
-        content: |
-          **Animation And Marker Preview**
-          The current helper toggles choose one active marker configuration.
-      - type: conditional
-        conditions:
-        - entity: input_boolean.sbcp_animated
-          state: "on"
-        - entity: input_boolean.sbcp_show_target_label
-          state: "on"
-        - entity: input_boolean.sbcp_show_peak
-          state: "on"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Animated on / Target label on / Peak on
+      - type: vertical-stack
+        cards:
+        - type: vertical-stack
+          cards:
+          - type: markdown
+            content: |
+              **Animation And Marker Preview**
+              The current helper toggles choose one active marker configuration.
+          - type: conditional
+            conditions:
+            - entity: input_boolean.sbcp_animated
+              state: "on"
+            - entity: input_boolean.sbcp_show_target_label
+              state: "on"
+            - entity: input_boolean.sbcp_show_peak
+              state: "on"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated on / Target label on / Peak on
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Marker stack
+              layout:
+                label:
+                  position: left
+                  width: 150
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#0f766e'
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#ef4444'
+              peak:
+                enabled: true
+                color: '#7c3aed'
+              bar:
+                animated: true
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: input_boolean.sbcp_animated
+              state: "on"
+            - entity: input_boolean.sbcp_show_target_label
+              state: "on"
+            - entity: input_boolean.sbcp_show_peak
+              state: "off"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated on / Target label on / Peak off
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Marker stack
+              layout:
+                label:
+                  position: left
+                  width: 150
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#0f766e'
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#ef4444'
+              peak:
+                enabled: false
+                color: '#7c3aed'
+              bar:
+                animated: true
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: input_boolean.sbcp_animated
+              state: "on"
+            - entity: input_boolean.sbcp_show_target_label
+              state: "off"
+            - entity: input_boolean.sbcp_show_peak
+              state: "on"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated on / Target label off / Peak on
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Marker stack
+              layout:
+                label:
+                  position: left
+                  width: 150
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#0f766e'
+                label:
+                  show: false
+                when_exceeded:
+                  fill_color: '#ef4444'
+              peak:
+                enabled: true
+                color: '#7c3aed'
+              bar:
+                animated: true
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: input_boolean.sbcp_animated
+              state: "on"
+            - entity: input_boolean.sbcp_show_target_label
+              state: "off"
+            - entity: input_boolean.sbcp_show_peak
+              state: "off"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated on / Target label off / Peak off
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Marker stack
+              layout:
+                label:
+                  position: left
+                  width: 150
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#0f766e'
+                label:
+                  show: false
+                when_exceeded:
+                  fill_color: '#ef4444'
+              peak:
+                enabled: false
+                color: '#7c3aed'
+              bar:
+                animated: true
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: input_boolean.sbcp_animated
+              state: "off"
+            - entity: input_boolean.sbcp_show_target_label
+              state: "on"
+            - entity: input_boolean.sbcp_show_peak
+              state: "on"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated off / Target label on / Peak on
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Marker stack
+              layout:
+                label:
+                  position: left
+                  width: 150
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#0f766e'
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#ef4444'
+              peak:
+                enabled: true
+                color: '#7c3aed'
+              bar:
+                animated: false
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: input_boolean.sbcp_animated
+              state: "off"
+            - entity: input_boolean.sbcp_show_target_label
+              state: "on"
+            - entity: input_boolean.sbcp_show_peak
+              state: "off"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated off / Target label on / Peak off
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Marker stack
+              layout:
+                label:
+                  position: left
+                  width: 150
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#0f766e'
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#ef4444'
+              peak:
+                enabled: false
+                color: '#7c3aed'
+              bar:
+                animated: false
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: input_boolean.sbcp_animated
+              state: "off"
+            - entity: input_boolean.sbcp_show_target_label
+              state: "off"
+            - entity: input_boolean.sbcp_show_peak
+              state: "on"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated off / Target label off / Peak on
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Marker stack
+              layout:
+                label:
+                  position: left
+                  width: 150
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#0f766e'
+                label:
+                  show: false
+                when_exceeded:
+                  fill_color: '#ef4444'
+              peak:
+                enabled: true
+                color: '#7c3aed'
+              bar:
+                animated: false
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: input_boolean.sbcp_animated
+              state: "off"
+            - entity: input_boolean.sbcp_show_target_label
+              state: "off"
+            - entity: input_boolean.sbcp_show_peak
+              state: "off"
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated off / Target label off / Peak off
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Marker stack
+              layout:
+                label:
+                  position: left
+                  width: 150
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#0f766e'
+                label:
+                  show: false
+                when_exceeded:
+                  fill_color: '#ef4444'
+              peak:
+                enabled: false
+                color: '#7c3aed'
+              bar:
+                animated: false
+                fill_style: gradient
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Color Modes
+            Dedicated wide cards for `gradient`, `bands`, and `solid` rendering.
+        - type: custom:sensor-bar-card-plus
+          title: Gradient
           entities:
           - entity: sensor.sbcp_playground_sensor
-            name: Marker stack
+            name: Sensor
           layout:
             label:
               position: left
-              width: 150
+              width: 160
           scale:
             min:
               entity: sensor.sbcp_playground_scale_min
@@ -815,1770 +1131,1501 @@ views:
           target:
             at:
               entity: sensor.sbcp_playground_target
-            color: '#0f766e'
+            label:
+              show: true
+            when_exceeded:
+              fill_color: '#991b1b'
+          bar:
+            gradient_stops:
+            - pos: 0
+              color: '#2563eb'
+            - pos: 35
+              color: '#0ea5e9'
+            - pos: 70
+              color: '#f59e0b'
+            - pos: 100
+              color: '#dc2626'
+            fill_style: gradient
+        - type: custom:sensor-bar-card-plus
+          title: Bands
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Sensor
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
+            label:
+              show: true
+          bar:
+            segments:
+            - from: 0%
+              to: 30%
+              color: '#22c55e'
+            - from: 30%
+              to: 60%
+              color: '#facc15'
+            - from: 60%
+              to: 85%
+              color: '#f97316'
+            - from: 85%
+              to: 100%
+              color: '#ef4444'
+            fill_style: bands
+        - type: custom:sensor-bar-card-plus
+          title: Solid Color
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Sensor
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
             label:
               show: true
             when_exceeded:
               fill_color: '#ef4444'
-          peak:
-            enabled: true
-            color: '#7c3aed'
           bar:
-            animated: true
-            fill_style: gradient
-      - type: conditional
-        conditions:
-        - entity: input_boolean.sbcp_animated
-          state: "on"
-        - entity: input_boolean.sbcp_show_target_label
-          state: "on"
-        - entity: input_boolean.sbcp_show_peak
-          state: "off"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Animated on / Target label on / Peak off
-          entities:
-          - entity: sensor.sbcp_playground_sensor
-            name: Marker stack
-          layout:
-            label:
-              position: left
-              width: 150
-          scale:
-            min:
-              entity: sensor.sbcp_playground_scale_min
-            max:
-              entity: sensor.sbcp_playground_scale_max
-          target:
-            at:
-              entity: sensor.sbcp_playground_target
             color: '#0f766e'
-            label:
-              show: true
-            when_exceeded:
-              fill_color: '#ef4444'
-          peak:
-            enabled: false
-            color: '#7c3aed'
-          bar:
-            animated: true
-            fill_style: gradient
-      - type: conditional
-        conditions:
-        - entity: input_boolean.sbcp_animated
-          state: "on"
-        - entity: input_boolean.sbcp_show_target_label
-          state: "off"
-        - entity: input_boolean.sbcp_show_peak
-          state: "on"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Animated on / Target label off / Peak on
-          entities:
-          - entity: sensor.sbcp_playground_sensor
-            name: Marker stack
-          layout:
-            label:
-              position: left
-              width: 150
-          scale:
-            min:
-              entity: sensor.sbcp_playground_scale_min
-            max:
-              entity: sensor.sbcp_playground_scale_max
-          target:
-            at:
-              entity: sensor.sbcp_playground_target
-            color: '#0f766e'
-            label:
-              show: false
-            when_exceeded:
-              fill_color: '#ef4444'
-          peak:
-            enabled: true
-            color: '#7c3aed'
-          bar:
-            animated: true
-            fill_style: gradient
-      - type: conditional
-        conditions:
-        - entity: input_boolean.sbcp_animated
-          state: "on"
-        - entity: input_boolean.sbcp_show_target_label
-          state: "off"
-        - entity: input_boolean.sbcp_show_peak
-          state: "off"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Animated on / Target label off / Peak off
-          entities:
-          - entity: sensor.sbcp_playground_sensor
-            name: Marker stack
-          layout:
-            label:
-              position: left
-              width: 150
-          scale:
-            min:
-              entity: sensor.sbcp_playground_scale_min
-            max:
-              entity: sensor.sbcp_playground_scale_max
-          target:
-            at:
-              entity: sensor.sbcp_playground_target
-            color: '#0f766e'
-            label:
-              show: false
-            when_exceeded:
-              fill_color: '#ef4444'
-          peak:
-            enabled: false
-            color: '#7c3aed'
-          bar:
-            animated: true
-            fill_style: gradient
-      - type: conditional
-        conditions:
-        - entity: input_boolean.sbcp_animated
-          state: "off"
-        - entity: input_boolean.sbcp_show_target_label
-          state: "on"
-        - entity: input_boolean.sbcp_show_peak
-          state: "on"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Animated off / Target label on / Peak on
-          entities:
-          - entity: sensor.sbcp_playground_sensor
-            name: Marker stack
-          layout:
-            label:
-              position: left
-              width: 150
-          scale:
-            min:
-              entity: sensor.sbcp_playground_scale_min
-            max:
-              entity: sensor.sbcp_playground_scale_max
-          target:
-            at:
-              entity: sensor.sbcp_playground_target
-            color: '#0f766e'
-            label:
-              show: true
-            when_exceeded:
-              fill_color: '#ef4444'
-          peak:
-            enabled: true
-            color: '#7c3aed'
-          bar:
-            animated: false
-            fill_style: gradient
-      - type: conditional
-        conditions:
-        - entity: input_boolean.sbcp_animated
-          state: "off"
-        - entity: input_boolean.sbcp_show_target_label
-          state: "on"
-        - entity: input_boolean.sbcp_show_peak
-          state: "off"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Animated off / Target label on / Peak off
-          entities:
-          - entity: sensor.sbcp_playground_sensor
-            name: Marker stack
-          layout:
-            label:
-              position: left
-              width: 150
-          scale:
-            min:
-              entity: sensor.sbcp_playground_scale_min
-            max:
-              entity: sensor.sbcp_playground_scale_max
-          target:
-            at:
-              entity: sensor.sbcp_playground_target
-            color: '#0f766e'
-            label:
-              show: true
-            when_exceeded:
-              fill_color: '#ef4444'
-          peak:
-            enabled: false
-            color: '#7c3aed'
-          bar:
-            animated: false
-            fill_style: gradient
-      - type: conditional
-        conditions:
-        - entity: input_boolean.sbcp_animated
-          state: "off"
-        - entity: input_boolean.sbcp_show_target_label
-          state: "off"
-        - entity: input_boolean.sbcp_show_peak
-          state: "on"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Animated off / Target label off / Peak on
-          entities:
-          - entity: sensor.sbcp_playground_sensor
-            name: Marker stack
-          layout:
-            label:
-              position: left
-              width: 150
-          scale:
-            min:
-              entity: sensor.sbcp_playground_scale_min
-            max:
-              entity: sensor.sbcp_playground_scale_max
-          target:
-            at:
-              entity: sensor.sbcp_playground_target
-            color: '#0f766e'
-            label:
-              show: false
-            when_exceeded:
-              fill_color: '#ef4444'
-          peak:
-            enabled: true
-            color: '#7c3aed'
-          bar:
-            animated: false
-            fill_style: gradient
-      - type: conditional
-        conditions:
-        - entity: input_boolean.sbcp_animated
-          state: "off"
-        - entity: input_boolean.sbcp_show_target_label
-          state: "off"
-        - entity: input_boolean.sbcp_show_peak
-          state: "off"
-        card:
-          type: custom:sensor-bar-card-plus
-          title: Animated off / Target label off / Peak off
-          entities:
-          - entity: sensor.sbcp_playground_sensor
-            name: Marker stack
-          layout:
-            label:
-              position: left
-              width: 150
-          scale:
-            min:
-              entity: sensor.sbcp_playground_scale_min
-            max:
-              entity: sensor.sbcp_playground_scale_max
-          target:
-            at:
-              entity: sensor.sbcp_playground_target
-            color: '#0f766e'
-            label:
-              show: false
-            when_exceeded:
-              fill_color: '#ef4444'
-          peak:
-            enabled: false
-            color: '#7c3aed'
-          bar:
-            animated: false
-            fill_style: gradient
-  - type: markdown
-    content: |
-      ## Color Modes
-      Dedicated wide cards for `gradient`, `bands`, and `solid` rendering.
-  - type: custom:sensor-bar-card-plus
-    title: Gradient
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Sensor
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-      label:
-        show: true
-      when_exceeded:
-        fill_color: '#991b1b'
-    bar:
-      gradient_stops:
-      - pos: 0
-        color: '#2563eb'
-      - pos: 35
-        color: '#0ea5e9'
-      - pos: 70
-        color: '#f59e0b'
-      - pos: 100
-        color: '#dc2626'
-      fill_style: gradient
-  - type: custom:sensor-bar-card-plus
-    title: Bands
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Sensor
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-      label:
-        show: true
-    bar:
-      segments:
-      - from: 0%
-        to: 30%
-        color: '#22c55e'
-      - from: 30%
-        to: 60%
-        color: '#facc15'
-      - from: 60%
-        to: 85%
-        color: '#f97316'
-      - from: 85%
-        to: 100%
-        color: '#ef4444'
-      fill_style: bands
-  - type: custom:sensor-bar-card-plus
-    title: Solid Color
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Sensor
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-      label:
-        show: true
-      when_exceeded:
-        fill_color: '#ef4444'
-    bar:
-      color: '#0f766e'
-      fill_style: solid
-  - type: markdown
-    content: |
-      ## Solid Fill
-      Compare the normal theoretical fill against `solid_fill: true`, which samples the current color and renders the revealed area as one solid fill.
-  - type: vertical-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Bands
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        label:
-          show: true
-      bar:
-        segments:
-        - from: 0%
-          to: 30%
-          color: '#22c55e'
-        - from: 30%
-          to: 60%
-          color: '#facc15'
-        - from: 60%
-          to: 85%
-          color: '#f97316'
-        - from: 85%
-          to: 100%
-          color: '#ef4444'
-        fill_style: bands
-    - type: custom:sensor-bar-card-plus
-      title: Bands + solid_fill
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        label:
-          show: true
-      bar:
-        segments:
-        - from: 0%
-          to: 30%
-          color: '#22c55e'
-        - from: 30%
-          to: 60%
-          color: '#facc15'
-        - from: 60%
-          to: 85%
-          color: '#f97316'
-        - from: 85%
-          to: 100%
-          color: '#ef4444'
-        fill_style: bands
-        solid_fill: true
-    - type: custom:sensor-bar-card-plus
-      title: Soft Bands
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        label:
-          show: true
-      bar:
-        segments:
-        - from: 0%
-          to: 30%
-          color: '#22c55e'
-        - from: 30%
-          to: 60%
-          color: '#facc15'
-        - from: 60%
-          to: 85%
-          color: '#f97316'
-        - from: 85%
-          to: 100%
-          color: '#ef4444'
-        fill_style: soft_bands
-    - type: custom:sensor-bar-card-plus
-      title: Soft Bands + solid_fill
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        label:
-          show: true
-      bar:
-        segments:
-        - from: 0%
-          to: 30%
-          color: '#22c55e'
-        - from: 30%
-          to: 60%
-          color: '#facc15'
-        - from: 60%
-          to: 85%
-          color: '#f97316'
-        - from: 85%
-          to: 100%
-          color: '#ef4444'
-        fill_style: soft_bands
-        solid_fill: true
-    - type: custom:sensor-bar-card-plus
-      title: Band Gradient
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        label:
-          show: true
-      bar:
-        segments:
-        - from: 0%
-          to: 20%
-          color: '#22c55e'
-        - from: 20%
-          to: 35%
-          color: '#84cc16'
-        - from: 35%
-          to: 50%
-          color: '#eab308'
-        - from: 50%
-          to: 65%
-          color: '#f59e0b'
-        - from: 65%
-          to: 80%
-          color: '#f97316'
-        - from: 80%
-          to: 100%
-          color: '#ef4444'
-        fill_style: band_gradient
-    - type: custom:sensor-bar-card-plus
-      title: Band Gradient + solid_fill
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        label:
-          show: true
-      bar:
-        segments:
-        - from: 0%
-          to: 20%
-          color: '#22c55e'
-        - from: 20%
-          to: 35%
-          color: '#84cc16'
-        - from: 35%
-          to: 50%
-          color: '#eab308'
-        - from: 50%
-          to: 65%
-          color: '#f59e0b'
-        - from: 65%
-          to: 80%
-          color: '#f97316'
-        - from: 80%
-          to: 100%
-          color: '#ef4444'
-        fill_style: band_gradient
-        solid_fill: true
-  - type: markdown
-    content: |
-      ## Needle
-      Small showcase only. Use the dedicated `Needle` view for the full marker, height, fill-style, and label-position test matrix.
-  - type: vertical-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Needle + Soft Bands
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Soft Bands Needle
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      bar:
-        fill_style: soft_bands
-        needle: true
-        segments:
-        - from: 0%
-          to: 30%
-          color: '#22c55e'
-        - from: 30%
-          to: 60%
-          color: '#facc15'
-        - from: 60%
-          to: 85%
-          color: '#f97316'
-        - from: 85%
-          to: 100%
-          color: '#ef4444'
-    - type: custom:sensor-bar-card-plus
-      title: Needle + Band Gradient
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Band Gradient Needle
+            fill_style: solid
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Solid Fill
+            Compare the normal theoretical fill against `solid_fill: true`, which samples the current color and renders the revealed area as one solid fill.
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Bands
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              label:
+                show: true
+            bar:
+              segments:
+              - from: 0%
+                to: 30%
+                color: '#22c55e'
+              - from: 30%
+                to: 60%
+                color: '#facc15'
+              - from: 60%
+                to: 85%
+                color: '#f97316'
+              - from: 85%
+                to: 100%
+                color: '#ef4444'
+              fill_style: bands
+          - type: custom:sensor-bar-card-plus
+            title: Bands + solid_fill
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              label:
+                show: true
+            bar:
+              segments:
+              - from: 0%
+                to: 30%
+                color: '#22c55e'
+              - from: 30%
+                to: 60%
+                color: '#facc15'
+              - from: 60%
+                to: 85%
+                color: '#f97316'
+              - from: 85%
+                to: 100%
+                color: '#ef4444'
+              fill_style: bands
+              solid_fill: true
+          - type: custom:sensor-bar-card-plus
+            title: Soft Bands
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              label:
+                show: true
+            bar:
+              segments:
+              - from: 0%
+                to: 30%
+                color: '#22c55e'
+              - from: 30%
+                to: 60%
+                color: '#facc15'
+              - from: 60%
+                to: 85%
+                color: '#f97316'
+              - from: 85%
+                to: 100%
+                color: '#ef4444'
+              fill_style: soft_bands
+          - type: custom:sensor-bar-card-plus
+            title: Soft Bands + solid_fill
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              label:
+                show: true
+            bar:
+              segments:
+              - from: 0%
+                to: 30%
+                color: '#22c55e'
+              - from: 30%
+                to: 60%
+                color: '#facc15'
+              - from: 60%
+                to: 85%
+                color: '#f97316'
+              - from: 85%
+                to: 100%
+                color: '#ef4444'
+              fill_style: soft_bands
+              solid_fill: true
+          - type: custom:sensor-bar-card-plus
+            title: Band Gradient
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              label:
+                show: true
+            bar:
+              segments:
+              - from: 0%
+                to: 20%
+                color: '#22c55e'
+              - from: 20%
+                to: 35%
+                color: '#84cc16'
+              - from: 35%
+                to: 50%
+                color: '#eab308'
+              - from: 50%
+                to: 65%
+                color: '#f59e0b'
+              - from: 65%
+                to: 80%
+                color: '#f97316'
+              - from: 80%
+                to: 100%
+                color: '#ef4444'
+              fill_style: band_gradient
+          - type: custom:sensor-bar-card-plus
+            title: Band Gradient + solid_fill
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              label:
+                show: true
+            bar:
+              segments:
+              - from: 0%
+                to: 20%
+                color: '#22c55e'
+              - from: 20%
+                to: 35%
+                color: '#84cc16'
+              - from: 35%
+                to: 50%
+                color: '#eab308'
+              - from: 50%
+                to: 65%
+                color: '#f59e0b'
+              - from: 65%
+                to: 80%
+                color: '#f97316'
+              - from: 80%
+                to: 100%
+                color: '#ef4444'
+              fill_style: band_gradient
+              solid_fill: true
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Needle
+            Small showcase only. Use the dedicated `Needle` view for the full marker, height, fill-style, and label-position test matrix.
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Needle + Soft Bands
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Soft Bands Needle
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            bar:
+              fill_style: soft_bands
+              needle: true
+              segments:
+              - from: 0%
+                to: 30%
+                color: '#22c55e'
+              - from: 30%
+                to: 60%
+                color: '#facc15'
+              - from: 60%
+                to: 85%
+                color: '#f97316'
+              - from: 85%
+                to: 100%
+                color: '#ef4444'
+          - type: custom:sensor-bar-card-plus
+            title: Needle + Band Gradient
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Band Gradient Needle
 
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      bar:
-        fill_style: band_gradient
-        needle: true
-        segments:
-        - from: 0%
-          to: 30%
-          color: '#22c55e'
-        - from: 30%
-          to: 60%
-          color: '#facc15'
-        - from: 60%
-          to: 85%
-          color: '#f97316'
-        - from: 85%
-          to: 100%
-          color: '#ef4444'
-    - type: custom:sensor-bar-card-plus
-      title: Needle + solid_fill
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sampled Needle
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      bar:
-        fill_style: soft_bands
-        solid_fill: true
-        needle: true
-        segments:
-        - from: 0%
-          to: 30%
-          color: '#22c55e'
-        - from: 30%
-          to: 60%
-          color: '#facc15'
-        - from: 60%
-          to: 85%
-          color: '#f97316'
-        - from: 85%
-          to: 100%
-          color: '#ef4444'
-    - type: custom:sensor-bar-card-plus
-      title: Needle + Target
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Needle Over Target
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        label:
-          show: true
-      bar:
-        fill_style: solid
-        color: '#2563eb'
-        needle: true
-  - type: markdown
-    content: |
-      ## Display Formatting
-      Focused checks for unit spacing, tight time-unit formatting, and text-state rendering.
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            bar:
+              fill_style: band_gradient
+              needle: true
+              segments:
+              - from: 0%
+                to: 30%
+                color: '#22c55e'
+              - from: 30%
+                to: 60%
+                color: '#facc15'
+              - from: 60%
+                to: 85%
+                color: '#f97316'
+              - from: 85%
+                to: 100%
+                color: '#ef4444'
+          - type: custom:sensor-bar-card-plus
+            title: Needle + solid_fill
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sampled Needle
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            bar:
+              fill_style: soft_bands
+              solid_fill: true
+              needle: true
+              segments:
+              - from: 0%
+                to: 30%
+                color: '#22c55e'
+              - from: 30%
+                to: 60%
+                color: '#facc15'
+              - from: 60%
+                to: 85%
+                color: '#f97316'
+              - from: 85%
+                to: 100%
+                color: '#ef4444'
+          - type: custom:sensor-bar-card-plus
+            title: Needle + Target
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Needle Over Target
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              label:
+                show: true
+            bar:
+              fill_style: solid
+              color: '#2563eb'
+              needle: true
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Display Formatting
+            Focused checks for unit spacing, tight time-unit formatting, and text-state rendering.
+        - type: grid
+          columns: 2
+          square: false
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Tight time unit - seconds
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Response time
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            formatting:
+              decimal: 0
+              unit: s
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            bar:
+              color: '#2563eb'
+              fill_style: solid
+          - type: custom:sensor-bar-card-plus
+            title: Tight time unit - hours
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Runtime
+            layout:
+              label:
+                position: above
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            formatting:
+              decimal: 0
+              unit: h
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            bar:
+              color: '#0f766e'
+              fill_style: solid
+          - type: custom:sensor-bar-card-plus
+            title: Custom text state
+            entities:
+            - entity: sensor.sbcp_playground_text_state
+              name: Text from helper
+            layout:
+              label:
+                position: left
+                width: 170
+            bar:
+              color: '#9333ea'
+              fill_style: solid
+          - type: custom:sensor-bar-card-plus
+            title: Unknown and unavailable
+            entities:
+            - entity: sensor.sbcp_playground_unknown
+            - entity: sensor.sbcp_playground_unavailable
+            layout:
+              label:
+                position: left
+                width: 170
+            bar:
+              fill_style: bands
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Label Modes
+            The clean showcase variants for left, above, inside, off, long-label, and no-icon rendering.
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Left Labels
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Above Labels
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            layout:
+              label:
+                position: above
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Inside Labels
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            layout:
+              label:
+                position: inside
+              height: 52
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Labels Off
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+            layout:
+              label:
+                position: "off"
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Hero Labels
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            layout:
+              label:
+                position: hero
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Long Labels
+            entities:
+            - entity: sensor.sbcp_playground_long_label
+            layout:
+              label:
+                position: left
+                width: 320
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            bar:
+              color: '#2563eb'
+              fill_style: solid
+          - type: custom:sensor-bar-card-plus
+            title: Missing Icons
+            entities:
+            - entity: sensor.sbcp_playground_no_icon
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            bar:
+              color: '#9333ea'
+              fill_style: solid
   - type: grid
-    columns: 2
-    square: false
     cards:
-    - type: custom:sensor-bar-card-plus
-      title: Tight time unit - seconds
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Response time
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      formatting:
-        decimal: 0
-        unit: s
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      bar:
-        color: '#2563eb'
-        fill_style: solid
-    - type: custom:sensor-bar-card-plus
-      title: Tight time unit - hours
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Runtime
-      layout:
-        label:
-          position: above
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      formatting:
-        decimal: 0
-        unit: h
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      bar:
-        color: '#0f766e'
-        fill_style: solid
-    - type: custom:sensor-bar-card-plus
-      title: Custom text state
-      entities:
-      - entity: sensor.sbcp_playground_text_state
-        name: Text from helper
-      layout:
-        label:
-          position: left
-          width: 170
-      bar:
-        color: '#9333ea'
-        fill_style: solid
-    - type: custom:sensor-bar-card-plus
-      title: Unknown and unavailable
-      entities:
-      - entity: sensor.sbcp_playground_unknown
-      - entity: sensor.sbcp_playground_unavailable
-      layout:
-        label:
-          position: left
-          width: 170
-      bar:
-        fill_style: bands
-  - type: markdown
-    content: |
-      ## Label Modes
-      The clean showcase variants for left, above, inside, off, long-label, and no-icon rendering.
-  - type: vertical-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Left Labels
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Above Labels
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      layout:
-        label:
-          position: above
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Inside Labels
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      layout:
-        label:
-          position: inside
-        height: 52
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Labels Off
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-      layout:
-        label:
-          position: "off"
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Hero Labels
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      layout:
-        label:
-          position: hero
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Long Labels
-      entities:
-      - entity: sensor.sbcp_playground_long_label
-      layout:
-        label:
-          position: left
-          width: 320
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      bar:
-        color: '#2563eb'
-        fill_style: solid
-    - type: custom:sensor-bar-card-plus
-      title: Missing Icons
-      entities:
-      - entity: sensor.sbcp_playground_no_icon
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      bar:
-        color: '#9333ea'
-        fill_style: solid
-  - type: markdown
-    content: |
-      ## Long Label Mode Tests
-      Dedicated long-label cards for left, above, and inside layouts so truncation and collision fixes stay testable.
-  - type: grid
-    columns: 2
-    square: false
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Long label left
-      entities:
-      - entity: sensor.sbcp_playground_long_label
-      layout:
-        label:
-          position: left
-          width: 220
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Long label above
-      entities:
-      - entity: sensor.sbcp_playground_long_label
-      layout:
-        label:
-          position: above
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Long label inside
-      entities:
-      - entity: sensor.sbcp_playground_long_label
-      layout:
-        label:
-          position: inside
-        height: 52
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      bar:
-        fill_style: gradient
-  - type: markdown
-    content: |
-      ## Dynamic Scaling
-      Dynamic `min_entity`, `max_entity`, and `target_entity` demonstrations using the live helper-backed sensors.
-  - type: vertical-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Dynamic max_entity
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Value vs dynamic max
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: 0
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Dynamic min_entity and max_entity
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Fully dynamic scale
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      bar:
-        segments:
-        - from: 0%
-          to: 25%
-          color: '#22c55e'
-        - from: 25%
-          to: 75%
-          color: '#f59e0b'
-        - from: 75%
-          to: 100%
-          color: '#ef4444'
-        fill_style: bands
-    - type: custom:sensor-bar-card-plus
-      title: Negative min scale
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Negative scale sensor
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      target:
-        at:
-          fixed: 0
-        label:
-          show: true
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Extremely large max scale
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Huge max sensor
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 10000
-      target:
-        at:
-          fixed: 5000
-        label:
-          show: true
-      bar:
-        segments:
-        - from: 0%
-          to: 25%
-          color: '#22c55e'
-        - from: 25%
-          to: 75%
-          color: '#f59e0b'
-        - from: 75%
-          to: 100%
-          color: '#ef4444'
-        fill_style: bands
-  - type: markdown
-    content: |
-      ## Baseline Test Matrix
-      Baseline fill should originate from the configured neutral point, support dynamic baseline sources, and coexist safely with existing target, peak, color, and layout features.
-  - type: horizontal-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Baseline at 0
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Zero baseline
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -100
-        max:
-          fixed: 100
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        color: '#0f766e'
-        fill_style: solid
-    - type: custom:sensor-bar-card-plus
-      title: Baseline at center
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Center baseline
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      baseline:
-        at:
-          fixed: 50
-      bar:
-        color: '#0f766e'
-        fill_style: solid
-  - type: vertical-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Baseline 0 with above / below
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Below baseline
-      - entity: sensor.sbcp_playground_sensor
-        name: Above baseline
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-        above:
-          color: '#34d399'
-        below:
-          color: '#ef4444'
-      bar:
-        color: '#2563eb'
-        fill_style: solid
-    - type: custom:sensor-bar-card-plus
-      title: Crossing baseline
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Move current through zero
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline at min
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Baseline equals min
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -100
-        max:
-          fixed: 100
-      baseline:
-        at:
-          fixed: -100
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline near max
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Baseline near max
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      baseline:
-        at:
-          fixed: 90
-      bar:
-        fill_style: gradient
-  - type: vertical-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: "Baseline colors: none"
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Inherit below
-      - entity: sensor.sbcp_playground_sensor
-        name: Inherit above
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: "Baseline colors: above only"
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Default below
-      - entity: sensor.sbcp_playground_sensor
-        name: Override above
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-        above:
-          color: '#34d399'
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: "Baseline colors: below only"
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Override below
-      - entity: sensor.sbcp_playground_sensor
-        name: Default above
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-        below:
-          color: '#ef4444'
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: "Baseline colors: both"
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Below override
-      - entity: sensor.sbcp_playground_sensor
-        name: Above override
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-        above:
-          color: '#34d399'
-        below:
-          color: '#ef4444'
-      bar:
-        fill_style: gradient
-  - type: vertical-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Dynamic baseline
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Dynamic baseline
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          entity: sensor.sbcp_playground_baseline
-          fixed: 10
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Missing baseline fallback
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Fallback to baseline
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          entity: sensor.sbcp_missing_baseline
-          fixed: 15
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + target
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Static target
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      target:
-        at:
-          fixed: 60
-        color: '#111827'
-        label:
-          show: true
-      baseline:
-        at:
-          entity: sensor.sbcp_playground_baseline
-          fixed: 0
-      bar:
-        color: '#2563eb'
-        fill_style: solid
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + target_entity
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Dynamic target
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        color: '#0f766e'
-        label:
-          show: true
-      baseline:
-        at:
-          entity: sensor.sbcp_playground_baseline
-          fixed: 0
-      bar:
-        fill_style: gradient
-  - type: vertical-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + peak
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Peak tracking
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      peak:
-        enabled: true
-        color: '#7c3aed'
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + above target color
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Above target split
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      target:
-        at:
-          fixed: 40
-        label:
-          show: true
-        when_exceeded:
-          fill_color: '#dc2626'
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + animation off
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: No animation
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        animated: false
-        fill_style: gradient
-  - type: vertical-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + solid
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Solid below
-      - entity: sensor.sbcp_playground_sensor
-        name: Solid above
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          entity: sensor.sbcp_playground_baseline
-          fixed: 0
-      bar:
-        color: '#2563eb'
-        fill_style: solid
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + gradient
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Gradient below
-      - entity: sensor.sbcp_playground_sensor
-        name: Gradient above
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          entity: sensor.sbcp_playground_baseline
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + bands
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Bands below
-      - entity: sensor.sbcp_playground_sensor
-        name: Bands above
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          entity: sensor.sbcp_playground_baseline
-          fixed: 0
-      bar:
-        segments:
-        - from: 0%
-          to: 25%
-          color: '#ef4444'
-        - from: 25%
-          to: 50%
-          color: '#f59e0b'
-        - from: 50%
-          to: 75%
-          color: '#22c55e'
-        - from: 75%
-          to: 100%
-          color: '#06b6d4'
-        fill_style: bands
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + band_gradient
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Band gradient below
-      - entity: sensor.sbcp_playground_sensor
-        name: Band gradient above
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          entity: sensor.sbcp_playground_baseline
-          fixed: 0
-      bar:
-        segments:
-        - from: 0%
-          to: 25%
-          color: '#ef4444'
-        - from: 25%
-          to: 50%
-          color: '#f59e0b'
-        - from: 50%
-          to: 75%
-          color: '#22c55e'
-        - from: 75%
-          to: 100%
-          color: '#06b6d4'
-        fill_style: band_gradient
-  - type: vertical-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + left labels
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Left below
-      - entity: sensor.sbcp_playground_sensor
-        name: Left above
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + above labels
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Above layout
-      layout:
-        label:
-          position: above
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + inside labels
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Inside layout
-      layout:
-        label:
-          position: inside
-        height: 52
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + compact width
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Compact left
-      layout:
-        label:
-          position: left
-          width: 90
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-  - type: markdown
-    content: |
-      ## Target Marker Tests
-      Move the target helper to test marker movement, label clamping, and above-target coloring.
-  - type: vertical-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Dynamic target_entity
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        label:
-          show: true
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Peak / target overlap
-      entities:
-      - entity: sensor.sbcp_playground_target
-        name: Overlap reference
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        color: '#0f766e'
-        label:
-          show: true
-      peak:
-        enabled: true
-        color: '#7c3aed'
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Long target label clamp
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      formatting:
-        decimal: 1
-        unit: kilowatt-hours equivalent
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        label:
-          show: true
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Above target color
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        color: '#111827'
-        label:
-          show: true
-        when_exceeded:
-          fill_color: '#dc2626'
-      bar:
-        color: '#2563eb'
-        fill_style: solid
-  - type: markdown
-    content: |
-      ## Peak Tracking
-      Increase the current value and then lower it again to confirm peak markers persist until a page reload.
-  - type: vertical-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Peak enabled
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      peak:
-        enabled: true
-        color: '#7c3aed'
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Peak plus target label
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        color: '#0f766e'
-        label:
-          show: true
-      peak:
-        enabled: true
-        color: '#7c3aed'
-      bar:
-        fill_style: gradient
+    - type: vertical-stack
+      cards:
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Long Label Mode Tests
+            Dedicated long-label cards for left, above, and inside layouts so truncation and collision fixes stay testable.
+        - type: grid
+          columns: 2
+          square: false
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Long label left
+            entities:
+            - entity: sensor.sbcp_playground_long_label
+            layout:
+              label:
+                position: left
+                width: 220
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Long label above
+            entities:
+            - entity: sensor.sbcp_playground_long_label
+            layout:
+              label:
+                position: above
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Long label inside
+            entities:
+            - entity: sensor.sbcp_playground_long_label
+            layout:
+              label:
+                position: inside
+              height: 52
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            bar:
+              fill_style: gradient
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Dynamic Scaling
+            Dynamic `min_entity`, `max_entity`, and `target_entity` demonstrations using the live helper-backed sensors.
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Dynamic max_entity
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Value vs dynamic max
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: 0
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Dynamic min_entity and max_entity
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Fully dynamic scale
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            bar:
+              segments:
+              - from: 0%
+                to: 25%
+                color: '#22c55e'
+              - from: 25%
+                to: 75%
+                color: '#f59e0b'
+              - from: 75%
+                to: 100%
+                color: '#ef4444'
+              fill_style: bands
+          - type: custom:sensor-bar-card-plus
+            title: Negative min scale
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Negative scale sensor
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            target:
+              at:
+                fixed: 0
+              label:
+                show: true
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Extremely large max scale
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Huge max sensor
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 10000
+            target:
+              at:
+                fixed: 5000
+              label:
+                show: true
+            bar:
+              segments:
+              - from: 0%
+                to: 25%
+                color: '#22c55e'
+              - from: 25%
+                to: 75%
+                color: '#f59e0b'
+              - from: 75%
+                to: 100%
+                color: '#ef4444'
+              fill_style: bands
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Baseline Test Matrix
+            Baseline fill should originate from the configured neutral point, support dynamic baseline sources, and coexist safely with existing target, peak, color, and layout features.
+        - type: horizontal-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Baseline at 0
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Zero baseline
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -100
+              max:
+                fixed: 100
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              color: '#0f766e'
+              fill_style: solid
+          - type: custom:sensor-bar-card-plus
+            title: Baseline at center
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Center baseline
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            baseline:
+              at:
+                fixed: 50
+            bar:
+              color: '#0f766e'
+              fill_style: solid
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Baseline 0 with above / below
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Below baseline
+            - entity: sensor.sbcp_playground_sensor
+              name: Above baseline
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+              above:
+                color: '#34d399'
+              below:
+                color: '#ef4444'
+            bar:
+              color: '#2563eb'
+              fill_style: solid
+          - type: custom:sensor-bar-card-plus
+            title: Crossing baseline
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Move current through zero
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline at min
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Baseline equals min
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -100
+              max:
+                fixed: 100
+            baseline:
+              at:
+                fixed: -100
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline near max
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Baseline near max
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            baseline:
+              at:
+                fixed: 90
+            bar:
+              fill_style: gradient
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: "Baseline colors: none"
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Inherit below
+            - entity: sensor.sbcp_playground_sensor
+              name: Inherit above
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: "Baseline colors: above only"
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Default below
+            - entity: sensor.sbcp_playground_sensor
+              name: Override above
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+              above:
+                color: '#34d399'
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: "Baseline colors: below only"
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Override below
+            - entity: sensor.sbcp_playground_sensor
+              name: Default above
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+              below:
+                color: '#ef4444'
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: "Baseline colors: both"
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Below override
+            - entity: sensor.sbcp_playground_sensor
+              name: Above override
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+              above:
+                color: '#34d399'
+              below:
+                color: '#ef4444'
+            bar:
+              fill_style: gradient
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Dynamic baseline
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Dynamic baseline
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                entity: sensor.sbcp_playground_baseline
+                fixed: 10
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Missing baseline fallback
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Fallback to baseline
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                entity: sensor.sbcp_missing_baseline
+                fixed: 15
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + target
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Static target
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            target:
+              at:
+                fixed: 60
+              color: '#111827'
+              label:
+                show: true
+            baseline:
+              at:
+                entity: sensor.sbcp_playground_baseline
+                fixed: 0
+            bar:
+              color: '#2563eb'
+              fill_style: solid
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + target_entity
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Dynamic target
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              color: '#0f766e'
+              label:
+                show: true
+            baseline:
+              at:
+                entity: sensor.sbcp_playground_baseline
+                fixed: 0
+            bar:
+              fill_style: gradient
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + peak
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Peak tracking
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            peak:
+              enabled: true
+              color: '#7c3aed'
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + above target color
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Above target split
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            target:
+              at:
+                fixed: 40
+              label:
+                show: true
+              when_exceeded:
+                fill_color: '#dc2626'
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + animation off
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: No animation
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              animated: false
+              fill_style: gradient
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + solid
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Solid below
+            - entity: sensor.sbcp_playground_sensor
+              name: Solid above
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                entity: sensor.sbcp_playground_baseline
+                fixed: 0
+            bar:
+              color: '#2563eb'
+              fill_style: solid
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + gradient
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Gradient below
+            - entity: sensor.sbcp_playground_sensor
+              name: Gradient above
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                entity: sensor.sbcp_playground_baseline
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + bands
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Bands below
+            - entity: sensor.sbcp_playground_sensor
+              name: Bands above
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                entity: sensor.sbcp_playground_baseline
+                fixed: 0
+            bar:
+              segments:
+              - from: 0%
+                to: 25%
+                color: '#ef4444'
+              - from: 25%
+                to: 50%
+                color: '#f59e0b'
+              - from: 50%
+                to: 75%
+                color: '#22c55e'
+              - from: 75%
+                to: 100%
+                color: '#06b6d4'
+              fill_style: bands
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + band_gradient
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Band gradient below
+            - entity: sensor.sbcp_playground_sensor
+              name: Band gradient above
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                entity: sensor.sbcp_playground_baseline
+                fixed: 0
+            bar:
+              segments:
+              - from: 0%
+                to: 25%
+                color: '#ef4444'
+              - from: 25%
+                to: 50%
+                color: '#f59e0b'
+              - from: 50%
+                to: 75%
+                color: '#22c55e'
+              - from: 75%
+                to: 100%
+                color: '#06b6d4'
+              fill_style: band_gradient
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + left labels
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Left below
+            - entity: sensor.sbcp_playground_sensor
+              name: Left above
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + above labels
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Above layout
+            layout:
+              label:
+                position: above
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + inside labels
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Inside layout
+            layout:
+              label:
+                position: inside
+              height: 52
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + compact width
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Compact left
+            layout:
+              label:
+                position: left
+                width: 90
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Target Marker Tests
+            Move the target helper to test marker movement, label clamping, and above-target coloring.
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Dynamic target_entity
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              label:
+                show: true
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Peak / target overlap
+            entities:
+            - entity: sensor.sbcp_playground_target
+              name: Overlap reference
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              color: '#0f766e'
+              label:
+                show: true
+            peak:
+              enabled: true
+              color: '#7c3aed'
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Long target label clamp
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            formatting:
+              decimal: 1
+              unit: kilowatt-hours equivalent
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              label:
+                show: true
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Above target color
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              color: '#111827'
+              label:
+                show: true
+              when_exceeded:
+                fill_color: '#dc2626'
+            bar:
+              color: '#2563eb'
+              fill_style: solid
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Peak Tracking
+            Increase the current value and then lower it again to confirm peak markers persist until a page reload.
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Peak enabled
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            peak:
+              enabled: true
+              color: '#7c3aed'
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Peak plus target label
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              color: '#0f766e'
+              label:
+                show: true
+            peak:
+              enabled: true
+              color: '#7c3aed'
+            bar:
+              fill_style: gradient
 - title: Needle
   path: sensor-bar-card-plus-needle
   icon: mdi:chart-timeline-variant
