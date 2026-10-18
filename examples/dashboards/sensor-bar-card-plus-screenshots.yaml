@@ -11464,3 +11464,230 @@ views:
         entities:
         - entity: sensor.sbcp_examples_primary
           name: House load
+- title: Direction Showcase v1.9
+  path: sensor-bar-card-plus-direction-showcase-v19
+  icon: mdi:axis-arrow
+  badges: []
+  cards:
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: |
+        # Direction Showcase v1.9
+        Static examples of Scale projection, Bar reveal origin, and semantic Baseline behavior.
+
+    - type: markdown
+      content: |
+        ## Scale × Bar Direction
+        Text-only endpoints show Scale orientation; Bar Direction changes only the ordinary reveal origin.
+    - type: custom:sensor-bar-card-plus
+      title: Scale × Bar Direction
+      layout:
+        label:
+          position: above
+        height: 40
+      formatting:
+        decimal: 1
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+      bar:
+        fill_style: gradient
+        animated: false
+        gradient_stops:
+        - pos: 0
+          color: '#8b5cf6'
+        - pos: 25
+          color: '#3b82f6'
+        - pos: 50
+          color: '#2dd4bf'
+        - pos: 75
+          color: '#fbbf24'
+        - pos: 100
+          color: '#fb7185'
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Scale normal · Bar normal
+        scale:
+          direction: normal
+        bar:
+          direction: normal
+        markers:
+        - at:
+            fixed: 0
+          lane: above
+          show_marker: false
+          color: '#e2e8f0'
+          label:
+            show: true
+            text: 0 kW
+            show_value: false
+            show_unit: false
+        - at:
+            fixed: 10
+          lane: above
+          show_marker: false
+          color: '#e2e8f0'
+          label:
+            show: true
+            text: 10 kW
+            show_value: false
+            show_unit: false
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Scale reverse · Bar normal
+        scale:
+          direction: reverse
+        bar:
+          direction: normal
+        markers:
+        - at:
+            fixed: 0
+          lane: above
+          show_marker: false
+          color: '#e2e8f0'
+          label:
+            show: true
+            text: 0 kW
+            show_value: false
+            show_unit: false
+        - at:
+            fixed: 10
+          lane: above
+          show_marker: false
+          color: '#e2e8f0'
+          label:
+            show: true
+            text: 10 kW
+            show_value: false
+            show_unit: false
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Scale normal · Bar reverse
+        scale:
+          direction: normal
+        bar:
+          direction: reverse
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Scale reverse · Bar reverse
+        scale:
+          direction: reverse
+        bar:
+          direction: reverse
+
+    - type: markdown
+      content: |
+        ## Reverse Scale · Markers and Needle
+        10 kW at left and 0 kW at right make the reversed Scale visible in both rows.
+    - type: custom:sensor-bar-card-plus
+      title: Reverse Scale · Markers and Needle
+      layout:
+        label:
+          position: above
+        height: 40
+      formatting:
+        decimal: 1
+      scale:
+        min:
+          fixed: 0
+        max:
+          fixed: 10
+        direction: reverse
+      target:
+        at:
+          fixed: 8.5
+        color: '#f8fafc'
+        label:
+          show: true
+          text: Target
+          show_value: false
+          show_unit: false
+      markers:
+      - at:
+          fixed: 5.5
+        lane: above
+        shape: circle
+        color: '#a78bfa'
+        label:
+          show: true
+          text: Reference
+          show_value: false
+          show_unit: false
+      - at:
+          fixed: 0
+        lane: above
+        show_marker: false
+        color: '#e2e8f0'
+        label:
+          show: true
+          text: 0 kW
+          show_value: false
+          show_unit: false
+      - at:
+          fixed: 10
+        lane: above
+        show_marker: false
+        color: '#e2e8f0'
+        label:
+          show: true
+          text: 10 kW
+          show_value: false
+          show_unit: false
+      bar:
+        fill_style: gradient
+        animated: false
+        gradient_stops:
+        - pos: 0
+          color: '#8b5cf6'
+        - pos: 25
+          color: '#3b82f6'
+        - pos: 50
+          color: '#2dd4bf'
+        - pos: 75
+          color: '#fbbf24'
+        - pos: 100
+          color: '#fb7185'
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Reveal Fill
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Needle
+        bar:
+          needle:
+            show: true
+            color: '#f8fafc'
+
+    - type: markdown
+      content: |
+        ## Reverse Scale · Bipolar Baseline
+        Semantic positive and negative sides keep their meaning when projected onto a reversed Scale.
+    - type: custom:sensor-bar-card-plus
+      title: Reverse Scale · Bipolar Baseline
+      layout:
+        label:
+          position: above
+        height: 40
+      formatting:
+        decimal: 1
+      scale:
+        min:
+          fixed: -10
+        max:
+          fixed: 10
+        direction: reverse
+      baseline:
+        at:
+          fixed: 0
+        above:
+          color: '#2dd4bf'
+        below:
+          color: '#fb7185'
+      bar:
+        fill_style: solid
+        color: '#64748b'
+        animated: false
+      entities:
+      - entity: sensor.sbcp_hero_shot_solar
+        name: Positive · above zero
+      - entity: sensor.sbcp_hero_shot_grid
+        name: Negative · below zero
