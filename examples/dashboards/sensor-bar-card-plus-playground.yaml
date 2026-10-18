@@ -4132,1438 +4132,1467 @@ views:
   path: sensor-bar-card-plus-baseline-matrix
   icon: mdi:vector-line
   badges: []
-  cards:
-  - type: markdown
-    content: |
-      ## Baseline Matrix
-      Dedicated validation surface for baseline-origin fill behavior.
-
-      Recommended helper values for a strong visual pass:
-      - `Current value`: around `95`
-      - `Baseline value`: move between `-80`, `0`, and `80`
-      - `Target`: move between `-80`, `0`, and `80`
-      - `Wave drive helper`: optional for dynamic current, target, baseline, and peak checks
-  - type: vertical-stack
-    cards:
-    - type: entities
-      title: Baseline Controls
-      show_header_toggle: false
-      entities:
-      - entity: input_number.sbcp_current_value
-        name: Current value
-      - entity: input_number.sbcp_target_value
-        name: Target value
-      - entity: input_number.sbcp_baseline_value
-        name: Baseline value
-      - entity: input_number.sbcp_scale_min_value
-        name: Scale minimum
-      - entity: input_number.sbcp_scale_max_value
-        name: Scale maximum
-      - entity: input_number.sbcp_min_value
-        name: Wave minimum
-      - entity: input_number.sbcp_max_value
-        name: Wave maximum
-      - entity: input_number.sbcp_current_quick
-        name: Current quick slider (-100 to 100)
-      - entity: input_number.sbcp_target_quick
-        name: Target quick slider (-100 to 100)
-      - entity: input_number.sbcp_baseline_quick
-        name: Baseline quick slider (-100 to 100)
-      - entity: input_boolean.sbcp_wave_enabled
-        name: Wave drive helper
-      - entity: input_select.sbcp_wave_target
-        name: Wave target
-      - entity: input_select.sbcp_waveform
-        name: Waveform
-      - entity: input_number.sbcp_wave_period
-        name: Wave period
-    - type: grid
-      columns: 2
-      square: false
-      cards:
-      - type: entities
-        title: Baseline Sensors A
-        show_header_toggle: false
-        entities:
-        - entity: sensor.sbcp_playground_negative
-          name: Negative sensor
-        - entity: sensor.sbcp_playground_sensor
-          name: Positive sensor
-        - entity: sensor.sbcp_playground_target
-          name: Dynamic target sensor
-      - type: entities
-        title: Baseline Sensors B
-        show_header_toggle: false
-        entities:
-        - entity: sensor.sbcp_playground_baseline
-          name: Dynamic baseline sensor
-        - entity: sensor.sbcp_stress_01
-          name: Stress 01
-        - entity: sensor.sbcp_stress_07
-          name: Stress 07
-        - entity: sensor.sbcp_stress_12
-          name: Stress 12
-  - type: markdown
-    content: |
-      ## Animated Semantic Fill Lab
-      Select a semantic fill mode and interval profile to stress animated baseline rendering with dynamic value, dynamic target, and dynamic baseline on the same card.
-  - type: vertical-stack
-    cards:
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_baseline_semantic_mode
-        state: gradient
-      - entity: input_select.sbcp_baseline_interval_profile
-        state: very_small
-      card:
-        type: custom:sensor-bar-card-plus
-        title: Animated semantic lab
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Dynamic current
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        - entity: sensor.sbcp_playground_negative
-          name: Inverted companion
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        layout:
-          label:
-            position: left
-            width: 168
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          color: '#111827'
-          label:
-            show: true
-          when_exceeded:
-            fill_color: '#dc2626'
-        peak:
-          enabled: true
-        bar:
-          gradient_stops:
-          - pos: 0
-            color: '#2563eb'
-          - pos: 49
-            color: '#06b6d4'
-          - pos: 50
-            color: '#f59e0b'
-          - pos: 51
-            color: '#dc2626'
-          - pos: 100
-            color: '#dc2626'
-          animated: true
-          fill_style: gradient
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_baseline_semantic_mode
-        state: gradient
-      - entity: input_select.sbcp_baseline_interval_profile
-        state: irregular
-      card:
-        type: custom:sensor-bar-card-plus
-        title: Animated semantic lab
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Dynamic current
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        - entity: sensor.sbcp_playground_negative
-          name: Inverted companion
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        layout:
-          label:
-            position: left
-            width: 168
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          color: '#111827'
-          label:
-            show: true
-          when_exceeded:
-            fill_color: '#dc2626'
-        peak:
-          enabled: true
-        bar:
-          gradient_stops:
-          - pos: 0
-            color: '#1d4ed8'
-          - pos: 8
-            color: '#06b6d4'
-          - pos: 37
-            color: '#22c55e'
-          - pos: 79
-            color: '#f59e0b'
-          - pos: 93
-            color: '#dc2626'
-          - pos: 100
-            color: '#7f1d1d'
-          animated: true
-          fill_style: gradient
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_baseline_semantic_mode
-        state: gradient
-      - entity: input_select.sbcp_baseline_interval_profile
-        state: even
-      card:
-        type: custom:sensor-bar-card-plus
-        title: Animated semantic lab
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Dynamic current
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        - entity: sensor.sbcp_playground_negative
-          name: Inverted companion
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        layout:
-          label:
-            position: left
-            width: 168
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          color: '#111827'
-          label:
-            show: true
-          when_exceeded:
-            fill_color: '#dc2626'
-        peak:
-          enabled: true
-        bar:
-          gradient_stops:
-          - pos: 0
-            color: '#2563eb'
-          - pos: 33
-            color: '#06b6d4'
-          - pos: 66
-            color: '#f59e0b'
-          - pos: 100
-            color: '#dc2626'
-          animated: true
-          fill_style: gradient
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_baseline_semantic_mode
-        state: gradient
-      - entity: input_select.sbcp_baseline_interval_profile
-        state: full_width
-      card:
-        type: custom:sensor-bar-card-plus
-        title: Animated semantic lab
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Dynamic current
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        - entity: sensor.sbcp_playground_negative
-          name: Inverted companion
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        layout:
-          label:
-            position: left
-            width: 168
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          color: '#111827'
-          label:
-            show: true
-          when_exceeded:
-            fill_color: '#dc2626'
-        peak:
-          enabled: true
-        bar:
-          gradient_stops:
-          - pos: 0
-            color: '#0ea5e9'
-          - pos: 100
-            color: '#ef4444'
-          animated: true
-          fill_style: gradient
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_baseline_semantic_mode
-        state: severity
-      - entity: input_select.sbcp_baseline_interval_profile
-        state: very_small
-      card:
-        type: custom:sensor-bar-card-plus
-        title: Animated semantic lab
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Dynamic current
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        - entity: sensor.sbcp_playground_negative
-          name: Inverted companion
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        layout:
-          label:
-            position: left
-            width: 168
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          color: '#111827'
-          label:
-            show: true
-          when_exceeded:
-            fill_color: '#dc2626'
-        peak:
-          enabled: true
-        bar:
-          animated: true
-          segments:
-          - from: 0%
-            to: 49%
-            color: '#2563eb'
-          - from: 49%
-            to: 50%
-            color: '#06b6d4'
-          - from: 50%
-            to: 51%
-            color: '#f59e0b'
-          - from: 51%
-            to: 100%
-            color: '#dc2626'
-          fill_style: bands
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_baseline_semantic_mode
-        state: severity
-      - entity: input_select.sbcp_baseline_interval_profile
-        state: irregular
-      card:
-        type: custom:sensor-bar-card-plus
-        title: Animated semantic lab
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Dynamic current
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        - entity: sensor.sbcp_playground_negative
-          name: Inverted companion
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        layout:
-          label:
-            position: left
-            width: 168
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          color: '#111827'
-          label:
-            show: true
-          when_exceeded:
-            fill_color: '#dc2626'
-        peak:
-          enabled: true
-        bar:
-          animated: true
-          segments:
-          - from: 0%
-            to: 8%
-            color: '#2563eb'
-          - from: 8%
-            to: 37%
-            color: '#06b6d4'
-          - from: 37%
-            to: 79%
-            color: '#22c55e'
-          - from: 79%
-            to: 93%
-            color: '#f59e0b'
-          - from: 93%
-            to: 100%
-            color: '#dc2626'
-          fill_style: bands
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_baseline_semantic_mode
-        state: severity
-      - entity: input_select.sbcp_baseline_interval_profile
-        state: even
-      card:
-        type: custom:sensor-bar-card-plus
-        title: Animated semantic lab
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Dynamic current
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        - entity: sensor.sbcp_playground_negative
-          name: Inverted companion
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        layout:
-          label:
-            position: left
-            width: 168
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          color: '#111827'
-          label:
-            show: true
-          when_exceeded:
-            fill_color: '#dc2626'
-        peak:
-          enabled: true
-        bar:
-          animated: true
-          segments:
-          - from: 0%
-            to: 25%
-            color: '#2563eb'
-          - from: 25%
-            to: 50%
-            color: '#06b6d4'
-          - from: 50%
-            to: 75%
-            color: '#f59e0b'
-          - from: 75%
-            to: 100%
-            color: '#dc2626'
-          fill_style: bands
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_baseline_semantic_mode
-        state: severity
-      - entity: input_select.sbcp_baseline_interval_profile
-        state: full_width
-      card:
-        type: custom:sensor-bar-card-plus
-        title: Animated semantic lab
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Dynamic current
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        - entity: sensor.sbcp_playground_negative
-          name: Inverted companion
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        layout:
-          label:
-            position: left
-            width: 168
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          color: '#111827'
-          label:
-            show: true
-          when_exceeded:
-            fill_color: '#dc2626'
-        peak:
-          enabled: true
-        bar:
-          animated: true
-          segments:
-          - from: 0%
-            to: 100%
-            color: '#f59e0b'
-          fill_style: bands
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_baseline_semantic_mode
-        state: severity_gradient
-      - entity: input_select.sbcp_baseline_interval_profile
-        state: very_small
-      card:
-        type: custom:sensor-bar-card-plus
-        title: Animated semantic lab
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Dynamic current
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        - entity: sensor.sbcp_playground_negative
-          name: Inverted companion
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        layout:
-          label:
-            position: left
-            width: 168
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          color: '#111827'
-          label:
-            show: true
-          when_exceeded:
-            fill_color: '#dc2626'
-        peak:
-          enabled: true
-        bar:
-          animated: true
-          segments:
-          - from: 0%
-            to: 49%
-            color: '#2563eb'
-          - from: 49%
-            to: 50%
-            color: '#06b6d4'
-          - from: 50%
-            to: 51%
-            color: '#f59e0b'
-          - from: 51%
-            to: 100%
-            color: '#dc2626'
-          fill_style: band_gradient
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_baseline_semantic_mode
-        state: severity_gradient
-      - entity: input_select.sbcp_baseline_interval_profile
-        state: irregular
-      card:
-        type: custom:sensor-bar-card-plus
-        title: Animated semantic lab
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Dynamic current
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        - entity: sensor.sbcp_playground_negative
-          name: Inverted companion
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        layout:
-          label:
-            position: left
-            width: 168
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          color: '#111827'
-          label:
-            show: true
-          when_exceeded:
-            fill_color: '#dc2626'
-        peak:
-          enabled: true
-        bar:
-          animated: true
-          segments:
-          - from: 0%
-            to: 8%
-            color: '#2563eb'
-          - from: 8%
-            to: 37%
-            color: '#06b6d4'
-          - from: 37%
-            to: 79%
-            color: '#22c55e'
-          - from: 79%
-            to: 93%
-            color: '#f59e0b'
-          - from: 93%
-            to: 100%
-            color: '#dc2626'
-          fill_style: band_gradient
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_baseline_semantic_mode
-        state: severity_gradient
-      - entity: input_select.sbcp_baseline_interval_profile
-        state: even
-      card:
-        type: custom:sensor-bar-card-plus
-        title: Animated semantic lab
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Dynamic current
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        - entity: sensor.sbcp_playground_negative
-          name: Inverted companion
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        layout:
-          label:
-            position: left
-            width: 168
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          color: '#111827'
-          label:
-            show: true
-          when_exceeded:
-            fill_color: '#dc2626'
-        peak:
-          enabled: true
-        bar:
-          animated: true
-          segments:
-          - from: 0%
-            to: 25%
-            color: '#2563eb'
-          - from: 25%
-            to: 50%
-            color: '#06b6d4'
-          - from: 50%
-            to: 75%
-            color: '#f59e0b'
-          - from: 75%
-            to: 100%
-            color: '#dc2626'
-          fill_style: band_gradient
-    - type: conditional
-      conditions:
-      - entity: input_select.sbcp_baseline_semantic_mode
-        state: severity_gradient
-      - entity: input_select.sbcp_baseline_interval_profile
-        state: full_width
-      card:
-        type: custom:sensor-bar-card-plus
-        title: Animated semantic lab
-        entities:
-        - entity: sensor.sbcp_playground_sensor
-          name: Dynamic current
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        - entity: sensor.sbcp_playground_negative
-          name: Inverted companion
-          baseline:
-            at:
-              entity: sensor.sbcp_playground_baseline
-              fixed: 0
-        layout:
-          label:
-            position: left
-            width: 168
-        scale:
-          min:
-            entity: sensor.sbcp_playground_scale_min
-          max:
-            entity: sensor.sbcp_playground_scale_max
-        target:
-          at:
-            entity: sensor.sbcp_playground_target
-          color: '#111827'
-          label:
-            show: true
-          when_exceeded:
-            fill_color: '#dc2626'
-        peak:
-          enabled: true
-        bar:
-          animated: true
-          segments:
-          - from: 0%
-            to: 100%
-            color: '#f59e0b'
-          fill_style: band_gradient
-  - type: markdown
-    content: |
-      ## Off-Center Geometry
-      Baseline at `10%`, `50%`, and `75%` of the configured scale, with mixed rows above and below the baseline.
-  - type: vertical-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Baseline at 10% of range
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Below 10% baseline
-      - entity: sensor.sbcp_playground_sensor
-        name: Above 10% baseline
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -110
-        max:
-          fixed: 90
-      baseline:
-        at:
-          fixed: -90
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline at center
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Below center baseline
-      - entity: sensor.sbcp_playground_sensor
-        name: Above center baseline
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline at 75% of range
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Below 75% baseline
-      - entity: sensor.sbcp_playground_sensor
-        name: Above 75% baseline
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -140
-        max:
-          fixed: 140
-      baseline:
-        at:
-          fixed: 70
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Dynamic baseline and fallback
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Static fallback baseline
-        baseline:
-          at:
-            entity: sensor.sbcp_missing_baseline
-            fixed: 15
-      - entity: sensor.sbcp_playground_sensor
-        name: Dynamic baseline from helper
-        baseline:
-          at:
-            entity: sensor.sbcp_playground_baseline
-            fixed: 15
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 15
-      bar:
-        fill_style: gradient
-  - type: markdown
-    content: |
-      ## Color Modes And Baseline Overrides
-      Override colors should win when set. Inherited color systems should remain coherent when the fill starts from baseline instead of min.
-  - type: vertical-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: "Baseline colors: none"
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Inherit below
-      - entity: sensor.sbcp_playground_sensor
-        name: Inherit above
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: "Baseline colors: above only"
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Default below
-      - entity: sensor.sbcp_playground_sensor
-        name: Override above
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-        above:
-          color: '#34d399'
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: "Baseline colors: below only"
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Override below
-      - entity: sensor.sbcp_playground_sensor
-        name: Default above
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-        below:
-          color: '#ef4444'
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: "Baseline colors: both"
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Below override
-      - entity: sensor.sbcp_playground_sensor
-        name: Above override
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-        above:
-          color: '#34d399'
-        below:
-          color: '#ef4444'
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + solid
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Solid below
-      - entity: sensor.sbcp_playground_sensor
-        name: Solid above
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        color: '#2563eb'
-        fill_style: solid
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + gradient
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Gradient below
-      - entity: sensor.sbcp_playground_sensor
-        name: Gradient above
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + bands
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Bands below
-      - entity: sensor.sbcp_playground_sensor
-        name: Bands above
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          entity: sensor.sbcp_playground_baseline
-          fixed: 0
-      bar:
-        segments:
-        - from: 0%
-          to: 25%
-          color: '#ef4444'
-        - from: 25%
-          to: 50%
-          color: '#f59e0b'
-        - from: 50%
-          to: 75%
-          color: '#22c55e'
-        - from: 75%
-          to: 100%
-          color: '#06b6d4'
-        fill_style: bands
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + band_gradient
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Band gradient below
-      - entity: sensor.sbcp_playground_sensor
-        name: Band gradient above
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          entity: sensor.sbcp_playground_baseline
-          fixed: 0
-      bar:
-        segments:
-        - from: 0%
-          to: 25%
-          color: '#ef4444'
-        - from: 25%
-          to: 50%
-          color: '#f59e0b'
-        - from: 50%
-          to: 75%
-          color: '#22c55e'
-        - from: 75%
-          to: 100%
-          color: '#06b6d4'
-        fill_style: band_gradient
-  - type: markdown
-    content: |
-      ## Targets, Peak, And Above-Target Color
-      Includes fixed targets below, on, and above the baseline, plus dynamic target movement and peak tracking on off-center baselines.
-  - type: vertical-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Target below baseline
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Negative row
-      - entity: sensor.sbcp_playground_sensor
-        name: Positive row
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      target:
-        at:
-          fixed: -60
-        color: '#111827'
-        label:
-          show: true
-        when_exceeded:
-          fill_color: '#dc2626'
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Target on baseline
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Negative row
-      - entity: sensor.sbcp_playground_sensor
-        name: Positive row
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      target:
-        at:
-          fixed: 0
-        color: '#111827'
-        label:
-          show: true
-        when_exceeded:
-          fill_color: '#dc2626'
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Target above baseline
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Negative row
-      - entity: sensor.sbcp_playground_sensor
-        name: Positive row
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      target:
-        at:
-          fixed: 60
-        color: '#111827'
-        label:
-          show: true
-        when_exceeded:
-          fill_color: '#dc2626'
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Dynamic target_entity on helper-driven baseline
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Dynamic target
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -140
-        max:
-          fixed: 140
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        color: '#0f766e'
-        label:
-          show: true
-        when_exceeded:
-          fill_color: '#dc2626'
-      baseline:
-        at:
-          entity: sensor.sbcp_playground_baseline
-          fixed: 70
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Peak and target overlap on helper-driven baseline
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Peak + target
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -140
-        max:
-          fixed: 140
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        color: '#0f766e'
-        label:
-          show: true
-        when_exceeded:
-          fill_color: '#dc2626'
-      peak:
-        enabled: true
-        color: '#7c3aed'
-      baseline:
-        at:
-          entity: sensor.sbcp_playground_baseline
-          fixed: 70
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline plus peak rows
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Peak below baseline
-      - entity: sensor.sbcp_playground_sensor
-        name: Peak above baseline
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      peak:
-        enabled: true
-        color: '#7c3aed'
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-  - type: markdown
-    content: |
-      ## Baseline With Different Label Layouts
-      Same baseline behavior under left, above, inside, and tighter left-label layouts.
-  - type: vertical-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + left labels
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Left below
-      - entity: sensor.sbcp_playground_sensor
-        name: Left above
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + above labels
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Above below
-      - entity: sensor.sbcp_playground_sensor
-        name: Above above
-      layout:
-        label:
-          position: above
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + inside labels
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Inside below
-      - entity: sensor.sbcp_playground_sensor
-        name: Inside above
-      layout:
-        label:
-          position: inside
-        height: 52
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + compact left width
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Compact below
-      - entity: sensor.sbcp_playground_sensor
-        name: Compact above
-      layout:
-        label:
-          position: left
-          width: 90
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Baseline + animation off
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: No animation
-      layout:
-        label:
-          position: left
-          width: 170
-      scale:
-        min:
-          fixed: -120
-        max:
-          fixed: 120
-      target:
-        at:
-          fixed: 40
-        label:
-          show: true
-        when_exceeded:
-          fill_color: '#dc2626'
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        animated: false
-        fill_style: gradient
-  - type: markdown
-    content: |
-      ## Advanced marker integration — Baseline
-
-      Compare markers on both sides of the neutral baseline, including the exact/near-zero case. The scale and row sample remain bipolar; labels and contrasting fills make it easier to judge whether marker positions remain clear against the baseline transition.
+  type: sections
+  max_columns: 3
+  dense_section_placement: false
+  sections:
   - type: grid
-    columns: 2
-    square: false
     cards:
-    - type: custom:sensor-bar-card-plus
-      title: Bipolar energy flow — references around zero
-      entities:
-      - entity: sensor.sbcp_hero_shot_grid
-        name: Utility exchange
-      scale:
-        min:
-          fixed: -10
-        max:
-          fixed: 10
-      formatting:
-        decimal: 1
-        unit: kW
-      baseline:
-        at:
-          fixed: 0
-      target:
-        at:
-          fixed: 0
-        color: '#F8FAFC'
-        label:
-          show: true
-      markers:
-      - at: 35%
-        lane: above
-        shape: diamond
-        color: '#DC2626'
-        label:
-          show: true
-      - at: 68%
-        lane: below
-        shape: pin
-        color: '#38BDF8'
-        label:
-          show: true
-      bar:
-        fill_style: gradient
-        gradient_stops:
-        - pos: 0
-          color: '#1D4ED8'
-        - pos: 50
-          color: '#64748B'
-        - pos: 100
-          color: '#F59E0B'
-    - type: custom:sensor-bar-card-plus
-      title: Peak and Floor straddling the baseline
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Import / export excursion
-      scale:
-        min:
-          fixed: -100
-        max:
-          fixed: 100
-      baseline:
-        at:
-          fixed: 0
-      target:
-        at:
-          fixed: 2
-        label:
-          show: true
-      peak:
-        enabled: true
-        reset: never
-        label:
-          show: true
-      floor:
-        enabled: true
-        reset: never
-        label:
-          show: true
-      markers:
-      - at:
-          fixed: -2
-        lane: below
-        shape: circle
-        color: '#DC2626'
-      bar:
-        fill_style: band_gradient
-        segments:
-        - from: 0%
-          to: 50%
-          color: '#2563EB'
-        - from: 50%
-          to: 100%
-          color: '#16A34A'
+    - type: vertical-stack
+      cards:
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Baseline Matrix
+            Dedicated validation surface for baseline-origin fill behavior.
+
+            Recommended helper values for a strong visual pass:
+            - `Current value`: around `95`
+            - `Baseline value`: move between `-80`, `0`, and `80`
+            - `Target`: move between `-80`, `0`, and `80`
+            - `Wave drive helper`: optional for dynamic current, target, baseline, and peak checks
+        - type: vertical-stack
+          cards:
+          - type: entities
+            title: Baseline Controls
+            show_header_toggle: false
+            entities:
+            - entity: input_number.sbcp_current_value
+              name: Current value
+            - entity: input_number.sbcp_target_value
+              name: Target value
+            - entity: input_number.sbcp_baseline_value
+              name: Baseline value
+            - entity: input_number.sbcp_scale_min_value
+              name: Scale minimum
+            - entity: input_number.sbcp_scale_max_value
+              name: Scale maximum
+            - entity: input_number.sbcp_min_value
+              name: Wave minimum
+            - entity: input_number.sbcp_max_value
+              name: Wave maximum
+            - entity: input_number.sbcp_current_quick
+              name: Current quick slider (-100 to 100)
+            - entity: input_number.sbcp_target_quick
+              name: Target quick slider (-100 to 100)
+            - entity: input_number.sbcp_baseline_quick
+              name: Baseline quick slider (-100 to 100)
+            - entity: input_boolean.sbcp_wave_enabled
+              name: Wave drive helper
+            - entity: input_select.sbcp_wave_target
+              name: Wave target
+            - entity: input_select.sbcp_waveform
+              name: Waveform
+            - entity: input_number.sbcp_wave_period
+              name: Wave period
+          - type: grid
+            columns: 2
+            square: false
+            cards:
+            - type: entities
+              title: Baseline Sensors A
+              show_header_toggle: false
+              entities:
+              - entity: sensor.sbcp_playground_negative
+                name: Negative sensor
+              - entity: sensor.sbcp_playground_sensor
+                name: Positive sensor
+              - entity: sensor.sbcp_playground_target
+                name: Dynamic target sensor
+            - type: entities
+              title: Baseline Sensors B
+              show_header_toggle: false
+              entities:
+              - entity: sensor.sbcp_playground_baseline
+                name: Dynamic baseline sensor
+              - entity: sensor.sbcp_stress_01
+                name: Stress 01
+              - entity: sensor.sbcp_stress_07
+                name: Stress 07
+              - entity: sensor.sbcp_stress_12
+                name: Stress 12
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Animated Semantic Fill Lab
+            Select a semantic fill mode and interval profile to stress animated baseline rendering with dynamic value, dynamic target, and dynamic baseline on the same card.
+        - type: vertical-stack
+          cards:
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_baseline_semantic_mode
+              state: gradient
+            - entity: input_select.sbcp_baseline_interval_profile
+              state: very_small
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated semantic lab
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Dynamic current
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              - entity: sensor.sbcp_playground_negative
+                name: Inverted companion
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              layout:
+                label:
+                  position: left
+                  width: 168
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#111827'
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#dc2626'
+              peak:
+                enabled: true
+              bar:
+                gradient_stops:
+                - pos: 0
+                  color: '#2563eb'
+                - pos: 49
+                  color: '#06b6d4'
+                - pos: 50
+                  color: '#f59e0b'
+                - pos: 51
+                  color: '#dc2626'
+                - pos: 100
+                  color: '#dc2626'
+                animated: true
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_baseline_semantic_mode
+              state: gradient
+            - entity: input_select.sbcp_baseline_interval_profile
+              state: irregular
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated semantic lab
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Dynamic current
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              - entity: sensor.sbcp_playground_negative
+                name: Inverted companion
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              layout:
+                label:
+                  position: left
+                  width: 168
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#111827'
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#dc2626'
+              peak:
+                enabled: true
+              bar:
+                gradient_stops:
+                - pos: 0
+                  color: '#1d4ed8'
+                - pos: 8
+                  color: '#06b6d4'
+                - pos: 37
+                  color: '#22c55e'
+                - pos: 79
+                  color: '#f59e0b'
+                - pos: 93
+                  color: '#dc2626'
+                - pos: 100
+                  color: '#7f1d1d'
+                animated: true
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_baseline_semantic_mode
+              state: gradient
+            - entity: input_select.sbcp_baseline_interval_profile
+              state: even
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated semantic lab
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Dynamic current
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              - entity: sensor.sbcp_playground_negative
+                name: Inverted companion
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              layout:
+                label:
+                  position: left
+                  width: 168
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#111827'
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#dc2626'
+              peak:
+                enabled: true
+              bar:
+                gradient_stops:
+                - pos: 0
+                  color: '#2563eb'
+                - pos: 33
+                  color: '#06b6d4'
+                - pos: 66
+                  color: '#f59e0b'
+                - pos: 100
+                  color: '#dc2626'
+                animated: true
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_baseline_semantic_mode
+              state: gradient
+            - entity: input_select.sbcp_baseline_interval_profile
+              state: full_width
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated semantic lab
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Dynamic current
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              - entity: sensor.sbcp_playground_negative
+                name: Inverted companion
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              layout:
+                label:
+                  position: left
+                  width: 168
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#111827'
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#dc2626'
+              peak:
+                enabled: true
+              bar:
+                gradient_stops:
+                - pos: 0
+                  color: '#0ea5e9'
+                - pos: 100
+                  color: '#ef4444'
+                animated: true
+                fill_style: gradient
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_baseline_semantic_mode
+              state: severity
+            - entity: input_select.sbcp_baseline_interval_profile
+              state: very_small
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated semantic lab
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Dynamic current
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              - entity: sensor.sbcp_playground_negative
+                name: Inverted companion
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              layout:
+                label:
+                  position: left
+                  width: 168
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#111827'
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#dc2626'
+              peak:
+                enabled: true
+              bar:
+                animated: true
+                segments:
+                - from: 0%
+                  to: 49%
+                  color: '#2563eb'
+                - from: 49%
+                  to: 50%
+                  color: '#06b6d4'
+                - from: 50%
+                  to: 51%
+                  color: '#f59e0b'
+                - from: 51%
+                  to: 100%
+                  color: '#dc2626'
+                fill_style: bands
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_baseline_semantic_mode
+              state: severity
+            - entity: input_select.sbcp_baseline_interval_profile
+              state: irregular
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated semantic lab
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Dynamic current
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              - entity: sensor.sbcp_playground_negative
+                name: Inverted companion
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              layout:
+                label:
+                  position: left
+                  width: 168
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#111827'
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#dc2626'
+              peak:
+                enabled: true
+              bar:
+                animated: true
+                segments:
+                - from: 0%
+                  to: 8%
+                  color: '#2563eb'
+                - from: 8%
+                  to: 37%
+                  color: '#06b6d4'
+                - from: 37%
+                  to: 79%
+                  color: '#22c55e'
+                - from: 79%
+                  to: 93%
+                  color: '#f59e0b'
+                - from: 93%
+                  to: 100%
+                  color: '#dc2626'
+                fill_style: bands
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_baseline_semantic_mode
+              state: severity
+            - entity: input_select.sbcp_baseline_interval_profile
+              state: even
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated semantic lab
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Dynamic current
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              - entity: sensor.sbcp_playground_negative
+                name: Inverted companion
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              layout:
+                label:
+                  position: left
+                  width: 168
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#111827'
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#dc2626'
+              peak:
+                enabled: true
+              bar:
+                animated: true
+                segments:
+                - from: 0%
+                  to: 25%
+                  color: '#2563eb'
+                - from: 25%
+                  to: 50%
+                  color: '#06b6d4'
+                - from: 50%
+                  to: 75%
+                  color: '#f59e0b'
+                - from: 75%
+                  to: 100%
+                  color: '#dc2626'
+                fill_style: bands
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_baseline_semantic_mode
+              state: severity
+            - entity: input_select.sbcp_baseline_interval_profile
+              state: full_width
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated semantic lab
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Dynamic current
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              - entity: sensor.sbcp_playground_negative
+                name: Inverted companion
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              layout:
+                label:
+                  position: left
+                  width: 168
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#111827'
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#dc2626'
+              peak:
+                enabled: true
+              bar:
+                animated: true
+                segments:
+                - from: 0%
+                  to: 100%
+                  color: '#f59e0b'
+                fill_style: bands
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_baseline_semantic_mode
+              state: severity_gradient
+            - entity: input_select.sbcp_baseline_interval_profile
+              state: very_small
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated semantic lab
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Dynamic current
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              - entity: sensor.sbcp_playground_negative
+                name: Inverted companion
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              layout:
+                label:
+                  position: left
+                  width: 168
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#111827'
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#dc2626'
+              peak:
+                enabled: true
+              bar:
+                animated: true
+                segments:
+                - from: 0%
+                  to: 49%
+                  color: '#2563eb'
+                - from: 49%
+                  to: 50%
+                  color: '#06b6d4'
+                - from: 50%
+                  to: 51%
+                  color: '#f59e0b'
+                - from: 51%
+                  to: 100%
+                  color: '#dc2626'
+                fill_style: band_gradient
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_baseline_semantic_mode
+              state: severity_gradient
+            - entity: input_select.sbcp_baseline_interval_profile
+              state: irregular
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated semantic lab
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Dynamic current
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              - entity: sensor.sbcp_playground_negative
+                name: Inverted companion
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              layout:
+                label:
+                  position: left
+                  width: 168
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#111827'
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#dc2626'
+              peak:
+                enabled: true
+              bar:
+                animated: true
+                segments:
+                - from: 0%
+                  to: 8%
+                  color: '#2563eb'
+                - from: 8%
+                  to: 37%
+                  color: '#06b6d4'
+                - from: 37%
+                  to: 79%
+                  color: '#22c55e'
+                - from: 79%
+                  to: 93%
+                  color: '#f59e0b'
+                - from: 93%
+                  to: 100%
+                  color: '#dc2626'
+                fill_style: band_gradient
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_baseline_semantic_mode
+              state: severity_gradient
+            - entity: input_select.sbcp_baseline_interval_profile
+              state: even
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated semantic lab
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Dynamic current
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              - entity: sensor.sbcp_playground_negative
+                name: Inverted companion
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              layout:
+                label:
+                  position: left
+                  width: 168
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#111827'
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#dc2626'
+              peak:
+                enabled: true
+              bar:
+                animated: true
+                segments:
+                - from: 0%
+                  to: 25%
+                  color: '#2563eb'
+                - from: 25%
+                  to: 50%
+                  color: '#06b6d4'
+                - from: 50%
+                  to: 75%
+                  color: '#f59e0b'
+                - from: 75%
+                  to: 100%
+                  color: '#dc2626'
+                fill_style: band_gradient
+          - type: conditional
+            conditions:
+            - entity: input_select.sbcp_baseline_semantic_mode
+              state: severity_gradient
+            - entity: input_select.sbcp_baseline_interval_profile
+              state: full_width
+            card:
+              type: custom:sensor-bar-card-plus
+              title: Animated semantic lab
+              entities:
+              - entity: sensor.sbcp_playground_sensor
+                name: Dynamic current
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              - entity: sensor.sbcp_playground_negative
+                name: Inverted companion
+                baseline:
+                  at:
+                    entity: sensor.sbcp_playground_baseline
+                    fixed: 0
+              layout:
+                label:
+                  position: left
+                  width: 168
+              scale:
+                min:
+                  entity: sensor.sbcp_playground_scale_min
+                max:
+                  entity: sensor.sbcp_playground_scale_max
+              target:
+                at:
+                  entity: sensor.sbcp_playground_target
+                color: '#111827'
+                label:
+                  show: true
+                when_exceeded:
+                  fill_color: '#dc2626'
+              peak:
+                enabled: true
+              bar:
+                animated: true
+                segments:
+                - from: 0%
+                  to: 100%
+                  color: '#f59e0b'
+                fill_style: band_gradient
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Off-Center Geometry
+            Baseline at `10%`, `50%`, and `75%` of the configured scale, with mixed rows above and below the baseline.
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Baseline at 10% of range
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Below 10% baseline
+            - entity: sensor.sbcp_playground_sensor
+              name: Above 10% baseline
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -110
+              max:
+                fixed: 90
+            baseline:
+              at:
+                fixed: -90
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline at center
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Below center baseline
+            - entity: sensor.sbcp_playground_sensor
+              name: Above center baseline
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline at 75% of range
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Below 75% baseline
+            - entity: sensor.sbcp_playground_sensor
+              name: Above 75% baseline
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -140
+              max:
+                fixed: 140
+            baseline:
+              at:
+                fixed: 70
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Dynamic baseline and fallback
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Static fallback baseline
+              baseline:
+                at:
+                  entity: sensor.sbcp_missing_baseline
+                  fixed: 15
+            - entity: sensor.sbcp_playground_sensor
+              name: Dynamic baseline from helper
+              baseline:
+                at:
+                  entity: sensor.sbcp_playground_baseline
+                  fixed: 15
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 15
+            bar:
+              fill_style: gradient
+  - type: grid
+    cards:
+    - type: vertical-stack
+      cards:
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Color Modes And Baseline Overrides
+            Override colors should win when set. Inherited color systems should remain coherent when the fill starts from baseline instead of min.
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: "Baseline colors: none"
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Inherit below
+            - entity: sensor.sbcp_playground_sensor
+              name: Inherit above
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: "Baseline colors: above only"
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Default below
+            - entity: sensor.sbcp_playground_sensor
+              name: Override above
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+              above:
+                color: '#34d399'
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: "Baseline colors: below only"
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Override below
+            - entity: sensor.sbcp_playground_sensor
+              name: Default above
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+              below:
+                color: '#ef4444'
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: "Baseline colors: both"
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Below override
+            - entity: sensor.sbcp_playground_sensor
+              name: Above override
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+              above:
+                color: '#34d399'
+              below:
+                color: '#ef4444'
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + solid
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Solid below
+            - entity: sensor.sbcp_playground_sensor
+              name: Solid above
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              color: '#2563eb'
+              fill_style: solid
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + gradient
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Gradient below
+            - entity: sensor.sbcp_playground_sensor
+              name: Gradient above
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + bands
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Bands below
+            - entity: sensor.sbcp_playground_sensor
+              name: Bands above
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                entity: sensor.sbcp_playground_baseline
+                fixed: 0
+            bar:
+              segments:
+              - from: 0%
+                to: 25%
+                color: '#ef4444'
+              - from: 25%
+                to: 50%
+                color: '#f59e0b'
+              - from: 50%
+                to: 75%
+                color: '#22c55e'
+              - from: 75%
+                to: 100%
+                color: '#06b6d4'
+              fill_style: bands
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + band_gradient
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Band gradient below
+            - entity: sensor.sbcp_playground_sensor
+              name: Band gradient above
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                entity: sensor.sbcp_playground_baseline
+                fixed: 0
+            bar:
+              segments:
+              - from: 0%
+                to: 25%
+                color: '#ef4444'
+              - from: 25%
+                to: 50%
+                color: '#f59e0b'
+              - from: 50%
+                to: 75%
+                color: '#22c55e'
+              - from: 75%
+                to: 100%
+                color: '#06b6d4'
+              fill_style: band_gradient
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Targets, Peak, And Above-Target Color
+            Includes fixed targets below, on, and above the baseline, plus dynamic target movement and peak tracking on off-center baselines.
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Target below baseline
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Negative row
+            - entity: sensor.sbcp_playground_sensor
+              name: Positive row
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            target:
+              at:
+                fixed: -60
+              color: '#111827'
+              label:
+                show: true
+              when_exceeded:
+                fill_color: '#dc2626'
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Target on baseline
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Negative row
+            - entity: sensor.sbcp_playground_sensor
+              name: Positive row
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            target:
+              at:
+                fixed: 0
+              color: '#111827'
+              label:
+                show: true
+              when_exceeded:
+                fill_color: '#dc2626'
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Target above baseline
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Negative row
+            - entity: sensor.sbcp_playground_sensor
+              name: Positive row
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            target:
+              at:
+                fixed: 60
+              color: '#111827'
+              label:
+                show: true
+              when_exceeded:
+                fill_color: '#dc2626'
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Dynamic target_entity on helper-driven baseline
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Dynamic target
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -140
+              max:
+                fixed: 140
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              color: '#0f766e'
+              label:
+                show: true
+              when_exceeded:
+                fill_color: '#dc2626'
+            baseline:
+              at:
+                entity: sensor.sbcp_playground_baseline
+                fixed: 70
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Peak and target overlap on helper-driven baseline
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Peak + target
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -140
+              max:
+                fixed: 140
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              color: '#0f766e'
+              label:
+                show: true
+              when_exceeded:
+                fill_color: '#dc2626'
+            peak:
+              enabled: true
+              color: '#7c3aed'
+            baseline:
+              at:
+                entity: sensor.sbcp_playground_baseline
+                fixed: 70
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline plus peak rows
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Peak below baseline
+            - entity: sensor.sbcp_playground_sensor
+              name: Peak above baseline
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            peak:
+              enabled: true
+              color: '#7c3aed'
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+  - type: grid
+    cards:
+    - type: vertical-stack
+      cards:
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Baseline With Different Label Layouts
+            Same baseline behavior under left, above, inside, and tighter left-label layouts.
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + left labels
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Left below
+            - entity: sensor.sbcp_playground_sensor
+              name: Left above
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + above labels
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Above below
+            - entity: sensor.sbcp_playground_sensor
+              name: Above above
+            layout:
+              label:
+                position: above
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + inside labels
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Inside below
+            - entity: sensor.sbcp_playground_sensor
+              name: Inside above
+            layout:
+              label:
+                position: inside
+              height: 52
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + compact left width
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Compact below
+            - entity: sensor.sbcp_playground_sensor
+              name: Compact above
+            layout:
+              label:
+                position: left
+                width: 90
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Baseline + animation off
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: No animation
+            layout:
+              label:
+                position: left
+                width: 170
+            scale:
+              min:
+                fixed: -120
+              max:
+                fixed: 120
+            target:
+              at:
+                fixed: 40
+              label:
+                show: true
+              when_exceeded:
+                fill_color: '#dc2626'
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              animated: false
+              fill_style: gradient
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Advanced marker integration — Baseline
+
+            Compare markers on both sides of the neutral baseline, including the exact/near-zero case. The scale and row sample remain bipolar; labels and contrasting fills make it easier to judge whether marker positions remain clear against the baseline transition.
+        - type: grid
+          columns: 2
+          square: false
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Bipolar energy flow — references around zero
+            entities:
+            - entity: sensor.sbcp_hero_shot_grid
+              name: Utility exchange
+            scale:
+              min:
+                fixed: -10
+              max:
+                fixed: 10
+            formatting:
+              decimal: 1
+              unit: kW
+            baseline:
+              at:
+                fixed: 0
+            target:
+              at:
+                fixed: 0
+              color: '#F8FAFC'
+              label:
+                show: true
+            markers:
+            - at: 35%
+              lane: above
+              shape: diamond
+              color: '#DC2626'
+              label:
+                show: true
+            - at: 68%
+              lane: below
+              shape: pin
+              color: '#38BDF8'
+              label:
+                show: true
+            bar:
+              fill_style: gradient
+              gradient_stops:
+              - pos: 0
+                color: '#1D4ED8'
+              - pos: 50
+                color: '#64748B'
+              - pos: 100
+                color: '#F59E0B'
+          - type: custom:sensor-bar-card-plus
+            title: Peak and Floor straddling the baseline
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Import / export excursion
+            scale:
+              min:
+                fixed: -100
+              max:
+                fixed: 100
+            baseline:
+              at:
+                fixed: 0
+            target:
+              at:
+                fixed: 2
+              label:
+                show: true
+            peak:
+              enabled: true
+              reset: never
+              label:
+                show: true
+            floor:
+              enabled: true
+              reset: never
+              label:
+                show: true
+            markers:
+            - at:
+                fixed: -2
+              lane: below
+              shape: circle
+              color: '#DC2626'
+            bar:
+              fill_style: band_gradient
+              segments:
+              - from: 0%
+                to: 50%
+                color: '#2563EB'
+              - from: 50%
+                to: 100%
+                color: '#16A34A'
 - title: Hero
   path: hero
   icon: mdi:star-four-points
