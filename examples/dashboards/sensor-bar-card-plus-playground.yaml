@@ -2583,1551 +2583,1582 @@ views:
   path: sensor-bar-card-plus-needle
   icon: mdi:chart-timeline-variant
   badges: []
-  cards:
-  - type: markdown
-    content: |
-      ## Needle
-      Dedicated validation surface for needle position, fill styles, marker layering, label modes, colors, and compact heights.
-
-      Notes:
-      - `Peak` uses the session-high behavior, so the "near peak" and "between target and peak" cards are interactive checks.
-      - Use the shared playground controls to move current, target, and baseline helpers while inspecting these cards.
-  - type: entities
-    title: Needle Controls
-    show_header_toggle: false
-    entities:
-    - entity: input_number.sbcp_current_value
-      name: Current value
-    - entity: input_number.sbcp_target_value
-      name: Target value
-    - entity: input_number.sbcp_baseline_value
-      name: Baseline value
-    - entity: input_number.sbcp_current_quick
-      name: Current quick slider (-100 to 100)
-    - entity: input_number.sbcp_target_quick
-      name: Target quick slider (-100 to 100)
-    - entity: input_number.sbcp_baseline_quick
-      name: Baseline quick slider (-100 to 100)
-  - type: entities
-    title: Needle Sensors
-    show_header_toggle: false
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Primary sensor
-    - entity: sensor.sbcp_playground_target
-      name: Target sensor
-    - entity: sensor.sbcp_playground_scale_min
-      name: Min sensor
-    - entity: sensor.sbcp_playground_scale_max
-      name: Max sensor
-    - entity: sensor.sbcp_playground_baseline
-      name: Baseline sensor
-    - entity: sensor.sbcp_playground_negative
-      name: Negative sensor
-  - type: markdown
-    content: |
-      ## Basic Positions
-  - type: custom:sensor-bar-card-plus
-    title: Needle at Minimum
-    entities:
-    - entity: sensor.sbcp_playground_scale_min
-      name: Min Helper
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      color: '#2563eb'
-      fill_style: solid
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle in the Middle
-    entities:
-    - entity: sensor.sbcp_playground_baseline
-      name: Baseline Helper
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        fixed: -100
-      max:
-        fixed: 100
-    bar:
-      color: '#0f766e'
-      fill_style: solid
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle at Maximum
-    entities:
-    - entity: sensor.sbcp_playground_scale_max
-      name: Max Helper
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      color: '#dc2626'
-      fill_style: solid
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle Below Minimum, Clamped Left
-    entities:
-    - entity: sensor.sbcp_playground_negative
-      name: Clamp Left
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        fixed: 0
-      max:
-        fixed: 100
-    bar:
-      color: '#7c3aed'
-      fill_style: solid
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle Above Maximum, Clamped Right
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Clamp Right
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        fixed: 0
-      max:
-        fixed: 20
-    bar:
-      color: '#ea580c'
-      fill_style: solid
-      needle: true
-  - type: markdown
-    content: |
-      ## Fill Styles
-  - type: custom:sensor-bar-card-plus
-    title: Needle + Solid
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Solid Needle
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      color: '#2563eb'
-      fill_style: solid
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle + Gradient
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Gradient Needle
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      fill_style: gradient
-      needle: true
-      gradient_stops:
-      - pos: 0
-        color: '#2563eb'
-      - pos: 35
-        color: '#06b6d4'
-      - pos: 70
-        color: '#f59e0b'
-      - pos: 100
-        color: '#dc2626'
-  - type: custom:sensor-bar-card-plus
-    title: Needle + Bands
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Bands Needle
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      fill_style: bands
-      needle: true
-      segments:
-      - from: 0%
-        to: 30%
-        color: '#22c55e'
-      - from: 30%
-        to: 60%
-        color: '#facc15'
-      - from: 60%
-        to: 85%
-        color: '#f97316'
-      - from: 85%
-        to: 100%
-        color: '#ef4444'
-  - type: custom:sensor-bar-card-plus
-    title: Needle + Soft Bands
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Soft Bands Needle
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      fill_style: soft_bands
-      needle: true
-      segments:
-      - from: 0%
-        to: 30%
-        color: '#22c55e'
-      - from: 30%
-        to: 60%
-        color: '#facc15'
-      - from: 60%
-        to: 85%
-        color: '#f97316'
-      - from: 85%
-        to: 100%
-        color: '#ef4444'
-  - type: custom:sensor-bar-card-plus
-    title: Needle + Band Gradient
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Band Gradient Needle
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      fill_style: band_gradient
-      needle: true
-      segments:
-      - from: 0%
-        to: 20%
-        color: '#22c55e'
-      - from: 20%
-        to: 35%
-        color: '#84cc16'
-      - from: 35%
-        to: 50%
-        color: '#eab308'
-      - from: 50%
-        to: 65%
-        color: '#f59e0b'
-      - from: 65%
-        to: 80%
-        color: '#f97316'
-      - from: 80%
-        to: 100%
-        color: '#ef4444'
-  - type: custom:sensor-bar-card-plus
-    title: Needle + solid_fill
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Sampled Needle
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      fill_style: soft_bands
-      solid_fill: true
-      needle: true
-      segments:
-      - from: 0%
-        to: 30%
-        color: '#22c55e'
-      - from: 30%
-        to: 60%
-        color: '#facc15'
-      - from: 60%
-        to: 85%
-        color: '#f97316'
-      - from: 85%
-        to: 100%
-        color: '#ef4444'
-  - type: custom:sensor-bar-card-plus
-    title: Needle Dense Telemetry A
-    entities:
-    - entity: sensor.sbcp_stress_01
-      name: Grid Import
-    - entity: sensor.sbcp_stress_02
-      name: Battery Flow
-    - entity: sensor.sbcp_stress_03
-      name: Solar Output
-    - entity: sensor.sbcp_stress_04
-      name: EV Charging
-    - entity: sensor.sbcp_stress_05
-      name: Heat Pump
-    - entity: sensor.sbcp_stress_06
-      name: Data Rack
-    layout:
-      label:
-        position: left
-        width: 150
-      height: 24
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      fill_style: gradient
-      needle:
-        show: true
-        color: '#ffffff'
-      gradient_stops:
-      - pos: 0
-        color: '#0f172a'
-      - pos: 18
-        color: '#1d4ed8'
-      - pos: 42
-        color: '#06b6d4'
-      - pos: 68
-        color: '#8b5cf6'
-      - pos: 100
-        color: '#ec4899'
-  - type: markdown
-    content: |
-      ## Marker Interactions
-  - type: custom:sensor-bar-card-plus
-    title: Needle + Target
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Needle Over Target
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-      label:
-        show: true
-    bar:
-      fill_style: solid
-      color: '#2563eb'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle + Peak
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Needle Over Peak
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    peak:
-      enabled: true
-    bar:
-      fill_style: solid
-      color: '#0f766e'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle + Target + Peak
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: All Three
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-      label:
-        show: true
-    peak:
-      enabled: true
-    bar:
-      fill_style: solid
-      color: '#7c3aed'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle Exactly Equal to Target
-    entities:
-    - entity: sensor.sbcp_playground_target
-      name: Same Value
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-      label:
-        show: true
-    bar:
-      fill_style: solid
-      color: '#ea580c'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle Exactly Equal to Peak
-    entities:
-    - entity: sensor.sbcp_playground_target
-      name: Peak Match
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    peak:
-      enabled: true
-    bar:
-      fill_style: solid
-      color: '#2563eb'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle Just Below Target
-    entities:
-    - entity: sensor.sbcp_playground_baseline
-      name: Just Below Target
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        fixed: -100
-      max:
-        fixed: 100
-    target:
-      at:
-        fixed: 5
-      label:
-        show: true
-    bar:
-      fill_style: solid
-      color: '#dc2626'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle Just Above Target
-    entities:
-    - entity: sensor.sbcp_playground_baseline
-      name: Just Above Target
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        fixed: -100
-      max:
-        fixed: 100
-    target:
-      at:
-        fixed: -5
-      label:
-        show: true
-    bar:
-      fill_style: solid
-      color: '#ef4444'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle Just Below Peak
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Lower after raising current
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    peak:
-      enabled: true
-    bar:
-      fill_style: solid
-      color: '#0f766e'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle Just Above Peak
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Raise above stored peak
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    peak:
-      enabled: true
-    bar:
-      fill_style: solid
-      color: '#2563eb'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle Between Target and Peak
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Move current between both
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        fixed: 40
-      label:
-        show: true
-    peak:
-      enabled: true
-    bar:
-      fill_style: solid
-      color: '#7c3aed'
-      needle: true
-  - type: markdown
-    content: |
-      ## Above-Target Color
-  - type: custom:sensor-bar-card-plus
-    title: Needle + Above-Target Color
-    entities:
-    - entity: sensor.sbcp_playground_scale_max
-      name: Above Target
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        fixed: 0
-      max:
-        fixed: 100
-    target:
-      at:
-        fixed: 40
-      label:
-        show: true
-      when_exceeded:
-        fill_color: '#dc2626'
-    bar:
-      fill_style: solid
-      color: '#2563eb'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle Below Target With Overlay Configured
-    entities:
-    - entity: sensor.sbcp_playground_baseline
-      name: Below Target
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        fixed: -100
-      max:
-        fixed: 100
-    target:
-      at:
-        fixed: 40
-      label:
-        show: true
-      when_exceeded:
-        fill_color: '#dc2626'
-    bar:
-      fill_style: solid
-      color: '#2563eb'
-      needle: true
-  - type: markdown
-    content: |
-      ## Color Visibility
-  - type: custom:sensor-bar-card-plus
-    title: White Needle on White Fill
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: White on White
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      fill_style: solid
-      color: '#ffffff'
-      needle:
-        show: true
-        color: '#ffffff'
-  - type: custom:sensor-bar-card-plus
-    title: Yellow Needle on White Fill
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: White Fill
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      fill_style: solid
-      color: '#ffffff'
-      needle:
-        show: true
-        color: '#ffff00'
-  - type: custom:sensor-bar-card-plus
-    title: Cyan Needle on Pale Fill
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Pale Fill
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      fill_style: solid
-      color: '#f5f5f5'
-      needle:
-        show: true
-        color: '#00ffff'
-  - type: custom:sensor-bar-card-plus
-    title: Black Needle on Yellow Fill
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Yellow Fill
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      fill_style: solid
-      color: '#facc15'
-      needle:
-        show: true
-        color: '#000000'
-  - type: custom:sensor-bar-card-plus
-    title: Magenta Needle on Cyan Fill
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Cyan Fill
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      fill_style: solid
-      color: '#06b6d4'
-      needle:
-        show: true
-        color: '#ff00cc'
-  - type: custom:sensor-bar-card-plus
-    title: Black Needle on Near-Black Fill
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Near-Black Fill
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      fill_style: solid
-      color: '#111111'
-      needle:
-        show: true
-        color: '#000000'
-  - type: custom:sensor-bar-card-plus
-    title: Greyscale Bands With Black Needle
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Greyscale Bands
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      fill_style: bands
-      needle:
-        show: true
-        color: '#000000'
-      segments:
-      - from: 0%
-        to: 22%
-        color: '#111111'
-      - from: 22%
-        to: 45%
-        color: '#4b5563'
-      - from: 45%
-        to: 72%
-        color: '#9ca3af'
-      - from: 72%
-        to: 100%
-        color: '#e5e7eb'
-  - type: markdown
-    content: |
-      ## Label Positions
-  - type: custom:sensor-bar-card-plus
-    title: Needle with label_position left
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Left Label
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-    bar:
-      fill_style: solid
-      color: '#2563eb'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle with label_position above
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Above Label
-    layout:
-      label:
-        position: above
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-    bar:
-      fill_style: solid
-      color: '#0f766e'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle with label_position inside
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Inside Label
-    layout:
-      label:
-        position: inside
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-    bar:
-      fill_style: solid
-      color: '#7c3aed'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Needle with label_position off
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Off Label
-    layout:
-      label:
-        position: "off"
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-    bar:
-      fill_style: solid
-      color: '#ea580c'
-      needle: true
-  - type: markdown
-    content: |
-      ## Inside Label Interactions
-  - type: custom:sensor-bar-card-plus
-    title: Inside label + needle
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Inside Needle
-    layout:
-      label:
-        position: inside
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    bar:
-      fill_style: solid
-      color: '#2563eb'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Inside label + needle + target
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Inside Needle Target
-    layout:
-      label:
-        position: inside
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-      label:
-        show: true
-    bar:
-      fill_style: solid
-      color: '#0f766e'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Inside label + needle + peak
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Inside Needle Peak
-    layout:
-      label:
-        position: inside
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    peak:
-      enabled: true
-    bar:
-      fill_style: solid
-      color: '#7c3aed'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Inside label + needle + target + peak
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Inside All Three
-    layout:
-      label:
-        position: inside
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-      label:
-        show: true
-    peak:
-      enabled: true
-    bar:
-      fill_style: solid
-      color: '#ea580c'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Inside label + needle at target
-    entities:
-    - entity: sensor.sbcp_playground_target
-      name: Inside Same Value
-    layout:
-      label:
-        position: inside
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-      label:
-        show: true
-    bar:
-      fill_style: solid
-      color: '#dc2626'
-      needle: true
-  - type: markdown
-    content: |
-      ## Height And Density
-  - type: custom:sensor-bar-card-plus
-    title: Normal Height Needle + Target + Peak
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: All Three
-    layout:
-      label:
-        position: left
-        width: 160
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-      label:
-        show: true
-    peak:
-      enabled: true
-    bar:
-      fill_style: solid
-      color: '#7c3aed'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Height 24 Needle + Target + Peak
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Height 24
-    layout:
-      label:
-        position: left
-        width: 160
-      height: 24
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-      label:
-        show: true
-    peak:
-      enabled: true
-    bar:
-      fill_style: solid
-      color: '#2563eb'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Height 16 Needle + Target + Peak
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Height 16
-    layout:
-      label:
-        position: left
-        width: 160
-      height: 16
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-      label:
-        show: true
-    peak:
-      enabled: true
-    bar:
-      fill_style: solid
-      color: '#ea580c'
-      needle: true
-  - type: custom:sensor-bar-card-plus
-    title: Height 12 Configured Needle + Target + Peak
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-      name: Height 12 Clamp
-    layout:
-      label:
-        position: left
-        width: 160
-      height: 12
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-      label:
-        show: true
-    peak:
-      enabled: true
-    bar:
-      fill_style: solid
-      color: '#dc2626'
-      needle: true
-  - type: horizontal-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: H24 A
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: A
-      layout:
-        label:
-          position: left
-          width: 96
-        height: 24
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      peak:
-        enabled: true
-      bar:
-        fill_style: solid
-        color: '#2563eb'
-        needle: true
-    - type: custom:sensor-bar-card-plus
-      title: H24 B
-      entities:
-      - entity: sensor.sbcp_playground_target
-        name: B
-      layout:
-        label:
-          position: left
-          width: 96
-        height: 24
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      peak:
-        enabled: true
-      bar:
-        fill_style: solid
-        color: '#0f766e'
-        needle: true
-    - type: custom:sensor-bar-card-plus
-      title: H24 C
-      entities:
-      - entity: sensor.sbcp_playground_baseline
-        name: C
-      layout:
-        label:
-          position: left
-          width: 96
-        height: 24
-      scale:
-        min:
-          fixed: -100
-        max:
-          fixed: 100
-      target:
-        at:
-          fixed: 5
-      peak:
-        enabled: true
-      bar:
-        fill_style: solid
-        color: '#7c3aed'
-        needle: true
-    - type: custom:sensor-bar-card-plus
-      title: H24 D
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: D
-      layout:
-        label:
-          position: left
-          width: 96
-        height: 24
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      peak:
-        enabled: true
-      bar:
-        fill_style: solid
-        color: '#ea580c'
-        needle: true
-  - type: horizontal-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: H16 A
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: A
-      layout:
-        label:
-          position: left
-          width: 96
-        height: 16
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      peak:
-        enabled: true
-      bar:
-        fill_style: solid
-        color: '#2563eb'
-        needle: true
-    - type: custom:sensor-bar-card-plus
-      title: H16 B
-      entities:
-      - entity: sensor.sbcp_playground_target
-        name: B
-      layout:
-        label:
-          position: left
-          width: 96
-        height: 16
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      peak:
-        enabled: true
-      bar:
-        fill_style: solid
-        color: '#0f766e'
-        needle: true
-    - type: custom:sensor-bar-card-plus
-      title: H16 C
-      entities:
-      - entity: sensor.sbcp_playground_baseline
-        name: C
-      layout:
-        label:
-          position: left
-          width: 96
-        height: 16
-      scale:
-        min:
-          fixed: -100
-        max:
-          fixed: 100
-      target:
-        at:
-          fixed: 5
-      peak:
-        enabled: true
-      bar:
-        fill_style: solid
-        color: '#7c3aed'
-        needle: true
-    - type: custom:sensor-bar-card-plus
-      title: H16 D
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: D
-      layout:
-        label:
-          position: left
-          width: 96
-        height: 16
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-      peak:
-        enabled: true
-      bar:
-        fill_style: solid
-        color: '#ea580c'
-        needle: true
-  - type: markdown
-    content: |
-      ## Advanced marker integration — Needle
-
-      The existing Wave Driver is intentionally reused. For the uncluttered motion test, set its min/max to 0/100, choose `current_value` and a 6–10 second period, then enable it: the Needle travels across stationary marker positions. The dense seven-marker card below combines Needle, Target, Peak, Floor, and two generic references in each lane; its Peak/Floor track the changing current sample. Watch the Needle approach, cross, coincide with, and leave the fixed references. Hover individual glyphs during motion to confirm the corresponding label still promotes independently. In the independent-source card, choose `target_value` to animate the dynamic generic marker while current/Needle remains still; switch back to `current_value` to watch it cross the marker. For the bipolar card, use wave limits -100/100 to watch current cross the stored Peak and Floor. The exact-coincidence card deliberately overlays the Needle, Target, and generic glyph. Turn the Wave Driver off after the check.
-  - type: entities
-    title: Needle / marker motion controls
-    show_header_toggle: false
-    entities:
-    - entity: input_boolean.sbcp_wave_enabled
-      name: Wave Driver
-    - entity: input_select.sbcp_wave_target
-      name: Animate current, Target, or baseline
-    - entity: input_select.sbcp_waveform
-      name: Waveform
-    - entity: input_number.sbcp_wave_period
-      name: Wave period
-    - entity: input_number.sbcp_min_value
-      name: Wave minimum
-    - entity: input_number.sbcp_max_value
-      name: Wave maximum
-    - entity: input_number.sbcp_current_value
-      name: Current / Needle source
-    - entity: input_number.sbcp_target_value
-      name: Dynamic marker source
+  type: sections
+  max_columns: 3
+  dense_section_placement: false
+  sections:
   - type: grid
-    columns: 2
-    square: false
     cards:
-    - type: custom:sensor-bar-card-plus
-      title: Moving Needle across stationary markers — 0..100 W
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Animated current through references
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      target:
-        at:
-          fixed: 50
-        color: '#F8FAFC'
-      markers:
-      - at: 22%
-        lane: above
-        shape: diamond
-        color: '#2563EB'
-      - at: 76%
-        lane: below
-        shape: pin
-        color: '#F59E0B'
-      bar:
-        fill_style: gradient
-        needle:
-          show: true
-          color: '#F8FAFC'
-        gradient_stops:
-        - pos: 0
-          color: '#0F172A'
-        - pos: 100
-          color: '#0F766E'
-    - type: custom:sensor-bar-card-plus
-      title: Needle and independently moving dynamic marker
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Current stays independent
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      markers:
-      - at:
-          entity: sensor.sbcp_playground_target
-          fixed: 65
-        lane: above
-        shape: arrow
-        color: '#DC2626'
-        label:
-          show: true
-      - at: 28%
-        lane: below
-        shape: circle
-        color: '#F8FAFC'
-      bar:
-        fill_style: solid
-        color: '#0F766E'
-        needle:
-          show: true
-          color: '#F8FAFC'
-    - type: custom:sensor-bar-card-plus
-      title: Seven markers + moving Needle — dense coexistence
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Peak / Floor evolve with current
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      target:
-        at:
-          fixed: 50
-        color: '#F8FAFC'
-        label:
-          show: true
-          decimal: 0
-      peak:
-        enabled: true
-        reset: never
-        label:
-          show: true
-      floor:
-        enabled: true
-        reset: never
-        label:
-          show: true
-      markers:
-      - at: 24%
-        lane: above
-        shape: diamond
-        color: '#38BDF8'
-        label:
-          show: true
-      - at: 78%
-        lane: above
-        shape: pin
-        direction: outward
-        color: '#F59E0B'
-        label:
-          show: true
-      - at: 35%
-        lane: below
-        shape: circle
-        color: '#DC2626'
-        label:
-          show: true
-      - at: 68%
-        lane: below
-        shape: chevron
-        direction: outward
-        color: '#16A34A'
-        label:
-          show: true
-      bar:
-        fill_style: bands
-        segments:
-        - from: 0%
-          to: 45%
-          color: '#1D4ED8'
-        - from: 45%
-          to: 100%
-          color: '#0F766E'
-        needle:
-          show: true
-          color: '#FDE047'
-    - type: custom:sensor-bar-card-plus
-      title: Coincident Needle, Target, and generic glyph
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Exact shared source position
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      target:
-        at:
-          entity: sensor.sbcp_playground_sensor
-        color: '#F59E0B'
-        label:
-          show: true
-      markers:
-      - at:
-          entity: sensor.sbcp_playground_sensor
-        lane: below
-        shape: circle
-        color: '#DC2626'
-        label:
-          show: true
-      bar:
-        fill_style: solid
-        color: '#111827'
-        needle:
-          show: true
-          color: '#F8FAFC'
+    - type: vertical-stack
+      cards:
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Needle
+            Dedicated validation surface for needle position, fill styles, marker layering, label modes, colors, and compact heights.
+
+            Notes:
+            - `Peak` uses the session-high behavior, so the "near peak" and "between target and peak" cards are interactive checks.
+            - Use the shared playground controls to move current, target, and baseline helpers while inspecting these cards.
+        - type: entities
+          title: Needle Controls
+          show_header_toggle: false
+          entities:
+          - entity: input_number.sbcp_current_value
+            name: Current value
+          - entity: input_number.sbcp_target_value
+            name: Target value
+          - entity: input_number.sbcp_baseline_value
+            name: Baseline value
+          - entity: input_number.sbcp_current_quick
+            name: Current quick slider (-100 to 100)
+          - entity: input_number.sbcp_target_quick
+            name: Target quick slider (-100 to 100)
+          - entity: input_number.sbcp_baseline_quick
+            name: Baseline quick slider (-100 to 100)
+        - type: entities
+          title: Needle Sensors
+          show_header_toggle: false
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Primary sensor
+          - entity: sensor.sbcp_playground_target
+            name: Target sensor
+          - entity: sensor.sbcp_playground_scale_min
+            name: Min sensor
+          - entity: sensor.sbcp_playground_scale_max
+            name: Max sensor
+          - entity: sensor.sbcp_playground_baseline
+            name: Baseline sensor
+          - entity: sensor.sbcp_playground_negative
+            name: Negative sensor
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Basic Positions
+        - type: custom:sensor-bar-card-plus
+          title: Needle at Minimum
+          entities:
+          - entity: sensor.sbcp_playground_scale_min
+            name: Min Helper
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            color: '#2563eb'
+            fill_style: solid
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle in the Middle
+          entities:
+          - entity: sensor.sbcp_playground_baseline
+            name: Baseline Helper
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              fixed: -100
+            max:
+              fixed: 100
+          bar:
+            color: '#0f766e'
+            fill_style: solid
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle at Maximum
+          entities:
+          - entity: sensor.sbcp_playground_scale_max
+            name: Max Helper
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            color: '#dc2626'
+            fill_style: solid
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle Below Minimum, Clamped Left
+          entities:
+          - entity: sensor.sbcp_playground_negative
+            name: Clamp Left
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 100
+          bar:
+            color: '#7c3aed'
+            fill_style: solid
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle Above Maximum, Clamped Right
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Clamp Right
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 20
+          bar:
+            color: '#ea580c'
+            fill_style: solid
+            needle: true
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Fill Styles
+        - type: custom:sensor-bar-card-plus
+          title: Needle + Solid
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Solid Needle
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            color: '#2563eb'
+            fill_style: solid
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle + Gradient
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Gradient Needle
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            fill_style: gradient
+            needle: true
+            gradient_stops:
+            - pos: 0
+              color: '#2563eb'
+            - pos: 35
+              color: '#06b6d4'
+            - pos: 70
+              color: '#f59e0b'
+            - pos: 100
+              color: '#dc2626'
+        - type: custom:sensor-bar-card-plus
+          title: Needle + Bands
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Bands Needle
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            fill_style: bands
+            needle: true
+            segments:
+            - from: 0%
+              to: 30%
+              color: '#22c55e'
+            - from: 30%
+              to: 60%
+              color: '#facc15'
+            - from: 60%
+              to: 85%
+              color: '#f97316'
+            - from: 85%
+              to: 100%
+              color: '#ef4444'
+        - type: custom:sensor-bar-card-plus
+          title: Needle + Soft Bands
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Soft Bands Needle
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            fill_style: soft_bands
+            needle: true
+            segments:
+            - from: 0%
+              to: 30%
+              color: '#22c55e'
+            - from: 30%
+              to: 60%
+              color: '#facc15'
+            - from: 60%
+              to: 85%
+              color: '#f97316'
+            - from: 85%
+              to: 100%
+              color: '#ef4444'
+        - type: custom:sensor-bar-card-plus
+          title: Needle + Band Gradient
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Band Gradient Needle
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            fill_style: band_gradient
+            needle: true
+            segments:
+            - from: 0%
+              to: 20%
+              color: '#22c55e'
+            - from: 20%
+              to: 35%
+              color: '#84cc16'
+            - from: 35%
+              to: 50%
+              color: '#eab308'
+            - from: 50%
+              to: 65%
+              color: '#f59e0b'
+            - from: 65%
+              to: 80%
+              color: '#f97316'
+            - from: 80%
+              to: 100%
+              color: '#ef4444'
+        - type: custom:sensor-bar-card-plus
+          title: Needle + solid_fill
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Sampled Needle
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            fill_style: soft_bands
+            solid_fill: true
+            needle: true
+            segments:
+            - from: 0%
+              to: 30%
+              color: '#22c55e'
+            - from: 30%
+              to: 60%
+              color: '#facc15'
+            - from: 60%
+              to: 85%
+              color: '#f97316'
+            - from: 85%
+              to: 100%
+              color: '#ef4444'
+      - type: vertical-stack
+        cards:
+        - type: custom:sensor-bar-card-plus
+          title: Needle Dense Telemetry A
+          entities:
+          - entity: sensor.sbcp_stress_01
+            name: Grid Import
+          - entity: sensor.sbcp_stress_02
+            name: Battery Flow
+          - entity: sensor.sbcp_stress_03
+            name: Solar Output
+          - entity: sensor.sbcp_stress_04
+            name: EV Charging
+          - entity: sensor.sbcp_stress_05
+            name: Heat Pump
+          - entity: sensor.sbcp_stress_06
+            name: Data Rack
+          layout:
+            label:
+              position: left
+              width: 150
+            height: 24
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            fill_style: gradient
+            needle:
+              show: true
+              color: '#ffffff'
+            gradient_stops:
+            - pos: 0
+              color: '#0f172a'
+            - pos: 18
+              color: '#1d4ed8'
+            - pos: 42
+              color: '#06b6d4'
+            - pos: 68
+              color: '#8b5cf6'
+            - pos: 100
+              color: '#ec4899'
   - type: grid
-    columns: 2
-    square: false
     cards:
-    - type: custom:sensor-bar-card-plus
-      title: Bipolar Needle crossing Peak and Floor — -100..100 W
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Positive / negative current
-      scale:
-        min:
-          fixed: -100
-        max:
-          fixed: 100
-      target:
-        at:
-          fixed: 0
-          label:
-            show: true
-      peak:
-        enabled: true
-        reset: never
-      floor:
-        enabled: true
-        reset: never
-      layout:
-        label:
-          position: inside
-      bar:
-        fill_style: gradient
-        needle:
-          show: true
-          color: '#FDE047'
-        gradient_stops:
-        - pos: 0
-          color: '#DC2626'
-        - pos: 50
-          color: '#334155'
-        - pos: 100
-          color: '#16A34A'
-    - type: custom:sensor-bar-card-plus
-      title: Grid exchange Needle — -10..10 kW
-      entities:
-      - entity: sensor.sbcp_hero_shot_grid
-        name: Grid import / export
-      scale:
-        min:
-          fixed: -10
-        max:
-          fixed: 10
-      formatting:
-        decimal: 1
-        unit: kW
-      target:
-        at:
-          fixed: 0
-        label:
-          show: true
-      markers:
-      - at: 35%
-        lane: above
-        shape: triangle
-        color: '#F59E0B'
-      - at: 72%
-        lane: below
-        shape: chevron
-        color: '#38BDF8'
-      layout:
-        label:
-          position: above
-      bar:
-        fill_style: gradient
-        needle:
-          show: true
-          color: '#F8FAFC'
-        gradient_stops:
-        - pos: 0
-          color: '#1D4ED8'
-        - pos: 50
-          color: '#0F766E'
-        - pos: 100
-          color: '#F59E0B'
+    - type: vertical-stack
+      cards:
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Marker Interactions
+        - type: custom:sensor-bar-card-plus
+          title: Needle + Target
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Needle Over Target
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
+            label:
+              show: true
+          bar:
+            fill_style: solid
+            color: '#2563eb'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle + Peak
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Needle Over Peak
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          peak:
+            enabled: true
+          bar:
+            fill_style: solid
+            color: '#0f766e'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle + Target + Peak
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: All Three
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
+            label:
+              show: true
+          peak:
+            enabled: true
+          bar:
+            fill_style: solid
+            color: '#7c3aed'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle Exactly Equal to Target
+          entities:
+          - entity: sensor.sbcp_playground_target
+            name: Same Value
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
+            label:
+              show: true
+          bar:
+            fill_style: solid
+            color: '#ea580c'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle Exactly Equal to Peak
+          entities:
+          - entity: sensor.sbcp_playground_target
+            name: Peak Match
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          peak:
+            enabled: true
+          bar:
+            fill_style: solid
+            color: '#2563eb'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle Just Below Target
+          entities:
+          - entity: sensor.sbcp_playground_baseline
+            name: Just Below Target
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              fixed: -100
+            max:
+              fixed: 100
+          target:
+            at:
+              fixed: 5
+            label:
+              show: true
+          bar:
+            fill_style: solid
+            color: '#dc2626'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle Just Above Target
+          entities:
+          - entity: sensor.sbcp_playground_baseline
+            name: Just Above Target
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              fixed: -100
+            max:
+              fixed: 100
+          target:
+            at:
+              fixed: -5
+            label:
+              show: true
+          bar:
+            fill_style: solid
+            color: '#ef4444'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle Just Below Peak
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Lower after raising current
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          peak:
+            enabled: true
+          bar:
+            fill_style: solid
+            color: '#0f766e'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle Just Above Peak
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Raise above stored peak
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          peak:
+            enabled: true
+          bar:
+            fill_style: solid
+            color: '#2563eb'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle Between Target and Peak
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Move current between both
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              fixed: 40
+            label:
+              show: true
+          peak:
+            enabled: true
+          bar:
+            fill_style: solid
+            color: '#7c3aed'
+            needle: true
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Above-Target Color
+        - type: custom:sensor-bar-card-plus
+          title: Needle + Above-Target Color
+          entities:
+          - entity: sensor.sbcp_playground_scale_max
+            name: Above Target
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              fixed: 0
+            max:
+              fixed: 100
+          target:
+            at:
+              fixed: 40
+            label:
+              show: true
+            when_exceeded:
+              fill_color: '#dc2626'
+          bar:
+            fill_style: solid
+            color: '#2563eb'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle Below Target With Overlay Configured
+          entities:
+          - entity: sensor.sbcp_playground_baseline
+            name: Below Target
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              fixed: -100
+            max:
+              fixed: 100
+          target:
+            at:
+              fixed: 40
+            label:
+              show: true
+            when_exceeded:
+              fill_color: '#dc2626'
+          bar:
+            fill_style: solid
+            color: '#2563eb'
+            needle: true
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Color Visibility
+        - type: custom:sensor-bar-card-plus
+          title: White Needle on White Fill
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: White on White
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            fill_style: solid
+            color: '#ffffff'
+            needle:
+              show: true
+              color: '#ffffff'
+        - type: custom:sensor-bar-card-plus
+          title: Yellow Needle on White Fill
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: White Fill
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            fill_style: solid
+            color: '#ffffff'
+            needle:
+              show: true
+              color: '#ffff00'
+        - type: custom:sensor-bar-card-plus
+          title: Cyan Needle on Pale Fill
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Pale Fill
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            fill_style: solid
+            color: '#f5f5f5'
+            needle:
+              show: true
+              color: '#00ffff'
+        - type: custom:sensor-bar-card-plus
+          title: Black Needle on Yellow Fill
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Yellow Fill
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            fill_style: solid
+            color: '#facc15'
+            needle:
+              show: true
+              color: '#000000'
+        - type: custom:sensor-bar-card-plus
+          title: Magenta Needle on Cyan Fill
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Cyan Fill
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            fill_style: solid
+            color: '#06b6d4'
+            needle:
+              show: true
+              color: '#ff00cc'
+        - type: custom:sensor-bar-card-plus
+          title: Black Needle on Near-Black Fill
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Near-Black Fill
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            fill_style: solid
+            color: '#111111'
+            needle:
+              show: true
+              color: '#000000'
+        - type: custom:sensor-bar-card-plus
+          title: Greyscale Bands With Black Needle
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Greyscale Bands
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            fill_style: bands
+            needle:
+              show: true
+              color: '#000000'
+            segments:
+            - from: 0%
+              to: 22%
+              color: '#111111'
+            - from: 22%
+              to: 45%
+              color: '#4b5563'
+            - from: 45%
+              to: 72%
+              color: '#9ca3af'
+            - from: 72%
+              to: 100%
+              color: '#e5e7eb'
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Label Positions
+        - type: custom:sensor-bar-card-plus
+          title: Needle with label_position left
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Left Label
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
+          bar:
+            fill_style: solid
+            color: '#2563eb'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle with label_position above
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Above Label
+          layout:
+            label:
+              position: above
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
+          bar:
+            fill_style: solid
+            color: '#0f766e'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle with label_position inside
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Inside Label
+          layout:
+            label:
+              position: inside
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
+          bar:
+            fill_style: solid
+            color: '#7c3aed'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Needle with label_position off
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Off Label
+          layout:
+            label:
+              position: "off"
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
+          bar:
+            fill_style: solid
+            color: '#ea580c'
+            needle: true
+  - type: grid
+    cards:
+    - type: vertical-stack
+      cards:
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Inside Label Interactions
+        - type: custom:sensor-bar-card-plus
+          title: Inside label + needle
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Inside Needle
+          layout:
+            label:
+              position: inside
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          bar:
+            fill_style: solid
+            color: '#2563eb'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Inside label + needle + target
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Inside Needle Target
+          layout:
+            label:
+              position: inside
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
+            label:
+              show: true
+          bar:
+            fill_style: solid
+            color: '#0f766e'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Inside label + needle + peak
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Inside Needle Peak
+          layout:
+            label:
+              position: inside
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          peak:
+            enabled: true
+          bar:
+            fill_style: solid
+            color: '#7c3aed'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Inside label + needle + target + peak
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Inside All Three
+          layout:
+            label:
+              position: inside
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
+            label:
+              show: true
+          peak:
+            enabled: true
+          bar:
+            fill_style: solid
+            color: '#ea580c'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Inside label + needle at target
+          entities:
+          - entity: sensor.sbcp_playground_target
+            name: Inside Same Value
+          layout:
+            label:
+              position: inside
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
+            label:
+              show: true
+          bar:
+            fill_style: solid
+            color: '#dc2626'
+            needle: true
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Height And Density
+        - type: custom:sensor-bar-card-plus
+          title: Normal Height Needle + Target + Peak
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: All Three
+          layout:
+            label:
+              position: left
+              width: 160
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
+            label:
+              show: true
+          peak:
+            enabled: true
+          bar:
+            fill_style: solid
+            color: '#7c3aed'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Height 24 Needle + Target + Peak
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Height 24
+          layout:
+            label:
+              position: left
+              width: 160
+            height: 24
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
+            label:
+              show: true
+          peak:
+            enabled: true
+          bar:
+            fill_style: solid
+            color: '#2563eb'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Height 16 Needle + Target + Peak
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Height 16
+          layout:
+            label:
+              position: left
+              width: 160
+            height: 16
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
+            label:
+              show: true
+          peak:
+            enabled: true
+          bar:
+            fill_style: solid
+            color: '#ea580c'
+            needle: true
+        - type: custom:sensor-bar-card-plus
+          title: Height 12 Configured Needle + Target + Peak
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Height 12 Clamp
+          layout:
+            label:
+              position: left
+              width: 160
+            height: 12
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
+            label:
+              show: true
+          peak:
+            enabled: true
+          bar:
+            fill_style: solid
+            color: '#dc2626'
+            needle: true
+        - type: horizontal-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: H24 A
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: A
+            layout:
+              label:
+                position: left
+                width: 96
+              height: 24
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            peak:
+              enabled: true
+            bar:
+              fill_style: solid
+              color: '#2563eb'
+              needle: true
+          - type: custom:sensor-bar-card-plus
+            title: H24 B
+            entities:
+            - entity: sensor.sbcp_playground_target
+              name: B
+            layout:
+              label:
+                position: left
+                width: 96
+              height: 24
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            peak:
+              enabled: true
+            bar:
+              fill_style: solid
+              color: '#0f766e'
+              needle: true
+          - type: custom:sensor-bar-card-plus
+            title: H24 C
+            entities:
+            - entity: sensor.sbcp_playground_baseline
+              name: C
+            layout:
+              label:
+                position: left
+                width: 96
+              height: 24
+            scale:
+              min:
+                fixed: -100
+              max:
+                fixed: 100
+            target:
+              at:
+                fixed: 5
+            peak:
+              enabled: true
+            bar:
+              fill_style: solid
+              color: '#7c3aed'
+              needle: true
+          - type: custom:sensor-bar-card-plus
+            title: H24 D
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: D
+            layout:
+              label:
+                position: left
+                width: 96
+              height: 24
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            peak:
+              enabled: true
+            bar:
+              fill_style: solid
+              color: '#ea580c'
+              needle: true
+        - type: horizontal-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: H16 A
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: A
+            layout:
+              label:
+                position: left
+                width: 96
+              height: 16
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            peak:
+              enabled: true
+            bar:
+              fill_style: solid
+              color: '#2563eb'
+              needle: true
+          - type: custom:sensor-bar-card-plus
+            title: H16 B
+            entities:
+            - entity: sensor.sbcp_playground_target
+              name: B
+            layout:
+              label:
+                position: left
+                width: 96
+              height: 16
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            peak:
+              enabled: true
+            bar:
+              fill_style: solid
+              color: '#0f766e'
+              needle: true
+          - type: custom:sensor-bar-card-plus
+            title: H16 C
+            entities:
+            - entity: sensor.sbcp_playground_baseline
+              name: C
+            layout:
+              label:
+                position: left
+                width: 96
+              height: 16
+            scale:
+              min:
+                fixed: -100
+              max:
+                fixed: 100
+            target:
+              at:
+                fixed: 5
+            peak:
+              enabled: true
+            bar:
+              fill_style: solid
+              color: '#7c3aed'
+              needle: true
+          - type: custom:sensor-bar-card-plus
+            title: H16 D
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: D
+            layout:
+              label:
+                position: left
+                width: 96
+              height: 16
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+            peak:
+              enabled: true
+            bar:
+              fill_style: solid
+              color: '#ea580c'
+              needle: true
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Advanced marker integration — Needle
+
+            The existing Wave Driver is intentionally reused. For the uncluttered motion test, set its min/max to 0/100, choose `current_value` and a 6–10 second period, then enable it: the Needle travels across stationary marker positions. The dense seven-marker card below combines Needle, Target, Peak, Floor, and two generic references in each lane; its Peak/Floor track the changing current sample. Watch the Needle approach, cross, coincide with, and leave the fixed references. Hover individual glyphs during motion to confirm the corresponding label still promotes independently. In the independent-source card, choose `target_value` to animate the dynamic generic marker while current/Needle remains still; switch back to `current_value` to watch it cross the marker. For the bipolar card, use wave limits -100/100 to watch current cross the stored Peak and Floor. The exact-coincidence card deliberately overlays the Needle, Target, and generic glyph. Turn the Wave Driver off after the check.
+        - type: entities
+          title: Needle / marker motion controls
+          show_header_toggle: false
+          entities:
+          - entity: input_boolean.sbcp_wave_enabled
+            name: Wave Driver
+          - entity: input_select.sbcp_wave_target
+            name: Animate current, Target, or baseline
+          - entity: input_select.sbcp_waveform
+            name: Waveform
+          - entity: input_number.sbcp_wave_period
+            name: Wave period
+          - entity: input_number.sbcp_min_value
+            name: Wave minimum
+          - entity: input_number.sbcp_max_value
+            name: Wave maximum
+          - entity: input_number.sbcp_current_value
+            name: Current / Needle source
+          - entity: input_number.sbcp_target_value
+            name: Dynamic marker source
+        - type: vertical-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Moving Needle across stationary markers — 0..100 W
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Animated current through references
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            target:
+              at:
+                fixed: 50
+              color: '#F8FAFC'
+            markers:
+            - at: 22%
+              lane: above
+              shape: diamond
+              color: '#2563EB'
+            - at: 76%
+              lane: below
+              shape: pin
+              color: '#F59E0B'
+            bar:
+              fill_style: gradient
+              needle:
+                show: true
+                color: '#F8FAFC'
+              gradient_stops:
+              - pos: 0
+                color: '#0F172A'
+              - pos: 100
+                color: '#0F766E'
+          - type: custom:sensor-bar-card-plus
+            title: Needle and independently moving dynamic marker
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Current stays independent
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            markers:
+            - at:
+                entity: sensor.sbcp_playground_target
+                fixed: 65
+              lane: above
+              shape: arrow
+              color: '#DC2626'
+              label:
+                show: true
+            - at: 28%
+              lane: below
+              shape: circle
+              color: '#F8FAFC'
+            bar:
+              fill_style: solid
+              color: '#0F766E'
+              needle:
+                show: true
+                color: '#F8FAFC'
+          - type: custom:sensor-bar-card-plus
+            title: Seven markers + moving Needle — dense coexistence
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Peak / Floor evolve with current
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            target:
+              at:
+                fixed: 50
+              color: '#F8FAFC'
+              label:
+                show: true
+                decimal: 0
+            peak:
+              enabled: true
+              reset: never
+              label:
+                show: true
+            floor:
+              enabled: true
+              reset: never
+              label:
+                show: true
+            markers:
+            - at: 24%
+              lane: above
+              shape: diamond
+              color: '#38BDF8'
+              label:
+                show: true
+            - at: 78%
+              lane: above
+              shape: pin
+              direction: outward
+              color: '#F59E0B'
+              label:
+                show: true
+            - at: 35%
+              lane: below
+              shape: circle
+              color: '#DC2626'
+              label:
+                show: true
+            - at: 68%
+              lane: below
+              shape: chevron
+              direction: outward
+              color: '#16A34A'
+              label:
+                show: true
+            bar:
+              fill_style: bands
+              segments:
+              - from: 0%
+                to: 45%
+                color: '#1D4ED8'
+              - from: 45%
+                to: 100%
+                color: '#0F766E'
+              needle:
+                show: true
+                color: '#FDE047'
+          - type: custom:sensor-bar-card-plus
+            title: Coincident Needle, Target, and generic glyph
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Exact shared source position
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            target:
+              at:
+                entity: sensor.sbcp_playground_sensor
+              color: '#F59E0B'
+              label:
+                show: true
+            markers:
+            - at:
+                entity: sensor.sbcp_playground_sensor
+              lane: below
+              shape: circle
+              color: '#DC2626'
+              label:
+                show: true
+            bar:
+              fill_style: solid
+              color: '#111827'
+              needle:
+                show: true
+                color: '#F8FAFC'
+          - type: custom:sensor-bar-card-plus
+            title: Bipolar Needle crossing Peak and Floor — -100..100 W
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Positive / negative current
+            scale:
+              min:
+                fixed: -100
+              max:
+                fixed: 100
+            target:
+              at:
+                fixed: 0
+                label:
+                  show: true
+            peak:
+              enabled: true
+              reset: never
+            floor:
+              enabled: true
+              reset: never
+            layout:
+              label:
+                position: inside
+            bar:
+              fill_style: gradient
+              needle:
+                show: true
+                color: '#FDE047'
+              gradient_stops:
+              - pos: 0
+                color: '#DC2626'
+              - pos: 50
+                color: '#334155'
+              - pos: 100
+                color: '#16A34A'
+          - type: custom:sensor-bar-card-plus
+            title: Grid exchange Needle — -10..10 kW
+            entities:
+            - entity: sensor.sbcp_hero_shot_grid
+              name: Grid import / export
+            scale:
+              min:
+                fixed: -10
+              max:
+                fixed: 10
+            formatting:
+              decimal: 1
+              unit: kW
+            target:
+              at:
+                fixed: 0
+              label:
+                show: true
+            markers:
+            - at: 35%
+              lane: above
+              shape: triangle
+              color: '#F59E0B'
+            - at: 72%
+              lane: below
+              shape: chevron
+              color: '#38BDF8'
+            layout:
+              label:
+                position: above
+            bar:
+              fill_style: gradient
+              needle:
+                show: true
+                color: '#F8FAFC'
+              gradient_stops:
+              - pos: 0
+                color: '#1D4ED8'
+              - pos: 50
+                color: '#0F766E'
+              - pos: 100
+                color: '#F59E0B'
 - title: Baseline Matrix
   path: sensor-bar-card-plus-baseline-matrix
   icon: mdi:vector-line
