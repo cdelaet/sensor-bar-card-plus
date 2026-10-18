@@ -6875,626 +6875,652 @@ views:
   path: sensor-bar-card-plus-edge-cases
   icon: mdi:alert-outline
   badges: []
-  cards:
-  - type: markdown
-    content: |
-      ## Edge Cases
-      Reproducible odd inputs and boundary conditions without cluttering the main demo view.
+  type: sections
+  max_columns: 3
+  dense_section_placement: false
+  sections:
   - type: grid
-    columns: 2
-    square: false
+    column_span: 3
     cards:
-    - type: custom:sensor-bar-card-plus
-      title: Unavailable and unknown states
-      entities:
-      - entity: sensor.sbcp_playground_unavailable
-      - entity: sensor.sbcp_playground_unknown
-      layout:
-        label:
-          position: left
-          width: 190
-      bar:
-        fill_style: bands
-    - type: custom:sensor-bar-card-plus
-      title: Negative values
-      entities:
-      - entity: sensor.sbcp_playground_negative
-      layout:
-        label:
-          position: left
-          width: 190
-      scale:
-        min:
-          fixed: -100
-        max:
-          fixed: 100
-      target:
-        at:
-          fixed: 0
-        label:
-          show: true
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Custom text state passthrough
-      entities:
-      - entity: sensor.sbcp_playground_text_state
-        name: Text from helper
-      layout:
-        label:
-          position: left
-          width: 190
-      bar:
-        color: '#9333ea'
-        fill_style: solid
-    - type: custom:sensor-bar-card-plus
-      title: target > max
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Raise target above 50
-      layout:
-        label:
-          position: left
-          width: 190
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 50
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        label:
-          show: true
-      bar:
-        color: '#0f766e'
-        fill_style: solid
-    - type: custom:sensor-bar-card-plus
-      title: target < min
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Lower target below 50
-      layout:
-        label:
-          position: left
-          width: 190
-      scale:
-        min:
-          fixed: 50
-        max:
-          fixed: 120
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        label:
-          show: true
-      bar:
-        color: '#0f766e'
-        fill_style: solid
-    - type: custom:sensor-bar-card-plus
-      title: min == max
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-      layout:
-        label:
-          position: left
-          width: 190
-      scale:
-        min:
-          fixed: 50
-        max:
-          fixed: 50
-      target:
-        at:
-          fixed: 50
-        label:
-          show: true
-      baseline:
-        at:
-          fixed: 50
-      bar:
-        fill_style: bands
-    - type: custom:sensor-bar-card-plus
-      title: baseline < min
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Clamped low baseline
-      layout:
-        label:
-          position: left
-          width: 190
-      scale:
-        min:
-          fixed: 20
-        max:
-          fixed: 100
-      baseline:
-        at:
-          fixed: -40
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: baseline > max
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Clamped high baseline
-      layout:
-        label:
-          position: left
-          width: 190
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 80
-      baseline:
-        at:
-          fixed: 140
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Non-numeric with baseline
-      entities:
-      - entity: sensor.sbcp_playground_text_state
-        name: Text state baseline
-      layout:
-        label:
-          position: left
-          width: 190
-      scale:
-        min:
-          fixed: -100
-        max:
-          fixed: 100
-      baseline:
-        at:
-          fixed: 0
-      bar:
-        color: '#9333ea'
-        fill_style: solid
-    - type: custom:sensor-bar-card-plus
-      title: Value below min with baseline
-      entities:
-      - entity: sensor.sbcp_playground_negative
-        name: Clamp below min
-      layout:
-        label:
-          position: left
-          width: 190
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      baseline:
-        at:
-          fixed: 50
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Value above max with baseline
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Clamp above max
-      layout:
-        label:
-          position: left
-          width: 190
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 20
-      baseline:
-        at:
-          fixed: 10
-      bar:
-        fill_style: gradient
-  - type: markdown
-    content: |
-      ## Responsive Layout Tests
-      Controlled narrow-width checks for `horizontal-stack` and `grid` rendering.
-  - type: horizontal-stack
-    cards:
-    - type: custom:sensor-bar-card-plus
-      title: Narrow A
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-      layout:
-        label:
-          position: above
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        label:
-          show: true
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Narrow B
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-      layout:
-        label:
-          position: "off"
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        label:
-          show: true
-      bar:
-        color: '#2563eb'
-        fill_style: solid
+    - type: vertical-stack
+      cards:
+        - type: markdown
+          content: |
+            ## Edge Cases
+            Reproducible odd inputs and boundary conditions without cluttering the main demo view.
   - type: grid
-    columns: 2
-    square: false
     cards:
-    - type: custom:sensor-bar-card-plus
-      title: Grid rendering A
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-      layout:
-        label:
-          position: above
-      scale:
-        min:
-          entity: sensor.sbcp_playground_scale_min
-        max:
-          entity: sensor.sbcp_playground_scale_max
-      target:
-        at:
-          entity: sensor.sbcp_playground_target
-        label:
-          show: true
-      bar:
-        fill_style: gradient
-    - type: custom:sensor-bar-card-plus
-      title: Grid rendering B
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-      layout:
-        label:
-          position: inside
-        height: 52
-      bar:
-        color: '#0f766e'
-        fill_style: solid
-    - type: custom:sensor-bar-card-plus
-      title: Grid rendering C
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-      layout:
-        label:
-          position: left
-          width: 90
-      bar:
-        fill_style: bands
-  - type: vertical-stack
+    - type: vertical-stack
+      cards:
+      - type: vertical-stack
+        cards:
+        - type: grid
+          columns: 2
+          square: false
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Unavailable and unknown states
+            entities:
+            - entity: sensor.sbcp_playground_unavailable
+            - entity: sensor.sbcp_playground_unknown
+            layout:
+              label:
+                position: left
+                width: 190
+            bar:
+              fill_style: bands
+          - type: custom:sensor-bar-card-plus
+            title: Negative values
+            entities:
+            - entity: sensor.sbcp_playground_negative
+            layout:
+              label:
+                position: left
+                width: 190
+            scale:
+              min:
+                fixed: -100
+              max:
+                fixed: 100
+            target:
+              at:
+                fixed: 0
+              label:
+                show: true
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Custom text state passthrough
+            entities:
+            - entity: sensor.sbcp_playground_text_state
+              name: Text from helper
+            layout:
+              label:
+                position: left
+                width: 190
+            bar:
+              color: '#9333ea'
+              fill_style: solid
+          - type: custom:sensor-bar-card-plus
+            title: target > max
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Raise target above 50
+            layout:
+              label:
+                position: left
+                width: 190
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 50
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              label:
+                show: true
+            bar:
+              color: '#0f766e'
+              fill_style: solid
+          - type: custom:sensor-bar-card-plus
+            title: target < min
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Lower target below 50
+            layout:
+              label:
+                position: left
+                width: 190
+            scale:
+              min:
+                fixed: 50
+              max:
+                fixed: 120
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              label:
+                show: true
+            bar:
+              color: '#0f766e'
+              fill_style: solid
+          - type: custom:sensor-bar-card-plus
+            title: min == max
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+            layout:
+              label:
+                position: left
+                width: 190
+            scale:
+              min:
+                fixed: 50
+              max:
+                fixed: 50
+            target:
+              at:
+                fixed: 50
+              label:
+                show: true
+            baseline:
+              at:
+                fixed: 50
+            bar:
+              fill_style: bands
+          - type: custom:sensor-bar-card-plus
+            title: baseline < min
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Clamped low baseline
+            layout:
+              label:
+                position: left
+                width: 190
+            scale:
+              min:
+                fixed: 20
+              max:
+                fixed: 100
+            baseline:
+              at:
+                fixed: -40
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: baseline > max
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Clamped high baseline
+            layout:
+              label:
+                position: left
+                width: 190
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 80
+            baseline:
+              at:
+                fixed: 140
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Non-numeric with baseline
+            entities:
+            - entity: sensor.sbcp_playground_text_state
+              name: Text state baseline
+            layout:
+              label:
+                position: left
+                width: 190
+            scale:
+              min:
+                fixed: -100
+              max:
+                fixed: 100
+            baseline:
+              at:
+                fixed: 0
+            bar:
+              color: '#9333ea'
+              fill_style: solid
+          - type: custom:sensor-bar-card-plus
+            title: Value below min with baseline
+            entities:
+            - entity: sensor.sbcp_playground_negative
+              name: Clamp below min
+            layout:
+              label:
+                position: left
+                width: 190
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            baseline:
+              at:
+                fixed: 50
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Value above max with baseline
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Clamp above max
+            layout:
+              label:
+                position: left
+                width: 190
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 20
+            baseline:
+              at:
+                fixed: 10
+            bar:
+              fill_style: gradient
+  - type: grid
     cards:
-    - type: markdown
-      content: |
-        ## Soft Bands Edge Cases
-        Matching `bands`, `soft_bands`, and `band_gradient` cards for boundaries at the edges and around genuinely narrow center bands.
-    - type: custom:sensor-bar-card-plus
-      title: Bands Narrow At 0%
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      bar:
-        fill_style: bands
-        segments:
-        - from: 0%
-          to: 3%
-          color: '#ef4444'
-        - from: 3%
-          to: 55%
-          color: '#f59e0b'
-        - from: 55%
-          to: 100%
-          color: '#22c55e'
-    - type: custom:sensor-bar-card-plus
-      title: Soft Bands Narrow At 0%
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      bar:
-        fill_style: soft_bands
-        segments:
-        - from: 0%
-          to: 3%
-          color: '#ef4444'
-        - from: 3%
-          to: 55%
-          color: '#f59e0b'
-        - from: 55%
-          to: 100%
-          color: '#22c55e'
-    - type: custom:sensor-bar-card-plus
-      title: Band Gradient Narrow At 0%
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      bar:
-        fill_style: band_gradient
-        segments:
-        - from: 0%
-          to: 3%
-          color: '#ef4444'
-        - from: 3%
-          to: 55%
-          color: '#f59e0b'
-        - from: 55%
-          to: 100%
-          color: '#22c55e'
-    - type: custom:sensor-bar-card-plus
-      title: Bands Narrow Center
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      bar:
-        fill_style: bands
-        segments:
-        - from: 0%
-          to: 45%
-          color: '#0ea5e9'
-        - from: 45%
-          to: 48%
-          color: '#f59e0b'
-        - from: 48%
-          to: 58%
-          color: '#22c55e'
-        - from: 58%
-          to: 100%
-          color: '#2563eb'
-    - type: custom:sensor-bar-card-plus
-      title: Soft Bands Narrow Center
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      bar:
-        fill_style: soft_bands
-        segments:
-        - from: 0%
-          to: 45%
-          color: '#0ea5e9'
-        - from: 45%
-          to: 48%
-          color: '#f59e0b'
-        - from: 48%
-          to: 58%
-          color: '#22c55e'
-        - from: 58%
-          to: 100%
-          color: '#2563eb'
-    - type: custom:sensor-bar-card-plus
-      title: Band Gradient Narrow Center
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      bar:
-        fill_style: band_gradient
-        segments:
-        - from: 0%
-          to: 45%
-          color: '#0ea5e9'
-        - from: 45%
-          to: 48%
-          color: '#f59e0b'
-        - from: 48%
-          to: 58%
-          color: '#22c55e'
-        - from: 58%
-          to: 100%
-          color: '#2563eb'
-    - type: custom:sensor-bar-card-plus
-      title: Bands Consecutive Narrow Center
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      bar:
-        fill_style: bands
-        segments:
-        - from: 0%
-          to: 30%
-          color: '#2563eb'
-        - from: 30%
-          to: 33%
-          color: '#f59e0b'
-        - from: 33%
-          to: 36%
-          color: '#ec4899'
-        - from: 36%
-          to: 46%
-          color: '#22c55e'
-        - from: 46%
-          to: 100%
-          color: '#0ea5e9'
-    - type: custom:sensor-bar-card-plus
-      title: Soft Bands Consecutive Narrow Center
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      bar:
-        fill_style: soft_bands
-        segments:
-        - from: 0%
-          to: 30%
-          color: '#2563eb'
-        - from: 30%
-          to: 33%
-          color: '#f59e0b'
-        - from: 33%
-          to: 36%
-          color: '#ec4899'
-        - from: 36%
-          to: 46%
-          color: '#22c55e'
-        - from: 46%
-          to: 100%
-          color: '#0ea5e9'
-    - type: custom:sensor-bar-card-plus
-      title: Band Gradient Consecutive Narrow Center
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      bar:
-        fill_style: band_gradient
-        segments:
-        - from: 0%
-          to: 30%
-          color: '#2563eb'
-        - from: 30%
-          to: 33%
-          color: '#f59e0b'
-        - from: 33%
-          to: 36%
-          color: '#ec4899'
-        - from: 36%
-          to: 46%
-          color: '#22c55e'
-        - from: 46%
-          to: 100%
-          color: '#0ea5e9'
-    - type: custom:sensor-bar-card-plus
-      title: Bands Narrow At 100%
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      bar:
-        fill_style: bands
-        segments:
-        - from: 0%
-          to: 45%
-          color: '#0ea5e9'
-        - from: 45%
-          to: 97%
-          color: '#22c55e'
-        - from: 97%
-          to: 100%
-          color: '#ef4444'
-    - type: custom:sensor-bar-card-plus
-      title: Soft Bands Narrow At 100%
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      bar:
-        fill_style: soft_bands
-        segments:
-        - from: 0%
-          to: 45%
-          color: '#0ea5e9'
-        - from: 45%
-          to: 97%
-          color: '#22c55e'
-        - from: 97%
-          to: 100%
-          color: '#ef4444'
-    - type: custom:sensor-bar-card-plus
-      title: Band Gradient Narrow At 100%
-      entities:
-      - entity: sensor.sbcp_playground_sensor
-        name: Sensor
-      scale:
-        min:
-          fixed: 0
-        max:
-          fixed: 100
-      bar:
-        fill_style: band_gradient
-        segments:
-        - from: 0%
-          to: 45%
-          color: '#0ea5e9'
-        - from: 45%
-          to: 97%
-          color: '#22c55e'
-        - from: 97%
-          to: 100%
-          color: '#ef4444'
-  - type: custom:sensor-bar-card-plus
-    title: Grid rendering D
-    entities:
-    - entity: sensor.sbcp_playground_sensor
-    layout:
-      label:
-        position: "off"
-    scale:
-      min:
-        entity: sensor.sbcp_playground_scale_min
-      max:
-        entity: sensor.sbcp_playground_scale_max
-    target:
-      at:
-        entity: sensor.sbcp_playground_target
-    peak:
-      enabled: true
-    bar:
-      fill_style: gradient
+    - type: vertical-stack
+      cards:
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## Responsive Layout Tests
+            Controlled narrow-width checks for `horizontal-stack` and `grid` rendering.
+        - type: horizontal-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Narrow A
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+            layout:
+              label:
+                position: above
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              label:
+                show: true
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Narrow B
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+            layout:
+              label:
+                position: "off"
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              label:
+                show: true
+            bar:
+              color: '#2563eb'
+              fill_style: solid
+        - type: grid
+          columns: 2
+          square: false
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: Grid rendering A
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+            layout:
+              label:
+                position: above
+            scale:
+              min:
+                entity: sensor.sbcp_playground_scale_min
+              max:
+                entity: sensor.sbcp_playground_scale_max
+            target:
+              at:
+                entity: sensor.sbcp_playground_target
+              label:
+                show: true
+            bar:
+              fill_style: gradient
+          - type: custom:sensor-bar-card-plus
+            title: Grid rendering B
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+            layout:
+              label:
+                position: inside
+              height: 52
+            bar:
+              color: '#0f766e'
+              fill_style: solid
+          - type: custom:sensor-bar-card-plus
+            title: Grid rendering C
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+            layout:
+              label:
+                position: left
+                width: 90
+            bar:
+              fill_style: bands
+        - type: custom:sensor-bar-card-plus
+          title: Grid rendering D
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+          layout:
+            label:
+              position: "off"
+          scale:
+            min:
+              entity: sensor.sbcp_playground_scale_min
+            max:
+              entity: sensor.sbcp_playground_scale_max
+          target:
+            at:
+              entity: sensor.sbcp_playground_target
+          peak:
+            enabled: true
+          bar:
+            fill_style: gradient
+  - type: grid
+    cards:
+    - type: vertical-stack
+      cards:
+      - type: vertical-stack
+        cards:
+        - type: vertical-stack
+          cards:
+          - type: markdown
+            content: |
+              ## Soft Bands Edge Cases
+              Matching `bands`, `soft_bands`, and `band_gradient` cards for boundaries at the edges and around genuinely narrow center bands.
+          - type: custom:sensor-bar-card-plus
+            title: Bands Narrow At 0%
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            bar:
+              fill_style: bands
+              segments:
+              - from: 0%
+                to: 3%
+                color: '#ef4444'
+              - from: 3%
+                to: 55%
+                color: '#f59e0b'
+              - from: 55%
+                to: 100%
+                color: '#22c55e'
+          - type: custom:sensor-bar-card-plus
+            title: Soft Bands Narrow At 0%
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            bar:
+              fill_style: soft_bands
+              segments:
+              - from: 0%
+                to: 3%
+                color: '#ef4444'
+              - from: 3%
+                to: 55%
+                color: '#f59e0b'
+              - from: 55%
+                to: 100%
+                color: '#22c55e'
+          - type: custom:sensor-bar-card-plus
+            title: Band Gradient Narrow At 0%
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            bar:
+              fill_style: band_gradient
+              segments:
+              - from: 0%
+                to: 3%
+                color: '#ef4444'
+              - from: 3%
+                to: 55%
+                color: '#f59e0b'
+              - from: 55%
+                to: 100%
+                color: '#22c55e'
+          - type: custom:sensor-bar-card-plus
+            title: Bands Narrow Center
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            bar:
+              fill_style: bands
+              segments:
+              - from: 0%
+                to: 45%
+                color: '#0ea5e9'
+              - from: 45%
+                to: 48%
+                color: '#f59e0b'
+              - from: 48%
+                to: 58%
+                color: '#22c55e'
+              - from: 58%
+                to: 100%
+                color: '#2563eb'
+          - type: custom:sensor-bar-card-plus
+            title: Soft Bands Narrow Center
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            bar:
+              fill_style: soft_bands
+              segments:
+              - from: 0%
+                to: 45%
+                color: '#0ea5e9'
+              - from: 45%
+                to: 48%
+                color: '#f59e0b'
+              - from: 48%
+                to: 58%
+                color: '#22c55e'
+              - from: 58%
+                to: 100%
+                color: '#2563eb'
+          - type: custom:sensor-bar-card-plus
+            title: Band Gradient Narrow Center
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            bar:
+              fill_style: band_gradient
+              segments:
+              - from: 0%
+                to: 45%
+                color: '#0ea5e9'
+              - from: 45%
+                to: 48%
+                color: '#f59e0b'
+              - from: 48%
+                to: 58%
+                color: '#22c55e'
+              - from: 58%
+                to: 100%
+                color: '#2563eb'
+          - type: custom:sensor-bar-card-plus
+            title: Bands Consecutive Narrow Center
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            bar:
+              fill_style: bands
+              segments:
+              - from: 0%
+                to: 30%
+                color: '#2563eb'
+              - from: 30%
+                to: 33%
+                color: '#f59e0b'
+              - from: 33%
+                to: 36%
+                color: '#ec4899'
+              - from: 36%
+                to: 46%
+                color: '#22c55e'
+              - from: 46%
+                to: 100%
+                color: '#0ea5e9'
+          - type: custom:sensor-bar-card-plus
+            title: Soft Bands Consecutive Narrow Center
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            bar:
+              fill_style: soft_bands
+              segments:
+              - from: 0%
+                to: 30%
+                color: '#2563eb'
+              - from: 30%
+                to: 33%
+                color: '#f59e0b'
+              - from: 33%
+                to: 36%
+                color: '#ec4899'
+              - from: 36%
+                to: 46%
+                color: '#22c55e'
+              - from: 46%
+                to: 100%
+                color: '#0ea5e9'
+          - type: custom:sensor-bar-card-plus
+            title: Band Gradient Consecutive Narrow Center
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            bar:
+              fill_style: band_gradient
+              segments:
+              - from: 0%
+                to: 30%
+                color: '#2563eb'
+              - from: 30%
+                to: 33%
+                color: '#f59e0b'
+              - from: 33%
+                to: 36%
+                color: '#ec4899'
+              - from: 36%
+                to: 46%
+                color: '#22c55e'
+              - from: 46%
+                to: 100%
+                color: '#0ea5e9'
+          - type: custom:sensor-bar-card-plus
+            title: Bands Narrow At 100%
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            bar:
+              fill_style: bands
+              segments:
+              - from: 0%
+                to: 45%
+                color: '#0ea5e9'
+              - from: 45%
+                to: 97%
+                color: '#22c55e'
+              - from: 97%
+                to: 100%
+                color: '#ef4444'
+          - type: custom:sensor-bar-card-plus
+            title: Soft Bands Narrow At 100%
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            bar:
+              fill_style: soft_bands
+              segments:
+              - from: 0%
+                to: 45%
+                color: '#0ea5e9'
+              - from: 45%
+                to: 97%
+                color: '#22c55e'
+              - from: 97%
+                to: 100%
+                color: '#ef4444'
+          - type: custom:sensor-bar-card-plus
+            title: Band Gradient Narrow At 100%
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Sensor
+            scale:
+              min:
+                fixed: 0
+              max:
+                fixed: 100
+            bar:
+              fill_style: band_gradient
+              segments:
+              - from: 0%
+                to: 45%
+                color: '#0ea5e9'
+              - from: 45%
+                to: 97%
+                color: '#22c55e'
+              - from: 97%
+                to: 100%
+                color: '#ef4444'
 - title: Stress Tests
   path: sensor-bar-card-plus-stress-tests
   icon: mdi:view-dashboard-outline
