@@ -9884,3 +9884,1039 @@ views:
         name: Operating mode
       - entity: input_select.sbcp_marker_label_relay
         name: Relay state
+- title: Direction Test
+  path: sensor-bar-card-plus-direction-test
+  icon: mdi:axis-arrow
+  badges: []
+  type: sections
+  max_columns: 3
+  dense_section_placement: false
+  sections:
+  - type: grid
+    column_span: 3
+    cards:
+    - type: vertical-stack
+      cards:
+        - type: markdown
+          content: |
+            # Sensor Bar Card Plus — Direction Test
+            Manual regression view for `scale.direction` and `bar.direction`. Load `examples/packages/sensor_bar_card_plus_playground_package.yaml` first. Ordinary test cards are kept full width within their dashboard column; only the explicitly labelled Narrow section pairs cards to constrain their width.
+        - type: entities
+          title: Shared Direction Test Controls
+          show_header_toggle: false
+          entities:
+          - entity: input_number.sbcp_current_value
+            name: Current value
+          - entity: input_number.sbcp_scale_min_value
+            name: Scale minimum
+          - entity: input_number.sbcp_scale_max_value
+            name: Scale maximum
+          - entity: input_number.sbcp_baseline_value
+            name: Baseline
+          - entity: input_number.sbcp_target_value
+            name: Target
+          - entity: input_number.sbcp_marker_primary_value
+            name: Reference A
+          - entity: input_number.sbcp_marker_target_value
+            name: Reference B
+          - entity: input_boolean.sbcp_wave_enabled
+            name: Wave Driver
+          - entity: input_select.sbcp_wave_target
+            name: Animate current, Target, or Baseline
+          - entity: input_select.sbcp_waveform
+            name: Waveform
+          - entity: input_number.sbcp_wave_period
+            name: Wave period
+          - entity: input_number.sbcp_min_value
+            name: Wave minimum
+          - entity: input_number.sbcp_max_value
+            name: Wave maximum
+
+  - type: grid
+    cards:
+    - type: vertical-stack
+      cards:
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## 1. Direction Fundamentals
+            Same live value, 0–100 Scale, and asymmetric Paint on every card. Change Current value to compare projection and reveal independently.
+        - type: custom:sensor-bar-card-plus
+          title: SCALE NORMAL / BAR NORMAL
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Same live value
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: normal
+          bar:
+            direction: normal
+            fill_style: gradient
+            gradient_stops:
+            - { pos: 0, color: '#10b981' }
+            - { pos: 35, color: '#facc15' }
+            - { pos: 100, color: '#ef4444' }
+        - type: custom:sensor-bar-card-plus
+          title: SCALE REVERSE / BAR NORMAL
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Same live value
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          bar:
+            direction: normal
+            fill_style: gradient
+            gradient_stops:
+            - { pos: 0, color: '#10b981' }
+            - { pos: 35, color: '#facc15' }
+            - { pos: 100, color: '#ef4444' }
+        - type: custom:sensor-bar-card-plus
+          title: SCALE NORMAL / BAR REVERSE
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Same live value
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: normal
+          bar:
+            direction: reverse
+            fill_style: gradient
+            gradient_stops:
+            - { pos: 0, color: '#10b981' }
+            - { pos: 35, color: '#facc15' }
+            - { pos: 100, color: '#ef4444' }
+        - type: custom:sensor-bar-card-plus
+          title: SCALE REVERSE / BAR REVERSE
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Same live value
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          bar:
+            direction: reverse
+            fill_style: gradient
+            gradient_stops:
+            - { pos: 0, color: '#10b981' }
+            - { pos: 35, color: '#facc15' }
+            - { pos: 100, color: '#ef4444' }
+
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## 2. Fill Styles and Paint Projection
+            Compare each style on a reversed Scale. Paint remains attached to semantic min-to-max coordinates; Bar direction changes reveal origin only. Segment overlap is intentional in the overlap regression card.
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE SOLID
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Solid semantic color
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          bar:
+            fill_style: solid
+            color: '#16a34a'
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE GRADIENT / PERCENT STOPS
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: 0%, 35%, 100% stop order stays semantic
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          bar:
+            fill_style: gradient
+            gradient_stops:
+            - { pos: 0, color: '#047857' }
+            - { pos: 35, color: '#facc15' }
+            - { pos: 100, color: '#dc2626' }
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE BANDS / PERCENT SEGMENTS
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Semantic 0–35–70–100%
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          bar:
+            fill_style: bands
+            segments:
+            - { from: 0%, to: 35%, color: '#16a34a' }
+            - { from: 35%, to: 70%, color: '#facc15' }
+            - { from: 70%, to: 100%, color: '#dc2626' }
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE SOFT BANDS
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Semantic soft bands
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          bar:
+            fill_style: soft_bands
+            segments:
+            - { from: 0%, to: 35%, color: '#16a34a' }
+            - { from: 35%, to: 70%, color: '#facc15' }
+            - { from: 70%, to: 100%, color: '#dc2626' }
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE BAND GRADIENT / NUMERIC SEGMENTS
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Numeric values on 0–100 Scale
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          bar:
+            fill_style: band_gradient
+            segments:
+            - { from: 0, to: 35, color: '#16a34a' }
+            - { from: 35, to: 70, color: '#facc15' }
+            - { from: 70, to: 100, color: '#dc2626' }
+        - type: custom:sensor-bar-card-plus
+          title: BAR REVERSE ONLY — PAINT ORDER STAYS PUT
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Normal Scale, reverse reveal
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: normal
+          bar:
+            direction: reverse
+            fill_style: bands
+            segments:
+            - { from: 0%, to: 50%, color: '#16a34a' }
+            - { from: 50%, to: 100%, color: '#dc2626' }
+        - type: custom:sensor-bar-card-plus
+          title: PAINT PROJECTION — NORMAL SCALE
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Green low / red high
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: normal
+          bar:
+            direction: reverse
+            fill_style: bands
+            segments:
+            - { from: 0%, to: 50%, color: '#16a34a' }
+            - { from: 50%, to: 100%, color: '#dc2626' }
+        - type: custom:sensor-bar-card-plus
+          title: PAINT PROJECTION — REVERSE SCALE
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Red low / green high physically
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          bar:
+            direction: reverse
+            fill_style: bands
+            segments:
+            - { from: 0%, to: 50%, color: '#16a34a' }
+            - { from: 50%, to: 100%, color: '#dc2626' }
+        - type: custom:sensor-bar-card-plus
+          title: OVERLAPPING SEGMENTS — REVERSE PROJECTION
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Later overlapping range keeps semantic precedence
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          bar:
+            fill_style: bands
+            segments:
+            - { from: 0%, to: 70%, color: '#16a34a' }
+            - { from: 30%, to: 100%, color: '#dc2626' }
+        - type: custom:sensor-bar-card-plus
+          title: EXTERIOR NUMERIC SEGMENTS CLAMP TO SCALE
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Paint boundaries extend beyond 0–100
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          bar:
+            fill_style: bands
+            segments:
+            - { from: -20, to: 30, color: '#16a34a' }
+            - { from: 70, to: 120, color: '#dc2626' }
+
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## 3. Baseline Direction
+            Baseline is a semantic reveal origin. With a resolved Baseline, both Bar directions produce the same interval between Baseline and current value. Move Current and Baseline controls to cross the origin.
+        - type: custom:sensor-bar-card-plus
+          title: BASELINE BELOW VALUE — REVERSE SCALE
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Dynamic value / fixed Baseline 25
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          baseline:
+            at: { fixed: 25 }
+            above: { color: '#22c55e' }
+            below: { color: '#ef4444' }
+          bar:
+            direction: normal
+            fill_style: gradient
+        - type: custom:sensor-bar-card-plus
+          title: BASELINE ABOVE VALUE — REVERSE SCALE
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Dynamic value / fixed Baseline 75
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          baseline:
+            at: { fixed: 75 }
+            above: { color: '#22c55e' }
+            below: { color: '#ef4444' }
+          bar:
+            direction: reverse
+            fill_style: gradient
+        - type: custom:sensor-bar-card-plus
+          title: BASELINE EQUALS VALUE — DYNAMIC COINCIDENCE
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Value is also Baseline source
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          baseline:
+            at: { entity: sensor.sbcp_playground_sensor }
+          bar:
+            fill_style: bands
+            segments:
+            - { from: 0%, to: 50%, color: '#16a34a' }
+            - { from: 50%, to: 100%, color: '#dc2626' }
+        - type: custom:sensor-bar-card-plus
+          title: ACTIVE BASELINE / BAR NORMAL
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Shared dynamic Baseline
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          baseline:
+            at: { entity: sensor.sbcp_playground_baseline }
+          bar:
+            direction: normal
+            fill_style: gradient
+        - type: custom:sensor-bar-card-plus
+          title: ACTIVE BASELINE / BAR REVERSE — SAME GEOMETRY
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Same value and Baseline sources
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          baseline:
+            at: { entity: sensor.sbcp_playground_baseline }
+          bar:
+            direction: reverse
+            fill_style: gradient
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE SCALE / BASELINE AT SEMANTIC MAX
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Semantic max Baseline projects left
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          baseline:
+            at: { fixed: 100 }
+          bar:
+            direction: normal
+            fill_style: gradient
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE SCALE / NO BASELINE / BAR ORIGIN RIGHT
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Physical right origin, not semantic max
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          bar:
+            direction: reverse
+            fill_style: gradient
+
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## 4. Asymmetric / Bipolar Scale
+            Set Scale minimum to -2000 and maximum to +3000 with the shared controls. Move Current through zero; semantic zero is not assumed to be a physical endpoint or midpoint.
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE BIPOLAR + BASELINE + TARGET
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Dynamic asymmetric power
+          scale:
+            min: { entity: sensor.sbcp_playground_scale_min }
+            max: { entity: sensor.sbcp_playground_scale_max }
+            direction: reverse
+          baseline:
+            at: { entity: sensor.sbcp_playground_baseline }
+            above: { color: '#22c55e' }
+            below: { color: '#3b82f6' }
+          target:
+            at: { entity: sensor.sbcp_playground_target }
+            label: { show: true, text: Target }
+          markers:
+          - at: { entity: sensor.sbcp_marker_primary, fixed: 140 }
+            lane: above
+            shape: diamond
+            color: '#f97316'
+            label: { show: true, text: Ref A }
+          - at: { entity: sensor.sbcp_marker_target, fixed: 65 }
+            lane: below
+            shape: arrow
+            color: '#7c3aed'
+            label: { show: true, text: Ref B }
+          bar:
+            fill_style: band_gradient
+            segments:
+            - { from: -2000, to: 0, color: '#2563eb' }
+            - { from: 0, to: 3000, color: '#22c55e' }
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE BIPOLAR / NUMERIC PAINT + ALL MARKERS
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Move through zero and references
+          scale:
+            min: { entity: sensor.sbcp_playground_scale_min }
+            max: { entity: sensor.sbcp_playground_scale_max }
+            direction: reverse
+          target:
+            at: { entity: sensor.sbcp_playground_target }
+            label: { show: true, text: Limit }
+          peak: { enabled: true, color: '#a855f7', label: { show: true, text: Peak } }
+          floor: { enabled: true, color: '#06b6d4', label: { show: true, text: Floor } }
+          markers:
+          - at: { entity: sensor.sbcp_marker_primary, fixed: 140 }
+            lane: above
+            shape: diamond
+            color: '#f97316'
+            label: { show: true, text: Ref A }
+          - at: { entity: sensor.sbcp_marker_target, fixed: 65 }
+            lane: below
+            shape: pin
+            color: '#7c3aed'
+            label: { show: true, text: Ref B }
+          bar:
+            fill_style: bands
+            segments:
+            - { from: -2000, to: 0, color: '#2563eb' }
+            - { from: 0, to: 3000, color: '#f97316' }
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE BIPOLAR / VALUE NEAR ZERO
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Set Current near 0
+          scale:
+            min: { fixed: -2000 }
+            max: { fixed: 3000 }
+            direction: reverse
+          baseline: { at: { fixed: 0 } }
+          target:
+            at: { fixed: 1800 }
+            label: { show: true }
+          markers:
+          - { at: -1000, lane: below, shape: triangle, color: '#3b82f6', label: { show: true, text: Export } }
+          - { at: 2400, lane: above, shape: arrow, color: '#f97316', label: { show: true, text: Import } }
+          bar:
+            direction: reverse
+            fill_style: gradient
+            gradient_stops:
+            - { pos: 0, color: '#1d4ed8' }
+            - { pos: 100, color: '#dc2626' }
+
+  - type: grid
+    cards:
+    - type: vertical-stack
+      cards:
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## 5. Markers under Reverse Scale
+            Marker values remain semantic. Move the shared Target and reference controls; Peak and Floor follow observed values in each card instance.
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE SCALE / TARGET
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Dynamic Target comparison
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          target:
+            at: { entity: sensor.sbcp_playground_target }
+            label: { show: true, text: Dynamic Target }
+          bar:
+            fill_style: gradient
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE SCALE / PEAK + FLOOR
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Move Current to evolve extrema
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          peak: { enabled: true, color: '#9333ea', label: { show: true } }
+          floor: { enabled: true, color: '#0891b2', label: { show: true } }
+          bar:
+            fill_style: bands
+            segments:
+            - { from: 0%, to: 50%, color: '#16a34a' }
+            - { from: 50%, to: 100%, color: '#dc2626' }
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE SCALE / DYNAMIC REFERENCES
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Two independently adjustable markers
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 300 }
+            direction: reverse
+          markers:
+          - at: { entity: sensor.sbcp_marker_primary, fixed: 140 }
+            lane: above
+            shape: diamond
+            color: '#f97316'
+            label: { show: true, text: Reference A }
+          - at: { entity: sensor.sbcp_marker_target, fixed: 65 }
+            lane: below
+            shape: arrow
+            color: '#7c3aed'
+            label: { show: true, text: Reference B }
+          bar:
+            fill_style: gradient
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE SCALE / DENSE LABEL COLLISION
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Closely spaced semantic references
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          target:
+            at: { fixed: 52 }
+            label: { show: true, text: Target 52 }
+          peak: { enabled: true, label: { show: true, text: Peak } }
+          floor: { enabled: true, label: { show: true, text: Floor } }
+          markers:
+          - { at: 48, lane: above, shape: diamond, color: '#f97316', label: { show: true, text: Ref 48 } }
+          - { at: 55, lane: above, shape: pin, color: '#0ea5e9', label: { show: true, text: Ref 55 } }
+          - { at: 44, lane: below, shape: triangle, color: '#7c3aed', label: { show: true, text: Ref 44 } }
+          bar:
+            fill_style: bands
+            segments:
+            - { from: 0%, to: 60%, color: '#16a34a' }
+            - { from: 60%, to: 100%, color: '#dc2626' }
+
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## 6. Needle under Reverse Scale
+            Needle shows the complete Paint rail. Scale direction moves Needle and markers; Bar direction does not create a partial reveal in Needle mode.
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE NEEDLE / GRADIENT
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Move Needle with Current
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          bar:
+            fill_style: gradient
+            needle: { show: true, color: '#111827' }
+            gradient_stops:
+            - { pos: 0, color: '#16a34a' }
+            - { pos: 35, color: '#facc15' }
+            - { pos: 100, color: '#dc2626' }
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE NEEDLE / BANDS
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Full bands with moving Needle
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          bar:
+            fill_style: bands
+            needle: { show: true, color: '#111827' }
+            segments:
+            - { from: 0%, to: 35%, color: '#16a34a' }
+            - { from: 35%, to: 70%, color: '#facc15' }
+            - { from: 70%, to: 100%, color: '#dc2626' }
+        - type: custom:sensor-bar-card-plus
+          title: NEEDLE / BAR NORMAL
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Full rail, no reveal
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          target:
+            at: { entity: sensor.sbcp_playground_target }
+            label: { show: true }
+          bar:
+            direction: normal
+            fill_style: gradient
+            needle: { show: true }
+        - type: custom:sensor-bar-card-plus
+          title: NEEDLE / BAR REVERSE — SAME NEEDLE GEOMETRY
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Compare with card above
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          target:
+            at: { entity: sensor.sbcp_playground_target }
+            label: { show: true }
+          bar:
+            direction: reverse
+            fill_style: gradient
+            needle: { show: true }
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE NEEDLE + TARGET + PEAK/FLOOR + REFERENCES
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Dense reverse marker layout
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          target: { at: { fixed: 70 }, label: { show: true, text: Target } }
+          peak: { enabled: true, label: { show: true, text: Peak } }
+          floor: { enabled: true, label: { show: true, text: Floor } }
+          markers:
+          - { at: 22%, lane: above, shape: diamond, color: '#f97316', label: { show: true, text: Ref A } }
+          - { at: 76%, lane: below, shape: pin, color: '#0ea5e9', label: { show: true, text: Ref B } }
+          - { at: 50%, lane: above, shape: arrow, color: '#7c3aed', label: { show: true, text: Midpoint } }
+          bar:
+            direction: normal
+            fill_style: soft_bands
+            needle: { show: true, color: '#111827' }
+            segments:
+            - { from: 0%, to: 40%, color: '#16a34a' }
+            - { from: 40%, to: 100%, color: '#dc2626' }
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE NEEDLE AT SCALE EDGES
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Set Current equal to 0 or 100
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          bar:
+            direction: reverse
+            fill_style: band_gradient
+            needle: { show: true }
+            segments:
+            - { from: 0%, to: 50%, color: '#16a34a' }
+            - { from: 50%, to: 100%, color: '#dc2626' }
+
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## 7. Dynamic Scale
+            Scale bounds and readings use the shared helpers. Set asymmetric bounds and change them while watching the current value, retained extrema, markers, and numeric Segment coordinates reproject semantically.
+        - type: custom:sensor-bar-card-plus
+          title: DYNAMIC REVERSE SCALE / PEAK + FLOOR
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Bounds follow Scale controls
+          scale:
+            min: { entity: sensor.sbcp_playground_scale_min }
+            max: { entity: sensor.sbcp_playground_scale_max }
+            direction: reverse
+          peak: { enabled: true, label: { show: true } }
+          floor: { enabled: true, label: { show: true } }
+          target: { at: { entity: sensor.sbcp_playground_target }, label: { show: true } }
+          markers:
+          - { at: { entity: sensor.sbcp_marker_primary, fixed: 140 }, lane: above, shape: diamond, color: '#f97316', label: { show: true } }
+          bar:
+            fill_style: bands
+            segments:
+            - { from: -1000, to: 0, color: '#2563eb' }
+            - { from: 0, to: 2000, color: '#f97316' }
+        - type: custom:sensor-bar-card-plus
+          title: DYNAMIC BOUNDS / NUMERIC SEGMENTS STAY SEMANTIC
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Change bounds and watch Segment projection
+          scale:
+            min: { entity: sensor.sbcp_playground_scale_min }
+            max: { entity: sensor.sbcp_playground_scale_max }
+            direction: reverse
+          bar:
+            fill_style: band_gradient
+            segments:
+            - { from: -1000, to: 0, color: '#2563eb' }
+            - { from: 0, to: 1500, color: '#facc15' }
+            - { from: 1500, to: 5000, color: '#dc2626' }
+        - type: custom:sensor-bar-card-plus
+          title: DYNAMIC REVERSE / VALUE + TARGET + BASELINE
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Wave current, Target, or Baseline
+          scale:
+            min: { entity: sensor.sbcp_playground_scale_min }
+            max: { entity: sensor.sbcp_playground_scale_max }
+            direction: reverse
+          target: { at: { entity: sensor.sbcp_playground_target }, label: { show: true } }
+          baseline:
+            at: { entity: sensor.sbcp_playground_baseline }
+            above: { color: '#22c55e' }
+            below: { color: '#3b82f6' }
+          bar:
+            fill_style: gradient
+
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## 8. Entity Direction Inheritance
+            The card defaults to Reverse Scale and Reverse Bar. Each row label states whether both fields inherit or explicitly override them. In particular, NORMAL / NORMAL is an explicit override, not inheritance.
+        - type: custom:sensor-bar-card-plus
+          title: CARD REVERSE / ROW INHERITANCE
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: A — INHERIT REVERSE / REVERSE
+          - entity: sensor.sbcp_playground_target
+            name: B — EXPLICIT NORMAL / NORMAL (Target value)
+            scale: { direction: normal }
+            bar: { direction: normal }
+          - entity: sensor.sbcp_marker_primary
+            name: C — EXPLICIT REVERSE SCALE / NORMAL BAR (Reference A)
+            scale: { direction: reverse }
+            bar: { direction: normal }
+          - entity: sensor.sbcp_marker_target
+            name: D — EXPLICIT NORMAL SCALE / REVERSE BAR (Reference B)
+            scale: { direction: normal }
+            bar: { direction: reverse }
+          scale:
+            min: { fixed: 0 }
+            max: { fixed: 100 }
+            direction: reverse
+          bar:
+            direction: reverse
+            fill_style: gradient
+            gradient_stops:
+            - { pos: 0, color: '#16a34a' }
+            - { pos: 50, color: '#facc15' }
+            - { pos: 100, color: '#dc2626' }
+
+  - type: grid
+    cards:
+    - type: vertical-stack
+      cards:
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## 9. Standalone Layout Variants
+            All cards use Reverse Scale. Compare value/name arrangements and reference positions without changing the shared reading.
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE / DEFAULT LEFT LABEL
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Left label and value
+          scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+          target: { at: { fixed: 70 }, label: { show: true } }
+          markers:
+          - { at: 35%, lane: above, shape: diamond, color: '#f97316' }
+          bar: { fill_style: gradient }
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE / ABOVE LABEL
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Above label
+          scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+          layout: { label: { position: above } }
+          target: { at: { fixed: 70 }, label: { show: true } }
+          bar: { fill_style: bands, segments: [{ from: 0%, to: 50%, color: '#16a34a' }, { from: 50%, to: 100%, color: '#dc2626' }] }
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE / INSIDE LABEL
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Inside label
+          scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+          layout: { label: { position: inside } }
+          markers:
+          - { at: 25, lane: below, shape: arrow, color: '#0ea5e9', label: { show: true } }
+          bar: { fill_style: gradient }
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE / LABEL OFF / CUSTOM UNIT
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Hidden row name
+          scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+          layout: { label: { position: off } }
+          formatting: { unit: 'kWh equivalent', decimal: 2 }
+          target: { at: { fixed: 60 }, label: { show: true } }
+          bar: { fill_style: solid, color: '#0f766e' }
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE / HERO LABEL
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Hero value
+          scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+          layout:
+            height: 42
+            label: { position: hero, hero_size: large }
+          target: { at: { fixed: 75 }, label: { show: true } }
+          bar: { fill_style: band_gradient, segments: [{ from: 0%, to: 40%, color: '#16a34a' }, { from: 40%, to: 100%, color: '#dc2626' }] }
+
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## 10. Narrow / Responsive Direction Tests
+            These horizontal stacks intentionally constrain each SBCP card to test narrow layouts. They are the only paired standalone SBCP cases in this view.
+        - type: horizontal-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: NARROW REVERSE + MARKERS
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Long narrow label
+            scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+            target: { at: { entity: sensor.sbcp_playground_target }, label: { show: true } }
+            markers:
+            - { at: { entity: sensor.sbcp_marker_primary, fixed: 140 }, lane: above, shape: diamond, color: '#f97316', label: { show: true } }
+            layout: { label: { position: left, width: 180 } }
+            bar: { direction: reverse, fill_style: gradient }
+          - type: custom:sensor-bar-card-plus
+            title: NARROW REVERSE / BASELINE
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Cross moving Baseline
+            scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+            baseline: { at: { entity: sensor.sbcp_playground_baseline }, above: { color: '#22c55e' }, below: { color: '#ef4444' } }
+            layout: { label: { position: inside } }
+            bar: { direction: normal, fill_style: bands, segments: [{ from: 0%, to: 50%, color: '#16a34a' }, { from: 50%, to: 100%, color: '#dc2626' }] }
+        - type: horizontal-stack
+          cards:
+          - type: custom:sensor-bar-card-plus
+            title: NARROW REVERSE NEEDLE + DENSE MARKERS
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Needle + references
+            scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+            target: { at: { fixed: 70 }, label: { show: true } }
+            markers:
+            - { at: 35%, lane: above, shape: diamond, color: '#f97316', label: { show: true, text: Ref A } }
+            - { at: 55%, lane: below, shape: arrow, color: '#0ea5e9', label: { show: true, text: Ref B } }
+            bar: { direction: reverse, needle: { show: true }, fill_style: soft_bands }
+          - type: custom:sensor-bar-card-plus
+            title: NARROW REVERSE / LONG READING
+            entities:
+            - entity: sensor.sbcp_playground_sensor
+              name: Narrow value and unit pressure
+            scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+            formatting: { unit: 'W long engineering unit', decimal: 2 }
+            layout: { label: { position: above } }
+            target: { at: { fixed: 45 }, label: { show: true } }
+            bar: { direction: reverse, fill_style: gradient }
+
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## 11. Card Feature Direction Parity
+            Each Tile keeps its SBCP Feature full width within the dashboard column. Compare Home Assistant's Inline and Bottom placements using the same dynamic sensor.
+        - type: tile
+          entity: sensor.sbcp_playground_sensor
+          name: FEATURE INLINE / SCALE REVERSE
+          features_position: inline
+          vertical: false
+          features:
+          - type: custom:sensor-bar-card-plus-feature
+            scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+            bar: { direction: normal, fill_style: gradient }
+        - type: tile
+          entity: sensor.sbcp_playground_sensor
+          name: FEATURE BOTTOM / BAR REVERSE
+          features_position: bottom
+          vertical: false
+          features:
+          - type: custom:sensor-bar-card-plus-feature
+            scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: normal }
+            bar: { direction: reverse, fill_style: bands, segments: [{ from: 0%, to: 50%, color: '#16a34a' }, { from: 50%, to: 100%, color: '#dc2626' }] }
+        - type: tile
+          entity: sensor.sbcp_playground_sensor
+          name: FEATURE INLINE / SCALE + BAR REVERSE
+          features_position: inline
+          vertical: false
+          features:
+          - type: custom:sensor-bar-card-plus-feature
+            scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+            target: { at: { entity: sensor.sbcp_playground_target }, label: { show: true } }
+            markers:
+            - { at: { entity: sensor.sbcp_marker_primary, fixed: 140 }, lane: above, shape: diamond, color: '#f97316', label: { show: true, text: Ref } }
+            bar: { direction: reverse, fill_style: gradient, needle: { show: true } }
+        - type: tile
+          entity: sensor.sbcp_playground_sensor
+          name: FEATURE BOTTOM / BASELINE + TARGET + PEAK/FLOOR + REFERENCE
+          features_position: bottom
+          vertical: false
+          features:
+          - type: custom:sensor-bar-card-plus-feature
+            scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+            baseline: { at: { entity: sensor.sbcp_playground_baseline }, above: { color: '#22c55e' }, below: { color: '#ef4444' } }
+            target: { at: { entity: sensor.sbcp_playground_target }, label: { show: true } }
+            peak: { enabled: true, label: { show: true } }
+            floor: { enabled: true, label: { show: true } }
+            markers:
+            - { at: { entity: sensor.sbcp_marker_target, fixed: 65 }, lane: below, shape: arrow, color: '#0ea5e9', label: { show: true, text: Ref } }
+            bar: { direction: normal, fill_style: soft_bands }
+
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## 12. Animation / Motion Lifecycle
+            Start the existing Wave Driver and choose `current_value` to move the ordinary reveal or Needle. Choose `baseline_value` to watch Baseline crossing; choose `target_value` to move the Target and entity-backed references. Compare `animated: false` with the default animated case.
+
+            **Direction-change acceptance:** open the first card below in the card editor, change Scale or Bar Direction while Current is steady, and confirm the geometry snaps to the new orientation. Then move Current or enable the Wave Driver; ordinary value changes should animate again. No additional runtime-config mutation helper is used here.
+        - type: custom:sensor-bar-card-plus
+          title: LIVE REVEAL / DIRECTION CHANGE SNAP CHECK
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Edit Scale Direction and Bar Direction here
+          scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: normal }
+          target: { at: { entity: sensor.sbcp_playground_target }, label: { show: true } }
+          baseline: { at: { entity: sensor.sbcp_playground_baseline } }
+          markers:
+          - { at: { entity: sensor.sbcp_marker_primary, fixed: 140 }, lane: above, shape: diamond, color: '#f97316', label: { show: true } }
+          bar: { direction: normal, fill_style: gradient }
+        - type: custom:sensor-bar-card-plus
+          title: ANIMATION DISABLED / REVERSE REVEAL
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Animated false remains respected
+          scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+          bar: { direction: reverse, animated: false, fill_style: bands, segments: [{ from: 0%, to: 50%, color: '#16a34a' }, { from: 50%, to: 100%, color: '#dc2626' }] }
+        - type: custom:sensor-bar-card-plus
+          title: MOVING NEEDLE / REVERSE SCALE
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Wave current or target helper
+          scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+          target: { at: { entity: sensor.sbcp_playground_target }, label: { show: true } }
+          markers:
+          - { at: { entity: sensor.sbcp_marker_primary, fixed: 140 }, lane: above, shape: arrow, color: '#f97316', label: { show: true } }
+          bar: { direction: normal, fill_style: gradient, needle: { show: true } }
+        - type: custom:sensor-bar-card-plus
+          title: DYNAMIC MARKER + BASELINE CROSSING / REVERSE
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Animate current or Baseline
+          scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+          baseline: { at: { entity: sensor.sbcp_playground_baseline } }
+          target: { at: { entity: sensor.sbcp_playground_target }, label: { show: true } }
+          markers:
+          - { at: { entity: sensor.sbcp_marker_target, fixed: 65 }, lane: above, shape: pin, color: '#7c3aed', label: { show: true } }
+          bar: { direction: reverse, fill_style: gradient }
+
+      - type: vertical-stack
+        cards:
+        - type: markdown
+          content: |
+            ## 13. Boundaries and Coincidence
+            The first four cases bind the current value to a Scale boundary or marker source so equality remains exact as the shared helpers change.
+        - type: custom:sensor-bar-card-plus
+          title: VALUE AT SEMANTIC MIN / REVERSE
+          entities:
+          - entity: sensor.sbcp_playground_scale_min
+            name: Current equals dynamic minimum
+          scale:
+            min: { entity: sensor.sbcp_playground_scale_min }
+            max: { entity: sensor.sbcp_playground_scale_max }
+            direction: reverse
+          bar: { direction: normal, fill_style: gradient }
+        - type: custom:sensor-bar-card-plus
+          title: VALUE AT SEMANTIC MAX / REVERSE
+          entities:
+          - entity: sensor.sbcp_playground_scale_max
+            name: Current equals dynamic maximum
+          scale:
+            min: { entity: sensor.sbcp_playground_scale_min }
+            max: { entity: sensor.sbcp_playground_scale_max }
+            direction: reverse
+          bar: { direction: reverse, fill_style: gradient }
+        - type: custom:sensor-bar-card-plus
+          title: TARGET EQUALS CURRENT / REVERSE
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Target uses the same dynamic source
+          scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+          target: { at: { entity: sensor.sbcp_playground_sensor }, label: { show: true, text: Coincident } }
+          bar: { fill_style: bands, segments: [{ from: 0%, to: 50%, color: '#16a34a' }, { from: 50%, to: 100%, color: '#dc2626' }] }
+        - type: custom:sensor-bar-card-plus
+          title: REFERENCE EQUALS CURRENT / REVERSE NEEDLE
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Marker uses the same dynamic source
+          scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+          markers:
+          - { at: { entity: sensor.sbcp_playground_sensor }, lane: above, shape: diamond, color: '#f97316', label: { show: true, text: Coincident } }
+          bar: { needle: { show: true }, fill_style: gradient }
+        - type: custom:sensor-bar-card-plus
+          title: REFERENCE AT SEMANTIC MIN / MAX
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: End markers project with Scale
+          scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: reverse }
+          markers:
+          - { at: 0, lane: above, shape: diamond, color: '#16a34a', label: { show: true, text: Min } }
+          - { at: 100, lane: below, shape: arrow, color: '#dc2626', label: { show: true, text: Max } }
+          bar: { direction: reverse, fill_style: solid, color: '#0f766e' }
+        - type: custom:sensor-bar-card-plus
+          title: REVERSE BAR AT VALUE BOUNDARIES
+          entities:
+          - entity: sensor.sbcp_playground_sensor
+            name: Set Current to 0, then 100
+          scale: { min: { fixed: 0 }, max: { fixed: 100 }, direction: normal }
+          bar: { direction: reverse, fill_style: gradient }
