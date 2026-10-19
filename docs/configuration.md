@@ -713,7 +713,7 @@ All five fill styles apply to both presentations. Segment coordinates and automa
 | `soft_bands` | Mostly distinct bands, with short smooth blends where neighboring bands have enough room | Yes |
 | `band_gradient` | The Segment color sequence becomes one continuous gradient | Yes |
 
-`bands` is the default when no fill style, palette or color-only configuration selects another style, retaining the original card's band-based behavior. A color configured alone selects a solid bar unless an explicit fill style or palette is inherited. With an explicit style/palette, `bar.color` supplies its solid/fallback color. Set `bar.fill_style` explicitly if you want a particular style.
+`bands` is the default when no fill style, palette or color-only configuration selects another style, retaining the original card's band-based behavior. A color configured alone selects a solid bar unless an explicit fill style or palette is inherited. With an explicit style/palette, `bar.color` supplies its solid color and remains the sampling fallback used by `solid_fill`; it does not add stops to an ordinary `bands` gradient. Set `bar.fill_style` explicitly if you want a particular style.
 
 ### Fill style details
 
@@ -759,7 +759,7 @@ bar:
 
 Compatibility name: `severity`
 
-`bands` gives each configured range its own color, with an abrupt change at the next range.
+`bands` gives each configured range its own color, with an abrupt change at a shared boundary. Authored ranges define Segment coverage; runtime Paint can also show color outside those authored intervals. The first Segment color extends to the rail start and the last extends to the rail end. Between separated Segments, the CSS gradient interpolates from the previous color to the next across the gap. No `bar.color` stop is inserted into these gaps. Adjacent Segments retain a hard boundary.
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -969,8 +969,9 @@ Practical range rules:
 
 - Supply `from` and `color` for every Segment. An omitted `to` ends at the next valid Segment's configured `from`, or the visible Scale maximum for the last Segment.
 - Use ordered, non-overlapping ranges within the visible Scale. Contiguous ranges can meet at a shared boundary.
-- Gaps are not transparent holes: depending on the fill style, fallback color or a color blend can appear there.
-- Overlaps have no supported winner/precedence rule. Avoid reversed ranges rather than relying on incidental output.
+- Segment coverage and runtime Paint are distinct. For `bands`, the first/last colors extend to the rail edges and colors interpolate across gaps. `soft_bands` adds a short transition around a previous Segment end when neighboring ranges are wide enough; transition width is independent of the gap width. `band_gradient` uses Segment colors as anchors in one continuous gradient.
+- Resolved ranges must remain ordered (`from < to`) on the active Scale. Mixed absolute/percentage coordinates are valid when their resolved endpoints are ordered; a Dynamic Scale can change that ordering. A Segment that resolves crossed or equal is suppressed for that Scale update rather than swapped or emitted as reversed Paint stops.
+- Overlaps have no supported winner/precedence rule. Avoid overlapping authored ranges rather than relying on incidental output.
 - Entity-backed boundaries are unsupported, including entity sources with fixed fallbacks. Use numbers or percentage strings.
 - Malformed percentages cause the affected Segment to be ignored with a warning. Do not rely on out-of-range percentages or malformed ranges for special paint effects.
 

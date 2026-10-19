@@ -65,12 +65,13 @@ for(const source of ['src','dist']) describe(`Feature capability closure (${sour
    await edit(editor,`#${key}-percent`,'-1');editor.setConfig({type,[key]:{at:'0%'}});await editor.updateComplete;expect(editor.shadowRoot.querySelector(`#${key}-percent`).value).toBe('0');
   });
  }
- for(const starts of [[0,50,80],['0%','50%','80%'],[-100,'50%',60]])it(`auto ends use the current scale for ${JSON.stringify(starts)} without materialization`,async()=>{
+ for(const starts of [[0,50,80],['0%','50%','80%'],[-100,'50%',60]])it(`auto-end preview preserves authored coordinates for ${JSON.stringify(starts)} without materialization`,async()=>{
   const config=raw();config.scale=starts[0]===-100?{min:-100,max:100}:{min:0,max:100};config.bar.segments=config.bar.segments.map((row,i)=>({...row,from:starts[i]}));
   const {editor,events}=await setup(source,config),section=editor._segmentsSection;
   expect(events).toHaveLength(0);expect(editor._config).toEqual(config);
   for(let i=0;i<3;i++)expect(section._getSegmentRowValidationMessage(root,i)).toBe('');
-  expect(section._getSegmentPreviewRows(root).map(row=>[row.from,row.to])).toEqual([[0,50],[50,80],[80,100]]);
+  const expected=starts[0]===-100?[[-100,'50%'],['50%',60],[60,null]]:starts[0]==='0%'?[["0%","50%"],["50%","80%"],["80%","100%"]]:[[0,50],[50,80],[80,null]];
+  expect(section._getSegmentPreviewRows(root).map(row=>[row.from,row.to])).toEqual(expected);
   const untouched=editor._config.bar.segments[1];await segment(editor,'color-text-fallback',0,'green');expect(editor._config.bar.segments[1]).toBe(untouched);
   expect(editor._config.bar.segments.every(row=>!Object.hasOwn(row,'to'))).toBe(true);
   await segment(editor,'to',0,starts[1]===50?'40':'40%');expect(editor._config.bar.segments[0].to).toBe(starts[1]===50?40:'40%');
@@ -91,9 +92,9 @@ for(const source of ['src','dist']) describe(`Feature capability closure (${sour
   const count=events.length;await segment(editor,'to',0,'70');expect(editor._config).toEqual(config);expect(section._getSegmentRowValidationMessage(root,0)).toBe('Segments overlap.');expect(events).toHaveLength(count);
   await segment(editor,'to',0,'-1');expect(editor._config).toEqual(config);
  });
- it('auto end resolution tracks dynamic scale without config emissions and reports reversed configured order',async()=>{
+ it('auto-end preview ignores current dynamic Scale for layout and reports reversed configured order',async()=>{
   const config=raw();config.scale={min:{entity:'sensor.min',fixed:0},max:{entity:'sensor.max',fixed:200}};config.bar.segments=[{from:0,color:'red'},{from:50,color:'orange'}];
-  const {editor,events}=await setup(source,config);expect(editor._segmentsSection._getSegmentPreviewRows(root).map(r=>r.from)).toEqual([0,25]);
+  const {editor,events}=await setup(source,config);expect(editor._segmentsSection._getSegmentPreviewRows(root).map(r=>r.from)).toEqual([0,50]);
   editor.hass={states:{'sensor.min':{state:'0'},'sensor.max':{state:'100'}}};await editor.updateComplete;
   expect(editor._segmentsSection._getSegmentPreviewRows(root).map(r=>r.from)).toEqual([0,50]);expect(events).toHaveLength(0);
   editor.setConfig({type,bar:{fill_style:'bands',segments:[{from:80,color:'red'},{from:0,color:'blue'}]}});await editor.updateComplete;

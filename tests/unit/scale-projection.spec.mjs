@@ -115,6 +115,17 @@ describe('Scale Direction and Bar Direction', () => {
     expect(reverse.model.fill.geometry).toMatchObject({ start: 30, end: 100 });
   });
 
+  it('projects historical bands stops through a reversed Scale without changing their semantic colors', () => {
+    const config = { scale: { min: 0, max: 100 }, bar: { fill_style: 'bands', color: '#aaaaaa', segments: [
+      { from: '30%', to: '50%', color: '#0000ff' },
+      { from: '60%', to: '80%', color: '#00ff00' },
+    ] } };
+    const normal = resolved(config).model.fill.paintLayers[0].paintStyle;
+    const reverse = resolved({ ...config, scale: { ...config.scale, direction: 'reverse' }, bar: { ...config.bar, direction: 'reverse' } }).model.fill.paintLayers[0].paintStyle;
+    expect(normal).toContain('linear-gradient(to right, #0000ff 30%, #0000ff 50%, #00ff00 60%, #00ff00 80%)');
+    expect(reverse).toContain('linear-gradient(to right, #00ff00 20%, #00ff00 40%, #0000ff 50%, #0000ff 70%)');
+  });
+
   it('preserves overlapping band precedence in semantic space before reverse projection', () => {
     const config = {
       scale: { min: 0, max: 100 },
@@ -225,7 +236,7 @@ describe('Scale Direction and Bar Direction', () => {
     expect(row.markers.find(marker => marker.type === 'peak').position).toBe(20);
     expect(row.markers.find(marker => marker.type === 'floor').position).toBe(90);
     expect(model.fill.paintLayers[0].paintStyle)
-      .toContain('linear-gradient(to right, #4a9eff 0%, #4a9eff 40%, #00ff00 40%, #00ff00 90%, #4a9eff 90%, #4a9eff 100%)');
+      .toContain('linear-gradient(to right, #00ff00 40%, #00ff00 90%)');
   });
 
   it('projects marker and Needle positions, while keeping Needle reveal full and Paint semantic', () => {

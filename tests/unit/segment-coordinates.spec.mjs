@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createCard } from '../support/load-card-class.cjs';
 import { normalizeBarConfig, normalizeCardConfig } from '../../src/config/normalize.js';
 import { buildRowViewModel } from '../../src/view-model/row-view-model.js';
+import { getBandsGradientCss, getSegmentsForRendering, getSeverityBandGradientCss } from '../../src/view-model/bar-render-model.js';
 
 const entity = 'sensor.sbcp_playground_negative';
 const negativeSegments = [
@@ -94,6 +95,34 @@ describe('replacement Segment coordinate semantics (issue #29)', () => {
     const card = createCard();
     const row = normalizeCardConfig(negativeConfig({ segments })).entities[0];
     expect(ranges(card, row, -20, 20)).toEqual([[0, 50], [50, 100]]);
+  });
+
+  it('suppresses mixed-coordinate Segments when resolved endpoints cross or coincide', () => {
+    const config = normalizeCardConfig({ entity, bar: { fill_style: 'bands', segments: [
+      { from: '30%', to: 50, color: '#ff2600' },
+    ] } });
+    const appearance = config.entities[0];
+    expect(getSegmentsForRendering(appearance, 0, 100)).toMatchObject([{ from: 30, to: 50 }]);
+    expect(getSegmentsForRendering(appearance, 0, 200)).toEqual([]);
+    const equal = normalizeCardConfig({ entity, bar: { fill_style: 'bands', segments: [
+      { from: '50%', to: 50, color: '#ff2600' },
+    ] } }).entities[0];
+    expect(getSegmentsForRendering(equal, 0, 100)).toEqual([]);
+    expect(getSeverityBandGradientCss(appearance, 0, 200, 'reverse')).toBeNull();
+    expect(getBandsGradientCss([{ from: 60, to: 30, color: '#ff2600' }], '#4a9eff', 'reverse')).toBeNull();
+  });
+
+  it('handles mixed Segment validity across changing Dynamic Scale bounds and reversed Scale', () => {
+    const appearance = normalizeCardConfig({
+      entity,
+      scale: { min: { entity: 'sensor.min', fixed: 0 }, max: { entity: 'sensor.max', fixed: 100 }, direction: 'reverse' },
+      bar: { fill_style: 'bands', segments: [{ from: '30%', to: 50, color: '#ff2600' }] },
+    }).entities[0];
+    expect(getSegmentsForRendering(appearance, 0, 100)).toMatchObject([{ from: 30, to: 50 }]);
+    expect(getSegmentsForRendering(appearance, 0, 200)).toEqual([]);
+    expect(getSegmentsForRendering(appearance, 0, 100)).toMatchObject([{ from: 30, to: 50 }]);
+    expect(getSeverityBandGradientCss(appearance, 0, 100, 'reverse'))
+      .toBe('linear-gradient(to right, #ff2600 50%, #ff2600 70%)');
   });
 
   for (const mode of ['percent', 'scale']) {

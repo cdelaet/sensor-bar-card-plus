@@ -5923,8 +5923,8 @@ describe('Sensor Bar Card Plus logic', () => {
         fill_style: 'band_gradient',
         solid_fill: true,
         segments: [
-          { from: '0%', to: '100%', color: '#22c55e' },
-          { from: '100%', to: '100%', color: '#ef4444' },
+          { from: '0%', to: '50%', color: '#22c55e' },
+          { from: '50%', to: '100%', color: '#ef4444' },
         ],
       },
       entities: [{ entity: 'sensor.row' }],
@@ -6135,7 +6135,7 @@ describe('Sensor Bar Card Plus logic', () => {
     );
   });
 
-  it('keeps narrow adjacent bands hard in soft_bands mode', () => {
+  it('softens adjacent bands when both ranges meet the transition threshold', () => {
     const card = createCard();
     const ecfg = card.normalizeCardConfig({
       bar: {
@@ -6150,6 +6150,21 @@ describe('Sensor Bar Card Plus logic', () => {
 
     expect(card._getBasePaintGradient(card._getColor(2, ecfg, 0, 100), ecfg, 0, 100)).toBe(
       'linear-gradient(to right, #22c55e 0%, #22c55e 2.25%, #ef4444 3.75%, #ef4444 100%)'
+    );
+  });
+
+  it('keeps genuinely sub-threshold adjacent soft bands hard', () => {
+    const card = createCard();
+    const ecfg = card.normalizeCardConfig({
+      bar: { fill_style: 'soft_bands', segments: [
+        { from: '0%', to: '1%', color: '#22c55e' },
+        { from: '1%', to: '100%', color: '#ef4444' },
+      ] },
+      entities: [{ entity: 'sensor.row' }],
+    }).entities[0];
+
+    expect(card._getBasePaintGradient(card._getColor(0.5, ecfg, 0, 100), ecfg, 0, 100)).toBe(
+      'linear-gradient(to right, #22c55e 0%, #22c55e 1%, #ef4444 1%, #ef4444 100%)'
     );
   });
 

@@ -2360,6 +2360,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return this._segmentsSection._getSegmentPreviewRows(...args);
   }
 
+  _renderSegmentPreviewIntervals(...args) {
+    return this._segmentsSection._renderSegmentPreviewIntervals(...args);
+  }
+
+  _renderSegmentListRows(...args) {
+    return this._segmentsSection._renderSegmentListRows(...args);
+  }
+
   _buildEditorSegmentPreviewStyle(...args) {
     return this._segmentsSection._buildEditorSegmentPreviewStyle(...args);
   }

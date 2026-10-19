@@ -212,8 +212,8 @@ entities:
 
 - **Solid** stays cyan regardless of the reading.
 - **Gradient** blends between its percentage stops.
-- **Bands** keeps hard boundaries between Segment colors.
-- **Soft Bands** blends briefly at boundaries where neighboring ranges have room.
+- **Bands** keeps hard boundaries between adjacent Segment colors and interpolates across gaps; the first and last colors extend to the rail edges.
+- **Soft Bands** blends briefly around a Segment boundary where neighboring ranges have room; the transition width does not follow the authored gap.
 - **Band Gradient** turns the Segment color sequence into a continuous gradient.
 - **Band Gradient + Solid Fill** samples that gradient at the current value and paints the entire Needle rail with the sampled color. The color changes as the value moves; `solid_fill` is a modifier, not a sixth `fill_style` value.
 

@@ -36,11 +36,11 @@ for (const key of ['target','baseline']) it(`${key} resolves strings/objects wit
   expect(getNormalizedResolvableNumericValue({},normalized({fixed:20,percent:50}),-100,100)).toBe(20);
   expect(getNormalizedResolvableNumericValue({},normalized('101%'),0,100)).toBe(101);
 });
-it('infers omitted/null ends using next configured valid start then scale end, with mixed coordinates', () => {
+it('infers omitted/null ends and suppresses ranges that resolve crossed', () => {
   const e=normalizeCardConfig({entities:['sensor.a'],scale:{min:-100,max:100},bar:{segments:[{from:-100,color:'red'},{from:'50%',to:null,color:'orange'},{from:60,color:'green'}]}}).entities[0];
   expect(getSegmentsForRendering(e,-100,100)).toEqual([{from:0,to:50,color:'red',label:null},{from:50,to:80,color:'orange',label:null},{from:80,to:100,color:'green',label:null}]);
   const out=normalizeCardConfig({entities:['sensor.a'],bar:{segments:[{from:80,color:'red'},{from:0,color:'green'}]}}).entities[0];
-  expect(getSegmentsForRendering(out)[1]).toMatchObject({from:80,to:0});
+  expect(getSegmentsForRendering(out)).toEqual([{from:0,to:80,color:'green',label:null}]);
 });
 it('keeps CSS direct painting distinct from hex-only Gradient Stop interpolation', () => {
   const e=style=>normalizeCardConfig({entities:['sensor.a'],bar:{fill_style:style,segments:[{from:0,color:'var(--low)'},{from:50,color:'orange'}],gradient_stops:[{pos:0,color:'red'},{pos:100,color:'blue'}]}}).entities[0];

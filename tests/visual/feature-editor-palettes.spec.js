@@ -41,7 +41,12 @@ for (const source of ['src', 'dist']) for (const style of ['bands', 'gradient'])
     await expect(draft).toHaveValue(segment ? '40%' : '50');
     expect(await draft.evaluate(node => node === window.__paletteDraftNode)).toBe(true);
     await expect(draft).toBeFocused();
-    await expect(section.locator('.gradient-preview-track')).toHaveAttribute('style', /linear-gradient/);
+    if (segment) {
+      await expect(section.locator('.segment-preview-track')).toHaveAttribute('aria-label', 'Authored Segment coverage preview');
+      await expect(section.locator('[data-preview-kind="undefined"]')).toHaveCount(2);
+    } else {
+      await expect(section.locator('.gradient-preview-track')).toHaveAttribute('style', /linear-gradient/);
+    }
     const add = editor.locator(`button[data-action="${segment ? 'add-segment' : 'add-gradient-stop'}"]`);
     await add.click();
     await expect(draft).toBeFocused();

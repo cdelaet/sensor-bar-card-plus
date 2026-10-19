@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { createEditor, loadElementClass } from '../support/load-card-class.cjs';
 import { normalizeCardConfig } from '../../src/config/normalize.js';
+import { allocateSegmentPreviewWidths } from '../../src/editor/sections/segments.js';
+
 
 function trackConfigEvents(editor) {
   const events = [];
@@ -5342,35 +5344,51 @@ describe('Sensor Bar Card Plus editor', () => {
 
     const previewTrack = editor.shadowRoot.querySelector('#card-segment-preview-track');
     const originalStyle = previewTrack.getAttribute('style');
-    expect(originalStyle).toContain('#c4bc00');
+    expect(originalStyle).toBe('');
+    const originalPreview = editor._renderSegmentPreviewIntervals({ type: 'card' });
+    expect(originalPreview).toContain('background-color:#c4bc00');
 
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="segment-color"]')[0], '#00ff00');
-    expect(editor.shadowRoot.querySelector('#card-segment-preview-track').getAttribute('style')).toContain('#00ff00');
+    expect(editor._renderSegmentPreviewIntervals({ type: 'card' })).toContain('background-color:#00ff00');
 
     dispatchInput(editor.shadowRoot.querySelector('#segment-draft-from'), '100');
     dispatchInput(editor.shadowRoot.querySelector('#segment-draft-to'), '120');
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-segment"]')[0]);
     await flushTimers();
-    expect(editor.shadowRoot.querySelector('#card-segment-preview-track').getAttribute('style')).toContain('#4a9eff');
+    expect(editor._renderSegmentPreviewIntervals({ type: 'card' })).toContain('background-color:#4a9eff');
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="remove-segment"]')[0]);
-    expect(editor.shadowRoot.querySelector('#card-segment-preview-track').getAttribute('style')).not.toBe(originalStyle);
+    expect(editor._renderSegmentPreviewIntervals({ type: 'card' })).not.toBe(originalPreview);
   });
 
-  it('bands segment preview uses the effective bar color for uncovered ranges', () => {
+  it('shows authored gaps as read-only checkerboard Undefined rows independent of runtime fill style', () => {
     const editor = createEditor();
     editor.setConfig({
       entity: 'sensor.one',
       bar: {
         fill_style: 'bands',
         color: '#4a9eff',
-        segments: [{ from: '0%', to: '50%', color: '#123456' }],
+        segments: [
+          { from: '20%', to: '40%', color: '#123456' },
+          { from: '60%', to: '80%', color: '#abcdef' },
+        ],
       },
     });
+    const track = editor.shadowRoot.querySelector('#card-segment-preview-track');
+    const configBefore = structuredClone(editor._config);
+    const preview = editor._renderSegmentPreviewIntervals({ type: 'card' });
+    expect(preview.match(/data-preview-kind="undefined"/g)).toHaveLength(3);
+    expect(preview).not.toMatch(/title="\d+(?:\.\d+)?%"/);
+    expect(editor.shadowRoot.innerHTML).toContain('segment-undefined-swatch');
+    expect(editor.shadowRoot.innerHTML).toContain('Undefined');
+    expect(editor.shadowRoot.innerHTML.match(/<div class="segment-undefined-row"[^>]*>(.*?)<\/div>/s)?.[1]).not.toContain('<button');
+    expect(editor._config).toEqual(configBefore);
 
-    expect(editor.shadowRoot.querySelector('#card-segment-preview-track').getAttribute('style')).toBe(
-      'background:linear-gradient(to right, #123456 0%, #123456 50%, #4a9eff 50%, #4a9eff 100%);background-repeat:no-repeat;',
-    );
+    const topology = editor._getSegmentPreviewRows({ type: 'card' }).map(row => row.type);
+    for (const fillStyle of ['soft_bands', 'band_gradient']) {
+      editor.setConfig({ ...configBefore, bar: { ...configBefore.bar, fill_style: fillStyle } });
+      expect(editor._getSegmentPreviewRows({ type: 'card' }).map(row => row.type)).toEqual(topology);
+    }
   });
 
   it('card segment preview ignores its draft and normalizes numeric rows to the committed extent', async () => {
@@ -5386,28 +5404,28 @@ describe('Sensor Bar Card Plus editor', () => {
     const track = editor.shadowRoot.querySelector('#card-segment-preview-track');
     const originalStyle = track.getAttribute('style');
     const originalRows = editor._getSegmentPreviewRows({ type: 'card' });
-    expect(originalStyle).toContain(`${segments.at(-1).color} 100%`);
-    expect(originalRows[0].from).toBe(0);
-    expect(originalRows[0].to).toBeCloseTo(100 / 7);
-    expect(originalRows.at(-1).from).toBeCloseTo((31 / 35) * 100);
-    expect(originalRows.at(-1).to).toBe(100);
+    const originalPreview = editor._renderSegmentPreviewIntervals({ type: 'card' });
+    expect(originalStyle).toBe('');
+    expect(originalRows[0]).toMatchObject({ from: 5, to: 10, previewStart: 0 });
+    expect(originalRows[0].previewWidth).toBeCloseTo((5 / 35) * 100);
+    expect(originalRows.at(-1)).toMatchObject({ from: 36, to: 40, previewEnd: 100 });
     expect(editor.shadowRoot.querySelector('#segment-draft-from').value).toBe('40');
     expect(editor.shadowRoot.querySelector('#segment-draft-to').value).toBe('100%');
 
     dispatchInput(editor.shadowRoot.querySelector('#segment-draft-to'), '41');
     expect(track.getAttribute('style')).toBe(originalStyle);
+    expect(editor._renderSegmentPreviewIntervals({ type: 'card' })).toBe(originalPreview);
     expect(editor._getSegmentPreviewRows({ type: 'card' })).toEqual(originalRows);
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-segment"]')[0]);
     await flushTimers();
     expect(editor._getSegmentsValue()).toHaveLength(13);
     expect(editor._getSegmentsValue().at(-1)).toEqual({ from: 40, to: 41, color: '#4a9eff' });
-    expect(editor.shadowRoot.querySelector('#card-segment-preview-track').getAttribute('style')).not.toBe(originalStyle);
-    expect(editor._getSegmentPreviewRows({ type: 'card' }).at(-1).from).toBeCloseTo((35 / 36) * 100);
-    expect(editor._getSegmentPreviewRows({ type: 'card' }).at(-1).to).toBe(100);
+    expect(editor._renderSegmentPreviewIntervals({ type: 'card' })).not.toBe(originalPreview);
+    expect(editor._getSegmentPreviewRows({ type: 'card' }).at(-1)).toMatchObject({ from: 40, to: 41, previewEnd: 100 });
   });
 
-  it('committed percentage and mixed segment preview coordinates retain their current positions', () => {
+  it('uses a schematic nominal width for mixed coordinates without converting them to Scale percentages', () => {
     const editor = createEditor();
     editor.setConfig({
       entity: 'sensor.one',
@@ -5419,12 +5437,86 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    const style = editor.shadowRoot.querySelector('#card-segment-preview-track').getAttribute('style');
-    expect(style).toContain('#ff0000 25%');
-    expect(style).toContain('#ff0000 50%');
-    expect(style).toContain('#0000ff 100%');
+    const rows = editor._getSegmentPreviewRows({ type: 'card' });
+    expect(rows.map(({ type, from, to }) => [type, from, to]))
+      .toEqual([['undefined', '0%', '25%'], ['segment', '25%', 50], ['segment', 50, '100%']]);
+    expect(rows[0].previewWidth).toBe(80);
+    expect(rows[1].previewWidth).toBe(10);
+    expect(rows[2].previewWidth).toBe(10);
+    expect(editor._renderSegmentPreviewIntervals({ type: 'card' })).not.toMatch(/(?:title|aria-label)="[^"]*\d/);
+  });
+
+  it('shows percentage and absolute gaps proportionally and gives mixed intervals nominal width', () => {
+    const editor = createEditor();
+    editor.setConfig({ entity: 'sensor.one', bar: { segments: [
+      { from: '20%', to: '40%', color: 'red' },
+      { from: '60%', to: '80%', color: 'green' },
+    ] } });
+    expect(editor._getSegmentPreviewRows({ type: 'card' }).map(row => row.previewWidth))
+      .toEqual([20, 20, 20, 20, 20]);
+
+    editor.setConfig({ entity: 'sensor.one', bar: { segments: [
+      { from: -200, to: 0, color: 'red' },
+      { from: 100, to: 400, color: 'green' },
+    ] } });
+    const absolute = editor._getSegmentPreviewRows({ type: 'card' });
+    expect(absolute.map(row => row.previewWidth)).toEqual([expect.closeTo(100 / 3), expect.closeTo(100 / 6), expect.closeTo(50)]);
+    expect(absolute[0]).toMatchObject({ from: -200, to: 0 });
+    expect(absolute.at(-1)).toMatchObject({ from: 100, to: 400 });
+
+    editor.setConfig({ entity: 'sensor.one', bar: { segments: [
+      { from: '0%', to: 40, color: 'red' },
+      { from: '60%', to: '80%', color: 'green' },
+    ] } });
+    const mixed = editor._getSegmentPreviewRows({ type: 'card' });
+    expect(mixed.map(row => row.type)).toEqual(['segment', 'undefined', 'segment', 'undefined']);
+    expect(mixed.map(row => row.previewWidth)).toEqual([10, 10, 40, 40]);
+    expect(mixed[1]).toMatchObject({ from: 40, to: '60%', mixed: true });
+  });
+
+  it('keeps every preview interval visible while fitting widths into exactly 100 percent', () => {
+    const widths = allocateSegmentPreviewWidths([
+      { mixed: false, weight: 0.00001 },
+      { mixed: false, weight: 99.99999 },
+      { mixed: false, weight: 0.00001 },
+    ]);
+    expect(widths.every(width => width >= 1)).toBe(true);
+    expect(widths.reduce((sum, width) => sum + width, 0)).toBeCloseTo(100);
+    expect(widths[0]).toBeCloseTo(1);
+    expect(widths[1]).toBeCloseTo(98);
+
+    const denseWidths = allocateSegmentPreviewWidths(Array.from({ length: 101 }, () => ({ mixed: false, weight: 1 })));
+    expect(denseWidths.reduce((sum, width) => sum + width, 0)).toBeCloseTo(100);
+    expect(denseWidths.every(width => width < 1)).toBe(true);
+  });
+
+  it('keeps omitted ends effective for preview without serializing inferred boundaries', () => {
+    const editor = createEditor();
+    const config = { entity: 'sensor.one', bar: { segments: [
+      { from: 0, color: 'red' },
+      { from: 50, color: 'green' },
+    ] } };
+    editor.setConfig(config);
     expect(editor._getSegmentPreviewRows({ type: 'card' }).map(({ from, to }) => [from, to]))
-      .toEqual([['25%', 50], [50, '100%']]);
+      .toEqual([[0, 50], [50, null]]);
+    expect(editor._config).toEqual(config);
+    expect(editor._renderSegmentListRows({ type: 'card' }, () => 'authored row')).not.toContain('Undefined');
+    expect(editor._renderSegmentPreviewIntervals({ type: 'card' })).not.toContain('gradient-preview-stop');
+  });
+
+  it('validates mixed-coordinate ordering only against the configured active Scale', () => {
+    const editor = createEditor();
+    editor.setConfig({ entity: 'sensor.one', scale: { min: 0, max: 100 }, bar: { segments: [
+      { from: '30%', to: 50, color: 'red' },
+    ] } });
+    expect(editor._getSegmentRowValidationMessage({ type: 'card' }, 0)).toBe('');
+    expect(editor._renderSegmentPreviewIntervals({ type: 'card' })).toContain('background-color:red');
+
+    editor.setConfig({ entity: 'sensor.one', scale: { min: 0, max: 200 }, bar: { segments: [
+      { from: '30%', to: 50, color: 'red' },
+    ] } });
+    expect(editor._getSegmentRowValidationMessage({ type: 'card' }, 0)).toBe('From must be below To.');
+    expect(editor._renderSegmentPreviewIntervals({ type: 'card' })).toContain('background-color:red');
   });
 
   it('numeric segment preview keeps empty, invalid, and zero-width geometry safe', () => {
@@ -5434,13 +5526,13 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#card-segment-preview-track').getAttribute('style')).toBe('');
 
     editor.setConfig({ entity: 'sensor.one', bar: { segments: [{ from: 5, to: 5, color: '#ff0000' }] } });
-    const zeroWidthStyle = editor.shadowRoot.querySelector('#card-segment-preview-track').getAttribute('style');
-    expect(zeroWidthStyle).toContain('#ff0000 5%');
-    expect(zeroWidthStyle).not.toMatch(/NaN|Infinity/);
+    const zeroWidthPreview = editor._renderSegmentPreviewIntervals({ type: 'card' });
+    expect(zeroWidthPreview).toContain('background-color:#ff0000');
+    expect(zeroWidthPreview).not.toMatch(/NaN|Infinity/);
 
     editor.setConfig({ entity: 'sensor.one', bar: { segments: [{ from: 'invalid', to: 40, color: '#ff0000' }] } });
     expect(editor._getSegmentPreviewRows({ type: 'card' })).toEqual([]);
-    expect(editor.shadowRoot.querySelector('#card-segment-preview-track').getAttribute('style')).toBe('');
+    expect(editor._renderSegmentPreviewIntervals({ type: 'card' })).toBe('');
   });
 
   it('segment rows sort after committed edits', () => {
@@ -5480,7 +5572,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    const previewBefore = editor.shadowRoot.querySelector('#card-segment-preview-track').getAttribute('style');
+    const previewBefore = editor._renderSegmentPreviewIntervals({ type: 'card' });
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="segment-from"]')[1], '40%');
     dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="segment-from"]')[1], '40%');
 
@@ -5490,7 +5582,7 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="segment-from"]')[0].value).toBe('20%');
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="segment-from"]')[1].value).toBe('40%');
-    expect(editor.shadowRoot.querySelector('#card-segment-preview-track').getAttribute('style')).not.toBe(previewBefore);
+    expect(editor._renderSegmentPreviewIntervals({ type: 'card' })).not.toBe(previewBefore);
   });
 
   it('remove works while card-level segments are invalid', () => {
@@ -8450,10 +8542,10 @@ describe('Sensor Bar Card Plus editor', () => {
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
-    const originalStyle = editor.shadowRoot.querySelector('#entity-0-segment-preview-track').getAttribute('style');
+    const originalPreview = editor._renderSegmentPreviewIntervals({ type: 'entity', index: 0 });
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-color"]')[0], '#00ff00');
 
-    expect(editor.shadowRoot.querySelector('#entity-0-segment-preview-track').getAttribute('style')).not.toBe(originalStyle);
+    expect(editor._renderSegmentPreviewIntervals({ type: 'entity', index: 0 })).not.toBe(originalPreview);
   });
 
   it('per-entity segment preview ignores draft endpoint edits until Add', async () => {
@@ -8473,10 +8565,12 @@ describe('Sensor Bar Card Plus editor', () => {
     const track = editor.shadowRoot.querySelector('#entity-0-segment-preview-track');
     const originalStyle = track.getAttribute('style');
     const originalRows = editor._getSegmentPreviewRows({ type: 'entity', index: 0 });
-    expect(originalStyle).toContain(`${segments.at(-1).color} 100%`);
+    const originalPreview = editor._renderSegmentPreviewIntervals({ type: 'entity', index: 0 });
+    expect(originalPreview).toContain(`${segments.at(-1).color}`);
 
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-segment-draft-to'), '41');
     expect(track.getAttribute('style')).toBe(originalStyle);
+    expect(editor._renderSegmentPreviewIntervals({ type: 'entity', index: 0 })).toBe(originalPreview);
     expect(editor._getSegmentPreviewRows({ type: 'entity', index: 0 })).toEqual(originalRows);
   });
 
@@ -8498,7 +8592,7 @@ describe('Sensor Bar Card Plus editor', () => {
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
-    const previewBefore = editor.shadowRoot.querySelector('#entity-0-segment-preview-track').getAttribute('style');
+    const previewBefore = editor._renderSegmentPreviewIntervals({ type: 'entity', index: 0 });
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')[1], '40%');
     dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')[1], '40%');
 
@@ -8515,7 +8609,7 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')[0].value).toBe('20%');
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')[1].value).toBe('40%');
-    expect(editor.shadowRoot.querySelector('#entity-0-segment-preview-track').getAttribute('style')).not.toBe(previewBefore);
+    expect(editor._renderSegmentPreviewIntervals({ type: 'entity', index: 0 })).not.toBe(previewBefore);
   });
 
   it('per-entity segments summary renders segment count', () => {

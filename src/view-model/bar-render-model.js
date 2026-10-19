@@ -84,7 +84,7 @@ export function hexToRgb(color) {
 export function getSeverityInterpolationStops(ecfg, minValue = 0, maxValue = 100, preserveCssColors = false) {
   const bands = getSegmentsForRendering(ecfg, minValue, maxValue);
   const sorted = bands
-    .filter(s => Number.isFinite(s?.from) && Number.isFinite(s?.to) && s?.color)
+    .filter(s => Number.isFinite(s?.from) && Number.isFinite(s?.to) && s.from < s.to && s?.color)
     .sort((a, b) => a.from - b.from);
 
   if (!sorted.length) return [];
@@ -110,23 +110,20 @@ export function getSeverityInterpolationStops(ecfg, minValue = 0, maxValue = 100
   return stops;
 }
 
-export function getBandsGradientCss(bands, fallbackColor = '#4a9eff', scaleDirection = 'normal') {
+export function getBandsGradientCss(bands, _fallbackColor = '#4a9eff', scaleDirection = 'normal') {
   const sorted = bands
-    .filter(s => Number.isFinite(s?.from) && Number.isFinite(s?.to) && s?.color)
+    .filter(s => Number.isFinite(s?.from) && Number.isFinite(s?.to) && s.from < s.to && s?.color)
     .sort((a, b) => a.from - b.from);
 
   if (!sorted.length) return null;
 
+  // Keep the released v1.8 semantics: each authored Segment contributes only
+  // its own flat-color endpoints. CSS interpolates gaps and extends the edge
+  // colors beyond the first and last Segment.
   const stops = [];
-  let coveredTo = 0;
   for (const band of sorted) {
-    if (band.from > coveredTo) {
-      stops.push({ color: fallbackColor, p: coveredTo }, { color: fallbackColor, p: band.from });
-    }
     stops.push({ color: band.color, p: band.from }, { color: band.color, p: band.to });
-    coveredTo = Math.max(coveredTo, band.to);
   }
-  if (coveredTo < 100) stops.push({ color: fallbackColor, p: coveredTo }, { color: fallbackColor, p: 100 });
 
   const projectedStops = scaleDirection === 'reverse'
     ? projectGradientStops(stops, scaleDirection)
@@ -242,11 +239,13 @@ export function getSegmentsForRendering(ecfg, minValue = 0, maxValue = 100) {
       .filter((segment) => Number.isFinite(segment.from) && segment.color);
 
     return inferSegmentEndValues(resolvedSegments, 100)
-      .filter((segment) => Number.isFinite(segment.from) && Number.isFinite(segment.to) && segment.color);
+      .filter((segment) => Number.isFinite(segment.from) && Number.isFinite(segment.to)
+        && segment.from < segment.to && segment.color);
   }
 
   return inferSegmentEndValues(rawSegments, 100)
-    .filter((segment) => Number.isFinite(segment.from) && Number.isFinite(segment.to) && segment.color);
+    .filter((segment) => Number.isFinite(segment.from) && Number.isFinite(segment.to)
+      && segment.from < segment.to && segment.color);
 }
 
 export function getColor(pct, ecfg, minValue = 0, maxValue = 100) {

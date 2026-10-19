@@ -211,6 +211,40 @@ export const editorStyles = `
 	          gap: 6px;
 	          min-width: 0;
 	        }
+	        .segment-undefined-row {
+	          display: flex;
+	          align-items: center;
+	          gap: 10px;
+	          min-height: 42px;
+	          padding: 6px 10px;
+	          border: 1px dashed color-mix(in srgb, var(--divider-color, #888) 55%, transparent);
+	          border-radius: 10px;
+	          color: var(--secondary-text-color, #666);
+	        }
+	        .segment-undefined-swatch,
+	        .segment-undefined-region {
+	          background-color: var(--secondary-background-color, var(--card-background-color, #fff));
+	          background-image: conic-gradient(color-mix(in srgb, var(--primary-text-color, #111) 20%, transparent) 25%, transparent 0 50%, color-mix(in srgb, var(--primary-text-color, #111) 20%, transparent) 0 75%, transparent 0);
+	          background-size: 12px 12px;
+	        }
+	        .segment-undefined-swatch {
+	          flex: 0 0 30px;
+	          width: 30px;
+	          height: 22px;
+	          border: 1px solid color-mix(in srgb, var(--divider-color, #888) 45%, transparent);
+	          border-radius: 5px;
+	        }
+	        .segment-undefined-label {
+	          display: flex;
+	          align-items: baseline;
+	          flex-wrap: wrap;
+	          gap: 4px 10px;
+	          min-width: 0;
+	          font-size: 0.85rem;
+	        }
+	        .segment-undefined-label small {
+	          color: var(--secondary-text-color, #666);
+	        }
 	        .segment-draft {
 	          display: grid;
 	          gap: 6px;
@@ -232,6 +266,19 @@ export const editorStyles = `
 	          background: linear-gradient(to right, #4CAF50 0%, #FF9800 50%, #F44336 100%);
 	          box-shadow: inset 0 1px 0 color-mix(in srgb, var(--card-background-color, #fff) 35%, transparent);
 	          overflow: hidden;
+	        }
+	        .segment-preview-track {
+	          background: var(--secondary-background-color, var(--card-background-color, #fff));
+	        }
+	        .segment-preview-interval {
+	          position: absolute;
+	          top: 0;
+	          bottom: 0;
+	          box-sizing: border-box;
+	        }
+	        .segment-invalid-region {
+	          outline: 2px solid var(--error-color, #db4437);
+	          outline-offset: -2px;
 	        }
 	        .gradient-preview-stop {
 	          position: absolute;

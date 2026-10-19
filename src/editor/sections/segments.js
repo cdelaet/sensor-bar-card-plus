@@ -3,9 +3,67 @@ import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumb
 import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, normalizeEditorColorValue } from '../shared/editor-controls.js';
 import { normalizeGaugeSegments, normalizeScaleConfig } from '../../config/normalize.js';
 import { getResolvedScale } from '../../config/resolve.js';
-import { getBandsGradientCss, getSegmentsForRendering } from '../../view-model/bar-render-model.js';
+import { getSegmentsForRendering, resolveSegmentBoundaryPct } from '../../view-model/bar-render-model.js';
 import { PaletteSection } from '../shared/palette-section.js';
-import { getEffectiveBarColorValue } from './bar-appearance.js';
+
+export const MIXED_INTERVAL_PREVIEW_WEIGHT = 10;
+export const MIN_SEGMENT_PREVIEW_WIDTH = 1;
+
+function segmentCoordinate(value, legacyPercent = false) {
+  if (value === null || value === undefined || typeof value === 'string' && !value.trim()) return null;
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    if (Number.isFinite(value.percent)) return { value: value.percent, space: 'percent' };
+    const fixed = Number(value.fixed ?? value.value);
+    return Number.isFinite(fixed) ? { value: fixed, space: 'absolute' } : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const match = trimmed.match(/^([+-]?(?:\d+(?:\.\d+)?|\.\d+))%$/);
+    if (match) return { value: Number(match[1]), space: 'percent' };
+    value = trimmed;
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return { value: numeric, space: legacyPercent ? 'percent' : 'absolute' };
+}
+
+export function allocateSegmentPreviewWidths(intervals) {
+  if (!intervals.length) return [];
+  // More than 100 intervals cannot each receive 1% and still fit. Preserve a
+  // fitted preview in that edge case by sharing the rail evenly.
+  if (intervals.length * MIN_SEGMENT_PREVIEW_WIDTH > 100) return intervals.map(() => 100 / intervals.length);
+  const mixedCount = intervals.filter(interval => interval.mixed).length;
+  const sameSpace = intervals.filter(interval => !interval.mixed);
+  let desired;
+  if (mixedCount && sameSpace.length) {
+    const mixedShare = Math.min(MIXED_INTERVAL_PREVIEW_WEIGHT, 100 / mixedCount);
+    const knownShare = Math.max(0, 100 - mixedShare * mixedCount);
+    const knownTotal = sameSpace.reduce((sum, interval) => sum + Math.max(0, interval.weight), 0);
+    desired = intervals.map(interval => interval.mixed
+      ? mixedShare
+      : knownTotal > 0 ? knownShare * Math.max(0, interval.weight) / knownTotal : knownShare / sameSpace.length);
+  } else {
+    const total = intervals.reduce((sum, interval) => sum + Math.max(0, interval.weight), 0);
+    desired = intervals.map(interval => total > 0
+      ? 100 * Math.max(0, interval.weight) / total
+      : 100 / intervals.length);
+  }
+
+  const widths = Array(intervals.length).fill(null);
+  let remaining = 100;
+  let active = intervals.map((_, index) => index);
+  while (active.length) {
+    const total = active.reduce((sum, index) => sum + desired[index], 0);
+    const small = active.filter(index => (total > 0 ? remaining * desired[index] / total : remaining / active.length) < MIN_SEGMENT_PREVIEW_WIDTH);
+    if (!small.length) {
+      active.forEach(index => { widths[index] = total > 0 ? remaining * desired[index] / total : remaining / active.length; });
+      break;
+    }
+    small.forEach(index => { widths[index] = MIN_SEGMENT_PREVIEW_WIDTH; remaining -= MIN_SEGMENT_PREVIEW_WIDTH; });
+    active = active.filter(index => !small.includes(index));
+  }
+  return widths;
+}
 
 export class SegmentsSection extends PaletteSection {
   constructor(context, ui, array) {
@@ -268,14 +326,40 @@ export class SegmentsSection extends PaletteSection {
   }
 
   _compareSegmentBoundaries(left, right) {
-    const leftValue = this._getSegmentPreviewBoundaryValue(left);
-    const rightValue = this._getSegmentPreviewBoundaryValue(right);
-    if (leftValue === null || rightValue === null) {
+    const legacyPercent = this.array.segmentSpace?.() === 'percent';
+    const leftCoordinate = segmentCoordinate(left, legacyPercent);
+    const rightCoordinate = segmentCoordinate(right, legacyPercent);
+    if (!leftCoordinate || !rightCoordinate || leftCoordinate.space !== rightCoordinate.space) {
       return null;
     }
-    if (leftValue < rightValue) return -1;
-    if (leftValue > rightValue) return 1;
+    if (leftCoordinate.value < rightCoordinate.value) return -1;
+    if (leftCoordinate.value > rightCoordinate.value) return 1;
     return 0;
+  }
+
+  _getResolvedMixedRangeValidationMessage(scope, rows, index) {
+    const card = this.context.read({ type: 'card' }, []);
+    const local = scope?.type === 'entity' ? this.context.read(scope, []) : {};
+    const rootScale = normalizeScaleConfig(card, null);
+    const scaleConfig = scope?.type === 'entity'
+      ? normalizeScaleConfig(local, { scale: rootScale })
+      : rootScale;
+    const scale = getResolvedScale(this.ui.hass?.(), scaleConfig);
+    const normalized = normalizeGaugeSegments(rows.map((row, rowIndex) => ({
+      from: row.parsedFrom.value,
+      ...(row.parsedTo.state === 'empty' ? {} : { to: row.parsedTo.value }),
+      color: row.segment?.color ?? '#4a9eff',
+      label: rowIndex,
+    })), { legacySegmentSpace: this.array.segmentSpace?.() });
+    const candidate = normalized?.[index];
+    if (!candidate || !Number.isFinite(scale.min) || !Number.isFinite(scale.max) || scale.min === scale.max) return '';
+    const from = resolveSegmentBoundaryPct(candidate.from, scale.min, scale.max);
+    let to = resolveSegmentBoundaryPct(candidate.to, scale.min, scale.max);
+    if (to === null) {
+      const next = normalized.slice(index + 1).find(segment => segment && !segment.invalidBoundary);
+      to = next ? resolveSegmentBoundaryPct(next.from, scale.min, scale.max) : 100;
+    }
+    return Number.isFinite(from) && Number.isFinite(to) && from >= to ? 'From must be below To.' : '';
   }
 
   _buildSegmentValidationRows(scope = { type: 'card' }) {
@@ -287,6 +371,7 @@ export class SegmentsSection extends PaletteSection {
       const parsedTo = this._parseSegmentBoundaryText(rawTo);
       return {
         index,
+        segment,
         rawFrom,
         rawTo,
         parsedFrom,
@@ -341,14 +426,22 @@ export class SegmentsSection extends PaletteSection {
     if (row.parsedFrom.state === 'invalid' || row.parsedTo.state === 'invalid' || row.parsedFrom.state === 'empty' || row.parsedTo.state === 'empty') {
       return 'Enter valid from/to values.';
     }
-    if (this._compareSegmentBoundaries(row.parsedFrom.value, row.parsedTo.value) !== -1) {
+    const boundaryOrder = this._compareSegmentBoundaries(row.parsedFrom.value, row.parsedTo.value);
+    if (boundaryOrder !== null && boundaryOrder !== -1) {
       return 'From must be below To.';
+    }
+    if (boundaryOrder === null) {
+      const resolvedMessage = this._getResolvedMixedRangeValidationMessage(scope, rows, segmentIndex);
+      if (resolvedMessage) return resolvedMessage;
     }
     const candidateFrom = this._getSegmentPreviewBoundaryValue(row.parsedFrom.value);
     const candidateTo = this._getSegmentPreviewBoundaryValue(row.parsedTo.value);
     for (const other of rows) {
       if (other.index === segmentIndex) continue;
       if (other.parsedFrom.state !== 'valid' || other.parsedTo.state !== 'valid') continue;
+      if (this._compareSegmentBoundaries(row.parsedFrom.value, other.parsedFrom.value) === null
+        || this._compareSegmentBoundaries(row.parsedFrom.value, row.parsedTo.value) === null
+        || this._compareSegmentBoundaries(other.parsedFrom.value, other.parsedTo.value) === null) continue;
       const otherFrom = this._getSegmentPreviewBoundaryValue(other.parsedFrom.value);
       const otherTo = this._getSegmentPreviewBoundaryValue(other.parsedTo.value);
       if (candidateFrom === otherFrom) {
@@ -376,14 +469,24 @@ export class SegmentsSection extends PaletteSection {
     if (parsedFrom.state !== 'valid' || parsedTo.state !== 'valid' || !color) {
       return null;
     }
-    if (this._compareSegmentBoundaries(parsedFrom.value, parsedTo.value) !== -1) {
+    const boundaryOrder = this._compareSegmentBoundaries(parsedFrom.value, parsedTo.value);
+    if (boundaryOrder !== null && boundaryOrder !== -1) {
       return null;
+    }
+    if (boundaryOrder === null) {
+      const rows = this._buildSegmentValidationRows(scope);
+      const mixedRow = { index: rows.length, segment: draft, rawFrom: draft.from, rawTo: draft.to,
+        parsedFrom, parsedTo };
+      if (this._getResolvedMixedRangeValidationMessage(scope, [...rows, mixedRow], mixedRow.index)) return null;
     }
     const candidateFrom = this._getSegmentPreviewBoundaryValue(parsedFrom.value);
     const candidateTo = this._getSegmentPreviewBoundaryValue(parsedTo.value);
     const rows = this._buildSegmentValidationRows(scope);
     for (const row of rows) {
       if (row.parsedFrom.state !== 'valid' || row.parsedTo.state !== 'valid') continue;
+      if (this._compareSegmentBoundaries(parsedFrom.value, row.parsedFrom.value) === null
+        || this._compareSegmentBoundaries(parsedFrom.value, parsedTo.value) === null
+        || this._compareSegmentBoundaries(row.parsedFrom.value, row.parsedTo.value) === null) continue;
       const otherFrom = this._getSegmentPreviewBoundaryValue(row.parsedFrom.value);
       const otherTo = this._getSegmentPreviewBoundaryValue(row.parsedTo.value);
       if (candidateFrom === otherFrom || (candidateFrom < otherTo && candidateTo > otherFrom)) {
@@ -418,8 +521,16 @@ export class SegmentsSection extends PaletteSection {
     if (parsedFrom.state !== 'valid' || parsedTo.state !== 'valid') {
       return 'Enter valid from/to values.';
     }
-    if (this._compareSegmentBoundaries(parsedFrom.value, parsedTo.value) !== -1) {
+    const boundaryOrder = this._compareSegmentBoundaries(parsedFrom.value, parsedTo.value);
+    if (boundaryOrder !== null && boundaryOrder !== -1) {
       return 'From must be below To.';
+    }
+    if (boundaryOrder === null) {
+      const rows = this._buildSegmentValidationRows(scope);
+      const mixedRow = { index: rows.length, segment: { from: parsedFrom.value, to: parsedTo.value, color },
+        parsedFrom, parsedTo };
+      const resolvedMessage = this._getResolvedMixedRangeValidationMessage(scope, [...rows, mixedRow], mixedRow.index);
+      if (resolvedMessage) return resolvedMessage;
     }
     if (!color) {
       return 'Choose a color to add a segment.';
@@ -429,6 +540,9 @@ export class SegmentsSection extends PaletteSection {
     const rows = this._buildSegmentValidationRows(scope);
     for (const row of rows) {
       if (row.parsedFrom.state !== 'valid' || row.parsedTo.state !== 'valid') continue;
+      if (this._compareSegmentBoundaries(parsedFrom.value, row.parsedFrom.value) === null
+        || this._compareSegmentBoundaries(parsedFrom.value, parsedTo.value) === null
+        || this._compareSegmentBoundaries(row.parsedFrom.value, row.parsedTo.value) === null) continue;
       const otherFrom = this._getSegmentPreviewBoundaryValue(row.parsedFrom.value);
       const otherTo = this._getSegmentPreviewBoundaryValue(row.parsedTo.value);
       if (candidateFrom === otherFrom) {
@@ -468,75 +582,113 @@ export class SegmentsSection extends PaletteSection {
     if (!Array.isArray(segments)) {
       return [];
     }
-    return cloneDeep(segments).sort((left, right) => {
-      const leftFrom = this._getSegmentPreviewBoundaryValue(left?.from);
-      const rightFrom = this._getSegmentPreviewBoundaryValue(right?.from);
-      if (leftFrom === null && rightFrom === null) return 0;
-      if (leftFrom === null) return 1;
-      if (rightFrom === null) return -1;
-      return leftFrom - rightFrom;
-    });
+    const rows = cloneDeep(segments);
+    const coordinates = rows.map(segment => segmentCoordinate(segment?.from, this.array.segmentSpace?.() === 'percent'));
+    const space = coordinates[0]?.space;
+    if (!space || coordinates.some(coordinate => !coordinate || coordinate.space !== space)) return rows;
+    return rows.sort((left, right) => segmentCoordinate(left?.from, space === 'percent').value
+      - segmentCoordinate(right?.from, space === 'percent').value);
   }
 
   _getSegmentPreviewRows(scope = { type: 'card' }) {
     const committedSegments = this._getSegmentsUiRows(scope) ?? this._getScopedSegmentsValue(scope);
-    if (this.array.autoEnds) {
-      return this._resolveAutomaticEndRows(scope, this._getAutomaticEndInputRows(scope));
+    const legacyPercent = this.array.segmentSpace?.() === 'percent';
+    const authored = committedSegments.map((segment, index) => ({
+      segment,
+      index,
+      fromValue: this._parseSegmentBoundaryText(this._getSegmentBoundaryText(scope, index, 'from', segment?.from)).value,
+      toValue: this._parseSegmentBoundaryText(this._getSegmentBoundaryText(scope, index, 'to', segment?.to)).value,
+      from: segmentCoordinate(this._getSegmentBoundaryText(scope, index, 'from', segment?.from), legacyPercent),
+      to: segmentCoordinate(this._getSegmentBoundaryText(scope, index, 'to', segment?.to), legacyPercent),
+    })).filter(row => row.from && typeof row.segment?.color === 'string' && row.segment.color.trim());
+    if (!authored.length) return [];
+
+    const intervals = [];
+    const first = authored[0];
+    if (first.from.space === 'percent' && first.from.value > 0) {
+      intervals.push({ type: 'undefined', from: '0%', to: first.fromValue,
+        fromCoordinate: { value: 0, space: 'percent' }, toCoordinate: first.from,
+        beforeIndex: first.index, mixed: false, weight: first.from.value });
     }
-    const previewSegments = this._sortSegmentsForEditor(committedSegments).filter((segment) => {
-      const from = this._getSegmentPreviewBoundaryValue(segment?.from);
-      const to = this._getSegmentPreviewBoundaryValue(segment?.to);
-      return from !== null && to !== null && typeof segment?.color === 'string' && segment.color.trim();
+
+    for (let index = 0; index < authored.length; index++) {
+      const row = authored[index];
+      const next = authored[index + 1];
+      const to = row.to ?? next?.from ?? (row.from.space === 'percent' ? { value: 100, space: 'percent' } : null);
+      const toValue = row.toValue ?? next?.fromValue ?? (row.from.space === 'percent' ? '100%' : null);
+      const railEnd = !to;
+      const mixed = railEnd || to.space !== row.from.space;
+      const weight = mixed ? MIXED_INTERVAL_PREVIEW_WEIGHT : Math.abs(to.value - row.from.value);
+      intervals.push({ type: 'segment', index: row.index, segment: row.segment,
+        from: row.fromValue, to: toValue, fromCoordinate: row.from, toCoordinate: to,
+        railEnd, mixed, weight,
+        invalid: !mixed && row.from.value >= to.value });
+
+      if (!next || !row.to) continue;
+      if (to.space !== next.from.space) {
+        intervals.push({ type: 'undefined', from: row.toValue, to: next.fromValue,
+          fromCoordinate: to, toCoordinate: next.from,
+          afterIndex: row.index, mixed: true, weight: MIXED_INTERVAL_PREVIEW_WEIGHT });
+      } else if (next.from.value > to.value) {
+        intervals.push({ type: 'undefined', from: row.toValue, to: next.fromValue,
+          fromCoordinate: to, toCoordinate: next.from,
+          afterIndex: row.index, mixed: false, weight: next.from.value - to.value });
+      }
+    }
+
+    const last = authored.at(-1);
+    if (last.to?.space === 'percent' && last.to.value < 100) {
+      intervals.push({ type: 'undefined', from: last.toValue, to: '100%',
+        fromCoordinate: last.to, toCoordinate: { value: 100, space: 'percent' },
+        afterIndex: last.index, mixed: false, weight: 100 - last.to.value });
+    }
+
+    const widths = allocateSegmentPreviewWidths(intervals);
+    let start = 0;
+    return intervals.map((interval, index) => {
+      const width = widths[index];
+      const laidOut = { ...interval, previewStart: start, previewWidth: width, previewEnd: start + width };
+      start += width;
+      return laidOut;
     });
-    if (!previewSegments.length) {
-      return previewSegments;
-    }
-    const hasOnlyNumericBoundaries = previewSegments.every((segment) => [segment.from, segment.to].every((boundary) => (
-      typeof boundary === 'number' && Number.isFinite(boundary)
-      || isObject(boundary) && !Number.isFinite(boundary.percent) && Number.isFinite(this._getFiniteNumber(boundary.fixed))
-    )));
-    if (!hasOnlyNumericBoundaries) {
-      return previewSegments;
-    }
-    const boundaries = previewSegments.flatMap((segment) => [
-      this._getSegmentPreviewBoundaryValue(segment.from),
-      this._getSegmentPreviewBoundaryValue(segment.to),
-    ]);
-    const domainMin = boundaries.reduce((min, boundary) => Math.min(min, boundary), Infinity);
-    const domainMax = boundaries.reduce((max, boundary) => Math.max(max, boundary), -Infinity);
-    const domainWidth = domainMax - domainMin;
-    if (!Number.isFinite(domainWidth) || domainWidth <= 0) {
-      return previewSegments;
-    }
-    return previewSegments.map((segment) => ({
-      ...segment,
-      from: ((this._getSegmentPreviewBoundaryValue(segment.from) - domainMin) / domainWidth) * 100,
-      to: ((this._getSegmentPreviewBoundaryValue(segment.to) - domainMin) / domainWidth) * 100,
-    }));
   }
 
   _buildEditorSegmentPreviewStyle(scope = { type: 'card' }) {
-    const segments = this._getSegmentPreviewRows(scope);
-    if (!segments.length) {
-      return '';
-    }
-    const fillStyle = this.fillStyle(scope);
-    if (fillStyle === 'bands') {
-      const bands = segments.map((segment) => ({
-        ...segment,
-        from: Math.max(0, Math.min(100, this._getSegmentPreviewBoundaryValue(segment.from))),
-        to: Math.max(0, Math.min(100, this._getSegmentPreviewBoundaryValue(segment.to))),
-      }));
-      const gradient = getBandsGradientCss(bands, getEffectiveBarColorValue(this.context, scope));
-      return gradient ? `background:${gradient};background-repeat:no-repeat;` : '';
-    }
-    const stops = [];
-    segments.forEach((segment) => {
-      const from = Math.max(0, Math.min(100, this._getSegmentPreviewBoundaryValue(segment.from)));
-      const to = Math.max(0, Math.min(100, this._getSegmentPreviewBoundaryValue(segment.to)));
-      stops.push(`${segment.color} ${from}%`, `${segment.color} ${to}%`);
+    return '';
+  }
+
+  _renderSegmentPreviewIntervals(scope = { type: 'card' }) {
+    return this._getSegmentPreviewRows(scope).map((interval, index) => {
+      const undefinedRegion = interval.type === 'undefined';
+      const color = !undefinedRegion && interval.segment?.color
+        ? `background-color:${escapeAttribute(interval.segment.color)};`
+        : '';
+      const description = undefinedRegion ? 'No Segment is defined for this range.' : 'Authored Segment range.';
+      return `<span class="segment-preview-interval${undefinedRegion ? ' segment-undefined-region' : ''}${interval.invalid ? ' segment-invalid-region' : ''}" data-preview-kind="${undefinedRegion ? 'undefined' : 'segment'}" style="left:${interval.previewStart}%;width:${interval.previewWidth}%;${color}" aria-label="${escapeAttribute(description)}"></span>`;
+    }).join('');
+  }
+
+  _renderSegmentListRows(scope, renderAuthored) {
+    const segments = this._getSegmentsUiRows(scope) ?? this._getScopedSegmentsValue(scope);
+    const previewRows = this._getSegmentPreviewRows(scope);
+    const renderUndefined = interval => {
+      const from = this._formatSegmentBoundaryValue(interval.from);
+      const to = this._formatSegmentBoundaryValue(interval.to);
+      return `<div class="segment-undefined-row" role="note" aria-label="No Segment is defined for this range.">
+        <span class="segment-undefined-swatch" aria-hidden="true"></span>
+        <span class="segment-undefined-label"><strong>Undefined</strong><small>${escapeAttribute(from)} – ${escapeAttribute(to)}</small></span>
+      </div>`;
+    };
+    const undefinedRows = previewRows.filter(interval => interval.type === 'undefined');
+    const rendered = [];
+    segments.forEach((segment, index) => {
+      undefinedRows.filter(interval => interval.beforeIndex === index).forEach(interval => rendered.push(renderUndefined(interval)));
+      rendered.push(renderAuthored(segment, index));
+      undefinedRows.filter(interval => interval.afterIndex === index).forEach(interval => rendered.push(renderUndefined(interval)));
     });
-    return `background:linear-gradient(to right,${stops.join(',')});background-repeat:no-repeat;`;
+    // Keep authored controls stable while a boundary has an incomplete draft.
+    // The preview may omit that range temporarily, but must not reorder inputs.
+    return rendered.join('');
   }
 
   _getSegmentPreviewDomIds(scope = { type: 'card' }) {
@@ -554,55 +706,21 @@ export class SegmentsSection extends PaletteSection {
 
   _renderSegmentPreview(scope = { type: 'card' }) {
     const { previewId, trackId } = this._getSegmentPreviewDomIds(scope);
-    const segments = this._getSegmentPreviewRows(scope);
-    const markers = [];
-    segments.forEach((segment) => {
-      const from = this._getSegmentPreviewBoundaryValue(segment.from);
-      const to = this._getSegmentPreviewBoundaryValue(segment.to);
-      if (from !== null) markers.push(from);
-      if (to !== null) markers.push(to);
-    });
-    const uniqueMarkers = [...new Set(markers)].sort((left, right) => left - right);
     return `
       <div id="${previewId}" class="gradient-preview segment-preview">
-        <div id="${trackId}" class="gradient-preview-track segment-preview-track" style="${escapeAttribute(this._buildEditorSegmentPreviewStyle(scope) ?? '')}">
-          ${uniqueMarkers.map((marker, index) => `
-            <span
-              id="${previewId}-stop-${index}"
-              class="gradient-preview-stop"
-              style="left:${escapeAttribute(String(marker))}%"
-              title="${escapeAttribute(`${marker}%`)}"
-            ></span>
-          `).join('')}
-        </div>
+        <div id="${trackId}" class="gradient-preview-track segment-preview-track" style="" aria-label="Authored Segment coverage preview">${this._renderSegmentPreviewIntervals(scope)}</div>
       </div>
     `;
   }
 
   _refreshSegmentPreview(scope = { type: 'card' }) {
-    const { previewId, trackId } = this._getSegmentPreviewDomIds(scope);
+    const { trackId } = this._getSegmentPreviewDomIds(scope);
     const track = this._getShadowElementById(trackId);
     if (!track) {
       return;
     }
-    track.setAttribute('style', this._buildEditorSegmentPreviewStyle(scope) ?? '');
-    const segments = this._getSegmentPreviewRows(scope);
-    const markers = [];
-    segments.forEach((segment) => {
-      const from = this._getSegmentPreviewBoundaryValue(segment.from);
-      const to = this._getSegmentPreviewBoundaryValue(segment.to);
-      if (from !== null) markers.push(from);
-      if (to !== null) markers.push(to);
-    });
-    const uniqueMarkers = [...new Set(markers)].sort((left, right) => left - right);
-    track.innerHTML = uniqueMarkers.map((marker, index) => `
-      <span
-        id="${previewId}-stop-${index}"
-        class="gradient-preview-stop"
-        style="left:${escapeAttribute(String(marker))}%"
-        title="${escapeAttribute(`${marker}%`)}"
-      ></span>
-    `).join('');
+    track.setAttribute('style', '');
+    track.innerHTML = this._renderSegmentPreviewIntervals(scope);
   }
 
   _getSegmentDomIds(scope = { type: 'card' }) {
@@ -735,7 +853,6 @@ export class SegmentsSection extends PaletteSection {
   render(scope = { type: 'card' }, renderGroup = ({ content }) => content, { section = true } = {}) {
     if (scope?.type === 'entity') {
       const index = scope.index;
-      const entitySegments = this._getScopedSegmentsValue(scope);
       const segmentsInherited = !this._hasSegmentsOverride(scope);
       return `
 	                      <div class="field-row">
@@ -752,7 +869,7 @@ export class SegmentsSection extends PaletteSection {
                       <div class="field-row">
                         <label>Segments</label>
                         <div class="list">
-                          ${this._renderListRows(entitySegments, (segment, segmentIndex) => `
+                          ${this._renderSegmentListRows(scope, (segment, segmentIndex) => `
                             <div class="segment-editor-row">
                             <div class="list-row triple segment-row">
                               <input type="text" data-kind="entity-segment-from" data-index="${index}" data-segment-index="${segmentIndex}" value="${escapeAttribute(this._getSegmentBoundaryText(scope, segmentIndex, 'from', segment?.from))}" placeholder="0%">
@@ -777,7 +894,6 @@ export class SegmentsSection extends PaletteSection {
 	                          `;
     }
     const fillStyle = this.fillStyle(scope);
-    const segments = this._getScopedSegmentsValue(scope);
     const defaultSegmentsVisible = !this._hasSegmentsOverride(scope) && this._isSegmentFillStyle(fillStyle);
     const group = renderGroup({
       group: 'segments',
@@ -797,7 +913,7 @@ export class SegmentsSection extends PaletteSection {
                     ? '<div class="section-note">Default bands</div>'
                     : ''
                   }
-                  ${this._renderListRows(segments, (segment, index) => `
+                  ${this._renderSegmentListRows({ type: 'card' }, (segment, index) => `
                     <div class="segment-editor-row">
                     <div class="list-row triple segment-row">
                       <input type="text"${this.array.autoEnds ? ` aria-label="Segment ${index + 1} start"` : ''} data-kind="segment-from" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: 'card' }, index, 'from', segment?.from))}" placeholder="0%">
