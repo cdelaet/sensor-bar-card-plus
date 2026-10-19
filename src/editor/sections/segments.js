@@ -856,6 +856,9 @@ export class SegmentsSection extends PaletteSection {
   }
 
   _getSegmentsSummary(scope) {
+    if (scope?.type === 'entity' && !this._hasSegmentsOverride(scope)) {
+      return 'Inherited';
+    }
     const segments = this._getScopedSegmentsValue(scope);
     if (!Array.isArray(segments) || segments.length === 0) {
       return 'Inherited';

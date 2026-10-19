@@ -8599,6 +8599,36 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.innerHTML).toContain('>Inherited</span>');
   });
 
+  it('entity Segments summary reflects override state before and after taking ownership', async () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    const cardSegments = Array.from({ length: 6 }, (_, index) => ({
+      from: `${index * (100 / 6)}%`,
+      to: `${(index + 1) * (100 / 6)}%`,
+      color: `#${String(index + 1).padStart(6, '0')}`,
+    }));
+    editor.setConfig({
+      bar: { fill_style: 'bands', segments: cardSegments },
+      entities: [{ entity: 'sensor.one' }],
+    });
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    const summaryMarkup = () => editor.shadowRoot.innerHTML.match(/id="entity-0-group-segments-summary"[^>]*>([^<]*)<\/span>/)?.[1];
+    expect(summaryMarkup()).toBe('Inherited');
+    expect(editor.shadowRoot.querySelector('#entity-0-segments-inherit').checked).toBe(true);
+
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
+    const summaryElement = editor.shadowRoot.querySelector('#entity-0-group-segments-summary');
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-color"]')[0], '#abcdef');
+    expect(summaryElement.textContent).toBe('6 segments');
+    await flushTimers();
+
+    expect(events.at(-1).detail.config.entities[0].bar.segments).toHaveLength(6);
+    expect(editor._hasSegmentsOverride({ type: 'entity', index: 0 })).toBe(true);
+    expect(editor._getSegmentsSummary({ type: 'entity', index: 0 })).toBe('6 segments');
+    expect(editor.shadowRoot.querySelector('#entity-0-segments-inherit').checked).toBe(false);
+  });
+
   it('inherited segments display effective card/default rows', () => {
     const editor = createEditor();
 
