@@ -245,11 +245,23 @@ export const editorStyles = `
 	        .segment-undefined-label small {
 	          color: var(--secondary-text-color, #666);
 	        }
+	        .segment-undefined-action {
+	          flex: 0 0 auto;
+	          margin-left: auto;
+	          min-height: 32px;
+	          padding: 4px 8px;
+	          font-size: 0.82rem;
+	        }
 	        .segment-draft {
 	          display: grid;
 	          gap: 6px;
 	          padding-top: 10px;
 	          border-top: 1px dashed color-mix(in srgb, var(--divider-color, #888) 34%, transparent);
+	        }
+	        .segment-draft-heading {
+	          color: var(--secondary-text-color, #666);
+	          font-size: 0.8rem;
+	          font-weight: 600;
 	        }
 	        .gradient-preview {
 	          display: grid;

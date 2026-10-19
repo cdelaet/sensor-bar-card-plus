@@ -59,6 +59,20 @@ for(const host of hosts) {
    await d.reopen(page,editor);await d.openSection(editor,entry);await expect(d.control(editor,entry)).toHaveValue('normal');
   }
  });
+ test(`${host}: Undefined Segment action prepares exact boundaries and effective color before explicit Add`,async({page})=>{
+  const config=d.seed(host);config.bar.color='#123456';config.bar.segments=[{from:0,to:50,color:'red'},{from:60,to:100,color:'blue'}];
+  const editor=await d.mount(page,host,config);await d.openSection(editor,{section:'Segments',scope:'root'});
+  const action=editor.locator('button[data-action="add-segment-from-undefined"][data-from="50"][data-to="60"]');
+  await expect(action).toBeVisible();const before=await d.saved(page),events=await d.count(page);
+  await action.click();
+  await expect(editor.locator('#segment-draft-from')).toHaveValue('50');
+  await expect(editor.locator('#segment-draft-to')).toHaveValue('60');
+  if(host==='feature')await expect(editor.locator('#segment-draft-color-text-fallback')).toHaveValue('#123456');
+  else await expect(editor.locator('input[data-kind="segment-draft-color"]')).toHaveValue('#123456');
+  expect(await d.saved(page)).toEqual(before);expect(await d.count(page)).toBe(events);
+  await d.commit(page,editor,()=>editor.locator('button[data-action="add-segment"]').click());
+  expect((await d.saved(page)).bar.segments).toContainEqual({from:50,to:60,color:'#123456'});
+ });
  test(`${host}: disclosures retain state through echo and normal close/reopen`,async({page})=>{
   const editor=await d.mount(page,host);await expect(editor.locator('.card-subgroup[data-expanded="true"]')).toHaveCount(0);
   for(const group of Object.values(groups)){

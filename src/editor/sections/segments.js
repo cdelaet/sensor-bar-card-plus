@@ -4,6 +4,7 @@ import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, norma
 import { normalizeGaugeSegments, normalizeScaleConfig } from '../../config/normalize.js';
 import { getResolvedScale } from '../../config/resolve.js';
 import { getSegmentsForRendering, resolveSegmentBoundaryPct } from '../../view-model/bar-render-model.js';
+import { getEffectiveBarColorValue } from './bar-appearance.js';
 import { PaletteSection } from '../shared/palette-section.js';
 
 export const MIXED_INTERVAL_PREVIEW_WEIGHT = 10;
@@ -178,6 +179,14 @@ export class SegmentsSection extends PaletteSection {
     }, { refreshOnly: true });
   }
 
+  _prepareSegmentDraftFromUndefined(scope, from, to) {
+    this._setSegmentDraftState(scope, {
+      from: this._formatSegmentBoundaryValue(from),
+      to: this._formatSegmentBoundaryValue(to),
+      color: this._getSegmentDraftColorDefault(scope),
+    });
+  }
+
   _isSegmentFillStyle(fillStyle) {
     return ['bands', 'soft_bands', 'band_gradient'].includes(fillStyle);
   }
@@ -239,11 +248,7 @@ export class SegmentsSection extends PaletteSection {
   }
 
   _getSegmentDraftColorDefault(scope = { type: 'card' }) {
-    const segments = this._getScopedSegmentsValue(scope);
-    if (segments.length) {
-      return normalizeTextValue(segments[segments.length - 1]?.color).trim() || '#4a9eff';
-    }
-    return '#4CAF50';
+    return getEffectiveBarColorValue(this.context, scope);
   }
 
   _getNewSegmentDefaults(scope = { type: 'card' }) {
@@ -253,7 +258,7 @@ export class SegmentsSection extends PaletteSection {
     return {
       from: previousTo ?? '0%',
       to: '100%',
-      color: '#4a9eff',
+      color: this._getSegmentDraftColorDefault(scope),
     };
   }
 
@@ -674,9 +679,12 @@ export class SegmentsSection extends PaletteSection {
     const renderUndefined = interval => {
       const from = this._formatSegmentBoundaryValue(interval.from);
       const to = this._formatSegmentBoundaryValue(interval.to);
-      return `<div class="segment-undefined-row" role="note" aria-label="No Segment is defined for this range.">
+      const entity = scope?.type === 'entity';
+      const action = entity ? 'add-entity-segment-from-undefined' : 'add-segment-from-undefined';
+      return `<div class="segment-undefined-row" role="group" aria-label="Undefined Segment range ${escapeAttribute(from)} to ${escapeAttribute(to)}.">
         <span class="segment-undefined-swatch" aria-hidden="true"></span>
         <span class="segment-undefined-label"><strong>Undefined</strong><small>${escapeAttribute(from)} – ${escapeAttribute(to)}</small></span>
+        <button type="button" class="segment-undefined-action" data-action="${action}"${entity ? ` data-index="${scope.index}"` : ''} data-from="${escapeAttribute(from)}" data-to="${escapeAttribute(to)}">Add Segment</button>
       </div>`;
     };
     const undefinedRows = previewRows.filter(interval => interval.type === 'undefined');
@@ -881,6 +889,7 @@ export class SegmentsSection extends PaletteSection {
                             </div>
                           `)}
                           <div class="segment-draft">
+                            <div class="segment-draft-heading">Add Segment</div>
                             <div class="list-row triple segment-row">
                               <input id="entity-${index}-segment-draft-from" type="text" data-kind="entity-segment-draft-from" data-index="${index}" value="${escapeAttribute(this._getSegmentDraftState(scope).from)}" placeholder="0%">
                               <input id="entity-${index}-segment-draft-to" type="text" data-kind="entity-segment-draft-to" data-index="${index}" value="${escapeAttribute(this._getSegmentDraftState(scope).to)}" placeholder="100%">
@@ -925,6 +934,7 @@ export class SegmentsSection extends PaletteSection {
                       </div>
                   `)}
                     <div class="segment-draft">
+                      <div class="segment-draft-heading">Add Segment</div>
                       <div class="list-row triple segment-row">
                         <input id="segment-draft-from" type="text"${this.array.autoEnds ? ' aria-label="New segment start"' : ''} data-kind="segment-draft-from" value="${escapeAttribute(this._getSegmentDraftState({ type: 'card' }).from)}" placeholder="0%">
                         <input id="segment-draft-to" type="text"${this.array.autoEnds ? ' aria-label="New segment end (blank = Auto)"' : ''} data-kind="segment-draft-to" value="${escapeAttribute(this._getSegmentDraftState({ type: 'card' }).to)}" placeholder="${this.array.autoEnds ? 'Auto' : '100%'}">

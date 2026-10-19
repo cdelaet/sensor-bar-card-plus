@@ -34,11 +34,17 @@ export class PaletteSection {
     const refresh = () => segment ? this._refreshSegmentUi(scope) : this._refreshGradientDraftUi(scope);
     if (mode === 'click') {
       if (!['add-segment', 'remove-segment', 'add-entity-segment', 'remove-entity-segment',
+        'add-segment-from-undefined', 'add-entity-segment-from-undefined',
         'add-gradient-stop', 'remove-gradient-stop', 'add-entity-gradient-stop', 'remove-entity-gradient-stop'].includes(action)
         || !action.includes(prefix)) return false;
       if (action.startsWith('add-')) {
-        this.ui.focus(`#${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-${segment ? 'from' : 'pos'}`);
-        commit();
+        if (segment && action.endsWith('-from-undefined')) {
+          this._prepareSegmentDraftFromUndefined(scope, target.dataset.from, target.dataset.to);
+          this.ui.focus(`#${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-from`);
+        } else {
+          this.ui.focus(`#${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-${segment ? 'from' : 'pos'}`);
+          commit();
+        }
       } else {
         write(rows().filter((_, i) => i !== index), { rerender: true, ...(segment ? { sort: true } : {}) }, { type: 'remove', index });
       }

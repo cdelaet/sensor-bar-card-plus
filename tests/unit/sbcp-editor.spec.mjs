@@ -5251,6 +5251,69 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#segment-draft-from').value).toBe('');
   });
 
+  it('Undefined Add Segment prepares exact absolute boundaries without saving until explicit Add', async () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    const config = {
+      entity: 'sensor.one',
+      bar: {
+        fill_style: 'bands',
+        color: '#123abc',
+        segments: [
+          { from: 0, to: 50, color: '#111111' },
+          { from: 60, to: 100, color: '#eeeeee' },
+        ],
+      },
+    };
+    editor.setConfig(config);
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-segments'));
+
+    const action = editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')
+      .find(button => button.dataset.from === '50' && button.dataset.to === '60');
+    expect(action).not.toBeNull();
+    dispatchClick(action);
+    await flushTimers();
+
+    expect(editor.shadowRoot.querySelector('#segment-draft-from').value).toBe('50');
+    expect(editor.shadowRoot.querySelector('#segment-draft-to').value).toBe('60');
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="segment-draft-color"]')[0].value).toBe('#123abc');
+    expect(editor._config).toEqual(config);
+    expect(events).toHaveLength(0);
+
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-segment"]')[0]);
+    await flushTimers();
+    expect(events.at(-1).detail.config.bar.segments).toContainEqual({ from: 50, to: 60, color: '#123abc' });
+  });
+
+  it('Undefined Add Segment preserves percentage and mixed boundary forms', async () => {
+    const editor = createEditor();
+    editor.setConfig({ entity: 'sensor.one', bar: { segments: [{ from: '30%', to: '100%', color: '#111111' }] } });
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-segments'));
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')
+      .find(button => button.dataset.from === '0%' && button.dataset.to === '30%'));
+    await flushTimers();
+    expect(editor.shadowRoot.querySelector('#segment-draft-from').value).toBe('0%');
+    expect(editor.shadowRoot.querySelector('#segment-draft-to').value).toBe('30%');
+
+    editor.setConfig({ entity: 'sensor.one', scale: { min: 0, max: 100 }, bar: { segments: [
+      { from: 20, to: 50, color: '#111111' },
+      { from: '60%', to: '80%', color: '#eeeeee' },
+    ] } });
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-segments'));
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')
+      .find(button => button.dataset.from === '50' && button.dataset.to === '60%'));
+    await flushTimers();
+    expect(editor.shadowRoot.querySelector('#segment-draft-from').value).toBe('50');
+    expect(editor.shadowRoot.querySelector('#segment-draft-to').value).toBe('60%');
+  });
+
+  it('ordinary Segment composer defaults to effective Bar color', () => {
+    const editor = createEditor();
+    editor.setConfig({ entity: 'sensor.one', bar: { color: '#223344', segments: [{ from: 0, to: 50, color: '#ff0000' }] } });
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-segments'));
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="segment-draft-color"]')[0].value).toBe('#223344');
+  });
+
   it('editing a default card-level segment row emits explicit bar.segments', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
@@ -5381,7 +5444,9 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(preview).not.toMatch(/title="\d+(?:\.\d+)?%"/);
     expect(editor.shadowRoot.innerHTML).toContain('segment-undefined-swatch');
     expect(editor.shadowRoot.innerHTML).toContain('Undefined');
-    expect(editor.shadowRoot.innerHTML.match(/<div class="segment-undefined-row"[^>]*>(.*?)<\/div>/s)?.[1]).not.toContain('<button');
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-segments'));
+    expect(editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')).toHaveLength(3);
+    expect(editor.shadowRoot.innerHTML).toContain('<div class="segment-draft-heading">Add Segment</div>');
     expect(editor._config).toEqual(configBefore);
 
     const topology = editor._getSegmentPreviewRows({ type: 'card' }).map(row => row.type);
@@ -8670,6 +8735,25 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-segment-draft-from').value).toBe('');
   });
 
+  it('entity Segment composer uses effective inherited and overridden Bar colors', () => {
+    const editor = createEditor();
+    editor.setConfig({
+      bar: { fill_style: 'bands', color: '#112233' },
+      entities: [{ entity: 'sensor.one' }],
+    });
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-draft-color"]')[0].value).toBe('#112233');
+
+    editor.setConfig({
+      bar: { fill_style: 'bands', color: '#112233' },
+      entities: [{ entity: 'sensor.one', bar: { color: '#aabbcc' } }],
+    });
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
+    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-draft-color"]')[0].value).toBe('#aabbcc');
+  });
+
   it('adding from inherited/default entity segments emits explicit entity-level bar.segments', async () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
@@ -8694,7 +8778,7 @@ describe('Sensor Bar Card Plus editor', () => {
             { from: '0%', to: '33%', color: '#4CAF50' },
             { from: '33%', to: '75%', color: '#FF9800' },
             { from: '75%', to: '100%', color: '#F44336' },
-            { from: 100, to: 120, color: '#4a9eff' },
+            { from: 100, to: 120, color: '#ff9800' },
           ],
         },
       },

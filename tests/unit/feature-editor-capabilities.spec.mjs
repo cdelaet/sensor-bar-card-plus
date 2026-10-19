@@ -92,6 +92,15 @@ for(const source of ['src','dist']) describe(`Feature capability closure (${sour
   const count=events.length;await segment(editor,'to',0,'70');expect(editor._config).toEqual(config);expect(section._getSegmentRowValidationMessage(root,0)).toBe('Segments overlap.');expect(events).toHaveLength(count);
   await segment(editor,'to',0,'-1');expect(editor._config).toEqual(config);
  });
+ it('Segment Undefined action seeds the shared composer locally with effective Bar color',async()=>{
+  const config={type,bar:{fill_style:'bands',color:'#123456',segments:[{from:0,to:50,color:'red'},{from:60,to:100,color:'blue'}]}};
+  const {editor,events}=await setup(source,config),section=editor._segmentsSection;
+  expect(section._getSegmentDraftState(root).color).toBe('#123456');
+  section.handle({type:'click',target:{dataset:{action:'add-segment-from-undefined',from:'50',to:'60'}}});
+  await editor.updateComplete;
+  expect(section._getSegmentDraftState(root)).toEqual({from:'50',to:'60',color:'#123456'});
+  expect(editor._config).toEqual(config);expect(events).toHaveLength(0);
+ });
  it('auto-end preview ignores current dynamic Scale for layout and reports reversed configured order',async()=>{
   const config=raw();config.scale={min:{entity:'sensor.min',fixed:0},max:{entity:'sensor.max',fixed:200}};config.bar.segments=[{from:0,color:'red'},{from:50,color:'orange'}];
   const {editor,events}=await setup(source,config);expect(editor._segmentsSection._getSegmentPreviewRows(root).map(r=>r.from)).toEqual([0,50]);
