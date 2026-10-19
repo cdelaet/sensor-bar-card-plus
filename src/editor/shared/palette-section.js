@@ -39,7 +39,7 @@ export class PaletteSection {
         || !action.includes(prefix)) return false;
       if (action.startsWith('add-')) {
         if (segment && action.endsWith('-from-undefined')) {
-          this._prepareSegmentDraftFromUndefined(scope, target.dataset.from, target.dataset.to);
+          this._prepareSegmentDraftFromUndefined(scope, target.dataset.from, target.dataset.to, Number(target.dataset.insertIndex));
           this.ui.focus(`#${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-from`);
         } else {
           this.ui.focus(`#${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-${segment ? 'from' : 'pos'}`);

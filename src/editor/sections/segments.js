@@ -160,6 +160,7 @@ export class SegmentsSection extends PaletteSection {
       from: nextDraft?.from ?? '',
       to: nextDraft?.to ?? '',
       color: nextDraft?.color ?? this._getSegmentDraftColorDefault(scope),
+      insertIndex: Number.isInteger(nextDraft?.insertIndex) ? nextDraft.insertIndex : undefined,
     });
     if (options?.refreshOnly) {
       this._refreshSegmentUi(scope);
@@ -176,14 +177,16 @@ export class SegmentsSection extends PaletteSection {
     this._setSegmentDraftState(scope, {
       ...currentDraft,
       [field]: nextValue,
+      insertIndex: field === 'color' ? currentDraft.insertIndex : undefined,
     }, { refreshOnly: true });
   }
 
-  _prepareSegmentDraftFromUndefined(scope, from, to) {
+  _prepareSegmentDraftFromUndefined(scope, from, to, insertIndex) {
     this._setSegmentDraftState(scope, {
       from: this._formatSegmentBoundaryValue(from),
       to: this._formatSegmentBoundaryValue(to),
       color: this._getSegmentDraftColorDefault(scope),
+      insertIndex: Number.isInteger(insertIndex) ? insertIndex : undefined,
     });
   }
 
@@ -681,10 +684,13 @@ export class SegmentsSection extends PaletteSection {
       const to = this._formatSegmentBoundaryValue(interval.to);
       const entity = scope?.type === 'entity';
       const action = entity ? 'add-entity-segment-from-undefined' : 'add-segment-from-undefined';
+      const insertIndex = Number.isInteger(interval.beforeIndex)
+        ? interval.beforeIndex
+        : Number.isInteger(interval.afterIndex) ? interval.afterIndex + 1 : segments.length;
       return `<div class="segment-undefined-row" role="group" aria-label="Undefined Segment range ${escapeAttribute(from)} to ${escapeAttribute(to)}.">
         <span class="segment-undefined-swatch" aria-hidden="true"></span>
         <span class="segment-undefined-label"><strong>Undefined</strong><small>${escapeAttribute(from)} – ${escapeAttribute(to)}</small></span>
-        <button type="button" class="segment-undefined-action" data-action="${action}"${entity ? ` data-index="${scope.index}"` : ''} data-from="${escapeAttribute(from)}" data-to="${escapeAttribute(to)}">Add Segment</button>
+        <button type="button" class="segment-undefined-action" data-action="${action}"${entity ? ` data-index="${scope.index}"` : ''} data-from="${escapeAttribute(from)}" data-to="${escapeAttribute(to)}" data-insert-index="${insertIndex}">Add Segment</button>
       </div>`;
     };
     const undefinedRows = previewRows.filter(interval => interval.type === 'undefined');
@@ -780,8 +786,14 @@ export class SegmentsSection extends PaletteSection {
       return false;
     }
     const committedSegments = this._getSegmentsUiRows(scope) ?? this._getScopedSegmentsValue(scope);
-    const nextSegments = this._sortSegmentsForEditor([...committedSegments, draftSegment]);
-    const applied = this._setScopedSegments(scope, nextSegments, { rerender: true }, { type: 'add', item: draftSegment });
+    const draftState = this._getSegmentDraftState(scope);
+    const hasPreparedPosition = Number.isInteger(draftState.insertIndex);
+    const nextSegments = hasPreparedPosition
+      ? [...committedSegments.slice(0, draftState.insertIndex), draftSegment, ...committedSegments.slice(draftState.insertIndex)]
+      : this._sortSegmentsForEditor([...committedSegments, draftSegment]);
+    const applied = this._setScopedSegments(scope, nextSegments,
+      { rerender: true, ...(hasPreparedPosition ? { sort: false } : {}) },
+      { type: 'add', item: draftSegment });
     if (applied !== false) {
       this._segmentDrafts.set(this._getSegmentsScopeKey(scope), this._createSegmentDraftState(scope));
     }

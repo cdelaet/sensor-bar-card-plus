@@ -5285,6 +5285,68 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(events.at(-1).detail.config.bar.segments).toContainEqual({ from: 50, to: 60, color: '#123abc' });
   });
 
+  it('adding a prepared leading mixed-coordinate gap inserts it into the authored topology', async () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({ entity: 'sensor.one', scale: { min: 0, max: 200 }, bar: { fill_style: 'bands', segments: [
+      { from: '30%', to: 50, color: 'blue' },
+      { from: 60, to: 80, color: 'green' },
+      { from: 80, to: 90, color: 'yellow' },
+    ] } });
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-segments'));
+
+    const leadingGap = editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')
+      .find(button => button.dataset.from === '0%' && button.dataset.to === '30%');
+    expect(leadingGap).not.toBeNull();
+    dispatchClick(leadingGap);
+    await flushTimers();
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="segment-draft-color"]')[0], '#800080');
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-segment"]')[0]);
+    await flushTimers();
+
+    const segments = events.at(-1).detail.config.bar.segments;
+    expect(segments).toEqual([
+      { from: '0%', to: '30%', color: '#800080' },
+      { from: '30%', to: 50, color: 'blue' },
+      { from: 60, to: 80, color: 'green' },
+      { from: 80, to: 90, color: 'yellow' },
+    ]);
+    const rows = editor._getSegmentPreviewRows({ type: 'card' });
+    expect(rows[0]).toMatchObject({ type: 'segment', from: '0%', to: '30%', previewStart: 0 });
+    expect(rows.some(row => row.type === 'undefined' && row.from === '0%' && row.to === '30%')).toBe(false);
+    expect(rows.some(row => row.type === 'undefined' && row.from === '30%' && row.to === '100%')).toBe(false);
+    expect(editor.shadowRoot.innerHTML).not.toContain('Undefined Segment range 0% to 30%');
+    expect(editor.shadowRoot.innerHTML).not.toContain('Undefined Segment range 30% to 100%');
+    expect(editor._renderSegmentPreviewIntervals({ type: 'card' })).toMatch(/left:0%;width:[^;]+;background-color:#800080/);
+    expect(normalizeCardConfig(events.at(-1).detail.config).bar.segments[0].color).toBe('#800080');
+  });
+
+  it('adding a prepared same-coordinate gap removes its Undefined row and keeps coordinate order', async () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({ entity: 'sensor.one', bar: { fill_style: 'bands', segments: [
+      { from: 0, to: 50, color: '#111111' },
+      { from: 60, to: 100, color: '#eeeeee' },
+    ] } });
+    dispatchClick(editor.shadowRoot.querySelector('#card-group-segments'));
+    const gap = editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')
+      .find(button => button.dataset.from === '50' && button.dataset.to === '60');
+    dispatchClick(gap);
+    await flushTimers();
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="segment-draft-color"]')[0], '#800080');
+    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-segment"]')[0]);
+    await flushTimers();
+
+    expect(events.at(-1).detail.config.bar.segments).toEqual([
+      { from: 0, to: 50, color: '#111111' },
+      { from: 50, to: 60, color: '#800080' },
+      { from: 60, to: 100, color: '#eeeeee' },
+    ]);
+    expect(editor._getSegmentPreviewRows({ type: 'card' }).map(row => row.type)).toEqual(['segment', 'segment', 'segment']);
+    expect(editor._getSegmentPreviewRows({ type: 'card' })[1]).toMatchObject({ from: 50, to: 60, previewStart: expect.any(Number) });
+    expect(editor.shadowRoot.innerHTML).not.toContain('Undefined Segment range 50 to 60');
+  });
+
   it('Undefined Add Segment preserves percentage and mixed boundary forms', async () => {
     const editor = createEditor();
     editor.setConfig({ entity: 'sensor.one', bar: { segments: [{ from: '30%', to: '100%', color: '#111111' }] } });
