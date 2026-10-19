@@ -11,7 +11,7 @@ Sensor Bar Card Plus (SBCP) presents numeric sensor values as configurable bars 
 
 ![Sensor Bar Card Plus showcase](images/hero-v17.gif)
 
-Both presentations support structured YAML, animated reveal fills, Needle gauges, five fill styles, dynamic Scales, Baseline fill origins, Target/Peak/Floor and Reference Markers, and a Visual Editor. The standalone card also supports multiple entities, five label layouts including Hero, per-entity overrides, and responsive row content.
+Both presentations support structured YAML, animated reveal fills, Needle gauges, five fill styles, dynamic Scales, independent Scale and Bar Direction, Baseline fill origins, Target/Peak/Floor and Reference Markers, and a Visual Editor. The standalone card also supports multiple entities, attribute values, tap, hold and double-tap actions, five label layouts including Hero, per-entity overrides, and responsive row content.
 
 Now you have no excuse not to build that pretty dashboard. Go forth and dash those boards. -Chris (with unapologetic dadhumor)
 
@@ -92,7 +92,7 @@ The Feature reuses SBCP's Scale, Bar, Segments, Gradient Stops, Needle, Baseline
 
 ## How a card works
 
-Each standalone card row starts with a sensor value. SBCP compares that value with the row’s effective minimum and maximum to place it on a scale. Those bounds, Baseline, Target, and generic marker values can use live Home Assistant entities as sources. The track represents the scale; the fill or Needle shows the current value. Peak and Floor show observed extrema. Baseline changes where a reveal fill begins. Labels and layout determine how the value and its context fit around the track.
+Each standalone card row starts with a sensor state or a scalar entity attribute. SBCP compares that value with the row’s effective minimum and maximum to place it on a Scale. Those bounds, Baseline, Target, and generic marker values can also use live Home Assistant entity sources. The track represents the Scale; the fill or Needle shows the current value. Peak and Floor show observed extrema. Scale Direction controls where values appear; Bar Direction chooses whether a reveal fills left-to-right or right-to-left. A resolved Baseline sets its own reveal origin. Labels and layout determine how the value and its context fit around the track.
 
 Card settings provide defaults for supported row settings. Entity rows can override layout, scale, bar, Baseline, Target, Peak, Floor, generic markers, and formatting; card-only settings such as `title` and `entities` are not row overrides. Lists such as markers replace the inherited list. See [Configuration: scope and inheritance](docs/configuration.md#scope-inheritance-and-replacement) for the detailed rules.
 
@@ -100,7 +100,7 @@ Card settings provide defaults for supported row settings. Entity rows can overr
 
 ### Reveal fill
 
-Reveal fill runs from its fill origin to the current value. By default, the origin is the scale minimum; when Baseline is active, it becomes the fill origin. Reveal fill works well for progress, usage, charge, and other quantities where the amount filled is meaningful.
+Reveal fill runs from its fill origin to the current value. By default, the bar fills from the left; set `bar.direction: reverse` to fill from the right. A resolved Baseline supplies the fill origin instead. Scale Direction independently controls where Scale values appear. Reveal fill works well for progress, usage, charge, and other quantities where the amount filled is meaningful.
 
 ### Needle
 
@@ -138,7 +138,7 @@ The card can adapt supporting labels and icons as width changes. Hero gives the 
 
 **Baseline controls where the fill begins. It is not a marker type.**
 
-A baseline can be placed anywhere on the scale. The bar fills outward from that value rather than from scale.min, making it useful for any measurement with a meaningful reference point, such as zero for import/export power or 32 °F for freezing/thawing temperatures.
+A Baseline can be placed anywhere on the Scale. It supplies a semantic fill origin rather than using the physical edge selected by Bar Direction, making it useful for measurements with a meaningful reference point, such as zero for import/export power or 32 °F for freezing/thawing temperatures. Scale Direction controls where Baseline and other values appear; above/below colors retain their semantic meaning.
 
 ~~~yaml
 scale:
@@ -216,7 +216,7 @@ The interactive Playground brings feature combinations together in larger workin
 
 ## Visual Editor
 
-Both presentations have a Home Assistant Visual Editor and live preview. The standalone editor configures entity rows and Layout as well as Scale, Bar and markers. The Card Feature editor offers the applicable shared sections: Entities, Scale, Markers, Bar Appearance, Segments, Gradient Stops and Formatting, with parent-entity inheritance or an explicit override.
+Both presentations have a Home Assistant Visual Editor and live preview. The reorganized editor includes Scale and Bar Direction controls. The standalone editor also configures entity rows, supported attribute values, Layout, tap, hold and double-tap actions, Scale, Bar and markers. The Card Feature editor offers applicable shared sections: Entities, Scale, Markers, Bar Appearance, Segments, Gradient Stops and Formatting, with parent-entity inheritance or an explicit override. Home Assistant Tile cards continue to own interactions for Card Features.
 
 Target, Peak, Floor, Generic Reference Markers, and individual generic markers have collapsible editor groups. Baseline is configured under **Bar Appearance**; entity-level Baseline remains with the standalone entity overrides. The editor keeps its local disclosure state out of saved YAML. You can continue editing the same structured configuration manually at any time.
 
@@ -224,7 +224,7 @@ Target, Peak, Floor, Generic Reference Markers, and individual generic markers h
 
 ## Responsive behavior and data details
 
-The standalone card adapts label and icon placement to available width, while keeping the bar and value useful where possible. Click or tap an entity row to open Home Assistant’s standard more-info dialog. If an entity is missing, its row shows an error while other rows remain available. Dynamic scales and reference values update as their source entities change. When a primary reading is unknown or unavailable, the card cannot place a new numeric value; Peak and Floor retain the last finite sample until reset or reconfiguration.
+The standalone card adapts label and icon placement to available width, while keeping the bar and value useful where possible. Tapping an entity row opens Home Assistant’s standard more-info dialog by default; tap, hold and double-tap actions can be configured for the card or individual rows. If an entity is missing, its row shows an error while other rows remain available. Dynamic scales and reference values update as their source entities change. When a primary reading is unknown or unavailable, the card cannot place a new numeric value; Peak and Floor retain the last finite sample until reset or reconfiguration.
 
 Peak and Floor are session state rather than long-term history. Standalone marker labels can overlap when references are close together. Compact Card Feature labels shorten or hide according to available width; full resolved marker information remains in the accessible description. A dynamic marker’s source unit is not converted to the displayed unit. These details and other boundary behavior are covered in the [configuration reference](docs/configuration.md).
 

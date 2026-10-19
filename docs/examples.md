@@ -217,11 +217,11 @@ entities:
 - **Band Gradient** turns the Segment color sequence into a continuous gradient.
 - **Band Gradient + Solid Fill** samples that gradient at the current value and paints the entire Needle rail with the sampled color. The color changes as the value moves; `solid_fill` is a modifier, not a sixth `fill_style` value.
 
-At 7200 W the Needle sits at 72%. Remove `bar.needle` to use ordinary reveal fill from the Scale minimum to the reading instead. See [Fill Styles Reference](configuration.md#fill-styles-reference) for exact color placement and modifiers.
+At 7200 W the Needle sits at 72%. Remove `bar.needle` to use reveal fill from the selected Bar edge to the reading instead. See [Fill Styles Reference](configuration.md#fill-styles-reference) for exact color placement and modifiers.
 
 ## Scale and Segment coordinates
 
-The cards above use a fixed **0–10000 W** Scale and percentage Segment boundaries. A plain Segment boundary is a **Scale value**: `2000` means 2000 W here. A `%` boundary is a **position across the Scale**: `75%` means 7500 W on this Scale.
+The cards above use a fixed **0–10000 W** Scale and percentage Segment boundaries. A plain Segment boundary is a **Scale value**: `2000` means 2000 W here. A `%` boundary is a **semantic position from Scale minimum to maximum**: `75%` means 7500 W on this Scale, and its physical position follows Scale Direction.
 
 This comparison uses value thresholds at 2000/6000 W, then replaces the second threshold with 75%:
 
@@ -253,7 +253,7 @@ entities:
         - { from: 75%, to: 100%, color: "#FF007F" }
 ```
 
-Changing the maximum to 8000 moves the 2000/6000 W thresholds to 25%/75% of the rail. The mixed row's 75% threshold stays at that fraction and now means 6000 W. **Gradient stops differ:** bare `pos: 70` always means 70%, never 70 W.
+Changing the maximum to 8000 moves the 2000/6000 W thresholds to 25%/75% of the Scale. The mixed row's 75% threshold stays at that semantic fraction and now means 6000 W. **Gradient stops differ:** bare `pos: 70` always means semantic 70%, never 70 W. Reversing Scale Direction projects these Paint coordinates to their opposite physical positions; keep the definitions in the same semantic order.
 
 For live Scale controls, replace the card's `scale` block with the dashboard's paired sources and complete fixed fallback:
 
@@ -268,6 +268,56 @@ scale:
 ```
 
 The bounds follow the helpers live. If either source is unavailable, this complete fallback supplies 0–10000 W. See [Scale and live sources](configuration.md#scale-and-dynamic-value-sources) and [Segment boundaries](configuration.md#segment-boundaries) for source and range rules.
+
+## Scale and Bar Direction
+
+Scale Direction controls where the values appear; Bar Direction independently chooses whether reveal fill runs from the left or right. For example, this row uses a reversed 0–100 Scale and fills from the physical right edge:
+
+```yaml
+type: custom:sensor-bar-card-plus
+scale:
+  min: { fixed: 0 }
+  max: { fixed: 100 }
+  direction: reverse
+bar:
+  direction: reverse
+entities:
+  - entity: sensor.battery_level
+```
+
+![All variations of scale.direction and bar.direction with the same values](images/examples/direction-combinations.png)
+
+For a visual comparison of all four Scale/Bar combinations, plus reversed Scale markers, Needle and bipolar Baseline, open the **Direction Showcase v1.9** view in the [Screenshot dashboard](../examples/dashboards/sensor-bar-card-plus-screenshots.yaml).
+
+## Use an entity attribute as a value
+
+Use `entities[].attribute` to read a scalar attribute directly as a row's value. The attribute's unit is not inferred from the entity domain, so set it explicitly when needed:
+
+```yaml
+type: custom:sensor-bar-card-plus
+scale:
+  min: { fixed: 0 }
+  max: { fixed: 40 }
+formatting:
+  unit: "°C"
+  decimal: 1
+entities:
+  - entity: climate.living_room
+    attribute: temperature
+    name: Living room
+```
+
+Other dynamic sources use the documented `{ id, attribute }` form. For example, a Scale bound can read the same kind of scalar attribute while retaining a fixed fallback:
+
+```yaml
+scale:
+  min: { fixed: 0 }
+  max:
+    entity: { id: climate.living_room, attribute: temperature }
+    fixed: 40
+```
+
+See [Scale and live sources](configuration.md#scale-and-dynamic-value-sources) for source and fallback behavior.
 
 ## Compact Needle
 
@@ -301,7 +351,7 @@ Needle works with every fill style and `solid_fill`. An active, resolved Baselin
 
 ## Baseline origins and side colors
 
-Ordinary reveal fill starts at the Scale minimum. With Baseline, fill spans **Baseline to the current value**, extending in either direction. A persistent line marks Baseline even when the reading equals it.
+By default, reveal fill starts at the physical edge selected by Bar Direction. With Baseline, fill spans **Baseline to the current value**, extending in either direction. Scale Direction projects Baseline and the value onto the rail; a persistent line marks Baseline even when the reading equals it.
 
 Compare a fixed 0 W origin, the visible midpoint, and a live origin with blue below/green above. On this Scale, 50% is 5000 W; if the minimum becomes −2000 W, the midpoint becomes 4000 W while the fixed origin remains 0 W.
 

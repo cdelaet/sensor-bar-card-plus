@@ -14,6 +14,7 @@ For focused, copyable configurations and visual comparisons, see the [Examples G
 - [Entity-level options](#top-level-entity-options)
 - [Layout](#layout-options-and-responsive-behavior)
 - [Scale and live sources](#scale-and-dynamic-value-sources)
+- [Scale and Bar Direction](#scale-and-bar-direction)
 - [Complete example](#complete-example)
 - [Fill styles](#fill-styles-reference)
 - [Needle](#needle)
@@ -44,6 +45,8 @@ Standalone card configuration supplies defaults for the supported per-row settin
 
 An omitted entity-level setting generally inherits the corresponding card-level setting, but inheritance is field-specific. Lists replace rather than merge: this applies to `markers`, `bar.segments`, and `bar.gradient_stops`. Generic markers are inherited from the card by default; an entity-level `markers` list replaces that list, and `markers: []` explicitly clears it. A supplied source object can replace the inherited source as a whole rather than merge its members. If a dynamic source needs a fallback, include both values explicitly, for example `{ entity: sensor.example, fixed: 10 }`. Legacy flat aliases listed in the entity options table are also accepted at entity scope where listed.
 
+Standalone row actions follow the same card-default and entity-override pattern: rows inherit card-level actions unless an entity specifies its own action for that gesture. An explicit `action: none` disables that action.
+
 ## Configuration Tree
 
 Settings are grouped by purpose. Applicable root settings also configure the Card Feature. In the standalone card, card-level settings supply row defaults; fields inside an `entities[]` entry override settings for that row.
@@ -59,6 +62,7 @@ layout
     └── value_size
 
 scale
+├── direction
 ├── min
 │   ├── fixed
 │   └── entity
@@ -67,6 +71,7 @@ scale
     └── entity
 
 bar
+├── direction
 ├── fill_style
 ├── color
 ├── solid_fill
@@ -81,6 +86,17 @@ bar
 └── gradient_stops[]
     ├── pos
     └── color
+
+tap_action
+hold_action
+double_tap_action
+
+entities[]
+├── entity
+├── attribute
+├── tap_action
+├── hold_action
+└── double_tap_action
 
 target
 ├── enabled
@@ -183,6 +199,7 @@ Use this overview to find a field by YAML path. Exact scope and behavior are des
 | `scale.min.entity` | absent | entity ID or `{ id, attribute }` | Live lower-bound source, using the entity state or one top-level scalar attribute. | Yes |
 | `scale.max.fixed` | `100` for an unspecified bound | number | Fixed upper bound or explicitly configured fallback. With two dynamic bounds, configure both fixed fallbacks together. | Yes |
 | `scale.max.entity` | absent | entity ID or `{ id, attribute }` | Live upper-bound source, using the entity state or one top-level scalar attribute. | Yes |
+| `scale.direction` | `normal` | `normal`, `reverse` | Places Scale minimum at the left and maximum at the right (`normal`), or maximum at the left and minimum at the right (`reverse`). Bounds keep their numeric meanings; Scale Direction does not swap them. | Yes |
 
 The Scale must have a minimum below its maximum. Two dynamic bounds are resolved as a pair, rather than mixing one live bound with a fallback. See [Scale and live sources](#scale-and-dynamic-value-sources) for fallback and temporary invalid-pair behavior. Values outside the effective Scale are drawn at the nearest rail endpoint; their displayed numeric value is unchanged.
 
@@ -190,6 +207,7 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 
 | Path | Default | Values | Description | Card Feature |
 |---|---:|---|---|---|
+| `bar.direction` | `normal` | `normal`, `reverse` | Chooses whether reveal fill starts at the left or right physical edge. It does not move Scale values or Paint. An active Baseline supplies the fill origin; Needle mode has no reveal origin. | Yes |
 | `bar.fill_style` | `bands` | `solid`, `gradient`, `bands`, `soft_bands`, `band_gradient` | Appearance of the visible fill. | Yes |
 | `bar.color` | `#4a9eff` | CSS color | Solid or fallback fill color. A color configured alone selects a solid bar unless an explicit fill style or palette is inherited. | Yes |
 | `bar.solid_fill` | `false` | boolean | Samples the active color and renders the revealed fill as one solid color. | Yes |
@@ -198,10 +216,10 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | `bar.needle.show` | `false` | boolean | Explicitly enables or disables needle mode in expanded configuration. | Yes |
 | `bar.needle.color` | `#ffffff` | CSS color | Needle body and glow color; a light or dark edge is added based on that color. | Yes |
 | `bar.segments` | default bands | list | Segment definitions for `bands`, `soft_bands`, and `band_gradient`. Each item has `from`, optional `to`, and `color`; boundaries use value or percentage coordinates independently. | Yes |
-| `bar.segments[].from` / `bar.segments[].to` | — | number or percentage string | Start/end boundary. A number is an active-scale value; a `%` string is a percentage of the visible scale. `to` may be omitted to end at the next segment start or the end of the scale. | Yes |
+| `bar.segments[].from` / `bar.segments[].to` | — | number or percentage string | Start/end boundary. A number is an active-scale value; a `%` string is a semantic percentage from Scale minimum (`0%`) to maximum (`100%`). Scale Direction determines the physical placement of both forms. `to` may be omitted to end at the next segment start or the end of the scale. | Yes |
 | `bar.segments[].color` | — | CSS color | Color assigned to the segment. | Yes |
 | `bar.gradient_stops` | `null` | list | Gradient stop definitions for `gradient`. Each item has `pos` and `color`. | Yes |
-| `bar.gradient_stops[].pos` | required | number or percentage string | Percentage across the visible rail from `0` to `100`: `50` and `50%` both mean the midpoint. Unlike Segment boundaries, bare numbers are not Scale values. | Yes |
+| `bar.gradient_stops[].pos` | required | number or percentage string | Semantic percentage from Scale minimum (`0`) to maximum (`100`): `50` and `50%` both mean the midpoint. Unlike Segment boundaries, bare numbers are not Scale values. Scale Direction determines physical placement. | Yes |
 | `bar.gradient_stops[].color` | — | hex color | Color at the gradient stop; interpolation requires supported hex colors. | Yes |
 
 ### Baseline
@@ -212,7 +230,7 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | `baseline.at` | absent | number, percentage string, entity ID, or source object | Baseline position as a Scale value, visible-Scale percentage, or source with `fixed`, `entity` and/or `percent`. | Yes |
 | `baseline.at.fixed` | `null` | number | Fixed baseline value; fallback when the entity does not provide a usable number. | Yes |
 | `baseline.at.entity` | `null` | entity ID or `{ id, attribute }` | Dynamic baseline source; its usable numeric state/attribute takes precedence over `fixed`. | Yes |
-| `baseline.at.percent` | absent | number | Percentage across the visible Scale in a source object; alternatively use `baseline.at: 50%`. | Yes |
+| `baseline.at.percent` | absent | number | Semantic percentage from Scale minimum (`0`) to maximum (`100`) in a source object; alternatively use `baseline.at: 50%`. Scale Direction controls its physical position. | Yes |
 | `baseline.above.color` | ordinary fill | CSS color | Optional color for the Scale region above Baseline. | Yes |
 | `baseline.below.color` | ordinary fill | CSS color | Optional color for the Scale region below Baseline. | Yes |
 
@@ -224,7 +242,7 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | `target.at` | absent | number, percentage string, entity ID, or source object | Target position as a Scale value, visible-Scale percentage, or source with `fixed`, `entity` and/or `percent`. | Yes |
 | `target.at.fixed` | `null` | number | Fixed target value; fallback when the entity does not provide a usable number. | Yes |
 | `target.at.entity` | `null` | entity ID or `{ id, attribute }` | Dynamic target source; its usable numeric state/attribute takes precedence over `fixed`. | Yes |
-| `target.at.percent` | absent | number | Percentage across the visible Scale in a source object; alternatively use `target.at: 50%`. | Yes |
+| `target.at.percent` | absent | number | Semantic percentage from Scale minimum (`0`) to maximum (`100`) in a source object; alternatively use `target.at: 50%`. Scale Direction controls its physical position. | Yes |
 | `target.shape` | `diamond` | `diamond`, `triangle` | Target marker shape. | Yes |
 | `target.color` | `#888888` | CSS color | Target marker color. | Yes |
 | `target.direction` | `inward` | `inward`, `outward` | Direction of the triangle Target; the diamond shape is not directional. Entity-level Target direction inherits the card-level value unless overridden. | Yes |
@@ -268,7 +286,7 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | Path | Default | Values | Description | Card Feature |
 |---|---:|---|---|---|
 | `markers[]` | `[]` | marker entries | Card-level markers are inherited; an entity-level list replaces them, and `markers: []` clears them. | Yes |
-| `markers[].at` | required | number, percentage string, entity ID, or source object | Marker position. Use a `%` string for a percentage of the visible row Scale. | Yes |
+| `markers[].at` | required | number, percentage string, entity ID, or source object | Marker position. Use a `%` string for a semantic percentage from Scale minimum (`0%`) to maximum (`100%`); Scale Direction controls its physical position. | Yes |
 | `markers[].at.fixed` | absent | number | Marker anchor value on the active scale; fallback for an entity source. | Yes |
 | `markers[].at.entity` | absent | entity ID or `{ id, attribute }` | Live marker anchor; a usable entity value/attribute takes precedence over `fixed`. | Yes |
 | `markers[].show_marker` | `true` | boolean | Hides only the marker shape when false. The anchor position, lane, and label remain active. | Yes |
@@ -302,14 +320,17 @@ Legacy flat options are listed separately in the Legacy Compatibility and Migrat
 | `entity` | string | `—` | Creates one row without an `entities` list | Yes — optional override |
 | `entities` | list | required unless using `entity` shorthand | Rows to render; items may be entity ID strings or entity objects | — |
 | `layout` | object | see below | Default layout for all rows | — |
-| `scale` | object | `min: 0`, `max: 100` | Default scale for all rows | Yes |
-| `bar` | object | see below | Default fill, Needle and animation settings | Yes |
+| `scale` | object | `min: 0`, `max: 100`, `direction: normal` | Default Scale for all rows | Yes |
+| `bar` | object | see below | Default Bar direction, fill, Needle and animation settings | Yes |
 | `baseline` | number/object | disabled | Default Baseline / fill origin; percentages go under `baseline.at` | Yes |
 | `target` | number/object | disabled | Default Target marker; percentages go under `target.at` | Yes |
 | `peak` | object | disabled | Default structured Peak marker config | Yes |
 | `floor` | object | disabled | Default structured Floor marker config | Yes |
 | `markers` | list | `[]` | Generic reference markers inherited by entity rows unless replaced | Yes |
 | `formatting` | object | locale-aware numbers; entity unit | Default decimal precision and displayed unit text | Yes |
+| `tap_action` | object | `action: more-info` | Home Assistant action for tapping a standalone entity row. Entity rows inherit it unless overridden. | — |
+| `hold_action` | object | `action: none` | Home Assistant action for holding a standalone entity row. Entity rows inherit it unless overridden. | — |
+| `double_tap_action` | object | `action: none` | Home Assistant action for double-tapping a standalone entity row. Entity rows inherit it unless overridden. | — |
 | `label_position` | string | `left` | Legacy alias for `layout.label.position` | — |
 | `label_width` | number | `100` | Legacy alias for `layout.label.width` | — |
 | `height` | number | `38` | Legacy alias for `layout.height`; minimum rail height is `24` | — |
@@ -341,6 +362,9 @@ Entity-level configuration supports the per-row groups and legacy aliases listed
 |---|---|---|---|---|
 | `entities[].entity` | string | required | Home Assistant entity ID for the row | — |
 | `entities[].attribute` | string | absent | Uses one top-level scalar entity attribute as the row's value; omitted keeps using entity state. No domain-specific unit inference is applied. | — |
+| `entities[].tap_action` | object | inherits card action, otherwise `action: more-info` | Overrides the card-level tap action for this row; `action: none` disables it. | — |
+| `entities[].hold_action` | object | inherits card action, otherwise `action: none` | Overrides the card-level hold action for this row; `action: none` disables it. | — |
+| `entities[].double_tap_action` | object | inherits card action, otherwise `action: none` | Overrides the card-level double-tap action for this row; `action: none` disables it. | — |
 | `entities[].name` | string | HA friendly name, then entity ID | Overrides the displayed name | — |
 | `entities[].icon` | string or `false` | HA icon, then supported device-class/domain fallback | Overrides the icon; `false` removes it. Hero never shows an icon. | — |
 | `entities[].layout` | object | inherits card layout | Per-row layout override | — |
@@ -533,9 +557,37 @@ entities:
 
 ## Scale and dynamic value sources
 
-The Scale defines which values appear at the rail's left and right ends. Use fixed bounds for a known range, or entity-backed bounds when helpers or sensors define the current range.
+The Scale defines the semantic minimum and maximum for the row. By default, the minimum appears at the rail's left and the maximum at its right. Set `scale.direction: reverse` to place the maximum on the left and minimum on the right; this does not swap the numeric `min` and `max`. Use fixed bounds for a known range, or entity-backed bounds when helpers or sensors define the current range.
 
 Entity-backed sources are live. Home Assistant state changes recalculate the relevant row; changing a source entity does not require reloading or recreating the card. This applies to `scale.min.entity`, `scale.max.entity`, `baseline.at.entity`, `target.at.entity`, `markers[].at.entity`, and `markers[].label.entity`.
+
+### Scale and Bar Direction
+
+Scale Direction controls where values are positioned. Bar Direction controls which side the bar fills from. They are independent:
+
+```yaml
+scale:
+  min: { fixed: 0 }
+  max: { fixed: 100 }
+  direction: normal # normal (default) or reverse
+bar:
+  direction: normal # normal (default) or reverse
+```
+
+`normal` Scale Direction places the minimum on the left and maximum on the right. `reverse` places the maximum on the left and minimum on the right. The numeric meanings of `min` and `max` stay the same. Current values, Baseline, Target, Peak, Floor, Reference Markers, Needle and Paint coordinates follow Scale Direction. Baseline `above`/`below` colors and Target-above Paint describe semantic value regions, so an above region can appear physically to the left on a reversed Scale.
+
+With `bar.direction: normal`, reveal fill starts at the physical left edge and runs toward the current value. With `reverse`, it starts at the physical right edge and runs toward the current value. Bar Direction does not move values, markers, the Scale or Paint definitions. A resolved Baseline supplies the reveal origin instead, so Bar Direction does not change Baseline reveal geometry. In Needle mode the full Paint rail is visible and Bar Direction has no reveal effect.
+
+For a Scale from 0 to 100 and a value of 30:
+
+| Scale Direction | Bar Direction | Value position | Reveal |
+|---|---|---:|---|
+| `normal` | `normal` | 30% | left to 30% (30% filled) |
+| `reverse` | `normal` | 70% | left to 70% (70% filled) |
+| `normal` | `reverse` | 30% | right to 30% (70% filled) |
+| `reverse` | `reverse` | 70% | right to 70% (30% filled) |
+
+Segment and Gradient Stop percentages are semantic positions from Scale minimum to maximum: `0%` is the minimum and `100%` is the maximum. Scale Direction automatically changes where those positions appear physically. Keep Paint definitions in semantic order; do not manually reverse Segments or Gradient Stops when reversing the Scale.
 
 Entity sources keep the released state shorthand (`entity: sensor.temperature`). To read one top-level scalar attribute, use the structured EntitySource form `entity: { id: climate.living_room, attribute: temperature }`. A source may also use `fixed` alone as a literal or alongside an entity as its fallback. The entity state/attribute is tried first; `fixed` applies only when that dynamic value is missing, unavailable, or non-numeric. Zero is a valid dynamic value, and an out-of-Scale numeric value does not trigger fallback. Object and array attributes are not suggested by the editor, but manually entered attribute names are retained.
 
@@ -717,13 +769,13 @@ All five fill styles apply to both presentations. Segment coordinates and automa
 
 ### Fill style details
 
-The colors are laid out across the full Scale. Normal fill reveals the part from the minimum to the current value; Baseline changes that interval to the span between Baseline and value. The color positions stay tied to the Scale as the visible fill grows or shrinks. Needle shows the full colored rail instead. Legacy `color_mode` aliases are listed under [compatibility](#legacy-compatibility-and-migration).
+Paint is laid out across the full semantic Scale and follows Scale Direction. Reveal fill runs from its configured origin to the current value: Bar Direction chooses the physical left or right edge when no resolved Baseline is active, while Baseline supplies a semantic origin when active. Needle shows the full colored rail instead. Legacy `color_mode` aliases are listed under [compatibility](#legacy-compatibility-and-migration).
 
 #### `gradient`
 
 `gradient` blends smoothly between colors positioned across the visible rail. Without custom stops it uses the built-in green/orange/red gradient.
 
-`bar.gradient_stops[].pos` is always a percentage from 0 to 100 across that rail. A bare `pos: 50` and `pos: 50%` both mean the midpoint, regardless of Scale values. **This differs from Segment boundaries**, where a bare number is a Scale value. To place colors using Scale values, use Segments with `band_gradient` instead.
+`bar.gradient_stops[].pos` is always a semantic percentage from Scale minimum (`0`) to maximum (`100`). A bare `pos: 50` and `pos: 50%` both mean the midpoint, regardless of Scale values. Scale Direction projects those positions onto the rail, so reversing the Scale reverses the physical Gradient. **This differs from Segment boundaries**, where a bare number is a Scale value. To place colors using Scale values, use Segments with `band_gradient` instead. Do not reverse Gradient Stop definitions manually when reversing the Scale.
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -936,7 +988,7 @@ bar:
 
 #### Segment boundaries
 
-Each `bar.segments[]` boundary has its own coordinate meaning. A plain number is a value on the active scale; a string with a `%` suffix is a percentage of the visible scale. You can mix the two forms within one segment or across a list. Percentage positions map from the resolved scale minimum to its maximum.
+Each `bar.segments[]` boundary has its own coordinate meaning. A plain number is a value on the active scale; a string with a `%` suffix is a semantic percentage from the resolved Scale minimum (`0%`) to its maximum (`100%`). You can mix the two forms within one segment or across a list. Scale Direction changes their physical placement automatically; do not reverse Segment definitions manually.
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -974,6 +1026,8 @@ Practical range rules:
 - Overlaps have no supported winner/precedence rule. Avoid overlapping authored ranges rather than relying on incidental output.
 - Entity-backed boundaries are unsupported, including entity sources with fixed fallbacks. Use numbers or percentage strings.
 - Malformed percentages cause the affected Segment to be ignored with a warning. Do not rely on out-of-range percentages or malformed ranges for special paint effects.
+
+The Visual Editor shows configured Segment coverage separately from undefined ranges. Undefined ranges use a checkerboard preview, and an Undefined row can prepare a new Segment with those missing boundaries. This editor preview describes authored coverage; runtime Paint still follows the selected fill style, as described above.
 
 #### Backward compatibility: `bar.segment_space` (deprecated)
 
@@ -1046,19 +1100,20 @@ Notes:
 - `bar.needle.color` sets the body and glow color; the card adds a light or dark edge chosen from that color to help distinguish it from the fill, without guaranteeing perfect contrast against every fill
 - the bar switches to full-scale paint mode when the needle is shown
 - the current value is represented by the needle position
+- Scale Direction changes the Needle position along with other Scale-bound values; Bar Direction has no reveal effect in Needle mode.
 - the needle works with `solid`, `gradient`, `bands`, `soft_bands`, `band_gradient`, and `solid_fill`
 - the needle is suppressed while a Baseline successfully resolves
 - an unresolved dynamic Baseline without a usable fixed fallback does not suppress the Needle
 
 ## Baseline
 
-Use `baseline` when the fill should start from a neutral point instead of always starting at `min`.
+Use `baseline` when the fill should start from a semantic reference point. Without a resolved Baseline, `bar.direction` chooses the physical edge where reveal fill starts. With a resolved Baseline, the fill starts at the projected Baseline position and `bar.direction` does not affect its geometry.
 
-The visible fill spans Baseline to the current value, extending left or right as needed. At equality there is no visible fill interval. Colors and markers still use the full Scale; Baseline does not restart a gradient or change what a Scale value means. This is useful for import/export, charge/discharge and other bidirectional values.
+The visible fill spans Baseline to the current value, extending either way as needed. Scale Direction projects both semantic positions onto the rail; values greater than Baseline may appear physically to its left on a reversed Scale. At equality there is no visible fill interval. Colors and markers still use the full Scale; Baseline does not restart a gradient or change what a Scale value means. This is useful for import/export, charge/discharge and other bidirectional values.
 
 An active resolved Baseline also has a thin persistent line at its position, including when value equals Baseline and the fill has zero width. The line uses theme-derived coloring; its visibility depends on the surrounding colors. There is no separate indicator configuration.
 
-With `baseline.enabled` omitted, a resolved configured source activates Baseline automatically. `false` disables it. If neither an entity nor its fallback provides a usable value, normal fill starts at the Scale minimum and the indicator disappears; a configured Needle can then appear.
+With `baseline.enabled` omitted, a resolved configured source activates Baseline automatically. `false` disables it. If neither an entity nor its fallback provides a usable value, Baseline is inactive and reveal fill starts from the physical edge selected by `bar.direction`; the Baseline indicator disappears and a configured Needle can then appear.
 
 ### Structured baseline configuration
 
@@ -1078,7 +1133,7 @@ baseline:
     entity: sensor.dynamic_baseline
 ```
 
-Use `at: { entity: sensor.dynamic_baseline, fixed: 0 }` when you want a fixed fallback. A numeric `baseline.at` is a Scale value; a percentage string such as `50%` is a position across the Scale. Use percentage strings directly under `at`, not inside `fixed`. Legacy numeric shorthand remains accepted; see [compatibility](#legacy-compatibility-and-migration).
+Use `at: { entity: sensor.dynamic_baseline, fixed: 0 }` when you want a fixed fallback. A numeric `baseline.at` is a Scale value; a percentage string such as `50%` is a semantic position from Scale minimum to maximum, projected according to Scale Direction. Use percentage strings directly under `at`, not inside `fixed`. Legacy numeric shorthand remains accepted; see [compatibility](#legacy-compatibility-and-migration).
 
 ### Centered zero baseline
 
@@ -1383,7 +1438,7 @@ Use `markers:` for configured reference points rather than tracked highs/lows. A
 
 ### Position sources
 
-`at` accepts a finite Scale value (`75` or `{ fixed: 75 }`), a percentage string such as `35%`, an entity ID, or `{ entity: sensor.limit, fixed: 75 }`. A usable entity value takes precedence over the fixed fallback. Generic percentages must be strings from `0%` through `100%`; `at.percent` is unsupported.
+`at` accepts a finite Scale value (`75` or `{ fixed: 75 }`), a semantic percentage string such as `35%`, an entity ID, or `{ entity: sensor.limit, fixed: 75 }`. A usable entity value takes precedence over the fixed fallback. Generic percentages must be strings from `0%` through `100%`; Scale Direction projects them onto the rail, and `at.percent` is unsupported.
 
 Percentage labels show the corresponding value on the effective Scale. Finite fixed/live values outside the Scale remain valid: the shape clamps to the nearest rail endpoint while its label retains the actual value. If no position resolves, the shape and label hide until recovery; an accepted marker still reserves its lane slot.
 
@@ -1599,7 +1654,22 @@ entities:
 
 ## Interaction and error behavior
 
-Clicking a standalone row opens Home Assistant's native more-info dialog for that entity. No extra configuration is required. The Card Feature is passive and leaves the parent Tile's normal interactions available.
+Standalone entity rows use Home Assistant's native action configuration through `tap_action`, `hold_action`, and `double_tap_action`. SBCP does not define a separate action schema. By default, tapping opens Home Assistant's more-info dialog; hold and double-tap actions default to `action: none`. Card-level actions apply to rows, and an entity can override an action for its row. Setting an action to `none` explicitly disables it. For example:
+
+```yaml
+tap_action:
+  action: more-info
+hold_action:
+  action: none
+double_tap_action:
+  action: none
+entities:
+  - entity: sensor.room_temperature
+    tap_action:
+      action: none
+```
+
+The Card Feature does not accept these row-action options: the parent Home Assistant Tile owns its interactions.
 
 If the row's entity cannot be found, the card shows an error in that row; other rows continue to render. An existing entity whose state is `unknown` or `unavailable` is displayed as text, as described under [Formatting](#formatting).
 
