@@ -59,6 +59,84 @@ test('none suppresses inherited tap and explicit action fields are preserved in 
   expect(await lastAction(page)).toBeNull();
 });
 
+test('setConfig adds and updates actions on the existing rendered rows', async ({ page }) => {
+  await render(page, { entities: [{ entity: 'sensor.room' }, { entity: 'sensor.outside' }] });
+  const card = page.locator('sensor-bar-card-plus');
+  const row = entity => page.locator(`.row[data-entity="${entity}"]`);
+
+  await card.evaluate(element => element.setConfig({
+    tap_action: { action: 'navigate', navigation_path: '/lovelace/room' },
+    entities: [
+      { entity: 'sensor.room', tap_action: { action: 'navigate', navigation_path: '/lovelace/override' } },
+      { entity: 'sensor.outside' },
+    ],
+  }));
+  await row('sensor.room').click();
+  expect((await lastAction(page)).detail.config.tap_action).toEqual({ action: 'navigate', navigation_path: '/lovelace/override' });
+  await row('sensor.outside').click();
+  expect((await lastAction(page)).detail.config.tap_action).toEqual({ action: 'navigate', navigation_path: '/lovelace/room' });
+
+  await card.evaluate(element => element.setConfig({
+    tap_action: { action: 'navigate', navigation_path: '/lovelace/updated' },
+    entities: [{ entity: 'sensor.room' }, { entity: 'sensor.outside' }],
+  }));
+  await row('sensor.room').click();
+  expect((await lastAction(page)).detail.config.tap_action).toEqual({ action: 'navigate', navigation_path: '/lovelace/updated' });
+});
+
+test('disconnecting and reconnecting the same card restores actions without duplicates', async ({ page }) => {
+  await render(page, {
+    tap_action: { action: 'navigate', navigation_path: '/lovelace/card-default' },
+    entities: [
+      { entity: 'sensor.room' },
+      { entity: 'sensor.outside', tap_action: { action: 'navigate', navigation_path: '/lovelace/row-override' } },
+    ],
+  });
+  await page.evaluate(() => {
+    window.__rowActionDispatches = [];
+    document.querySelector('sensor-bar-card-plus').addEventListener('hass-action', event => {
+      window.__rowActionDispatches.push(event.detail);
+    });
+  });
+  const card = page.locator('sensor-bar-card-plus');
+
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    await card.evaluate(element => { const parent = element.parentElement; element.remove(); parent.append(element); });
+    await page.locator('.row[data-entity="sensor.room"]').click();
+    expect(await page.evaluate(() => window.__rowActionDispatches.at(-1).config.tap_action.navigation_path)).toBe('/lovelace/card-default');
+    await page.locator('.row[data-entity="sensor.outside"]').click();
+    expect(await page.evaluate(() => window.__rowActionDispatches.at(-1).config.tap_action.navigation_path)).toBe('/lovelace/row-override');
+  }
+
+  expect(await page.evaluate(() => window.__rowActionDispatches.length)).toBe(6);
+});
+
+test('reconnection preserves hold and double-tap gestures', async ({ page }) => {
+  await render(page, {
+    tap_action: { action: 'toggle' },
+    hold_action: { action: 'navigate', navigation_path: '/lovelace/held' },
+    double_tap_action: { action: 'navigate', navigation_path: '/lovelace/double' },
+    entity: 'sensor.room',
+  });
+  const card = page.locator('sensor-bar-card-plus');
+  await card.evaluate(element => { const parent = element.parentElement; element.remove(); parent.append(element); });
+  const row = page.locator('.row[data-entity="sensor.room"]');
+
+  await row.click();
+  await row.click();
+  await expectLastAction(page, 'double_tap');
+  expect((await lastAction(page)).detail.config.double_tap_action.navigation_path).toBe('/lovelace/double');
+
+  await page.evaluate(() => { window.__lastHassAction = null; });
+  const box = await row.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(600);
+  await page.mouse.up();
+  await expectLastAction(page, 'hold');
+  expect((await lastAction(page)).detail.config.hold_action.navigation_path).toBe('/lovelace/held');
+});
+
 test('hold and double tap dispatch only their matching action', async ({ page }) => {
   await render(page, {
     entity: 'sensor.room',

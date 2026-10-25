@@ -216,6 +216,11 @@ export class SensorBarCard extends HTMLElement {
   connectedCallback() {
     window.addEventListener('resize', this._boundWindowResize, { passive: true });
     this._setupResizeObserver();
+    // Row action handlers are cleared while the card is detached. Reattach
+    // them to the retained rows without disturbing marker and row identity.
+    if (this._config?.entities && this._hass) {
+      this._attachRowActionHandlers(this.shadowRoot.querySelectorAll('.row[data-entity]'));
+    }
     this._schedulePostLayoutDensityPass();
   }
 
@@ -324,6 +329,39 @@ export class SensorBarCard extends HTMLElement {
   _clearRowActionHandlers() {
     this._rowActionCleanup.forEach((cleanup) => cleanup());
     this._rowActionCleanup = [];
+  }
+
+  _attachRowActionHandlers(rows) {
+    // Guard repeated connection or render paths from accumulating listeners.
+    this._clearRowActionHandlers();
+    rows.forEach((row) => {
+      const entityIndex = Number(row.dataset.rowIndex);
+      const entityId = row.dataset.entity;
+      const resolveAction = (slot) => {
+        const rowConfig = Array.isArray(this._actionConfig?.entities)
+          ? this._actionConfig.entities[entityIndex]
+          : null;
+        return resolveRowAction(this._actionConfig, rowConfig, slot);
+      };
+      const cleanup = attachRowActionHandlers(row, {
+        resolveAction,
+        label: row.getAttribute?.('aria-label') ?? entityId,
+        dispatchAction: ({ config: actionConfig, action }) => {
+          const eventConfig = {
+            ...this._actionConfig,
+            entity: entityId,
+            [action === 'double_tap' ? 'double_tap_action' : `${action}_action`]: actionConfig,
+          };
+          const event = new CustomEvent('hass-action', {
+            bubbles: true,
+            composed: true,
+            detail: { config: eventConfig, action },
+          });
+          this.dispatchEvent(event);
+        },
+      });
+      this._rowActionCleanup.push(cleanup);
+    });
   }
 
   _logDiagnostics() {
@@ -3343,34 +3381,7 @@ ${barMarkerStyles}
       
       // Attach the row gesture adapter after rebuilding present rows. Missing
       // entity warning rows are deliberately absent from this selector.
-      builtRows.forEach(row => {
-        const entityIndex = Number(row.dataset.rowIndex);
-        const entityId = row.dataset.entity;
-        const resolveAction = (slot) => {
-          const rowConfig = Array.isArray(this._actionConfig?.entities)
-            ? this._actionConfig.entities[entityIndex]
-            : null;
-          return resolveRowAction(this._actionConfig, rowConfig, slot);
-        };
-        const cleanup = attachRowActionHandlers(row, {
-          resolveAction,
-          label: row.getAttribute?.('aria-label') ?? entityId,
-          dispatchAction: ({ config: actionConfig, action }) => {
-            const eventConfig = {
-              ...this._actionConfig,
-              entity: entityId,
-              [action === 'double_tap' ? 'double_tap_action' : `${action}_action`]: actionConfig,
-            };
-            const event = new CustomEvent('hass-action', {
-              bubbles: true,
-              composed: true,
-              detail: { config: eventConfig, action },
-            });
-            this.dispatchEvent(event);
-          },
-        });
-        this._rowActionCleanup.push(cleanup);
-      });
+      this._attachRowActionHandlers(builtRows);
       return;
     }
 
