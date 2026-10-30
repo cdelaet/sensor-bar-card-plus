@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { normalizeCardConfig } from '../../src/config/normalize.js';
 import { validateNormalizedConfig } from '../../src/config/validate.js';
 import { buildRowViewModel } from '../../src/view-model/row-view-model.js';
-import { renderMarker } from '../../src/render/bar-renderer.js';
+import { renderMarker, patchMarker } from '../../src/render/bar-renderer.js';
 import { historicalMarkerConsumers, historicalMarkerId } from '../../src/history/marker-consumers.js';
 import { resolveTimeWindow } from '../../src/history/time-window.js';
 import { HistoricalValueResolver } from '../../src/history/value-resolver.js';
@@ -87,6 +87,24 @@ describe('historical Peak/Floor', () => {
     expect(stale.floor).toBe(20); expect(stale.floorStatus).toBe('stale');
     expect(renderMarker(stale.markers.find(m => m.type === 'floor'))).toContain('Stale history');
     expect(row('peak', { value: 70, status: 'available' }).peak).toBe(70);
+  });
+
+  it('exposes partial and stale marker descriptions without additional tab stops and clears them on recovery', () => {
+    for (const [type, status, text] of [['peak', 'partial', 'Partial history'], ['floor', 'stale', 'Stale history']]) {
+      const marker = row(type, { value: 20, status }).markers.find(item => item.type === type);
+      const html = renderMarker(marker);
+      expect(html).toContain(`aria-label="${type === 'peak' ? 'Peak' : 'Floor'}: ${text}"`);
+      expect(html).toContain(`title="${text}"`);
+      expect(html).not.toContain('tabindex=');
+      const attributes = {}; const element = { dataset: {}, style: { setProperty() {}, removeProperty() {} },
+        setAttribute: (name, value) => { attributes[name] = value; },
+        removeAttribute: name => { delete attributes[name]; }, querySelector: () => null };
+      patchMarker(element, marker);
+      expect(attributes['aria-label']).toContain(text);
+      patchMarker(element, { ...marker, historyStatus: 'available' });
+      expect(attributes['aria-label']).toBeUndefined();
+      expect(attributes.role).toBeUndefined();
+    }
   });
 
   it('renders ordinary Recorder results without a partial badge while preserving unknown coverage', async () => {

@@ -7072,6 +7072,7 @@ describe('Sensor Bar Card Plus editor', () => {
     const finalConfig = events.at(-1).detail.config;
     expect(finalConfig.peak).toEqual({
       enabled: true,
+      window: 'today',
     });
     expect(finalConfig.peak.color).toBeUndefined();
   });
@@ -7100,6 +7101,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(finalConfig.peak).toEqual({
       enabled: true,
       color: '#ff9800',
+      window: 'today',
     });
   });
 
@@ -7207,6 +7209,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(finalConfig.peak).toEqual({
       enabled: true,
       custom_peak_key: 'keep',
+      window: 'today',
     });
   });
 
@@ -7316,7 +7319,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', peak: { enabled: true } },
+      { entity: 'sensor.one', name: 'One', peak: { enabled: true, window: 'today' } },
     ]);
   });
 
@@ -9200,7 +9203,7 @@ describe('Sensor Bar Card Plus editor', () => {
     const floorToggle = editor.shadowRoot.querySelector('#floor-show');
     floorToggle.checked = true;
     floorToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    dispatchChange(editor.shadowRoot.querySelector('#floor-reset'), 'quarterly');
+    dispatchChange(editor.shadowRoot.querySelector('#floor-window'), 'quarterly');
     const floorLabel = editor.shadowRoot.querySelector('#floor-label-show');
     floorLabel.checked = true;
     floorLabel.dispatchEvent({ type: 'change', bubbles: true, composed: true });
@@ -9208,7 +9211,7 @@ describe('Sensor Bar Card Plus editor', () => {
 
     expect(events.at(-1).detail.config.floor).toEqual({
       enabled: true,
-      reset: 'quarterly',
+      window: 'quarterly',
       label: { show: true, precision: 0 },
     });
   });
@@ -9223,11 +9226,11 @@ describe('Sensor Bar Card Plus editor', () => {
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-floor'));
-    dispatchChange(editor.shadowRoot.querySelector('#entity-0-floor-reset'), 'never');
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-floor-window'), 'today');
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-floor-label-precision'), '0');
 
     expect(events.at(-1).detail.config.entities[0].floor).toEqual({
-      reset: 'never',
+      window: 'today',
       label: { precision: 0 },
     });
   });
@@ -9440,8 +9443,8 @@ describe('Sensor Bar Card Plus editor', () => {
       expect(editor.shadowRoot.innerHTML).toContain(`id="card-group-${group}-title" class="override-group-title">▸`);
     }
     expect(editor.shadowRoot.innerHTML).toContain('65 · Diamond');
-    expect(editor.shadowRoot.innerHTML).toContain('Enabled · hourly reset');
-    expect(editor.shadowRoot.innerHTML).toContain('Enabled · daily reset');
+    expect(editor.shadowRoot.innerHTML).toContain('Enabled · hourly');
+    expect(editor.shadowRoot.innerHTML).toContain('Enabled · today');
 
     editor._toggleCardGroupExpanded('marker-peak');
     expect(editor.shadowRoot.innerHTML).toContain('id="card-group-marker-peak-title" class="override-group-title">▾ Peak');

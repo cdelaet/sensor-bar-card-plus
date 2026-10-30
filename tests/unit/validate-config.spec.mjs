@@ -8,6 +8,33 @@ function normalize(rawConfig) {
 }
 
 describe('validateNormalizedConfig', () => {
+  it('warns on raw extrema aliases at card and entity scopes without using them', () => {
+    const aliases = { peak_marker: { enabled: true, color: 'red', reset: 'daily' },
+      floor_marker: { enabled: true, color: 'blue', reset: 'hourly' } };
+    const config = normalize({ ...aliases, entities: [{ entity: 'sensor.one', ...aliases }] });
+    for (const scope of [config, config.entities[0]]) {
+      expect(scope.peak_marker).toMatchObject({ show: false, color: '#888888', window: 'today' });
+      expect(scope.floor_marker).toMatchObject({ show: false, color: '#888888', window: 'today' });
+    }
+    const diagnostics = validateNormalizedConfig(config);
+    expect(diagnostics.errors).toEqual([]);
+    for (const path of ['card.peak_marker', 'card.floor_marker', 'entities[0].peak_marker', 'entities[0].floor_marker']) {
+      expect(diagnostics.warnings).toContainEqual(expect.objectContaining({ code: 'markers.unsupported_extremum_alias', path }));
+    }
+    expect(validateNormalizedConfig(normalize({ entities: ['sensor.one'] })).warnings
+      .some(item => item.code === 'markers.unsupported_extremum_alias')).toBe(false);
+  });
+
+  it('keeps canonical extrema and row inheritance independent of unsupported aliases', () => {
+    const config = normalize({ peak: { enabled: true, window: '24h', color: 'green' },
+      floor: { enabled: true, reset: 'hourly' }, peak_marker: null, floor_marker: false,
+      entities: [{ entity: 'sensor.one', peak_marker: { enabled: false }, floor_marker: {} }] });
+    for (const scope of [config, config.entities[0]]) {
+      expect(scope.peak_marker).toMatchObject({ show: true, color: 'green', window: '24h' });
+      expect(scope.floor_marker).toMatchObject({ show: true, window: 'hourly' });
+    }
+    expect(validateNormalizedConfig(config).warnings.filter(item => item.code === 'markers.unsupported_extremum_alias')).toHaveLength(4);
+  });
   it('preserves primary and nested source attributes through normalization, including legacy root entity config', () => {
     const config = normalize({
       entity: 'sensor.primary', attribute: 'custom.temperature',

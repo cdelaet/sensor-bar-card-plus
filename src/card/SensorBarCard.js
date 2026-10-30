@@ -3246,6 +3246,12 @@ ${barMarkerStyles}
     const peakLabelEl = row.querySelector('.peak-value-label');
     const floorLabelEl = row.querySelector('.floor-value-label');
     const markerModels = rowViewModel.markers ?? [];
+    const historyDescription = markerModels
+      .filter(marker => marker.visible && ['peak', 'floor'].includes(marker.type) && ['partial', 'stale'].includes(marker.historyStatus))
+      .map(marker => `${marker.type === 'peak' ? 'Peak' : 'Floor'}: ${marker.historyStatus === 'partial' ? 'partial' : 'stale'} history`)
+      .join('. ');
+    if (historyDescription) row.setAttribute?.('aria-description', historyDescription);
+    else row.removeAttribute?.('aria-description');
     (row.querySelectorAll?.('.generic-marker[data-marker-id]') ?? []).forEach((markerEl) => {
       const markerId = markerEl.dataset.markerId;
       const marker = this._getMarkerModel(markerModels, markerId);

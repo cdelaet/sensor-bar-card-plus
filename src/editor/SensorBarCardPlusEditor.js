@@ -8,7 +8,7 @@ import {
 } from './shared/editor-config.js';
 import {
   renderEntityAttributeInput, renderEntityInput, renderEntitySourceInput, renderBuiltinMarkerLabelControls,
-  renderResetOptions, escapeAttribute, isHexColorValue, expandHexColor,
+  renderWindowOptions, escapeAttribute, isHexColorValue, expandHexColor,
   normalizeColorComparisonValue, getColorPickerValue, renderColorInput, getEntityAttributeSuggestions,
 } from './shared/editor-controls.js';
 import { editorStyles } from './shared/editor-styles.js';
@@ -39,7 +39,7 @@ import { GradientStopsSection } from './sections/gradient-stops.js';
 import { NeedleSection } from './sections/needle.js';
 import { BaselineSection } from './sections/baseline.js';
 import { TargetSection } from './sections/target.js';
-import { ExtremaSection } from './sections/extrema.js';
+import { ExtremaSection, migrateExtremaConfig } from './sections/extrema.js';
 import { ReferenceMarkersSection, getReferenceMarkerSource, getMarkerLabelSource } from './sections/reference-markers.js';
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from './shared/editor-marker-controls.js';
 
@@ -113,6 +113,15 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   setConfig(config) {
+    const migrated = migrateExtremaConfig(config ?? {});
+    if (migrated) {
+      this.setConfig(migrated);
+      const signature = this._serializeConfig(migrated);
+      Promise.resolve().then(() => {
+        if (this._serializeConfig(this._draftConfig) === signature) this._emitConfigChanged({ preserveRawConfig: true });
+      });
+      return;
+    }
     const nextConfig = this._cloneDeep(config ?? {});
     const nextConfigJson = this._serializeConfig(nextConfig);
     const currentConfigJson = this._serializeConfig(this._config);
@@ -2161,8 +2170,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return this._extremaSection._setScopedExtremumColor(...args);
   }
 
-  _setScopedExtremumReset(...args) {
-    return this._extremaSection._setScopedExtremumReset(...args);
+  _setScopedExtremumWindow(...args) {
+    return this._extremaSection._setScopedExtremumWindow(...args);
   }
 
   _setScopedExtremumLabelShow(...args) {
@@ -3066,8 +3075,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return nextTarget;
   }
 
-  _renderResetOptions(value) {
-    return renderResetOptions(value);
+  _renderWindowOptions(value) {
+    return renderWindowOptions(value);
   }
 
   _escapeAttribute(value) {

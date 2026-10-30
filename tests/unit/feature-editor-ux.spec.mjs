@@ -19,7 +19,7 @@ for(const source of ['src','dist'])it(`canonical standalone structure and disclo
 });
 for(const source of ['src','dist'])it(`Feature keeps its structure and shared section semantics (${source})`,async()=>{
  const {loadCardClass}=await import('../support/load-card-class.cjs');const classes=loadCardClass({source});
- const config={type:'custom:sensor-bar-card-plus-feature',target:{at:'75%'},baseline:{at:{percent:35,future:true}},peak:{enabled:true,reset:'daily'},floor:{enabled:true},markers:[{at:'25%'}],bar:{animated:false,fill_style:'solid'},future:{unset:undefined}};
+ const config={type:'custom:sensor-bar-card-plus-feature',target:{at:'75%'},baseline:{at:{percent:35,future:true}},peak:{enabled:true,window:'today'},floor:{enabled:true},markers:[{at:'25%'}],bar:{animated:false,fill_style:'solid'},future:{unset:undefined}};
  const standalone=new classes.editor();standalone.setConfig({...config,entities:['sensor.a']});
  const editor=new classes.featureEditor(),events=[];editor.dispatchEvent=e=>{events.push(e.detail.config);editor.setConfig(e.detail.config);return true;};editor.setConfig(config);editor.context={entity_id:'sensor.parent'};await editor.updateComplete;
  const headings=html=>[...html.matchAll(/<h3>([^<]+)<\/h3>/g)].map(m=>m[1]);expect(headings(editor.shadowRoot.innerHTML)).toEqual(['Entities','Scale','Markers','Bar Appearance','Segments','Gradient Stops','Formatting']);

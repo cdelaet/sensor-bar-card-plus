@@ -1,4 +1,5 @@
 import { normalizeTextValue, normalizeNumberValue } from './editor-config.js';
+import { parseHistoricalWindow } from '../../history/time-window.js';
 
 // Templates preserve the existing IDs/data routing. The host supplies resolved
 // values and owns picker synchronization, event handling and persistence.
@@ -70,14 +71,21 @@ export function renderBuiltinMarkerLabelControls(scope, key, title, options) {
       </div>`;
 }
 
-export function renderResetOptions(value) {
-  const selected = normalizeTextValue(value).trim().toLowerCase() || 'never';
+export function renderWindowOptions(value) {
+  const selected = normalizeTextValue(value).trim().toLowerCase() || 'today';
   const options = [
-    'never', 'quarterly', 'hourly', 'daily', 'weekly', 'monthly', 'yearly',
-    ...Array.from({ length: 59 }, (_, index) => `${index + 1}m`),
-    ...Array.from({ length: 23 }, (_, index) => `${index + 1}h`),
+    ['today', 'Today'], ['yesterday', 'Yesterday'], ['this_week', 'This week'], ['last_week', 'Last week'],
+    ['this_month', 'This month'], ['last_month', 'Last month'], ['this_year', 'This year'], ['last_year', 'Last year'],
+    ['quarterly', 'Current quarter hour'], ['hourly', 'Current hour'], ['yearly', 'Current year'],
+    ...Array.from({ length: 59 }, (_, index) => [`${index + 1}m`, `Last ${index + 1} minute${index ? 's' : ''}`]),
+    ...Array.from({ length: 24 }, (_, index) => [`${index + 1}h`, `Last ${index + 1} hour${index ? 's' : ''}`]),
+    ['7d', 'Last 7 days'],
   ];
-  return options.map((option) => `<option value="${option}"${selected === option ? ' selected' : ''}>${option}</option>`).join('');
+  if (!options.some(([option]) => option === selected)) {
+    const valid = Boolean(parseHistoricalWindow(selected));
+    options.push([selected, valid ? selected : `Invalid window: ${selected}`, !valid]);
+  }
+  return options.map(([option, label, disabled]) => `<option value="${escapeAttribute(option)}"${selected === option ? ' selected' : ''}${disabled ? ' disabled' : ''}>${escapeAttribute(label)}</option>`).join('');
 }
 
 export function escapeAttribute(value) {

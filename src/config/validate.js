@@ -1,4 +1,4 @@
-import { getFiniteNumber } from './normalize.js';
+import { getFiniteNumber, UNSUPPORTED_EXTREMA_ALIASES } from './normalize.js';
 
 function createDiagnostic(code, message, path, entity = null) {
   return { code, message, path, entity };
@@ -13,6 +13,13 @@ function getStaticFixedValue(resolvable) {
 
 function addWarning(diagnostics, code, message, path, entity = null) {
   diagnostics.warnings.push(createDiagnostic(code, message, path, entity));
+}
+
+function validateUnsupportedExtremaAliases(diagnostics, config, path, entity = null) {
+  for (const alias of config?.[UNSUPPORTED_EXTREMA_ALIASES] ?? []) {
+    addWarning(diagnostics, 'markers.unsupported_extremum_alias',
+      `Unsupported ${alias}; use ${alias.replace('_marker', '')} instead.`, `${path}.${alias}`, entity);
+  }
 }
 
 function validateAttribute(diagnostics, source, path, entity = null) {
@@ -304,6 +311,7 @@ export function validateNormalizedConfig(config) {
   }
 
   validateConfigScope(diagnostics, config, 'card');
+  validateUnsupportedExtremaAliases(diagnostics, config, 'card');
   validateGenericMarkers(diagnostics, config.generic_markers, config.generic_markers_invalid, 'markers');
 
   const seenEntities = new Set();
@@ -312,6 +320,7 @@ export function validateNormalizedConfig(config) {
     const entityConfig = entities[index];
     const entityId = entityConfig?.entity ?? null;
     const path = `entities[${index}]`;
+    validateUnsupportedExtremaAliases(diagnostics, entityConfig, path, entityId);
 
     if (!entityId) {
       addWarning(diagnostics, 'entities.missing_entity', 'Entity row is missing an entity id.', path, null);

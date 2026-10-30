@@ -22,6 +22,22 @@ async function update(element, value, others = {}) {
 }
 
 describe('native feature registration', () => {
+  it('warns and ignores unsupported extrema aliases in both runtime hosts', async () => {
+    const { card: Card, feature: Feature } = loadCardClass();
+    const config = { entity, peak_marker: { enabled: true, color: 'red', reset: 'daily' },
+      floor_marker: { enabled: true, color: 'blue', reset: 'hourly' } };
+    const card = new Card(); card._render = () => {}; card._logDiagnostics = () => {}; card.setConfig(config);
+    const element = new Feature(); element._render = () => {}; element.setConfig(config);
+    element.hass = hass(42); await element.updateComplete;
+    for (const host of [card, element]) {
+      const normalized = host === card ? host._config : host._normalized;
+      expect(normalized.entities[0].peak_marker.show).toBe(false);
+      expect(normalized.entities[0].floor_marker.show).toBe(false);
+      expect(host._historicalRuntime.entries.size).toBe(0);
+      expect(host._diagnostics.warnings.filter(item => item.code === 'markers.unsupported_extremum_alias').map(item => item.path))
+        .toEqual(['card.peak_marker', 'card.floor_marker']);
+    }
+  });
   it('registers runtimes and discovery entries, with an inherited stub and async editor', async () => {
     const classes = loadCardClass();
     expect(classes.card).toBeTypeOf('function');
@@ -249,6 +265,27 @@ describe('textual Feature primary presentation', () => {
       expect(element._textValue).toBeNull();
       expect(element._statusEl.textContent).toBe('Unavailable');
       expect(element._surface.dataset.state).toBe('unavailable');
+    });
+  }
+});
+
+describe('historical Feature accessibility', () => {
+  for (const source of ['src', 'dist']) {
+    it(`${source}: describes partial and stale markers on the accessible surface`, async () => {
+      const { feature: Feature } = loadCardClass({ source });
+      const element = new Feature();
+      element.style = { setProperty() {}, removeProperty() {} };
+      element.setConfig({ entity, peak: { enabled: true }, floor: { enabled: true } });
+      element.hass = { states: { [entity]: { state: '42', attributes: {} } } };
+      await element.updateComplete;
+      const row = { ...element._row, markers: [
+        { type: 'peak', visible: true, showMarker: true, value: 80, historyStatus: 'partial' },
+        { type: 'floor', visible: true, showMarker: true, value: 10, historyStatus: 'stale' },
+      ] };
+      element._render(row, null);
+      expect(element._surface.getAttribute('aria-label')).toContain('Peak at 80; partial history');
+      expect(element._surface.getAttribute('aria-label')).toContain('Floor at 10; stale history');
+      expect(element._surface.getAttribute('tabindex')).toBeNull();
     });
   }
 });

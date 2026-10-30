@@ -1,7 +1,38 @@
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue,
   pruneEmptyObjectsInTarget, normalizeTextValue, normalizeNumberValue } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderResetOptions, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderWindowOptions, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from '../shared/editor-marker-controls.js';
+import { isValidReset } from '../../utils/extrema.js';
+import { parseHistoricalWindow } from '../../history/time-window.js';
+
+export function migrateExtremaConfig(config) {
+  let changed = false;
+  const migrateScope = (scope) => {
+    if (!isObject(scope)) return scope;
+    let next = scope;
+    for (const key of ['peak', 'floor']) {
+      const marker = scope[key];
+      if (!isObject(marker) || !Object.prototype.hasOwnProperty.call(marker, 'reset')) continue;
+      if (next === scope) next = { ...scope };
+      const { reset, ...rest } = marker;
+      if (!Object.prototype.hasOwnProperty.call(rest, 'window')) {
+        const normalized = typeof reset === 'string' ? reset.trim().toLowerCase() : reset;
+        const aliases = { never: 'today', daily: 'today', weekly: 'this_week', monthly: 'this_month' };
+        rest.window = isValidReset(reset) ? (aliases[normalized] ?? normalized)
+          : parseHistoricalWindow(normalized) ? `invalid legacy reset: ${normalized}` : reset ?? null;
+      }
+      next[key] = rest;
+      changed = true;
+    }
+    return next;
+  };
+  let next = migrateScope(config);
+  if (Array.isArray(config?.entities)) {
+    const entities = config.entities.map(migrateScope);
+    if (entities.some((entry, index) => entry !== config.entities[index])) next = { ...next, entities };
+  }
+  return changed ? next : null;
+}
 
 // Configuration controls only. No runtime extrema/history state lives here.
 export class ExtremaSection {
@@ -9,7 +40,6 @@ export class ExtremaSection {
 
   _getScopedPeakConfig(scope) {
     const rawPeak = this.context.read(scope, ['peak']);
-    const rawPeakMarker = this.context.read(scope, ['peak_marker']);
     const rawLegacyShow = this.context.read(scope, ['show_peak']);
     const rawLegacyColor = this.context.read(scope, ['peak_color']);
     const defaultColor = '#888';
@@ -23,17 +53,6 @@ export class ExtremaSection {
         mode = 'disabled';
       }
       color = rawPeak.color ?? color;
-    }
-
-    if (isObject(rawPeakMarker)) {
-      if (rawPeakMarker.show === true) {
-        mode = 'enabled';
-      } else if (rawPeakMarker.show === false) {
-        mode = 'disabled';
-      } else if (scope?.type !== 'entity') {
-        mode = 'disabled';
-      }
-      color = rawPeakMarker.color ?? color;
     }
 
     if (rawLegacyShow === true) {
@@ -70,18 +89,9 @@ export class ExtremaSection {
     if (isObject(peakValue) && (
       Object.prototype.hasOwnProperty.call(peakValue, 'enabled')
       || Object.prototype.hasOwnProperty.call(peakValue, 'color')
-      || Object.prototype.hasOwnProperty.call(peakValue, 'reset')
+      || Object.prototype.hasOwnProperty.call(peakValue, 'window')
       || Object.prototype.hasOwnProperty.call(peakValue, 'label')
       || Object.prototype.hasOwnProperty.call(peakValue, 'direction')
-    )) {
-      return true;
-    }
-
-    const peakMarkerValue = this.context.read(scope, ['peak_marker']) ?? {};
-    if (isObject(peakMarkerValue) && (
-      Object.prototype.hasOwnProperty.call(peakMarkerValue, 'show')
-      || Object.prototype.hasOwnProperty.call(peakMarkerValue, 'color')
-      || Object.prototype.hasOwnProperty.call(peakMarkerValue, 'direction')
     )) {
       return true;
     }
@@ -103,12 +113,11 @@ export class ExtremaSection {
     return this.context.mutate(scope, (target) => {
       let nextTarget = deletePathValue(target, ['peak', 'enabled']);
       nextTarget = deletePathValue(nextTarget, ['peak', 'color']);
-      nextTarget = deletePathValue(nextTarget, ['peak', 'reset']);
+      nextTarget = deletePathValue(nextTarget, ['peak', 'window']);
       nextTarget = deletePathValue(nextTarget, ['peak', 'label']);
       nextTarget = deletePathValue(nextTarget, ['peak', 'direction']);
       nextTarget = deletePathValue(nextTarget, ['show_peak']);
       nextTarget = deletePathValue(nextTarget, ['peak_color']);
-      nextTarget = deletePathValue(nextTarget, ['peak_marker']);
       nextTarget = pruneEmptyObjectsInTarget(nextTarget, ['peak']);
       return nextTarget;
     }, { rerender: true });
@@ -123,12 +132,12 @@ export class ExtremaSection {
         ? cloneDeep(getPathValue(nextTarget, ['peak']))
         : {};
       const currentColor = currentPeak.color
-        ?? (isObject(getPathValue(nextTarget, ['peak_marker'])) ? getPathValue(nextTarget, ['peak_marker', 'color']) : undefined)
         ?? getPathValue(nextTarget, ['peak_color'])
         ?? defaultColor;
 
       if (scope?.type === 'entity' || boolValue) {
         currentPeak.enabled = boolValue;
+        if (boolValue && currentPeak.window === undefined) currentPeak.window = this._getEffectiveMarkerExtras(scope, 'peak').window;
       } else {
         delete currentPeak.enabled;
       }
@@ -147,7 +156,6 @@ export class ExtremaSection {
 
       nextTarget = deletePathValue(nextTarget, ['show_peak']);
       nextTarget = deletePathValue(nextTarget, ['peak_color']);
-      nextTarget = deletePathValue(nextTarget, ['peak_marker']);
       nextTarget = pruneEmptyObjectsInTarget(nextTarget, ['peak']);
       return nextTarget;
     }, { extremumEdit: { key: 'peak', path: ['enabled'], value: boolValue } });
@@ -183,7 +191,6 @@ export class ExtremaSection {
 
       nextTarget = deletePathValue(nextTarget, ['show_peak']);
       nextTarget = deletePathValue(nextTarget, ['peak_color']);
-      nextTarget = deletePathValue(nextTarget, ['peak_marker']);
       nextTarget = pruneEmptyObjectsInTarget(nextTarget, ['peak']);
       return nextTarget;
     }, { extremumEdit: { key: 'peak', path: ['color'], value: normalizedValue && normalizeColorComparisonValue(normalizedValue) !== normalizeColorComparisonValue(defaultColor) ? normalizedValue : undefined } });
@@ -194,7 +201,9 @@ export class ExtremaSection {
     const marker = isObject(raw) ? raw : {};
     const label = isObject(marker.label) ? marker.label : {};
     return {
-      reset: Object.prototype.hasOwnProperty.call(marker, 'reset') ? normalizeTextValue(marker.reset).trim().toLowerCase() : null,
+      window: Object.prototype.hasOwnProperty.call(marker, 'window')
+        ? (marker.window == null ? String(marker.window) : normalizeTextValue(marker.window).trim().toLowerCase() || '(empty)')
+        : null,
       labelShow: typeof label.show === 'boolean' ? label.show : null,
       labelText: typeof label.text === 'string' ? label.text.replace(/\s+/g, ' ').trim() : null,
       labelShowValue: typeof label.show_value === 'boolean' ? label.show_value : null,
@@ -208,7 +217,7 @@ export class ExtremaSection {
   _hasExtremumOverride(scope, key) {
     const marker = this.context.read(scope, [key]);
     if (!isObject(marker)) return false;
-    return ['enabled', 'color', 'reset', 'label', 'direction'].some((field) => (
+    return ['enabled', 'color', 'window', 'label', 'direction'].some((field) => (
       Object.prototype.hasOwnProperty.call(marker, field)
     ));
   }
@@ -217,7 +226,7 @@ export class ExtremaSection {
     const local = this._getScopedMarkerExtras(scope, key);
     if (scope?.type !== 'entity') {
       return {
-        reset: local.reset ?? 'never',
+        window: local.window ?? 'today',
         labelShow: local.labelShow ?? false,
         labelText: local.labelText,
         labelShowValue: local.labelShowValue ?? true,
@@ -228,7 +237,7 @@ export class ExtremaSection {
     const card = this._getScopedMarkerExtras({ type: 'card' }, key);
     if (!this._hasExtremumOverride(scope, key)) {
       return {
-        reset: card.reset ?? 'never',
+        window: card.window ?? 'today',
         labelShow: card.labelShow ?? false,
         labelText: card.labelText,
         labelShowValue: card.labelShowValue ?? true,
@@ -237,7 +246,7 @@ export class ExtremaSection {
       };
     }
     return {
-      reset: local.reset ?? card.reset ?? 'never',
+      window: local.window ?? card.window ?? 'today',
       labelShow: local.labelShow ?? card.labelShow ?? false,
       labelText: Object.prototype.hasOwnProperty.call(this.context.read(scope, [key, 'label']) ?? {}, 'text') ? local.labelText : card.labelText,
       labelShowValue: local.labelShowValue ?? card.labelShowValue ?? true,
@@ -287,8 +296,8 @@ export class ExtremaSection {
       ? this._getScopedPeakConfig(scope)
       : this._getEffectiveScopedFloorConfig(scope);
     const enabled = marker.mode === 'enabled';
-    const reset = this._getEffectiveMarkerExtras(scope, key).reset ?? 'never';
-    return `${enabled ? 'Enabled' : 'Disabled'} · ${reset === 'never' ? 'no reset' : `${reset} reset`}`;
+    const window = this._getEffectiveMarkerExtras(scope, key).window;
+    return `${enabled ? 'Enabled' : 'Disabled'} · ${window}`;
   }
 
   _setScopedExtremumEnabled(scope, key, value) {
@@ -302,6 +311,7 @@ export class ExtremaSection {
       const currentColor = current.color ?? defaultColor;
       if (scope?.type === 'entity' || boolValue) current.enabled = boolValue;
       else delete current.enabled;
+      if (boolValue && current.window === undefined) current.window = this._getEffectiveMarkerExtras(scope, key).window;
       if (currentColor && normalizeColorComparisonValue(currentColor) !== normalizeColorComparisonValue(defaultColor)) {
         current.color = currentColor;
       } else delete current.color;
@@ -332,30 +342,28 @@ export class ExtremaSection {
       if (key === 'peak') {
         nextTarget = deletePathValue(nextTarget, ['show_peak']);
         nextTarget = deletePathValue(nextTarget, ['peak_color']);
-        nextTarget = deletePathValue(nextTarget, ['peak_marker']);
       }
       return nextTarget;
     }, { extremumEdit: { key, path: ['color'], value: normalizedValue && normalizeColorComparisonValue(normalizedValue) !== normalizeColorComparisonValue(defaultColor) ? normalizedValue : undefined } });
   }
 
-  _setScopedExtremumReset(scope, key, value) {
+  _setScopedExtremumWindow(scope, key, value) {
     const normalized = normalizeTextValue(value).trim().toLowerCase();
     return this.context.mutate(scope, (target) => {
       let nextTarget = cloneDeep(target);
       const current = isObject(getPathValue(nextTarget, [key]))
         ? cloneDeep(getPathValue(nextTarget, [key]))
         : {};
-      if (normalized && (scope?.type === 'entity' || normalized !== 'never')) current.reset = normalized;
-      else delete current.reset;
+      if (!parseHistoricalWindow(normalized)) return target;
+      current.window = normalized;
       if (Object.keys(current).length) nextTarget = setPathValue(nextTarget, [key], current);
       else nextTarget = deletePathValue(nextTarget, [key]);
       if (key === 'peak') {
         nextTarget = deletePathValue(nextTarget, ['show_peak']);
         nextTarget = deletePathValue(nextTarget, ['peak_color']);
-        nextTarget = deletePathValue(nextTarget, ['peak_marker']);
       }
       return nextTarget;
-    }, { extremumEdit: { key, path: ['reset'], value: normalized } });
+    }, { extremumEdit: { key, path: ['window'], value: normalized } });
   }
 
   _setScopedExtremumLabelShow(scope, key, value) {
@@ -375,7 +383,6 @@ export class ExtremaSection {
       if (key === 'peak') {
         nextTarget = deletePathValue(nextTarget, ['show_peak']);
         nextTarget = deletePathValue(nextTarget, ['peak_color']);
-        nextTarget = deletePathValue(nextTarget, ['peak_marker']);
       }
       return nextTarget;
     }, { extremumEdit: { key, path: ['label', 'show'], value: enabled } });
@@ -405,10 +412,9 @@ export class ExtremaSection {
       const floor = isObject(getPathValue(nextTarget, ['floor']))
         ? cloneDeep(getPathValue(nextTarget, ['floor']))
         : {};
-      ['enabled', 'color', 'reset', 'label', 'direction'].forEach((key) => delete floor[key]);
+      ['enabled', 'color', 'window', 'label', 'direction'].forEach((key) => delete floor[key]);
       if (Object.keys(floor).length) nextTarget = setPathValue(nextTarget, ['floor'], floor);
       else nextTarget = deletePathValue(nextTarget, ['floor']);
-      nextTarget = deletePathValue(nextTarget, ['floor_marker']);
       return nextTarget;
     }, { rerender: true });
   }
@@ -465,9 +471,9 @@ ${indent}                          <input id="entity-${index}-${key}-inherit" ty
                         })}
                       </div>
                       <div class="field-row">
-                        <label for="entity-${index}-${key}-reset">${title} reset</label>
-                        <select id="entity-${index}-${key}-reset" data-kind="entity-${key}-reset" data-index="${index}" value="${escapeAttribute(marker.reset)}">
-                          ${renderResetOptions(marker.reset)}
+                        <label for="entity-${index}-${key}-window">${title} time window</label>
+                        <select id="entity-${index}-${key}-window" data-kind="entity-${key}-window" data-index="${index}" value="${escapeAttribute(marker.window)}">
+                          ${renderWindowOptions(marker.window)}
                         </select>
                       </div>
                       <div class="field-row">
@@ -499,9 +505,9 @@ ${indent}                          `;
               })}
             </div>
             <div class="field-row">
-              <label for="${key}-reset">${title} reset</label>
-              <select id="${key}-reset" data-field="${key}-reset" value="${escapeAttribute(marker.reset)}">
-                ${renderResetOptions(marker.reset)}
+              <label for="${key}-window">${title} time window</label>
+              <select id="${key}-window" data-field="${key}-window" value="${escapeAttribute(marker.window)}">
+                ${renderWindowOptions(marker.window)}
               </select>
             </div>
             <div class="field-row">
@@ -526,7 +532,7 @@ ${indent}                          `;
       key === 'peak' ? this._setScopedPeakEnabled(scope, value) : this._setScopedExtremumEnabled(scope, key, value); return true;
     }
     if (option === 'color') { key === 'peak' ? this._setScopedPeakColor(scope, value) : this._setScopedExtremumColor(scope, key, value); return true; }
-    if (option === 'reset') { this._setScopedExtremumReset(scope, key, value); return true; }
+    if (option === 'window') { this._setScopedExtremumWindow(scope, key, value); return true; }
     if (option === 'direction') { setMarkerDirection(this.context, scope, key, value); return true; }
     const label = option.match(/^label-(show|text|show-value|show-unit|precision)$/);
     if (label) {

@@ -26,7 +26,7 @@ import { createFeaturePaletteArray } from './feature-editor-palettes.js';
 import { NeedleSection } from '../editor/sections/needle.js';
 import { BaselineSection } from '../editor/sections/baseline.js';
 import { TargetSection } from '../editor/sections/target.js';
-import { ExtremaSection } from '../editor/sections/extrema.js';
+import { ExtremaSection, migrateExtremaConfig } from '../editor/sections/extrema.js';
 import { ReferenceMarkersSection } from '../editor/sections/reference-markers.js';
 import { getFeatureReferenceMarkerSource, patchFeatureReferenceMarkerSource, patchFeatureReferenceMarkerLabelSource, patchFeatureReferenceMarker } from './feature-editor-reference-markers.js';
 import { patchFeatureExtremumField } from './feature-editor-extrema.js';
@@ -102,7 +102,21 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
 
   setConfig(config) {
     if (!isObject(config)) throw new Error('Invalid Sensor Bar Card Plus feature configuration');
+    const migrated = migrateExtremaConfig(config);
+    if (migrated) {
+      this.setConfig(migrated);
+      const signature = serializeConfig(migrated);
+      Promise.resolve().then(() => {
+        if (serializeConfig(this._config) !== signature || this._lastMigrationSignature === signature) return;
+        this._lastMigrationSignature = signature;
+        this.dispatchEvent(new CustomEvent('config-changed', {
+          bubbles: true, composed: true, detail: { config: cloneDeep(this._config) },
+        }));
+      });
+      return;
+    }
     if (serializeConfig(config) !== serializeConfig(this._config)) {
+      this._lastMigrationSignature = null;
       this._paletteRenderRequested ||= ['bar.segments', 'bar.gradient_stops', 'segments', 'severity', 'gradient_stops']
         .some(path => serializeConfig(getPathValue(config, path.split('.'))) !== serializeConfig(getPathValue(this._config, path.split('.'))));
       this._config = cloneDeep(config);

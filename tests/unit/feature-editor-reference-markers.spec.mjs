@@ -6,7 +6,7 @@ const marker = () => ({ at: { entity: 'sensor.reference', value: 25, ...meta() }
   label: { show: true, text: 'Limit', entity: 'sensor.information', show_value: false, show_unit: false, decimal: 2, unit: 'unsupported', ...meta() }, ...meta() });
 const raw = () => ({ type, markers: [marker(), marker()], ...meta(),
   scale: { min: { fixed: 0, future: true }, max: 100 }, bar: { color: 'blue', needle: true, animated: false, fill_style: 'gradient', segments: [{ from: 50, color: 'red' }, { from: 0, color: 'blue' }], gradient_stops: [{ pos: 100, color: 'red' }, { pos: 0, color: 'blue' }] },
-  baseline: { at: '50%', ...meta() }, target: { at: '75%', ...meta() }, peak: { enabled: true, reset: { unsupported: true }, ...meta() }, floor: { enabled: true, ...meta() }, formatting: { unit: 'W', decimal: 1 } });
+  baseline: { at: '50%', ...meta() }, target: { at: '75%', ...meta() }, peak: { enabled: true, window: { unsupported: true }, ...meta() }, floor: { enabled: true, ...meta() }, formatting: { unit: 'W', decimal: 1 } });
 async function setup(source, config = raw(), withEntityPicker = false) {
   const classes = loadCardClass({ source, withEntityPicker }), editor = new classes.featureEditor(), events = [];
   editor.dispatchEvent = event => { events.push(event.detail.config); editor.setConfig(event.detail.config); return true; };

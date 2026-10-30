@@ -6,7 +6,7 @@ const raw=()=>({type,...metadata(),scale:{min:-100,max:100},
  bar:{animated:false,fill_style:'band_gradient',solid_fill:false,color:'#123456',needle:{show:true,color:'#abcdef',...metadata()},segments:[{from:-100,color:'var(--low)',...metadata()},{from:'50%',color:'orange',...metadata()},{from:60,color:'red',...metadata()}],gradient_stops:[{pos:0,color:'#123456'},{pos:100,color:'#abcdef'}],...metadata()},
  baseline:{at:{percent:35,...metadata()},above:{color:'red',...metadata()},below:{color:'blue',...metadata()},...metadata()},
  target:{at:{percent:75,...metadata()},shape:'triangle',direction:'outward',color:'orange',label:{show:true,text:'Limit',precision:1,...metadata()},when_exceeded:{fill_color:'red',...metadata()},...metadata()},
- peak:{enabled:true,color:'red',reset:'daily',...metadata()},floor:{enabled:true,color:'blue',...metadata()},
+ peak:{enabled:true,color:'red',window:'today',...metadata()},floor:{enabled:true,color:'blue',...metadata()},
  markers:[{at:'25%',color:'red',show_marker:false,label:{show:true,entity:'sensor.label',...metadata()},...metadata()}],formatting:{unit:'W',decimal:1},animated:false});
 async function setup(source,config=raw(),picker=false) {
  const calls=[],classes=loadCardClass({source,withEntityPicker:picker,CSS:{supports:(property,value)=>{calls.push([property,value]);return !['var(','rgb(','bogus'].includes(value);}}}),editor=new classes.featureEditor(),events=[];

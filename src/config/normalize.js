@@ -1,6 +1,13 @@
 import { isValidReset } from '../utils/extrema.js';
 import { parseHistoricalWindow } from '../history/time-window.js';
 
+export const UNSUPPORTED_EXTREMA_ALIASES = Symbol.for('sensor-bar-card-plus.unsupported-extrema-aliases');
+
+function recordUnsupportedExtremaAliases(normalized, raw) {
+  const aliases = ['peak_marker', 'floor_marker'].filter(key => Object.prototype.hasOwnProperty.call(raw ?? {}, key));
+  if (aliases.length) Object.defineProperty(normalized, UNSUPPORTED_EXTREMA_ALIASES, { value: aliases });
+}
+
 function normalizeAttribute(value) {
   return typeof value === 'string' && value !== '' ? value : null;
 }
@@ -915,11 +922,7 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
 
 function getRawExtremumConfig(config, key) {
   const value = config?.[key];
-  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
-  const markerValue = config?.[`${key}_marker`];
-  return markerValue && typeof markerValue === 'object' && !Array.isArray(markerValue)
-    ? markerValue
-    : null;
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
 }
 
 function normalizeLabelConfig(rawConfig, inheritedConfig) {
@@ -1044,6 +1047,7 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
     name: entityConfig.name ?? null,
     icon: entityConfig.icon,
   };
+  recordUnsupportedExtremaAliases(normalizedEntity, entityConfig);
 
   if (entityConfig.attribute !== undefined) {
     const attribute = normalizeAttribute(entityConfig.attribute);
@@ -1150,6 +1154,7 @@ export function normalizeCardConfig(rawConfig) {
     ...baseConfig,
     _normalized: true,
   };
+  recordUnsupportedExtremaAliases(normalizedCard, rawConfig);
   Object.defineProperty(normalizedCard, PAINT_EXPLICITNESS, {
     value: cardPaintExplicitness,
     enumerable: false,
