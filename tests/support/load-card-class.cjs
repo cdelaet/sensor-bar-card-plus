@@ -225,6 +225,8 @@ function loadCardClass(options = {}) {
     },
     window: {
       customCards: [],
+      addEventListener() {},
+      removeEventListener() {},
     },
     CustomEvent: class {
       constructor(type, init = {}) {

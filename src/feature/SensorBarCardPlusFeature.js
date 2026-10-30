@@ -7,6 +7,7 @@ import { buildBarRenderModel, getRevealTransitionDuration, getEffectiveMarkerCol
 import { renderBar, patchBar } from '../render/bar-renderer.js';
 import { barTrackStyles, barMarkerStyles, getBarAnimationStyles } from '../render/bar-styles.js';
 import { updateExtremum } from '../utils/extrema.js';
+import { HistoricalHostRuntime, historicalConfigKey } from '../history/host-runtime.js';
 import { formatNumericDisplay } from '../utils/format.js';
 import { setStyleIfChanged } from '../utils/dom.js';
 import { getFeatureLabelGeometry, layoutFeatureMarkerLabels } from './marker-label-layout.js';
@@ -22,6 +23,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     super();
     this.attachShadow({ mode: 'open' });
     this._extrema = {};
+    this._historicalRuntime = new HistoricalHostRuntime();
     this._scaleHistory = null;
     this._previousRow = null;
     this._labelNodes = new Map();
@@ -49,15 +51,26 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     }
     const key = JSON.stringify(config);
     if (key === this._configKey) return;
+    const entity = config.entity || this._context?.entity_id || null;
+    const normalized = normalizeCardConfig({ ...config, type: 'custom:sensor-bar-card-plus', entity: undefined,
+      entities: entity ? [{ entity, ...(config.attribute !== undefined ? { attribute: config.attribute } : {}) }] : [] });
+    const historyKey = historicalConfigKey(normalized.entities);
+    if (this._historyConfigKey !== undefined && this._historyConfigKey !== historyKey) {
+      this._historicalRuntime.setConsumers([]);
+    }
+    this._historyConfigKey = historyKey;
     this._configKey = key;
     this._config = { ...config, ...(typeof config.entity === 'string' ? { entity: config.entity.trim() } : {}) };
     this._configChanged = true;
     this._requestUpdate();
   }
 
-  set hass(value) { this._hass = value; this._requestUpdate(); }
+  set hass(value) { this._hass = value; this._historicalRuntime.setHass(value); this._requestUpdate(); }
   get hass() { return this._hass; }
-  set context(value) { this._context = value; this._requestUpdate(); }
+  set context(value) {
+    if (!this._config?.entity && this._context?.entity_id !== value?.entity_id) this._historicalRuntime.setConsumers([]);
+    this._context = value; this._requestUpdate();
+  }
   get context() { return this._context; }
   set color(value) { this._color = value; this._requestUpdate(); }
   get color() { return this._color; }
@@ -65,9 +78,10 @@ export class SensorBarCardPlusFeature extends HTMLElement {
   get position() { return this._position; }
   get updateComplete() { return this._updateComplete; }
 
-  connectedCallback() { this._requestUpdate(); }
+  connectedCallback() { this._historicalRuntime.attach(); this._requestUpdate(); }
 
   disconnectedCallback() {
+    this._historicalRuntime.detach();
     this._stopLabelLayout();
   }
 

@@ -328,7 +328,7 @@ export class SharedObservationService {
 
   _consumerRecord(consumer, record, merge = true) {
     let incoming = record.observations ?? [];
-    if (record.acquiredWindow) {
+    if (merge && record.acquiredWindow) {
       const acquired = record.acquiredWindow;
       const windows = [...this.consumers.values()].filter((item) => item.journal === consumer.journal)
         .map((item) => item.window);
@@ -473,11 +473,16 @@ export class SharedObservationService {
     return dispose;
   }
 
-  _notify(cacheKey, record) {
+  _notify(cacheKey, record, merge = true) {
     const [sourceKey, familyKey] = cacheKey.split('\u0001');
+    const updatedJournals = new Set();
     for (const consumer of this.consumers.values()) {
       if (consumer.sourceKey !== sourceKey || consumer.window.cacheKey !== familyKey) continue;
-      try { consumer.callback(this._consumerRecord(consumer, record)); } catch { /* Isolate consumer failures. */ }
+      try {
+        const result = this._consumerRecord(consumer, record, merge && !updatedJournals.has(consumer.journal));
+        updatedJournals.add(consumer.journal);
+        consumer.callback(result);
+      } catch { /* Isolate consumer failures. */ }
     }
   }
 
@@ -547,7 +552,7 @@ export class SharedObservationService {
         journal.recordMetadata = { ...journal.recordMetadata, stale: true, status: 'stale',
           coverage: { ...journal.recordMetadata.coverage, complete: false,
             reason: 'History invalidated; Recorder revalidation is required' } };
-        this._notify(key, { ...journal.recordMetadata, observations: journal.observations });
+        this._notify(key, { ...journal.recordMetadata, observations: journal.observations }, false);
       }
       if ([...this.inflight.values()].some((flight) => flight.cacheKey === key)) {
         this.generations.set(key, (this.generations.get(key) ?? 0) + 1);

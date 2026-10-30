@@ -474,4 +474,25 @@ describe('shared observation service', () => {
     first(); second(); third();
   });
 
+  it('notifies a shared journal without remerging on invalidation or live delivery', async () => {
+    const service = new SharedObservationService({ now: () => 1000,
+      provider: async (_h, sources, window) => result(sources[0], window) });
+    const peak = vi.fn(); const floor = vi.fn();
+    const stopPeak = service.subscribe('sensor.one', win(), peak);
+    const stopFloor = service.subscribe('sensor.one', win(), floor);
+    await service.request({ hass: {}, sources: ['sensor.one'], window: win() });
+    const merge = vi.spyOn(service, '_mergeIntoConsumer');
+    peak.mockClear(); floor.mockClear();
+    service.invalidate({ sources: ['sensor.one'] });
+    expect(merge).not.toHaveBeenCalled();
+    service.ingestLiveState({ source: 'sensor.one', state: { state: '9' }, timestamp: 150 });
+    expect(merge).toHaveBeenCalledTimes(1);
+    expect(peak.mock.calls.at(-1)[0]).toMatchObject({ stale: true });
+    expect(floor.mock.calls.at(-1)[0]).toMatchObject({ stale: true });
+    stopPeak();
+    service.ingestLiveState({ source: 'sensor.one', state: { state: '10' }, timestamp: 160 });
+    expect(floor.mock.calls.at(-1)[0].observations.at(-1).value).toBe(10);
+    stopFloor();
+  });
+
 });

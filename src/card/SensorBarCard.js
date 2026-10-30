@@ -49,6 +49,7 @@ import {
   isTightUnit,
 } from '../utils/format.js';
 import { updateExtremum } from '../utils/extrema.js';
+import { HistoricalHostRuntime, historicalConfigKey } from '../history/host-runtime.js';
 import * as barRenderModel from '../view-model/bar-render-model.js';
 import * as barRenderer from '../render/bar-renderer.js';
 import { attachRowActionHandlers, resolveRowAction } from '../actions/row-actions.js';
@@ -194,6 +195,7 @@ export class SensorBarCard extends HTMLElement {
     this._diagnostics = { warnings: [], errors: [] };
     this._lastDiagnosticsSignature = null;
     this._hass = null;
+    this._historicalRuntime = new HistoricalHostRuntime();
     this._extrema = new WeakMap();
     this._rowScales = new WeakMap();
     this._rowGeneration = 0;
@@ -214,6 +216,7 @@ export class SensorBarCard extends HTMLElement {
   }
 
   connectedCallback() {
+    this._historicalRuntime.attach();
     window.addEventListener('resize', this._boundWindowResize, { passive: true });
     this._setupResizeObserver();
     // Row action handlers are cleared while the card is detached. Reattach
@@ -225,6 +228,7 @@ export class SensorBarCard extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._historicalRuntime.detach();
     this._rowGeneration += 1;
     this._clearRowActionHandlers();
     window.removeEventListener('resize', this._boundWindowResize);
@@ -248,6 +252,11 @@ export class SensorBarCard extends HTMLElement {
     const previousConfig = this._config;
     this._actionConfig = config;
     this._config = this.normalizeCardConfig(config);
+    const historyKey = historicalConfigKey(this._config.entities);
+    if (this._historyConfigKey !== undefined && this._historyConfigKey !== historyKey) {
+      this._historicalRuntime.setConsumers([]);
+    }
+    this._historyConfigKey = historyKey;
     this._rowScales = new WeakMap();
     this._reconcileRowHistory(previousConfig?.entities ?? []);
     this._diagnostics = validateNormalizedConfig(this._config);
@@ -500,6 +509,7 @@ export class SensorBarCard extends HTMLElement {
   set hass(hass) {
     const oldHass = this._hass;
     this._hass = hass;
+    this._historicalRuntime.setHass(hass);
     if (!this._config.entities) return;
     
     if (!oldHass) {

@@ -221,7 +221,9 @@ export class HistoricalValueResolver {
       } else {
         unsubscribe.updateWindow(currentWindow);
       }
-      callback(makeResult({ status: 'pending', spec: normalized, window: currentWindow, now: this.now() }));
+      if (!latestRecord?.stale && !latestRecord?.error) {
+        callback(makeResult({ status: 'pending', spec: normalized, window: currentWindow, now: this.now() }));
+      }
       scheduleRollover(latestRecord);
       return currentContext.service.request({ hass: currentContext.hass, sources: [normalized.source],
         window: currentWindow, force })
