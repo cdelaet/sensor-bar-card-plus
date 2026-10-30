@@ -75,4 +75,19 @@ describe('historical extrema calculations', () => {
     expect(result.value).toBe(3);
     expect(result.boundaryIncluded).toBe(true);
   });
+  it('keeps an unchanged boundary state effective and respects unavailable intervals', () => {
+    const samples = [observation(10, 21, 0), observation(130, null, 1), observation(180, 22, 2)];
+    expect(calculateObservationValue(samples, 'max', { start: 100, end: 120 }).value).toBe(21);
+    expect(calculateObservationValue(samples, 'max', { start: 140, end: 170 }).value).toBeNull();
+    expect(calculateObservationValue(samples, 'min', { start: 140, end: 190 }).value).toBe(22);
+  });
+
+  it('does not invent an ordering across independent acquisition batches', () => {
+    const result = calculateObservationValue([
+      { ...observation(120, 100, 0), state: '100', orderKnown: true, orderDomain: 'recorder:1' },
+      { ...observation(120, 5, 1), state: '5', orderKnown: true, orderDomain: 'recorder:2' },
+    ], 'max', window);
+    expect(result).toMatchObject({ value: null, orderingAmbiguous: true });
+  });
+
 });

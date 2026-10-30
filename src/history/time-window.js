@@ -1,3 +1,5 @@
+import { getWeekStartByLocale } from 'weekstart';
+
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const WEEK_MS = 7 * DAY_MS;
@@ -152,15 +154,17 @@ export function resolveWeekStart(locale, firstWeekday = null, explicitWeekStarts
     .indexOf(String(firstWeekday ?? '').toLowerCase());
   if (weekdayIndex >= 0) return weekdayIndex;
   if ((firstWeekday === null || firstWeekday === undefined || firstWeekday === 'language')
-    && typeof locale === 'string' && typeof Intl.Locale === 'function') {
+    && typeof locale === 'string') {
     try {
-      const localeObject = new Intl.Locale(locale);
+      const localeObject = typeof Intl.Locale === 'function' ? new Intl.Locale(locale) : null;
+      if (!localeObject) return getWeekStartByLocale(locale) % 7;
       const info = typeof localeObject.getWeekInfo === 'function'
         ? localeObject.getWeekInfo()
         : localeObject.weekInfo;
       const firstDay = info?.firstDay;
       if (Number.isInteger(firstDay) && firstDay >= 1 && firstDay <= 7) return firstDay % 7;
-    } catch { /* Fall back to SBCP's established Monday week boundary. */ }
+    } catch { /* Use the same locale fallback as Home Assistant. */ }
+    return getWeekStartByLocale(locale) % 7;
   }
   return 1;
 }

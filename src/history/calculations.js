@@ -23,6 +23,7 @@ function collapseEqualTimestamps(observations) {
     if (group.length === 1 || group.every((sample) => sample.value === group[0].value && sample.state === group[0].state)) {
       effective.push(group.at(-1));
     } else if (group.every((sample) => sample.orderKnown)
+      && new Set(group.map((sample) => sample.orderDomain ?? sample.origin ?? 'unknown')).size === 1
       && new Set(group.map((sample) => sample.order)).size === group.length) {
       effective.push(group.at(-1));
     } else {
@@ -44,8 +45,7 @@ function selectWindowDetails(observations, window, acquiredWindow = null, liveTh
   const startCovered = !acquiredWindow || (Number.isFinite(acquiredWindow.start)
     && acquiredWindow.start <= window.start);
   const endCovered = !acquiredWindow || (Number.isFinite(acquiredWindow.end)
-    && acquiredWindow.end >= window.end) || (startCovered && Number.isFinite(liveThrough)
-      && liveThrough >= window.end);
+    && acquiredWindow.end >= window.end);
   const requestedBoundsCovered = startCovered && endCovered;
   let boundary = null;
   for (const observation of ordered) {

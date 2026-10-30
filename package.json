@@ -35,5 +35,8 @@
     "esbuild": "^0.28.1",
     "playwright": "^1.60.0",
     "vitest": "^4.1.7"
+  },
+  "dependencies": {
+    "weekstart": "2.0.0"
   }
 }

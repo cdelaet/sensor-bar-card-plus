@@ -42,7 +42,7 @@ function makeResult({ value = null, status, spec, window = null, record = null, 
     else resolvedStatus = 'partial';
   }
   return {
-    value: Number.isFinite(value) ? value : null,
+    value: Number.isFinite(value) && !record?.coverage?.liveOverflow && !calculation?.orderingAmbiguous ? value : null,
     status: resolvedStatus,
     source: { provider: spec.provider, ...spec.source },
     calculation: spec.calculation,
@@ -154,7 +154,7 @@ export class HistoricalValueResolver {
       currentContext = currentResolutionContext();
       currentWindow = currentContext.window;
       unsubscribe?.updateWindow(currentWindow);
-      latestRecord = unsubscribe ? unsubscribe.merge(record) : record;
+      latestRecord = record;
       const calculation = calculateObservationValue(latestRecord.observations, normalized.calculation,
         currentWindow, { acquiredWindow: latestRecord.acquiredWindow, liveThrough: latestRecord.liveThrough });
       const overflow = latestRecord.coverage?.liveOverflow === true;
@@ -168,8 +168,11 @@ export class HistoricalValueResolver {
 
     const scheduleRollover = (record = latestRecord) => {
       clearTimer();
+      if (!['calendar', 'rolling'].includes(currentWindow.semantics.kind)) return;
       const now = this.now();
       const boundaries = [Math.floor(now / 60000) * 60000 + 60000];
+      if ((record?.observations ?? []).some((observation) => observation.origin === 'live'
+        && observation.timestamp === currentWindow.end && observation.timestamp <= now)) boundaries.push(now + 1);
       if (currentWindow.semantics.kind === 'calendar') {
         const rolloverAt = currentWindow.semantics.rolloverAt;
         if (Number.isFinite(rolloverAt) && rolloverAt > now) boundaries.push(rolloverAt + 1);
@@ -224,7 +227,7 @@ export class HistoricalValueResolver {
         window: currentWindow, force })
         .then((records) => {
           const record = records.get(`${normalized.source.entityId}\u0000${normalized.source.attribute ?? ''}`);
-          if (generation === requestGeneration) publish(unsubscribe ? unsubscribe.merge(record) : record, generation);
+          if (generation === requestGeneration) publish(record, generation);
           return record ?? null;
         })
         .catch((error) => {

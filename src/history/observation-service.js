@@ -44,9 +44,12 @@ function compareObservations(a, b) {
 function mergeObservations(...lists) {
   const merged = new Map();
   for (const observation of lists.flat()) {
-    const key = `${observation.timestamp}\u0000${String(observation.value)}\u0000${String(observation.state)}`;
-    const previous = merged.get(key);
-    if (!previous || (observation.origin === 'live' && previous.origin !== 'live')) merged.set(key, observation);
+    // Recorder order identifies a row within a response. Live sequence identifies
+    // a delivered event. Never collapse distinct transitions with equal values.
+    const key = observation.origin === 'live'
+      ? `live:${observation.order}`
+      : `recorder:${observation.orderDomain ?? ''}:${observation.timestamp}:${observation.order}:${String(observation.value)}:${String(observation.state)}`;
+    if (!merged.has(key)) merged.set(key, observation);
   }
   return [...merged.values()].sort(compareObservations);
 }
@@ -70,6 +73,8 @@ export class SharedObservationService {
     this.queue = [];
     this.flushScheduled = false;
     this.consumers = new Map();
+    this.journals = new Map();
+    this.acceptedFlights = new Map();
     this.nextFlightId = 0;
     this.nextConsumerId = 0;
     this.liveSequence = 0;
@@ -95,17 +100,16 @@ export class SharedObservationService {
     return `${historySourceKey(source)}\u0001${window.cacheKey}`;
   }
 
-  _covers(record, window, liveMayCoverEnd = true) {
+  _covers(record, window) {
     const acquired = record?.acquiredWindow;
     if (!acquired || acquired.start > window.start) return false;
-    if (acquired.end >= window.end) return true;
-    return liveMayCoverEnd && Number.isFinite(record.liveThrough) && record.liveThrough >= window.end;
+    return acquired.end >= window.end;
   }
 
   _requestSource(hass, source, window, force) {
     const cacheKey = this._cacheKey(source, window);
     const cached = this._touch(cacheKey);
-    if (!force && cached && this.now() - cached.fetchedAt < this.ttlMs && this._covers(cached, window)) {
+    if (!force && cached && !cached.stale && this.now() - cached.fetchedAt < this.ttlMs && this._covers(cached, window)) {
       return Promise.resolve(cloneRecord(cached, { cache: 'hit', stale: false,
         requestedWindow: { start: window.start, end: window.end } }));
     }
@@ -186,21 +190,31 @@ export class SharedObservationService {
 
       for (const item of items) {
         const currentGeneration = this.generations.get(item.cacheKey) ?? 0;
+        const accepted = this.acceptedFlights.get(item.cacheKey);
+        const superseded = item.id < (accepted?.id ?? 0);
         const response = fetched?.get(item.sourceKey);
-        const previous = this.cache.get(item.cacheKey);
+        const journal = this.journals.get(item.cacheKey);
+        const previous = this.cache.get(item.cacheKey) ?? (journal?.recordMetadata
+          ? { ...journal.recordMetadata, observations: journal.observations } : null);
         let record;
-        if (failure) {
+        if (superseded) {
+          record = accepted?.record ? cloneRecord(accepted.record, { cache: 'superseded' }) : {
+            source: item.source, observations: [], status: 'stale', stale: true,
+            coverage: { complete: false, kind: 'unknown', reason: 'Superseded acquisition' },
+          };
+        } else if (failure && currentGeneration === item.generation) {
           record = previous
             ? cloneRecord(previous, { status: 'stale', stale: true, error: failure, cache: 'stale' })
             : {
               source: item.source, observations: [], status: 'unavailable', stale: false,
               retrievedAt: this.now(), observedThrough: null,
               requestedWindow: item.requestedWindow,
-              acquiredWindow: { start: queryWindow.start, end: queryWindow.end },
+              acquiredWindow: null,
               error: failure,
               coverage: { complete: false, kind: 'unknown', reason: 'History provider request failed',
                 requested: item.requestedWindow },
             };
+          if (previous && this.cache.has(item.cacheKey)) this.cache.set(item.cacheKey, record);
         } else if (currentGeneration !== item.generation) {
           record = previous
             ? cloneRecord(previous, { stale: true, cache: 'superseded' })
@@ -214,15 +228,18 @@ export class SharedObservationService {
         } else if (!response) {
           record = { source: item.source, observations: [], status: 'unavailable', stale: false,
             retrievedAt: this.now(), observedThrough: null, requestedWindow: item.requestedWindow,
-            acquiredWindow: { start: queryWindow.start, end: queryWindow.end },
+            acquiredWindow: null,
             coverage: { complete: false, kind: 'unknown', reason: 'History response omitted the requested source',
               requested: item.requestedWindow } };
         } else {
-          const activeLive = [...this.consumers.values()]
-            .filter((consumer) => consumer.sourceKey === item.sourceKey)
-            .flatMap((consumer) => consumer.observations.filter((observation) => observation.origin === 'live'));
+          const activeLive = [...this.journals.entries()]
+            .filter(([key]) => key.startsWith(`${item.sourceKey}\u0001`))
+            .flatMap(([, journal]) => journal.observations.filter((observation) => observation.origin === 'live'));
           const cachedLive = previous?.observations.filter((observation) => observation.origin === 'live') ?? [];
-          const observations = mergeObservations(response.observations ?? [], cachedLive, activeLive)
+          const recorder = (response.observations ?? []).map((observation) => ({
+            ...observation, orderDomain: `recorder:${item.id}`,
+          }));
+          const observations = mergeObservations(recorder, cachedLive, activeLive)
             .map((observation) => ({
               ...observation,
               boundaryEffective: observation.timestamp < item.requestedWindow.start,
@@ -237,9 +254,10 @@ export class SharedObservationService {
             ...response,
             observations,
             requestedWindow: item.requestedWindow,
-            acquiredWindow: { start: queryWindow.start, end: queryWindow.end },
+            acquiredWindow: { start: queryWindow.start, end: Math.min(queryWindow.end, this.now()) },
             fetchedAt: this.now(),
             requestStartedAt: item.startedAt,
+            acquisitionId: item.id,
             liveThrough: Number.isFinite(liveThrough) ? liveThrough : null,
             observedThrough: lastTimestamp,
             coverage: { ...response.coverage,
@@ -259,12 +277,16 @@ export class SharedObservationService {
           };
           this._store(item.cacheKey, record);
         }
+        if (!superseded && currentGeneration === item.generation) {
+          this.acceptedFlights.set(item.cacheKey, { id: item.id, record });
+        }
         item.resolve(cloneRecord(record));
         this.inflight.delete(item.id);
         if (![...this.inflight.values()].some((flight) => flight.cacheKey === item.cacheKey)) {
           this.generations.delete(item.cacheKey);
+          this.acceptedFlights.delete(item.cacheKey);
         }
-        this._notify(item.cacheKey, record);
+        if (!superseded && currentGeneration === item.generation) this._notify(item.cacheKey, record);
       }
     }));
   }
@@ -279,7 +301,10 @@ export class SharedObservationService {
 
   _store(key, record) {
     const count = record.observations.length;
-    if (count > this.maxObservations) return;
+    if (count > this.maxObservations) {
+      this.cache.delete(key);
+      return;
+    }
     const previous = this.cache.get(key);
     if (previous) {
       const previousEnd = previous.requestedWindow?.end ?? previous.acquiredWindow?.end ?? -Infinity;
@@ -301,22 +326,32 @@ export class SharedObservationService {
     return count;
   }
 
-  _consumerRecord(consumer, record) {
+  _consumerRecord(consumer, record, merge = true) {
+    let incoming = record.observations ?? [];
     if (record.acquiredWindow) {
       const acquired = record.acquiredWindow;
-      if (!record.stale && !record.error
-        && acquired.start <= consumer.window.start && acquired.end >= consumer.window.end
-        && (record.observations?.length ?? 0) <= this.maxConsumerObservations) {
-        consumer.observations = [];
-        consumer.overflow = false;
+      const windows = [...this.consumers.values()].filter((item) => item.journal === consumer.journal)
+        .map((item) => item.window);
+      const older = Number.isFinite(record.acquisitionId) && Number.isFinite(consumer.recordMetadata?.acquisitionId)
+        && record.acquisitionId < consumer.recordMetadata.acquisitionId;
+      if (older) {
+        incoming = incoming.filter((observation) => observation.origin === 'live');
+        record = { ...record, ...consumer.recordMetadata, requestedWindow: record.requestedWindow };
+      } else if (!record.stale && !record.error) {
+        const boundaryTime = incoming.filter((sample) => sample.origin !== 'live' && sample.timestamp < acquired.start)
+          .reduce((latest, sample) => Math.max(latest, sample.timestamp), -Infinity);
+        const canReplaceBoundary = windows.every((window) => window.start >= acquired.start);
+        consumer.observations = consumer.observations.filter((sample) => sample.origin === 'live'
+          || !((sample.timestamp >= acquired.start && sample.timestamp < acquired.end)
+            || (canReplaceBoundary && sample.timestamp === boundaryTime)));
+        if (windows.every((window) => acquired.start <= window.start && acquired.end >= window.end)
+          && incoming.length <= this.maxConsumerObservations) consumer.overflow = false;
       }
-      consumer.recordMetadata = {
-        ...record,
-        observations: [],
-        coverage: { ...(record.coverage ?? {}) },
+      if (!older) consumer.recordMetadata = {
+        ...record, observations: [], coverage: { ...(record.coverage ?? {}) },
       };
     }
-    this._mergeIntoConsumer(consumer, record.observations ?? []);
+    if (merge) this._mergeIntoConsumer(consumer, incoming);
     const observations = consumer.observations.map((observation) => ({ ...observation }));
     const liveThrough = observations.filter((observation) => observation.origin === 'live')
       .reduce((latest, observation) => Math.max(latest, observation.timestamp), -Infinity);
@@ -348,13 +383,18 @@ export class SharedObservationService {
 
   _mergeIntoConsumer(consumer, incoming) {
     consumer.observations = mergeObservations(consumer.observations, incoming);
-    const before = consumer.observations.filter((sample) => sample.timestamp < consumer.window.start);
-    const inOrAfter = consumer.observations.filter((sample) => sample.timestamp >= consumer.window.start);
-    const boundary = before.at(-1);
-    consumer.observations = [...(boundary ? [boundary] : []), ...inOrAfter];
+    const starts = [...this.consumers.values()].filter((item) => item.journal === consumer.journal)
+      .map((item) => item.window.start);
+    const earliest = Math.min(consumer.window.start, ...starts);
+    const before = consumer.observations.filter((sample) => sample.timestamp < earliest);
+    const inOrAfter = consumer.observations.filter((sample) => sample.timestamp >= earliest);
+    const boundaryTime = before.at(-1)?.timestamp;
+    const boundary = before.filter((sample) => sample.timestamp === boundaryTime);
+    consumer.observations = [...boundary, ...inOrAfter];
     if (consumer.observations.length > this.maxConsumerObservations) {
-      const remaining = Math.max(0, this.maxConsumerObservations - (boundary ? 1 : 0));
-      consumer.observations = [...(boundary ? [boundary] : []), ...inOrAfter.slice(-remaining)];
+      const keptBoundary = this.maxConsumerObservations > 0 ? boundary.slice(-this.maxConsumerObservations) : [];
+      const remaining = Math.max(0, this.maxConsumerObservations - keptBoundary.length);
+      consumer.observations = [...keptBoundary, ...(remaining ? inOrAfter.slice(-remaining) : [])];
       consumer.overflow = true;
     }
   }
@@ -367,41 +407,67 @@ export class SharedObservationService {
         acquisitionRequest: record.acquiredWindow ? { ...record.acquiredWindow } : null },
     });
     const sourceKey = historySourceKey(source);
-    const consumers = [...this.consumers.values()].filter((consumer) => consumer.sourceKey === sourceKey
+    const consumer = [...this.consumers.values()].find((consumer) => consumer.sourceKey === sourceKey
       && consumer.window.cacheKey === window.cacheKey);
-    if (!consumers.length) return adjusted;
-    let decorated = adjusted;
-    for (const consumer of consumers) decorated = this._consumerRecord(consumer, decorated);
-    return decorated;
+    return consumer ? this._consumerRecord(consumer, adjusted) : adjusted;
   }
 
   subscribe(source, window, callback) {
     if (typeof callback !== 'function') throw new TypeError('A consumer callback is required');
     if (this.consumers.size >= this.maxConsumers) throw new RangeError('Active history consumer limit reached');
     const normalized = normalizeSource(source);
+    const journalKey = this._cacheKey(normalized, window);
+    let journal = this.journals.get(journalKey);
+    if (!journal) {
+      journal = { observations: [], overflow: false, recordMetadata: null, refs: 0 };
+      this.journals.set(journalKey, journal);
+    }
+    journal.refs += 1;
     const consumer = {
       id: ++this.nextConsumerId,
       source: normalized,
       sourceKey: historySourceKey(normalized),
       window,
       callback,
-      observations: [],
-      overflow: false,
-      sequence: 0,
+      journalKey, journal,
+      get observations() { return this.journal.observations; },
+      set observations(value) { this.journal.observations = value; },
+      get overflow() { return this.journal.overflow; },
+      set overflow(value) { this.journal.overflow = value; },
+      get recordMetadata() { return this.journal.recordMetadata; },
+      set recordMetadata(value) { this.journal.recordMetadata = value; },
     };
     const cacheKey = this._cacheKey(normalized, window);
     const cached = this.cache.get(cacheKey);
-    if (cached) this._mergeIntoConsumer(consumer, cached.observations);
+    if (cached && (!journal.recordMetadata || (cached.acquisitionId ?? 0) > (journal.recordMetadata.acquisitionId ?? 0))) {
+      this._consumerRecord(consumer, cached);
+    }
     this.consumers.set(consumer.id, consumer);
-    const dispose = () => this.consumers.delete(consumer.id);
+    const releaseJournal = () => {
+      if (--consumer.journal.refs === 0) this.journals.delete(consumer.journalKey);
+    };
+    const dispose = () => {
+      if (this.consumers.delete(consumer.id)) releaseJournal();
+    };
     dispose.updateWindow = (nextWindow) => {
+      const nextKey = this._cacheKey(normalized, nextWindow);
+      if (nextKey !== consumer.journalKey) {
+        releaseJournal();
+        let nextJournal = this.journals.get(nextKey);
+        if (!nextJournal) {
+          nextJournal = { observations: [], overflow: false, recordMetadata: null, refs: 0 };
+          this.journals.set(nextKey, nextJournal);
+        }
+        nextJournal.refs += 1;
+        consumer.journalKey = nextKey;
+        consumer.journal = nextJournal;
+      }
       consumer.window = nextWindow;
-      const before = consumer.observations.filter((sample) => sample.timestamp < nextWindow.start);
-      const after = consumer.observations.filter((sample) => sample.timestamp >= nextWindow.start);
-      const boundary = before.at(-1);
-      consumer.observations = [...(boundary ? [boundary] : []), ...after];
       const nextCached = this.cache.get(this._cacheKey(normalized, nextWindow));
-      if (nextCached) this._mergeIntoConsumer(consumer, nextCached.observations);
+      if (nextCached && (!consumer.recordMetadata
+        || (nextCached.acquisitionId ?? 0) > (consumer.recordMetadata.acquisitionId ?? 0))) {
+        this._consumerRecord(consumer, nextCached);
+      }
     };
     dispose.merge = (record) => this._consumerRecord(consumer, record);
     return dispose;
@@ -430,17 +496,23 @@ export class SharedObservationService {
       transitionInWindow: false,
       order: 1_000_000_000_000 + ++this.liveSequence,
       orderKnown: true,
+      orderDomain: 'live',
       origin: 'live',
     };
     let updated = 0;
+    const updatedJournals = new Set();
     for (const consumer of this.consumers.values()) {
       if (consumer.sourceKey !== historySourceKey(normalized)) continue;
-      this._mergeIntoConsumer(consumer, [observation]);
+      if (!updatedJournals.has(consumer.journal)) {
+        this._mergeIntoConsumer(consumer, [observation]);
+        updatedJournals.add(consumer.journal);
+      }
       try { consumer.callback(this._consumerRecord(consumer, { source: normalized,
-        observations: consumer.observations, status: 'partial', stale: false,
-        retrievedAt: this.now(), observedThrough: observedAt,
+        observations: consumer.observations, status: 'partial',
+        stale: consumer.recordMetadata?.stale === true, error: consumer.recordMetadata?.error ?? null,
+        retrievedAt: consumer.recordMetadata?.retrievedAt ?? null, observedThrough: observedAt,
         requestedWindow: { start: consumer.window.start, end: consumer.window.end },
-        coverage: { complete: false, kind: 'unknown', reason: 'Live samples are reconciled with Recorder asynchronously' } })); }
+        coverage: { complete: false, kind: 'unknown', reason: 'Live samples are reconciled with Recorder asynchronously' } }, false)); }
       catch { /* Isolate consumer failures. */ }
       updated += 1;
     }
@@ -462,6 +534,7 @@ export class SharedObservationService {
     const sourceKeys = sources ? new Set(sources.map((source) => historySourceKey(normalizeSource(source)))) : null;
     const keys = new Set([
       ...this.cache.keys(),
+      ...this.journals.keys(),
       ...[...this.inflight.values()].map((flight) => flight.cacheKey),
     ]);
     for (const key of keys) {
@@ -469,6 +542,13 @@ export class SharedObservationService {
       if (sourceKeys && !sourceKeys.has(sourceKey)) continue;
       if (windowKey && familyKey !== windowKey) continue;
       this.cache.delete(key);
+      const journal = this.journals.get(key);
+      if (journal?.recordMetadata) {
+        journal.recordMetadata = { ...journal.recordMetadata, stale: true, status: 'stale',
+          coverage: { ...journal.recordMetadata.coverage, complete: false,
+            reason: 'History invalidated; Recorder revalidation is required' } };
+        this._notify(key, { ...journal.recordMetadata, observations: journal.observations });
+      }
       if ([...this.inflight.values()].some((flight) => flight.cacheKey === key)) {
         this.generations.set(key, (this.generations.get(key) ?? 0) + 1);
       } else {
@@ -481,6 +561,8 @@ export class SharedObservationService {
     this.invalidate();
     this.cache.clear();
     this.consumers.clear();
+    this.journals.clear();
+    this.acceptedFlights.clear();
   }
 }
 

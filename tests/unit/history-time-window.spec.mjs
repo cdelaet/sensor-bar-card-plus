@@ -29,8 +29,11 @@ describe('historical time windows', () => {
       Object.defineProperty(Intl, 'Locale', { configurable: true, value: class LocaleWithoutWeekInfo {} });
       const fallback = resolveTimeWindow({ kind: 'calendar', period: 'week' },
         { ...brussels, locale: 'en-US', firstWeekday: 'language', now });
-      expect(fallback.semantics.weekStartsOn).toBe(1);
-      expect(fallback.start).toBe(Date.parse('2026-05-10T22:00:00Z'));
+      expect(fallback.semantics.weekStartsOn).toBe(0);
+      expect(fallback.start).toBe(Date.parse('2026-05-09T22:00:00Z'));
+      const gb = resolveTimeWindow({ kind: 'calendar', period: 'week' },
+        { ...brussels, firstWeekday: 'language', now });
+      expect(gb.semantics.weekStartsOn).toBe(1);
     } finally {
       Object.defineProperty(Intl, 'Locale', { configurable: true, value: originalLocale });
     }
