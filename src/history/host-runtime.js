@@ -11,15 +11,6 @@ function authorizationFailure(error) {
   return ['unauthorized', 'forbidden', 'invalid_auth'].includes(String(error?.code ?? '').toLowerCase());
 }
 
-export function historicalConfigKey(rows) {
-  return JSON.stringify(rows.map((row) => ({
-    entity: row.entity, attribute: row.attribute,
-    peak: { show: row.peak_marker?.show, reset: row.peak_marker?.reset },
-    floor: { show: row.floor_marker?.show, reset: row.floor_marker?.reset },
-    markers: row.generic_markers?.map((marker) => ({ id: marker.id, source: marker.source, accepted: marker.accepted })),
-  })));
-}
-
 function releaseSubscription(unsubscribe) {
   try { Promise.resolve(unsubscribe?.()).catch(() => {}); } catch { /* Connection may already be closed. */ }
 }

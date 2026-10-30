@@ -85,7 +85,7 @@ describe('shared bar presentation without a card instance', () => {
     const row = resolvedRow(appearance, 10, {
       hass: { states: { 'sensor.minimum': state(20), 'sensor.maximum': state(-20) } },
       previousScale: { min: -20, max: 20 },
-      extrema: { peak: { value: 15 }, floor: { value: -15 } },
+      historicalExtrema: { peak: { status: 'available', value: 15 }, floor: { status: 'available', value: -15 } },
     });
     const model = buildBarRenderModel(row, appearance, { height: 'var(--sbcp-row-height)' });
     expect(row).toMatchObject({ min: -20, max: 20 });

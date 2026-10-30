@@ -38,8 +38,8 @@ function makeResult({ value = null, status, spec, window = null, record = null, 
     else if (record?.coverage?.liveOverflow || calculation?.orderingAmbiguous
       || calculation?.requestedBoundsCovered === false) resolvedStatus = 'partial';
     else if (!Number.isFinite(value)) resolvedStatus = 'unavailable';
-    else if (record?.coverage?.complete === true) resolvedStatus = 'available';
-    else resolvedStatus = 'partial';
+    else if (record?.coverage?.kind === 'incomplete') resolvedStatus = 'partial';
+    else resolvedStatus = 'available';
   }
   return {
     value: Number.isFinite(value) && !record?.coverage?.liveOverflow && !calculation?.orderingAmbiguous ? value : null,
@@ -168,12 +168,12 @@ export class HistoricalValueResolver {
 
     const scheduleRollover = (record = latestRecord) => {
       clearTimer();
-      if (!['calendar', 'rolling'].includes(currentWindow.semantics.kind)) return;
+      if (!['calendar', 'shifted_calendar', 'rolling'].includes(currentWindow.semantics.kind)) return;
       const now = this.now();
       const boundaries = [Math.floor(now / 60000) * 60000 + 60000];
       if ((record?.observations ?? []).some((observation) => observation.origin === 'live'
         && observation.timestamp === currentWindow.end && observation.timestamp <= now)) boundaries.push(now + 1);
-      if (currentWindow.semantics.kind === 'calendar') {
+      if (['calendar', 'shifted_calendar'].includes(currentWindow.semantics.kind)) {
         const rolloverAt = currentWindow.semantics.rolloverAt;
         if (Number.isFinite(rolloverAt) && rolloverAt > now) boundaries.push(rolloverAt + 1);
       }
@@ -192,7 +192,7 @@ export class HistoricalValueResolver {
         const previousKey = currentWindow.cacheKey;
         const updatedContext = currentResolutionContext();
         if (updatedContext.window.cacheKey !== previousKey
-          && updatedContext.window.semantics.kind === 'calendar') {
+          && ['calendar', 'shifted_calendar'].includes(updatedContext.window.semantics.kind)) {
           refresh(false);
           return;
         }

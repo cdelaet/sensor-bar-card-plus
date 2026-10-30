@@ -91,12 +91,12 @@ function validateBaselineSuppressesNeedle(diagnostics, config, path, entity = nu
 
 function validateExtremumReset(diagnostics, config, path, entity = null) {
   for (const marker of ['peak_marker', 'floor_marker']) {
-    if (config?.[marker]?.reset_invalid) {
+    if (config?.[marker]?.window_invalid) {
       addWarning(
         diagnostics,
-        `${marker}.invalid_reset`,
-        'Invalid marker reset; using never.',
-        `${path}.${marker}.reset`,
+        `${marker}.invalid_window`,
+        'Invalid historical marker window; marker is unavailable.',
+        `${path}.${marker}.window`,
         entity
       );
     }

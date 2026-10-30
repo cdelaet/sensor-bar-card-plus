@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { loadCardClass } from '../support/load-card-class.cjs';
+import { historicalMarkerId } from '../../src/history/marker-consumers.js';
 import { HistoricalHostRuntime } from '../../src/history/host-runtime.js';
 
 const entity = 'sensor.temperature';
@@ -52,6 +53,8 @@ function hosts() {
 }
 
 const register = (host, id = 'peak', valueSpec = spec(), callback = vi.fn()) => {
+  if (typeof host._reconcile === 'function'
+    && (host._configChanged || (host._config?.entity || host._context?.entity_id || null) !== host._entity)) host._reconcile();
   host._historicalRuntime.setConsumers([{ id, spec: valueSpec }], callback);
   return callback;
 };
@@ -87,7 +90,7 @@ describe('historical runtime host integration', () => {
     expect(a._historicalRuntime.hub).toBe(b._historicalRuntime.hub);
     expect(connection.subscribeMessage).toHaveBeenCalledTimes(1);
     expect(callWS).toHaveBeenCalledTimes(1);
-    expect(b._extrema).toEqual({});
+    expect(b._row?.peak ?? null).toBeNull();
     a.disconnectedCallback(); b.disconnectedCallback();
   });
 
@@ -233,12 +236,17 @@ describe('historical runtime host integration', () => {
 
   it('keeps historical consumers across presentation-only configuration edits', async () => {
     const { card, feature } = hosts(); const a = card(); const b = feature(); const { hass, callWS, connection } = connectionFixture();
-    a.hass = hass; b.hass = hass; register(a); register(b, 'floor', spec('min'));
-    a.connectedCallback(); b.connectedCallback(); await awaitValue(a); await awaitValue(b, 'floor');
-    const aEntry = a._historicalRuntime.entries.get('peak'); const bEntry = b._historicalRuntime.entries.get('floor');
-    a.setConfig({ entity, title: 'Updated' }); b.setConfig({ entity, bar: { animated: false } });
-    expect(a._historicalRuntime.entries.get('peak')).toBe(aEntry);
-    expect(b._historicalRuntime.entries.get('floor')).toBe(bEntry);
+    a.setConfig({ entity, peak: { enabled: true } }); b.setConfig({ entity, floor: { enabled: true } });
+    a.hass = hass; b.hass = hass;
+    a.connectedCallback(); b.connectedCallback(); await b.updateComplete;
+    const peakId = historicalMarkerId(a._config.entities[0], 'peak');
+    const floorId = historicalMarkerId(b._normalized.entities[0], 'floor');
+    await awaitValue(a, peakId); await awaitValue(b, floorId);
+    const aEntry = a._historicalRuntime.entries.get(peakId); const bEntry = b._historicalRuntime.entries.get(floorId);
+    a.setConfig({ entity, peak: { enabled: true }, title: 'Updated' }); b.setConfig({ entity, floor: { enabled: true }, bar: { animated: false } });
+    await b.updateComplete;
+    expect(a._historicalRuntime.entries.get(peakId)).toBe(aEntry);
+    expect(b._historicalRuntime.entries.get(floorId)).toBe(bEntry);
     expect(callWS).toHaveBeenCalledTimes(1);
     expect(connection.subscribeMessage).toHaveBeenCalledTimes(1);
     a.disconnectedCallback(); b.disconnectedCallback();
@@ -374,7 +382,8 @@ describe('historical runtime host integration', () => {
       await vi.advanceTimersByTimeAsync(1000);
       expect(callWS).toHaveBeenCalledTimes(2);
       expect(a.getResult('peak').freshness.stale).toBe(false);
-      expect(a.getResult('peak').status).toBe('partial');
+      expect(a.getResult('peak').status).toBe('available');
+      expect(a.getResult('peak').provenance.coverage).toMatchObject({ complete: false, kind: 'unknown' });
       await vi.advanceTimersByTimeAsync(5000);
       expect(connection.subscribeMessage).toHaveBeenCalledTimes(1);
       expect(callWS).toHaveBeenCalledTimes(2);

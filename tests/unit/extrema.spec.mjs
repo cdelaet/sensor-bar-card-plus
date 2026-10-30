@@ -98,13 +98,13 @@ describe('extrema reset helpers', () => {
 
     expect(config.entities[0].peak_marker).toMatchObject({
       show: true,
-      reset: { kind: 'duration', minutes: 26 },
+      window: '26m', window_spec: { kind: 'rolling', duration: { amount: 26, unit: 'minute' } },
       show_label: true,
       label_decimal: 0,
     });
     expect(config.entities[0].floor_marker).toMatchObject({
       show: true,
-      reset: { kind: 'calendar', unit: 'quarterly' },
+      window: 'quarterly', window_spec: { kind: 'calendar', period: 'quarter_hour' },
       show_label: true,
       label_decimal: 1,
     });

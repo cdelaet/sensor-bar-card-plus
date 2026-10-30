@@ -1,13 +1,13 @@
 import { createConfigEditor } from '../editor-loader.js';
-import { getFiniteNumber, looksLikeEntityId, normalizeCardConfig } from '../config/normalize.js';
+import { looksLikeEntityId, normalizeCardConfig } from '../config/normalize.js';
 import { resolveEntitySource } from '../config/resolve.js';
 import { validateNormalizedConfig } from '../config/validate.js';
 import { buildRowViewModel } from '../view-model/row-view-model.js';
 import { buildBarRenderModel, getRevealTransitionDuration, getEffectiveMarkerColor } from '../view-model/bar-render-model.js';
 import { renderBar, patchBar } from '../render/bar-renderer.js';
 import { barTrackStyles, barMarkerStyles, getBarAnimationStyles } from '../render/bar-styles.js';
-import { updateExtremum } from '../utils/extrema.js';
-import { HistoricalHostRuntime, historicalConfigKey } from '../history/host-runtime.js';
+import { HistoricalHostRuntime } from '../history/host-runtime.js';
+import { historicalMarkerConsumers, historicalMarkerResults } from '../history/marker-consumers.js';
 import { formatNumericDisplay } from '../utils/format.js';
 import { setStyleIfChanged } from '../utils/dom.js';
 import { getFeatureLabelGeometry, layoutFeatureMarkerLabels } from './marker-label-layout.js';
@@ -22,7 +22,6 @@ export class SensorBarCardPlusFeature extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    this._extrema = {};
     this._historicalRuntime = new HistoricalHostRuntime();
     this._scaleHistory = null;
     this._previousRow = null;
@@ -51,14 +50,6 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     }
     const key = JSON.stringify(config);
     if (key === this._configKey) return;
-    const entity = config.entity || this._context?.entity_id || null;
-    const normalized = normalizeCardConfig({ ...config, type: 'custom:sensor-bar-card-plus', entity: undefined,
-      entities: entity ? [{ entity, ...(config.attribute !== undefined ? { attribute: config.attribute } : {}) }] : [] });
-    const historyKey = historicalConfigKey(normalized.entities);
-    if (this._historyConfigKey !== undefined && this._historyConfigKey !== historyKey) {
-      this._historicalRuntime.setConsumers([]);
-    }
-    this._historyConfigKey = historyKey;
     this._configKey = key;
     this._config = { ...config, ...(typeof config.entity === 'string' ? { entity: config.entity.trim() } : {}) };
     this._configChanged = true;
@@ -99,9 +90,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     if (this._configChanged || entity !== this._entity) {
       this._entity = entity;
       this._configChanged = false;
-      this._extrema = {};
       this._scaleHistory = null;
-      this._sampleState = null;
       this._previousRow = null;
       this._structureKey = null;
       this._labelLayoutKey = null;
@@ -113,6 +102,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         entities: entity ? [{ entity, ...(this._config.attribute !== undefined ? { attribute: this._config.attribute } : {}) }] : [],
       }) : null;
       this._diagnostics = validateNormalizedConfig(this._normalized);
+      this._historicalRuntime.setConsumers(historicalMarkerConsumers(this._normalized?.entities ?? []), () => this._requestUpdate());
     }
 
     const source = resolveEntitySource(this._hass, entity, this._normalized?.entities?.[0]?.attribute);
@@ -126,23 +116,9 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     let textValue = null;
     if (state && this._normalized?.entities[0]) {
       const appearance = this._normalized.entities[0];
-      const sample = source.available && source.attributeFound ? getFiniteNumber(source.value) : null;
-      if (sample !== null && (state !== this._sampleState || sample !== this._sampleValue)) {
-        this._sampleState = state;
-        this._sampleValue = sample;
-        const rawTimestamp = state.last_updated ?? state.last_changed;
-        const parsedTimestamp = rawTimestamp instanceof Date ? rawTimestamp.getTime() : Date.parse(String(rawTimestamp ?? ''));
-        const timestamp = Number.isFinite(parsedTimestamp) ? parsedTimestamp : Date.now();
-        for (const key of ['peak', 'floor']) {
-          const marker = appearance[`${key}_marker`];
-          if (marker.show) {
-            this._extrema[key] = updateExtremum(this._extrema[key], sample, marker.reset ?? { kind: 'never' }, key === 'peak' ? 'max' : 'min', timestamp);
-          }
-        }
-      }
       row = buildRowViewModel({
         hass: this._hass, entityConfig: appearance, entityState: state,
-        extrema: this._extrema, previousScale: this._scaleHistory,
+        historicalExtrema: historicalMarkerResults(this._historicalRuntime, appearance), previousScale: this._scaleHistory,
       });
       this._scaleHistory = { min: row.min, max: row.max };
       if (row.numericValue === null) {
@@ -255,7 +231,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       .map(marker => {
         const type = marker.type === 'generic' ? 'Reference marker' : `${marker.type[0].toUpperCase()}${marker.type.slice(1)}`;
         const anchor = `${formatNumericDisplay(marker.value)}${row.displayUnit ? ` ${row.displayUnit}` : ''}`;
-        return `${type} at ${anchor}${marker.labelVisible && marker.label?.text ? `; label ${marker.label.text}` : ''}.`;
+        return `${type} at ${anchor}${marker.labelVisible && marker.label?.text ? `; label ${marker.label.text}` : ''}${marker.historyStatus === 'partial' ? '; partial history' : marker.historyStatus === 'stale' ? '; stale history' : ''}.`;
       }).join(' ');
     this._surface.setAttribute('aria-label', status
       ? `${name}${this._entity && name !== this._entity ? ` (${this._entity})` : ''}: ${status}${row ? ` (${row.state})` : ''}`

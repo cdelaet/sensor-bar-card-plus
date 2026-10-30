@@ -130,34 +130,12 @@ function getNeedleState(entityConfig, numericValue, minValue, maxValue, baseline
   };
 }
 
-function getExtremumState(numericValue, minValue, maxValue, tracker, direction, enabled) {
-  if (!enabled) {
-    return {
-      value: null,
-      percent: null,
-      display: null,
-      visible: false,
-    };
-  }
-
-  const existingValue = getFiniteNumber(tracker?.value);
-  if (!Number.isFinite(existingValue) && !Number.isFinite(numericValue)) {
-    return {
-      value: null,
-      percent: null,
-      visible: false,
-    };
-  }
-  const value = Number.isFinite(existingValue)
-    ? (Number.isFinite(numericValue)
-      ? (direction === 'min' ? Math.min(existingValue, numericValue) : Math.max(existingValue, numericValue))
-      : existingValue)
-    : numericValue;
-
+function getExtremumState(minValue, maxValue, result, enabled) {
+  const value = enabled && ['available', 'partial', 'stale'].includes(result?.status)
+    ? getFiniteNumber(result?.value) : null;
   return {
-    value,
-    percent: toScalePct(value, minValue, maxValue),
-    visible: true,
+    value, percent: Number.isFinite(value) ? toScalePct(value, minValue, maxValue) : null,
+    visible: Number.isFinite(value), status: result?.status ?? 'pending',
   };
 }
 
@@ -167,8 +145,7 @@ export function buildRowViewModel(options) {
     cardConfig,
     entityConfig,
     entityState,
-    peaks,
-    extrema,
+    historicalExtrema,
     previousScale,
   } = options;
 
@@ -228,25 +205,8 @@ export function buildRowViewModel(options) {
   const baselinePositionPercent = projectScalePercent(baselinePercent, scaleDirection);
   const baselineVisible = Number.isFinite(baselineValue);
 
-  const legacyPeak = Number.isFinite(getFiniteNumber(peaks?.[entityId]))
-    ? { value: getFiniteNumber(peaks?.[entityId]) }
-    : null;
-  const peakState = getExtremumState(
-    numericValue,
-    safeMin,
-    safeMax,
-    extrema?.peak ?? legacyPeak,
-    'max',
-    entityConfig?.peak_marker?.show === true,
-  );
-  const floorState = getExtremumState(
-    numericValue,
-    safeMin,
-    safeMax,
-    extrema?.floor,
-    'min',
-    entityConfig?.floor_marker?.show === true,
-  );
+  const peakState = getExtremumState(safeMin, safeMax, historicalExtrema?.peak, entityConfig?.peak_marker?.show === true);
+  const floorState = getExtremumState(safeMin, safeMax, historicalExtrema?.floor, entityConfig?.floor_marker?.show === true);
   const peakDecimal = entityConfig?.peak_marker?.label_decimal ?? decimal;
   const floorDecimal = entityConfig?.floor_marker?.label_decimal ?? decimal;
   const peakLabelPrecision = entityConfig?.peak_marker?.label_precision ?? peakDecimal;
@@ -325,11 +285,13 @@ export function buildRowViewModel(options) {
     peakPresentation,
     peakLabelPresentation,
     peakVisible: peakState.visible,
+    peakStatus: peakState.status,
     floorValue: floorState.value,
     floorPosition: projectScalePercent(floorState.percent, scaleDirection),
     floorPresentation,
     floorLabelPresentation,
     floorVisible: floorState.visible,
+    floorStatus: floorState.status,
     genericMarkers,
   });
 
@@ -369,12 +331,14 @@ export function buildRowViewModel(options) {
     peakPresentation,
     peakLabelPresentation,
     peakVisible: peakState.visible,
+    peakStatus: peakState.status,
     floor: floorState.value,
     floorPercent: floorState.percent,
     floorDisplay: floorPresentation?.number ?? null,
     floorPresentation,
     floorLabelPresentation,
     floorVisible: floorState.visible,
+    floorStatus: floorState.status,
     markers,
     markerLaneOccupancy: getMarkerLaneOccupancy(entityConfig),
     markerLabelLaneOccupancy: getMarkerLabelLaneOccupancy(entityConfig),

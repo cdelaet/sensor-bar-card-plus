@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { loadCardClass } from '../support/load-card-class.cjs';
 import { normalizeCardConfig } from '../../src/config/normalize.js';
+import { historicalMarkerId } from '../../src/history/marker-consumers.js';
 import { buildBarRenderModel } from '../../src/view-model/bar-render-model.js';
 
 const entity = 'sensor.power';
@@ -155,7 +156,8 @@ describe('independent input reconciliation', () => {
     await inherited.updateComplete;
     expect(inherited._status).toBeNull();
     expect(inherited._row).toMatchObject({ entityId: 'sensor.weather', numericValue: 22.5, displayUnit: '°C' });
-    expect(inherited._extrema).toMatchObject({ peak: { value: 22.5 }, floor: { value: 22.5 } });
+    expect([...inherited._historicalRuntime.entries.values()].map(item => item.spec.source.attribute)).toEqual(['temperature', 'temperature']);
+    expect(inherited._row.peak).toBeNull(); expect(inherited._row.floor).toBeNull();
 
     const explicit = feature({ entity: 'sensor.explicit', attribute: 'watts' });
     explicit.context = { entity_id: 'sensor.parent' };
@@ -180,7 +182,8 @@ describe('independent input reconciliation', () => {
     await element.updateComplete;
     expect(element._status).toBe('Not numeric');
     expect(element._row.numericValue).toBeNull();
-    expect(element._extrema).toEqual({});
+    expect(element._row.peak).toBeNull();
+    expect([...element._historicalRuntime.entries.values()][0].spec.source.attribute).toBe('missing');
   });
   it('rejects malformed configs and multiple entities', () => {
     const element = feature(null);
@@ -210,7 +213,7 @@ describe('independent input reconciliation', () => {
     const element = feature({ entity, scale: { min: 50, max: 10 }, peak: { enabled: true, reset: 'invalid' } });
     await update(element, 42);
     expect(element._diagnostics.warnings.map(warning => warning.code)).toContain('scale.min_gt_max');
-    expect(element._diagnostics.warnings.map(warning => warning.code)).toContain('peak_marker.invalid_reset');
+    expect(element._diagnostics.warnings.map(warning => warning.code)).toContain('peak_marker.invalid_window');
   });
 });
 
@@ -281,40 +284,41 @@ describe('unavailable states and recovery', () => {
 
 describe('per-instance history', () => {
   const extremaConfig = { entity, peak: { enabled: true }, floor: { enabled: true } };
-  it('keeps same-entity Peak/Floor independent, including repeated config and unavailable recovery', async () => {
-    const a = feature(extremaConfig);
-    const b = feature(extremaConfig);
-    await update(a, 80);
-    await update(a, 20);
-    await update(b, 30);
-    a.setConfig({ ...extremaConfig });
-    await update(a, 'unavailable');
-    await update(a, 50);
-    expect(a._extrema).toMatchObject({ peak: { value: 80 }, floor: { value: 20 } });
-    expect(b._extrema).toMatchObject({ peak: { value: 30 }, floor: { value: 30 } });
+  it('does not invent Peak/Floor values from per-instance samples', async () => {
+    const a = feature(extremaConfig); const b = feature(extremaConfig);
+    await update(a, 80); await update(a, 20); await update(b, 30);
+    a.setConfig({ ...extremaConfig }); await update(a, 'unavailable'); await update(a, 50);
+    expect(a._row).toMatchObject({ peak: null, floor: null });
+    expect(b._row).toMatchObject({ peak: null, floor: null });
+    expect([...a._historicalRuntime.entries.keys()]).toEqual([...b._historicalRuntime.entries.keys()]);
   });
-  it.each(['duration', 'calendar'])('reuses %s reset policies on the next sample', async kind => {
+  it.each(['duration', 'calendar'])('maps %s reset policies to historical windows', async kind => {
     const element = feature({ entity, peak: { enabled: true, reset: kind === 'duration' ? '1h' : 'daily' } });
-    element.hass = { states: { [entity]: sensor(80, {}, '2026-10-06T12:00:00Z') } };
-    await element.updateComplete;
-    element.hass = { states: { [entity]: sensor(20, {}, '2026-10-07T12:00:00Z') } };
-    await element.updateComplete;
-    expect(element._extrema.peak.value).toBe(20);
+    await update(element, 80);
+    const entry = [...element._historicalRuntime.entries.values()][0];
+    expect(entry.spec.window).toMatchObject(kind === 'duration'
+      ? { kind: 'rolling', duration: { amount: 1, unit: 'hour' } } : { kind: 'calendar', period: 'day' });
+    await update(element, 20);
+    expect(element._row.peak).toBeNull();
   });
-  it('resets extrema and scale on effective-entity or config replacement', async () => {
+  it('replaces historical consumers when the effective entity changes and keeps scale behavior', async () => {
     const element = feature({ peak: { enabled: true }, floor: { enabled: true } });
     element.context = { entity_id: entity };
     await update(element, 80, { 'sensor.other': sensor(30) });
-    element.context = { entity_id: 'sensor.other' };
-    await element.updateComplete;
-    expect(element._extrema.peak.value).toBe(30);
-    element.setConfig({ entity, ...extremaConfig, scale: { max: 200 } });
-    await update(element, 10);
-    expect(element._extrema.peak.value).toBe(10);
+    const old = [...element._historicalRuntime.entries.values()];
+    element.context = { entity_id: 'sensor.other' }; await element.updateComplete;
+    expect([...element._historicalRuntime.entries.values()].every(item => item.spec.source.entityId === 'sensor.other')).toBe(true);
+    expect([...element._historicalRuntime.entries.values()][0]).not.toBe(old[0]);
+    element.setConfig({ entity, ...extremaConfig, scale: { max: 200 } }); await update(element, 10);
     expect(element._row.max).toBe(200);
+    expect(element._row.peak).toBeNull();
+    const peak = historicalMarkerId(element._normalized.entities[0], 'peak');
+    element._historicalRuntime.results.set(peak, { value: 90, status: 'partial' });
+    element._requestUpdate(); await element.updateComplete;
+    expect(element._row.peak).toBe(90);
     element.setConfig({ ...extremaConfig, entity: 'sensor.other' });
     await update(element, 80, { 'sensor.other': sensor(20) });
-    expect(element._extrema).toMatchObject({ peak: { value: 20 }, floor: { value: 20 } });
+    expect(element._row.peak).toBeNull();
   });
   it('isolates transient dynamic-scale history and uses shared missing-source fallbacks', async () => {
     const config = { entity, scale: { min: { entity: 'sensor.min' }, max: { entity: 'sensor.max' } } };

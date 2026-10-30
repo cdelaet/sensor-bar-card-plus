@@ -229,7 +229,7 @@ describe('Scale Direction and Bar Direction', () => {
       entityConfig: appearance,
       entityState: state(160),
       hass: { states: { 'sensor.minimum': state(100), 'sensor.maximum': state(300) } },
-      extrema: { peak: { value: 260 }, floor: { value: 120 } },
+      historicalExtrema: { peak: { status: 'available', value: 260 }, floor: { status: 'available', value: 120 } },
     });
     const model = buildBarRenderModel(row, appearance, { height: 30 });
     expect(row).toMatchObject({ min: 100, max: 300, percent: 30, positionPercent: 70, peakPercent: 80, floorPercent: 10 });

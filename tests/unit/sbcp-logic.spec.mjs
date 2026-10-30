@@ -2,6 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createCard } from '../support/load-card-class.cjs';
+import { historicalMarkerId } from '../../src/history/marker-consumers.js';
+
+function seedPeak(card, cfg, value) {
+  card._historicalRuntime.results.set(historicalMarkerId(cfg, 'peak'), { value, status: 'available' });
+}
 
 function readCardStyles() {
   const card = createCard();
@@ -938,6 +943,7 @@ describe('Sensor Bar Card Plus logic', () => {
       show: true,
       color: '#888888',
       direction: 'inward',
+      window: 'today', window_spec: { kind: 'calendar', period: 'day' },
     });
   });
 
@@ -1744,7 +1750,7 @@ describe('Sensor Bar Card Plus logic', () => {
       entities: [{ entity: 'sensor.row', name: 'Sensor' }],
     }).entities[0];
 
-    card._extrema.set(cfg, { peak: { value: 42, startedAtMs: null, windowKey: null } });
+    seedPeak(card, cfg, 42);
     const peakMarker = createTrackedElement({
       style: {
         left: '42%',
@@ -1784,7 +1790,7 @@ describe('Sensor Bar Card Plus logic', () => {
       entities: [{ entity: 'sensor.row', name: 'Sensor' }],
     }).entities[0];
 
-    card._extrema.set(cfg, { peak: { value: 80, startedAtMs: null, windowKey: null } });
+    seedPeak(card, cfg, 80);
     const peakMarker = createTrackedElement({
       style: {
         left: '80%',
@@ -1810,7 +1816,7 @@ describe('Sensor Bar Card Plus logic', () => {
       },
     });
 
-    expect(card._extrema.get(cfg).peak.value).toBe(80);
+    expect(card._historicalRuntime.getResult(historicalMarkerId(cfg, 'peak')).value).toBe(80);
     expect(peakMarker.style.left).toBe('80%');
   });
 
@@ -1823,7 +1829,7 @@ describe('Sensor Bar Card Plus logic', () => {
       entities: [{ entity: 'sensor.row', name: 'Sensor' }],
     }).entities[0];
 
-    card._extrema.set(cfg, { peak: { value: 80, startedAtMs: null, windowKey: null } });
+    seedPeak(card, cfg, 80);
     const peakMarker = createTrackedElement({
       style: {
         left: '80%',
@@ -1881,7 +1887,7 @@ describe('Sensor Bar Card Plus logic', () => {
         },
       },
     };
-    card._extrema.set(card._config.entities[0], { peak: { value: 80, startedAtMs: null, windowKey: null } });
+    seedPeak(card, card._config.entities[0], 80);
     card.shadowRoot = {
       querySelectorAll: () => [],
       querySelector: (selector) => (
@@ -1904,7 +1910,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
     card._update();
 
-    expect(card._extrema.get(card._config.entities[0]).peak.value).toBe(80);
+    expect(card._historicalRuntime.getResult(historicalMarkerId(card._config.entities[0], 'peak')).value).toBe(80);
     expect(capturedPeakPct).toBe(80);
     expect(capturedPeakDisplay).toBe('80');
   });
@@ -1914,13 +1920,12 @@ describe('Sensor Bar Card Plus logic', () => {
     card._render = () => {};
     card.setConfig({ peak: { enabled: true }, entities: [{ entity: 'sensor.keep' }, { entity: 'sensor.remove' }] });
     const [keep, removed] = card._config.entities;
-    const tracker = { peak: { value: 75, startedAtMs: null, windowKey: null } };
-    card._extrema.set(keep, tracker);
-    card._extrema.set(removed, { peak: { value: 42, startedAtMs: null, windowKey: null } });
+    const keepId = historicalMarkerId(keep, 'peak'); const removedId = historicalMarkerId(removed, 'peak');
+    const keepEntry = card._historicalRuntime.entries.get(keepId);
     card.setConfig({ peak: { enabled: true }, entities: [{ entity: 'sensor.keep' }, { entity: 'sensor.new' }] });
-    expect(card._extrema.get(card._config.entities[0])).toEqual(tracker);
-    expect(card._extrema.has(removed)).toBe(false);
-    expect(card._extrema.has(card._config.entities[1])).toBe(false);
+    expect(card._historicalRuntime.entries.get(keepId)).toBe(keepEntry);
+    expect(card._historicalRuntime.getResult(removedId)).toBeNull();
+    expect(card._historicalRuntime.getResult(historicalMarkerId(card._config.entities[1], 'peak'))).toBeNull();
   });
 
   it('does not recreate or rewrite an unchanged needle marker during _patchRow', () => {
@@ -2817,6 +2822,7 @@ describe('Sensor Bar Card Plus logic', () => {
       show: false,
       color: '#00ffff',
       direction: 'inward',
+      window: 'today', window_spec: { kind: 'calendar', period: 'day' },
     });
     expect(row.bar.color_mode).toBe('gradient');
     expect(row.bar.animated).toBe(false);
@@ -2899,6 +2905,7 @@ describe('Sensor Bar Card Plus logic', () => {
       show: true,
       color: '#00ff00',
       direction: 'inward',
+      window: 'today', window_spec: { kind: 'calendar', period: 'day' },
     });
     expect(row.bar.color_mode).toBe('single');
     expect(row.bar.animated).toBe(true);
@@ -2981,6 +2988,7 @@ describe('Sensor Bar Card Plus logic', () => {
       show: true,
       color: '#00ffff',
       direction: 'inward',
+      window: 'today', window_spec: { kind: 'calendar', period: 'day' },
     });
     expect(row.bar.color_mode).toBe('gradient');
     expect(row.bar.animated).toBe(false);
@@ -6282,221 +6290,68 @@ describe('Sensor Bar Card Plus logic', () => {
     }).not.toThrow();
   });
 
-  it('tracks Peak and Floor independently and clears only disabled state', () => {
-    const card = createCard();
-    card._render = () => {};
-    card.setConfig({
-      entities: [{
-        entity: 'sensor.row',
-        peak: { enabled: true },
-        floor: { enabled: true },
-      }],
-    });
-    const entityCfg = card._config.entities[0];
-    const state = {
-      state: '42',
-      last_updated: '2026-01-01T10:07:00.000Z',
-      attributes: { unit_of_measurement: 'W' },
-    };
-
-    card._updateExtrema(entityCfg, entityCfg, state);
-    state.state = '60';
-    card._updateExtrema(entityCfg, entityCfg, state);
-    state.state = '20';
-    card._updateExtrema(entityCfg, entityCfg, state);
-    expect(card._extrema.get(card._config.entities[0]).peak.value).toBe(60);
-    expect(card._extrema.get(card._config.entities[0]).floor.value).toBe(20);
-
+  it('registers Peak and Floor independently and disposes disabled markers', () => {
+    const card = createCard(); card._render = () => {};
+    card.setConfig({ entities: [{ entity: 'sensor.row', peak: { enabled: true }, floor: { enabled: true } }] });
+    const peakId = historicalMarkerId(card._config.entities[0], 'peak');
+    const floorId = historicalMarkerId(card._config.entities[0], 'floor');
+    expect(card._historicalRuntime.entries.get(peakId).spec.calculation).toBe('max');
+    expect(card._historicalRuntime.entries.get(floorId).spec.calculation).toBe('min');
     card.setConfig({ entities: [{ entity: 'sensor.row', peak: { enabled: false }, floor: { enabled: true } }] });
-    expect(card._extrema.get(card._config.entities[0]).peak).toBeUndefined();
-    expect(card._extrema.get(card._config.entities[0]).floor.value).toBe(20);
+    expect(card._historicalRuntime.entries.has(peakId)).toBe(false);
+    expect(card._historicalRuntime.entries.has(floorId)).toBe(true);
   });
 
-  it('clears only Peak when its effective reset policy changes', () => {
-    const card = createCard();
-    card._render = () => {};
-    const config = (reset) => ({
-      entities: [{
-        entity: 'sensor.row',
-        peak: { enabled: true, reset },
-        floor: { enabled: true, reset: 'quarterly' },
-      }],
-    });
-    card.setConfig(config('daily'));
-    let entityCfg = card._config.entities[0];
-    const state = { state: '80', last_updated: '2026-01-01T10:07:00.000Z' };
-    card._updateExtrema(entityCfg, entityCfg, state);
-    state.state = '20';
-    card._updateExtrema(entityCfg, entityCfg, state);
-    const floorBefore = card._extrema.get(card._config.entities[0]).floor;
-    const peakBefore = card._extrema.get(card._config.entities[0]).peak;
-
-    card.setConfig(config('hourly'));
-    expect(card._extrema.get(card._config.entities[0]).peak).toBeUndefined();
-    expect(card._extrema.get(card._config.entities[0]).floor).toEqual(floorBefore);
-
-    entityCfg = card._config.entities[0];
-    state.state = '55';
-    state.last_updated = '2026-01-01T10:08:00.000Z';
-    card._updateExtrema(entityCfg, entityCfg, state);
-    expect(entityCfg.peak_marker.reset).toEqual({ kind: 'calendar', unit: 'hourly' });
-    expect(card._extrema.get(card._config.entities[0]).peak).toMatchObject({ value: 55, startedAtMs: null });
-    expect(card._extrema.get(card._config.entities[0]).peak.windowKey).not.toBe(peakBefore.windowKey);
-    expect(card._extrema.get(card._config.entities[0]).floor).toEqual(floorBefore);
+  it.each(['peak', 'floor'])('replaces only the %s consumer when its window changes', marker => {
+    const card = createCard(); card._render = () => {};
+    const config = window => ({ entity: 'sensor.row', peak: { enabled: true, window: marker === 'peak' ? window : 'today' },
+      floor: { enabled: true, window: marker === 'floor' ? window : 'today' } });
+    card.setConfig(config('today'));
+    const unchanged = marker === 'peak' ? 'floor' : 'peak';
+    const oldId = historicalMarkerId(card._config.entities[0], marker);
+    const otherId = historicalMarkerId(card._config.entities[0], unchanged);
+    const other = card._historicalRuntime.entries.get(otherId);
+    card.setConfig(config('1h'));
+    const newId = historicalMarkerId(card._config.entities[0], marker);
+    expect(card._historicalRuntime.entries.has(oldId)).toBe(false);
+    expect(card._historicalRuntime.entries.get(newId).spec.window).toMatchObject({ kind: 'rolling', duration: { amount: 1, unit: 'hour' } });
+    expect(card._historicalRuntime.entries.get(otherId)).toBe(other);
   });
 
-  it('clears only Floor when its effective reset policy changes', () => {
-    const card = createCard();
-    card._render = () => {};
-    const config = (reset) => ({
-      entities: [{
-        entity: 'sensor.row',
-        peak: { enabled: true, reset: 'daily' },
-        floor: { enabled: true, reset },
-      }],
-    });
-    card.setConfig(config('quarterly'));
-    let entityCfg = card._config.entities[0];
-    const state = { state: '80', last_updated: '2026-01-01T10:07:00.000Z' };
-    card._updateExtrema(entityCfg, entityCfg, state);
-    state.state = '20';
-    card._updateExtrema(entityCfg, entityCfg, state);
-    const peakBefore = card._extrema.get(card._config.entities[0]).peak;
-    const floorBefore = card._extrema.get(card._config.entities[0]).floor;
-
-    card.setConfig(config('daily'));
-    expect(card._extrema.get(card._config.entities[0]).floor).toBeUndefined();
-    expect(card._extrema.get(card._config.entities[0]).peak).toEqual(peakBefore);
-
-    entityCfg = card._config.entities[0];
-    state.state = '55';
-    state.last_updated = '2026-01-01T10:08:00.000Z';
-    card._updateExtrema(entityCfg, entityCfg, state);
-    expect(entityCfg.floor_marker.reset).toEqual({ kind: 'calendar', unit: 'daily' });
-    expect(card._extrema.get(card._config.entities[0]).floor).toMatchObject({ value: 55, startedAtMs: null });
-    expect(card._extrema.get(card._config.entities[0]).floor.windowKey).not.toBe(floorBefore.windowKey);
-    expect(card._extrema.get(card._config.entities[0]).peak).toEqual(peakBefore);
+  it('preserves consumers across visual-only configuration changes', () => {
+    const card = createCard(); card._render = () => {};
+    const config = color => ({ entity: 'sensor.row', peak: { enabled: true, window: 'today', color }, floor: { enabled: true } });
+    card.setConfig(config('#111111'));
+    const before = [...card._historicalRuntime.entries.values()];
+    card.setConfig(config('#ff0000'));
+    expect([...card._historicalRuntime.entries.values()]).toEqual(before);
+    expect([...card._historicalRuntime.entries.values()][0]).toBe(before[0]);
   });
 
-  it('preserves Peak and Floor across visual-only configuration changes', () => {
-    const card = createCard();
-    card._render = () => {};
-    const config = (color, show, decimal) => ({
-      entities: [{
-        entity: 'sensor.row',
-        peak: { enabled: true, reset: 'daily', color, label: { show, decimal } },
-        floor: { enabled: true, reset: 'quarterly', color, label: { show, decimal } },
-      }],
-    });
-    card.setConfig(config('#111111', false, 1));
-    let entityCfg = card._config.entities[0];
-    const state = { state: '80', last_updated: '2026-01-01T10:07:00.000Z' };
-    card._updateExtrema(entityCfg, entityCfg, state);
-    state.state = '20';
-    card._updateExtrema(entityCfg, entityCfg, state);
-    const extremaBefore = structuredClone(card._extrema.get(card._config.entities[0]));
-
-    card.setConfig(config('#ff0000', true, 0));
-
-    expect(card._extrema.get(card._config.entities[0])).toEqual(extremaBefore);
+  it('preserves equivalent inherited and explicit historical consumer specifications', () => {
+    const card = createCard(); card._render = () => {};
+    const marker = { enabled: true, reset: 'daily' };
+    card.setConfig({ peak: marker, entities: [{ entity: 'sensor.row' }] });
+    const before = [...card._historicalRuntime.entries.values()][0];
+    card.setConfig({ entities: [{ entity: 'sensor.row', peak: marker }] });
+    expect([...card._historicalRuntime.entries.values()][0]).toBe(before);
   });
 
-  it('preserves extrema when equivalent reset and enabled settings move between inherited and explicit config', () => {
-    const card = createCard();
-    card._render = () => {};
-    const inherited = {
-      peak: { enabled: true, reset: 'daily' },
-      floor: { enabled: true, reset: 'quarterly' },
-      entities: [{ entity: 'sensor.row' }],
-    };
-    card.setConfig(inherited);
-    let entityCfg = card._config.entities[0];
-    const state = { state: '80', last_updated: '2026-01-01T10:07:00.000Z' };
-    card._updateExtrema(entityCfg, entityCfg, state);
-    state.state = '20';
-    card._updateExtrema(entityCfg, entityCfg, state);
-    const extremaBefore = structuredClone(card._extrema.get(card._config.entities[0]));
-
-    card.setConfig({
-      ...inherited,
-      entities: [{
-        entity: 'sensor.row',
-        peak: { enabled: true, reset: 'daily' },
-        floor: { enabled: true, reset: 'quarterly' },
-      }],
-    });
-    expect(card._extrema.get(card._config.entities[0])).toEqual(extremaBefore);
-
-    card.setConfig(inherited);
-    expect(card._extrema.get(card._config.entities[0])).toEqual(extremaBefore);
+  it('maps a relative legacy duration to a rolling Recorder window', () => {
+    const card = createCard(); card._render = () => {};
+    card.setConfig({ entity: 'sensor.row', peak: { enabled: true, reset: '26m' } });
+    expect([...card._historicalRuntime.entries.values()][0].spec.window)
+      .toEqual({ kind: 'rolling', duration: { amount: 26, unit: 'minute' } });
   });
 
-  it('applies relative 26m resets through the card update path, including delayed samples', () => {
-    const card = createCard();
-    card._render = () => {};
-    card.setConfig({ entities: [{ entity: 'sensor.row', peak: { enabled: true, reset: '26m' } }] });
-    const entityCfg = card._config.entities[0];
-    const state = { state: '10', last_updated: '2026-01-01T10:07:00.000Z' };
-
-    card._updateExtrema(entityCfg, entityCfg, state);
-    expect(card._extrema.get(card._config.entities[0]).peak).toMatchObject({ value: 10, startedAtMs: Date.parse(state.last_updated) });
-
-    state.state = '20';
-    state.last_updated = '2026-01-01T10:32:00.000Z';
-    card._updateExtrema(entityCfg, entityCfg, state);
-    expect(card._extrema.get(card._config.entities[0]).peak).toMatchObject({ value: 20, startedAtMs: Date.parse('2026-01-01T10:07:00.000Z') });
-
-    state.state = '5';
-    state.last_updated = '2026-01-01T10:33:00.000Z';
-    card._updateExtrema(entityCfg, entityCfg, state);
-    expect(card._extrema.get(card._config.entities[0]).peak).toMatchObject({ value: 5, startedAtMs: Date.parse(state.last_updated) });
-
-    card._extrema = new WeakMap();
-    state.state = '10';
-    state.last_updated = '2026-01-01T10:07:00.000Z';
-    card._updateExtrema(entityCfg, entityCfg, state);
-    state.state = '5';
-    state.last_updated = '2026-01-01T10:36:00.000Z';
-    card._updateExtrema(entityCfg, entityCfg, state);
-    expect(card._extrema.get(card._config.entities[0]).peak).toMatchObject({ value: 5, startedAtMs: Date.parse(state.last_updated) });
+  it('distinguishes rolling 15m from calendar quarterly windows', () => {
+    const card = createCard(); card._render = () => {};
+    card.setConfig({ entity: 'sensor.row', peak: { enabled: true, reset: '15m' }, floor: { enabled: true, reset: 'quarterly' } });
+    const row = card._config.entities[0];
+    expect(card._historicalRuntime.entries.get(historicalMarkerId(row, 'peak')).spec.window)
+      .toEqual({ kind: 'rolling', duration: { amount: 15, unit: 'minute' } });
+    expect(card._historicalRuntime.entries.get(historicalMarkerId(row, 'floor')).spec.window)
+      .toEqual({ kind: 'calendar', period: 'quarter_hour' });
   });
 
-  it('distinguishes relative 15m from quarterly resets through the card update path', () => {
-    const card = createCard();
-    card._render = () => {};
-    card.setConfig({
-      entities: [{
-        entity: 'sensor.row',
-        peak: { enabled: true, reset: '15m' },
-        floor: { enabled: true, reset: 'quarterly' },
-      }],
-    });
-    const entityCfg = card._config.entities[0];
-    const localIso = (hour, minute) => new Date(2026, 0, 1, hour, minute).toISOString();
-    const state = { state: '50', last_updated: localIso(10, 7) };
-
-    card._updateExtrema(entityCfg, entityCfg, state);
-    const initialFloorWindow = card._extrema.get(card._config.entities[0]).floor.windowKey;
-    const initialPeakStart = card._extrema.get(card._config.entities[0]).peak.startedAtMs;
-
-    state.state = '60';
-    state.last_updated = localIso(10, 14);
-    card._updateExtrema(entityCfg, entityCfg, state);
-    expect(card._extrema.get(card._config.entities[0]).peak.startedAtMs).toBe(initialPeakStart);
-    expect(card._extrema.get(card._config.entities[0]).floor.windowKey).toBe(initialFloorWindow);
-
-    state.state = '40';
-    state.last_updated = localIso(10, 15);
-    card._updateExtrema(entityCfg, entityCfg, state);
-    expect(card._extrema.get(card._config.entities[0]).peak.value).toBe(60);
-    expect(card._extrema.get(card._config.entities[0]).peak.startedAtMs).toBe(initialPeakStart);
-    expect(card._extrema.get(card._config.entities[0]).floor.value).toBe(40);
-    expect(card._extrema.get(card._config.entities[0]).floor.windowKey).not.toBe(initialFloorWindow);
-
-    state.state = '30';
-    state.last_updated = localIso(10, 22);
-    card._updateExtrema(entityCfg, entityCfg, state);
-    expect(card._extrema.get(card._config.entities[0]).peak.value).toBe(30);
-    expect(card._extrema.get(card._config.entities[0]).peak.startedAtMs).toBe(Date.parse(state.last_updated));
-  });
 });

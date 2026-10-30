@@ -32,7 +32,6 @@ import {
   getEntityNumericValue,
   getNormalizedResolvableNumericValue,
   getNumericValue,
-  resolveEntityState,
   resolvePercentValue,
 } from '../config/resolve.js';
 import { validateNormalizedConfig } from '../config/validate.js';
@@ -48,8 +47,8 @@ import {
   formatNumericDisplay,
   isTightUnit,
 } from '../utils/format.js';
-import { updateExtremum } from '../utils/extrema.js';
-import { HistoricalHostRuntime, historicalConfigKey } from '../history/host-runtime.js';
+import { HistoricalHostRuntime } from '../history/host-runtime.js';
+import { historicalMarkerConsumers, historicalMarkerResults } from '../history/marker-consumers.js';
 import * as barRenderModel from '../view-model/bar-render-model.js';
 import * as barRenderer from '../render/bar-renderer.js';
 import { attachRowActionHandlers, resolveRowAction } from '../actions/row-actions.js';
@@ -196,7 +195,14 @@ export class SensorBarCard extends HTMLElement {
     this._lastDiagnosticsSignature = null;
     this._hass = null;
     this._historicalRuntime = new HistoricalHostRuntime();
-    this._extrema = new WeakMap();
+    this._historicalUpdate = () => {
+      if (this._historicalUpdateScheduled) return;
+      this._historicalUpdateScheduled = true;
+      Promise.resolve().then(() => {
+        this._historicalUpdateScheduled = false;
+        if (this._historicalRuntime.attached) this._update();
+      });
+    };
     this._rowScales = new WeakMap();
     this._rowGeneration = 0;
     this._rowPresence = [];
@@ -252,13 +258,9 @@ export class SensorBarCard extends HTMLElement {
     const previousConfig = this._config;
     this._actionConfig = config;
     this._config = this.normalizeCardConfig(config);
-    const historyKey = historicalConfigKey(this._config.entities);
-    if (this._historyConfigKey !== undefined && this._historyConfigKey !== historyKey) {
-      this._historicalRuntime.setConsumers([]);
-    }
-    this._historyConfigKey = historyKey;
     this._rowScales = new WeakMap();
     this._reconcileRowHistory(previousConfig?.entities ?? []);
+    this._historicalRuntime.setConsumers(historicalMarkerConsumers(this._config.entities), this._historicalUpdate);
     this._diagnostics = validateNormalizedConfig(this._config);
     this._logDiagnostics();
     this._render();
@@ -312,26 +314,13 @@ export class SensorBarCard extends HTMLElement {
       matches.set(row, old[0]);
       unmatchedOld.delete(old[0]);
     }
-    const extrema = new WeakMap();
     const responsive = new WeakMap();
     for (const [row, previous] of matches) {
-      const stored = this._extrema.get(previous);
-      const retained = {};
-      for (const key of ['peak', 'floor']) {
-        const before = previous[`${key}_marker`];
-        const after = row[`${key}_marker`];
-        if (stored?.[key] && before?.show === true && after?.show === true
-          && JSON.stringify(before.reset) === JSON.stringify(after.reset)) {
-          retained[key] = { ...stored[key] };
-        }
-      }
-      if (retained.peak || retained.floor) extrema.set(row, retained);
       if (previous.layout?.label?.position === 'left' && row.layout?.label?.position === 'left'
         && this._leftModeResponsiveHistory.has(previous)) {
         responsive.set(row, this._leftModeResponsiveHistory.get(previous));
       }
     }
-    this._extrema = extrema;
     this._leftModeResponsiveHistory = responsive;
   }
 
@@ -531,42 +520,6 @@ export class SensorBarCard extends HTMLElement {
       icon: ecfg.icon === false ? false : (ecfg.icon ?? stateObj?.attributes?.icon ?? this._getDefaultEntityIcon(stateObj, ecfg.entity)),
       name: ecfg.name ?? null,
     };
-  }
-
-  _getStateTimestamp(stateObj) {
-    const rawTimestamp = stateObj?.last_updated ?? stateObj?.last_changed;
-    const timestamp = rawTimestamp instanceof Date
-      ? rawTimestamp.getTime()
-      : Date.parse(String(rawTimestamp ?? ''));
-    return Number.isFinite(timestamp) ? timestamp : Date.now();
-  }
-
-  _updateExtrema(entityCfg, normalizedEntity, stateObj) {
-    const source = resolveEntityState(stateObj, normalizedEntity?.attribute);
-    const sample = source.available && source.attributeFound ? getFiniteNumber(source.value) : null;
-    if (!Number.isFinite(sample)) return;
-
-    const current = this._extrema.get(entityCfg) ?? {};
-    const timestamp = this._getStateTimestamp(stateObj);
-    for (const key of ['peak', 'floor']) {
-      const marker = normalizedEntity?.[`${key}_marker`];
-      if (marker?.show !== true) {
-        delete current[key];
-        continue;
-      }
-      current[key] = updateExtremum(
-        current[key] ?? null,
-        sample,
-        marker.reset ?? { kind: 'never' },
-        key === 'floor' ? 'min' : 'max',
-        timestamp,
-      );
-    }
-    if (current.peak || current.floor) {
-      this._extrema.set(entityCfg, current);
-    } else {
-      this._extrema.delete(entityCfg);
-    }
   }
 
   _getDefaultEntityIcon(stateObj, entityId = '') {
@@ -3083,7 +3036,7 @@ ${barMarkerStyles}
       cardConfig: this._config,
       entityConfig: ecfg,
       entityState: stateObj,
-      extrema: this._extrema.get(entityCfg) ?? null,
+      historicalExtrema: historicalMarkerResults(this._historicalRuntime, ecfg),
       previousScale: this._rowScales.get(entityCfg),
     });
     this._rowScales.set(entityCfg, { min: rowViewModel.min, max: rowViewModel.max });
@@ -3093,7 +3046,6 @@ ${barMarkerStyles}
   _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue, rowIndex = this._config.entities?.indexOf(entityCfg) ?? -1) {
     const ecfg = this._resolve(entityCfg);
     const stateObj = this._hass?.states?.[entityCfg.entity] ?? null;
-    if (stateObj) this._updateExtrema(entityCfg, ecfg, stateObj);
     const rowViewModel = stateObj
       ? this._buildRowViewModel(entityCfg, ecfg, stateObj)
       : null;
@@ -3206,7 +3158,6 @@ ${barMarkerStyles}
     if (!row || !stateObj) return;
 
     const ecfg = this._resolve(entityCfg);
-    this._updateExtrema(entityCfg, ecfg, stateObj);
     const previousScale = this._rowScales.get(entityCfg);
     const rowViewModel = this._buildRowViewModel(entityCfg, ecfg, stateObj);
     const safeMin = rowViewModel.min;
@@ -3225,7 +3176,7 @@ ${barMarkerStyles}
         cardConfig: this._config,
         entityConfig: ecfg,
         entityState: previousStateObj,
-        extrema: this._extrema.get(entityCfg) ?? null,
+        historicalExtrema: historicalMarkerResults(this._historicalRuntime, ecfg),
         previousScale,
       })
       : null;
@@ -3360,7 +3311,6 @@ ${barMarkerStyles}
           continue;
         }
         const ecfg      = this._resolve(entityCfg);
-        this._updateExtrema(entityCfg, ecfg, stateObj);
         const rowViewModel = this._buildRowViewModel(entityCfg, ecfg, stateObj);
         const safeMin   = rowViewModel.min;
         const safeMax   = rowViewModel.max;

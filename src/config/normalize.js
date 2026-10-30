@@ -1,4 +1,5 @@
-import { isValidReset, normalizeReset } from '../utils/extrema.js';
+import { isValidReset } from '../utils/extrema.js';
+import { parseHistoricalWindow } from '../history/time-window.js';
 
 function normalizeAttribute(value) {
   return typeof value === 'string' && value !== '' ? value : null;
@@ -956,12 +957,16 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
     label_show_value: true,
     label_show_unit: true,
     label_precision: null,
-    reset: { kind: 'never' },
+    window: 'today', window_spec: parseHistoricalWindow('today'),
     direction: 'inward',
   };
   const hasReset = rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, 'reset');
-  const rawReset = hasReset ? rawMarker.reset : undefined;
-  const reset = hasReset ? normalizeReset(rawReset) : (inherited.reset ?? { kind: 'never' });
+  const hasWindow = rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, 'window');
+  const rawWindow = hasWindow ? rawMarker.window : hasReset ? rawMarker.reset : inherited.window ?? 'today';
+  const legacyInvalid = !hasWindow && hasReset && !isValidReset(rawWindow);
+  const window = !hasWindow && hasReset && typeof rawWindow === 'string' && rawWindow.trim().toLowerCase() === 'never'
+    ? 'today' : typeof rawWindow === 'string' ? rawWindow.trim().toLowerCase() : rawWindow;
+  const windowSpec = legacyInvalid ? null : parseHistoricalWindow(window);
   const rawLabel = rawMarker?.label;
   const label = normalizeLabelConfig(rawMarker, inherited);
   const normalized = {
@@ -977,6 +982,9 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
       ? normalizeMarkerDirection(rawMarker.direction)
       : normalizeMarkerDirection(inherited.direction),
     ...(isInvalidMarkerDirection(rawMarker?.direction) ? { direction_invalid: true } : {}),
+    window, window_spec: windowSpec,
+    ...(!windowSpec || (!hasWindow && !hasReset && inherited.window_invalid) ? { window_invalid: true } : {}),
+    ...(legacyInvalid ? { window_invalid_source: 'reset' } : {}),
   };
   const inheritedAdvanced = cardMarker && (
     Object.prototype.hasOwnProperty.call(cardMarker, 'show_label')
@@ -985,17 +993,16 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
     || Object.prototype.hasOwnProperty.call(cardMarker, 'label_show_value')
     || Object.prototype.hasOwnProperty.call(cardMarker, 'label_show_unit')
     || Object.prototype.hasOwnProperty.call(cardMarker, 'label_precision')
-    || Object.prototype.hasOwnProperty.call(cardMarker, 'reset')
   );
   const hasAdvancedConfig = key === 'floor'
     || hasReset
+    || hasWindow
     || rawLabel !== undefined
     || inheritedAdvanced;
 
   if (hasAdvancedConfig) {
     normalized.show_label = label.show;
     normalized.label_decimal = label.precision;
-    normalized.reset = reset;
   }
   Object.assign(normalized, builtinMarkerLabelFields({
     label_text: label.text,
@@ -1010,9 +1017,6 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
     label_precision_key: label.precisionKey,
     label_unsupported_unit: label.unsupportedUnit,
   }));
-  if (hasReset && !isValidReset(rawReset)) {
-    normalized.reset_invalid = true;
-  }
   return normalized;
 }
 
@@ -1022,6 +1026,14 @@ export function normalizePeakMarkerConfig(entityConfig, cardConfig) {
 
 export function normalizeFloorMarkerConfig(entityConfig, cardConfig) {
   return normalizeExtremumMarkerConfig(entityConfig, cardConfig, 'floor', { defaultColor: '#888888' });
+}
+
+function normalizeLegacyMarkerFields(config) {
+  for (const key of ['peak', 'floor']) {
+    if (!config[key] || typeof config[key] !== 'object' || Array.isArray(config[key])) continue;
+    const { reset, ...marker } = config[key];
+    config[key] = { ...marker, window: config[`${key}_marker`].window };
+  }
 }
 
 export function normalizeEntityConfig(entityConfig, cardConfig) {
@@ -1053,6 +1065,7 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
   normalizedEntity.target_marker = normalizeTargetMarkerConfig(entityConfig, cardConfig);
   normalizedEntity.peak_marker = normalizePeakMarkerConfig(entityConfig, cardConfig);
   normalizedEntity.floor_marker = normalizeFloorMarkerConfig(entityConfig, cardConfig);
+  normalizeLegacyMarkerFields(normalizedEntity);
   const normalizedMarkers = entityConfig.markers === undefined
     ? {
       markers: applyGenericMarkerCapacity(cardConfig?.generic_markers ?? [], normalizedEntity),
@@ -1154,6 +1167,7 @@ export function normalizeCardConfig(rawConfig) {
   normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);
   normalizedCard.peak_marker = normalizePeakMarkerConfig(baseConfig, null);
   normalizedCard.floor_marker = normalizeFloorMarkerConfig(baseConfig, null);
+  normalizeLegacyMarkerFields(normalizedCard);
   const normalizedMarkers = normalizeGenericMarkerList(baseConfig.markers, normalizedCard);
   normalizedCard.generic_markers = normalizedMarkers.markers;
   normalizedCard.generic_markers_invalid = normalizedMarkers.invalidList;

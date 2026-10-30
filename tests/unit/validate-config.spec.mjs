@@ -183,7 +183,7 @@ describe('validateNormalizedConfig', () => {
     }));
   });
 
-  it('warns and falls back safely for invalid marker resets', () => {
+  it('warns and leaves invalid marker resets unavailable', () => {
     const normalized = normalize({
       peak: { enabled: true, reset: '60m' },
       floor: { enabled: true, reset: '1h30m' },
@@ -191,15 +191,17 @@ describe('validateNormalizedConfig', () => {
     });
     const diagnostics = validateNormalizedConfig(normalized);
 
-    expect(normalized.peak_marker.reset).toEqual({ kind: 'never' });
-    expect(normalized.floor_marker.reset).toEqual({ kind: 'never' });
+    expect(normalized.peak_marker.window_invalid).toBe(true);
+    expect(normalized.peak_marker.window_spec).toBeNull();
+    expect(normalized.floor_marker.window_invalid).toBe(true);
+    expect(normalized.floor_marker.window_spec).toBeNull();
     expect(diagnostics.warnings).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: 'peak_marker.invalid_reset' }),
-      expect.objectContaining({ code: 'floor_marker.invalid_reset' }),
+      expect.objectContaining({ code: 'peak_marker.invalid_window' }),
+      expect.objectContaining({ code: 'floor_marker.invalid_window' }),
     ]));
   });
 
-  it('warns and falls back for explicitly non-string reset values', () => {
+  it('warns and leaves non-string reset values unavailable', () => {
     for (const reset of [['15m'], {}, 15, null, true]) {
       const normalized = normalize({
         peak: { enabled: true, reset },
@@ -207,9 +209,10 @@ describe('validateNormalizedConfig', () => {
       });
       const diagnostics = validateNormalizedConfig(normalized);
 
-      expect(normalized.peak_marker.reset).toEqual({ kind: 'never' });
+      expect(normalized.peak_marker.window_invalid).toBe(true);
+      expect(normalized.peak_marker.window_spec).toBeNull();
       expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
-        code: 'peak_marker.invalid_reset',
+        code: 'peak_marker.invalid_window',
       }));
     }
   });

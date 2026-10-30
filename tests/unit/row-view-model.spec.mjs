@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { createCard } from '../support/load-card-class.cjs';
 import { buildRowViewModel } from '../../src/view-model/row-view-model.js';
 import { formatNumericDisplay } from '../../src/utils/format.js';
+import { historicalMarkerConsumers } from '../../src/history/marker-consumers.js';
+import { normalizeHistoryResponse } from '../../src/history/history-provider.js';
+import { calculateObservationValue } from '../../src/history/calculations.js';
 
 function sensor(state, attrs = {}) {
   return {
@@ -170,10 +173,7 @@ describe('buildRowViewModel', () => {
       last_updated: '2026-01-01T10:07:00.000Z',
       attributes: { unit_of_measurement: 'W' },
     };
-    card._updateExtrema(entityConfig, entityConfig, state);
-    state.state = '20';
-    state.last_updated = '2026-01-01T10:08:00.000Z';
-    card._updateExtrema(entityConfig, entityConfig, state);
+    const results = { peak: { value: 80, status: 'partial' }, floor: { value: 20, status: 'partial' } };
 
     for (const unavailableState of ['unavailable', 'unknown']) {
       state.state = unavailableState;
@@ -185,7 +185,7 @@ describe('buildRowViewModel', () => {
         cardConfig: config,
         entityConfig,
         entityState: state,
-        extrema: card._extrema.get(entityConfig),
+        historicalExtrema: results,
       });
 
       expect(row.primaryPresentation.text).toBe(unavailableState);
@@ -196,13 +196,12 @@ describe('buildRowViewModel', () => {
 
     state.state = '42';
     state.last_updated = '2026-01-01T10:11:00.000Z';
-    card._updateExtrema(entityConfig, entityConfig, state);
     const recoveredRow = buildRowViewModel({
       hass: { states: { 'sensor.power': state } },
       cardConfig: config,
       entityConfig,
       entityState: state,
-      extrema: card._extrema.get(entityConfig),
+      historicalExtrema: results,
     });
     expect(recoveredRow.primaryPresentation.text).toBe('42 W');
     expect(recoveredRow.peakPresentation.text).toBe('80 W');
@@ -292,7 +291,7 @@ describe('buildRowViewModel', () => {
       cardConfig: null,
       entityConfig,
       entityState: hass.states['sensor.power'],
-      peaks: { 'sensor.power': 48 },
+      historicalExtrema: { peak: { status: 'available', value: 48, status: 'available' } },
     });
 
     expect(row.primaryPresentation.text).toBe('42,00 kW');
@@ -319,7 +318,7 @@ describe('buildRowViewModel', () => {
       cardConfig: null,
       entityConfig,
       entityState: hass.states['sensor.power'],
-      peaks: { 'sensor.power': 48 },
+      historicalExtrema: { peak: { status: 'available', value: 48, status: 'available' } },
     });
 
     const targetMarker = row.markers.find((marker) => marker.type === 'target');
@@ -544,7 +543,7 @@ describe('buildRowViewModel', () => {
       hass,
       entityConfig,
       entityState: hass.states['sensor.power'],
-      extrema: { peak: { value: 80 }, floor: { value: 12 } },
+      historicalExtrema: { peak: { status: 'available', value: 80 }, floor: { status: 'available', value: 12 } },
     });
     expect(row.markers.find((marker) => marker.type === 'target').label.text).toBe('Target 34,6 kW');
     expect(row.markers.find((marker) => marker.type === 'peak').label.text).toBe('Max 80 kW');
@@ -559,7 +558,7 @@ describe('buildRowViewModel', () => {
       hass,
       entityConfig: inheritedConfig,
       entityState: hass.states['sensor.power'],
-      extrema: { peak: { value: 80 } },
+      historicalExtrema: { peak: { status: 'available', value: 80 } },
     });
     expect(inheritedRow.markers.find((marker) => marker.type === 'target').label.text).toBe('Goal kW');
     expect(inheritedRow.markers.find((marker) => marker.type === 'peak').label.text).toBe('High 80');
@@ -575,7 +574,7 @@ describe('buildRowViewModel', () => {
       hass,
       entityConfig: emptyConfig,
       entityState: hass.states['sensor.power'],
-      extrema: { peak: { value: 80 }, floor: { value: 12 } },
+      historicalExtrema: { peak: { status: 'available', value: 80 }, floor: { status: 'available', value: 12 } },
     });
     expect(emptyRow.markers.map((marker) => marker.labelVisible)).toEqual([false, false, false, false]);
     expect(emptyRow.markerLabelLaneOccupancy).toEqual({ above: false, below: false });
@@ -972,7 +971,7 @@ describe('buildRowViewModel', () => {
       cardConfig: null,
       entityConfig,
       entityState: hass.states['sensor.power'],
-      peaks,
+      historicalExtrema: { peak: { value: peaks['sensor.power'], status: 'available' } },
     });
 
     expect(row.primaryPresentation).toEqual({
@@ -1116,7 +1115,7 @@ describe('buildRowViewModel', () => {
       cardConfig: null,
       entityConfig,
       entityState: hass.states['sensor.power'],
-      peaks,
+      historicalExtrema: { peak: { value: peaks['sensor.power'], status: 'available' } },
     });
 
     expect(row.peak).toBe(60);
@@ -1154,7 +1153,7 @@ describe('buildRowViewModel', () => {
       cardConfig: null,
       entityConfig,
       entityState: hass.states['sensor.power'],
-      peaks,
+      historicalExtrema: { peak: { value: peaks['sensor.power'], status: 'available' } },
     });
     peaks['sensor.power'] = initialRow.peak;
     const updatedRow = buildRowViewModel({
@@ -1162,7 +1161,7 @@ describe('buildRowViewModel', () => {
       cardConfig: null,
       entityConfig,
       entityState: hass.states['sensor.power'],
-      peaks,
+      historicalExtrema: { peak: { value: peaks['sensor.power'], status: 'available' } },
     });
 
     expect(updatedRow.primaryPresentation).toEqual(initialRow.primaryPresentation);
@@ -1426,7 +1425,7 @@ describe('buildRowViewModel', () => {
       cardConfig,
       entityConfig,
       entityState,
-      peaks,
+      historicalExtrema: { peak: { value: peaks['sensor.power'], status: 'available' } },
     });
 
     buildRowViewModel({
@@ -1434,14 +1433,14 @@ describe('buildRowViewModel', () => {
       cardConfig,
       entityConfig,
       entityState,
-      peaks,
+      historicalExtrema: { peak: { value: peaks['sensor.power'], status: 'available' } },
     });
 
     expect(JSON.stringify({
       cardConfig,
       entityConfig,
       entityState,
-      peaks,
+      historicalExtrema: { peak: { value: peaks['sensor.power'], status: 'available' } },
     })).toBe(before);
   });
 
@@ -1465,9 +1464,9 @@ describe('buildRowViewModel', () => {
       cardConfig: null,
       entityConfig,
       entityState: hass.states['sensor.power'],
-      extrema: {
-        peak: { value: 80, startedAtMs: null, windowKey: null },
-        floor: { value: 20, startedAtMs: null, windowKey: null },
+      historicalExtrema: {
+        peak: { status: 'available', value: 80, startedAtMs: null, windowKey: null },
+        floor: { status: 'available', value: 20, startedAtMs: null, windowKey: null },
       },
     });
 
@@ -1499,7 +1498,7 @@ describe('buildRowViewModel', () => {
       cardConfig: null,
       entityConfig,
       entityState: hass.states['sensor.power'],
-      extrema: { floor: { value: -20, startedAtMs: null, windowKey: null } },
+      historicalExtrema: { floor: { status: 'available', value: -20, startedAtMs: null, windowKey: null } },
     });
 
     expect(row.floor).toBe(-20);
@@ -1545,21 +1544,21 @@ describe('buildRowViewModel', () => {
     expect(row).toMatchObject({ state: 'unavailable', numericValue: null, displayUnit: '' });
   });
 
-  it('samples Peak and Floor from the selected primary attribute instead of the entity state', () => {
+  it('resolves Peak and Floor from the selected Recorder attribute instead of the entity state', () => {
     const card = createCard();
     const config = card.normalizeCardConfig({ entities: [{
-      entity: 'sensor.power', attribute: 'watts',
-      peak: { enabled: true }, floor: { enabled: true },
+      entity: 'sensor.power', attribute: 'watts', peak: { enabled: true }, floor: { enabled: true },
     }] });
-    const entityConfig = config.entities[0];
-    const state = { state: '900', attributes: { watts: '40' } };
-
-    card._updateExtrema(entityConfig, entityConfig, state);
-    state.state = '10';
-    state.attributes.watts = '60';
-    card._updateExtrema(entityConfig, entityConfig, state);
-
-    expect(card._extrema.get(entityConfig)).toMatchObject({ peak: { value: 60 }, floor: { value: 40 } });
+    const consumers = historicalMarkerConsumers(config.entities);
+    expect(consumers.map(item => item.spec.source.attribute)).toEqual(['watts', 'watts']);
+    const window = { start: 100000, end: 200000 };
+    const records = normalizeHistoryResponse({ 'sensor.power': [
+      { s: '900', a: { watts: '40' }, lu: 110 },
+      { s: '10', a: { watts: '60' }, lu: 120 },
+    ] }, [consumers[0].spec.source], window, 200000);
+    const samples = records.get('sensor.power\u0000watts').observations;
+    expect(calculateObservationValue(samples, 'max', window).value).toBe(60);
+    expect(calculateObservationValue(samples, 'min', window).value).toBe(40);
   });
 
   it('resolves attribute-backed Baseline, Target, Reference Marker position and textual label independently', () => {

@@ -7,6 +7,29 @@ const WEEK_MS = 7 * DAY_MS;
 const CALENDAR_UNITS = new Set(['quarter_hour', 'hour', 'day', 'week', 'month', 'year']);
 const SHIFT_UNITS = new Set(['quarter_hour', 'hour', 'day', 'week', 'month', 'year']);
 
+// Configuration strings map to the same window specifications used by the resolver.
+export function parseHistoricalWindow(value) {
+  if (typeof value !== 'string') return null;
+  const text = value.trim().toLowerCase();
+  const calendars = {
+    today: ['day', 0], yesterday: ['day', -1],
+    this_week: ['week', 0], 'this week': ['week', 0], last_week: ['week', -1], 'last week': ['week', -1],
+    this_month: ['month', 0], 'this month': ['month', 0], last_month: ['month', -1], 'last month': ['month', -1],
+    this_year: ['year', 0], last_year: ['year', -1],
+    quarterly: ['quarter_hour', 0], hourly: ['hour', 0], daily: ['day', 0],
+    weekly: ['week', 0], monthly: ['month', 0], yearly: ['year', 0],
+  };
+  const calendar = Object.prototype.hasOwnProperty.call(calendars, text) ? calendars[text] : null;
+  if (calendar) return calendar[1] === 0
+    ? { kind: 'calendar', period: calendar[0] }
+    : { kind: 'shifted_calendar', period: calendar[0], shift: { amount: -1, unit: calendar[0] } };
+  const match = /^(\d+)(m|h|d|w)$/.exec(text);
+  if (!match || !Number.isSafeInteger(Number(match[1])) || Number(match[1]) < 1) return null;
+  const unit = { m: 'minute', h: 'hour', d: 'day', w: 'week' }[match[2]];
+  const duration = { amount: Number(match[1]), unit };
+  return Number.isFinite(durationMilliseconds(duration)) ? { kind: 'rolling', duration } : null;
+}
+
 function toEpoch(value, name) {
   const epoch = value instanceof Date ? value.getTime()
     : typeof value === 'number' ? value
@@ -238,7 +261,7 @@ export function resolveTimeWindow(spec, options = {}) {
   if (!(end > start)) throw new RangeError('Resolved time window must have a positive duration');
 
   const calendarUnit = spec.period ?? spec.unit;
-  const rolloverAt = kind === 'calendar'
+  const rolloverAt = kind === 'calendar' || kind === 'shifted_calendar'
     ? (() => {
       const startParts = periodStart(localParts(now, timeZone, dateFormatter), calendarUnit, weekStartsOn);
       const startEpoch = localToEpoch(startParts, timeZone, dateFormatter, { reference: now });

@@ -7,7 +7,7 @@ const spec = { provider: 'recorder_history', source: { entityId: 'sensor.soil' }
   window: { kind: 'calendar', period: 'day' } };
 
 describe('historical value resolver', () => {
-  it('resolves max as a partial Recorder value without presentation fields', async () => {
+  it('resolves max with unknown coverage as available without presentation fields', async () => {
     const service = new SharedObservationService({ now: () => Date.parse('2026-05-13T10:00:00Z'),
       provider: async (_hass, sources, window) => new Map(sources.map((source) => [sourceKey, {
         source, observations: [{ timestamp: window.start + 1000, value: 22 }, { timestamp: window.start + 2000, value: 38 }],
@@ -16,10 +16,25 @@ describe('historical value resolver', () => {
       }])) });
     const resolver = new HistoricalValueResolver({ service, now: () => Date.parse('2026-05-13T10:00:00Z') });
     const result = await resolver.resolve(spec, { hass: { config: { time_zone: 'Europe/Brussels' } } });
-    expect(result).toMatchObject({ value: 38, status: 'partial', calculation: 'max', source: { provider: 'recorder_history', entityId: 'sensor.soil' } });
+    expect(result).toMatchObject({ value: 38, status: 'available', calculation: 'max', source: { provider: 'recorder_history', entityId: 'sensor.soil' } });
     expect(result.window.interval).toBe('[start,end)');
     expect(result.provenance.coverage.complete).toBe(false);
+    expect(result.provenance.coverage.kind).toBe('unknown');
     expect(result).not.toHaveProperty('color');
+  });
+
+  it.each([
+    [{ complete: true, kind: 'complete' }, 'available'],
+    [{ complete: false, kind: 'incomplete', reason: 'Missing interval' }, 'partial'],
+  ])('classifies explicit coverage %j as %s', async (coverage, status) => {
+    const now = Date.parse('2026-05-13T10:00:00Z');
+    const provider = async (_hass, sources, window) => new Map([[sourceKey, {
+      source: sources[0], observations: [{ timestamp: window.start + 1000, value: 22 }],
+      retrievedAt: now, coverage,
+    }]]);
+    const resolver = new HistoricalValueResolver({ service: new SharedObservationService({ provider, now: () => now }), now: () => now });
+    const result = await resolver.resolve(spec, { hass: { config: { time_zone: 'UTC' } } });
+    expect(result).toMatchObject({ value: 22, status, provenance: { coverage } });
   });
 
   it('publishes pending and a result, then stops publishing after disposal', async () => {

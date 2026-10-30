@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createCard } from '../support/load-card-class.cjs';
+import { historicalMarkerId } from '../../src/history/marker-consumers.js';
 
 const state = (value) => ({ state: String(value), attributes: { unit_of_measurement: 'W' } });
 const dynamicScale = { min: { entity: 'sensor.min' }, max: { entity: 'sensor.max' } };
@@ -156,18 +157,23 @@ describe('dynamic scale through the card update path', () => {
     expectGeometry(model(), rows[0]);
   });
 
-  it('stores absolute Peak/Floor history and reprojects it, including simultaneous new samples', () => {
+  it('reprojects historical Peak/Floor values as the dynamic scale changes', () => {
     const { card, model, rows } = setup({ peak: { enabled: true }, floor: { enabled: true } }, snapshot(80, 0, 100));
-    card.hass = snapshot(20, 0, 100);
-    card.hass = snapshot(50, 0, 200);
-    expect(card._extrema.get(card._config.entities[0])).toMatchObject({ peak: { value: 80 }, floor: { value: 20 } });
+    const row = card._config.entities[0];
+    const peak = historicalMarkerId(row, 'peak'); const floor = historicalMarkerId(row, 'floor');
+    card._historicalRuntime.results.set(peak, { value: 80, status: 'available' });
+    card._historicalRuntime.results.set(floor, { value: 20, status: 'available' });
+    card._hass = snapshot(20, 0, 100); card._update();
+    card._hass = snapshot(50, 0, 200); card._update();
     expect(model()).toMatchObject({ peak: 80, peakPercent: 40, floor: 20, floorPercent: 10 });
     expect(rows[0].elements['.peak-marker'].style.left).toBe('40%');
     expect(rows[0].elements['.floor-marker'].style.left).toBe('10%');
-    card.hass = snapshot(50, 30, 70);
+    card._hass = snapshot(50, 30, 70); card._update();
     expect(model()).toMatchObject({ peak: 80, peakPercent: 100, floor: 20, floorPercent: 0 });
-    card.hass = snapshot(160, 0, 200);
-    expect(card._extrema.get(card._config.entities[0])).toMatchObject({ peak: { value: 160 }, floor: { value: 20 } });
+    card._hass = snapshot(160, 0, 200); card._update();
+    expect(model()).toMatchObject({ peak: 80, floor: 20 });
+    card._historicalRuntime.results.set(peak, { value: 160, status: 'partial' });
+    card._update();
     expect(model()).toMatchObject({ peak: 160, peakPercent: 80, floor: 20, floorPercent: 10 });
     expectGeometry(model(), rows[0]);
   });

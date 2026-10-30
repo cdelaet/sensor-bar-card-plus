@@ -43,6 +43,16 @@ export const barTrackStyles = `
 `;
 
 export const barMarkerStyles = `
+        :is(.peak-marker, .floor-marker)[data-history-status="partial"]::after,
+        :is(.peak-marker, .floor-marker)[data-history-status="stale"]::after {
+          position: absolute; left: 6px; top: 2px; color: var(--marker-color);
+          background: var(--card-background-color, #fff); border-radius: 2px;
+          font: bold 10px/1 sans-serif; pointer-events: none;
+        }
+        :is(.peak-marker, .floor-marker)[data-history-edge="end"]::after { left: -12px; }
+        .floor-marker[data-history-status]::after { top: auto; bottom: 2px; }
+        :is(.peak-marker, .floor-marker)[data-history-status="partial"]::after { content: '!'; }
+        :is(.peak-marker, .floor-marker)[data-history-status="stale"]::after { content: '~'; }
         /* ── Shared marker base ── */
         .peak-marker, .target-marker, .floor-marker, .generic-marker {
           position: absolute;

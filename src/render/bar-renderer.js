@@ -13,6 +13,9 @@ export function renderMarker(marker) {
   const defaultShape = marker.type === 'target' ? 'diamond' : marker.type === 'generic' ? 'circle' : 'triangle';
   const shape = normalizeMarkerShape(marker.shape, defaultShape);
   const lane = marker.lane ?? (marker.type === 'peak' ? 'above' : 'below');
+  const historyStatus = ['partial', 'stale'].includes(marker.historyStatus) ? marker.historyStatus : '';
+  const historyLabel = historyStatus === 'partial' ? 'Partial history' : historyStatus === 'stale' ? 'Stale history' : '';
+  const historyAttributes = historyStatus ? ` data-history-status="${historyStatus}" data-history-edge="${position > 90 ? 'end' : 'start'}" title="${historyLabel}"` : '';
   const shapePaths = `<g class="marker-shape-paths">
     <path data-shape="circle" d="M8 1A7 7 0 1 0 8 15A7 7 0 1 0 8 1Z"></path>
     <path data-shape="diamond" d="M8 1L15 8L8 15L1 8Z"></path>
@@ -36,7 +39,7 @@ export function renderMarker(marker) {
   if (marker.type === 'target' || marker.type === 'floor') {
     const markerClass = `${marker.type}-marker`;
     return `
-    <div class="${markerClass}" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+    <div class="${markerClass}" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}"${historyAttributes} style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
       <div class="${marker.type}-inset"></div>
       <div class="${marker.type}-outset"></div>
       <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
@@ -44,7 +47,7 @@ export function renderMarker(marker) {
   }
 
   return `
-    <div class="peak-marker" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+    <div class="peak-marker" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}"${historyAttributes} style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
       <div class="peak-outset"></div>
       <div class="peak-inset"></div>
       <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
@@ -59,6 +62,12 @@ export function patchMarker(markerEl, marker) {
   setDatasetIfChanged(markerEl, 'shape', shape);
   setDatasetIfChanged(markerEl, 'lane', marker.lane ?? (marker.type === 'peak' ? 'above' : 'below'));
   setDatasetIfChanged(markerEl, 'direction', marker.direction ?? 'inward');
+  if (marker.type === 'peak' || marker.type === 'floor') {
+    const status = ['partial', 'stale'].includes(marker.historyStatus) ? marker.historyStatus : '';
+    setDatasetIfChanged(markerEl, 'historyStatus', status);
+    setDatasetIfChanged(markerEl, 'historyEdge', marker.position > 90 ? 'end' : 'start');
+    markerEl.setAttribute?.('title', status === 'partial' ? 'Partial history' : status === 'stale' ? 'Stale history' : '');
+  }
   if (marker.type === 'generic') {
     setDatasetIfChanged(markerEl, 'showMarker', marker.showMarker === false ? 'false' : 'true');
   }
