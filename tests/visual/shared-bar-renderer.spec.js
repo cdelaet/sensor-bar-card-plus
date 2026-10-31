@@ -1,5 +1,37 @@
 const { test, expect } = require('@playwright/test');
 
+test('historical status badges are hover targets with tooltips in card and feature styling', async ({ page }) => {
+  await page.route('**/src/history/time-window.js', async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, body: (await response.text()).replace("from 'weekstart'", "from '/node_modules/weekstart/dist/es-module/main.js'") });
+  });
+  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.evaluate(async () => {
+    const { renderMarker, patchMarker } = await import('/src/render/bar-renderer.js');
+    const { barMarkerStyles } = await import('/src/render/bar-styles.js');
+    document.body.innerHTML = `<style>${barMarkerStyles}
+      .surface .bar-track *, .surface .marker-shape-svg path[data-shape] { pointer-events: none; }
+      .bar-track { position: relative; width: 300px; height: 40px; margin: 30px; }
+    </style><div class="bar-track" id="card"></div><div class="surface"><div class="bar-track" id="feature"></div></div>`;
+    for (const [id, type, status] of [['card', 'peak', 'partial'], ['feature', 'floor', 'stale']]) {
+      const marker = { type, id: type, visible: true, position: 50, historyStatus: status };
+      const root = document.getElementById(id);
+      root.innerHTML = renderMarker(marker);
+      window[`patch_${id}`] = next => patchMarker(root.firstElementChild, { ...marker, historyStatus: next });
+    }
+  });
+  for (const [id, title, glyph] of [['card', 'Partial history', '!'], ['feature', 'Stale history', '~']]) {
+    const indicator = page.locator(`#${id} .history-indicator`);
+    await expect(indicator).toHaveText(glyph);
+    await expect(indicator).toHaveAttribute('title', title);
+    await indicator.hover();
+    await expect(indicator).toHaveCSS('pointer-events', 'auto');
+    await page.evaluate(id => window[`patch_${id}`]('available'), id);
+    await expect(indicator).toHaveText('');
+    await expect(indicator).toHaveAttribute('title', '');
+  }
+});
+
 for (const fillStyle of ['solid', 'bands', 'soft_bands', 'gradient', 'band_gradient']) {
   test(`shared ${fillStyle} bars render and patch in adapter DOM without a card`, async ({ page }) => {
     await page.goto('/tests/visual/fixtures/harness.html');

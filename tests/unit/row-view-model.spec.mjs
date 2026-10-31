@@ -4,7 +4,7 @@ import { buildRowViewModel } from '../../src/view-model/row-view-model.js';
 import { formatNumericDisplay } from '../../src/utils/format.js';
 import { historicalMarkerConsumers } from '../../src/history/marker-consumers.js';
 import { normalizeHistoryResponse } from '../../src/history/history-provider.js';
-import { calculateObservationValue } from '../../src/history/calculations.js';
+import { calculateObservationValue } from '../support/history-observation-oracle.mjs';
 
 function sensor(state, attrs = {}) {
   return {

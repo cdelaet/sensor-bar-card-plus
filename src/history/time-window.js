@@ -220,7 +220,8 @@ export function resolveTimeWindow(spec, options = {}) {
   } else if (kind === 'rolling') {
     const durationMs = Number.isFinite(spec.durationMs) ? spec.durationMs : durationMilliseconds(spec.duration);
     if (!Number.isFinite(durationMs) || durationMs <= 0) throw new RangeError('Rolling duration must be positive');
-    start = now - durationMs;
+    if (durationMs % 60000 !== 0) throw new RangeError('Rolling duration must be a whole number of minutes');
+    start = Math.floor(now / 60000) * 60000 - durationMs;
     end = now;
     metadata = { kind, durationMs, partial: false };
   } else if (kind === 'calendar' || kind === 'shifted_calendar') {
@@ -276,6 +277,45 @@ export function resolveTimeWindow(spec, options = {}) {
       future: !(kind === 'calendar' && start === now && end === now + 1) && (start > now || end > now),
       rolloverAt },
   };
+}
+
+// Plan acquisition without rounding calendar or absolute boundaries. A long
+// rolling duration counts complete UTC hours plus the current unfinished hour.
+export function planHistoricalAcquisition(window, now = Date.now()) {
+  if (!window || !Number.isFinite(window.start) || !Number.isFinite(window.end)
+    || window.end <= window.start || !Number.isFinite(now)) throw new TypeError('A valid resolved window and current time are required');
+  const invalid = reason => ({ mode: 'invalid', reason, window });
+  if (window.end > now && !(window.semantics?.kind === 'calendar' && window.start === now && window.end === now + 1)) {
+    return invalid('Future history is not available');
+  }
+  if (window.start >= now - DAY_MS
+    || (window.semantics?.kind === 'rolling' && window.semantics.durationMs <= DAY_MS)) {
+    if (window.start % 60000 !== 0 || (window.end !== now && window.end % 60000 !== 0
+      && !(window.semantics?.kind === 'calendar' && window.end === now + 1))) {
+      return invalid('Recent historical window boundaries must be aligned to whole minutes');
+    }
+    return { mode: 'raw', window, raw: { start: window.start, end: window.end } };
+  }
+
+  const hour = Math.floor(now / HOUR_MS) * HOUR_MS;
+  let start = window.start;
+  if (window.semantics?.kind === 'rolling') {
+    const duration = window.semantics.durationMs;
+    if (!Number.isFinite(duration) || duration % HOUR_MS !== 0) return invalid('Long rolling windows must contain whole hours');
+    start = hour - duration;
+  }
+  const endsNow = window.end === now;
+  const completedEnd = endsNow ? hour : window.end;
+  if (start % HOUR_MS !== 0 || completedEnd % HOUR_MS !== 0) {
+    return invalid('Historical statistics require whole UTC-hour boundaries');
+  }
+  if (completedEnd <= start) return invalid('Historical statistics require at least one complete hour');
+  const statistics = { start, end: completedEnd };
+  const raw = endsNow && window.end > hour ? { start: hour, end: window.end } : null;
+  const effective = { ...window, start, cacheKey: `${window.cacheKey}:statistics`,
+    acquisition: { mode: 'statistics', statistics, raw },
+    semantics: { ...window.semantics, acquisition: 'statistics' } };
+  return { mode: 'statistics', window: effective, statistics, raw };
 }
 
 function durationMilliseconds(duration) {

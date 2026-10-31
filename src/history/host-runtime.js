@@ -1,11 +1,13 @@
 import { getSharedObservationService } from './observation-service.js';
 import { historySourceKey } from './history-provider.js';
 import { HistoricalValueResolver, normalizeValueSpec } from './value-resolver.js';
+import { historyDebugEnabled, historyDebugId, historyDebugLog, historyDebugTime } from './history-debug.js';
 
 // A connection owns one event subscription regardless of the number of cards.
 const connections = new WeakMap();
 const RETRY_INITIAL_MS = 1000;
 const RETRY_MAX_MS = 60000;
+const MAX_PENDING_EVENTS = 10000;
 
 function authorizationFailure(error) {
   return ['unauthorized', 'forbidden', 'invalid_auth'].includes(String(error?.code ?? '').toLowerCase());
@@ -21,6 +23,7 @@ class ConnectionHistory {
     this.service = getSharedObservationService(hass);
     this.hosts = new Set();
     this.sourceMap = new Map();
+    this.sourceLiveStarts = new Map();
     this.lastStates = new Map();
     this.pendingEvents = [];
     this.pendingOverflow = false;
@@ -38,6 +41,8 @@ class ConnectionHistory {
     this.online = connection.connected !== false && hass.connected !== false;
     this.ready = false;
     this.unsubscribe = null;
+    this.liveStartedAt = null;
+    this.debugSubscriptionTimer = null;
     this.onDisconnect = () => this.disconnect();
     this.onReady = () => this.reconnect();
     connection.addEventListener?.('disconnected', this.onDisconnect);
@@ -49,6 +54,10 @@ class ConnectionHistory {
     const sources = new Map();
     for (const host of this.hosts) for (const entry of host.entries.values()) {
       sources.set(historySourceKey(entry.spec.source), entry.spec.source);
+    }
+    for (const key of this.sourceLiveStarts.keys()) if (!sources.has(key)) this.sourceLiveStarts.delete(key);
+    if (this.online && this.ready && typeof this.unsubscribe === 'function') {
+      for (const key of sources.keys()) if (!this.sourceLiveStarts.has(key)) this.sourceLiveStarts.set(key, Date.now());
     }
     this.sourceMap = sources;
     for (const key of this.lastStates.keys()) if (!sources.has(key)) this.lastStates.delete(key);
@@ -65,6 +74,8 @@ class ConnectionHistory {
     if (this.recoveryTimer !== null) clearTimeout(this.recoveryTimer);
     this.subscriptionTimer = null;
     this.recoveryTimer = null;
+    if (this.debugSubscriptionTimer !== null) clearTimeout(this.debugSubscriptionTimer);
+    this.debugSubscriptionTimer = null;
   }
 
   markDirty(source, changed = true) {
@@ -142,7 +153,10 @@ class ConnectionHistory {
   disconnect() {
     if (!this.online) return;
     this.online = false;
+    if (historyDebugEnabled()) historyDebugLog('subscription.disconnected', { sources: [...this.sourceMap.values()] });
     this.ready = false;
+    this.liveStartedAt = null;
+    this.sourceLiveStarts.clear();
     this.generation += 1;
     this.connectionEpoch += 1;
     this.cancelTimers();
@@ -156,6 +170,7 @@ class ConnectionHistory {
     this.pendingEvents = [];
     this.pendingOverflow = false;
     this.service.invalidate({ sources: [...this.sourceMap.values()] });
+    this.service.retireConnection();
   }
 
   reconnect() {
@@ -168,6 +183,18 @@ class ConnectionHistory {
     if (this.subscribing || !this.online) return;
     this.subscribing = true;
     const generation = ++this.generation;
+    const debug = historyDebugEnabled();
+    const subscriptionId = debug ? historyDebugId('subscription') : null;
+    const started = debug ? historyDebugTime() : 0;
+    if (debug) {
+      historyDebugLog('subscription.start', { subscriptionId, generation, online: this.online });
+      this.debugSubscriptionTimer = setTimeout(() => {
+        this.debugSubscriptionTimer = null;
+        if (this.subscribing && generation === this.generation) historyDebugLog('subscription.still_waiting', {
+          subscriptionId, elapsedMs: historyDebugTime() - started, sources: [...this.sourceMap.values()],
+        });
+      }, 30000);
+    }
     const deliver = (event) => {
       if (!this.online || generation !== this.generation) return;
       const entity = event?.data?.entity_id;
@@ -175,7 +202,7 @@ class ConnectionHistory {
         ? { state: 'unavailable', attributes: {}, last_updated: event.time_fired } : null);
       if (!entity || !state || ![...this.sourceMap.values()].some((source) => source.entityId === entity)) return;
       if (this.ready) this.deliver(entity, state);
-      else if (this.pendingEvents.length < this.service.maxConsumerObservations) this.pendingEvents.push({ entity, state });
+      else if (this.pendingEvents.length < MAX_PENDING_EVENTS) this.pendingEvents.push({ entity, state });
       else this.pendingOverflow = true;
     };
     let request;
@@ -188,6 +215,9 @@ class ConnectionHistory {
       }
     } catch (error) { request = Promise.reject(error); }
     if (!request) {
+      if (this.debugSubscriptionTimer !== null) clearTimeout(this.debugSubscriptionTimer);
+      this.debugSubscriptionTimer = null;
+      if (debug) historyDebugLog('subscription.unavailable', { subscriptionId, elapsedMs: historyDebugTime() - started });
       this.subscribing = false;
       this.subscriptionPermanent = true;
       this.ready = true;
@@ -195,11 +225,19 @@ class ConnectionHistory {
       return;
     }
     Promise.resolve(request).then((unsubscribe) => {
+      if (this.debugSubscriptionTimer !== null && generation === this.generation) clearTimeout(this.debugSubscriptionTimer);
+      if (generation === this.generation) this.debugSubscriptionTimer = null;
       if (!this.online || generation !== this.generation || !this.hosts.size) {
+        if (debug) historyDebugLog('subscription.superseded', { subscriptionId, elapsedMs: historyDebugTime() - started });
         releaseSubscription(unsubscribe);
         return;
       }
       this.unsubscribe = unsubscribe;
+      if (debug) historyDebugLog('subscription.ready', { subscriptionId, elapsedMs: historyDebugTime() - started,
+        hasUnsubscribe: typeof unsubscribe === 'function', sources: [...this.sourceMap.values()] });
+      this.liveStartedAt = typeof unsubscribe === 'function' ? Date.now() : null;
+      this.sourceLiveStarts.clear();
+      if (this.liveStartedAt !== null) for (const key of this.sourceMap.keys()) this.sourceLiveStarts.set(key, this.liveStartedAt);
       this.subscribing = false;
       this.subscriptionPermanent = false;
       this.subscriptionDelay = RETRY_INITIAL_MS;
@@ -214,9 +252,13 @@ class ConnectionHistory {
       if (recovering || this.pendingOverflow) for (const source of this.sourceMap.values()) this.markDirty(source);
       this.pendingOverflow = false;
     }).catch((error) => {
+      if (this.debugSubscriptionTimer !== null && generation === this.generation) clearTimeout(this.debugSubscriptionTimer);
+      if (generation === this.generation) this.debugSubscriptionTimer = null;
       if (!this.online || generation !== this.generation) return;
+      if (debug) historyDebugLog('subscription.error', { subscriptionId, elapsedMs: historyDebugTime() - started, error: String(error) });
       this.generation += 1;
       this.subscribing = false;
+      this.liveStartedAt = null;
       this.subscriptionPermanent = authorizationFailure(error);
       const initialFailure = !this.ready;
       if (initialFailure || this.pendingEvents.length || this.pendingOverflow) {
@@ -261,6 +303,8 @@ class ConnectionHistory {
   close() {
     this.online = false;
     this.ready = false;
+    this.liveStartedAt = null;
+    this.sourceLiveStarts.clear();
     this.generation += 1;
     this.connectionEpoch += 1;
     this.cancelTimers();
@@ -332,6 +376,12 @@ export class HistoricalHostRuntime {
       hub.hosts.add(this);
     }
     this.hub.updateSources();
+    if (!this.hub.ready && historyDebugEnabled()) for (const entry of this.entries.values()) {
+      if (entry.debugWaiting) continue;
+      entry.debugWaiting = true;
+      historyDebugLog('consumer.waiting_for_subscription', { consumerId: entry.id, source: entry.spec.source,
+        calculation: entry.spec.calculation, windowSpec: entry.spec.window, online: this.hub.online });
+    }
     if (this.hub.ready) this.activate(false);
   }
 
@@ -339,22 +389,39 @@ export class HistoricalHostRuntime {
     if (!this.attached || !this.hub?.online || !this.hub.ready) return;
     const resolver = new HistoricalValueResolver({ service: this.hub.service });
     for (const entry of this.entries.values()) {
+      entry.debugWaiting = false;
       if (entry.starting) continue;
       if (entry.stop) {
         if (revalidate) entry.stop.refresh();
         continue;
       }
-      const context = { hass: this.hass };
+      const context = { hass: this.hass, liveCoverageStart: () => {
+        if (!hub.online || !hub.ready || typeof hub.unsubscribe !== 'function' || !Number.isFinite(hub.liveStartedAt)) return null;
+        return hub.sourceLiveStarts.get(historySourceKey(entry.spec.source)) ?? null;
+      } };
       entry.context = context;
       const current = entry;
       const hub = this.hub;
+      const debugConsumer = historyDebugEnabled();
       entry.starting = true;
       const stop = resolver.watch(entry.spec, context, (result) => {
         if (this.attached && this.entries.get(entry.id) === current && this.hub) {
           this.results.set(entry.id, result);
+          if (debugConsumer) {
+            const signature = `${result.status}:${Number.isFinite(result.value)}:${Boolean(result.provenance?.error)}`;
+            if (signature !== entry.debugResultSignature) {
+              entry.debugResultSignature = signature;
+              historyDebugLog('consumer.result', { consumerId: entry.id, source: entry.spec.source,
+                calculation: entry.spec.calculation, status: result.status, hasValue: Number.isFinite(result.value),
+                error: result.provenance?.error ? String(result.provenance.error) : null });
+            }
+          }
           if (result.provenance?.error && this.hub?.online) this.hub.acquisitionFailed(entry.spec.source, result.provenance.error);
-          try { this.onChange?.(entry.id, result); } catch { /* Isolate host callbacks. */ }
-        }
+          try { this.onChange?.(entry.id, result); } catch (error) {
+            if (debugConsumer) historyDebugLog('consumer.notification.error', { consumerId: entry.id, error: String(error) });
+          }
+        } else if (debugConsumer) historyDebugLog('consumer.result_discarded', { consumerId: entry.id,
+          source: entry.spec.source, reason: 'Host detached or consumer replaced' });
       });
       entry.starting = false;
       if (this.attached && this.entries.get(entry.id) === current && this.hub === hub) entry.stop = stop;

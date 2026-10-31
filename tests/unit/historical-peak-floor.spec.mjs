@@ -110,13 +110,13 @@ describe('historical Peak/Floor', () => {
   it('renders ordinary Recorder results without a partial badge while preserving unknown coverage', async () => {
     const now = Date.parse('2026-05-13T12:00:00Z');
     const hass = { config: { time_zone: 'UTC' }, callWS: vi.fn(async () => ({ [entity]: [
-      { s: '10', lu: Date.parse('2026-05-12T10:00:00Z') / 1000 },
-      { s: '90', lu: Date.parse('2026-05-12T11:00:00Z') / 1000 },
+      { s: '10', lu: Date.parse('2026-05-13T10:00:00Z') / 1000 },
+      { s: '90', lu: Date.parse('2026-05-13T11:00:00Z') / 1000 },
     ] })) };
     const resolver = new HistoricalValueResolver({ now: () => now, serviceOptions: { now: () => now } });
     for (const [marker, calculation, value] of [['peak', 'max', 90], ['floor', 'min', 10]]) {
       const result = await resolver.resolve({ source: { entityId: entity }, calculation,
-        window: { kind: 'shifted_calendar', period: 'day', shift: { amount: -1, unit: 'day' } } }, { hass });
+        window: { kind: 'calendar', period: 'day' } }, { hass });
       expect(result).toMatchObject({ value, status: 'available', provenance: { coverage: { complete: false, kind: 'unknown' } } });
       const html = renderMarker(row(marker, result).markers.find(m => m.type === marker));
       expect(html).not.toContain('data-history-status="partial"');
@@ -150,13 +150,14 @@ describe('historical Peak/Floor', () => {
     await vi.waitFor(() => expect(feature._historicalRuntime.getResult(floorId)?.value).toBe(10));
     await vi.waitFor(() => expect(feature._row?.floor).toBe(10));
     expect(feature._row.peak).toBe(90);
-    expect(feature._row.floorStatus).toBe('partial');
+    expect(feature._row.floorStatus).toBe('available');
     const model = card._buildRowViewModel(card._config.entities[0], card._config.entities[0], hass.states[entity]);
     expect(model.peak).toBe(90); expect(model.floor).toBe(10);
     expect(model.markers.find(m => m.type === 'peak').position).toBeCloseTo(10);
     expect(model.markers.find(m => m.type === 'floor').position).toBeCloseTo(90);
     expect(card._historicalRuntime.hub).toBe(feature._historicalRuntime.hub);
-    expect(card._historicalRuntime.hub.service.journals.size).toBe(1);
+    expect(card._historicalRuntime.hub.service.families.size).toBe(1);
+    expect(card._historicalRuntime.hub.service.sourceHistories.size).toBe(1);
     expect(callWS).toHaveBeenCalledTimes(1);
     card.disconnectedCallback(); card.connectedCallback();
     await vi.waitFor(() => expect(card._historicalRuntime.getResult(peakId)?.value).toBe(90));
@@ -202,8 +203,11 @@ describe('historical Peak/Floor', () => {
       vi.setSystemTime(new Date('2026-05-13T23:59:58Z'));
       const sourceKey = `${entity}\u0000`;
       const provider = vi.fn(async (_hass, sources, window) => new Map([[sourceKey, {
-        source: sources[0], observations: [{ timestamp: window.start + 1000,
-          value: new Date(window.start).getUTCDate(), state: 'ok' }],
+        source: sources[0], observations: [], statisticsWindow: { start: window.start, end: window.end },
+        statistics: { buckets: Array.from({ length: (window.end - window.start) / 3600000 }, (_, index) => ({
+          start: window.start + index * 3600000, end: window.start + (index + 1) * 3600000,
+          min: new Date(window.start).getUTCDate(), max: new Date(window.start).getUTCDate(),
+        })) },
         coverage: { complete: false }, retrievedAt: Date.now(),
       }]]));
       const service = new SharedObservationService({ provider });

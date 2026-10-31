@@ -1,10 +1,90 @@
 import { describe, expect, it } from 'vitest';
-import { calculateObservationValue, normalizeObservations } from '../../src/history/calculations.js';
+import { advanceMinuteBuckets, aggregateMinuteBuckets, calculateMinuteBuckets, normalizeObservations } from '../../src/history/calculations.js';
+import { calculateObservationValue } from '../support/history-observation-oracle.mjs';
 
 const window = { start: 100, end: 200 };
 const observation = (timestamp, value, order = 0) => ({ timestamp, value, order });
 
 describe('historical extrema calculations', () => {
+  it('advances five minute rollovers without observations and expires old extrema', () => {
+    const samples = Array.from({ length: 86400 }, (_, index) => ({ timestamp: index * 1000,
+      value: index === 1 ? 1000 : index === 2 ? -1000 : index % 31,
+      state: 's', origin: 'recorder', order: index, orderKnown: true }));
+    const end = 86400000;
+    let buckets = aggregateMinuteBuckets(samples, { start: 0, end }, { ordered: true });
+    for (let minute = 1; minute <= 5; minute += 1) {
+      const window = { start: minute * 60000, end: end + minute * 60000 };
+      buckets = advanceMinuteBuckets(buckets, [], window);
+      const expected = aggregateMinuteBuckets(samples, window, { ordered: true });
+      for (const calculation of ['max', 'min']) {
+        expect(calculateMinuteBuckets(buckets, calculation, window)).toMatchObject({
+          value: calculateMinuteBuckets(expected, calculation, window).value,
+          sampleCount: calculateMinuteBuckets(expected, calculation, window).sampleCount,
+          orderingAmbiguous: false,
+        });
+      }
+      expect(calculateMinuteBuckets(buckets, 'max', window).value).toBe(30);
+      expect(calculateMinuteBuckets(buckets, 'min', window).value).toBe(0);
+    }
+  });
+  it('aggregates 86400 transitions into exact minute extrema and carries states', () => {
+    const samples = Array.from({ length: 86400 }, (_, i) => ({ timestamp: i * 1000,
+      value: i === 1 ? 1000 : i === 2 ? -1000 : i % 31, order: i, orderKnown: true, origin: 'recorder' }));
+    const window = { start: 0, end: 86400000 };
+    const buckets = aggregateMinuteBuckets(samples, window);
+    expect(buckets).toHaveLength(1440);
+    expect(calculateMinuteBuckets(buckets, 'max', window).value).toBe(1000);
+    expect(calculateMinuteBuckets(buckets, 'min', window).value).toBe(-1000);
+    const carry = aggregateMinuteBuckets([{ timestamp: -1, value: 8 }, { timestamp: 120000, value: null }], { start: 0, end: 180000 });
+    expect(carry.map(bucket => bucket.max?.value ?? null)).toEqual([8, 8, null]);
+  });
+
+  it('preserves equal-time ambiguity until the next effective transition', () => {
+    const window = { start: 0, end: 180000 };
+    const samples = [{ timestamp: -10, value: 2 }, { timestamp: 60000, value: 100 },
+      { timestamp: 60000, value: 5 }, { timestamp: 130000, value: 7 }];
+    const buckets = aggregateMinuteBuckets(samples, window);
+    expect(buckets.map(bucket => bucket.ambiguous)).toEqual([false, true, true]);
+    expect(calculateMinuteBuckets(buckets, 'max', window)).toMatchObject({ value: null, orderingAmbiguous: true });
+  });
+
+  it('distinguishes matching and conflicting late Recorder/live transitions even when bucket extrema match', () => {
+    const window = { start: 0, end: 60000 };
+    const event = (timestamp, value, origin, order) => ({ timestamp, value, state: String(value),
+      origin, order, orderKnown: true, orderDomain: origin });
+    const samples = value => [event(0, 0, 'recorder', 0), event(10000, value, 'live', 1),
+      event(20000, 10, 'recorder', 2), event(30000, 0, 'recorder', 3)];
+    const matching = samples(5), conflicting = samples(6);
+    const summary = events => {
+      const [bucket] = aggregateMinuteBuckets(events, window);
+      return { min: bucket.min.value, max: bucket.max.value, end: bucket.endState.value, count: bucket.numericCount };
+    };
+    expect(summary(matching)).toEqual(summary(conflicting));
+    const late = event(10000, 5, 'recorder', 4);
+    expect(calculateMinuteBuckets(aggregateMinuteBuckets([...matching, late], window), 'max', window))
+      .toMatchObject({ value: 10, orderingAmbiguous: false });
+    expect(calculateMinuteBuckets(aggregateMinuteBuckets([...conflicting, late], window), 'max', window))
+      .toMatchObject({ value: null, orderingAmbiguous: true });
+  });
+
+  it('matches ordered-state extrema for aligned subwindows', () => {
+    let seed = 17;
+    const samples = Array.from({ length: 5000 }, (_, index) => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return { timestamp: index * 1000, value: index % 127 === 0 ? null : (seed % 1000) - 500,
+        state: 's', order: index, orderKnown: true, origin: 'recorder' };
+    });
+    const buckets = aggregateMinuteBuckets(samples, { start: 0, end: 5040000 });
+    for (let start = 0; start < 4800000; start += 300000) for (const calculation of ['max', 'min']) {
+      const window = { start, end: 5040000 };
+      const expected = calculateObservationValue(samples, calculation, window);
+      const actual = calculateMinuteBuckets(buckets, calculation, window);
+      expect(actual.value).toBe(expected.value);
+      expect(actual.sampleCount).toBe(expected.sampleCount);
+      expect(actual.boundaryIncluded).toBe(expected.boundaryIncluded);
+    }
+    expect(() => calculateMinuteBuckets(buckets, 'max', { start: 1, end: 5040000 })).toThrow('minute-aligned');
+  });
   it('calculates max and min from unordered observations', () => {
     const samples = [observation(150, 8), observation(120, 2), observation(180, 5)];
     expect(calculateObservationValue(samples, 'max', window).value).toBe(8);

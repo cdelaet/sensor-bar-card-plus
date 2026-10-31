@@ -1,7 +1,7 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { createCard } from '../support/load-card-class.cjs';
 import { historicalMarkerId } from '../../src/history/marker-consumers.js';
-import { calculateObservationValue } from '../../src/history/calculations.js';
+import { calculateObservationValue } from '../support/history-observation-oracle.mjs';
 import { resolveTimeWindow } from '../../src/history/time-window.js';
 
 const both = { peak: { enabled: true }, floor: { enabled: true } };
@@ -49,7 +49,7 @@ describe('shared historical extrema for rows', () => {
     const { card, callWS } = fixture([row('A', a), row('B', b)]); await ready(card);
     expect(values(models(card))).toEqual(expected);
     expect(callWS).toHaveBeenCalledTimes(1);
-    expect(card._historicalRuntime.hub.service.journals.size).toBe(1);
+    expect(card._historicalRuntime.hub.service.families.size).toBe(1);
   });
 
   it.each([
@@ -105,7 +105,7 @@ describe('shared historical extrema for rows', () => {
       row('Long', { peak: { enabled: true, window: '24h' } })]); await ready(card);
     expect(values(models(card))).toEqual([[90, null], [90, null]]);
     expect(card._historicalRuntime.entries.size).toBe(2);
-    expect(card._historicalRuntime.hub.service.journals.size).toBe(2);
+    expect(card._historicalRuntime.hub.service.families.size).toBe(2);
   });
 
   it('keeps effective boundary states and handles unavailable transitions', () => {

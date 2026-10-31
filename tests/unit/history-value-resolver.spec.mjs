@@ -1,12 +1,211 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HistoricalValueResolver } from '../../src/history/value-resolver.js';
 import { SharedObservationService } from '../../src/history/observation-service.js';
+import { calculateObservationValue } from '../support/history-observation-oracle.mjs';
 
 const sourceKey = 'sensor.soil\u0000';
 const spec = { provider: 'recorder_history', source: { entityId: 'sensor.soil' }, calculation: 'max',
   window: { kind: 'calendar', period: 'day' } };
 
 describe('historical value resolver', () => {
+  it('reports unaligned Kathmandu calendar statistics as unavailable with a reason', async () => {
+    const now = Date.parse('2026-10-31T12:00:00Z');
+    const resolver = new HistoricalValueResolver({ now: () => now });
+    const callWS = vi.fn();
+    const result = await resolver.resolve({ ...spec,
+      window: { kind: 'shifted_calendar', period: 'month', shift: { amount: -1, unit: 'month' } } },
+    { hass: { callWS, config: { time_zone: 'Asia/Kathmandu' } } });
+    expect(result.status).toBe('unavailable');
+    expect(result.provenance.error.message).toContain('whole UTC-hour');
+    expect(callWS).not.toHaveBeenCalled();
+  });
+  it('shares exact peak and floor for a full day of one-second observations', async () => {
+    const now = Date.parse('2026-10-31T12:00:00Z');
+    const states = Array.from({ length: 86400 }, (_, index) => ({
+      s: String(index === 1 ? 1000 : index === 2 ? -1000 : index % 31),
+      lu: (now - 86400000 + index * 1000) / 1000,
+    }));
+    const callWS = vi.fn(async () => ({ 'sensor.soil': states }));
+    const hass = { callWS, config: { time_zone: 'UTC' } };
+    const service = new SharedObservationService({ now: () => now });
+    const resolver = new HistoricalValueResolver({ service, now: () => now });
+    const rolling = { ...spec, window: { kind: 'rolling', duration: { amount: 24, unit: 'hour' } } };
+    const peak = vi.fn(), floor = vi.fn();
+    const stopPeak = resolver.watch(rolling, { hass }, peak);
+    const stopFloor = resolver.watch({ ...rolling, calculation: 'min' }, { hass }, floor);
+    await vi.waitFor(() => {
+      expect(peak.mock.calls.at(-1)?.[0].value).toBe(1000);
+      expect(floor.mock.calls.at(-1)?.[0].value).toBe(-1000);
+      expect(peak.mock.calls.at(-1)?.[0].status).toBe('available');
+      expect(floor.mock.calls.at(-1)?.[0].status).toBe('available');
+    }, { timeout: 10000 });
+    expect(callWS).toHaveBeenCalledTimes(1);
+    stopPeak(); stopFloor();
+  }, 15000);
+
+  it('updates shared minute extrema for ordered, invalid, and out-of-order live transitions', async () => {
+    let clock = Date.parse('2026-05-13T10:00:00Z');
+    const service = new SharedObservationService({ now: () => clock, provider: async (_hass, sources, window) => new Map([[sourceKey, {
+      source: sources[0], observations: [{ timestamp: window.start, value: 5, state: '5', origin: 'recorder', order: 0, orderKnown: true }],
+      retrievedAt: clock, coverage: { kind: 'unknown', complete: false },
+    }]]) });
+    const resolver = new HistoricalValueResolver({ service, now: () => clock });
+    const hass = { config: { time_zone: 'UTC' } }, peak = vi.fn(), floor = vi.fn();
+    const stopPeak = resolver.watch(spec, { hass }, peak), stopFloor = resolver.watch({ ...spec, calculation: 'min' }, { hass }, floor);
+    await vi.waitFor(() => expect(peak.mock.calls.at(-1)[0].value).toBe(5));
+    clock += 10000; resolver.ingestLiveState(hass, { entityId: 'sensor.soil' }, { state: '30' }, clock - 1);
+    clock += 1000; resolver.ingestLiveState(hass, { entityId: 'sensor.soil' }, { state: '-5' }, clock - 1);
+    expect(peak.mock.calls.at(-1)[0].value).toBe(30);
+    expect(floor.mock.calls.at(-1)[0].value).toBe(-5);
+    clock += 1000; resolver.ingestLiveState(hass, { entityId: 'sensor.soil' }, { state: 'unavailable' }, clock - 1);
+    clock += 1000; resolver.ingestLiveState(hass, { entityId: 'sensor.soil' }, { state: '25' }, clock - 1);
+    expect(peak.mock.calls.at(-1)[0].value).toBe(30);
+    expect(floor.mock.calls.at(-1)[0].value).toBe(-5);
+    clock += 1000; resolver.ingestLiveState(hass, { entityId: 'sensor.soil' }, { state: '50' }, clock - 2500);
+    expect(peak.mock.calls.at(-1)[0].value).toBe(50);
+    stopPeak(); stopFloor();
+  });
+
+  it('shares covering source history between different rolling durations', async () => {
+    let clock = Date.parse('2026-05-13T10:00:30Z');
+    const callWS = vi.fn(async () => ({ 'sensor.soil': [
+      { s: '90', lu: Date.parse('2026-05-13T09:58:15Z') / 1000 },
+      { s: '5', lu: Date.parse('2026-05-13T09:59:00Z') / 1000 },
+    ] }));
+    const hass = { callWS, config: { time_zone: 'UTC' } };
+    const service = new SharedObservationService({ now: () => clock });
+    const resolver = new HistoricalValueResolver({ service, now: () => clock });
+    const rolling = minutes => ({ ...spec, window: { kind: 'rolling', duration: { amount: minutes, unit: 'minute' } } });
+    const wide = vi.fn(), narrow = vi.fn();
+    const stopWide = resolver.watch(rolling(2), { hass }, wide);
+    const stopNarrow = resolver.watch(rolling(1), { hass }, narrow);
+    await vi.waitFor(() => {
+      expect(wide.mock.calls.at(-1)[0].value).toBe(90);
+      expect(narrow.mock.calls.at(-1)[0].value).toBe(5);
+    });
+    expect(callWS).toHaveBeenCalledOnce();
+    expect(service.sourceHistories.size).toBe(1);
+    clock += 1000; resolver.ingestLiveState(hass, { entityId: 'sensor.soil' }, { state: '50' }, clock - 1);
+    expect(wide.mock.calls.at(-1)[0].value).toBe(90);
+    expect(narrow.mock.calls.at(-1)[0].value).toBe(50);
+    stopWide();
+    expect(service.sourceHistories.size).toBe(1);
+    stopNarrow();
+    expect(service.sourceHistories.size).toBe(0);
+  });
+
+  it('matches the transition oracle while live updates cross minute boundaries', async () => {
+    let clock = Date.parse('2026-05-13T10:00:30Z');
+    const initial = { timestamp: Date.parse('2026-05-13T09:59:00Z'), value: 5, state: '5',
+      origin: 'recorder', order: 0, orderKnown: true };
+    const service = new SharedObservationService({ now: () => clock, provider: async (_hass, sources) => new Map([[sourceKey, {
+      source: sources[0], observations: [initial], retrievedAt: clock, coverage: { complete: false, kind: 'unknown' },
+    }]]) });
+    const resolver = new HistoricalValueResolver({ service, now: () => clock });
+    const hass = { config: { time_zone: 'UTC' } }, peak = vi.fn(), floor = vi.fn();
+    const rolling = { ...spec, window: { kind: 'rolling', duration: { amount: 1, unit: 'minute' } } };
+    const stopPeak = resolver.watch(rolling, { hass }, peak);
+    const stopFloor = resolver.watch({ ...rolling, calculation: 'min' }, { hass }, floor);
+    await vi.waitFor(() => expect(peak.mock.calls.at(-1)[0].value).toBe(5));
+    const samples = [initial]; let seed = 7;
+    for (let index = 0; index < 120; index += 1) {
+      clock += 1000; seed = (seed * 1664525 + 1013904223) >>> 0;
+      const value = index % 17 === 0 ? null : (seed % 201) - 100;
+      const state = value === null ? 'unavailable' : String(value);
+      const timestamp = clock - 1;
+      samples.push({ timestamp, value, state, origin: 'live', order: index + 1, orderKnown: true });
+      resolver.ingestLiveState(hass, { entityId: 'sensor.soil' }, { state }, timestamp);
+      const window = { start: Math.floor(clock / 60000) * 60000 - 60000, end: clock };
+      expect(peak.mock.calls.at(-1)[0].value).toBe(calculateObservationValue(samples, 'max', window).value);
+      expect(floor.mock.calls.at(-1)[0].value).toBe(calculateObservationValue(samples, 'min', window).value);
+    }
+    stopPeak(); stopFloor();
+  });
+  it('resolves long rolling extrema from hourly statistics and the raw current hour', async () => {
+    const now = Date.parse('2026-10-31T12:30:00Z');
+    const callWS = vi.fn(async request => {
+      if (request.type === 'recorder/get_statistics_metadata') return [{ statistic_id: 'sensor.soil', mean_type: 1 }];
+      if (request.type === 'history/history_during_period') return { 'sensor.soil': [{ s: '8', lu: now / 1000 - 100 }] };
+      const start = Date.parse(request.start_time), end = Date.parse(request.end_time);
+      return { 'sensor.soil': Array.from({ length: (end - start) / 3600000 }, (_, index) => ({
+        start: start + index * 3600000, end: start + (index + 1) * 3600000, min: 2, max: index === 0 ? 100 : 20,
+      })) };
+    });
+    const resolver = new HistoricalValueResolver({ now: () => now, serviceOptions: { now: () => now } });
+    const hass = { callWS, config: { time_zone: 'UTC' } };
+    const longSpec = { ...spec, window: { kind: 'rolling', duration: { amount: 48, unit: 'hour' } } };
+    const max = await resolver.resolve(longSpec, { hass });
+    const min = await resolver.resolve({ ...longSpec, calculation: 'min' }, { hass });
+    expect(max).toMatchObject({ value: 100, status: 'available', provenance: { selectedTimestamp: null } });
+    expect(min).toMatchObject({ value: 2, status: 'available', provenance: { selectedTimestamp: null } });
+    expect(callWS.mock.calls.filter(([request]) => request.type === 'history/history_during_period')).toHaveLength(1);
+  });
+
+  it('keeps a raw extremum when a completed-hour bucket is delayed', async () => {
+    vi.useFakeTimers();
+    try {
+      const now = Date.parse('2026-10-31T12:59:59Z');
+      vi.setSystemTime(now);
+      const callWS = vi.fn(async request => {
+        if (request.type === 'recorder/get_statistics_metadata') return [{ statistic_id: 'sensor.soil', mean_type: 1 }];
+        if (request.type === 'history/history_during_period') return { 'sensor.soil': [
+          { s: Date.now() < now + 1000 ? '100' : '5', lu: Date.now() / 1000 - 0.5 },
+        ] };
+        const start = Date.parse(request.start_time), end = Date.parse(request.end_time);
+        return { 'sensor.soil': Array.from({ length: (end - start) / 3600000 }, (_, index) => ({
+          start: start + index * 3600000, end: start + (index + 1) * 3600000, min: 1, max: 10,
+        })).filter(bucket => bucket.start !== Date.parse('2026-10-31T12:00:00Z')) };
+      });
+      const hass = { callWS, config: { time_zone: 'UTC' } };
+      const resolver = new HistoricalValueResolver();
+      const callback = vi.fn();
+      const dispose = resolver.watch({ ...spec, window: { kind: 'rolling', duration: { amount: 48, unit: 'hour' } } },
+        { hass }, callback);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(callback.mock.calls.at(-1)[0]).toMatchObject({ value: 100, status: 'available' });
+      await vi.advanceTimersByTimeAsync(1100);
+      expect(callback.mock.calls.at(-1)[0]).toMatchObject({ value: 100, status: 'partial' });
+      dispose();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('deduplicates recent-bucket retries and recovers after repeated failures', async () => {
+    vi.useFakeTimers();
+    try {
+      const now = Date.parse('2026-10-31T13:00:01Z'); vi.setSystemTime(now);
+      const bucketStart = now - 3601000;
+      let retries = 0;
+      const callWS = vi.fn(async request => {
+        if (request.type === 'recorder/get_statistics_metadata') return [{ statistic_id: 'sensor.soil', mean_type: 1 }];
+        if (request.type === 'history/history_during_period') return { 'sensor.soil': [{ s: '5', lu: now / 1000 - 1 }] };
+        const start = Date.parse(request.start_time), end = Date.parse(request.end_time);
+        if (start === bucketStart && end - start === 3600000) {
+          retries += 1;
+          if (retries < 3) throw new Error('not ready');
+          return { 'sensor.soil': [{ start, end, min: -20, max: 100 }] };
+        }
+        return { 'sensor.soil': Array.from({ length: (end - start) / 3600000 }, (_, index) => ({
+          start: start + index * 3600000, end: start + (index + 1) * 3600000, min: 1, max: 10,
+        })).filter(bucket => bucket.start !== bucketStart) };
+      });
+      const hass = { callWS, config: { time_zone: 'UTC' } };
+      const resolver = new HistoricalValueResolver();
+      const rolling = { ...spec, window: { kind: 'rolling', duration: { amount: 48, unit: 'hour' } } };
+      const peak = vi.fn(), floor = vi.fn();
+      const stopPeak = resolver.watch(rolling, { hass, liveCoverageStart: () => now }, peak);
+      const stopFloor = resolver.watch({ ...rolling, calculation: 'min' }, { hass, liveCoverageStart: () => now }, floor);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(peak.mock.calls.at(-1)[0].status).toBe('partial');
+      await vi.advanceTimersByTimeAsync(36000);
+      expect(retries).toBe(3);
+      expect(peak.mock.calls.at(-1)[0]).toMatchObject({ value: 100, status: 'available' });
+      expect(floor.mock.calls.at(-1)[0]).toMatchObject({ value: -20, status: 'available' });
+      expect(callWS.mock.calls.filter(([request]) => request.type === 'recorder/statistics_during_period'
+        && Date.parse(request.start_time) !== bucketStart)).toHaveLength(1);
+      stopPeak(); stopFloor();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
   it('resolves max with unknown coverage as available without presentation fields', async () => {
     const service = new SharedObservationService({ now: () => Date.parse('2026-05-13T10:00:00Z'),
       provider: async (_hass, sources, window) => new Map(sources.map((source) => [sourceKey, {
@@ -53,6 +252,42 @@ describe('historical value resolver', () => {
     service.ingestLiveState({ source: { entityId: 'sensor.soil' }, state: { state: '11', last_updated: new Date(1500).toISOString() } });
     await Promise.resolve();
     expect(callback).toHaveBeenCalledTimes(before);
+  });
+
+  it('keeps an uncovered tail partial when live coverage starts after the acquisition', async () => {
+    let clock = Date.parse('2026-05-13T10:00:00Z');
+    let finish;
+    const provider = (_hass, sources, window) => new Promise(resolve => { finish = () => resolve(new Map([[sourceKey, {
+      source: sources[0], observations: [{ timestamp: window.start + 1, value: 8 }],
+      retrievedAt: clock, coverage: { complete: false, kind: 'unknown' },
+    }]])); });
+    const service = new SharedObservationService({ provider, now: () => clock });
+    const resolver = new HistoricalValueResolver({ service, now: () => clock });
+    const callback = vi.fn(); const start = clock;
+    const dispose = resolver.watch(spec, { hass: { config: { time_zone: 'UTC' } }, liveCoverageStart: () => start + 1000 }, callback);
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    clock += 2000; finish();
+    await vi.waitFor(() => expect(callback.mock.calls.at(-1)[0].value).toBe(8));
+    expect(callback.mock.calls.at(-1)[0].status).toBe('partial');
+    dispose();
+  });
+
+  it('retains explicitly incomplete Recorder coverage after a live observation', async () => {
+    let clock = Date.parse('2026-05-13T10:00:00Z');
+    const service = new SharedObservationService({ now: () => clock,
+      provider: async (_hass, sources, window) => new Map([[sourceKey, {
+        source: sources[0], observations: [{ timestamp: window.start + 1, value: 8 }], retrievedAt: clock,
+        coverage: { complete: false, kind: 'incomplete', reason: 'Missing interval' },
+      }]]) });
+    const resolver = new HistoricalValueResolver({ service, now: () => clock });
+    const callback = vi.fn(); const liveStart = clock;
+    const dispose = resolver.watch(spec, { hass: { config: { time_zone: 'UTC' } }, liveCoverageStart: () => liveStart }, callback);
+    await vi.waitFor(() => expect(callback.mock.calls.at(-1)[0].value).toBe(8));
+    expect(callback.mock.calls.at(-1)[0].status).toBe('partial');
+    clock += 2000;
+    resolver.ingestLiveState({}, { entityId: 'sensor.soil' }, { state: '9' }, clock - 1000);
+    expect(callback.mock.calls.at(-1)[0]).toMatchObject({ value: 9, status: 'partial', provenance: { coverage: { kind: 'incomplete' } } });
+    dispose();
   });
 
   it('re-resolves the live 10:00 to 10:05 update against the advancing calendar window', async () => {
@@ -223,7 +458,7 @@ describe('historical value resolver', () => {
     expect(result.value).toBe(100);
   });
 
-  it('expires a one-minute rolling maximum at the superseding transition boundary', async () => {
+  it('expires a one-minute rolling maximum at the next minute boundary', async () => {
     vi.useFakeTimers();
     try {
       const start = Date.parse('2026-05-13T10:00:30Z'); vi.setSystemTime(start);
@@ -236,11 +471,13 @@ describe('historical value resolver', () => {
       const dispose = resolver.watch({ ...spec, window: { kind: 'rolling', duration: { amount: 1, unit: 'minute' } } },
         { hass: { config: { time_zone: 'UTC' } } }, callback);
       await vi.waitFor(() => expect(callback.mock.calls.some(([item]) => item.value === 90)).toBe(true));
-      await vi.advanceTimersByTimeAsync(start + 9_999 - Date.now());
+      await vi.advanceTimersByTimeAsync(start + 29_999 - Date.now());
       expect(callback.mock.calls.at(-1)[0].value).toBe(90);
       await vi.advanceTimersByTimeAsync(4);
       expect(callback.mock.calls.at(-1)[0].value).toBe(5);
       dispose();
+      expect(resolver.service.cacheExpiryTimer).not.toBeNull();
+      resolver.service.clear();
       expect(vi.getTimerCount()).toBe(0);
     } finally { vi.useRealTimers(); }
   });
@@ -264,6 +501,8 @@ describe('historical value resolver', () => {
       expect(service.consumers.size).toBe(1);
       dispose();
       expect(service.consumers.size).toBe(0);
+      expect(service.cacheExpiryTimer).not.toBeNull();
+      service.clear();
       expect(vi.getTimerCount()).toBe(0);
     } finally { vi.useRealTimers(); }
   });
@@ -315,7 +554,7 @@ describe('historical value resolver', () => {
     pending.shift()(); await refresh;
     expect(callback.mock.calls.at(-1)[0].value).toBe(50);
     expect(callback.mock.calls.at(-1)[0].status).toBe('partial');
-    expect([...service.journals.values()][0].observations.filter((item) => item.origin === 'recorder')).toHaveLength(3);
+    expect([...service.families.values()][0].history.observations.filter((item) => item.origin === 'recorder')).toHaveLength(3);
     dispose();
   });
 
@@ -330,7 +569,7 @@ describe('historical value resolver', () => {
     const stopPeak = resolver.watch(spec, { hass }, peak);
     const stopFloor = resolver.watch({ ...spec, calculation: 'min' }, { hass }, floor);
     await vi.waitFor(() => { expect(peak.mock.calls.at(-1)[0].value).toBe(5); expect(floor.mock.calls.at(-1)[0].value).toBe(5); });
-    const merge = vi.spyOn(service, '_mergeIntoConsumer');
+    const merge = vi.spyOn(service, '_mergeIntoHistory');
     clock += 2000;
     resolver.ingestLiveState(hass, { entityId: 'sensor.soil' }, { state: '9' }, clock - 1000);
     expect(merge).toHaveBeenCalledTimes(1);

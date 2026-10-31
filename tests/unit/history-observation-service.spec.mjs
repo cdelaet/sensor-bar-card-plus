@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SharedObservationService } from '../../src/history/observation-service.js';
-import { calculateObservationValue } from '../../src/history/calculations.js';
+import { calculateObservationValue } from '../support/history-observation-oracle.mjs';
 
 const win = (start = 100, end = 200, cacheKey = 'calendar:day:100:UTC') => ({
   start, end, timeZone: 'UTC', cacheKey, interval: '[start,end)', semantics: { kind: 'calendar' },
@@ -14,6 +14,278 @@ const result = (source, window, value = 5) => new Map([[key(source.entityId), {
 }]]);
 
 describe('shared observation service', () => {
+  it('expires the previous calendar window while the same source remains active', async () => {
+    vi.useFakeTimers();
+    const midnight = Date.parse('2026-11-01T00:00:00Z');
+    vi.setSystemTime(midnight - 10_000);
+    try {
+      const source = 'sensor.one';
+      const previous = win(midnight - 86400000, midnight - 10_000, 'today:old');
+      const current = win(midnight, midnight + 1000, 'today:new');
+      const provider = vi.fn(async (_hass, sources, window) => result(sources[0], window));
+      const service = new SharedObservationService({ provider, ttlMs: 30_000 });
+      const onUpdate = vi.fn();
+      const stop = service.subscribe(source, previous, onUpdate);
+      await service.request({ hass: {}, sources: [source], window: previous });
+      const oldKey = service._cacheKey({ entityId: source }, previous);
+      const oldRecord = service.cache.get(oldKey);
+      await vi.advanceTimersByTimeAsync(11_000);
+      stop.updateWindow(current);
+      await service.request({ hass: {}, sources: [source], window: current });
+      expect(service.cache.has(oldKey)).toBe(true);
+      const oldValues = oldRecord.observations.map(item => item.value);
+      service.ingestLiveState({ source, state: { state: '9' }, timestamp: midnight + 1000 });
+      expect(oldRecord.observations.map(item => item.value)).toEqual(oldValues);
+      expect(onUpdate.mock.calls.at(-1)[0].observations.at(-1).value).toBe(9);
+      const reused = (await service.request({ hass: {}, sources: [source], window: previous })).get(key(source));
+      expect(reused.cache).toBe('hit');
+      expect(reused.observations.map(item => item.value)).toEqual(oldValues);
+      expect(provider).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(19_000);
+      expect(service.cache.has(oldKey)).toBe(false);
+      expect(service.sourceHistories.size).toBe(1);
+      expect([...service.sourceHistories.values()][0].observations.at(-1).value).toBe(9);
+      stop(); service.clear();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('retains each active window independently and expires only the disposed window', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(1000);
+    try {
+      const provider = vi.fn(async (_hass, sources, window) => result(sources[0], window));
+      const service = new SharedObservationService({ provider, ttlMs: 100 });
+      const firstWindow = win(100, 200, 'first'), secondWindow = win(300, 400, 'second');
+      const first = service.subscribe('sensor.one', firstWindow, () => {});
+      const second = service.subscribe('sensor.one', secondWindow, () => {});
+      await service.request({ hass: {}, sources: ['sensor.one'], window: firstWindow });
+      await service.request({ hass: {}, sources: ['sensor.one'], window: secondWindow, force: true });
+      const firstKey = service._cacheKey({ entityId: 'sensor.one' }, firstWindow);
+      const secondKey = service._cacheKey({ entityId: 'sensor.one' }, secondWindow);
+      expect(service.cache.has(firstKey)).toBe(true);
+      expect(service.cache.has(secondKey)).toBe(true);
+      first(); await vi.advanceTimersByTimeAsync(100);
+      expect(service.cache.has(firstKey)).toBe(false);
+      expect(service.cache.has(secondKey)).toBe(true);
+      expect(service.sourceHistories.size).toBe(1);
+      second(); service.clear();
+      expect(service.cache.size).toBe(0);
+      expect(service.sourceHistories.size).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('reacquires inactive cached windows if an omitted live event intersects them', async () => {
+    const provider = vi.fn(async (_hass, sources, window) => result(sources[0], window));
+    const service = new SharedObservationService({ provider, now: () => 1000, ttlMs: 30_000 });
+    const old = win(100, 200, 'old'), other = win(300, 400, 'other');
+    const stop = service.subscribe('sensor.one', old, () => {});
+    await service.request({ hass: {}, sources: ['sensor.one'], window: old });
+    stop.updateWindow(other);
+    service.ingestLiveState({ source: 'sensor.one', state: { state: '9' }, timestamp: 150 });
+    stop.updateWindow(old);
+    const record = (await service.request({ hass: {}, sources: ['sensor.one'], window: old })).get(key('sensor.one'));
+    expect(provider).toHaveBeenCalledTimes(2);
+    expect(record.observations.map(item => item.value)).toContain(9);
+    stop(); service.clear();
+  });
+
+  it('reclaims inactive cache entries after the TTL with one shared timer', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(1000);
+    try {
+      const provider = vi.fn(async (_hass, sources, window) => new Map(sources.map(source => [key(source.entityId), result(source, window).get(key(source.entityId))])));
+      const service = new SharedObservationService({ provider, ttlMs: 100 });
+      const first = service.subscribe('sensor.one', win(), () => {});
+      const second = service.subscribe('sensor.two', win(), () => {});
+      await service.request({ hass: {}, sources: ['sensor.one', 'sensor.two'], window: win() });
+      first(); second();
+      expect(service.sourceHistories.size).toBe(0);
+      expect(service.cache.size).toBe(2);
+      expect(vi.getTimerCount()).toBe(1);
+      await vi.advanceTimersByTimeAsync(99);
+      const remount = service.subscribe('sensor.one', win(), () => {});
+      expect((await service.request({ hass: {}, sources: ['sensor.one'], window: win() })).get(key('sensor.one')).cache).toBe('hit');
+      remount();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(service.cache.size).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(provider).toHaveBeenCalledOnce();
+      service.clear();
+    } finally { vi.useRealTimers(); }
+  });
+  it('shares a covering acquisition and transition array across compatible window families', async () => {
+    let finish;
+    const provider = vi.fn((_hass, sources, window) => new Promise(resolve => {
+      finish = () => resolve(result(sources[0], window));
+    }));
+    const service = new SharedObservationService({ provider, now: () => 1000 });
+    const source = 'sensor.one';
+    const wide = win(100, 200, 'wide');
+    const narrow = win(120, 200, 'narrow');
+    const stopWide = service.subscribe(source, wide, () => {});
+    const stopNarrow = service.subscribe(source, narrow, () => {});
+    const first = service.request({ hass: {}, sources: [source], window: wide });
+    const second = service.request({ hass: {}, sources: [source], window: narrow });
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    finish();
+    const [large, small] = await Promise.all([first, second]);
+    expect(provider).toHaveBeenCalledTimes(1);
+    expect(large.get(key(source)).observations).toBe(small.get(key(source)).observations);
+    expect((await service.request({ hass: {}, sources: [source], window: narrow })).get(key(source)).cache).toBe('hit');
+    expect(provider).toHaveBeenCalledTimes(1);
+    service.ingestLiveState({ source, state: { state: '9' }, timestamp: 190 });
+    const histories = [...service.families.values()].map(journal => journal.history.observations);
+    expect(histories[0]).toBe(histories[1]);
+    expect(histories[0].map(item => item.value)).toEqual([5, 9]);
+    expect([...service.cache.values()][0].observations).toBe(histories[0]);
+    stopWide(); stopNarrow();
+  });
+
+  it('coalesces compatible queued windows even when the narrower request arrives first', async () => {
+    const provider = vi.fn(async (_hass, sources, window) => result(sources[0], window));
+    const service = new SharedObservationService({ provider, now: () => 1000 });
+    const narrow = win(120, 200, 'narrow'), wide = win(100, 200, 'wide');
+    const first = service.request({ hass: {}, sources: ['sensor.one'], window: narrow });
+    const second = service.request({ hass: {}, sources: ['sensor.one'], window: wide });
+    const [, wider] = await Promise.all([first, second]);
+    expect(provider).toHaveBeenCalledOnce();
+    expect(provider.mock.calls[0][2]).toMatchObject({ start: 100, end: 200 });
+    expect(wider.get(key('sensor.one')).acquiredWindow).toEqual({ start: 100, end: 200 });
+  });
+
+  it('does not widen a recent raw acquisition to an aged-out consumer window', async () => {
+    const now = Date.parse('2026-05-13T12:00:00Z');
+    const provider = vi.fn(async (_hass, sources, window) => result(sources[0], window));
+    const service = new SharedObservationService({ provider, now: () => now });
+    const aged = win(now - 48 * 3600000, now - 47 * 3600000, 'aged');
+    const recent = win(now - 3600000, now, 'recent');
+    const stopAged = service.subscribe('sensor.one', aged, () => {});
+    const stopRecent = service.subscribe('sensor.one', recent, () => {});
+    await service.request({ hass: {}, sources: ['sensor.one'], window: recent });
+    expect(provider.mock.calls[0][2].start).toBe(recent.start);
+    stopAged(); stopRecent();
+  });
+
+  it('does not reuse another window family after source invalidation', async () => {
+    const provider = vi.fn(async (_hass, sources, window) => result(sources[0], window));
+    const service = new SharedObservationService({ provider, now: () => 1000 });
+    const wide = win(100, 200, 'wide'), narrow = win(120, 200, 'narrow');
+    const stop = service.subscribe('sensor.one', narrow, () => {});
+    await service.request({ hass: {}, sources: ['sensor.one'], window: wide });
+    await service.request({ hass: {}, sources: ['sensor.one'], window: narrow });
+    expect(provider).toHaveBeenCalledTimes(1);
+    service.invalidate({ sources: ['sensor.one'], windowKey: 'narrow' });
+    await service.request({ hass: {}, sources: ['sensor.one'], window: narrow });
+    expect(provider).toHaveBeenCalledTimes(2);
+    stop();
+  });
+
+  it('reconciles a compatible-family refresh into the shared transition history', async () => {
+    let value = 5;
+    const provider = vi.fn(async (_hass, sources, window) => result(sources[0], window, value));
+    const service = new SharedObservationService({ provider, now: () => 1000 });
+    const wide = win(100, 200, 'wide'), narrow = win(120, 200, 'narrow');
+    const wideUpdates = vi.fn(), narrowUpdates = vi.fn();
+    const stopWide = service.subscribe('sensor.one', wide, wideUpdates);
+    const stopNarrow = service.subscribe('sensor.one', narrow, narrowUpdates);
+    await service.request({ hass: {}, sources: ['sensor.one'], window: wide });
+    await service.request({ hass: {}, sources: ['sensor.one'], window: narrow });
+    value = 20;
+    await service.request({ hass: {}, sources: ['sensor.one'], window: narrow, force: true });
+    const histories = [...service.families.values()].map(journal => journal.history.observations);
+    expect(histories[0]).toBe(histories[1]);
+    expect(histories[0].map(sample => sample.value)).toEqual([20]);
+    expect(wideUpdates.mock.calls.at(-1)[0].observations[0].value).toBe(20);
+    expect(narrowUpdates.mock.calls.at(-1)[0].observations[0].value).toBe(20);
+    stopWide(); stopNarrow();
+  });
+
+  it('does not let an older response from another window family replace newer source history', async () => {
+    const pending = [];
+    const provider = vi.fn((_hass, sources, window) => new Promise(resolve => {
+      pending.push(value => resolve(result(sources[0], window, value)));
+    }));
+    const service = new SharedObservationService({ provider, now: () => 1000 });
+    const wide = win(100, 150, 'wide'), narrow = win(120, 200, 'narrow');
+    const stopWide = service.subscribe('sensor.one', wide, () => {});
+    const stopNarrow = service.subscribe('sensor.one', narrow, () => {});
+    const older = service.request({ hass: {}, sources: ['sensor.one'], window: wide });
+    await vi.waitFor(() => expect(pending).toHaveLength(1));
+    const newer = service.request({ hass: {}, sources: ['sensor.one'], window: narrow, force: true });
+    await vi.waitFor(() => expect(pending).toHaveLength(2));
+    pending[1](20); await newer;
+    pending[0](5); await older;
+    expect([...service.sourceHistories.values()][0].observations.map(item => item.value)).toEqual([20]);
+    stopWide(); stopNarrow();
+  });
+
+  it('keeps raw and statistics acquisition histories independent for the same source', async () => {
+    const provider = vi.fn(async (_hass, sources, window) => result(sources[0], window,
+      window.acquisition?.mode === 'statistics' ? 20 : 10));
+    const service = new SharedObservationService({ provider, now: () => 1000 });
+    const raw = win(100, 200, 'raw');
+    const stats = { ...win(100, 200, 'stats'), acquisition: { mode: 'statistics' } };
+    const stopRaw = service.subscribe('sensor.one', raw, () => {});
+    const stopStats = service.subscribe('sensor.one', stats, () => {});
+    const [rawResult, statsResult] = await Promise.all([
+      service.request({ hass: {}, sources: ['sensor.one'], window: raw }),
+      service.request({ hass: {}, sources: ['sensor.one'], window: stats }),
+    ]);
+    expect(rawResult.get(key('sensor.one')).observations.map(item => item.value)).toEqual([10]);
+    expect(statsResult.get(key('sensor.one')).observations.map(item => item.value)).toEqual([20]);
+    expect(service.sourceHistories.size).toBe(2);
+    stopRaw(); stopStats();
+  });
+  it('bounds simultaneous acquisitions while batching compatible sources', async () => {
+    const pending = [];
+    const provider = vi.fn((_hass, sources, window) => new Promise(resolve => pending.push(() => resolve(
+      new Map(sources.map(source => [key(source.entityId), result(source, window).get(key(source.entityId))]))))));
+    const service = new SharedObservationService({ provider, now: () => 1000 });
+    const sources = Array.from({ length: 16 }, (_, index) => `sensor.n${index}`);
+    const request = service.request({ hass: {}, sources, window: win() });
+    await vi.waitFor(() => expect(provider).toHaveBeenCalledTimes(3));
+    expect(provider.mock.calls.every(([, batch]) => batch.length <= 4)).toBe(true);
+    pending.shift()();
+    await vi.waitFor(() => expect(provider).toHaveBeenCalledTimes(4));
+    for (const finish of pending) finish();
+    expect((await request).size).toBe(16);
+  });
+
+  it('keeps transport slots occupied after timeout until the underlying request settles', async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = [];
+      const provider = vi.fn(() => new Promise(resolve => pending.push(resolve)));
+      const service = new SharedObservationService({ provider, now: () => 1000, requestTimeoutMs: 10 });
+      const sources = Array.from({ length: 16 }, (_, index) => `sensor.timeout${index}`);
+      const request = service.request({ hass: {}, sources, window: win() });
+      await vi.advanceTimersByTimeAsync(11);
+      const records = await request;
+      expect(provider).toHaveBeenCalledTimes(3);
+      expect([...records.values()].every(record => record.status === 'unavailable')).toBe(true);
+      expect(service.activeBatches).toBe(3);
+      for (const finish of pending) finish(new Map());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(service.activeBatches).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+  it('retains raw journal rows across a statistical hour handoff', async () => {
+    const first = { ...win(0, 5400000, 'statistics'), acquisition: { mode: 'statistics' } };
+    const second = { ...first, end: 9000000 };
+    const provider = vi.fn(async (_hass, sources, window) => new Map(sources.map(source => [key(source.entityId), {
+      source, observations: [{ timestamp: window.end - 1000, value: window.end === first.end ? 100 : 5,
+        state: 'ok', origin: 'recorder', order: 0 }], status: 'available', retrievedAt: window.end,
+      statisticsWindow: { start: 0, end: window.end === first.end ? 3600000 : 7200000 },
+      rawWindow: { start: window.end === first.end ? 3600000 : 7200000, end: window.end },
+      statistics: { buckets: [] }, coverage: { kind: 'incomplete' },
+    }])));
+    const service = new SharedObservationService({ provider, now: () => second.end });
+    const dispose = service.subscribe('sensor.one', first, () => {});
+    await service.request({ hass: {}, sources: ['sensor.one'], window: first });
+    dispose.updateWindow(second);
+    const record = (await service.request({ hass: {}, sources: ['sensor.one'], window: second })).get(key('sensor.one'));
+    expect(record.observations.map(item => item.value)).toEqual([100, 5]);
+    dispose();
+  });
   it('batches compatible requests and deduplicates identical in-flight requests', async () => {
     const provider = vi.fn(async (_hass, sources, window) => new Map(sources.map((source) => [key(source.entityId), {
       ...result(source, window).get(key(source.entityId)),
@@ -185,25 +457,22 @@ describe('shared observation service', () => {
     dispose();
   });
 
-  it('retains active observations after cache eviction and reports bounded-buffer overflow', async () => {
+  it('retains all active observations after cache eviction', async () => {
     const provider = vi.fn(async (_hass, sources, window) => new Map(sources.map((source) => [key(source.entityId), {
       source, observations: [1, 9, 2].map((value, index) => ({ timestamp: window.start + index + 1, value,
         state: String(value), order: index, orderKnown: true, origin: 'recorder' })),
       acquiredWindow: { start: window.start, end: window.end }, retrievedAt: 1000,
       coverage: { complete: false, kind: 'unknown' },
     }])));
-    const service = new SharedObservationService({ provider, now: () => 1000, maxEntries: 0,
-      maxObservations: 2, maxConsumerObservations: 2 });
+    const service = new SharedObservationService({ provider, now: () => 1000, maxEntries: 0 });
     const source = { entityId: 'sensor.one' };
     const callback = vi.fn();
     const dispose = service.subscribe(source, win(), callback);
     const record = (await service.request({ hass: {}, sources: [source], window: win() })).get(key('sensor.one'));
     expect(service.cache.size).toBe(0);
-    expect(record.observations.length).toBeLessThanOrEqual(2);
-    expect(record.coverage.liveOverflow).toBe(true);
+    expect(record.observations.map(item => item.value)).toEqual([1, 9, 2]);
     service.ingestLiveState({ source, state: { state: '4', last_updated: new Date(150).toISOString() } });
-    expect(callback.mock.calls.at(-1)[0].coverage.liveOverflow).toBe(true);
-    expect(callback.mock.calls.at(-1)[0].observations.length).toBeLessThanOrEqual(2);
+    expect(callback.mock.calls.at(-1)[0].observations.map(item => item.value)).toEqual([1, 9, 2, 4]);
     dispose();
     expect(service.consumers.size).toBe(0);
   });
@@ -245,14 +514,14 @@ describe('shared observation service', () => {
     const stopFloor = service.subscribe(source, win(), floor);
     await service.request({ hass: {}, sources: [source], window: win() });
     const [a, b] = [...service.consumers.values()];
-    expect(a.journal).toBe(b.journal);
-    expect(service.journals.size).toBe(1);
+    expect(a.family).toBe(b.family);
+    expect(service.families.size).toBe(1);
     stopPeak();
     service.ingestLiveState({ source, state: { state: '10' }, timestamp: 150 });
     expect(floor.mock.calls.at(-1)[0].observations.some((item) => item.value === 10)).toBe(true);
-    expect(service.journals.size).toBe(1);
+    expect(service.families.size).toBe(1);
     stopFloor();
-    expect(service.journals.size).toBe(0);
+    expect(service.families.size).toBe(0);
   });
 
   it('does not notify consumers with an older acquisition after a newer one', async () => {
@@ -311,7 +580,7 @@ describe('shared observation service', () => {
     const second = service.subscribe('sensor.one', win(120, 200, 'rolling'), vi.fn());
     await service.request({ hass: {}, sources: ['sensor.one'], window: win(100, 200, 'rolling') });
     await service.request({ hass: {}, sources: ['sensor.one'], window: win(120, 200, 'rolling'), force: true });
-    expect([...service.journals.values()][0].observations.some((sample) => sample.timestamp === 101)).toBe(true);
+    expect([...service.families.values()][0].history.observations.some((sample) => sample.timestamp === 101)).toBe(true);
     first(); second();
   });
 
@@ -353,6 +622,30 @@ describe('shared observation service', () => {
     stop();
   });
 
+  it('retains a non-extreme live transition to detect a later conflicting Recorder row', async () => {
+    let correction = null;
+    const provider = async (_hass, sources) => new Map([[key('sensor.one'), {
+      source: sources[0], observations: [
+        { timestamp: 101, value: 0, state: '0', order: 0, orderKnown: true, origin: 'recorder' },
+        ...(correction === null ? [] : [{ timestamp: 150, value: correction, state: String(correction), order: 1, orderKnown: true, origin: 'recorder' }]),
+        { timestamp: 160, value: 10, state: '10', order: 2, orderKnown: true, origin: 'recorder' },
+        { timestamp: 180, value: 0, state: '0', order: 3, orderKnown: true, origin: 'recorder' },
+      ], retrievedAt: 1000, coverage: { complete: false, kind: 'unknown' },
+    }]]);
+    const service = new SharedObservationService({ provider, now: () => 1000 });
+    const stop = service.subscribe('sensor.one', win(), () => {});
+    const args = { hass: {}, sources: ['sensor.one'], window: win() };
+    await service.request(args);
+    service.ingestLiveState({ source: 'sensor.one', state: { state: '6' }, timestamp: 150 });
+    correction = 5;
+    const conflicting = (await service.request({ ...args, force: true })).get(key('sensor.one'));
+    expect(calculateObservationValue(conflicting.observations, 'max', win())).toMatchObject({ value: null, orderingAmbiguous: true });
+    correction = 6;
+    const matching = (await service.request({ ...args, force: true })).get(key('sensor.one'));
+    expect(calculateObservationValue(matching.observations, 'max', win())).toMatchObject({ value: 10, orderingAmbiguous: false });
+    stop();
+  });
+
   it('does not let an older success clear a newer failed acquisition', async () => {
     const pending = [];
     const provider = vi.fn((_h, sources, window) => new Promise((resolve, reject) => pending.push({ resolve, reject, sources, window })));
@@ -389,19 +682,20 @@ describe('shared observation service', () => {
     expect(provider).toHaveBeenCalledTimes(3);
   });
 
-  it('evicts an older cache entry when a successful replacement exceeds the limit', async () => {
+  it('retains a successful cache replacement without truncating its observations', async () => {
     let large = false;
     const provider = async (_h, sources, window) => {
       const data = result(sources[0], window);
       if (large) data.get(key('sensor.one')).observations.push({ timestamp: 130, value: 30 });
       return data;
     };
-    const service = new SharedObservationService({ provider, now: () => 1000, maxObservations: 1 });
+    const service = new SharedObservationService({ provider, now: () => 1000 });
     const args = { hass: {}, sources: ['sensor.one'], window: win() };
     await service.request(args); large = true;
     const refreshed = (await service.request({ ...args, force: true })).get(key('sensor.one'));
     expect(refreshed.observations).toHaveLength(2);
-    expect(service.cache.size).toBe(0);
+    expect(service.cache.size).toBe(1);
+    expect((await service.request(args)).get(key('sensor.one')).observations).toHaveLength(2);
   });
 
   it('marks an active journal stale on invalidation until Recorder revalidation', async () => {
@@ -448,7 +742,7 @@ describe('shared observation service', () => {
     const first = vi.fn(); const second = vi.fn();
     const stopA = service.subscribe('sensor.one', win(), first);
     const stopB = service.subscribe('sensor.one', win(), second);
-    const merge = vi.spyOn(service, '_mergeIntoConsumer');
+    const merge = vi.spyOn(service, '_mergeIntoHistory');
     expect(service.ingestLiveState({ source: 'sensor.one', state: { state: '7' }, timestamp: 150 })).toBe(2);
     expect(merge).toHaveBeenCalledTimes(1);
     expect(first).toHaveBeenCalledOnce(); expect(second).toHaveBeenCalledOnce();
@@ -468,7 +762,7 @@ describe('shared observation service', () => {
     await service.request({ hass: {}, sources: ['sensor.one'], window: win(120, 200, 'rolling'), force: true });
     first.updateWindow(win(100, 220, 'rolling'));
     const third = service.subscribe('sensor.one', win(100, 220, 'rolling'), vi.fn());
-    const observations = [...service.journals.values()][0].observations;
+    const observations = [...service.families.values()][0].history.observations;
     expect(observations.map((sample) => sample.value)).toEqual([100, 5, 100]);
     expect(calculateObservationValue(observations, 'min', win(100, 220, 'rolling')).value).toBe(100);
     first(); second(); third();
@@ -481,7 +775,7 @@ describe('shared observation service', () => {
     const stopPeak = service.subscribe('sensor.one', win(), peak);
     const stopFloor = service.subscribe('sensor.one', win(), floor);
     await service.request({ hass: {}, sources: ['sensor.one'], window: win() });
-    const merge = vi.spyOn(service, '_mergeIntoConsumer');
+    const merge = vi.spyOn(service, '_mergeIntoHistory');
     peak.mockClear(); floor.mockClear();
     service.invalidate({ sources: ['sensor.one'] });
     expect(merge).not.toHaveBeenCalled();

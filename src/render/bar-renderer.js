@@ -16,6 +16,7 @@ export function renderMarker(marker) {
   const historyStatus = ['partial', 'stale'].includes(marker.historyStatus) ? marker.historyStatus : '';
   const historyLabel = historyStatus === 'partial' ? 'Partial history' : historyStatus === 'stale' ? 'Stale history' : '';
   const historyAttributes = historyStatus ? ` data-history-status="${historyStatus}" data-history-edge="${position > 90 ? 'end' : 'start'}" title="${historyLabel}" role="img" aria-label="${marker.type === 'peak' ? 'Peak' : 'Floor'}: ${historyLabel}"` : '';
+  const historyIndicator = `<span class="history-indicator" aria-hidden="true" title="${historyLabel}">${historyStatus === 'partial' ? '!' : historyStatus === 'stale' ? '~' : ''}</span>`;
   const shapePaths = `<g class="marker-shape-paths">
     <path data-shape="circle" d="M8 1A7 7 0 1 0 8 15A7 7 0 1 0 8 1Z"></path>
     <path data-shape="diamond" d="M8 1L15 8L8 15L1 8Z"></path>
@@ -43,6 +44,7 @@ export function renderMarker(marker) {
       <div class="${marker.type}-inset"></div>
       <div class="${marker.type}-outset"></div>
       <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
+      ${marker.type === 'floor' ? historyIndicator : ''}
     </div>`;
   }
 
@@ -51,6 +53,7 @@ export function renderMarker(marker) {
       <div class="peak-outset"></div>
       <div class="peak-inset"></div>
       <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
+      ${historyIndicator}
     </div>`;
 }
 
@@ -64,9 +67,15 @@ export function patchMarker(markerEl, marker) {
   setDatasetIfChanged(markerEl, 'direction', marker.direction ?? 'inward');
   if (marker.type === 'peak' || marker.type === 'floor') {
     const status = ['partial', 'stale'].includes(marker.historyStatus) ? marker.historyStatus : '';
+    const label = status === 'partial' ? 'Partial history' : status === 'stale' ? 'Stale history' : '';
     setDatasetIfChanged(markerEl, 'historyStatus', status);
     setDatasetIfChanged(markerEl, 'historyEdge', marker.position > 90 ? 'end' : 'start');
-    markerEl.setAttribute?.('title', status === 'partial' ? 'Partial history' : status === 'stale' ? 'Stale history' : '');
+    markerEl.setAttribute?.('title', label);
+    const indicator = markerEl.querySelector?.('.history-indicator');
+    if (indicator) {
+      indicator.textContent = status === 'partial' ? '!' : status === 'stale' ? '~' : '';
+      indicator.setAttribute('title', label);
+    }
     if (status) {
       markerEl.setAttribute?.('role', 'img');
       markerEl.setAttribute?.('aria-label', `${marker.type === 'peak' ? 'Peak' : 'Floor'}: ${status === 'partial' ? 'Partial history' : 'Stale history'}`);

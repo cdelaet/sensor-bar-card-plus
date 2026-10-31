@@ -62,6 +62,111 @@ const awaitValue = async (host, id = 'peak', value = 5) => vi.waitFor(() => expe
 const state = (value, timestamp = Date.now() - 1000) => ({ state: String(value), attributes: {}, last_updated: new Date(timestamp).toISOString() });
 
 describe('historical runtime host integration', () => {
+  it('recovers acquisition slots after disconnect and ignores retired responses', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-31T08:00:00Z'));
+    try {
+      const { hass, connection, callWS } = connectionFixture();
+      const pending = []; let stalled = true;
+      callWS.mockImplementation(request => stalled ? new Promise((resolve, reject) => pending.push({ resolve, reject, request }))
+        : Promise.resolve(Object.fromEntries(request.entity_ids.map(id => [id, [{ s: '5', lu: (Date.now() - 1000) / 1000 }]]))));
+      const host = new HistoricalHostRuntime();
+      const consumers = Array.from({ length: 12 }, (_, index) => ({ id: `p${index}`, spec: spec('max', `sensor.e${index}`) }));
+      host.setHass(hass); host.setConsumers(consumers); host.attach();
+      host.hub.service.requestTimeoutMs = 20;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(pending).toHaveLength(3);
+      await vi.advanceTimersByTimeAsync(21);
+      expect(host.hub.service.activeBatches).toBe(3);
+      connection.connected = false; connection.emit('disconnected');
+      expect(host.hub.service.retiredBatches).toBe(3);
+      stalled = false; connection.connected = true; connection.emit('ready');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(host.getResult('p0')).toMatchObject({ value: 5, status: 'available' });
+      pending[0].resolve(Object.fromEntries(pending[0].request.entity_ids.map(id => [id, [{ s: '999', lu: (Date.now() - 1000) / 1000 }]])));
+      pending[1].reject(new Error('old connection'));
+      pending[2].resolve({});
+      await vi.advanceTimersByTimeAsync(0);
+      expect(host.hub.service.retiredBatches).toBe(0);
+      expect(host.getResult('p0').value).toBe(5);
+      for (let cycle = 0; cycle < 3; cycle += 1) {
+        connection.connected = false; connection.emit('disconnected');
+        stalled = true;
+        connection.connected = true; connection.emit('ready');
+        await vi.advanceTimersByTimeAsync(0);
+        const old = pending.slice(-3);
+        await vi.advanceTimersByTimeAsync(21);
+        connection.connected = false; connection.emit('disconnected');
+        expect(host.hub.service.retiredBatches).toBe(3);
+        stalled = false;
+        connection.connected = true; connection.emit('ready');
+        await vi.advanceTimersByTimeAsync(0);
+        old[0].reject(new Error('disconnected'));
+        old[1].resolve({}); old[2].resolve({});
+        await vi.advanceTimersByTimeAsync(0);
+        expect(host.getResult('p0').value).toBe(5);
+        expect(host.hub.service.retiredBatches).toBe(0);
+        expect(host.hub.service.batchLeases.size).toBe(0);
+      }
+      const historyService = host.hub.service;
+      host.detach(); expect(vi.getTimerCount()).toBe(1);
+      expect(historyService.cacheExpiryTimer).not.toBeNull();
+      historyService.clear(); expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+  it('covers a moving today window through an overlapping live subscription during Recorder latency', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-31T08:00:00Z'));
+    try {
+      const { hass, connection, callWS } = connectionFixture();
+      let finish;
+      callWS.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+      const host = new HistoricalHostRuntime();
+      const today = { ...spec(), window: { kind: 'calendar', period: 'day' } };
+      host.setHass(hass); host.setConsumers([{ id: 'peak', spec: today }, { id: 'floor', spec: { ...today, calculation: 'min' } }]);
+      host.attach(); await vi.advanceTimersByTimeAsync(0);
+      expect(finish).toBeTypeOf('function');
+      vi.setSystemTime(Date.now() + 5000);
+      finish({ [entity]: [
+        { s: '20.1', lu: Date.parse('2026-10-31T00:00:00Z') / 1000 },
+        { s: '19.6', lu: Date.parse('2026-10-31T06:37:00Z') / 1000 },
+      ] });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(host.getResult('peak')).toMatchObject({ value: 20.1, status: 'available', provenance: { coverage: { kind: 'unknown' } } });
+      expect(host.getResult('floor')).toMatchObject({ value: 19.6, status: 'available' });
+      vi.setSystemTime(Date.now() + 30_000);
+      connection.change(entity, state(21, Date.now() - 1000));
+      expect(host.getResult('peak')).toMatchObject({ value: 21, status: 'available' });
+      expect(host.getResult('floor')).toMatchObject({ value: 19.6, status: 'available' });
+      await vi.advanceTimersByTimeAsync(60_001);
+      expect(host.getResult('peak')).toMatchObject({ value: 21, status: 'available' });
+      expect(host.getResult('floor')).toMatchObject({ value: 19.6, status: 'available' });
+      expect(callWS).toHaveBeenCalledTimes(1);
+      connection.connected = false; connection.emit('disconnected');
+      expect(host.getResult('peak').status).toBe('stale');
+      host.detach(); expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('does not claim live coverage when the subscription is denied', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-31T08:00:00Z'));
+    try {
+      const { hass, connection, callWS } = connectionFixture();
+      connection.subscribeMessage.mockRejectedValue({ code: 'unauthorized' });
+      let finish;
+      callWS.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+      const host = new HistoricalHostRuntime();
+      host.setHass(hass); host.setConsumers([{ id: 'peak', spec: { ...spec(), window: { kind: 'calendar', period: 'day' } } }]);
+      host.attach(); await vi.advanceTimersByTimeAsync(0);
+      vi.setSystemTime(Date.now() + 5000);
+      finish({ [entity]: [{ s: '19.6', lu: Date.parse('2026-10-31T06:37:00Z') / 1000 }] });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(host.getResult('peak')).toMatchObject({ value: 19.6, status: 'partial' });
+      const historyService = host.hub.service;
+      host.detach(); expect(vi.getTimerCount()).toBe(1);
+      expect(historyService.cacheExpiryTimer).not.toBeNull();
+      historyService.clear(); expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+
   it('shares one subscription, acquisition and journal across two cards and disposes independently', async () => {
     const { card } = hosts(); const a = card(); const b = card(); const { connection, hass, callWS } = connectionFixture();
     a.hass = hass; b.hass = hass; register(a); register(b, 'floor', spec('min'));
@@ -71,7 +176,7 @@ describe('historical runtime host integration', () => {
     expect(connection.subscribeMessage).toHaveBeenCalledTimes(1);
     expect(callWS).toHaveBeenCalledTimes(1);
     const service = a._historicalRuntime.hub.service;
-    expect(service.journals.size).toBe(1);
+    expect(service.families.size).toBe(1);
     a.disconnectedCallback();
     expect(connection.subscriptions[0].active).toBe(true);
     expect(service.consumers.size).toBe(1);
@@ -107,7 +212,7 @@ describe('historical runtime host integration', () => {
     expect(a._historicalRuntime.getResult('peak').value).toBe(9);
     connection.change(entity, state('unavailable', Date.now() - 500));
     expect(ingest).toHaveBeenCalledTimes(2);
-    expect([...service.journals.values()][0].observations.at(-1).value).toBeNull();
+    expect([...service.families.values()][0].history.observations.at(-1).value).toBeNull();
     expect(callWS).toHaveBeenCalledTimes(1);
     a.disconnectedCallback(); b.disconnectedCallback();
   });
@@ -369,7 +474,7 @@ describe('historical runtime host integration', () => {
       a.attach(); b.attach();
       await vi.advanceTimersByTimeAsync(0);
       const one = state(8); const two = state(9);
-      const merge = vi.spyOn(a.hub.service, '_mergeIntoConsumer');
+      const merge = vi.spyOn(a.hub.service, '_mergeIntoHistory');
       peak.mockClear(); floor.mockClear();
       a.setHass({ ...hass, states: { [entity]: one } });
       expect(merge).toHaveBeenCalledTimes(1);

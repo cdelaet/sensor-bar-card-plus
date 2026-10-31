@@ -1,9 +1,65 @@
 import { describe, expect, it } from 'vitest';
-import { resolveTimeWindow } from '../../src/history/time-window.js';
+import { planHistoricalAcquisition, resolveTimeWindow } from '../../src/history/time-window.js';
 
 const brussels = { timeZone: 'Europe/Brussels', locale: 'en-GB' };
 
 describe('historical time windows', () => {
+  it('requires rolling durations to contain whole minutes without rounding observations', () => {
+    const now = Date.parse('2026-10-31T12:34:56.789Z');
+    expect(() => resolveTimeWindow({ kind: 'rolling', durationMs: 90001 }, { ...brussels, now })).toThrow('whole number of minutes');
+    expect(resolveTimeWindow({ kind: 'rolling', durationMs: 60000 }, { ...brussels, now }))
+      .toMatchObject({ start: Date.parse('2026-10-31T12:33:00Z'), end: now });
+  });
+  it('uses completed minutes plus the unfinished minute, including for 24 hours', () => {
+    const now = Date.parse('2026-10-31T12:15:30Z');
+    const quarter = resolveTimeWindow({ kind: 'rolling', duration: { amount: 15, unit: 'minute' } }, { ...brussels, now });
+    expect(quarter).toMatchObject({ start: Date.parse('2026-10-31T12:00:00Z'), end: now });
+    const day = resolveTimeWindow({ kind: 'rolling', duration: { amount: 24, unit: 'hour' } }, { ...brussels, now });
+    expect(day.start).toBe(Date.parse('2026-10-30T12:15:00Z'));
+    expect(planHistoricalAcquisition(day, now).mode).toBe('raw');
+  });
+  it('plans raw within the last 24 hours and complete-hour statistics beyond it', () => {
+    const now = Date.parse('2026-10-31T12:34:00Z');
+    const rolling = hours => resolveTimeWindow({ kind: 'rolling', duration: { amount: hours, unit: 'hour' } }, { ...brussels, now });
+    const quarterHour = resolveTimeWindow({ kind: 'rolling', duration: { amount: 15, unit: 'minute' } }, { ...brussels, now });
+    expect(planHistoricalAcquisition(quarterHour, now)).toMatchObject({ mode: 'raw', raw: { start: now - 900000, end: now } });
+    expect(planHistoricalAcquisition(rolling(24), now).mode).toBe('raw');
+    const justOutside = resolveTimeWindow({ kind: 'absolute', start: now - 24 * 3600000 - 1,
+      end: now - 24 * 3600000 + 899999 }, { ...brussels, now });
+    expect(planHistoricalAcquisition(justOutside, now).mode).toBe('invalid');
+    const plan = planHistoricalAcquisition(rolling(48), now);
+    expect(plan).toMatchObject({ mode: 'statistics', statistics: { start: Date.parse('2026-10-29T12:00:00Z'), end: Date.parse('2026-10-31T12:00:00Z') },
+      raw: { start: Date.parse('2026-10-31T12:00:00Z'), end: now } });
+    expect(plan.window.start).toBe(plan.statistics.start);
+    expect(plan.window.cacheKey).toContain(':statistics');
+    const subhour = resolveTimeWindow({ kind: 'absolute', start: now - 25 * 3600000, end: now - 25 * 3600000 + 900000 }, { ...brussels, now });
+    expect(planHistoricalAcquisition(subhour, now)).toMatchObject({ mode: 'invalid', reason: expect.stringContaining('whole UTC-hour') });
+  });
+
+  it('preserves DST calendar boundaries and rejects unaligned local calendar periods', () => {
+    const now = Date.parse('2026-10-26T12:00:00Z');
+    const yesterday = resolveTimeWindow({ kind: 'shifted_calendar', period: 'day', shift: { amount: -1, unit: 'day' } }, { ...brussels, now });
+    const plan = planHistoricalAcquisition(yesterday, now);
+    expect(plan.mode).toBe('statistics');
+    expect(plan.statistics.end - plan.statistics.start).toBe(25 * 3600000);
+    const month = resolveTimeWindow({ kind: 'shifted_calendar', period: 'month', shift: { amount: -1, unit: 'month' } },
+      { timeZone: 'Asia/Kathmandu', now });
+    expect(planHistoricalAcquisition(month, now)).toMatchObject({ mode: 'invalid', reason: expect.stringContaining('UTC-hour') });
+  });
+  it('plans long calendar periods and the previous month using whole hourly buckets', () => {
+    const now = Date.parse('2026-10-31T12:34:00Z');
+    for (const period of ['week', 'month', 'year']) {
+      const window = resolveTimeWindow({ kind: 'calendar', period }, { ...brussels, now });
+      const plan = planHistoricalAcquisition(window, now);
+      expect(plan.mode).toBe('statistics');
+      expect(plan.statistics.start).toBe(window.start);
+      expect(plan.statistics.end).toBe(Date.parse('2026-10-31T12:00:00Z'));
+      expect(plan.raw.end).toBe(now);
+    }
+    const lastMonth = resolveTimeWindow({ kind: 'shifted_calendar', period: 'month', shift: { amount: -1, unit: 'month' } }, { ...brussels, now });
+    const plan = planHistoricalAcquisition(lastMonth, now);
+    expect(plan).toMatchObject({ mode: 'statistics', raw: null, statistics: { start: lastMonth.start, end: lastMonth.end } });
+  });
   it('resolves calendar days and locale-aware week boundaries', () => {
     const now = Date.parse('2026-05-13T10:22:00Z');
     const day = resolveTimeWindow({ kind: 'calendar', period: 'day' }, { ...brussels, now });
