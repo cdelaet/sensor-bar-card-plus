@@ -62,7 +62,7 @@ Run `npm run test:visual` to compare against the canonical snapshots. After an i
 After Full Validation succeeds for the current `main` commit, prepare the release draft:
 
 ~~~sh
-gh workflow run release-dist.yml --ref main -f version=1.8.0 -f title="Native Card Feature for Home Assistant Tile cards"
+gh workflow run release-dist.yml --ref main -f version=1.10.0 -f title="Historical Peak and Floor"
 ~~~
 
 The Release workflow checks that its commit is still the tip of `main`, requires successful Full Validation for that exact SHA, checks that the requested version matches `package.json`, refuses an existing tag or release, verifies both tracked dist files, and records each SHA-256 and size. It then creates and pushes the annotated `vX.Y.Z` tag, creates a DRAFT GitHub Release with the supplied title, and uploads the editor followed by the core. It verifies the exact two-asset set and downloads both to check bytes, hashes and sizes. The workflow never publishes the release.
