@@ -438,13 +438,11 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       'bar-needle-mode': this._needleSection._getScopedNeedleConfig(root).mode,
       'bar-needle-color': getColorPickerValue(this._needleSection._getScopedNeedleConfig(root).color, '#ffffff'),
       'bar-needle-color-text-fallback': this._needleSection._getScopedNeedleConfig(root).color,
-      'baseline-mode': this._baselineSection._getBaselineMode(root),
       'baseline-value': formatScaleValueInput(getFeatureBaselineSource(this._config)),
       'baseline-above-color': getColorPickerValue(this._baselineSection._getBaselineDirectionalColorValue(root, 'above'), '#000000'),
       'baseline-above-color-text-fallback': this._baselineSection._getBaselineDirectionalColorValue(root, 'above'),
       'baseline-below-color': getColorPickerValue(this._baselineSection._getBaselineDirectionalColorValue(root, 'below'), '#000000'),
       'baseline-below-color-text-fallback': this._baselineSection._getBaselineDirectionalColorValue(root, 'below'),
-      'target-mode': this._targetSection._getTargetMode(root),
       'target-value': formatScaleValueInput(getFeatureTargetSource(this._config)),
       'target-shape': this._targetSection._getEffectiveTargetShapeValue(root),
       'target-direction': this._targetSection._getEffectiveMarkerDirection(root, 'target'),
@@ -480,6 +478,11 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         && ![...control.options].some(option => option.value === String(value))) control.innerHTML = renderWindowOptions(value);
       if (control && (control !== this.shadowRoot.activeElement || this._configReplaced)) control.value = String(value);
       if (field === 'bar-color-text-fallback') control?.setAttribute('aria-label', 'Bar color (CSS value)');
+    }
+    for (const [id, checked] of [['target-show', this._targetSection._getTargetShow(root)],
+      ['baseline-show', this._baselineSection._getBaselineShow(root)]]) {
+      const control = this.shadowRoot.querySelector(`#${id}`);
+      if (control) control.checked = checked;
     }
     for (const section of [this._segmentsSection, this._gradientStopsSection]) {
       const segment = section === this._segmentsSection;

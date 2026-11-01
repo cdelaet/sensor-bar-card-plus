@@ -66,12 +66,35 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
       expect(editor._config.bar.needle).toBe(true);
     }
   });
-  for (const mode of ['auto', 'enabled', 'disabled']) it(`patches Baseline mode ${mode} and preserves Needle and source`, async () => {
+  for (const checked of [false, true]) it(`patches Show marker=${checked} and preserves Needle and source`, async () => {
     const config = raw(), { editor } = await setup(source, config);
-    await edit(editor, '#baseline-mode', mode, 'change');
+    await edit(editor, '#baseline-show', checked, 'change');
     const expected = structuredClone(config);
-    if (mode === 'auto') delete expected.baseline.enabled; else expected.baseline.enabled = mode === 'enabled';
+    expected.baseline.enabled = checked;
     expect(editor._config).toEqual(expected);
+  });
+  it('keeps omitted visibility checked without materializing it through echoes or unrelated edits', async () => {
+    const config = { type, baseline: { at: '50%' }, target: { at: 25 } };
+    const { editor, events } = await setup(source, config);
+    const show = editor.shadowRoot.querySelector('#baseline-show');
+    expect(show.checked).toBe(true); expect(events).toHaveLength(0);
+    await edit(editor, '#formatting-unit', 'W');
+    expect(editor._config.baseline).toEqual(config.baseline);
+    editor.setConfig(editor._config); await editor.updateComplete;
+    expect(editor.shadowRoot.querySelector('#baseline-show').checked).toBe(true);
+    await edit(editor, '#baseline-show', false, 'change');
+    expect(editor._config.baseline.enabled).toBe(false);
+    await edit(editor, '#baseline-show', true, 'change');
+    expect(editor._config.baseline.enabled).toBe(true);
+    editor.setConfig({ type, baseline: { at: 10, enabled: false } }); await editor.updateComplete;
+    expect(editor.shadowRoot.querySelector('#baseline-show').checked).toBe(false);
+  });
+  it('preserves a legacy scalar Baseline and unknown siblings when toggling visibility', async () => {
+    const config = { type, baseline: 50, future: { keep: true } };
+    const { editor } = await setup(source, config);
+    await edit(editor, '#baseline-show', false, 'change');
+    expect(editor._config.baseline).toEqual({ at: 50, enabled: false });
+    expect(editor._config.future).toEqual(config.future);
   });
   for (const direction of ['above', 'below']) it(`patches/toggles ${direction} color without losing nested metadata or Needle`, async () => {
     const config = raw(), { editor } = await setup(source, config);
@@ -129,7 +152,7 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
     const config = raw(); config.baseline = 20;
     const { editor } = await setup(source, config);
     await edit(editor, '#baseline-value', '30'); expect(editor._config.baseline).toBe(30);
-    await edit(editor, '#baseline-mode', 'disabled', 'change'); expect(editor._config.baseline).toEqual({ at: 30, enabled: false });
+    await edit(editor, '#baseline-show', false, 'change'); expect(editor._config.baseline).toEqual({ at: 30, enabled: false });
     await edit(editor, '#baseline-above-color', '#123456'); expect(editor._config.baseline).toEqual({ at: 30, enabled: false, above: { color: '#123456' } });
     expect(editor._config.bar.needle).toEqual(config.bar.needle);
   });

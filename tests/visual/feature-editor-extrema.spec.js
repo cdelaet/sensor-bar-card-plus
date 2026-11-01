@@ -71,7 +71,7 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
     for (const name of ['bar', 'target', 'baseline', 'markers', 'future']) expect(edited[name]).toEqual(original[name]);
   }
   const before = await saved(editor);
-  for (const [selector, value] of [['#bar-needle-mode', 'disabled'], ['#baseline-mode', 'enabled'], ['#target-mode', 'disabled'], ['#bar-fill-style', 'bands']]) await editor.locator(selector).selectOption(value);
+  await editor.locator('#bar-needle-mode').selectOption('disabled'); await editor.locator('#baseline-show').check(); await editor.locator('#target-show').uncheck(); await editor.locator('#bar-fill-style').selectOption('bands');
   await editor.locator('#formatting-unit').fill('W');
   expect((await saved(editor)).peak).toEqual(before.peak); expect((await saved(editor)).floor).toEqual(before.floor);
   const count = await page.evaluate(() => window.__extremaEvents.length);

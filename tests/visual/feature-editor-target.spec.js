@@ -29,7 +29,7 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   expect(await editor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   await expect(section.locator('#target-direction option')).toHaveText(['Inward', 'Outward']);
   await expect(section.locator('#target-shape option')).toHaveText(['diamond', 'triangle']);
-  await editor.locator('#target-mode').selectOption('enabled');
+  await editor.locator('#target-show').check();
   await editor.locator('#target-shape').selectOption('diamond'); await editor.locator('#target-direction').selectOption('inward');
   await editor.locator('[data-field="target-color-text-fallback"]').fill('var(--primary-color)');
   await expect(editor.locator('[data-field="target-color-text-fallback"]')).toBeFocused();
@@ -51,10 +51,10 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   await editor.locator('#target-above-fill-color').evaluate(el => { el.value = '#334455'; el.dispatchEvent(new Event('input', { bubbles: true })); });
   expect((await saved(editor)).target.when_exceeded).toEqual({ future: true });
   await editor.locator('#target-above-fill-enabled').check(); expect((await saved(editor)).target.when_exceeded).toEqual({ fill_color: '#334455', future: true });
-  await editor.locator('#target-mode').selectOption('disabled');
+  await editor.locator('#target-show').uncheck();
   const before = await saved(editor);
   for (const key of ['baseline', 'bar', 'peak', 'floor', 'markers', 'future']) expect(before[key]).toEqual(original[key]);
-  await editor.locator('#bar-needle-mode').selectOption('disabled'); await editor.locator('#baseline-mode').selectOption('enabled');
+  await editor.locator('#bar-needle-mode').selectOption('disabled'); await editor.locator('#baseline-show').check();
   await editor.locator('#bar-fill-style').selectOption('bands'); await editor.locator('#bar-color').evaluate(el => { el.value = '#445566'; el.dispatchEvent(new Event('input', { bubbles: true })); });
   expect((await saved(editor)).target).toEqual(before.target);
   const echoCount = await page.evaluate(() => window.__targetEvents.length);
@@ -69,7 +69,7 @@ for (const source of ['src', 'dist']) test(`Feature Target percentage and HA pic
   const editor = await mount(page, source, 240, true);
   const value = editor.locator('#target-value'); await expect(value).toHaveValue('70%'); await expect(editor.locator('#target-source-mode')).toHaveCount(0); await expect(editor.locator('#target-percent')).toHaveCount(0);
   await expect(editor.locator('[data-kind="target-label-entity"]')).toHaveCount(0);
-  await editor.locator('#target-label-text').fill('Percentage goal'); await editor.locator('#target-mode').selectOption('enabled');
+  await editor.locator('#target-label-text').fill('Percentage goal'); await editor.locator('#target-show').check();
   await editor.locator('#formatting-unit').fill('W'); expect((await saved(editor)).target.at).toBe('70%');
   const picker = editor.locator('ha-entity-picker[data-kind="target-entity-source"]');
   await picker.evaluate(el => { el.dispatchEvent(new CustomEvent('value-changed', { bubbles: true, composed: true, detail: { value: 'sensor.changed' } })); });

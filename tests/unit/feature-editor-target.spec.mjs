@@ -29,6 +29,7 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
     const config = raw(); config.target = target;
     const { editor, events } = await setup(source, config);
     expect(editor._config).toEqual(config); expect(events).toHaveLength(0);
+    if (target === undefined) expect(editor.shadowRoot.querySelector('#target-show').checked).toBe(true);
     editor.context = { entity_id: 'sensor.changed' }; editor.hass = { states: {} }; await editor.updateComplete;
     expect(editor._config).toEqual(config);
     await edit(editor, '#formatting-unit', 'W'); await edit(editor, '#bar-needle-mode', 'enabled', 'change');
@@ -36,18 +37,18 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
   });
   for (const [field, value, path] of [
     ['target-color', '#123456', ['color']], ['target-shape', 'diamond', ['shape']], ['target-direction', 'inward', ['direction']],
-    ['target-mode', 'enabled', ['enabled']], ['target-label-text', 'New goal', ['label', 'text']],
+    ['target-show', true, ['enabled']], ['target-label-text', 'New goal', ['label', 'text']],
     ['target-label-show', false, ['label', 'show']], ['target-label-show-value', true, ['label', 'show_value']],
     ['target-label-show-unit', true, ['label', 'show_unit']], ['target-label-precision', '2', ['label', 'precision']],
     ['target-above-fill-color', '#123456', ['when_exceeded', 'fill_color']],
   ]) it(`patches only ${field}, preserving all nested metadata and other controls`, async () => {
     const config = raw(), { editor, events } = await setup(source, config);
-    await edit(editor, `#${field}`, value, typeof value === 'boolean' || field.endsWith('mode') || field.endsWith('shape') || field.endsWith('direction') ? 'change' : 'input');
+    await edit(editor, `#${field}`, value, typeof value === 'boolean' || field.endsWith('shape') || field.endsWith('direction') ? 'change' : 'input');
     const expected = structuredClone(config);
     let container = expected.target; for (const key of path.slice(0, -1)) container = container[key];
     const key = path.at(-1);
     if (field === 'target-shape') delete container[key];
-    else container[key] = field === 'target-mode' ? true : field === 'target-label-precision' ? 2 : value;
+    else container[key] = field === 'target-label-precision' ? 2 : value;
     if (field === 'target-color') delete expected.target_color;
     if (field === 'target-label-show') delete expected.show_target_label;
     if (field === 'target-label-precision') delete expected.target.label.decimal;
@@ -56,11 +57,19 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
     expect(Object.hasOwn(editor._config.target.label.future, 'unset')).toBe(true);
     expect(editor._config.target.label.entity).toBe('sensor.unsupported');
   });
-  for (const mode of ['auto', 'disabled']) it(`owns only enabled for ${mode}`, async () => {
+  for (const checked of [false, true]) it(`owns only enabled when Show marker is ${checked}`, async () => {
     const config = raw(); config.target.enabled = true;
-    const { editor } = await setup(source, config); await edit(editor, '#target-mode', mode, 'change');
-    const expected = structuredClone(config); if (mode === 'auto') delete expected.target.enabled; else expected.target.enabled = false;
+    const { editor } = await setup(source, config); await edit(editor, '#target-show', checked, 'change');
+    const expected = structuredClone(config); expected.target.enabled = checked;
     expect(editor._config).toEqual(expected);
+  });
+  it('preserves legacy scalar Target value and unknown siblings when toggling visibility', async () => {
+    const config = { type, target: 70, target_entity: 'sensor.legacy', future: { keep: true } };
+    const { editor } = await setup(source, config);
+    await edit(editor, '#target-show', false, 'change');
+    expect(editor._config.target).toEqual({ at: { fixed: 70, entity: 'sensor.legacy' }, enabled: false });
+    expect(editor._config.target_entity).toBe('sensor.legacy');
+    expect(editor._config.future).toEqual(config.future);
   });
   it('clears owned label/color fields and aliases without normalizing other defaults', async () => {
     const config = raw(), { editor } = await setup(source, config);
@@ -86,7 +95,7 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
   for (const at of [70, 'sensor.t', '70%']) it(`keeps scalar source ${at} and promotes minimally for another component`, async () => {
     const config = raw(); config.target.at = at;
     const { editor } = await setup(source, config);
-    await edit(editor, '#target-label-text', 'Edited'); await edit(editor, '#baseline-mode', 'disabled', 'change'); expect(editor._config.target.at).toBe(at);
+    await edit(editor, '#target-label-text', 'Edited'); await edit(editor, '#baseline-show', false, 'change'); expect(editor._config.target.at).toBe(at);
     if (at === 'sensor.t') {
       await edit(editor, '#feature-target-entity', 'sensor.changed'); expect(editor._config.target.at).toBe('sensor.changed');
       await edit(editor, '#target-value', '75'); expect(editor._config.target.at).toEqual({ entity: 'sensor.changed', fixed: 75 });
@@ -137,11 +146,12 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
   it('opens an absent Target without defaults, enables/disables it and retains label defaults only when edited', async () => {
     const { editor, events } = await setup(source, { type });
     expect(editor._config).toEqual({ type }); expect(events).toHaveLength(0);
-    expect(editor.shadowRoot.querySelector('#target-mode').value).toBe('auto');
-    await edit(editor, '#target-mode', 'enabled', 'change'); expect(editor._config.target).toEqual({ enabled: true });
-    await edit(editor, '#target-mode', 'disabled', 'change'); expect(editor._config.target).toEqual({ enabled: false });
+    expect(editor.shadowRoot.querySelector('#target-show').checked).toBe(true);
+    expect(editor._config).toEqual({ type });
+    await edit(editor, '#target-show', false, 'change'); expect(editor._config.target).toEqual({ enabled: false });
+    await edit(editor, '#target-show', true, 'change'); expect(editor._config.target).toEqual({ enabled: true });
     await edit(editor, '#target-label-show-unit', true, 'change'); expect(editor._config.target.label).toEqual({ show_unit: true });
-    await edit(editor, '#target-mode', 'auto', 'change'); expect(editor._config.target).toEqual({ label: { show_unit: true } });
+    expect(editor._config.target.enabled).toBe(true);
   });
   it('switches the direct Value between absolute and percentage fallbacks with Entity/Attribute retained', async () => {
     const config = raw(); config.target.at = { entity: { id: 'sensor.t', attribute: 'temperature' }, fixed: 20, future: true };

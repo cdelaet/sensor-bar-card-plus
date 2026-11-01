@@ -1,5 +1,5 @@
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue,
-  pruneEmptyObjectsInTarget, normalizeTextValue, hasResolvableOverride } from '../shared/editor-config.js';
+  pruneEmptyObjectsInTarget, normalizeTextValue } from '../shared/editor-config.js';
 import { escapeAttribute, formatScaleValueInput, normalizeEditorColorValue, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput } from '../shared/editor-controls.js';
 
 export class BaselineSection {
@@ -78,37 +78,24 @@ export class BaselineSection {
     return 'auto';
   }
 
-  _getEffectiveBaselineMode(scope) {
-    const mode = this._getBaselineMode(scope);
-    if (scope?.type !== 'entity' || mode !== 'inherit') {
-      return mode;
-    }
-    const cardMode = this._getBaselineMode({ type: 'card' });
-    if (cardMode === 'disabled') return 'disabled';
-    if (cardMode === 'enabled') return 'enabled';
-    const cardBaseline = this._getBaselineResolvableValue({ type: 'card' });
-    return hasResolvableOverride(cardBaseline)
-      || !!this._getBaselineDirectionalColorValue({ type: 'card' }, 'above')
-      || !!this._getBaselineDirectionalColorValue({ type: 'card' }, 'below')
-      ? 'enabled'
-      : 'disabled';
+  _getBaselineShow(scope) {
+    const enabled = this.context.read(scope, ['baseline', 'enabled']);
+    if (typeof enabled === 'boolean') return enabled;
+    return scope?.type === 'entity' ? this._getBaselineShow({ type: 'card' }) : true;
   }
 
-  _setBaselineMode(scope, mode) {
-    if (scope?.type === 'entity' && mode === 'inherit') {
-      return this._clearBaselineOverride(scope);
-    }
+  _setBaselineShow(scope, value) {
+    const enabled = !!value;
     return this.context.mutate(scope, (target) => {
+      const rawBaseline = getPathValue(target, ['baseline']);
       let nextTarget = cloneDeep(target);
-      if (mode === 'auto') {
-        nextTarget = deletePathValue(nextTarget, ['baseline', 'enabled']);
+      if (rawBaseline !== undefined && rawBaseline !== null && !isObject(rawBaseline)) {
+        nextTarget = setPathValue(nextTarget, ['baseline'], { at: rawBaseline, enabled });
       } else {
-        nextTarget = setPathValue(nextTarget, ['baseline', 'enabled'], mode === 'enabled');
+        nextTarget = setPathValue(nextTarget, ['baseline', 'enabled'], enabled);
       }
-
-      nextTarget = pruneEmptyObjectsInTarget(nextTarget, ['baseline']);
       return nextTarget;
-    }, { baselineEdit: { path: ['enabled'], value: mode === 'auto' ? undefined : mode === 'enabled' } });
+    }, { baselineEdit: { path: ['enabled'], value: enabled } });
   }
 
   _setBaselineDirectionalColor(scope, direction, rawValue) {
@@ -210,8 +197,12 @@ export class BaselineSection {
     const scope = kind?.startsWith('entity-') ? { type: 'entity', index: Number(index) } : { type: 'card' };
     const control = field ?? kind?.replace(/^entity-/, '');
     if (this._handleValueField(control, value, scope)) return true;
-    if (kind === 'entity-baseline-inherit') { if (value) this._clearBaselineOverride(scope); return true; }
-    if (control === 'baseline-mode') { this._setBaselineMode(scope, value); return true; }
+    if (kind === 'entity-baseline-inherit') {
+      if (value) this._clearBaselineOverride(scope);
+      else this._setBaselineShow(scope, this._getBaselineShow(scope));
+      return true;
+    }
+    if (control === 'baseline-show') { this._setBaselineShow(scope, value); return true; }
     if (control === 'baseline-value') { this._setBaselineResolvablePart(scope, 'fixed', value); return true; }
     if (control === 'baseline-entity-source') { this._setBaselineResolvablePart(scope, 'entity', value); return true; }
     if (control === 'baseline-attribute') { this._setBaselineResolvablePart(scope, 'attribute', value); return true; }
@@ -234,7 +225,7 @@ export class BaselineSection {
       const index = scope.index;
       const baselineInherited = !this._hasBaselineOverride(scope);
       const baselineParts = this._getEffectiveBaselineResolvableValue(scope);
-      const baselineMode = this._getEffectiveBaselineMode(scope);
+      const baselineShow = this._getBaselineShow(scope);
       return `
 	                      <div class="field-row">
 	                        <div class="toggle">
@@ -246,11 +237,10 @@ export class BaselineSection {
                         <button type="button" data-action="remove-baseline" data-scope-type="entity" data-index="${index}" aria-label="Remove Baseline" title="Remove Baseline">🗑</button>
                       </div>
                       <div class="field-row">
-                        <label for="entity-${index}-baseline-mode">Baseline mode</label>
-                        <select id="entity-${index}-baseline-mode" data-kind="entity-baseline-mode" data-index="${index}" value="${escapeAttribute(baselineMode)}">
-                          <option value="enabled"${baselineMode === 'enabled' ? ' selected' : ''}>enabled</option>
-                          <option value="disabled"${baselineMode === 'disabled' ? ' selected' : ''}>disabled</option>
-                        </select>
+	                      <div class="toggle">
+	                        <input id="entity-${index}-baseline-show" type="checkbox" data-kind="entity-baseline-show" data-index="${index}"${baselineShow ? ' checked' : ''}${baselineInherited ? ' disabled' : ''}>
+	                        <label for="entity-${index}-baseline-show">Show marker</label>
+	                      </div>
                       </div>
                       <div class="field-row">
                         <label for="entity-${index}-baseline-value">Baseline fallback</label>
@@ -301,7 +291,7 @@ export class BaselineSection {
 	                          `;
     }
     const baseline = this._getBaselineResolvableValue(scope);
-    const baselineMode = this._getBaselineMode(scope);
+    const baselineShow = this._getBaselineShow(scope);
     const baselineAboveColor = this._getBaselineDirectionalColorValue(scope, 'above');
     const baselineBelowColor = this._getBaselineDirectionalColorValue(scope, 'below');
     return `
@@ -315,15 +305,10 @@ export class BaselineSection {
               <button type="button" data-action="remove-baseline" data-scope-type="card" aria-label="Remove Baseline" title="Remove Baseline">🗑</button>
             </div>
             <div class="field-row">
-              <label for="baseline-mode">Baseline mode</label>
-              <select id="baseline-mode" data-field="baseline-mode" value="${escapeAttribute(baselineMode)}">
-                <option value="auto"${baselineMode === 'auto' ? ' selected' : ''}>auto</option>
-                <option value="enabled"${baselineMode === 'enabled' ? ' selected' : ''}>enabled</option>
-                <option value="disabled"${baselineMode === 'disabled' ? ' selected' : ''}>disabled</option>
-              </select>
-            </div>
-            <div class="field-row">
-              <div class="section-note">Auto shows the baseline when a baseline value is configured.</div>
+	              <div class="toggle">
+	                <input id="baseline-show" type="checkbox" data-field="baseline-show"${baselineShow ? ' checked' : ''}>
+	                <label for="baseline-show">Show marker</label>
+	              </div>
             </div>
             <div class="field-row">
               <label for="baseline-value">${this.options.directValue ? 'Value' : 'Baseline fallback'}</label>

@@ -22,7 +22,7 @@ field('scale-direction', 'Scale', 'select', 'scale.direction', ['normal', 'rever
 for (const marker of ['target', 'peak', 'floor']) {
   const section = marker === 'target' ? 'Target' : marker === 'peak' ? 'Peak' : 'Floor';
   if (marker === 'target') {
-    field('target-mode', section, 'select', 'target.enabled', ['disabled', 'enabled']);
+    field('target-show', section, 'checkbox', 'target.enabled', null);
     field('target-value', section, 'value', null, '75%', { journey: 'sources' });
     kind('target-entity-source', section, 'entity', 'target.at.entity', 'sensor.changed');
     kind('target-attribute', section, 'text', null, 'temperature', { hosts: ['feature'], conditional: true, journey: 'sources' });
@@ -48,7 +48,7 @@ field('bar-animated', 'Bar Appearance', 'checkbox', 'bar.animated', null, { host
 color('field', 'bar-color', 'Bar Appearance', 'bar.color');
 field('bar-needle-mode', 'Needle', 'select', 'bar.needle.show', ['disabled', 'enabled']);
 color('field', 'bar-needle-color', 'Needle', 'bar.needle.color');
-field('baseline-mode', 'Baseline', 'select', 'baseline.enabled', ['disabled', 'enabled']);
+field('baseline-show', 'Baseline', 'checkbox', 'baseline.enabled', null);
 field('baseline-value', 'Baseline', 'value', null, '75%', { journey: 'sources' });
 kind('baseline-entity-source', 'Baseline', 'entity', 'baseline.at.entity', 'sensor.changed');
 kind('baseline-attribute', 'Baseline', 'text', null, 'temperature', { hosts: ['feature'], conditional: true, journey: 'sources' });
@@ -86,7 +86,7 @@ const entityNames = {
  'scale-direction':'entity-scale-direction','bar-direction':'entity-bar-direction',
  'scale-min':'entity-override-min','scale-max':'entity-override-max',
  'scale-min-entity-source':'entity-override-min-entity-source','scale-max-entity-source':'entity-override-max-entity-source',
- 'target-mode':'entity-target-mode','peak-show':'entity-peak-enabled','floor-show':'entity-floor-enabled',
+ 'target-show':'entity-target-show','peak-show':'entity-peak-enabled','floor-show':'entity-floor-enabled',
  'bar-needle-mode':'entity-needle-mode','bar-needle-color':'entity-needle-color','bar-needle-color-text-fallback':'entity-needle-color-text-fallback',
  'layout-height':'entity-override-height',
 };

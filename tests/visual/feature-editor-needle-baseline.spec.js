@@ -30,7 +30,7 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   }
   expect(await editor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   await expect(featureGroup(editor, 'baseline')).toHaveAttribute('data-expanded', 'true');
-  await editor.locator('#baseline-mode').selectOption('enabled');
+  await editor.locator('#baseline-show').check();
   expect((await saved(editor)).bar.needle).toBe(true);
   const fallback = editor.locator('#baseline-value');
   await fallback.evaluate(node => { window.__physicalFallbackNode = node; });
@@ -54,7 +54,7 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   await editor.locator('#baseline-above-color-enabled').check();
   expect((await saved(editor)).baseline.above).toEqual({ color: 'var(--accent-color)', future: true });
   await editor.locator('[data-field="baseline-below-color-text-fallback"]').fill('var(--primary-color)');
-  await editor.locator('#baseline-mode').selectOption('disabled');
+  await editor.locator('#baseline-show').uncheck();
   const count = await page.evaluate(() => window.__physicalEvents.length);
   const before = await saved(editor);
   await editor.evaluate(el => { el.context = { entity_id: 'sensor.changed_parent' }; el.hass = { states: {} }; el.setConfig(el._config); });
@@ -65,8 +65,8 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   expect((await saved(editor)).baseline.at).toEqual({ future: { keep: true } });
   await editor.getByRole('button', { name: 'Remove Baseline', exact: true }).click();
   expect((await saved(editor)).baseline).toBeUndefined(); expect((await saved(editor)).bar.needle).toEqual(before.bar.needle);
-  await editor.locator('#baseline-mode').selectOption('enabled'); await fallback.fill('40');
-  expect((await saved(editor)).baseline).toEqual({ enabled: true, at: { fixed: 40 } });
+  await editor.locator('#baseline-show').check(); await fallback.fill('40');
+  expect((await saved(editor)).baseline).toEqual({ at: { fixed: 40 } });
   expect((await saved(editor)).bar.needle).toEqual(before.bar.needle);
 });
 for (const source of ['src', 'dist']) test(`Feature percentage Baseline and HA picker (${source})`, async ({ page }) => {
@@ -76,7 +76,7 @@ for (const source of ['src', 'dist']) test(`Feature percentage Baseline and HA p
   await expect(value).toHaveValue('50%');
   await expect(editor.locator('#baseline-source-mode')).toHaveCount(0);
   await expect(editor.locator('#baseline-percent')).toHaveCount(0);
-  await editor.locator('#baseline-mode').selectOption('enabled');
+  await editor.locator('#baseline-show').check();
   await editor.locator('#bar-needle-mode').selectOption('enabled');
   await editor.locator('[data-field="bar-needle-color-text-fallback"]').fill('red');
   await expect(editor.locator('[data-field="bar-needle-color-text-fallback"]')).toBeFocused();

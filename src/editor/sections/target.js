@@ -1,6 +1,6 @@
 import { normalizeTargetMarkerShape } from '../../config/normalize.js';
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue, removePathsFromTarget,
-  pruneEmptyObjectsInTarget, normalizeTextValue, normalizeDecimalValue, hasResolvableOverride, getEffectiveDisplayValue } from '../shared/editor-config.js';
+  pruneEmptyObjectsInTarget, normalizeTextValue, normalizeDecimalValue, getEffectiveDisplayValue } from '../shared/editor-config.js';
 import { escapeAttribute, formatScaleValueInput, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from '../shared/editor-marker-controls.js';
 
@@ -45,6 +45,12 @@ export class TargetSection {
     return 'auto';
   }
 
+  _getTargetShow(scope) {
+    const enabled = this.context.read(scope, ['target', 'enabled']);
+    if (typeof enabled === 'boolean') return enabled;
+    return scope?.type === 'entity' ? this._getTargetShow({ type: 'card' }) : true;
+  }
+
   _getTargetShapeValue(scope) {
     return this.context.read(scope, ['target', 'shape']) ?? '';
   }
@@ -73,35 +79,20 @@ export class TargetSection {
     });
   }
 
-  _getEffectiveTargetMode(scope) {
-    const mode = this._getTargetMode(scope);
-    if (scope?.type !== 'entity' || mode !== 'inherit') {
-      return mode;
-    }
-    const cardMode = this._getTargetMode({ type: 'card' });
-    if (cardMode === 'disabled') return 'disabled';
-    if (cardMode === 'enabled') return 'enabled';
-    const cardTarget = this._getTargetResolvableValue({ type: 'card' });
-    return hasResolvableOverride(cardTarget)
-      || this._hasCustomTargetColor({ type: 'card' })
-      || this._getTargetLabelShowValue({ type: 'card' })
-      || !!this._getTargetAboveFillColorValue({ type: 'card' })
-      ? 'enabled'
-      : 'disabled';
-  }
-
-  _setTargetMode(scope, mode) {
-    if (scope?.type === 'entity' && mode === 'inherit') {
-      return this._clearTargetOverride(scope);
-    }
-    if (mode === 'auto') {
-      return this._remove(scope, ['target', 'enabled'], {
-        prunePaths: [['target']],
-      });
-    }
-    return this._write(scope, ['target', 'enabled'], mode === 'enabled', {
-      prunePaths: [['target']],
-    });
+  _setTargetShow(scope, value) {
+    const enabled = !!value;
+    return this.context.mutate(scope, (target) => {
+      let nextTarget = cloneDeep(target);
+      const rawTarget = getPathValue(nextTarget, ['target']);
+      if (rawTarget !== undefined && rawTarget !== null && !isObject(rawTarget)) {
+        const legacyEntity = getPathValue(nextTarget, ['target_entity']);
+        const at = legacyEntity ? { fixed: rawTarget, entity: legacyEntity } : rawTarget;
+        nextTarget = setPathValue(nextTarget, ['target'], { at, enabled });
+      } else {
+        nextTarget = setPathValue(nextTarget, ['target', 'enabled'], enabled);
+      }
+      return nextTarget;
+    }, { targetEdit: { path: ['enabled'], value: enabled } });
   }
 
   _setTargetResolvablePart(scope, part, rawValue) { return this.context.setSource(scope, 'target', part, rawValue); }
@@ -349,8 +340,12 @@ export class TargetSection {
     const scope = kind?.startsWith('entity-') ? { type: 'entity', index: Number(index) } : { type: 'card' };
     const control = field ?? kind?.replace(/^entity-/, '');
     if (this._handleValueField(control, value, scope)) return true;
-    if (control === 'target-inherit') { if (value) this._clearTargetOverride(scope); return true; }
-    if (control === 'target-mode') { this._setTargetMode(scope, value); return true; }
+    if (control === 'target-inherit') {
+      if (value) this._clearTargetOverride(scope);
+      else this._setTargetShow(scope, this._getTargetShow(scope));
+      return true;
+    }
+    if (control === 'target-show') { this._setTargetShow(scope, value); return true; }
     if (control === 'target-value') { this._setTargetResolvablePart(scope, 'fixed', value); return true; }
     if (control === 'target-entity-source') { this._setTargetResolvablePart(scope, 'entity', value); return true; }
     if (control === 'target-attribute') { this._setTargetResolvablePart(scope, 'attribute', value); return true; }
@@ -377,7 +372,7 @@ export class TargetSection {
       const index = scope.index;
       const targetInherited = !this._hasTargetOverride(scope);
       const targetParts = this._getEffectiveTargetResolvableValue(scope);
-      const targetMode = this._getEffectiveTargetMode(scope);
+      const targetShow = this._getTargetShow(scope);
       const targetShape = this._getEffectiveTargetShapeValue(scope);
       const targetDirection = this._getEffectiveMarkerDirection(scope, 'target');
       return `
@@ -388,11 +383,10 @@ export class TargetSection {
                         </div>
                       </div>
 	                      <div class="field-row">
-	                        <label for="entity-${index}-target-mode">Target mode</label>
-	                        <select id="entity-${index}-target-mode" data-kind="entity-target-mode" data-index="${index}" value="${escapeAttribute(targetMode)}">
-                          <option value="enabled"${targetMode === 'enabled' ? ' selected' : ''}>enabled</option>
-                          <option value="disabled"${targetMode === 'disabled' ? ' selected' : ''}>disabled</option>
-                        </select>
+	                        <div class="toggle">
+	                          <input id="entity-${index}-target-show" type="checkbox" data-kind="entity-target-show" data-index="${index}"${targetShow ? ' checked' : ''}${targetInherited ? ' disabled' : ''}>
+	                          <label for="entity-${index}-target-show">Show marker</label>
+	                        </div>
                       </div>
                       <div class="field-row">
                         <label for="entity-${index}-target-value">Target fallback</label>
@@ -452,7 +446,7 @@ export class TargetSection {
 	                          `;
     }
     const target = this._getTargetResolvableValue(scope);
-    const targetMode = this._getTargetMode(scope);
+    const targetShow = this._getTargetShow(scope);
     const targetShape = this._getEffectiveTargetShapeValue(scope);
     const targetDirection = this._getEffectiveMarkerDirection(scope, 'target');
     const targetColor = this._getTargetColorValue(scope);
@@ -460,12 +454,10 @@ export class TargetSection {
     return `
             <div class="field-grid">
             <div class="field-row">
-              <label for="target-mode">Target mode</label>
-              <select id="target-mode" data-field="target-mode" value="${escapeAttribute(targetMode)}">
-                <option value="auto"${targetMode === 'auto' ? ' selected' : ''}>auto</option>
-                <option value="enabled"${targetMode === 'enabled' ? ' selected' : ''}>enabled</option>
-                <option value="disabled"${targetMode === 'disabled' ? ' selected' : ''}>disabled</option>
-              </select>
+	              <div class="toggle">
+	                <input id="target-show" type="checkbox" data-field="target-show"${targetShow ? ' checked' : ''}>
+	                <label for="target-show">Show marker</label>
+	              </div>
             </div>
             <div class="field-row">
               <label for="target-value">${this.options.directValue ? 'Value' : 'Target fallback'}</label>

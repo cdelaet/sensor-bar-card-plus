@@ -70,7 +70,7 @@ for(const source of ['src','dist']) for(const width of [360,240]) test(`Feature 
   await rows(editor).first().getByRole('button',{name:'Remove marker'}).click();await expect(rows(editor)).toHaveCount(3);
   expect((await saved(editor)).markers[0]).toEqual(before.markers[0]);await expect(rows(editor).first()).toHaveAttribute('data-marker-ui-id',id);
   const markers=(await saved(editor)).markers;
-  await editor.locator('#formatting-unit').fill('kW');await editor.locator('#bar-needle-mode').selectOption('disabled');await editor.locator('#baseline-mode').selectOption('enabled');await editor.locator('#target-mode').selectOption('disabled');await editor.locator('#peak-show').uncheck();await editor.locator('#floor-show').uncheck();
+  await editor.locator('#formatting-unit').fill('kW');await editor.locator('#bar-needle-mode').selectOption('disabled');await editor.locator('#baseline-show').check();await editor.locator('#target-show').uncheck();await editor.locator('#peak-show').uncheck();await editor.locator('#floor-show').uncheck();
   await editor.locator('#scale-min').fill('5');await editor.locator('#bar-fill-style').selectOption('bands');
   await editor.locator('input[data-kind="segment-color"]').first().evaluate(el=>{el.value='#123456';el.dispatchEvent(new Event('input',{bubbles:true}));});
   expect((await saved(editor)).markers).toEqual(markers);expect((await saved(editor)).bar.animated).toBe(false);expect((await saved(editor)).entity).toBeUndefined();

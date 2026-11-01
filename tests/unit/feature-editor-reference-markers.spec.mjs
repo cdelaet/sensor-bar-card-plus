@@ -128,7 +128,7 @@ for (const source of ['src', 'dist']) describe(`Feature Reference markers (${sou
   });
   it('every existing Feature section and palette item edit preserves raw markers, including label-only/config aliases', async () => {
     const config = raw(), {editor}=await setup(source,config);
-    for (const [fieldName,value] of [['scale-min','5'],['bar-color','#123456'],['bar-needle-mode','disabled'],['baseline-mode','enabled'],['target-mode','disabled'],['peak-show',false],['floor-show',false],['formatting-unit','kW']]) {
+    for (const [fieldName,value] of [['scale-min','5'],['bar-color','#123456'],['bar-needle-mode','disabled'],['baseline-show',true],['target-show',false],['peak-show',false],['floor-show',false],['formatting-unit','kW']]) {
       const control = editor.shadowRoot.querySelector(`[data-field="${fieldName}"]`); if(control.type==='checkbox') control.checked=value;else control.value=value;
       editor._handleField({type:'change',target:control}); await editor.updateComplete;
     }

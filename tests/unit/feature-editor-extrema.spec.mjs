@@ -52,7 +52,7 @@ for (const source of ['src', 'dist']) describe(`Feature extrema (${source})`, ()
       expect(editor._config).toEqual(config); expect(events).toHaveLength(0);
       editor.context = { entity_id: 'sensor.new' }; editor.hass = { states: {} }; editor.setConfig(config); await editor.updateComplete;
       expect(events).toHaveLength(0);
-      for (const [field, value] of [['formatting-unit', 'W'], ['bar-needle-mode', 'disabled'], ['baseline-mode', 'enabled'], ['target-mode', 'disabled'], ['bar-color', '#123456'], ['bar-fill-style', 'bands']]) await edit(editor, field, value);
+      for (const [field, value] of [['formatting-unit', 'W'], ['bar-needle-mode', 'disabled'], ['baseline-show', true], ['target-show', false], ['bar-color', '#123456'], ['bar-fill-style', 'bands']]) await edit(editor, field, value);
       expect(editor._config[key]).toEqual(marker); expect(editor._config).not.toHaveProperty('entity');
     });
     for (const [suffix, value, path, stored] of [
@@ -134,6 +134,13 @@ for (const source of ['src', 'dist']) describe(`Feature extrema (${source})`, ()
     await edit(editor, 'peak-color', '#123456'); expect(editor._config).not.toHaveProperty('peak_color');
     expect(editor._config.peak_marker).toEqual(config.peak_marker); expect(editor._config.floor).toEqual(config.floor);
   });
+  for (const [enabled, legacyShow, checked] of [[undefined, false, false], [undefined, true, true], [false, true, false], [true, false, true]]) {
+    it(`uses explicit Peak enabled before legacy show_peak (${enabled}, ${legacyShow})`, async () => {
+      const peak = enabled === undefined ? { future: true } : { enabled, future: true };
+      const { editor } = await setup(source, { type, peak, show_peak: legacyShow });
+      expect(editor.shadowRoot.querySelector('#peak-show').checked).toBe(checked);
+    });
+  }
   it('shares the same section and templates with standalone for both extrema; picker availability does not change controls', async () => {
     const { editor, classes } = await setup(source);
     const standalone = new classes.editor(); standalone.setConfig(raw());

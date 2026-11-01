@@ -53,20 +53,11 @@ export class ExtremaSection {
     let mode = scope?.type === 'entity' ? 'inherit' : 'disabled';
     let color = '';
 
-    if (isObject(rawPeak)) {
-      if (rawPeak.enabled === true) {
-        mode = 'enabled';
-      } else if (rawPeak.enabled === false) {
-        mode = 'disabled';
-      }
-      color = rawPeak.color ?? color;
-    }
-
-    if (rawLegacyShow === true) {
-      mode = 'enabled';
-    } else if (rawLegacyShow === false) {
-      mode = 'disabled';
-    }
+    if (rawPeak?.enabled === true) mode = 'enabled';
+    else if (rawPeak?.enabled === false) mode = 'disabled';
+    else if (rawLegacyShow === true) mode = 'enabled';
+    else if (rawLegacyShow === false) mode = 'disabled';
+    if (isObject(rawPeak)) color = rawPeak.color ?? color;
 
     color = color || rawLegacyColor || '';
     if (color && normalizeColorComparisonValue(color) === normalizeColorComparisonValue(defaultColor)) {
@@ -142,12 +133,8 @@ export class ExtremaSection {
         ?? getPathValue(nextTarget, ['peak_color'])
         ?? defaultColor;
 
-      if (scope?.type === 'entity' || boolValue) {
-        currentPeak.enabled = boolValue;
-        if (boolValue && currentPeak.window === undefined) currentPeak.window = this._getEffectiveMarkerExtras(scope, 'peak').window;
-      } else {
-        delete currentPeak.enabled;
-      }
+      currentPeak.enabled = boolValue;
+      if (boolValue && currentPeak.window === undefined) currentPeak.window = this._getEffectiveMarkerExtras(scope, 'peak').window;
 
       if (currentColor && normalizeColorComparisonValue(currentColor) !== normalizeColorComparisonValue(defaultColor)) {
         currentPeak.color = currentColor;
@@ -176,18 +163,9 @@ export class ExtremaSection {
       const currentPeak = isObject(getPathValue(nextTarget, ['peak']))
         ? cloneDeep(getPathValue(nextTarget, ['peak']))
         : {};
-      const currentConfig = this._getScopedPeakConfig(scope);
-
       delete currentPeak.color;
       if (normalizedValue && normalizeColorComparisonValue(normalizedValue) !== normalizeColorComparisonValue(defaultColor)) {
         currentPeak.color = normalizedValue;
-      }
-
-      if (scope?.type === 'entity') {
-        if (currentConfig.mode === 'enabled') currentPeak.enabled = true;
-        if (currentConfig.mode === 'disabled') currentPeak.enabled = false;
-      } else if (currentConfig.mode === 'enabled') {
-        currentPeak.enabled = true;
       }
 
       if (Object.keys(currentPeak).length) {
@@ -196,7 +174,6 @@ export class ExtremaSection {
         nextTarget = deletePathValue(nextTarget, ['peak']);
       }
 
-      nextTarget = deletePathValue(nextTarget, ['show_peak']);
       nextTarget = deletePathValue(nextTarget, ['peak_color']);
       nextTarget = pruneEmptyObjectsInTarget(nextTarget, ['peak']);
       return nextTarget;
@@ -316,8 +293,7 @@ export class ExtremaSection {
         ? cloneDeep(getPathValue(nextTarget, [key]))
         : {};
       const currentColor = current.color ?? defaultColor;
-      if (scope?.type === 'entity' || boolValue) current.enabled = boolValue;
-      else delete current.enabled;
+      current.enabled = boolValue;
       if (boolValue && current.window === undefined) current.window = this._getEffectiveMarkerExtras(scope, key).window;
       if (currentColor && normalizeColorComparisonValue(currentColor) !== normalizeColorComparisonValue(defaultColor)) {
         current.color = currentColor;
@@ -346,10 +322,6 @@ export class ExtremaSection {
       }
       if (Object.keys(current).length) nextTarget = setPathValue(nextTarget, [key], current);
       else nextTarget = deletePathValue(nextTarget, [key]);
-      if (key === 'peak') {
-        nextTarget = deletePathValue(nextTarget, ['show_peak']);
-        nextTarget = deletePathValue(nextTarget, ['peak_color']);
-      }
       return nextTarget;
     }, { extremumEdit: { key, path: ['color'], value: normalizedValue && normalizeColorComparisonValue(normalizedValue) !== normalizeColorComparisonValue(defaultColor) ? normalizedValue : undefined } });
   }
@@ -365,10 +337,6 @@ export class ExtremaSection {
       current.window = normalized;
       if (Object.keys(current).length) nextTarget = setPathValue(nextTarget, [key], current);
       else nextTarget = deletePathValue(nextTarget, [key]);
-      if (key === 'peak') {
-        nextTarget = deletePathValue(nextTarget, ['show_peak']);
-        nextTarget = deletePathValue(nextTarget, ['peak_color']);
-      }
       return nextTarget;
     }, { extremumEdit: { key, path: ['window'], value: normalized } });
   }
@@ -387,10 +355,6 @@ export class ExtremaSection {
       else delete current.label;
       if (Object.keys(current).length) nextTarget = setPathValue(nextTarget, [key], current);
       else nextTarget = deletePathValue(nextTarget, [key]);
-      if (key === 'peak') {
-        nextTarget = deletePathValue(nextTarget, ['show_peak']);
-        nextTarget = deletePathValue(nextTarget, ['peak_color']);
-      }
       return nextTarget;
     }, { extremumEdit: { key, path: ['label', 'show'], value: enabled } });
   }
@@ -462,8 +426,8 @@ ${indent}                          <input id="entity-${index}-${key}-inherit" ty
                       </div>
                       <div class="field-row">
                         <div class="toggle">
-                          <input id="entity-${index}-${key}-enabled" type="checkbox" data-kind="entity-${key}-enabled" data-index="${index}"${marker.mode === 'enabled' ? ' checked' : ''}>
-                          <label for="entity-${index}-${key}-enabled">${title} enabled</label>
+                          <input id="entity-${index}-${key}-enabled" type="checkbox" data-kind="entity-${key}-enabled" data-index="${index}"${marker.mode === 'enabled' ? ' checked' : ''}${inherited ? ' disabled' : ''}>
+                          <label for="entity-${index}-${key}-enabled">Show marker</label>
                         </div>
                       </div>
                       <div class="field-row">
@@ -499,7 +463,7 @@ ${indent}                          `;
             <div class="field-row">
               <div class="toggle">
                 <input id="${key}-show" type="checkbox" data-field="${key}-show"${marker.mode === 'enabled' ? ' checked' : ''}>
-                <label for="${key}-show">${title} enabled</label>
+                <label for="${key}-show">Show marker</label>
               </div>
             </div>
             <div class="field-row">
@@ -536,7 +500,14 @@ ${indent}                          `;
     const match = control?.match(/^(peak|floor)-(.*)$/);
     if (!match) return false;
     const [, key, option] = match;
-    if (option === 'inherit') { if (value) key === 'peak' ? this._clearPeakOverride(scope) : this._clearFloorOverride(scope); return true; }
+    if (option === 'inherit') {
+      if (value) key === 'peak' ? this._clearPeakOverride(scope) : this._clearFloorOverride(scope);
+      else {
+        const show = this._getMarkerConfig(scope, key).mode === 'enabled';
+        key === 'peak' ? this._setScopedPeakEnabled(scope, show) : this._setScopedExtremumEnabled(scope, key, show);
+      }
+      return true;
+    }
     if (option === 'show' || option === 'enabled') {
       key === 'peak' ? this._setScopedPeakEnabled(scope, value) : this._setScopedExtremumEnabled(scope, key, value); return true;
     }

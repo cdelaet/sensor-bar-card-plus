@@ -42,7 +42,7 @@ for (const source of ['src', 'dist']) describe(`standalone extrema characterizat
       setEnabled(editor, root, key, true); expect(configOf(editor, row, key).mode).toBe('enabled');
       setEnabled(editor, row, key, false); expect(configOf(editor, row, key).mode).toBe('disabled');
       expect(configOf(editor, root, key).mode).toBe('enabled');
-      setEnabled(editor, root, key, false); expect(editor._draftConfig[key]).toEqual({ window: 'today' });
+      setEnabled(editor, root, key, false); expect(editor._draftConfig[key]).toEqual({ enabled: false, window: 'today' });
     });
     it(`${key}: accepts supported windows and rejects invalid values`, () => {
       const editor = createEditor({ source }); editor.setConfig({ [key]: { enabled: true }, entities: ['sensor.a'] });
@@ -92,9 +92,9 @@ for (const source of ['src', 'dist']) describe(`standalone extrema characterizat
       expect(editor.shadowRoot.innerHTML).not.toContain(`${key}-window-duration`);
     });
   }
-  it('ignores unsupported Peak aliases while retaining documented flat legacy controls', () => {
+  it('uses canonical Peak enabled before legacy show_peak and retains legacy color fallback', () => {
     const editor = createEditor({ source }); editor.setConfig({ peak: { enabled: true, color: 'red' }, peak_marker: { show: true, color: 'blue', future: true }, show_peak: false, peak_color: 'green' });
-    expect(editor._getScopedPeakConfig(root)).toEqual({ mode: 'disabled', color: 'red' });
+    expect(editor._getScopedPeakConfig(root)).toEqual({ mode: 'enabled', color: 'red' });
     editor._setScopedPeakEnabled(root, true);
     expect(editor._draftConfig.peak).toEqual({ enabled: true, color: 'red', window: 'today' });
     expect(editor._draftConfig.peak_marker).toEqual({ show: true, color: 'blue', future: true });
