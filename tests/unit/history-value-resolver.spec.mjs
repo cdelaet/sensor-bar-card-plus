@@ -369,7 +369,7 @@ describe('historical value resolver', () => {
 
   it('re-resolves the live 10:00 to 10:05 update against the advancing calendar window', async () => {
     let clock = Date.parse('2026-05-13T10:00:00Z');
-    const hass = { config: { time_zone: 'UTC' }, locale: { language: 'en-GB', first_weekday: 'monday' } };
+    const hass = { config: { time_zone: 'UTC' }, locale: { language: 'nl-BE', first_weekday: 'monday' } };
     const service = new SharedObservationService({ now: () => clock,
       provider: async (_hass, sources, window) => new Map(sources.map((source) => [sourceKey, {
         source, observations: [{ timestamp: window.end - 1000, value: 24, state: '24', order: 0,

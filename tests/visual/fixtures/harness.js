@@ -36,7 +36,7 @@ window.__sbcpHistoryFixture = (states, values = [80]) => {
     const samples = Array.isArray(values) ? values : values[entity] ?? [];
     return samples.map((value, index) => ({ s: String(value), lu: (now - (samples.length - index) * 60000) / 1000 }));
   };
-  const hass = { connection, connected: true, states, config: { time_zone: 'UTC' }, locale: { language: 'en-GB' },
+  const hass = { connection, connected: true, states, config: { time_zone: 'UTC' }, locale: { language: navigator.language },
     callWS: async request => { requests.push(request); return Object.fromEntries(request.entity_ids.map(id => [id, rows(id)])); } };
   return { hass, connection, requests, get subscriptions() { return subscriptions; },
     update: (entity, value) => {

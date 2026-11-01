@@ -1,4 +1,5 @@
 const path = require('path');
+const { testLocale } = require('./tests/support/test-locale.cjs');
 
 module.exports = {
   testDir: path.join(__dirname, 'tests/visual'),
@@ -20,7 +21,7 @@ module.exports = {
   ],
   use: {
     headless: true,
-    locale: 'nl-BE',
+    locale: testLocale,
     baseURL: 'http://127.0.0.1:4173',
     viewport: { width: 900, height: 720 },
   },

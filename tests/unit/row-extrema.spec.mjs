@@ -19,7 +19,7 @@ function fixture(rows, extra = {}) {
   ]])));
   const state = value => ({ state: String(value), attributes: { unit_of_measurement: 'W' } });
   card.setConfig({ entities: rows, ...extra });
-  card.hass = { connection, callWS, config: { time_zone: 'UTC' }, locale: { language: 'en-GB' },
+  card.hass = { connection, callWS, config: { time_zone: 'UTC' }, locale: { language: 'nl-BE' },
     states: { 'sensor.power': state(70), 'sensor.min': state(0), 'sensor.max': state(200), 'sensor.other_max': state(400) } };
   card.connectedCallback();
   return { card, callWS };
@@ -122,7 +122,7 @@ describe('shared historical extrema for rows', () => {
     ['weekly', { kind: 'calendar', period: 'week' }],
   ])('uses the expected %s historical window', (_input, spec) => {
     const now = Date.parse('2026-05-13T10:22:00Z');
-    const resolved = resolveTimeWindow(spec, { now, timeZone: 'UTC', locale: 'en-GB' });
+    const resolved = resolveTimeWindow(spec, { now, timeZone: 'UTC', locale: 'nl-BE' });
     expect(resolved.end).toBe(now);
     expect(resolved.start).toBeLessThan(now);
     expect(resolved.interval).toBe('[start,end)');

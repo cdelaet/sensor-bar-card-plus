@@ -29,7 +29,7 @@ function connectionFixture() {
   const callWS = vi.fn(async (request) => Object.fromEntries(request.entity_ids.map((id) => [id, [
     { s: '5', lu: (Date.now() - 10_000) / 1000 },
   ]])));
-  const hass = { connection, connected: true, callWS, config: { time_zone: 'UTC' }, locale: { language: 'en-GB' }, states: {} };
+  const hass = { connection, connected: true, callWS, config: { time_zone: 'UTC' }, locale: { language: 'nl-BE' }, states: {} };
   return { connection, hass, callWS };
 }
 

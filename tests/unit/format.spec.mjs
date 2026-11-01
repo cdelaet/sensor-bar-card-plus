@@ -4,10 +4,11 @@ import {
   createTextPresentation,
   formatNumericDisplay,
 } from '../../src/utils/format.js';
+import testLocale from '../support/test-locale.cjs';
 
 describe('numeric presentation formatting', () => {
   it('uses the canonical test locale', () => {
-    expect(new Intl.NumberFormat().resolvedOptions().locale).toBe('nl-BE');
+    expect(new Intl.NumberFormat().resolvedOptions().locale).toBe(testLocale.testLocale);
   });
 
   it('formats explicit decimals with fixed trailing zeroes', () => {

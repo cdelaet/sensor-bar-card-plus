@@ -28,7 +28,7 @@ function fixture() {
     { s: '10', lu: (now - 30000) / 1000 }, { s: '90', lu: (now - 20000) / 1000 },
     { s: '20', lu: (now - 10000) / 1000 },
   ]])));
-  const hass = { connection, callWS, connected: true, config: { time_zone: 'UTC' }, locale: { language: 'en-GB' },
+  const hass = { connection, callWS, connected: true, config: { time_zone: 'UTC' }, locale: { language: 'nl-BE' },
     states: { [entity]: { state: '40', attributes: {}, last_updated: new Date(now - 5000).toISOString() } } };
   const { card: Card, feature: Feature } = loadCardClass();
   const card = new Card(); card._render = () => {}; card._update = vi.fn(); card._logDiagnostics = () => {};

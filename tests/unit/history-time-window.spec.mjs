@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalizeHistoricalWindow, isEligibleHistoricalWindow, parseHistoricalWindow, planHistoricalAcquisition, resolveTimeWindow } from '../../src/history/time-window.js';
 
-const brussels = { timeZone: 'Europe/Brussels', locale: 'en-GB' };
+const brussels = { timeZone: 'Europe/Brussels', locale: 'nl-BE' };
 
 describe('historical time windows', () => {
   it('parses legacy calendar aliases while exposing canonical values', () => {
@@ -82,15 +82,15 @@ describe('historical time windows', () => {
     expect(day.start).toBe(Date.parse('2026-05-12T22:00:00Z'));
     expect(day.end).toBe(now);
     const usWeek = resolveTimeWindow({ kind: 'calendar', period: 'week' }, { ...brussels, locale: 'en-US', now });
-    const gbWeek = resolveTimeWindow({ kind: 'calendar', period: 'week' }, { ...brussels, now });
+    const nlBeWeek = resolveTimeWindow({ kind: 'calendar', period: 'week' }, { ...brussels, now });
     expect(new Date(usWeek.start).toISOString()).toBe('2026-05-09T22:00:00.000Z');
-    expect(new Date(gbWeek.start).toISOString()).toBe('2026-05-10T22:00:00.000Z');
+    expect(new Date(nlBeWeek.start).toISOString()).toBe('2026-05-10T22:00:00.000Z');
   });
 
   it('uses the Home Assistant first-weekday preference before locale and has a deterministic fallback', () => {
     const now = Date.parse('2026-05-13T10:22:00Z');
     const sunday = resolveTimeWindow({ kind: 'calendar', period: 'week' },
-      { ...brussels, locale: 'en-GB', firstWeekday: 'sunday', now });
+      { ...brussels, locale: 'nl-BE', firstWeekday: 'sunday', now });
     const monday = resolveTimeWindow({ kind: 'calendar', period: 'week' },
       { ...brussels, locale: 'en-US', firstWeekday: 'monday', now });
     expect(sunday.start).toBe(Date.parse('2026-05-09T22:00:00Z'));
@@ -103,9 +103,9 @@ describe('historical time windows', () => {
         { ...brussels, locale: 'en-US', firstWeekday: 'language', now });
       expect(fallback.semantics.weekStartsOn).toBe(0);
       expect(fallback.start).toBe(Date.parse('2026-05-09T22:00:00Z'));
-      const gb = resolveTimeWindow({ kind: 'calendar', period: 'week' },
+      const nlBe = resolveTimeWindow({ kind: 'calendar', period: 'week' },
         { ...brussels, firstWeekday: 'language', now });
-      expect(gb.semantics.weekStartsOn).toBe(1);
+      expect(nlBe.semantics.weekStartsOn).toBe(1);
     } finally {
       Object.defineProperty(Intl, 'Locale', { configurable: true, value: originalLocale });
     }
