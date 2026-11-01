@@ -255,7 +255,7 @@ test('labels stay passive, add no tab stops and preserve primary unavailable/rec
 });
 
 for (const [animated, reducedMotion] of [[true, 'no-preference'], [false, 'no-preference'], [true, 'reduce']]) {
-  test(`stable label motion follows animated=${animated}, reduced-motion=${reducedMotion}`, async ({ page }) => {
+  test(`marker label positions are immediate for animated=${animated}, reduced-motion=${reducedMotion}`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion });
     await mount(page, { bar: { animated }, markers: [{ at: { entity: 'sensor.anchor' }, lane: 'above', label: textOnly('High') }] },
       { states: { [entity]: state(50), 'sensor.anchor': state(20) } });
@@ -266,7 +266,17 @@ for (const [animated, reducedMotion] of [[true, 'no-preference'], [false, 'no-pr
       await element.updateComplete;
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     });
-    await expect(label(page, 'generic-0')).toHaveCSS('transition-duration', animated && reducedMotion !== 'reduce' ? '0.6s' : '0s');
+    await expect(label(page, 'generic-0')).toHaveCSS('transition-duration', '0s');
+    const moved = await feature(page).evaluate(element => {
+      const surface = element.shadowRoot.querySelector('#surface').getBoundingClientRect();
+      const node = element.shadowRoot.querySelector('.compact-marker-label[data-marker-id="generic-0"]');
+      const rect = node.getBoundingClientRect();
+      const marker = element._row.markers.find(item => item.id === 'generic-0');
+      const anchor = marker.position * surface.width / 100;
+      const center = Math.max(rect.width / 2, Math.min(surface.width - rect.width / 2, anchor));
+      return { actual: rect.left - surface.left + rect.width / 2, expected: center };
+    });
+    expect(moved.actual).toBeCloseTo(moved.expected, 1);
     await feature(page).evaluate(element => { element.parentElement.style.width = '80px'; });
     await frames(page);
     await expect(label(page, 'generic-0')).toHaveCSS('transition-duration', '0s');

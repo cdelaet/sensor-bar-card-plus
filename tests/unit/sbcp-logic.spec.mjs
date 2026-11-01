@@ -1435,7 +1435,7 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(html).toContain('data-edge="middle"');
   });
 
-  it('marks rows with bar.animated false and disables row-scoped transitions in CSS', () => {
+  it('marks rows with bar.animated false without coupling marker labels to bar animation', () => {
     const card = createCard();
     const cfg = card.normalizeCardConfig({
       bar: { fill_style: 'solid', color: '#2563eb', animated: false, needle: true },
@@ -1462,14 +1462,18 @@ describe('Sensor Bar Card Plus logic', () => {
 
     expect(html).toContain('data-bar-animated="false"');
     expect(html).toContain('bar-fill-reveal no-anim');
+    expect(html).toContain('class="target-value-label" style="left:80%;visibility:hidden;');
 
     const source = readCardStyles();
     expect(source).toContain('.row[data-bar-animated="false"] .bar-fill-reveal,');
     expect(source).toContain('.row[data-bar-animated="false"] .needle-marker,');
     expect(source).toContain('.row[data-bar-animated="false"] .target-marker,');
     expect(source).toContain('.row[data-bar-animated="false"] .peak-marker,');
-    expect(source).toContain('.row[data-bar-animated="false"] .target-value-label {');
-    expect(source).toContain('transition: none;');
+    expect(source).not.toContain('.row[data-bar-animated="false"] .target-value-label');
+    expect(source).not.toContain('.row[data-bar-animated="false"] .peak-value-label');
+    expect(source).not.toContain('.row[data-bar-animated="false"] .generic-value-label');
+    expect(source.match(/\.target-value-label \{[\s\S]*?\n        \}/)?.[0]).not.toContain('transition:');
+    expect(source.match(/\.peak-value-label,[\s\S]*?\.generic-value-label \{[\s\S]*?\n        \}/)?.[0]).not.toContain('transition:');
   });
 
   it('keeps glyph occupancy separate from configured marker-label lanes', () => {

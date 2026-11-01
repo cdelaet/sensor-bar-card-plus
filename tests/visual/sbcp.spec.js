@@ -68,6 +68,40 @@ async function render(page, { width = 720, config, states = baseStates }) {
   return page.locator('#mount');
 }
 
+test('Card marker labels across types have no horizontal position transition', async ({ page }) => {
+  const states = {
+    'sensor.marker_label_card': sensor(50),
+    'sensor.marker_target': sensor(30),
+    'sensor.marker_reference': sensor(70),
+  };
+  await render(page, {
+    config: { entities: [{
+      entity: 'sensor.marker_label_card',
+      target: { at: { entity: 'sensor.marker_target' }, label: { show: true, text: 'Target' } },
+      peak: { enabled: true, label: { show: true, text: 'Peak' } },
+      floor: { enabled: true, label: { show: true, text: 'Floor' } },
+      markers: [{ at: { entity: 'sensor.marker_reference' }, label: { show: true, text: 'Reference' } }],
+    }] },
+    states,
+  });
+  const row = page.locator('.row[data-entity="sensor.marker_label_card"]');
+  const labels = row.locator('.target-value-label, .peak-value-label, .floor-value-label, .generic-value-label');
+  await expect(labels).toHaveCount(4);
+  await expect.poll(() => labels.evaluateAll(nodes => nodes.map(node => ({
+    transition: getComputedStyle(node).transitionDuration,
+    visibility: getComputedStyle(node).visibility,
+  })))).toEqual(Array.from({ length: 4 }, () => ({ transition: '0s', visibility: 'visible' })));
+
+  await page.locator('sensor-bar-card-plus').evaluate(async card => {
+    card.hass = { ...card._hass, states: { ...card._hass.states,
+      'sensor.marker_target': { state: '80', attributes: { unit_of_measurement: 'W' } },
+      'sensor.marker_reference': { state: '20', attributes: { unit_of_measurement: 'W' } } } };
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  await expect.poll(() => labels.evaluateAll(nodes => nodes.map(node => getComputedStyle(node).transitionDuration)))
+    .toEqual(Array.from({ length: 4 }, () => '0s'));
+});
+
 for (const animated of [false, true]) {
   test(`dynamic scale holds invalid bounds and settles simultaneous updates (animated=${animated})`, async ({ page }) => {
     const states = (value, min, max, baseline) => ({

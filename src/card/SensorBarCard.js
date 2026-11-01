@@ -214,7 +214,10 @@ export class SensorBarCard extends HTMLElement {
     this._densityPassDirty = false;
     this._densityPassFrame = null;
     this._densityPassRetries = 0;
-    this._boundWindowResize = () => this._schedulePostLayoutDensityPass();
+    this._boundWindowResize = () => {
+      this._repositionAllTargetLabels();
+      this._schedulePostLayoutDensityPass();
+    };
     this._markerHover = null;
     this._boundMarkerPointerOver = (event) => this._handleMarkerPointerOver(event);
     this._boundMarkerPointerOut = (event) => this._handleMarkerPointerOut(event);
@@ -694,8 +697,12 @@ export class SensorBarCard extends HTMLElement {
     const track = row.querySelector('.bar-track');
     const label = row.querySelector(labelSelector);
     const marker = row.querySelector(markerSelector);
-    
-    if (!track || !label || !marker) return;
+
+    if (!label) return;
+    if (!track || !marker) {
+      this._setStyleIfChanged(label, 'visibility', 'hidden');
+      return;
+    }
     
     if (marker.style.display === 'none' || !label.textContent.trim()) {
       this._setStyleIfChanged(label, 'visibility', 'hidden');
@@ -1122,15 +1129,6 @@ export class SensorBarCard extends HTMLElement {
         }
 ${barTrackStyles}
 ${getBarAnimationStyles('.row[data-bar-animated="false"]')}
-        .row[data-bar-animated="false"] .target-value-label,
-        .row[data-bar-animated="false"] .peak-value-label,
-        .row[data-bar-animated="false"] .floor-value-label,
-        .row[data-bar-animated="false"] .generic-value-label {
-          transition: none;
-        }
-        .row[data-bar-animated="false"] .target-value-label {
-          transition: none;
-        }
 
         .bar-inner-label {
           position: absolute;
@@ -1283,7 +1281,6 @@ ${getBarAnimationStyles('.row[data-bar-animated="false"]')}
           pointer-events: none;
           z-index: 8;
           visibility: hidden;
-          transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
         }
         .peak-value-label,
         .floor-value-label,
@@ -1307,7 +1304,6 @@ ${getBarAnimationStyles('.row[data-bar-animated="false"]')}
           pointer-events: none;
           z-index: 8;
           visibility: hidden;
-          transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
         }
         .generic-value-label[data-show-marker="false"] {
           pointer-events: auto;
@@ -1661,6 +1657,7 @@ ${barMarkerStyles}
 
     const observer = new ResizeObserver(() => {
       if (!this.isConnected || this._resizeObserver !== observer) return;
+      this._repositionAllTargetLabels();
       this._applyCompactTier();
       this._schedulePostLayoutDensityPass();
     });
@@ -3078,21 +3075,21 @@ ${barMarkerStyles}
       needle: needleState, markers: markerModels,
     }, ecfg, { height: 'var(--sbcp-row-height)', color });
     const targetValueLabel = targetMarkerModel?.labelVisible ? `
-      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;visibility:${targetMarkerModel.visible && targetMarkerModel.label?.text ? 'visible' : 'hidden'};${this._getMarkerLabelColorStyle(targetMarkerModel)}">
+      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;visibility:hidden;${this._getMarkerLabelColorStyle(targetMarkerModel)}">
         ${targetMarkerModel.label?.text ? escapeHtml(targetMarkerModel.label.text) : ''}
       </div>` : '';
     const peakValueLabel = peakMarkerModel?.labelVisible ? `
-      <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;visibility:${peakMarkerModel.visible && peakMarkerModel.label?.text ? 'visible' : 'hidden'};${this._getMarkerLabelColorStyle(peakMarkerModel)}">
+      <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;visibility:hidden;${this._getMarkerLabelColorStyle(peakMarkerModel)}">
         ${peakMarkerModel.visible && peakMarkerModel.label?.text ? escapeHtml(peakMarkerModel.label.text) : ''}
       </div>` : '';
     const floorValueLabel = floorMarkerModel?.labelVisible ? `
-      <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;visibility:${floorMarkerModel.visible && floorMarkerModel.label?.text ? 'visible' : 'hidden'};${this._getMarkerLabelColorStyle(floorMarkerModel)}">
+      <div class="floor-value-label" style="left:${Number.isFinite(floorMarkerModel.position) ? floorMarkerModel.position : 0}%;visibility:hidden;${this._getMarkerLabelColorStyle(floorMarkerModel)}">
         ${floorMarkerModel.visible && floorMarkerModel.label?.text ? escapeHtml(floorMarkerModel.label.text) : ''}
       </div>` : '';
     const genericValueLabels = genericMarkerModels
       .filter((marker) => marker.labelVisible)
       .map((marker) => `
-      <div class="generic-value-label" data-marker-id="${escapeHtml(marker.id)}" data-lane="${marker.lane}" data-show-marker="${marker.showMarker === false ? 'false' : 'true'}" style="left:${Number.isFinite(marker.position) ? marker.position : 0}%;visibility:${marker.visible && marker.label?.text ? 'visible' : 'hidden'};${this._getMarkerLabelColorStyle(marker)}">
+      <div class="generic-value-label" data-marker-id="${escapeHtml(marker.id)}" data-lane="${marker.lane}" data-show-marker="${marker.showMarker === false ? 'false' : 'true'}" style="left:${Number.isFinite(marker.position) ? marker.position : 0}%;visibility:hidden;${this._getMarkerLabelColorStyle(marker)}">
         ${marker.visible && marker.label?.text ? escapeHtml(marker.label.text) : ''}
       </div>`)
       .join('');
@@ -3265,7 +3262,6 @@ ${barMarkerStyles}
       this._patchMarkerLabelAppearance(labelEl, marker);
       if (marker?.labelVisible && marker.visible && marker.label?.text) {
         this._setTextIfChanged(labelEl, marker.label?.text ?? null);
-        this._setStyleIfChanged(labelEl, 'visibility', 'visible');
         this._setStyleIfChanged(labelEl, 'left', `${Number.isFinite(marker.position) ? marker.position : 0}%`);
       } else {
         this._setStyleIfChanged(labelEl, 'visibility', 'hidden');
@@ -3286,7 +3282,6 @@ ${barMarkerStyles}
       this._patchMarkerLabelAppearance(labelEl, marker);
       if (marker?.labelVisible && marker.visible && marker.label?.text) {
         this._setTextIfChanged(labelEl, marker.label?.text ?? null);
-        this._setStyleIfChanged(labelEl, 'visibility', 'visible');
         this._setStyleIfChanged(labelEl, 'left', `${Number.isFinite(marker.position) ? marker.position : 0}%`);
       } else {
         this._setStyleIfChanged(labelEl, 'visibility', 'hidden');
@@ -3294,6 +3289,13 @@ ${barMarkerStyles}
     };
     patchValueLabel(peakLabelEl, 'peak');
     patchValueLabel(floorLabelEl, 'floor');
+
+    if (row.querySelector('.bar-track')) {
+      this._positionTargetLabel(row);
+      this._positionMarkerValueLabel(row, '.peak-value-label', '.peak-marker');
+      this._positionMarkerValueLabel(row, '.floor-value-label', '.floor-marker');
+      this._positionGenericMarkerLabels(row);
+    }
   }
 
   _update(previousHass = null) {

@@ -26,7 +26,10 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     this._scaleHistory = null;
     this._previousRow = null;
     this._labelNodes = new Map();
-    this._onLabelResize = () => this._scheduleLabelLayout(true);
+    this._onLabelResize = () => {
+      for (const node of this._labelNodes.values()) node.hidden = true;
+      this._scheduleLabelLayout();
+    };
     this._updateComplete = Promise.resolve();
   }
 
@@ -93,7 +96,6 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       this._scaleHistory = null;
       this._previousRow = null;
       this._structureKey = null;
-      this._labelLayoutKey = null;
       // Keep inheritance transient: never write context.entity_id into raw config.
       this._normalized = this._config ? normalizeCardConfig({
         ...this._config,
@@ -164,7 +166,6 @@ export class SensorBarCardPlusFeature extends HTMLElement {
           pointer-events: none;
         }
         .compact-marker-label[data-lane="below"] { top: auto; bottom: 0; }
-        .surface[data-bar-animated="false"] .compact-marker-label { transition: none !important; }
         /* Any reserved label lane caps all glyphs. Uniform scaling preserves shape and edge anchoring. */
         .surface[data-compact-glyphs="true"] .marker-shape-svg { transform: translateX(-50%) scale(0.5); }
         .surface[data-compact-glyphs="true"] :is(.peak-inset, .target-inset, .floor-inset) {
@@ -258,7 +259,6 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       ) });
     }
     this._barRenderKey = renderKey;
-    this._labelAnimated = model.animated;
     this._scheduleLabelLayout();
   }
 
@@ -278,6 +278,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         this._labelNodes.set(marker.id, node);
       }
       const node = this._labelNodes.get(marker.id);
+      node.hidden = true;
       node.dataset.lane = marker.lane;
       setStyleIfChanged(node, '--marker-color', getEffectiveMarkerColor(marker));
     }
@@ -293,7 +294,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       this._labelFonts.addEventListener('loadingdone', this._onLabelResize);
       const fonts = this._labelFonts;
       fonts.ready.then(() => {
-        if (this._labelFonts === fonts) this._scheduleLabelLayout(true);
+        if (this._labelFonts === fonts) this._scheduleLabelLayout();
       });
     }
   }
@@ -305,12 +306,10 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     this._labelFonts = null;
     if (this._labelFrame) cancelAnimationFrame(this._labelFrame);
     this._labelFrame = null;
-    this._labelLayoutKey = null;
   }
 
-  _scheduleLabelLayout(snap = false) {
+  _scheduleLabelLayout() {
     if (!this._labelObserver) return;
-    this._snapLabels = this._snapLabels || snap;
     if (this._labelFrame) return;
     this._labelFrame = requestAnimationFrame(() => {
       this._labelFrame = null;
@@ -325,20 +324,14 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     this._labelMeasure ??= document.createElement('canvas').getContext('2d');
     this._labelMeasure.font = getComputedStyle(this._labels).font;
     const layouts = layoutFeatureMarkerLabels(this._row?.markers ?? [], width, text => this._labelMeasure.measureText(text).width);
-    const key = JSON.stringify([width, height, geometry.above, geometry.below, this._labelMeasure.font,
-      layouts.map(label => [label.id, label.lane, label.mode, label.width])]);
-    const animate = this._labelAnimated && !this._snapLabels && key === this._labelLayoutKey;
     for (const node of this._labelNodes.values()) node.hidden = true;
     for (const label of layouts) {
       const node = this._labelNodes.get(label.id);
-      node.hidden = label.mode === 'hidden';
       node.dataset.mode = label.mode;
       if (node.textContent !== label.text) node.textContent = label.text;
-      setStyleIfChanged(node, 'transition', animate ? 'left 0.6s cubic-bezier(0.4,0,0.2,1)' : 'none');
       setStyleIfChanged(node, 'left', `${label.left}px`);
       setStyleIfChanged(node, 'width', `${label.width}px`);
+      node.hidden = label.mode === 'hidden';
     }
-    this._labelLayoutKey = key;
-    this._snapLabels = false;
   }
 }
