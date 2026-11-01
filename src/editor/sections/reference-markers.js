@@ -538,7 +538,7 @@ export class ReferenceMarkersSection {
     return false;
   }
   // Reconcile only Reference rows. UI IDs own rows; field routing owns each
-  // direct body group. Keep unchanged controls mounted, including Source, so
+  // direct body group. Keep unchanged controls mounted, including Value, so
   // Safari never loses the editing row's viewport anchor during a mode change.
   syncStructure(scope = { type: 'card' }) {
     const root = this.ui.root();
@@ -615,7 +615,8 @@ export class ReferenceMarkersSection {
     markers.forEach((marker, index) => {
       const source = this._getGenericMarkerSource(marker, scope, index), label = marker?.label ?? {};
       const values = {
-        'source-mode': source.mode, fixed: source.fixed ?? '', fallback: source.fixed ?? '', percent: source.percent ?? '',
+        fixed: source.fixed !== '' && source.fixed !== undefined && source.fixed !== null
+          ? source.fixed : source.percent !== '' && source.percent !== undefined && source.percent !== null ? `${source.percent}%` : '',
         lane: marker?.lane ?? 'below', shape: marker?.shape ?? 'circle', direction: normalizeMarkerDirection(marker?.direction),
         color: getColorPickerValue(marker?.color, '#888888'), 'color-text-fallback': marker?.color ?? '#888888',
         'label-text': label.text ?? '', 'label-precision': label.precision ?? label.decimal ?? '',

@@ -83,7 +83,7 @@ for (const source of ['src', 'dist']) describe(`standalone extrema characterizat
       if (key === 'peak') editor._clearPeakOverride(row); else editor._clearFloorOverride(row);
       expect(editor._draftConfig.entities[0][key]).toEqual({ future: true });
       expect(editor._draftConfig.entities[0][key === 'peak' ? 'floor' : 'peak']).toEqual({ enabled: true });
-      expect(editor._draftConfig[key]).toEqual({ enabled: true, window: 'daily' });
+      expect(editor._draftConfig[key]).toEqual({ enabled: true, window: 'today' });
     });
     it(`${key}: preserves raw unsupported reset objects on load, with no reset draft state`, () => {
       const editor = createEditor({ source }), reset = { mode: 'duration', duration: '15m', future: true };

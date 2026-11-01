@@ -94,7 +94,11 @@ async function commit(page,editor,operation) {
  return saved(page);
 }
 async function replaceNumericDraft(page,editor,input,value,policy='native') {
- await input.focus();const before=await saved(page),events=await count(page);await input.fill('');
+ await input.focus();const before=await saved(page),events=await count(page);
+ if(await input.getAttribute('data-kind')==='generic-marker-fixed') {
+  await input.evaluate(el=>{el.focus();el.select();});await input.press('Backspace');
+ }
+ else await input.fill('');
  await expect(input).toHaveValue('');await expect(input).toBeFocused();await echo(page,editor);
  expect(await saved(page)).toEqual(before);expect(await count(page)).toBe(events);await expect(input).toHaveValue('');
  if(policy==='native'||policy==='percentage') {
@@ -123,6 +127,29 @@ function expectedValue(entry,value,config) {
 }
 async function fieldJourney(page,host,entry,options={}) {
  const editor=await mount(page,host,seed(host),options);await openSection(editor,entry);const before=await saved(page);
+ if(entry.journey==='references') {
+  const input=control(editor,entry), marker=()=>saved(page).then(config=>config.markers[0]);
+  if(entry.name==='generic-marker-fixed') {
+   await expect(input).toHaveValue('50');
+   await commit(page,editor,()=>input.fill('75%'));await expect(input).toHaveValue('75%');
+   expect((await marker()).at).toBe('75%');
+   await commit(page,editor,()=>input.fill('75'));expect((await marker()).at).toEqual({fixed:75});
+  } else if(entry.name==='generic-marker-entity') {
+   await expect(input).toHaveValue('');
+   await commit(page,editor,()=>replaceText(input,'sensor.changed'));
+   expect((await marker()).at).toEqual({entity:'sensor.changed',fixed:50});
+  } else if(entry.name==='generic-marker-attribute') {
+   const entity=editor.locator('[data-kind="generic-marker-entity"]').first();
+   await commit(page,editor,()=>replaceText(entity,'sensor.changed'));
+   await expect(input).toHaveValue('');
+   await commit(page,editor,()=>input.fill('temperature'));
+   expect((await marker()).at).toEqual({entity:{id:'sensor.changed',attribute:'temperature'},fixed:50});
+  }
+  const value=await input.inputValue();await reopen(page,editor);await openSection(editor,entry);await expect(control(editor,entry)).toHaveValue(value);
+  if(entry.scope==='entity') {const after=await saved(page);expect(after.entities[1]).toEqual(before.entities[1]);expect(after.scale).toEqual(before.scale);expect(after.markers).toEqual(before.markers);}
+  expect((await saved(page)).future).toEqual(before.future);
+  return entry.id;
+ }
  if(['entity-icon-mode','entity-icon-value','entity-icon-picker'].includes(entry.name)) {
   const mode=value=>editor.locator(`input[data-kind="entity-icon-mode"][data-index="0"][value="${value}"]`);
   const input=options.iconPicker?editor.locator('ha-icon-picker[data-kind="entity-icon-picker"][data-index="0"] input'):editor.locator('input[data-kind="entity-icon-value"][data-index="0"]');

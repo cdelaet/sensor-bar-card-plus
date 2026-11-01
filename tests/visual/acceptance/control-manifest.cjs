@@ -59,14 +59,13 @@ for (const side of ['above', 'below']) {
   color('field', `baseline-${side}-color`, 'Baseline', `baseline.${side}.color`);
 }
 for (const [suffix, type, value, path] of [
-  ['source-mode','select',null,null], ['fixed','number','75','at.fixed'], ['fallback','number','85','at.fixed'], ['percent','number','75','at'],
-  ['entity','entity','sensor.changed','at.entity'], ['lane','select',['above','below'],'lane'],
+  ['fixed','text','75%',null], ['entity','entity','sensor.changed',null], ['attribute','text','temperature',null], ['lane','select',['above','below'],'lane'],
   ['shape','select',['diamond','pin','circle'],'shape'], ['direction','select',['outward','inward'],'direction'],
   ['show-marker','checkbox',null,'show_marker'], ['label-show','checkbox',null,'label.show'],
   ['label-text','text','Reference label','label.text'], ['label-entity','entity','sensor.label','label.entity'],
   ['label-show-value','checkbox',null,'label.show_value'], ['label-show-unit','checkbox',null,'label.show_unit'], ['label-precision','number','3','label.precision'],
 ]) kind(`generic-marker-${suffix}`, 'References', type, path && `markers.0.${path}`, value,
-  { journey: ['source-mode','fallback','percent','entity'].includes(suffix) ? 'sources' : 'fields', conditional: ['fixed','fallback','percent','entity'].includes(suffix), drafts: suffix === 'percent' ? 'percentage' : type === 'number' ? 'native' : false, clear: type === 'text' });
+  { journey: ['fixed','entity','attribute'].includes(suffix) ? 'references' : 'fields', conditional: suffix === 'attribute', drafts: type === 'number' ? 'native' : false, clear: type === 'text' && suffix !== 'fixed' });
 color('kind','generic-marker-color','References','markers.0.color');
 for (const [name,type,path,value] of [
   ['height','number','height','36'], ['label-position','select','label.position',['left','hero','inside','off']],

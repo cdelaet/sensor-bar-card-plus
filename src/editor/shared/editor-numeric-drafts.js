@@ -8,10 +8,10 @@ export class NumericInputDrafts {
 
   handle(event, rendering = false) {
     const input = event.target;
+    const route = input?.dataset?.field ?? input?.dataset?.kind ?? '';
     // innerHTML replacement can dispatch a native change before detaching the
     // old focused control; that is not a user's blank reset commit.
-    if (rendering && input?.type === 'number') return true;
-    const route = input?.dataset?.field ?? input?.dataset?.kind ?? '';
+    if (rendering && (input?.type === 'number' || route === 'generic-marker-fixed' && input?.type === 'text')) return true;
     if (route === 'generic-marker-fixed' && input?.type === 'text' && input.id) {
       if (input.isConnected === false) return true;
       const value = input.value.trim();
@@ -26,21 +26,16 @@ export class NumericInputDrafts {
       this.values.set(input.id, input.value);
       return true;
     }
-    if (route === 'generic-marker-source-mode' && input.id) {
-      for (const suffix of ['fixed', 'fallback', 'percent']) this.values.delete(input.id.replace(/source-mode$/, suffix));
-    }
     if (input?.type !== 'number' || !input.id || /^(?:entity-)?gradient-/.test(route)
       || /^(?:target|baseline)-percent$/.test(route)) return false;
     if (input.isConnected === false) return true;
     const value = input.value;
-    const percentage = route === 'generic-marker-percent';
     const precision = /(?:precision|decimal)$/.test(route);
     const number = precision ? normalizeDecimalValue(value) : normalizeNumberValue(value);
     const complete = number !== null && !input.validity?.badInput
       && (!/(?:layout-height|override-height)$/.test(route) || number >= 24);
     // Blank reset/inherit is an intentional commit on change (blur), never input.
-    // Percentage has no blank source: changing mode is the explicit conversion.
-    const clear = event.type === 'change' && value === '' && !input.validity?.badInput && !percentage;
+    const clear = event.type === 'change' && value === '' && !input.validity?.badInput;
     if (complete || clear) { this.values.delete(input.id); return false; }
     this.values.set(input.id, value);
     return true;

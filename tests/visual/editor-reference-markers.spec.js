@@ -25,5 +25,5 @@ for (const width of [360, 240]) test(`standalone Reference markers ${width}px re
   const entity = editor.locator('.override-group:not(.card-subgroup)[data-group="markers"]');
   await entity.locator('[data-action="toggle-generic-marker"]').click();
   await expect(entity).toHaveScreenshot(`reference-markers-entity-${width}.png`);
-  const percent = entity.locator('[data-kind="generic-marker-percent"]'); await percent.fill('40'); await expect(percent).toBeFocused();
+  const value = entity.locator('[data-kind="generic-marker-fixed"]'); await value.fill('40%'); await expect(value).toBeFocused();
 });

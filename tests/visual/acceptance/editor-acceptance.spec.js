@@ -24,7 +24,10 @@ for(const host of hosts) {
   async function collect(){for(const id of await d.discover(editor))discovered.add(id);}
   await collect();await refs(editor);
   if(host==='feature'){await editor.locator('#feature-entity-override').check();await collect();}
-  for(const mode of ['entity','entity-fallback','percent','fixed']) {await ref(rootRows(editor).nth(1),'source-mode').selectOption(mode);await collect();}
+  const markerRow=rootRows(editor).nth(1);
+  await ref(markerRow,'fixed').fill('75%');await collect();
+  await ref(markerRow,'entity').fill('sensor.reference');await collect();
+  await ref(markerRow,'attribute').fill('temperature');await collect();
   if(host==='standalone'){
    await d.openDisclosure(editor.locator('[data-action="toggle-entity-overrides"]').first());
    await d.openDisclosure(editor.locator('#entity-0-group-markers'));
@@ -82,42 +85,40 @@ for(const host of hosts) {
   await d.closeDisclosure(row.locator('.generic-marker-toggle'));await d.openDisclosure(row.locator('.generic-marker-toggle'));
  });
  test(`${host}: foreign config resets owned numeric/palette drafts and Reference identities`,async({page})=>{
-  const editor=await d.mount(page,host);await refs(editor);const row=rootRows(editor).nth(1);await ref(row,'source-mode').selectOption('percent');const input=ref(row,'percent');
-  await input.fill('');await d.echo(page,editor);await expect(input).toHaveValue('');const events=await d.count(page);
+  const editor=await d.mount(page,host);await refs(editor);const row=rootRows(editor).nth(1);const input=ref(row,'fixed');
+  await input.focus();await input.evaluate(el=>el.select());await input.press('Backspace');await d.echo(page,editor);await expect(input).toHaveValue('');const events=await d.count(page);
   const replacement=await d.saved(page);replacement.markers=[{at:'35%',label:{text:'Foreign'}}];replacement.future={keep:'foreign'};
   await d.foreign(editor,replacement);await expect(rootRows(editor)).toHaveCount(1);await expect(rootRows(editor).first()).toHaveAttribute('data-expanded','false');
-  await d.openDisclosure(rootRows(editor).first().locator('.generic-marker-toggle'));await expect(ref(rootRows(editor).first(),'percent')).toHaveValue('35');expect(await d.count(page)).toBe(events);
+  await d.openDisclosure(rootRows(editor).first().locator('.generic-marker-toggle'));await expect(ref(rootRows(editor).first(),'fixed')).toHaveValue('35%');expect(await d.count(page)).toBe(events);
   await d.openDisclosure(editor.locator('#card-group-segments'));const from=editor.locator('[data-kind="segment-from"]').first();await from.fill('-.');await from.press('Tab');await d.echo(page,editor);await expect(from).toHaveValue('-.');
   replacement.bar.segments=[{from:10,to:100,color:'#abcdef'}];await d.foreign(editor,replacement);await expect(from).toHaveValue('10');
  });
  for(const nested of [false,true]) {
   test(`${host} ${nested?'dialog':'page'} Journey A — incomplete Percentage belongs to Marker 2`,async({page})=>{
-   const editor=await d.mount(page,host,d.seed(host),{tall:true,nested});await refs(editor);const row=rootRows(editor).nth(1),source=ref(row,'source-mode');
-   await d.commit(page,editor,()=>source.selectOption('percent'));const id=await row.getAttribute('data-marker-ui-id');const input=ref(row,'percent');await expect(input).toHaveValue('50');
-   const originalFirst=(await d.saved(page)).markers[0];await input.focus();await d.replaceNumericDraft(page,editor,input,'75','percentage');
-   await expect(source).toHaveValue('percent');await expect(row).toHaveAttribute('data-marker-ui-id',id);await expect(row).toHaveAttribute('data-expanded','true');await expect(input).toBeFocused();await nearby(input,nested);
-   const config=await d.saved(page);expect(config.markers[1].at).toBe('75%');expect(config.markers[0]).toEqual(originalFirst);
-   await d.reopen(page,editor);await refs(editor);await expect(ref(rootRows(editor).nth(1),'percent')).toHaveValue('75');
+   const editor=await d.mount(page,host,d.seed(host),{tall:true,nested});await refs(editor);const row=rootRows(editor).nth(1),input=ref(row,'fixed');
+   const id=await row.getAttribute('data-marker-ui-id');await expect(input).toHaveValue('50');
+   const originalFirst=(await d.saved(page)).markers[0];await input.focus();await d.replaceNumericDraft(page,editor,input,'75%','percentage');
+   await expect(row).toHaveAttribute('data-marker-ui-id',id);await expect(row).toHaveAttribute('data-expanded','true');await expect(input).toBeFocused();await nearby(input,nested);
+   const config=await d.saved(page);expect(config.markers[1].at).toEqual({percent:75});expect(config.markers[0]).toEqual(originalFirst);
+   await d.reopen(page,editor);await refs(editor);await expect(ref(rootRows(editor).nth(1),'fixed')).toHaveValue('75%');
   });
   test(`${host} ${nested?'dialog':'page'} Journey B — Marker 2/3 Source ownership and viewport`,async({page})=>{
    const editor=await d.mount(page,host,d.seed(host),{tall:true,nested});await refs(editor);const ids=await rootRows(editor).evaluateAll(nodes=>nodes.map(n=>n.dataset.markerUiId));expect(new Set(ids).size).toBe(3);
    for(const index of [1,2]){
-    const row=rootRows(editor).nth(index),source=ref(row,'source-mode');await source.scrollIntoViewIfNeeded();await source.focus();
-    await source.evaluate(el=>window.__acceptanceSource=el);await row.evaluate(el=>window.__acceptanceRow=el);
-    for(const mode of ['percent','entity','fixed','entity','percent','fixed','entity-fallback']){
-     const before=await d.saved(page),events=await d.count(page);await source.selectOption(mode);await expect(source).toHaveValue(mode);
+    const row=rootRows(editor).nth(index),value=ref(row,'fixed');await value.scrollIntoViewIfNeeded();await value.focus();
+    await value.evaluate(el=>window.__acceptanceValue=el);await row.evaluate(el=>window.__acceptanceRow=el);
+    for(const nextValue of ['75%','25','50%','50']){
+     const before=await d.saved(page),events=await d.count(page);await value.fill(nextValue);await expect(value).toHaveValue(nextValue);
      if(JSON.stringify(await d.saved(page))===JSON.stringify(before))expect(await d.count(page)).toBe(events);
      else await expect.poll(()=>d.count(page)).toBeGreaterThan(events);
-     await d.echo(page,editor);await expect(source).toBeFocused();await expect(row).toHaveAttribute('data-expanded','true');await nearby(source,nested);
+     await d.echo(page,editor);await expect(value).toBeFocused();await expect(row).toHaveAttribute('data-expanded','true');await nearby(value,nested);
      expect(await rootRows(editor).evaluateAll(nodes=>nodes.map(n=>n.dataset.markerUiId))).toEqual(ids);
-     expect(await source.evaluate(el=>el===window.__acceptanceSource)).toBe(true);expect(await row.evaluate(el=>el===window.__acceptanceRow)).toBe(true);
-     // The contract is that the active Source control remains visible after
-     // each projection update. nearby() checks that directly; a minimum scroll
-     // delta is layout-dependent and does not establish visibility.
-     await expect(ref(row,'percent')).toHaveCount(mode==='percent'?1:0);await expect(ref(row,'fixed')).toHaveCount(mode==='fixed'?1:0);
+     expect(await value.evaluate(el=>el===window.__acceptanceValue)).toBe(true);expect(await row.evaluate(el=>el===window.__acceptanceRow)).toBe(true);
     }
-    await d.replaceNumericDraft(page,editor,ref(row,'fallback'),'85');await d.commit(page,editor,()=>ref(row,'entity').fill(`sensor.marker_${index}`));
+    await d.replaceNumericDraft(page,editor,value,'85');await d.commit(page,editor,()=>ref(row,'entity').fill(`sensor.marker_${index}`));
     expect((await d.saved(page)).markers[index].at).toMatchObject({fixed:85,entity:`sensor.marker_${index}`});
+    await d.commit(page,editor,()=>ref(row,'attribute').fill('temperature'));
+    expect((await d.saved(page)).markers[index].at).toMatchObject({fixed:85,entity:{id:`sensor.marker_${index}`,attribute:'temperature'}});
    }
   });
   test(`${host} ${nested?'dialog':'page'} Journey C — Add/expand/fold stays near interaction`,async({page})=>{
@@ -295,9 +296,10 @@ test('feature: palette aliases keep raw order, untouched metadata and omitted Au
 });
 test('standalone: entity Reference scope edits do not route to root or another entity',async({page})=>{
  const editor=await d.mount(page,'standalone');await d.openSection(editor,{scope:'entity',section:'References'});const row=editor.locator('.override-group:not(.card-subgroup)[data-group="markers"] .generic-marker-item').first();
- const before=await d.saved(page);await d.commit(page,editor,()=>ref(row,'source-mode').selectOption('percent'));await d.replaceNumericDraft(page,editor,ref(row,'percent'),'75','percentage');
- expect((await d.saved(page)).entities[0].markers[0].at).toBe('75%');expect((await d.saved(page)).markers).toEqual(before.markers);expect((await d.saved(page)).entities[1]).toEqual(before.entities[1]);
- await d.reopen(page,editor);await d.openSection(editor,{scope:'entity',section:'References'});await expect(ref(row,'percent')).toHaveValue('75');
+ const before=await d.saved(page),value=ref(row,'fixed');await d.replaceNumericDraft(page,editor,value,'75%','percentage');
+ await d.commit(page,editor,()=>ref(row,'entity').fill('sensor.override_reference'));
+ expect((await d.saved(page)).entities[0].markers[0].at).toMatchObject({entity:'sensor.override_reference'});expect((await d.saved(page)).markers).toEqual(before.markers);expect((await d.saved(page)).entities[1]).toEqual(before.entities[1]);
+ await d.reopen(page,editor);await d.openSection(editor,{scope:'entity',section:'References'});await expect(ref(row,'fixed')).toHaveValue('75%');
 });
 for(const host of hosts)test(`${host}: Needle mode respects the host Baseline cleanup policy`,async({page})=>{
  const config=d.seed(host),editor=await d.mount(page,host,config);await d.openSection(editor,{section:'Needle'});await d.commit(page,editor,()=>editor.locator('#bar-needle-mode').selectOption('disabled'));await d.commit(page,editor,()=>editor.locator('#bar-needle-mode').selectOption('enabled'));

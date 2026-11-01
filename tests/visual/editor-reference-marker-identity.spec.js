@@ -29,42 +29,38 @@ async function ownership(editor, row, nested) {
   const id = await row.getAttribute('data-marker-ui-id');
   await expect(row).toHaveAttribute('data-expanded', 'true');
   expect(await editor.evaluate(el => el.shadowRoot.activeElement?.closest('.generic-marker-item')?.dataset.markerUiId)).toBe(id);
-  expect(await field(row, 'source-mode').evaluate((el, nested) => { const r = el.getBoundingClientRect(), box = document.querySelector('#mount').getBoundingClientRect(); return r.top >= (nested ? box.top : 0) && r.bottom <= (nested ? box.bottom : innerHeight); }, nested)).toBe(true);
+  expect(await field(row, 'fixed').evaluate((el, nested) => { const r = el.getBoundingClientRect(), box = document.querySelector('#mount').getBoundingClientRect(); return r.top >= (nested ? box.top : 0) && r.bottom <= (nested ? box.bottom : innerHeight); }, nested)).toBe(true);
 }
 for (const source of ['src', 'dist']) for (const host of ['feature', 'standalone']) for (const nested of [false, true]) test(`Reference identity ${source} ${host} ${nested ? 'dialog' : 'page'}: three duplicate markers, sources, echo and numeric draft`, async ({ page }) => {
   const editor = await mount(page, source, host, nested);
   const ids = await rows(editor).evaluateAll(nodes => nodes.map(n => n.dataset.markerUiId));
   expect(new Set(ids).size).toBe(3);
   for (const index of [1, 2]) {
-    const row = rows(editor).nth(index), sourceControl = field(row, 'source-mode');
-    await sourceControl.evaluate(el => el.scrollIntoView({ block: 'center' })); await sourceControl.focus();
+    const row = rows(editor).nth(index), valueControl = field(row, 'fixed');
+    await valueControl.evaluate(el => el.scrollIntoView({ block: 'center' })); await valueControl.focus();
     const before = await scroll(page, nested);
-    await row.evaluate(el => { window.__identityRow = el; window.__identitySource = el.querySelector('[data-kind="generic-marker-source-mode"]'); });
-    for (const mode of ['percent', 'fixed', 'entity', 'percent']) {
-      await sourceControl.selectOption(mode);
-      await expect(sourceControl).toHaveValue(mode);
-      await expect(sourceControl).toBeFocused();
+    await row.evaluate(el => { window.__identityRow = el; window.__identityValue = el.querySelector('[data-kind="generic-marker-fixed"]'); });
+    for (const value of ['50%', '50', '50%', '50']) {
+      await valueControl.fill(value);
+      await expect(valueControl).toHaveValue(value);
+      await expect(valueControl).toBeFocused();
       expect(await row.evaluate(el => el === window.__identityRow)).toBe(true);
-      expect(await sourceControl.evaluate(el => el === window.__identitySource)).toBe(true);
+      expect(await valueControl.evaluate(el => el === window.__identityValue)).toBe(true);
       expect(await rows(editor).evaluateAll(nodes => nodes.map(n => n.dataset.markerUiId))).toEqual(ids);
       await ownership(editor, row, nested);
       expect(Math.abs(await scroll(page, nested) - before)).toBeLessThan(50);
     }
-    const percent = field(row, 'percent');
-    await expect(percent).toHaveValue('50');
-    await percent.focus();
-    await percent.press('ArrowRight'); await percent.press('ArrowRight');
-    await percent.press('Backspace'); await percent.press('Backspace');
-    await expect(percent).toHaveValue('');
+    await valueControl.evaluate(el => { el.focus(); el.select(); }); await valueControl.press('Backspace');
+    await expect(valueControl).toHaveValue('');
     const events = await page.evaluate(() => window.__identityEvents.length);
     await editor.evaluate(async el => { el.setConfig(el._config); el.hass = { states: {} }; await el.updateComplete; });
-    await expect(percent).toHaveValue(''); await expect(percent).toBeFocused();
+    await expect(valueControl).toHaveValue(''); await expect(valueControl).toBeFocused();
     await ownership(editor, row, nested);
     expect(await page.evaluate(() => window.__identityEvents.length)).toBe(events);
-    await percent.press('7'); await percent.press('5');
-    await expect(percent).toHaveValue('75'); await expect(percent).toBeFocused();
+    await valueControl.press('7'); await valueControl.press('5'); await valueControl.press('%');
+    await expect(valueControl).toHaveValue('75%'); await expect(valueControl).toBeFocused();
     await ownership(editor, row, nested);
-    expect((await saved(editor)).markers[index].at).toBe('75%');
+    expect((await saved(editor)).markers[index].at).toEqual({ percent: 75 });
     expect((await saved(editor)).markers[0]).toEqual({ at: { fixed: 50 } });
   }
 });
@@ -91,13 +87,12 @@ for (const source of ['src', 'dist']) for (const host of ['feature', 'standalone
   expect((await saved(editor)).markers[1]).toMatchObject({ at: { fixed: 60 }, shape: 'diamond', direction: 'outward', lane: 'above', color: '#123456', show_marker: false, label: { text: 'Second', show: true, entity: 'sensor.label' } });
   expect((await saved(editor)).markers[0]).toEqual({ at: { fixed: 50 } });
   expect(await row.evaluate(el => el === window.__identityRow)).toBe(true);
-  const sourceControl = field(row, 'source-mode'); await sourceControl.focus(); await sourceControl.selectOption('percent');
-  await field(row, 'percent').fill('');
+  const valueControl = field(row, 'fixed'); await valueControl.evaluate(el => { el.focus(); el.select(); }); await valueControl.press('Backspace');
   await editor.getByRole('button', { name: 'Add reference marker', exact: true }).focus();
   await editor.getByRole('button', { name: 'Add reference marker', exact: true }).press('Enter');
   await expect(rows(editor)).toHaveCount(4);
   expect(await rows(editor).evaluateAll(nodes => nodes.slice(0, 3).map(n => n.dataset.markerUiId))).toEqual(ids);
-  await expect(field(row, 'percent')).toHaveValue('');
+  await expect(valueControl).toHaveValue('');
   await rows(editor).first().getByRole('button', { name: 'Remove marker', exact: true }).focus();
   await rows(editor).first().getByRole('button', { name: 'Remove marker', exact: true }).press('Enter');
   await expect(rows(editor)).toHaveCount(3); await expect(rows(editor).first()).toHaveAttribute('data-marker-ui-id', ids[1]);
@@ -107,11 +102,10 @@ for (const source of ['src', 'dist']) for (const host of ['feature', 'standalone
   await row.getByRole('button', { name: 'Move marker down' }).press('Enter');
   await expect(rows(editor).nth(1)).toHaveAttribute('data-marker-ui-id', ids[1]);
   await expect(row.getByRole('button', { name: 'Move marker down' })).toBeFocused();
-  await expect(field(row, 'percent')).toHaveValue('');
-  await sourceControl.focus(); await sourceControl.selectOption('fixed');
-  await expect(field(row, 'fixed')).toHaveValue('50');
+  await expect(valueControl).toHaveValue('');
+  await valueControl.fill('50');
   await field(row, 'fixed').fill('80'); await expect(field(row, 'fixed')).toBeFocused();
-  expect((await saved(editor)).markers[1]).toMatchObject({ at: { fixed: 80 }, label: { text: 'Second', entity: 'sensor.label' } });
+  expect((await saved(editor)).markers[1]).toMatchObject({ at: 80, label: { text: 'Second', entity: 'sensor.label' } });
   expect(await row.evaluate(el => el === window.__identityRow)).toBe(true);
   await row.locator('.generic-marker-toggle').press('Enter'); await expect(row).toHaveAttribute('data-expanded', 'false');
   await row.locator('.generic-marker-toggle').press('Enter'); await expect(row).toHaveAttribute('data-expanded', 'true');
@@ -124,14 +118,13 @@ for (const source of ['src', 'dist']) test(`Reference identity ${source} standal
   await editor.locator('#entity-0-group-markers').click();
   const list = editor.locator('.entity-shell[data-entity-shell-index="0"] .override-group[data-group="markers"]');
   await list.locator('.generic-marker-toggle').nth(1).click();
-  const row = list.locator('.generic-marker-item').nth(1), mode = field(row, 'source-mode');
+  const row = list.locator('.generic-marker-item').nth(1), value = field(row, 'fixed');
   const id = await row.getAttribute('data-marker-ui-id');
   await row.evaluate(el => window.__identityRow = el);
-  await mode.focus(); await mode.selectOption('percent');
-  await expect(mode).toBeFocused(); await expect(field(row, 'percent')).toHaveValue('50');
-  await field(row, 'percent').fill('75'); await expect(field(row, 'percent')).toBeFocused();
+  await value.focus(); await value.fill('75%');
+  await expect(value).toBeFocused(); await expect(value).toHaveValue('75%');
   await expect(row).toHaveAttribute('data-marker-ui-id', id);
   expect(await row.evaluate(el => el === window.__identityRow)).toBe(true);
-  expect((await saved(editor)).entities[0].markers[1].at).toBe('75%');
+  expect((await saved(editor)).entities[0].markers[1].at).toEqual({ percent: 75 });
   expect((await saved(editor)).markers).toEqual([{ at: { fixed: 20 } }]);
 });

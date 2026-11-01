@@ -13,26 +13,21 @@ it('keeps incomplete native entry local and reconciles the next complete value',
   expect(drafts.values.size).toBe(0);
 });
 
-it('distinguishes deliberate blank resets from incomplete source percentages and native bad input', () => {
+it('distinguishes deliberate native blank resets from incomplete drafts and bad input', () => {
   const drafts = new NumericInputDrafts();
-  const input = { id: 'marker-fixed', type: 'number', value: '', dataset: { kind: 'generic-marker-fixed' } };
+  const input = { id: 'scale-min', type: 'number', value: '', dataset: { field: 'scale-min' } };
   expect(drafts.handle({ type: 'input', target: input })).toBe(true);
   expect(drafts.handle({ type: 'change', target: input }, true)).toBe(true);
   expect(drafts.values.get(input.id)).toBe('');
   expect(drafts.handle({ type: 'change', target: input })).toBe(false);
   input.validity = { badInput: true };
   expect(drafts.handle({ type: 'change', target: input })).toBe(true);
-  input.validity.badInput = false; input.dataset.kind = 'generic-marker-percent';
-  expect(drafts.handle({ type: 'change', target: input })).toBe(true);
-  // Reference percentages retain their established finite-number range rules.
-  for (const value of ['-1', '101']) { input.value = value; expect(drafts.handle({ type: 'input', target: input })).toBe(false); }
-  input.value = '75'; expect(drafts.handle({ type: 'input', target: input })).toBe(false);
 });
 
 it('keeps incomplete Value text local while accepting numeric and percent-suffixed entries', () => {
   const drafts = new NumericInputDrafts();
   const input = { id: 'marker-value', type: 'text', dataset: { kind: 'generic-marker-fixed' } };
-  for (const value of ['-', '.', '25x', '101%']) {
+  for (const value of ['-', '.', '25x', '-1%', '101%']) {
     input.value = value;
     expect(drafts.handle({ type: 'input', target: input })).toBe(true);
     expect(drafts.values.get(input.id)).toBe(value);
@@ -45,6 +40,14 @@ it('keeps incomplete Value text local while accepting numeric and percent-suffix
   input.value = '';
   expect(drafts.handle({ type: 'input', target: input })).toBe(true);
   expect(drafts.handle({ type: 'change', target: input })).toBe(false);
+});
+
+it('ignores Reference Value change events caused by rendering a focused incomplete draft', () => {
+  const drafts = new NumericInputDrafts();
+  const input = { id: 'marker-value', type: 'text', value: '', dataset: { kind: 'generic-marker-fixed' } };
+  drafts.values.set(input.id, '');
+  expect(drafts.handle({ type: 'change', target: input }, true)).toBe(true);
+  expect(drafts.values.get(input.id)).toBe('');
 });
 
 it('uses existing precision/height validation and leaves section-owned drafts alone', () => {
@@ -73,11 +76,8 @@ it('restores owned drafts through DOM replacement, preserves native buffers and 
   old.isConnected = false; expect(drafts.handle({ type: 'change', target: old })).toBe(true);
 });
 
-it('discards source drafts on explicit conversion and removed controls', () => {
+it('discards drafts for controls removed from the editor', () => {
   const drafts = new NumericInputDrafts();
-  drafts.values.set('card-card-generic-marker-1-percent', '');
-  drafts.handle({ target: { id: 'card-card-generic-marker-1-source-mode', dataset: { kind: 'generic-marker-source-mode' } } });
-  expect(drafts.values.size).toBe(0);
   drafts.values.set('removed', '-'); drafts.apply({ getElementById: () => null, querySelector: () => null });
   expect(drafts.values.size).toBe(0);
 });

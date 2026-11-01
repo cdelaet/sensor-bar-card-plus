@@ -160,33 +160,32 @@ for (const source of ['src', 'dist']) describe(`Entity attributes (${source})`, 
   it.each([
     ['card', { markers: [{ at: { fixed: 50 } }] }, { type: 'card' }, 'card'],
     ['entity override', { entities: [{ entity: 'sensor.row', markers: [{ at: { fixed: 50 } }] }] }, { type: 'entity', index: 0 }, '0'],
-  ])('keeps a transient Reference Marker Entity mode through config echo and then persists its attribute (%s)', (scopeName, config, scope, scopeIndex) => {
+  ])('keeps Reference Marker Value while adding Entity and Attribute through config echo (%s)', (scopeName, config, scope, scopeIndex) => {
     const editor = createEditor({ source, withEntityPicker: true });
     const events = track(editor);
     editor.setConfig(config);
     editor.hass = { states: { 'weather.forecast_home': { state: 'partlycloudy', attributes: { temperature: 21 } } } };
-    const modeTarget = { dataset: { kind: 'generic-marker-source-mode', scopeType: scope.type, index: scopeIndex, markerIndex: '0' }, value: 'entity' };
-    editor._handleFieldEvent({ type: 'change', target: modeTarget });
-    const emitted = events.at(-1);
-    expect(emitted.markers?.[0]?.at?.entity).toBeUndefined();
-    if (scope.type === 'entity') expect(emitted.entities[0].markers[0].at?.entity).toBeUndefined();
-    editor.setConfig(emitted);
+    editor._render();
+    expect(editor._renderGenericMarkersEditor(scope)).not.toContain('generic-marker-source-mode');
+    const value = editor.shadowRoot.querySelectorAll('input[data-kind="generic-marker-fixed"]')[0];
+    expect(value.value).toBe('50');
+    editor.setConfig(editor._draftConfig);
     editor._render();
     const currentMarker = () => editor._getGenericMarkers(scope)[0];
-    expect(editor._getGenericMarkerSource(currentMarker(), scope, 0).mode).toBe('entity');
-    expect(editor._renderGenericMarkersEditor(scope)).toContain('<option value="entity" selected>Entity</option>');
+    expect(editor._getGenericMarkerSource(currentMarker(), scope, 0).mode).toBe('fixed');
+    expect(editor._renderGenericMarkersEditor(scope)).toContain('value="50"');
 
     const picker = { tagName: 'HA-ENTITY-PICKER', dataset: { kind: 'generic-marker-entity', scopeType: scope.type, index: scopeIndex, markerIndex: '0' }, value: 'weather.forecast_home' };
     editor._handleValueChanged({ type: 'value-changed', target: picker, detail: { value: 'weather.forecast_home' } });
     editor.setConfig(events.at(-1));
     editor._render();
-    expect(editor._getGenericMarkerSource(currentMarker(), scope, 0)).toMatchObject({ mode: 'entity', entity: 'weather.forecast_home' });
+    expect(editor._getGenericMarkerSource(currentMarker(), scope, 0)).toMatchObject({ mode: 'entity-fallback', entity: 'weather.forecast_home', fixed: 50 });
     const attribute = editor.shadowRoot.querySelectorAll('input[data-kind="generic-marker-attribute"]')[0];
     expect(attribute).toBeTruthy();
     dispatch(editor, attribute, 'temperature');
     const finalConfig = events.at(-1);
     const finalMarker = scope.type === 'entity' ? finalConfig.entities[0].markers[0] : finalConfig.markers[0];
-    expect(finalMarker.at).toEqual({ entity: { id: 'weather.forecast_home', attribute: 'temperature' } });
+    expect(finalMarker.at).toEqual({ entity: { id: 'weather.forecast_home', attribute: 'temperature' }, fixed: 50 });
   });
 
   it('moves the existing row Unit control beside Attribute without duplicating its binding', () => {
@@ -298,18 +297,16 @@ describe('Feature entity attributes', () => {
     expect(editor._config.markers[0].label.entity).toEqual({ id: 'sensor.label', attribute: 'status' });
   });
 
-  it('keeps Entity mode transient in Feature Reference Markers until a real entity is selected', async () => {
+  it('keeps the direct Value fallback when adding a Feature Reference Marker entity', async () => {
     const { editor } = await featureEditor({ type: 'custom:sensor-bar-card-plus-feature', markers: [{ at: { fixed: 50 } }] });
     const section = editor._referenceMarkersSection;
-    const sourceTarget = { dataset: { kind: 'generic-marker-source-mode', scopeType: 'card', index: 'card', markerIndex: '0' }, value: 'entity' };
-    section.handleField({ target: sourceTarget, kind: 'generic-marker-source-mode', value: 'entity' });
-    await editor.updateComplete;
-    expect(editor._config.markers[0].at).toBeUndefined();
-    expect(section._getGenericMarkerSource(editor._config.markers[0], { type: 'card' }, 0).mode).toBe('entity');
     const picker = { dataset: { kind: 'generic-marker-entity', scopeType: 'card', index: 'card', markerIndex: '0' } };
     section.handleField({ target: picker, kind: 'generic-marker-entity', value: 'weather.forecast_home' });
     await editor.updateComplete;
-    expect(editor._config.markers[0].at).toEqual({ entity: 'weather.forecast_home' });
+    expect(editor._config.markers[0].at).toEqual({ entity: 'weather.forecast_home', fixed: 50 });
+    expect(section._getGenericMarkerSource(editor._config.markers[0], { type: 'card' }, 0)).toMatchObject({
+      mode: 'entity-fallback', entity: 'weather.forecast_home', fixed: 50,
+    });
   });
 
   it('places the existing Feature Unit editor near Attribute and keeps a single config binding', async () => {

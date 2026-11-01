@@ -24,26 +24,27 @@ for (const source of ['src', 'dist']) for (const host of ['feature', 'standalone
   await editor.locator('#card-group-generic-markers').click();
   await editor.getByRole('button', { name: 'Add reference marker', exact: true }).click();
   const row = editor.locator('.generic-marker-item').first();
-  const mode = row.locator('[data-kind="generic-marker-source-mode"]');
-  await mode.selectOption('percent');
-  const input = row.locator('[data-kind="generic-marker-percent"]');
+  const input = row.locator('[data-kind="generic-marker-fixed"]');
   await expect(input).toHaveValue('50'); await input.focus(); await input.press('ArrowRight'); await input.press('ArrowRight');
   await input.press('Backspace'); await expect(input).toHaveValue('5');
   const before = await saved(editor), count = await page.evaluate(() => window.__numericEvents.length);
   await input.evaluate(node => window.__numericInput = node);
   await input.press('Backspace');
-  await expect(mode).toHaveValue('percent'); await expect(input).toHaveValue(''); await expect(input).toBeFocused();
+  await expect(input).toHaveValue(''); await expect(input).toBeFocused();
   await expect(row).toHaveAttribute('data-expanded', 'true');
   expect(await saved(editor)).toEqual(before); expect(await page.evaluate(() => window.__numericEvents.length)).toBe(count);
   expect(await input.evaluate(node => node === window.__numericInput)).toBe(true);
   await editor.evaluate(async el => { el.setConfig(el._draftConfig ?? el._config); el.hass = { states: {} }; await el.updateComplete; });
-  await expect(input).toHaveValue(''); await expect(mode).toHaveValue('percent'); await expect(input).toBeFocused();
-  await input.press('7'); await input.press('5'); await expect(input).toHaveValue('75');
-  expect((await saved(editor)).markers[0].at).toBe('75%');
-  await input.fill(''); await echoAndRender(editor); await expect(input).toHaveValue(''); await expect(input).toBeFocused();
+  await expect(input).toHaveValue(''); await expect(input).toBeFocused();
+  await input.press('7'); await input.press('5'); await input.press('%'); await expect(input).toHaveValue('75%');
+  expect((await saved(editor)).markers[0].at).toEqual({ percent: 75 });
+  await input.focus(); await input.press('End');
+  const length = (await input.inputValue()).length;
+  for (let index = 0; index < length; index++) await input.press('Backspace');
+  await echoAndRender(editor); await expect(input).toHaveValue(''); await expect(input).toBeFocused();
   const foreignEvents = await page.evaluate(() => window.__numericEvents.length);
   await editor.evaluate(async el => { el.setConfig({ ...(el._draftConfig ?? el._config), markers: [{ at: '35%' }] }); await el.updateComplete; });
-  await expect(mode).toHaveValue('percent'); await expect(input).toHaveValue('35');
+  await expect(input).toHaveValue('35%');
   expect(await page.evaluate(() => window.__numericEvents.length)).toBe(foreignEvents);
 });
 
@@ -63,7 +64,12 @@ async function echoAndRender(editor) {
   });
 }
 async function replaceNumber(editor, page, selector, value, read) {
-  const input = editor.locator(selector); await input.fill('');
+  const input = editor.locator(selector);
+  if (selector === '[data-kind="generic-marker-fixed"]') {
+    await input.evaluate(el => { el.focus(); el.select(); }); await input.press('Backspace');
+  }
+  else await input.fill('');
+  if (selector === '[data-kind="generic-marker-fixed"]') await expect(input).toHaveValue('');
   const before = await saved(editor), count = await page.evaluate(() => window.__numericEvents.length);
   await echoAndRender(editor);
   await expect(input).toHaveValue(''); await expect(input).toBeFocused();
@@ -87,8 +93,8 @@ for (const source of ['src', 'dist']) for (const host of ['feature', 'standalone
     ['[data-kind="generic-marker-label-precision"]', '3', el => (el._draftConfig ?? el._config).markers[0].label.precision],
   ];
   for (const [selector, value, read] of cases) await replaceNumber(editor, page, selector, value, read);
-  await editor.locator('[data-kind="generic-marker-source-mode"]').selectOption('entity-fallback');
-  await replaceNumber(editor, page, '[data-kind="generic-marker-fallback"]', '85', el => (el._draftConfig ?? el._config).markers[0].at.fixed);
+  await editor.locator('[data-kind="generic-marker-entity"]').fill('sensor.reference');
+  expect((await saved(editor)).markers[0].at).toEqual({ entity: 'sensor.reference', fixed: 75 });
   const input = editor.locator('#scale-min'); await input.fill('');
   const before = await saved(editor); await input.press('-');
   expect(await input.evaluate(el => el.validity.badInput)).toBe(true);
