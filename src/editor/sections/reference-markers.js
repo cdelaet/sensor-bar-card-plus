@@ -1,29 +1,100 @@
 import { normalizeMarkerDirection } from '../../config/normalize.js';
 import { cloneDeep, isObject, setPathValue, deletePathValue, normalizeNumberValue, normalizeTextValue } from '../shared/editor-config.js';
-import { escapeAttribute, getEntityAttributeSuggestions, normalizeEditorColorValue, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput, renderScalePercentageInput, getColorPickerValue } from '../shared/editor-controls.js';
+import { escapeAttribute, getEntityAttributeSuggestions, normalizeEditorColorValue, normalizeScalePercentageInput, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput, getColorPickerValue } from '../shared/editor-controls.js';
 import { normalizeMarkerLabelField } from '../shared/editor-marker-controls.js';
 
 export function getReferenceMarkerSource(marker) {
     const at = marker?.at;
+    if (typeof at === 'number') return { mode: 'fixed', fixed: at };
     if (typeof at === 'string' && /^\s*[+-]?(?:\d+(?:\.\d+)?|\.\d+)\s*%\s*$/.test(at)) {
       return { mode: 'percent', percent: at.replace(/%/g, '').trim() };
     }
     if (typeof at === 'string' && /^[a-z0-9_]+\.[a-z0-9_]+$/i.test(at.trim())) {
       return { mode: 'entity', entity: at.trim(), fixed: '' };
     }
+    if (typeof at === 'string' && normalizeNumberValue(at.trim()) !== null) {
+      return { mode: 'fixed', fixed: at.trim() };
+    }
     const source = isObject(at) ? at : {};
+    const fixed = source.fixed ?? source.value ?? '';
+    const percent = source.percent ?? '';
+    const percentPart = percent !== '' && percent !== undefined && percent !== null ? { percent } : {};
     if (Object.prototype.hasOwnProperty.call(source, 'entity')) {
       const entitySource = isObject(source.entity) ? source.entity : {};
       const entity = isObject(source.entity) ? entitySource.id : source.entity;
       const attribute = isObject(source.entity) ? entitySource.attribute : undefined;
+      const hasFallback = fixed !== '' && fixed !== undefined && fixed !== null
+        || percent !== '' && percent !== undefined && percent !== null;
       return {
-        mode: source.fixed !== undefined && source.fixed !== null && source.fixed !== '' ? 'entity-fallback' : 'entity',
+        mode: hasFallback ? 'entity-fallback' : 'entity',
         entity: entity ?? '',
-        fixed: source.fixed ?? '',
+        fixed,
+        ...percentPart,
         ...(attribute ? { attribute } : {}),
       };
     }
-    return { mode: 'fixed', fixed: source.fixed ?? '' };
+    return normalizeNumberValue(fixed) !== null
+      ? { mode: 'fixed', fixed, ...percentPart }
+      : Number.isFinite(normalizeNumberValue(percent))
+        ? { mode: 'percent', fixed: '', percent }
+        : { mode: 'fixed', fixed, ...percentPart };
+}
+
+export function patchReferenceMarkerAt(marker, part, rawValue) {
+  const rawAt = marker?.at;
+  const source = getReferenceMarkerSource(marker);
+  const rawText = normalizeTextValue(rawValue).trim();
+  const textPart = part === 'entity' || part === 'attribute';
+  const value = textPart ? rawText
+    : part === 'percent' ? normalizeScalePercentageInput(rawText) : normalizeNumberValue(rawText);
+  const empty = textPart ? !value : rawText === '';
+  if (!['entity', 'attribute', 'fixed', 'percent'].includes(part)) return marker;
+  if (!empty && value === null) return marker;
+  if (part === 'entity' && empty && !source.entity) return marker;
+
+  if (!isObject(rawAt) && part === 'fixed' && !source.entity) {
+    return { ...marker, ...(empty ? { at: null } : { at: value }) };
+  }
+  if (!isObject(rawAt) && part === 'percent' && !source.entity) {
+    return { ...marker, ...(empty ? { at: null } : { at: `${value}%` }) };
+  }
+  if (!isObject(rawAt) && part === 'entity' && source.mode === 'entity') {
+    return { ...marker, at: empty ? null : value };
+  }
+
+  const at = isObject(rawAt) ? cloneDeep(rawAt) : {};
+  if (!isObject(rawAt)) {
+    if (source.entity) at.entity = source.attribute
+      ? { id: source.entity, attribute: source.attribute } : source.entity;
+    if (source.fixed !== '' && source.fixed !== undefined && source.fixed !== null) at.fixed = source.fixed;
+    else if (source.percent !== '' && source.percent !== undefined && source.percent !== null) at.percent = normalizeNumberValue(source.percent);
+  }
+  if (Object.prototype.hasOwnProperty.call(at, 'value')) {
+    if (at.fixed === undefined || at.fixed === null || at.fixed === '') at.fixed = at.value;
+    delete at.value;
+  }
+
+  if (part === 'entity') {
+    if (empty) delete at.entity;
+    else if (isObject(at.entity)) at.entity = { ...at.entity, id: value };
+    else at.entity = value;
+  } else if (part === 'attribute') {
+    const entity = isObject(at.entity) ? { ...at.entity } : { id: at.entity ?? '' };
+    if (empty) delete entity.attribute;
+    else entity.attribute = value;
+    if (!entity.id) delete at.entity;
+    else at.entity = entity.attribute ? entity : entity.id;
+  } else if (part === 'fixed') {
+    delete at.percent;
+    if (empty) delete at.fixed;
+    else at.fixed = value;
+  } else {
+    delete at.fixed;
+    if (empty) delete at.percent;
+    else at.percent = value;
+  }
+
+  return { ...marker, at: Object.keys(at).length ? at : null };
 }
 
 export function getMarkerLabelSource(label = {}) {
@@ -143,12 +214,10 @@ export class ReferenceMarkersSection {
       const markerUiId = markerUiIds[markerIndex];
       const rowId = `${scopeType}-${scopeIndex}-generic-${markerUiId}`;
       const expanded = this._expandedGenericMarkerUiIds.has(markerUiId);
-      const entitySource = (source.mode === 'entity' || source.mode === 'entity-fallback')
-        ? renderEntitySourceInput('generic-marker-entity', scopeIndex, source.entity, 'sensor.reference', {
+      const entitySource = renderEntitySourceInput('generic-marker-entity', scopeIndex, source.entity, 'sensor.reference', {
           'scope-type': scopeType,
           'marker-index': markerIndex,
         })
-        : '';
       const labelEntitySource = renderEntitySourceInput(
         'generic-marker-label-entity', scopeIndex, labelSource.entity, 'sensor.information', {
           'scope-type': scopeType,
@@ -178,38 +247,17 @@ export class ReferenceMarkersSection {
           </div>
           <div class="generic-marker-body" style="display:${expanded ? 'grid' : 'none'};">
             <div class="field-row">
-              <label for="${rowId}-source-mode">Source</label>
-              <select id="${rowId}-source-mode" data-kind="generic-marker-source-mode" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}">
-              <option value="fixed"${source.mode === 'fixed' ? ' selected' : ''}>Fixed</option>
-              <option value="entity"${source.mode === 'entity' ? ' selected' : ''}>Entity</option>
-              <option value="entity-fallback"${source.mode === 'entity-fallback' ? ' selected' : ''}>Entity with fixed fallback</option>
-              <option value="percent"${source.mode === 'percent' ? ' selected' : ''}>Percentage</option>
-              </select>
+              <label for="${rowId}-fixed">Value</label>
+              <input id="${rowId}-fixed" type="text" data-kind="generic-marker-fixed" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${escapeAttribute(source.fixed !== '' && source.fixed !== undefined && source.fixed !== null ? source.fixed : source.percent !== '' && source.percent !== undefined && source.percent !== null ? `${source.percent}%` : '')}" placeholder="25 or 25%">
             </div>
-            ${source.mode === 'fixed' ? `
-              <div class="field-row">
-                <label for="${rowId}-fixed">Fixed value</label>
-                <input id="${rowId}-fixed" type="number" step="any" data-kind="generic-marker-fixed" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${escapeAttribute(source.fixed)}">
-              </div>` : ''}
-          ${source.mode === 'entity' || source.mode === 'entity-fallback' ? `
             <div class="field-row">
-              <label>Reference marker entity</label>
+              <label>Entity</label>
               ${entitySource}
-            </div>` : ''}
+            </div>
           ${entityAttribute ? `<div class="field-row">
-            <label>Reference marker attribute</label>
+            <label>Attribute</label>
             ${entityAttribute}
           </div>` : ''}
-          ${source.mode === 'entity-fallback' ? `
-            <div class="field-row">
-              <label for="${rowId}-fallback">Fixed fallback</label>
-              <input id="${rowId}-fallback" type="number" step="any" data-kind="generic-marker-fallback" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${escapeAttribute(source.fixed)}">
-            </div>` : ''}
-          ${source.mode === 'percent' ? `
-            <div class="field-row">
-              <label for="${rowId}-percent">Scale percentage</label>
-              ${renderScalePercentageInput(`${rowId}-percent`, `data-kind="generic-marker-percent" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}"`, source.percent)}
-            </div>` : ''}
           <div class="inline-row generic-marker-pair">
             <div class="field-row">
               <label for="${rowId}-lane">Lane</label>
@@ -375,26 +423,7 @@ export class ReferenceMarkersSection {
       if (entity) this._genericMarkerSourceModes.delete(modeKey);
       else this._genericMarkerSourceModes.set(modeKey, 'entity');
     }
-    const changed = this._updateGenericMarker(scope, markerIndex, marker => {
-      const value = ['entity', 'attribute'].includes(part) ? normalizeTextValue(rawValue).trim() || undefined : normalizeNumberValue(rawValue) ?? undefined;
-      if (part === 'percent') { marker.at = value === undefined ? null : `${value}%`; return marker; }
-      const at = isObject(marker.at) ? cloneDeep(marker.at) : {};
-      if (part === 'entity' || part === 'attribute') {
-        const entitySource = isObject(at.entity) ? { ...at.entity } : { id: at.entity ?? '' };
-        if (part === 'entity') {
-          if (value === undefined) { delete at.entity; }
-          else entitySource.id = value;
-        } else if (value === undefined) delete entitySource.attribute;
-        else entitySource.attribute = value;
-        if (part !== 'entity' || value !== undefined) {
-          if (entitySource.attribute) at.entity = { id: entitySource.id, attribute: entitySource.attribute };
-          else at.entity = entitySource.id;
-        }
-      } else if (value === undefined) delete at[part];
-      else at[part] = value;
-      marker.at = Object.keys(at).length ? at : null;
-      return marker;
-    });
+    const changed = this._updateGenericMarker(scope, markerIndex, marker => patchReferenceMarkerAt(marker, part, rawValue));
     return changed;
   }
 
@@ -416,6 +445,15 @@ export class ReferenceMarkersSection {
   _setGenericMarkerField(scope, markerIndex, kind, value) {
     const field = kind.replace(/^generic-marker-/, '');
     if (field === 'source-mode') return this._setGenericMarkerSourceMode(scope, markerIndex, value);
+    if (field === 'fixed') {
+      const text = normalizeTextValue(value).trim();
+      const percentage = text.match(/^(.+?)\s*%$/);
+      if (percentage) {
+        const percent = normalizeScalePercentageInput(percentage[1]);
+        return percent === null ? false : this.context.setSource(scope, { type: 'reference-marker', index: markerIndex }, 'percent', percent);
+      }
+      return this.context.setSource(scope, { type: 'reference-marker', index: markerIndex }, 'fixed', text);
+    }
     if (['fixed', 'fallback', 'entity', 'attribute', 'percent'].includes(field)) {
       if (field === 'entity') {
         const modeKey = this._getGenericMarkerSourceModeKey(scope, markerIndex);

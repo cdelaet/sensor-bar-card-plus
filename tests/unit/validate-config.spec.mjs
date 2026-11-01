@@ -122,6 +122,24 @@ describe('validateNormalizedConfig', () => {
     expect(row.generic_markers[0].source).toMatchObject({ entity: 'sensor.marker', fixed: 15 });
   });
 
+  it('accepts Entity/Attribute with a percentage fallback but still rejects malformed Entity structure', () => {
+    const valid = normalize({
+      entities: [{ entity: 'sensor.primary' }],
+      markers: [{ at: { entity: { id: 'sensor.reference', attribute: 'temperature' }, percent: 25 } }],
+    });
+    expect(valid.entities[0].generic_markers[0]).toMatchObject({
+      valid: true,
+      source: { entity: 'sensor.reference', attribute: 'temperature', percent: 25 },
+    });
+
+    const invalid = normalize({
+      entities: [{ entity: 'sensor.primary' }],
+      markers: [{ at: { entity: { id: '', attribute: 'temperature' }, percent: 25 } }],
+    });
+    expect(invalid.entities[0].generic_markers[0]).toMatchObject({ valid: false, invalidSource: true });
+    expect(validateNormalizedConfig(invalid).warnings.map(item => item.code)).toContain('markers.invalid_source');
+  });
+
   it('keeps entity-ID shorthand state-only and accepts unknown non-empty attribute names', () => {
     expect(normalize({ entities: ['sensor.one'] }).entities[0]).not.toHaveProperty('attribute');
     const config = normalize({ entities: [{ entity: 'sensor.one', attribute: 'not_currently_present' }] });
@@ -264,7 +282,7 @@ describe('validateNormalizedConfig', () => {
         { at: { entity: 'sensor.unavailable_limit' }, lane: 'below' },
         { at: '120%' },
         { at: '-1%' },
-        { at: { percent: 35 } },
+        { at: { entity: 'sensor.reference', percent: 35 } },
         { at: { fixed: 42 }, lane: 'top' },
         { at: { fixed: 42 }, shape: 'hexagon' },
         null,
@@ -284,7 +302,6 @@ describe('validateNormalizedConfig', () => {
     expect(diagnostics.warnings).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: 'markers.excess_capacity' }),
       expect.objectContaining({ code: 'markers.invalid_percentage' }),
-      expect.objectContaining({ code: 'markers.invalid_source' }),
       expect.objectContaining({ code: 'markers.invalid_lane' }),
       expect.objectContaining({ code: 'markers.invalid_shape' }),
       expect.objectContaining({ code: 'markers.invalid_item' }),

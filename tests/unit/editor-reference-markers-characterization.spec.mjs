@@ -15,23 +15,24 @@ for (const source of ['src', 'dist']) describe(`standalone Reference Marker char
     expect(editor._expandedGenericMarkerUiIds.has(ids[1])).toBe(true);
     expect(editor._draftConfig.markers[0]).not.toHaveProperty('markerUiId');
   });
-  for (const [at, expected] of [[25, { mode: 'fixed', fixed: '' }], [{ value: 25 }, { mode: 'fixed', fixed: '' }], [{ fixed: 25 }, { mode: 'fixed', fixed: 25 }], ['25%', { mode: 'percent', percent: '25' }], ['sensor.reference', { mode: 'entity', entity: 'sensor.reference', fixed: '' }], [{ entity: 'sensor.reference', fixed: 25 }, { mode: 'entity-fallback', entity: 'sensor.reference', fixed: 25 }]]) it(`reads source ${JSON.stringify(at)} exactly as before`, () => {
+  for (const [at, expected] of [[25, { mode: 'fixed', fixed: 25 }], [{ value: 25 }, { mode: 'fixed', fixed: 25 }], [{ fixed: 25 }, { mode: 'fixed', fixed: 25 }], ['25%', { mode: 'percent', percent: '25' }], ['sensor.reference', { mode: 'entity', entity: 'sensor.reference', fixed: '' }], [{ entity: 'sensor.reference', fixed: 25 }, { mode: 'entity-fallback', entity: 'sensor.reference', fixed: 25 }]]) it(`reads source ${JSON.stringify(at)} with direct value support`, () => {
     const editor = createEditor({ source }); editor.setConfig({ markers: [{ at }] });
     expect(editor._getGenericMarkerSource(editor._draftConfig.markers[0])).toEqual(expected);
   });
-  it('source modes preserve object unknown fields but replace scalar sources, with percent exposed as a string', () => {
-    const editor = createEditor({ source }); editor.setConfig({ markers: [{ at: { fixed: 25, entity: 'sensor.a', future: true } }] });
-    edit(editor, 'source-mode', 'fixed'); expect(editor._draftConfig.markers[0].at).toEqual({ fixed: 25, future: true });
-    edit(editor, 'source-mode', 'entity'); expect(editor._draftConfig.markers[0].at).toEqual({ future: true });
-    expect(editor._getGenericMarkerSource(editor._draftConfig.markers[0], root, 0).mode).toBe('entity');
-    edit(editor, 'source-mode', 'entity-fallback'); expect(editor._draftConfig.markers[0].at).toEqual({ future: true, fixed: 50 });
-    edit(editor, 'source-mode', 'percent'); expect(editor._draftConfig.markers[0].at).toBe('50%');
-    edit(editor, 'percent', '101'); expect(editor._draftConfig.markers[0].at).toBe('101%');
-    edit(editor, 'source-mode', 'fixed'); expect(editor._draftConfig.markers[0].at).toEqual({ fixed: 50 });
+  it('edits percentage suffixes in the direct value while retaining Entity and validating drafts', () => {
+    const editor = createEditor({ source });
+    editor.setConfig({ markers: [{ at: { entity: { id: 'sensor.a', attribute: 'temperature' }, fixed: 25, future: true } }] });
+    edit(editor, 'fixed', '50%');
+    expect(editor._draftConfig.markers[0].at).toEqual({ entity: { id: 'sensor.a', attribute: 'temperature' }, future: true, percent: 50 });
+    edit(editor, 'fixed', '101%');
+    expect(editor._draftConfig.markers[0].at).toEqual({ entity: { id: 'sensor.a', attribute: 'temperature' }, future: true, percent: 50 });
+    edit(editor, 'fixed', '50');
+    expect(editor._draftConfig.markers[0].at).toEqual({ entity: { id: 'sensor.a', attribute: 'temperature' }, future: true, fixed: 50 });
   });
   it('blank/invalid numeric and precision inputs clear owned fields; aliases and unrelated fields survive draft mutation', () => {
     const editor = createEditor({ source }); editor.setConfig({ markers: [{ at: { fixed: 25, value: 12, future: true }, label: { precision: 1, decimal: 2, future: true } }] });
-    edit(editor, 'fixed', '-'); expect(editor._draftConfig.markers[0].at).toEqual({ value: 12, future: true });
+    edit(editor, 'fixed', '-');
+    expect(editor._draftConfig.markers[0].at).toEqual({ fixed: 25, value: 12, future: true });
     edit(editor, 'label-precision', '-1'); expect(editor._draftConfig.markers[0].label).toEqual({ future: true });
     edit(editor, 'label-precision', '0'); expect(editor._draftConfig.markers[0].label.precision).toBe(0);
   });
@@ -45,7 +46,10 @@ for (const source of ['src', 'dist']) describe(`standalone Reference Marker char
     const editor = createEditor({ source }); editor.setConfig({ markers: [{ at: '25%', color: 'red' }] });
     const html = editor._renderGenericMarkersEditor(root);
     for (const option of ['circle','diamond','triangle','chevron','arrow','pin','above','below','inward','outward']) expect(html).toContain(`value="${option}"`);
-    expect(html).toContain('generic-marker-percent'); expect(html).toContain('generic-marker-color-text-fallback');
+    expect(html).toContain('value="25%"');
+    expect(html).not.toContain('generic-marker-source-mode');
+    expect(html).not.toContain('generic-marker-percent');
+    expect(html).toContain('generic-marker-color-text-fallback');
     for (const shape of ['circle','diamond','triangle','chevron','arrow','pin']) { edit(editor,'shape',shape); expect(editor._draftConfig.markers[0].shape).toBe(shape); }
     edit(editor,'direction','OUTWARD'); expect(editor._draftConfig.markers[0].direction).toBe('outward');
     edit(editor,'direction','invalid'); expect(editor._draftConfig.markers[0].direction).toBe('inward');

@@ -12,6 +12,20 @@ export class NumericInputDrafts {
     // old focused control; that is not a user's blank reset commit.
     if (rendering && input?.type === 'number') return true;
     const route = input?.dataset?.field ?? input?.dataset?.kind ?? '';
+    if (route === 'generic-marker-fixed' && input?.type === 'text' && input.id) {
+      if (input.isConnected === false) return true;
+      const value = input.value.trim();
+      const percentage = value.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)\s*%$/i);
+      const numeric = normalizeNumberValue(value);
+      const percentNumber = percentage ? normalizeNumberValue(percentage[1]) : null;
+      const complete = percentage
+        ? percentNumber !== null && percentNumber >= 0 && percentNumber <= 100
+        : numeric !== null;
+      const clear = event.type === 'change' && value === '';
+      if (complete || clear) { this.values.delete(input.id); return false; }
+      this.values.set(input.id, input.value);
+      return true;
+    }
     if (route === 'generic-marker-source-mode' && input.id) {
       for (const suffix of ['fixed', 'fallback', 'percent']) this.values.delete(input.id.replace(/source-mode$/, suffix));
     }

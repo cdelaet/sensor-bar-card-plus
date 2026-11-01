@@ -156,8 +156,6 @@ export function normalizeGenericMarkerList(input, capacityConfig = null) {
     }
 
     const rawAt = rawMarker.at;
-    const hasUnsupportedPercentField = rawAt && typeof rawAt === 'object'
-      && Object.prototype.hasOwnProperty.call(rawAt, 'percent');
     const atInput = typeof rawAt === 'string' ? rawAt.trim() : rawAt;
     const source = normalizeStructuredResolvableValue(atInput, null, null, { allowPercent: true });
     const explicitEntity = rawAt && typeof rawAt === 'object' && rawAt.entity !== undefined
@@ -168,13 +166,15 @@ export function normalizeGenericMarkerList(input, capacityConfig = null) {
     const invalidFixed = rawAt && typeof rawAt === 'object'
       && rawAt.fixed !== undefined && rawAt.fixed !== null
       && getFiniteNumber(rawAt.fixed) === null;
+    const hasObjectPercent = rawAt && typeof rawAt === 'object'
+      && Object.prototype.hasOwnProperty.call(rawAt, 'percent');
     const hasSource = !!source.entity
       || getFiniteNumber(source.fixed) !== null
       || Number.isFinite(source.percent);
-    const invalidPercentage = Number.isFinite(source.percent)
-      && (source.percent < 0 || source.percent > 100);
+    const invalidPercentage = hasObjectPercent
+      ? !Number.isFinite(source.percent) || source.percent < 0 || source.percent > 100
+      : Number.isFinite(source.percent) && (source.percent < 0 || source.percent > 100);
     const validSource = rawAt !== undefined && rawAt !== null
-      && !hasUnsupportedPercentField
       && !invalidEntity
       && !invalidFixed
       && hasSource
@@ -241,7 +241,6 @@ export function normalizeGenericMarkerList(input, capacityConfig = null) {
       valid: validSource && validLane,
       invalidSource: !validSource,
       invalidPercentage,
-      unsupportedPercentField: hasUnsupportedPercentField,
       invalidLane: !validLane,
       invalidShape: !validShape,
       accepted: false,

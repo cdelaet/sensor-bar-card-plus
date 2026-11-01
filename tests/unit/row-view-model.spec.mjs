@@ -695,6 +695,31 @@ describe('buildRowViewModel', () => {
     });
   });
 
+  it('resolves object percentage fallbacks after invalid Entity/Attribute values, with Entity then fixed precedence', () => {
+    const hass = {
+      states: {
+        'sensor.power': sensor(20),
+        'sensor.nonnumeric': sensor('not numeric'),
+        'sensor.no_attribute': sensor(75),
+        'sensor.numeric': sensor(40),
+        'sensor.unavailable': sensor('unavailable'),
+      },
+    };
+    const entityConfig = createNormalizedEntity({
+      scale: { min: { fixed: 0 }, max: { fixed: 200 } },
+      markers: [
+        { at: { entity: 'sensor.nonnumeric', percent: 25 } },
+        { at: { entity: { id: 'sensor.no_attribute', attribute: 'missing' }, percent: 17 } },
+        { at: { entity: 'sensor.numeric', fixed: 0, percent: 25 } },
+        { at: { entity: 'sensor.unavailable', fixed: 0, percent: 25 } },
+      ],
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.power'] });
+    expect(row.markers.filter(marker => marker.type === 'generic').map(marker => marker.value))
+      .toEqual([50, 34, 40, 0]);
+  });
+
   it('keeps unresolved generic markers hidden while reserving their configured lanes', () => {
     const hass = { states: { 'sensor.power': sensor(42), 'sensor.limit': sensor('unknown') } };
     const entityConfig = createNormalizedEntity({

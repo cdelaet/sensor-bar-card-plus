@@ -56,33 +56,41 @@ for (const source of ['src', 'dist']) describe(`Feature Reference markers (${sou
   for (const shape of ['circle','diamond','triangle','chevron','arrow','pin']) it(`edits supported shape ${shape} without Target restrictions`, async () => {
     const { editor } = await setup(source); await field(editor,'shape',shape); expect(editor._config.markers[0].shape).toBe(shape);
   });
-  for (const [sourcePart,value] of [['fallback','30'],['entity','sensor.changed'],['entity',''],['fallback','']]) it(`owns source ${sourcePart}=${value} and keeps value alias/metadata appropriately`, async () => {
+  const valueField = 'fixed';
+  for (const [sourcePart,value] of [[valueField,'30'],['entity','sensor.changed'],['entity',''],[valueField,'']]) it(`edits ${sourcePart} value=${value} and keeps aliases/metadata appropriately`, async () => {
     const config = raw(), { editor } = await setup(source,config); await field(editor,sourcePart,value);
     const expected = structuredClone(config);
-    if (sourcePart === 'fallback') { if (value === '') { delete expected.markers[0].at.fixed; delete expected.markers[0].at.value; } else expected.markers[0].at.value = 30; }
+    if (sourcePart === valueField) {
+      if (value === '') { delete expected.markers[0].at.fixed; delete expected.markers[0].at.value; }
+      else { expected.markers[0].at.fixed = 30; delete expected.markers[0].at.value; }
+    }
     else if (value === '') delete expected.markers[0].at.entity; else expected.markers[0].at.entity = value;
+    if (sourcePart === 'entity') {
+      expected.markers[0].at.fixed = 25;
+      delete expected.markers[0].at.value;
+    }
     expect(editor._config).toEqual(expected);
   });
   it('edits scalar numeric/entity sources in place and promotes minimally for entity fallback', async () => {
     const config = raw(); config.markers[0].at = 25;
     const { editor } = await setup(source,config); expect(editor._referenceMarkersSection._getGenericMarkerSource(editor._config.markers[0])).toEqual({ mode:'fixed',fixed:25 });
     await field(editor,'fixed','30'); expect(editor._config.markers[0].at).toBe(30);
-    await field(editor,'source-mode','entity-fallback'); expect(editor._config.markers[0].at).toEqual({ fixed:30 });
-    expect(editor._referenceMarkersSection._getGenericMarkerSource(editor._config.markers[0],root,0).mode).toBe('entity-fallback');
     await field(editor,'entity','sensor.changed'); expect(editor._config.markers[0].at).toEqual({ fixed:30,entity:'sensor.changed' });
+    expect(editor._referenceMarkersSection._getGenericMarkerSource(editor._config.markers[0],root,0).mode).toBe('entity-fallback');
     const replacement = raw(); replacement.markers[0].at = 'sensor.reference'; editor.setConfig(replacement); await editor.updateComplete;
     await field(editor,'entity','sensor.changed'); expect(editor._config.markers[0].at).toBe('sensor.changed');
   });
-  it('mode changes own source fields only, preserve object metadata, and percentage mode uses supported string syntax', async () => {
+  it('edits percentage sources and preserves unrelated marker fields', async () => {
     const config = raw(), { editor } = await setup(source,config);
-    await field(editor,'source-mode','fixed'); expect(editor._config.markers[0].at).toEqual({ value:25,...meta() });
-    await field(editor,'source-mode','entity-fallback'); expect(editor._config.markers[0].at).toEqual({ value:25,...meta() });
-    expect(editor._referenceMarkersSection._getGenericMarkerSource(editor._config.markers[0],root,0).mode).toBe('entity-fallback');
-    await field(editor,'source-mode','entity'); expect(editor._config.markers[0].at).toEqual(meta());
-    expect(editor._referenceMarkersSection._getGenericMarkerSource(editor._config.markers[0],root,0).mode).toBe('entity');
-    await field(editor,'source-mode','percent'); expect(editor._config.markers[0].at).toBe('50%');
-    for (const value of ['0','100','101']) { await field(editor,'percent',value); expect(editor._config.markers[0].at).toBe(`${value}%`); }
-    await field(editor,'percent',''); expect(editor._config.markers[0].at).toBe('101%');
+    for (const value of ['0%','100%','101%']) {
+      await field(editor,'fixed',value);
+      const percent = value === '101%' ? 100 : Number(value.slice(0, -1));
+      expect(editor._config.markers[0].at).toMatchObject({ entity: 'sensor.reference', percent });
+      expect(editor._config.markers[0].at).not.toHaveProperty('fixed');
+      expect(editor._config.markers[0].at).not.toHaveProperty('value');
+    }
+    await field(editor,'fixed',''); expect(editor._config.markers[0].at).toMatchObject({ entity: 'sensor.reference' });
+    expect(editor._config.markers[0].at).not.toHaveProperty('percent');
     expect(editor._config.markers[0].label).toEqual(config.markers[0].label); expect(editor._config.markers[1]).toEqual(config.markers[1]);
   });
   it('clears only label entity/text/precision and its decimal alias; label-only anchors remain', async () => {
@@ -153,9 +161,12 @@ for (const source of ['src', 'dist']) describe(`Feature Reference markers (${sou
     for(const key of ['target','peak','floor']) expect(editor.shadowRoot.innerHTML).not.toContain(`${key}-label-entity`);
   });
 });
-it('source/dist and picker/fallback whole-Feature HTML remain identical for representative Reference Marker configurations', async () => {
-  for(const withEntityPicker of [false,true]) for(const config of [{type},raw(),{type,markers:[{at:25},{at:'25%',show_marker:false,label:{entity:'sensor.label'}}]}]) {
-    const a=await setup('src',config,withEntityPicker), b=await setup('dist',config,withEntityPicker);
-    expect(a.editor.shadowRoot.innerHTML).toBe(b.editor.shadowRoot.innerHTML);
+it('Reference Marker controls work with HA pickers and text-input fallbacks', async () => {
+  for(const source of ['src','dist']) for(const withEntityPicker of [false,true]) for(const config of [raw(),{type,markers:[{at:25},{at:'25%',show_marker:false,label:{entity:'sensor.label'}}]}]) {
+    const { editor }=await setup(source,config,withEntityPicker);
+    const markup=editor._referenceMarkersSection.render(root);
+    expect(markup).toContain('data-kind="generic-marker-fixed"');
+    expect(markup).toContain('data-kind="generic-marker-entity"');
+    expect(markup).not.toContain('generic-marker-source-mode');
   }
 });

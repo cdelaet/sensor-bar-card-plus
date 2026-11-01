@@ -29,6 +29,24 @@ it('distinguishes deliberate blank resets from incomplete source percentages and
   input.value = '75'; expect(drafts.handle({ type: 'input', target: input })).toBe(false);
 });
 
+it('keeps incomplete Value text local while accepting numeric and percent-suffixed entries', () => {
+  const drafts = new NumericInputDrafts();
+  const input = { id: 'marker-value', type: 'text', dataset: { kind: 'generic-marker-fixed' } };
+  for (const value of ['-', '.', '25x', '101%']) {
+    input.value = value;
+    expect(drafts.handle({ type: 'input', target: input })).toBe(true);
+    expect(drafts.values.get(input.id)).toBe(value);
+  }
+  for (const value of ['25', '25%', '0%', '100%']) {
+    input.value = value;
+    expect(drafts.handle({ type: 'input', target: input })).toBe(false);
+    expect(drafts.values.has(input.id)).toBe(false);
+  }
+  input.value = '';
+  expect(drafts.handle({ type: 'input', target: input })).toBe(true);
+  expect(drafts.handle({ type: 'change', target: input })).toBe(false);
+});
+
 it('uses existing precision/height validation and leaves section-owned drafts alone', () => {
   const drafts = new NumericInputDrafts();
   const input = { id: 'precision', type: 'number', dataset: { field: 'target-label-precision' } };

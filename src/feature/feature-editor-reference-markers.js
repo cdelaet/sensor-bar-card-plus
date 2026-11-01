@@ -1,6 +1,5 @@
-import { getReferenceMarkerSource } from '../editor/sections/reference-markers.js';
-import { cloneDeep, isObject, normalizeNumberValue, normalizeTextValue, setPathValue, deletePathValue, pruneEmptyObjectsInTarget } from '../editor/shared/editor-config.js';
-import { patchSource } from './feature-editor-config.js';
+import { getReferenceMarkerSource, patchReferenceMarkerAt } from '../editor/sections/reference-markers.js';
+import { cloneDeep, isObject, normalizeTextValue, setPathValue, deletePathValue, pruneEmptyObjectsInTarget } from '../editor/shared/editor-config.js';
 
 // Display supported scalar/value sources without changing standalone's reader.
 export function getFeatureReferenceMarkerSource(marker) {
@@ -12,15 +11,7 @@ export function getFeatureReferenceMarkerSource(marker) {
 
 export function patchFeatureReferenceMarkerSource(config, index, part, rawValue) {
   if (!Array.isArray(config.markers) || !config.markers[index]) return config;
-  const base = ['markers', index, 'at'], at = config.markers[index]?.at;
-  const isTextPart = ['entity', 'attribute'].includes(part);
-  const value = isTextPart ? normalizeTextValue(rawValue).trim() : normalizeNumberValue(rawValue);
-  const empty = isTextPart ? !value : value === null;
-  // Generic percentage anchors have only string syntax; object percent is invalid.
-  if (part === 'percent') return setPathValue(config, base, empty ? null : `${value}%`);
-  // Apply the existing object-source patcher to one item: its delete helper
-  // intentionally does not traverse arrays.
-  const marker = patchSource(config.markers[index], ['at'], at, part, value, empty);
+  const marker = patchReferenceMarkerAt(config.markers[index], part, rawValue);
   return setPathValue(config, ['markers', index], marker);
 }
 

@@ -149,14 +149,11 @@ function validateGenericMarkers(diagnostics, markers, invalidList, path, entity 
       continue;
     }
     validateEntitySource(diagnostics, marker.source, `${markerPath}.at`, entity);
-    if (marker.invalidSource && !marker.invalidPercentage && !marker.unsupportedPercentField) {
+    if (marker.invalidSource && !marker.invalidPercentage) {
       addWarning(diagnostics, 'markers.invalid_source', 'Marker requires a valid fixed value, percentage, or entity source.', `${markerPath}.at`, entity);
     }
     if (marker.invalidPercentage) {
       addWarning(diagnostics, 'markers.invalid_percentage', 'Marker percentage must be between 0 and 100 inclusive.', `${markerPath}.at`, entity);
-    }
-    if (marker.unsupportedPercentField) {
-      addWarning(diagnostics, 'markers.invalid_source', 'Use a percentage string such as "35%" instead of an at.percent field.', `${markerPath}.at`, entity);
     }
     if (marker.invalidLane) {
       addWarning(diagnostics, 'markers.invalid_lane', 'Marker lane must be above or below; ignoring this marker.', `${markerPath}.lane`, entity);

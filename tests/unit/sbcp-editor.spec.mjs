@@ -9279,7 +9279,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(markup).toContain('move-generic-marker-up');
     expect(markup).toContain('move-generic-marker-down');
     expect(markup).toContain('generic-marker-entity');
-    expect(markup).toContain('generic-marker-percent');
+    expect(markup).toContain('value="35%"');
+    expect(markup).not.toContain('generic-marker-source-mode');
     expect(markup).toContain('generic-marker-label-text');
     expect(markup).toContain('generic-marker-label-entity');
     expect(markup).toContain('generic-marker-show-marker');
@@ -9398,30 +9399,32 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(renderCount).toBe(0);
   });
 
-  it('keeps source-mode changes structural so the matching value control appears', async () => {
+  it('uses the direct Value input for numbers and scale percentages', async () => {
     const editor = createEditor();
     editor.setConfig({ markers: [{ at: { fixed: 20 } }] });
     const markerUiId = editor._getGenericMarkerUiIds({ type: 'card' }, 1)[0];
     editor._expandedGenericMarkerUiIds.add(markerUiId);
     editor._render();
-    const sourceMode = editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-source-mode`);
+    expect(editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-source-mode`)).toBeNull();
+    expect(editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-fixed`)).toBeTruthy();
+    expect(editor.shadowRoot.innerHTML).toContain('>Entity</label>');
 
-    dispatchChange(sourceMode, 'percent');
+    const value = editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-fixed`);
+    dispatchChange(value, '25%');
     await flushTimers();
 
-    expect(editor.shadowRoot.innerHTML).toContain(`id="card-card-generic-${markerUiId}-percent"`);
-    expect(editor._draftConfig.markers[0].at).toBe('50%');
+    expect(editor._draftConfig.markers[0].at).toEqual({ percent: 25 });
+    expect(editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-fixed`).value).toBe('25%');
 
-    dispatchChange(editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-source-mode`), 'entity-fallback');
+    dispatchChange(editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-fixed`), '101%');
     await flushTimers();
-    expect(editor.shadowRoot.innerHTML).toContain('Reference marker entity');
-    expect(editor.shadowRoot.innerHTML).toContain(`id="card-card-generic-${markerUiId}-fallback"`);
-    expect(editor._draftConfig.markers[0].at).toEqual({ fixed: 50 });
+    expect(editor._draftConfig.markers[0].at).toEqual({ percent: 25 });
 
-    dispatchChange(editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-source-mode`), 'entity');
+    dispatchChange(editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-fixed`), '30');
     await flushTimers();
+    expect(editor._draftConfig.markers[0].at).toEqual({ fixed: 30 });
     expect(editor.shadowRoot.innerHTML).toContain('generic-marker-entity');
-    expect(editor.shadowRoot.innerHTML).not.toContain(`id="card-card-generic-${markerUiId}-fallback"`);
+    expect(editor.shadowRoot.innerHTML).not.toContain('Use scale percentage');
   });
 
   it('collapses marker groups by default and keeps generic marker expansion attached through reorder and removal', () => {
