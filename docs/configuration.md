@@ -25,7 +25,7 @@ For focused, copyable configurations and visual comparisons, see the [Examples G
 - [Generic reference markers](#generic-reference-markers)
 - [Formatting](#formatting)
 - [Interaction and error behavior](#interaction-and-error-behavior)
-- [Peak and Floor reset behavior](#peak-and-floor-reset-behavior)
+- [Peak and Floor history windows](#peak-and-floor-history-windows)
 - [Invalid and unsupported configuration](#invalid-and-unsupported-configuration)
 - [Compatibility and migration](#legacy-compatibility-and-migration)
 
@@ -257,9 +257,9 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 
 | Path | Default | Values | Description | Card Feature |
 |---|---:|---|---|---|
-| `peak.enabled` | `false` | boolean | Shows a session peak marker. | Yes |
+| `peak.enabled` | `false` | boolean | Shows the Peak marker when a historical result is available. Omitted means hidden. | Yes |
 | `peak.color` | `#888888` | CSS color | Peak marker color. | Yes |
-| `peak.reset` | `never` | reset value | Resets Peak using a relative duration or local calendar boundary. | Yes |
+| `peak.window` | `today` | calendar preset or rolling duration | Selects the Home Assistant history window used to calculate Peak. Legacy `peak.reset` is migrated by the editor; see [Peak and Floor history windows](#peak-and-floor-history-windows). | Yes |
 | `peak.direction` | `inward` | `inward`, `outward` | Direction of the fixed triangle marker. Entity-level Peak direction inherits the card-level value unless overridden. | Yes |
 | `peak.label.show` | `false` | boolean | Shows the formatted Peak value label. | Yes — compact |
 | `peak.label.text` | absent | string | Optional plain text shown before the value and unit. | Yes |
@@ -271,9 +271,9 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 
 | Path | Default | Values | Description | Card Feature |
 |---|---:|---|---|---|
-| `floor.enabled` | `false` | boolean | Shows a session Floor marker for the lowest finite value. | Yes |
+| `floor.enabled` | `false` | boolean | Shows the Floor marker when a historical result is available. Omitted means hidden. | Yes |
 | `floor.color` | `#888888` | CSS color | Floor marker color. | Yes |
-| `floor.reset` | `never` | reset value | Resets Floor using a relative duration or local calendar boundary. | Yes |
+| `floor.window` | `today` | calendar preset or rolling duration | Selects the Home Assistant history window used to calculate Floor. Legacy `floor.reset` is migrated by the editor; see [Peak and Floor history windows](#peak-and-floor-history-windows). | Yes |
 | `floor.direction` | `inward` | `inward`, `outward` | Direction of the fixed triangle marker. Entity-level Floor direction inherits the card-level value unless overridden. | Yes |
 | `floor.label.show` | `false` | boolean | Shows the formatted Floor value label. | Yes — compact |
 | `floor.label.text` | absent | string | Optional plain text shown before the value and unit. | Yes |
@@ -1135,6 +1135,8 @@ baseline:
 
 Use `at: { entity: sensor.dynamic_baseline, fixed: 0 }` when you want a fixed fallback. A numeric `baseline.at` is a Scale value; a percentage string such as `50%` is a semantic position from Scale minimum to maximum, projected according to Scale Direction. Use percentage strings directly under `at`, not inside `fixed`. Legacy numeric shorthand remains accepted; see [compatibility](#legacy-compatibility-and-migration).
 
+In the Card Feature Visual Editor, the Baseline Value field accepts a number such as `25` or a Scale percentage such as `25%`; optional Entity and Attribute controls can be used with that fallback. The standalone Card editor retains its existing separate value/source controls. Both editors read and write the existing Baseline YAML forms; no new configuration key is required.
+
 ### Centered zero baseline
 
 ```yaml
@@ -1377,6 +1379,8 @@ Supported target features:
 - optional target value label
 - optional `target.when_exceeded.fill_color`
 
+In the Card Feature Visual Editor, enter a number for a fixed Target or append `%` for a percentage of the active Scale. Entity and optional Attribute can coexist with the Value fallback. The standalone Card editor keeps its established separate source/value controls. These are editor presentations of the existing Target configuration model.
+
 Migration note: The default Target marker is a diamond, making it easier to distinguish from Floor. To retain the previous triangle, set `target.shape: triangle`.
 
 ### Target labels and exceeded fill
@@ -1411,12 +1415,12 @@ target:
 peak:
   enabled: true
   color: '#fde68a'
-  reset: never
+  window: today
   label:
     show: false
 ```
 
-The Peak marker tracks the highest finite value observed for the current card session. Its shape is a fixed triangle; configure its direction, not its shape. `reset: never` is the default. See [Peak and Floor reset behavior](#peak-and-floor-reset-behavior) for relative duration and local calendar resets.
+Peak is the maximum numeric value in the configured Home Assistant history window. The result can be recovered after a reload or card recreation when the necessary Recorder history or statistics are available. Its shape is a fixed triangle; configure its direction, not its shape. `window` defaults to `today`. Peak is hidden by default (`enabled: false`).
 
 ## Floor Marker
 
@@ -1424,17 +1428,19 @@ The Peak marker tracks the highest finite value observed for the current card se
 floor:
   enabled: true
   color: '#888888'
-  reset: daily
+  window: yesterday
   label:
     show: true
     decimal: 1
 ```
 
-The Floor marker tracks the lowest finite value observed for the current card session. Its shape is a fixed triangle; configure its direction, not its shape. It shares the below marker lane with Target. See [Peak and Floor reset behavior](#peak-and-floor-reset-behavior) for reset options.
+Floor is the minimum numeric value in the configured Home Assistant history window. It shares the below marker lane with Target. Like Peak, its shape is a fixed triangle and it is hidden by default.
 
 ## Generic Reference Markers
 
 Use `markers:` for configured reference points rather than tracked highs/lows. A marker's `at` controls its position; optional `label.entity` supplies independent numeric or textual label content. Neither source converts values between units.
+
+The Card and Card Feature Visual Editors use a direct Value field for a fixed reference or Scale percentage (`25` or `25%`), with optional Entity and Attribute controls. Entity/Attribute remains primary when it resolves; the configured fixed or percentage fallback is retained and used if it cannot. The `%` suffix denotes a Scale percentage and is separate from the Home Assistant entity's unit.
 
 ### Position sources
 
@@ -1673,17 +1679,44 @@ The Card Feature does not accept these row-action options: the parent Home Assis
 
 If the row's entity cannot be found, the card shows an error in that row; other rows continue to render. An existing entity whose state is `unknown` or `unavailable` is displayed as text, as described under [Formatting](#formatting).
 
-## Peak and Floor reset behavior
+## Peak and Floor history windows
 
-Peak and Floor track finite samples in memory for each standalone card row or Card Feature instance. They are visual extrema, not durable historical statistics. The default reset policy is `never`. Duration windows accept `1m`–`59m` and `1h`–`23h` and begin at the first finite sample in the window; they are elapsed-time windows, not clock-aligned. A reset is applied lazily when the next finite sample arrives at or after expiry.
+`peak.window` and `floor.window` select the history period used to calculate the maximum or minimum for the row's primary entity or configured scalar attribute. Both default to `today`. Calendar windows use Home Assistant's configured IANA timezone, including its daylight-saving transitions. Week boundaries use Home Assistant's explicit first-weekday preference when set, otherwise the first weekday associated with its locale. The current calendar window runs from its local boundary through now; a previous calendar window covers the complete prior period.
 
-Calendar reset policies use local time boundaries: `quarterly` means quarter-hour boundaries (`:00`, `:15`, `:30`, and `:45`), followed by `hourly`, `daily`, `weekly` (Monday start), `monthly`, and `yearly`. Invalid reset values fall back to `never` with a configuration warning. Changing an effective reset policy clears that tracker's stored extremum; disabling Peak or Floor clears that tracker independently. Unknown or unavailable primary values do not erase the previous finite extremum.
+The Visual Editor offers these 24 presets:
 
-For the Card Feature, recreating the instance or changing its configuration/effective entity starts fresh history. Repeating an identical configuration does not reset it. Neither presentation fetches historical sensor readings.
+| Calendar presets (10) | Rolling presets (14) |
+|---|---|
+| `quarterly` — current quarter-hour | `5m`, `10m`, `15m`, `30m` |
+| `hourly` — current hour | `1h`, `2h`, `3h`, `6h`, `12h`, `24h`, `48h` |
+| `today`, `yesterday` | `7d`, `14d`, `30d` |
+| `this_week`, `previous_week` | |
+| `this_month`, `previous_month` | |
+| `this_year`, `previous_year` | |
+
+`quarterly` means the current 15-minute interval (`:00`, `:15`, `:30`, or `:45`), not a three-month quarter. Rolling windows count back from the current time; they are not aligned to calendar boundaries. YAML also accepts other positive integer durations written with `m`, `h`, `d`, or `w` (for example `45m` or `10d`) when eligible for the acquisition path. A duration longer than 24 hours must be a whole number of hours; unsupported or invalid values remain unavailable and produce a configuration diagnostic rather than silently selecting a different period.
+
+### Recorder, statistics, and coverage
+
+Windows up to and including 24 hours use Home Assistant Recorder state history. Longer windows use Recorder long-term statistics for completed hours and raw state history for the current hour. The statistics source must provide compatible min/max metadata, and its unit must match the entity's unit. Entity attributes use raw state history only; Home Assistant does not provide long-term statistics for attributes, so attribute-based windows requiring the longer statistics path are unavailable.
+
+Recorder history availability depends on the instance's Recorder configuration and retention. A returned history response does not prove that the requested period is complete. SBCP reports a `partial` result when it detects missing or malformed intervals or an uncovered boundary, but unknown Recorder retention is not automatically called partial. `pending` means acquisition is underway; `available` means a usable result was resolved without known incomplete coverage; `stale` means the prior result is being retained after a refresh failure; `unavailable` means no usable value can be produced; and `invalid` identifies an invalid window or source. When there is no usable historical result, the marker is not placed using the current reading as a substitute. Status text is exposed through the row's accessible description and, where applicable, a status badge.
+
+Some local calendar boundaries in time zones with a non-whole-hour UTC offset cannot be represented by Home Assistant's UTC-hour statistics buckets. Those long-window requests can be unavailable; raw-history windows of 24 hours or less do not have that statistics boundary limitation.
+
+### Legacy `reset` migration
+
+`reset` is a legacy Peak/Floor key. Runtime normalization still accepts `peak.reset` and `floor.reset`; when the Visual Editor edits that configuration, it emits canonical `peak.window` and `floor.window` at card and entity scope, removes the old key, preserves unknown sibling properties, and does not mutate the input object. If both `window` and `reset` are present, `window` takes precedence, including when its value is invalid. Calendar aliases are canonicalized (`daily` → `today`, `weekly` → `this_week`, `monthly` → `this_month`, `yearly` → `this_year`; `last_week`, `last_month`, and `last_year` → their `previous_*` forms). Other valid aliases such as `this week` are emitted with underscores.
+
+`reset: never` migrates to `window: today`. This is an intentional behavior change: the former setting retained an in-memory lifetime/session extremum, while v1.10 resolves a Recorder-backed calendar window and does not query an unbounded lifetime. Old duration resets started on the first finite sample and expired lazily; rolling windows now move relative to the current time and can recover history after reload. Invalid legacy reset values stay invalid and are diagnosed; they do not fall back to `never` or another valid window.
+
+### Visibility defaults and compatibility
+
+Peak and Floor are both hidden when `enabled` is omitted (`false` by default). Set `enabled: true` to show a marker when its historical value resolves. Target and Baseline have different automatic visibility behavior: an omitted `enabled` can show them when their configured value resolves. The Visual Editor's **Show marker** checkbox reflects that effective behavior, but merely opening the editor or changing an unrelated field does not add an omitted `enabled` key. Entity-level settings inherit the card setting until explicitly overridden. Legacy `show_peak` and `peak_color` remain supported; canonical `peak.enabled` and `peak.color` take precedence where both are supplied. There is no legacy `show_floor` alias.
 
 ## Invalid and unsupported configuration
 
-Invalid configuration is reported through non-fatal diagnostics where applicable. A generic marker with an unusable source, lane, or structure is skipped. Recoverable invalid fields, such as shape, direction, visibility, or label options, fall back to supported defaults or inherited values, with a warning where applicable. Valid excess markers remain in configuration but do not render and produce a capacity warning. Invalid reset syntax falls back to `never`. Generic percentage positions use strings such as `35%`; an `at.percent` object field is unsupported. Entity-backed segment boundaries are unsupported and ignored with a configuration warning. The Card Feature rejects `entities`; standalone presentation options such as `title` and `layout` do not add content. See the relevant sections for details.
+Invalid configuration is reported through non-fatal diagnostics where applicable. A generic marker with an unusable source, lane, or structure is skipped. Recoverable invalid fields, such as shape, direction, visibility, or label options, fall back to supported defaults or inherited values, with a warning where applicable. Valid excess markers remain in configuration but do not render and produce a capacity warning. Invalid Peak/Floor windows remain invalid and their historical markers cannot resolve; legacy invalid `reset` values are not converted to `never`. Generic percentage positions use strings such as `35%`; an `at.percent` object field is unsupported. Entity-backed segment boundaries are unsupported and ignored with a configuration warning. The Card Feature rejects `entities`; standalone presentation options such as `title` and `layout` do not add content. See the relevant sections for details.
 
 ## Legacy Compatibility and Migration
 

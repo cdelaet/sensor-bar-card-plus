@@ -72,8 +72,8 @@ features:
     target:
       at: { fixed: 2500 }
       label: { show: true, text: Limit, precision: 0 }
-    peak: { enabled: true, reset: daily }
-    floor: { enabled: true, reset: daily }
+    peak: { enabled: true, window: today }
+    floor: { enabled: true, window: today }
     markers:
       - at: -1500
         lane: above
@@ -83,7 +83,44 @@ features:
     formatting: { unit: W, decimal: 0 }
 ```
 
-Peak/Floor are session extrema, not recorded history. Baseline takes precedence over a configured Needle while it resolves. See [Baseline](configuration.md#baseline), [Reference Markers](configuration.md#generic-reference-markers) and [compact labels](configuration.md#compact-card-feature-marker-labels) for details.
+Peak/Floor use Home Assistant Recorder history and can recover their values after a dashboard reload when the selected history is available. Baseline takes precedence over a configured Needle while it resolves. See [Baseline](configuration.md#baseline), [Peak and Floor history windows](configuration.md#peak-and-floor-history-windows), [Reference Markers](configuration.md#generic-reference-markers) and [compact labels](configuration.md#compact-card-feature-marker-labels) for details.
+
+### Choose a different history window
+
+Use `yesterday` for the previous local calendar day, or a rolling duration such as `24h` to look back from the current time:
+
+```yaml
+peak:
+  enabled: true
+  window: yesterday
+floor:
+  enabled: true
+  window: 24h
+```
+
+Longer windows use Home Assistant long-term statistics for completed hours. For example, `7d` selects a rolling week and `previous_month` selects the previous local calendar month:
+
+```yaml
+peak:
+  enabled: true
+  window: 7d
+floor:
+  enabled: true
+  window: previous_month
+```
+
+Long-term statistics must provide compatible min/max metadata. An entity attribute can be used with short windows backed by raw Recorder history:
+
+```yaml
+type: custom:sensor-bar-card-plus
+entities:
+  - entity: sensor.air_quality
+    attribute: co2
+    peak: { enabled: true, window: today }
+    floor: { enabled: true, window: 24h }
+```
+
+Attributes do not have long-term statistics and therefore cannot supply windows longer than 24 hours. See [history requirements and coverage](configuration.md#recorder-statistics-and-coverage) for details.
 
 ### Explicit entity override: power beside a switch
 
@@ -415,7 +452,7 @@ floor:
 
 The revealed portion above Target becomes vivid blue **#00B2FF**, distinct from the magenta palette color. Move the reading to 3000 W, then 9000 W, then 7200 W: Peak remains at 9000 and Floor at 3000, assuming no earlier samples outside that range. They track the card session and reset when the card is recreated, rather than providing stored history.
 
-Use just `target`, `peak`, or `floor` when only one reference is needed. See [Target](configuration.md#target-marker), [Peak](configuration.md#peak-marker), [Floor](configuration.md#floor-marker), and [reset behavior](configuration.md#peak-and-floor-reset-behavior).
+Use just `target`, `peak`, or `floor` when only one reference is needed. See [Target](configuration.md#target-marker), [Peak](configuration.md#peak-marker), [Floor](configuration.md#floor-marker), and [history windows](configuration.md#peak-and-floor-history-windows).
 
 ## Generic references
 

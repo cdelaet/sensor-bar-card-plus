@@ -170,7 +170,7 @@ Target is a configured threshold or reference. It supports fixed, percentage, an
 
 ### Peak and Floor
 
-Peak tracks the highest finite value observed for the card row; Floor tracks the lowest. They complement each other by showing the observed range. Their values are runtime/session state held by each card row or Card Feature instance, not durable historical statistics, and are lost when that instance or browser is recreated. Each can be reset using supported duration or local calendar policies; see [Peak and Floor reset behavior](docs/configuration.md#peak-and-floor-reset-behavior).
+Peak and Floor show the highest and lowest values in a Home Assistant history window. Because Home Assistant Recorder supplies the history, results can be recovered after a dashboard reload or card recreation. Choose calendar windows such as `today` or `previous_week`, or rolling windows such as `24h` and `7d`. Recent windows use Recorder state history; longer windows require compatible long-term statistics. Missing or incomplete history can leave a marker partial or unavailable. See [Peak and Floor history windows](docs/configuration.md#peak-and-floor-history-windows) for retention, statistics, and timezone details.
 
 ### Generic Reference Markers
 
@@ -224,9 +224,9 @@ Target, Peak, Floor, Generic Reference Markers, and individual generic markers h
 
 ## Responsive behavior and data details
 
-The standalone card adapts label and icon placement to available width, while keeping the bar and value useful where possible. Tapping an entity row opens Home Assistant’s standard more-info dialog by default; tap, hold and double-tap actions can be configured for the card or individual rows. If an entity is missing, its row shows an error while other rows remain available. Dynamic scales and reference values update as their source entities change. When a primary reading is unknown or unavailable, the card cannot place a new numeric value; Peak and Floor retain the last finite sample until reset or reconfiguration.
+The standalone card adapts label and icon placement to available width, while keeping the bar and value useful where possible. Tapping an entity row opens Home Assistant’s standard more-info dialog by default; tap, hold and double-tap actions can be configured for the card or individual rows. If an entity is missing, its row shows an error while other rows remain available. Dynamic scales and reference values update as their source entities change. When a primary reading is unknown or unavailable, the card cannot place a new numeric value; Peak and Floor continue to resolve from the configured Home Assistant history window.
 
-Peak and Floor are session state rather than long-term history. Standalone marker labels can overlap when references are close together. Compact Card Feature labels shorten or hide according to available width; full resolved marker information remains in the accessible description. A dynamic marker’s source unit is not converted to the displayed unit. These details and other boundary behavior are covered in the [configuration reference](docs/configuration.md).
+Standalone marker labels can overlap when references are close together. Compact Card Feature labels shorten or hide according to available width; full resolved marker information remains in the accessible description. A dynamic marker’s source unit is not converted to the displayed unit. These details and other boundary behavior are covered in the [configuration reference](docs/configuration.md).
 
 ## Compatibility
 
