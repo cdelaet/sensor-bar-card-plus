@@ -1,6 +1,6 @@
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue,
   pruneEmptyObjectsInTarget, normalizeTextValue, hasResolvableOverride } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeEditorColorValue, normalizeScalePercentageInput, renderMarkerPercentageControls, getMarkerSourceMode, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput } from '../shared/editor-controls.js';
+import { escapeAttribute, formatScaleValueInput, normalizeEditorColorValue, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput } from '../shared/editor-controls.js';
 
 export class BaselineSection {
   constructor(context, options = {}) { this.options = options;
@@ -8,7 +8,7 @@ export class BaselineSection {
     this.reset();
   }
 
-  reset() { this._baselineColorDrafts = new Map(); this._sourceMode = undefined; this._percentageDraft = undefined; }
+  reset() { this._baselineColorDrafts = new Map(); }
 
   _getBaselineColorDraftKey(scope = { type: 'card' }, direction = 'above') {
     const scopeKey = scope?.type === 'entity' ? `entity:${scope.index}` : 'card';
@@ -52,20 +52,9 @@ export class BaselineSection {
     });
   }
 
-  _getSourceMode() { return this._sourceMode ?? getMarkerSourceMode(this.context.source({ type: 'card' }, 'baseline')); }
-
-  _handlePercentageField(control, value, scope) {
-    if (!this.options.percentSources) return false;
-    if (control === 'baseline-source-mode') {
-      this._sourceMode = value;
-      this._percentageDraft = undefined;
-      this.context.setSource(scope, 'baseline', 'mode', value);
-      return true;
-    }
-    if (control !== 'baseline-percent') return false;
-    const percent = normalizeScalePercentageInput(value);
-    this._percentageDraft = percent === null ? value : undefined;
-    if (percent !== null) this.context.setSource(scope, 'baseline', 'percent', percent);
+  _handleValueField(control, value, scope) {
+    if (!this.options.directValue || control !== 'baseline-value') return false;
+    this._setBaselineResolvablePart(scope, 'value', value);
     return true;
   }
 
@@ -220,7 +209,7 @@ export class BaselineSection {
   handleField({ field, kind, index, value }) {
     const scope = kind?.startsWith('entity-') ? { type: 'entity', index: Number(index) } : { type: 'card' };
     const control = field ?? kind?.replace(/^entity-/, '');
-    if (this._handlePercentageField(control, value, scope)) return true;
+    if (this._handleValueField(control, value, scope)) return true;
     if (kind === 'entity-baseline-inherit') { if (value) this._clearBaselineOverride(scope); return true; }
     if (control === 'baseline-mode') { this._setBaselineMode(scope, value); return true; }
     if (control === 'baseline-value') { this._setBaselineResolvablePart(scope, 'fixed', value); return true; }
@@ -234,11 +223,6 @@ export class BaselineSection {
   }
 
   handleClick(target) {
-    if (this.options.percentSources && target?.dataset?.action === 'baseline-clear-percent') {
-      this._percentageDraft = undefined;
-      this.context.setSource({ type: 'card' }, 'baseline', 'percent', null);
-      return true;
-    }
     if (target?.dataset?.action !== 'remove-baseline') return false;
     this._removeBaseline(target.dataset.scopeType === 'entity'
       ? { type: 'entity', index: Number(target.dataset.index) } : { type: 'card' });
@@ -341,9 +325,9 @@ export class BaselineSection {
             <div class="field-row">
               <div class="section-note">Auto shows the baseline when a baseline value is configured.</div>
             </div>
-            ${this.options.percentSources ? renderMarkerPercentageControls('baseline', this._getSourceMode(), this._percentageDraft ?? baseline.percent ?? '') : ''}<div class="field-row">
-              <label for="baseline-value">Baseline fallback</label>
-              <input id="baseline-value" type="number" step="any" data-field="baseline-value" value="${escapeAttribute(baseline.fixed)}">
+            <div class="field-row">
+              <label for="baseline-value">${this.options.directValue ? 'Value' : 'Baseline fallback'}</label>
+              <input id="baseline-value" type="${this.options.directValue ? 'text' : 'number'}" ${this.options.directValue ? 'inputmode="decimal" placeholder="25 or 25%"' : 'step="any"'} data-field="baseline-value" value="${escapeAttribute(this.options.directValue ? formatScaleValueInput(baseline) : baseline.fixed)}">
             </div>
             <div class="field-row">
               <label>Baseline entity</label>

@@ -127,6 +127,28 @@ function expectedValue(entry,value,config) {
 }
 async function fieldJourney(page,host,entry,options={}) {
  const editor=await mount(page,host,seed(host),options);await openSection(editor,entry);const before=await saved(page);
+ if(entry.journey==='sources'&&['target-value','baseline-value'].includes(entry.name)) {
+  const key=entry.name==='target-value'?'target':'baseline',input=control(editor,entry);
+  if(host==='feature') {
+   await expect(input).toHaveValue(key==='target'?'50':'20');
+   await commit(page,editor,()=>input.fill('75%'));
+   expect((await saved(page))[key].at).toEqual(key==='target'?'75%':{percent:75});
+   const entity=editor.locator(`[data-kind="${key}-entity-source"]`).first();
+   await commit(page,editor,()=>replaceText(entity,'sensor.changed'));
+   expect((await saved(page))[key].at).toEqual({entity:'sensor.changed',percent:75});
+   const attribute=editor.locator(`[data-kind="${key}-attribute"]`).first();
+   await commit(page,editor,()=>replaceText(attribute,'temperature'));
+   expect((await saved(page))[key].at).toEqual({entity:{id:'sensor.changed',attribute:'temperature'},percent:75});
+   await commit(page,editor,()=>input.fill('25'));
+   expect((await saved(page))[key].at).toEqual({entity:{id:'sensor.changed',attribute:'temperature'},fixed:25});
+   await reopen(page,editor);await openSection(editor,entry);await expect(control(editor,entry)).toHaveValue('25');
+  } else {
+   await replaceNumericDraft(page,editor,input,'75');
+   expect(read(await saved(page),`${key}.at.fixed`)).toBe(75);
+  }
+  const result=await saved(page);expect(result.future).toEqual(before.future);
+  return entry.id;
+ }
  if(entry.journey==='references') {
   const input=control(editor,entry), marker=()=>saved(page).then(config=>config.markers[0]);
   if(entry.name==='generic-marker-fixed') {

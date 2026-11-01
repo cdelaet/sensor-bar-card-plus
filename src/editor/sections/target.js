@@ -1,12 +1,12 @@
 import { normalizeTargetMarkerShape } from '../../config/normalize.js';
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue, removePathsFromTarget,
   pruneEmptyObjectsInTarget, normalizeTextValue, normalizeDecimalValue, hasResolvableOverride, getEffectiveDisplayValue } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeEditorColorValue, normalizeScalePercentageInput, renderMarkerPercentageControls, getMarkerSourceMode, normalizeColorComparisonValue, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
+import { escapeAttribute, formatScaleValueInput, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from '../shared/editor-marker-controls.js';
 
 export class TargetSection {
   constructor(context, options = {}) { this.options = options; this.context = context; this.reset(); }
-  reset() { this._targetAboveFillDrafts = new Map(); this._sourceMode = undefined; this._percentageDraft = undefined; }
+  reset() { this._targetAboveFillDrafts = new Map(); }
 
   _getCardTargetMarkerSummary() {
     const mode = this._getTargetMode({ type: 'card' });
@@ -23,20 +23,9 @@ export class TargetSection {
     return parts.length ? parts.join(' · ') : 'Automatic';
   }
 
-  _getSourceMode() { return this._sourceMode ?? getMarkerSourceMode(this.context.source({ type: 'card' }, 'target')); }
-
-  _handlePercentageField(control, value, scope) {
-    if (!this.options.percentSources) return false;
-    if (control === 'target-source-mode') {
-      this._sourceMode = value;
-      this._percentageDraft = undefined;
-      this.context.setSource(scope, 'target', 'mode', value);
-      return true;
-    }
-    if (control !== 'target-percent') return false;
-    const percent = normalizeScalePercentageInput(value);
-    this._percentageDraft = percent === null ? value : undefined;
-    if (percent !== null) this.context.setSource(scope, 'target', 'percent', percent);
+  _handleValueField(control, value, scope) {
+    if (!this.options.directValue || control !== 'target-value') return false;
+    this._setTargetResolvablePart(scope, 'value', value);
     return true;
   }
 
@@ -359,7 +348,7 @@ export class TargetSection {
   handleField({ field, kind, index, value }) {
     const scope = kind?.startsWith('entity-') ? { type: 'entity', index: Number(index) } : { type: 'card' };
     const control = field ?? kind?.replace(/^entity-/, '');
-    if (this._handlePercentageField(control, value, scope)) return true;
+    if (this._handleValueField(control, value, scope)) return true;
     if (control === 'target-inherit') { if (value) this._clearTargetOverride(scope); return true; }
     if (control === 'target-mode') { this._setTargetMode(scope, value); return true; }
     if (control === 'target-value') { this._setTargetResolvablePart(scope, 'fixed', value); return true; }
@@ -380,11 +369,6 @@ export class TargetSection {
   }
 
   handleClick(target) {
-    if (this.options.percentSources && target?.dataset?.action === 'target-clear-percent') {
-      this._percentageDraft = undefined;
-      this.context.setSource({ type: 'card' }, 'target', 'percent', null);
-      return true;
-    }
     return false;
   }
 
@@ -483,9 +467,9 @@ export class TargetSection {
                 <option value="disabled"${targetMode === 'disabled' ? ' selected' : ''}>disabled</option>
               </select>
             </div>
-            ${this.options.percentSources ? renderMarkerPercentageControls('target', this._getSourceMode(), this._percentageDraft ?? target.percent ?? '') : ''}<div class="field-row">
-              <label for="target-value">Target fallback</label>
-              <input id="target-value" type="number" step="any" data-field="target-value" value="${escapeAttribute(target.fixed)}">
+            <div class="field-row">
+              <label for="target-value">${this.options.directValue ? 'Value' : 'Target fallback'}</label>
+              <input id="target-value" type="${this.options.directValue ? 'text' : 'number'}" ${this.options.directValue ? 'inputmode="decimal" placeholder="25 or 25%"' : 'step="any"'} data-field="target-value" value="${escapeAttribute(this.options.directValue ? formatScaleValueInput(target) : target.fixed)}">
             </div>
             <div class="field-row">
               <label for="target-shape">Target shape</label>

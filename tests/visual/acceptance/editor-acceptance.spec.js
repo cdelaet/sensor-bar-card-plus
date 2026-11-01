@@ -23,7 +23,13 @@ for(const host of hosts) {
   const editor=await d.mount(page,host),discovered=new Set();
   async function collect(){for(const id of await d.discover(editor))discovered.add(id);}
   await collect();await refs(editor);
-  if(host==='feature'){await editor.locator('#feature-entity-override').check();await collect();}
+  if(host==='feature'){
+   await editor.locator('#feature-entity-override').check();await collect();
+   for(const [group,key] of [['marker-target','target'],['baseline','baseline']]){
+    await d.openDisclosure(editor.locator(`#card-group-${group}`));
+    await editor.locator(`[data-kind="${key}-entity-source"]`).fill('sensor.reference');await collect();
+   }
+  }
   const markerRow=rootRows(editor).nth(1);
   await ref(markerRow,'fixed').fill('75%');await collect();
   await ref(markerRow,'entity').fill('sensor.reference');await collect();
@@ -189,18 +195,26 @@ for(const host of hosts)for(const scope of host==='standalone'?['root','entity']
  }
  expect((await d.saved(page)).future).toEqual(original.future);
 });
-for(const key of ['target','baseline'])test(`feature ${key}: supported Source modes, percentage drafts, scalar/object preservation and clear`,async({page})=>{
+for(const key of ['target','baseline'])test(`feature ${key}: direct Value conversions, entity fallback, drafts and preservation`,async({page})=>{
  const config=d.seed('feature');config[key].at={value:25,future:'source metadata'};const editor=await d.mount(page,'feature',config);await d.openSection(editor,{section:key==='target'?'Target':'Baseline'});
- const source=editor.locator(`#${key}-source-mode`);
- for(const mode of ['entity','percent','fixed','percent','entity','entity-fallback','fixed']){
-  await source.focus();await d.commit(page,editor,()=>source.selectOption(mode));await expect(source).toHaveValue(mode);await expect(source).toBeFocused();
-  const raw=(await d.saved(page))[key].at;expect(raw.future).toBe('source metadata');
-  if(mode==='percent')expect(raw.percent).toBe(50);if(mode==='fixed')expect(raw.entity).toBeUndefined();
- }
- await d.commit(page,editor,()=>source.selectOption('percent'));await d.replaceNumericDraft(page,editor,editor.locator(`#${key}-percent`),'75','percentage');expect((await d.saved(page))[key].at.percent).toBe(75);
- await d.commit(page,editor,()=>editor.locator(`[data-action="${key}-clear-percent"]`).click());expect((await d.saved(page))[key].at.percent).toBeUndefined();
+ const input=editor.locator(`#${key}-value`),entity=editor.locator(`[data-kind="${key}-entity-source"]`),attribute=editor.locator(`[data-kind="${key}-attribute"]`);
+ await expect(input).toHaveValue('25');
+ await d.commit(page,editor,()=>input.fill('50%'));
+ expect((await d.saved(page))[key].at).toEqual({percent:50,future:'source metadata'});
+ await d.commit(page,editor,()=>d.replaceText(entity,'sensor.reference'));
+ expect((await d.saved(page))[key].at).toEqual({entity:'sensor.reference',percent:50,future:'source metadata'});
+ await d.commit(page,editor,()=>attribute.fill('temperature'));
+ expect((await d.saved(page))[key].at).toEqual({entity:{id:'sensor.reference',attribute:'temperature'},percent:50,future:'source metadata'});
+ await d.commit(page,editor,()=>input.fill('30'));
+ expect((await d.saved(page))[key].at).toEqual({entity:{id:'sensor.reference',attribute:'temperature'},fixed:30,future:'source metadata'});
+ await d.commit(page,editor,()=>input.fill('65%'));
+ expect((await d.saved(page))[key].at).toEqual({entity:{id:'sensor.reference',attribute:'temperature'},percent:65,future:'source metadata'});
+ const before=await d.saved(page),count=await d.count(page);await input.fill('101%');await d.echo(page,editor);
+ expect(await d.saved(page)).toEqual(before);expect(await d.count(page)).toBe(count);await expect(input).toHaveValue('101%');
+ await d.commit(page,editor,async()=>{await input.fill('');await input.press('Tab');});
+ expect((await d.saved(page))[key].at).toEqual({entity:{id:'sensor.reference',attribute:'temperature'},future:'source metadata'});
  const foreign=d.seed('feature');foreign[key].at='40%';await d.foreign(editor,foreign);await d.openSection(editor,{section:key==='target'?'Target':'Baseline'});
- await d.commit(page,editor,()=>editor.locator(`#${key}-percent`).fill('65'));expect((await d.saved(page))[key].at).toBe('65%');await d.reopen(page,editor);await d.openSection(editor,{section:key==='target'?'Target':'Baseline'});await expect(editor.locator(`#${key}-percent`)).toHaveValue('65');
+ await expect(editor.locator(`#${key}-value`)).toHaveValue('40%');
  if(key==='baseline'){await d.commit(page,editor,()=>editor.locator('[data-action="remove-baseline"]').click());expect((await d.saved(page)).baseline).toBeUndefined();}
 });
 for(const host of hosts)test(`${host}: entity ownership and structural persistence`,async({page})=>{

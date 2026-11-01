@@ -135,6 +135,24 @@ export function normalizeScalePercentageInput(value) {
   return number !== null && number >= 0 && number <= 100 ? number : null;
 }
 
+export function parseScaleValueInput(value) {
+  const text = normalizeTextValue(value).trim();
+  if (!text) return null;
+  const percentage = text.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)\s*%$/i);
+  if (percentage) {
+    const number = normalizeScalePercentageInput(percentage[1]);
+    return number === null ? null : { part: 'percent', value: number };
+  }
+  const number = normalizeNumberValue(text);
+  return number === null ? null : { part: 'fixed', value: number };
+}
+
+export function formatScaleValueInput(source) {
+  if (source?.fixed !== '' && source?.fixed !== undefined && source?.fixed !== null) return String(source.fixed);
+  if (Number.isFinite(source?.percent)) return `${source.percent}%`;
+  return '';
+}
+
 // Same compact percentage input used by Reference, Target and Baseline.
 export function renderScalePercentageInput(id, routing, value) {
   return `<input id="${id}" type="number" min="0" max="100" step="any" ${routing} value="${escapeAttribute(value)}">%`;

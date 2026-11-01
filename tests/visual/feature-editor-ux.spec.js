@@ -53,7 +53,7 @@ for(const source of ['src','dist'])for(const width of [360,240])test(`Canonical 
  await expect(editor).toHaveScreenshot(`feature-ux-initial-${width}.png`);
  for(const group of canonical.groups){const button=editor.locator(`#card-group-${group.group}`);await button.evaluate(el=>window.__uxDisclosure=el);await button.click();await expect(button).toHaveAttribute('aria-expanded','true');expect(await button.evaluate(el=>el===window.__uxDisclosure)).toBe(true);await button.press('Enter');await expect(button).toHaveAttribute('aria-expanded','false');}
  expect(await page.evaluate(()=>window.__uxEvents)).toHaveLength(0);
- for(const [group,id,value] of [['marker-target','target-percent','60'],['marker-peak','peak-label-text','High'],['marker-floor','floor-label-text','Low'],['baseline','baseline-percent','40']]){
+ for(const [group,id,value] of [['marker-target','target-value','60%'],['marker-peak','peak-label-text','High'],['marker-floor','floor-label-text','Low'],['baseline','baseline-value','40%']]){
   const button=editor.locator(`#card-group-${group}`);await button.click();const control=editor.locator(`#${id}`);await control.fill(value);await expect(control).toBeFocused();await expect(button).toHaveAttribute('aria-expanded','true');
   await editor.evaluate(async el=>{el.setConfig(el._config);el.hass={states:{}};el.context={entity_id:'sensor.changed'};await el.updateComplete;});await expect(button).toHaveAttribute('aria-expanded','true');await expect(control).toHaveValue(value);
  }

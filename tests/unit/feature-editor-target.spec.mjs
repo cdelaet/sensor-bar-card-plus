@@ -79,9 +79,9 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
   it('retains value aliases and percentage metadata while patching source components', async () => {
     const config = raw(); config.target.at = { value: 70, percent: 30, fallback: 10, ...meta() };
     const { editor } = await setup(source, config);
-    await edit(editor, '#target-value', '75'); expect(editor._config.target.at).toEqual({ ...config.target.at, value: 75 });
+    await edit(editor, '#target-value', '75'); expect(editor._config.target.at).toEqual({ value: 75, fallback: 10, ...meta() });
     await edit(editor, '#feature-target-entity', 'sensor.changed'); await edit(editor, '#target-value', '', 'change');
-    expect(editor._config.target.at).toEqual({ percent: 30, fallback: 10, ...meta(), entity: 'sensor.changed' });
+    expect(editor._config.target.at).toEqual({ fallback: 10, ...meta(), entity: 'sensor.changed' });
   });
   for (const at of [70, 'sensor.t', '70%']) it(`keeps scalar source ${at} and promotes minimally for another component`, async () => {
     const config = raw(); config.target.at = at;
@@ -91,10 +91,11 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
       await edit(editor, '#feature-target-entity', 'sensor.changed'); expect(editor._config.target.at).toBe('sensor.changed');
       await edit(editor, '#target-value', '75'); expect(editor._config.target.at).toEqual({ entity: 'sensor.changed', fixed: 75 });
     } else {
-      if (at === '70%') { expect(editor.shadowRoot.querySelector('#target-value').value).toBe(''); await edit(editor, '#target-value', '', 'change'); expect(editor._config.target.at).toBe(at); }
+      if (at === '70%') expect(editor.shadowRoot.querySelector('#target-value').value).toBe('70%');
       await edit(editor, '#feature-target-entity', 'sensor.changed'); expect(editor._config.target.at).toEqual({ [at === '70%' ? 'percent' : 'fixed']: 70, entity: 'sensor.changed' });
     }
-    expect(editor.shadowRoot.innerHTML).toContain('target-percent');
+    expect(editor.shadowRoot.innerHTML).not.toContain('target-source-mode');
+    expect(editor.shadowRoot.innerHTML).not.toContain('target-percent');
   });
   it('preserves legacy scalar/aliases until owned editing requires object syntax', async () => {
     const config = raw(); config.target = 70; config.target_entity = 'sensor.t';
@@ -142,11 +143,28 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
     await edit(editor, '#target-label-show-unit', true, 'change'); expect(editor._config.target.label).toEqual({ show_unit: true });
     await edit(editor, '#target-mode', 'auto', 'change'); expect(editor._config.target).toEqual({ label: { show_unit: true } });
   });
-  it('adds a numeric fallback to percentage syntax while retaining its percentage component', async () => {
-    const config = raw(); config.target.at = '70%';
+  it('switches the direct Value between absolute and percentage fallbacks with Entity/Attribute retained', async () => {
+    const config = raw(); config.target.at = { entity: { id: 'sensor.t', attribute: 'temperature' }, fixed: 20, future: true };
     const { editor } = await setup(source, config);
-    await edit(editor, '#target-value', '75'); expect(editor._config.target.at).toEqual({ percent: 70, fixed: 75 });
-    await edit(editor, '#target-value', '', 'change'); expect(editor._config.target.at).toEqual({ percent: 70 });
+    expect(editor.shadowRoot.querySelector('#target-value').value).toBe('20');
+    await edit(editor, '#target-value', '25%');
+    expect(editor._config.target.at).toEqual({ entity: { id: 'sensor.t', attribute: 'temperature' }, percent: 25, future: true });
+    await edit(editor, '#feature-target-entity', 'sensor.changed');
+    expect(editor._config.target.at).toEqual({ entity: { id: 'sensor.changed', attribute: 'temperature' }, percent: 25, future: true });
+    await edit(editor, '#target-value', '0');
+    expect(editor._config.target.at).toEqual({ entity: { id: 'sensor.changed', attribute: 'temperature' }, fixed: 0, future: true });
+    const beforeInvalid = structuredClone(editor._config); await edit(editor, '#target-value', '101%');
+    expect(editor._config).toEqual(beforeInvalid);
+  });
+  it('keeps incomplete Value drafts through config echoes and resets them on foreign replacement', async () => {
+    const { editor } = await setup(source, raw());
+    const before = structuredClone(editor._config);
+    await edit(editor, '#target-value', '25e');
+    expect(editor._config).toEqual(before);
+    editor.setConfig(editor._config); await editor.updateComplete;
+    expect(editor.shadowRoot.querySelector('#target-value').value).toBe('25e');
+    editor.setConfig({ type, target: { at: 12 } }); await editor.updateComplete;
+    expect(editor.shadowRoot.querySelector('#target-value').value).toBe('12');
   });
 });
 

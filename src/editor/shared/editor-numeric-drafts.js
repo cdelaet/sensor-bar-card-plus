@@ -1,4 +1,5 @@
 import { normalizeNumberValue, normalizeDecimalValue } from './editor-config.js';
+import { parseScaleValueInput } from './editor-controls.js';
 
 // Native entry fields without a section-owned text draft. Palette and built-in
 // percentage controls retain their existing draft stores and commit policies.
@@ -11,16 +12,12 @@ export class NumericInputDrafts {
     const route = input?.dataset?.field ?? input?.dataset?.kind ?? '';
     // innerHTML replacement can dispatch a native change before detaching the
     // old focused control; that is not a user's blank reset commit.
-    if (rendering && (input?.type === 'number' || route === 'generic-marker-fixed' && input?.type === 'text')) return true;
-    if (route === 'generic-marker-fixed' && input?.type === 'text' && input.id) {
+    const scaleValue = ['generic-marker-fixed', 'target-value', 'baseline-value'].includes(route);
+    if (rendering && (input?.type === 'number' || scaleValue && input?.type === 'text')) return true;
+    if (scaleValue && input?.type === 'text' && input.id) {
       if (input.isConnected === false) return true;
       const value = input.value.trim();
-      const percentage = value.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)\s*%$/i);
-      const numeric = normalizeNumberValue(value);
-      const percentNumber = percentage ? normalizeNumberValue(percentage[1]) : null;
-      const complete = percentage
-        ? percentNumber !== null && percentNumber >= 0 && percentNumber <= 100
-        : numeric !== null;
+      const complete = parseScaleValueInput(value) !== null;
       const clear = event.type === 'change' && value === '';
       if (complete || clear) { this.values.delete(input.id); return false; }
       this.values.set(input.id, input.value);

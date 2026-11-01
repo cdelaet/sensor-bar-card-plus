@@ -2,7 +2,7 @@ import { looksLikeEntityId, normalizeStructuredResolvableValue, parsePercentLite
 import {
   isObject, normalizeNumberValue, normalizeTextValue, setPathValue, deletePathValue,
 } from '../editor/shared/editor-config.js';
-import { normalizeScalePercentageInput } from '../editor/shared/editor-controls.js';
+import { normalizeScalePercentageInput, parseScaleValueInput } from '../editor/shared/editor-controls.js';
 
 // Display resolution only. Neither defaults nor normalized config are persisted.
 export function getFeatureScaleSource(config, key) {
@@ -90,6 +90,7 @@ export function getFeatureBaselineSource(config) {
 }
 
 export function patchFeatureBaselineSource(config, part, rawValue) {
+  if (part === 'value') return patchFeatureResolvableValue(config, 'baseline', rawValue);
   if (part === 'mode') return patchFeatureMarkerSourceMode(config, 'baseline', rawValue);
   if (part === 'percent') return patchFeatureMarkerPercentage(config, 'baseline', rawValue);
   const value = part === 'fixed' ? normalizeNumberValue(rawValue) : normalizeTextValue(rawValue).trim();
@@ -124,6 +125,7 @@ export function promoteFeatureTarget(config) {
 }
 
 export function patchFeatureTargetSource(config, part, rawValue) {
+  if (part === 'value') return patchFeatureResolvableValue(config, 'target', rawValue);
   if (part === 'mode') return patchFeatureMarkerSourceMode(config, 'target', rawValue);
   if (part === 'percent') return patchFeatureMarkerPercentage(config, 'target', rawValue);
   const value = part === 'fixed' ? normalizeNumberValue(rawValue) : normalizeTextValue(rawValue).trim();
@@ -144,6 +146,60 @@ export function patchFeatureTargetSource(config, part, rawValue) {
   let next = patchSource(config, ['target', 'at'], raw?.at, part, value, empty, true);
   if (part === 'entity') next = deletePathValue(next, ['target_entity']);
   return next;
+}
+
+function patchFeatureResolvableValue(config, key, rawValue) {
+  const text = normalizeTextValue(rawValue).trim();
+  const patchSource = key === 'target' ? patchFeatureTargetSource : patchFeatureBaselineSource;
+  const getSource = key === 'target' ? getFeatureTargetSource : getFeatureBaselineSource;
+  if (!text) {
+    const withoutFixed = patchSource(config, 'fixed', null);
+    return patchSource(withoutFixed, 'percent', null);
+  }
+  const parsed = parseScaleValueInput(text);
+  if (!parsed) return config;
+
+  const raw = config[key];
+  const hasAt = isObject(raw) && Object.prototype.hasOwnProperty.call(raw, 'at');
+  const rawAt = hasAt ? raw.at : !isObject(raw) ? raw : undefined;
+  const source = getSource(config);
+
+  // A scalar at value is itself the canonical representation for fixed and
+  // percentage fallbacks. Replace it directly so editing 50% to 25 cannot
+  // leave both an old percent and a new fixed fallback behind.
+  if (hasAt && rawAt !== null && rawAt !== undefined && !isObject(rawAt) && !source.entity) {
+    return setPathValue(config, [key, 'at'], parsed.part === 'percent' ? `${parsed.value}%` : parsed.value);
+  }
+  if (key === 'baseline' && !isObject(raw) && raw !== null && raw !== undefined) {
+    return setPathValue(config, [key], parsed.part === 'percent' ? `${parsed.value}%` : parsed.value);
+  }
+
+  // A legacy scalar Target may coexist with target_entity. Promote it only
+  // when a second resolvable component is needed, keeping the entity primary.
+  if (key === 'target' && !isObject(raw) && config.target_entity) {
+    if (parsed.part === 'fixed') return setPathValue(config, ['target'], parsed.value);
+    return setPathValue(config, ['target'], { at: { entity: config.target_entity, [parsed.part]: parsed.value } });
+  }
+
+  if (hasAt && isObject(rawAt)) {
+    let nextAt = { ...rawAt };
+    delete nextAt.fixed;
+    delete nextAt.value;
+    delete nextAt.percent;
+    const fixedAlias = rawAt.fixed === undefined && rawAt.value !== undefined;
+    const part = parsed.part === 'fixed' && fixedAlias ? 'value' : parsed.part;
+    nextAt[part] = parsed.value;
+    return setPathValue(config, [key, 'at'], nextAt);
+  }
+
+  const next = patchSource(config, parsed.part === 'fixed' ? 'percent' : 'fixed', null);
+  // Target and Baseline percentage literals are stored at their existing `at`
+  // path. This also handles a newly added value without introducing a schema.
+  const nextAt = isObject(next[key]) ? next[key].at : undefined;
+  if (parsed.part === 'percent' && nextAt === undefined && !getSource(next).entity) {
+    return setPathValue(next, [key, 'at'], `${parsed.value}%`);
+  }
+  return patchSource(next, parsed.part, parsed.value);
 }
 
 // Explicit conversions own source components, never surrounding marker fields.

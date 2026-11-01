@@ -122,17 +122,21 @@ for (const source of ['src', 'dist']) test(`Standalone numeric drafts ${source}:
   expect((await saved(editor)).entities[0].formatting).toBeUndefined();
 });
 
-for (const source of ['src', 'dist']) test(`Built-in percentages ${source}: owned drafts, explicit clear and foreign replacement`, async ({ page }) => {
+for (const source of ['src', 'dist']) test(`Built-in direct Values ${source}: percentage drafts, explicit clear and foreign replacement`, async ({ page }) => {
   const editor = await mount(page, source, 'feature', initial);
   for (const [key, group] of [['target', 'marker-target'], ['baseline', 'baseline']]) {
-    await editor.locator(`#card-group-${group}`).click(); await editor.locator(`#${key}-source-mode`).selectOption('percent');
-    const input = editor.locator(`#${key}-percent`);
+    await editor.locator(`#card-group-${group}`).click();
+    const input = editor.locator(`#${key}-value`);
     const before = await saved(editor); await input.fill(''); await echoAndRender(editor);
     expect(await saved(editor)).toEqual(before); await expect(input).toHaveValue(''); await expect(input).toBeFocused();
-    await expect(editor.locator(`#${key}-source-mode`)).toHaveValue('percent');
-    await input.fill('75'); expect((await saved(editor))[key].at.percent).toBe(75);
-    await input.fill(''); await editor.locator(`[data-action="${key}-clear-percent"]`).click();
+    await input.fill('75%'); expect((await saved(editor))[key].at.percent).toBe(75);
+    await input.fill('101%'); await echoAndRender(editor);
+    expect((await saved(editor))[key].at.percent).toBe(75); await expect(input).toHaveValue('101%');
+    await input.fill(''); await input.press('Tab');
+    expect((await saved(editor))[key]?.at?.fixed).toBeUndefined();
     expect((await saved(editor))[key]?.at?.percent).toBeUndefined();
+    await editor.evaluate(async (el, key) => { el.setConfig({ ...(el._draftConfig ?? el._config), [key]: { at: '0%' } }); await el.updateComplete; }, key);
+    await expect(input).toHaveValue('0%');
   }
 });
 

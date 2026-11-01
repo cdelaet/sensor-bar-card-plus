@@ -72,8 +72,10 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
 for (const source of ['src', 'dist']) test(`Feature percentage Baseline and HA picker (${source})`, async ({ page }) => {
   await page.addInitScript(() => { customElements.define('ha-entity-picker', class extends HTMLElement {}); });
   const editor = await mount(page, source, 240, true);
-  await expect(editor.locator('#baseline-value')).toHaveValue('');
-  await expect(editor.locator('#baseline-percent')).toHaveCount(1);
+  const value = editor.locator('#baseline-value');
+  await expect(value).toHaveValue('50%');
+  await expect(editor.locator('#baseline-source-mode')).toHaveCount(0);
+  await expect(editor.locator('#baseline-percent')).toHaveCount(0);
   await editor.locator('#baseline-mode').selectOption('enabled');
   await editor.locator('#bar-needle-mode').selectOption('enabled');
   await editor.locator('[data-field="bar-needle-color-text-fallback"]').fill('red');
@@ -82,7 +84,9 @@ for (const source of ['src', 'dist']) test(`Feature percentage Baseline and HA p
   const picker = editor.locator('ha-entity-picker[data-kind="baseline-entity-source"]');
   await picker.evaluate(el => { el.dispatchEvent(new CustomEvent('value-changed', { bubbles: true, composed: true, detail: { value: 'sensor.c' } })); });
   expect((await saved(editor)).baseline.at).toEqual({ percent: 50, entity: 'sensor.c' });
+  await value.fill('42.5%'); expect((await saved(editor)).baseline.at).toEqual({ percent: 42.5, entity: 'sensor.c' });
+  await value.fill('30'); expect((await saved(editor)).baseline.at).toEqual({ fixed: 30, entity: 'sensor.c' });
   await picker.evaluate(el => { el.dispatchEvent(new CustomEvent('value-changed', { bubbles: true, composed: true, detail: { value: '' } })); });
-  expect((await saved(editor)).baseline.at).toEqual({ percent: 50 });
+  expect((await saved(editor)).baseline.at).toEqual({ fixed: 30 });
   expect((await saved(editor)).bar.needle).toEqual({ show: true, color: 'red', future: { keep: true } });
 });

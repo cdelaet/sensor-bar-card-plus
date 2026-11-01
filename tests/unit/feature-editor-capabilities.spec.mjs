@@ -36,33 +36,33 @@ for(const source of ['src','dist']) describe(`Feature capability closure (${sour
   await edit(empty.editor,'#bar-animated',false);await edit(empty.editor,'#bar-animated',true);expect(empty.editor._config).toEqual({type});expect(empty.events).toHaveLength(2);
  });
  for(const key of ['target','baseline']) {
-  for(const at of [' 50% ',{percent:50,...metadata()},{percent:50,fixed:5,entity:'sensor.reference',...metadata()}])it(`${key} percentage edits preserve source form/components and all marker siblings`,async()=>{
+  for(const at of [' 50% ',{percent:50,...metadata()},{percent:50,fixed:5,entity:'sensor.reference',...metadata()}])it(`${key} direct Value editing preserves canonical source form and marker siblings`,async()=>{
    const config=raw();config[key].at=at;const {editor,events}=await setup(source,config);expect(events).toHaveLength(0);
-   await edit(editor,`#${key}-percent`,'0');const first=typeof at==='string'?'0%':{...at,percent:0};expect(editor._config).toEqual(expectedAt(config,[key,'at'],first));
-   await edit(editor,`#${key}-percent`,'100');expect(editor._config[key].at).toEqual(typeof at==='string'?'100%':{...at,percent:100});
+   const initial=typeof at==='object'&&at.fixed!==undefined?String(at.fixed):'50%';
+   expect(editor.shadowRoot.querySelector(`#${key}-value`).value).toBe(initial);
+   await edit(editor,`#${key}-value`,'0%');
+   const storedAt=typeof at==='string'?'0%':{...metadata(),...(at.entity?{entity:at.entity}:{}),percent:0};
+   expect(editor._config).toEqual(expectedAt(config,[key,'at'],storedAt));
+   await edit(editor,`#${key}-value`,'100');
+   expect(editor._config[key].at).toEqual(typeof at==='string'?100:{...metadata(),...(at.entity?{entity:at.entity}:{}),fixed:100});
   });
-  it(`${key} explicit mode conversions own recognized components, keeping metadata, labels and paint`,async()=>{
-   const config=raw();config[key].at={entity:'sensor.reference',value:25,...metadata()};const {editor}=await setup(source,config);
-   for(const [mode,at] of [['percent',{percent:50,...metadata()}],['fixed',{fixed:50,...metadata()}],['entity',{entity:'',...metadata()}],['entity-fallback',{fixed:50,entity:'',...metadata()}]]){
-    await edit(editor,`#${key}-source-mode`,mode,'change');expect(editor._config).toEqual(expectedAt(config,[key,'at'],at));
-   }
-   for(const input of [25,'sensor.reference','50%']){
-    const fresh=raw();fresh[key].at=input;editor.setConfig(fresh);await editor.updateComplete;
-    await edit(editor,`#${key}-source-mode`,'percent','change');expect(editor._config[key].at).toBe('50%');
-    await edit(editor,`#${key}-source-mode`,'fixed','change');expect(editor._config[key].at).toBe(50);
-    await edit(editor,`#${key}-source-mode`,'entity','change');expect(editor._config[key].at).toEqual({entity:''});
-   }
+  it(`${key} fixed/percentage conversion retains Entity and unknown properties`,async()=>{
+   const config=raw();config[key].at={entity:{id:'sensor.reference',attribute:'temperature'},fixed:25,...metadata()};const {editor}=await setup(source,config);
+   await edit(editor,`#${key}-value`,'50%');
+   expect(editor._config[key].at).toEqual({entity:{id:'sensor.reference',attribute:'temperature'},percent:50,...metadata()});
+   await edit(editor,`#${key}-value`,'0');
+   expect(editor._config[key].at).toEqual({entity:{id:'sensor.reference',attribute:'temperature'},fixed:0,...metadata()});
   });
-  it(`${key} invalid/incomplete percent stays local through echo/context, and clear owns percent only`,async()=>{
+  it(`${key} invalid/incomplete Value stays local through echo/context; blank clears fallback only`,async()=>{
    const config=raw(),{editor,events}=await setup(source,config);
-   for(const invalid of ['-1','101','','-','1e']){
-    await edit(editor,`#${key}-percent`,invalid);expect(editor._config).toEqual(config);expect(events).toHaveLength(0);
-    editor.setConfig(editor._config);editor.context={entity_id:'sensor.changed'};await editor.updateComplete;expect(editor.shadowRoot.querySelector(`#${key}-percent`).value).toBe(invalid);
+   for(const invalid of ['-1%','101%','','-','1e']){
+    await edit(editor,`#${key}-value`,invalid);expect(editor._config).toEqual(config);expect(events).toHaveLength(0);
+    editor.setConfig(editor._config);editor.context={entity_id:'sensor.changed'};await editor.updateComplete;expect(editor.shadowRoot.querySelector(`#${key}-value`).value).toBe(invalid);
    }
-   await edit(editor,`#${key}-percent`,'42.5');expect(editor._config[key].at.percent).toBe(42.5);expect(events).toHaveLength(1);
-   editor[`_${key}Section`].handleClick({dataset:{action:`${key}-clear-percent`}});await editor.updateComplete;
+   await edit(editor,`#${key}-value`,'42.5%');expect(editor._config[key].at.percent).toBe(42.5);expect(events).toHaveLength(1);
+   await edit(editor,`#${key}-value`,'','change');
    expect(editor._config[key].at).toEqual(metadata());expect(events).toHaveLength(2);
-   await edit(editor,`#${key}-percent`,'-1');editor.setConfig({type,[key]:{at:'0%'}});await editor.updateComplete;expect(editor.shadowRoot.querySelector(`#${key}-percent`).value).toBe('0');
+   await edit(editor,`#${key}-value`,'-1%');editor.setConfig({type,[key]:{at:'0%'}});await editor.updateComplete;expect(editor.shadowRoot.querySelector(`#${key}-value`).value).toBe('0%');
   });
  }
  for(const starts of [[0,50,80],['0%','50%','80%'],[-100,'50%',60]])it(`auto-end preview preserves authored coordinates for ${JSON.stringify(starts)} without materialization`,async()=>{

@@ -33,28 +33,32 @@ for(const source of ['src','dist'])for(const width of [360,240])test(`Feature ca
  expect(await page.evaluate(()=>window.__capabilityEvents.length)).toBe(count);await expect(color).toHaveValue('var(');await expect(color).toHaveAttribute('aria-invalid','true');expect(await color.evaluate(el=>el===window.__capabilityColorNode)).toBe(true);
  await color.fill('rgba(0, 100, 0, .5)');await expect(color).toBeFocused();expect((await saved(editor)).bar.segments[0].color).toBe('rgba(0, 100, 0, .5)');expect((await saved(editor)).bar.segments.every(row=>!Object.hasOwn(row,'to'))).toBe(true);
  await end(editor,0,'40');expect((await saved(editor)).bar.segments[0].to).toBe(40);await end(editor,0,'');expect(Object.hasOwn((await saved(editor)).bar.segments[0],'to')).toBe(false);
- await editor.locator('#target-source-mode').selectOption('percent');await editor.locator('#target-percent').fill('50');expect((await saved(editor)).target.at).toBe('50%');
- await editor.locator('#baseline-percent').fill('42.5');expect((await saved(editor)).baseline.at).toEqual({percent:42.5,future:{keep:true}});
+ await editor.locator('#target-value').fill('50%');expect((await saved(editor)).target.at).toBe('50%');
+ await editor.locator('#baseline-value').fill('42.5%');expect((await saved(editor)).baseline.at).toEqual({percent:42.5,future:{keep:true}});
  const config=await saved(editor);for(const key of ['peak','floor','markers','formatting','scale','future'])expect(config[key]).toEqual(original[key]);
  expect(config.target).toEqual({...original.target,at:'50%'});expect(config.baseline).toEqual({...original.baseline,at:{percent:42.5,future:{keep:true}}});
  expect(config.bar.gradient_stops).toEqual(original.bar.gradient_stops);expect(config.bar.needle).toEqual(original.bar.needle);expect(config.bar.segments.slice(1)).toEqual(original.bar.segments.slice(1));expect(config.entity).toBeUndefined();
  const after=await page.evaluate(()=>window.__capabilityEvents.length);await editor.evaluate(async el=>{el.setConfig(el._config);await el.updateComplete;});expect(await page.evaluate(()=>window.__capabilityEvents.length)).toBe(after);
 });
-for(const source of ['src','dist'])for(const key of ['target','baseline'])test(`Feature ${key} percentages ${source}: conversion, invalid draft, clear and foreign replacement`,async({page})=>{
- const editor=await mount(page,source),original=await saved(editor),mode=editor.locator(`#${key}-source-mode`),percent=editor.locator(`#${key}-percent`);
- for(const invalid of ['-1','101','']){
-  const before=await saved(editor),count=await page.evaluate(()=>window.__capabilityEvents.length);await percent.fill(invalid);await expect(percent).toBeFocused();
-  await editor.evaluate(async el=>{el.setConfig(el._config);el.context={entity_id:'sensor.changed'};await el.updateComplete;});expect(await saved(editor)).toEqual(before);expect(await page.evaluate(()=>window.__capabilityEvents.length)).toBe(count);await expect(percent).toHaveValue(invalid);
+for(const source of ['src','dist'])for(const key of ['target','baseline'])test(`Feature ${key} direct Value ${source}: conversion, entity fallback, drafts and foreign replacement`,async({page})=>{
+ const editor=await mount(page,source),original=await saved(editor),value=editor.locator(`#${key}-value`),entity=editor.getByLabel(`${key==='target'?'Target':'Baseline'} entity`,{exact:true});
+ for(const invalid of ['-1%','101%','25e']){
+  const before=await saved(editor),count=await page.evaluate(()=>window.__capabilityEvents.length);await value.fill(invalid);await expect(value).toBeFocused();
+  await editor.evaluate(async el=>{el.setConfig(el._config);el.context={entity_id:'sensor.changed'};await el.updateComplete;});expect(await saved(editor)).toEqual(before);expect(await page.evaluate(()=>window.__capabilityEvents.length)).toBe(count);await expect(value).toHaveValue(invalid);
  }
- for(const value of ['0','100','35']){await percent.fill(value);expect((await saved(editor))[key].at).toEqual(key==='target'?`${value}%`:{percent:Number(value),future:{keep:true}});}
- await mode.focus();await mode.selectOption('fixed');await expect(mode).toBeFocused();await editor.locator(`#${key}-value`).fill('20');
- expect((await saved(editor))[key].at).toEqual(key==='target'?20:{fixed:20,future:{keep:true}});
- await mode.focus();await mode.selectOption('percent');expect((await saved(editor))[key].at).toEqual(key==='target'?'50%':{percent:50,future:{keep:true}});
- await mode.focus();await mode.selectOption('entity');await editor.getByLabel(`${key==='target'?'Target':'Baseline'} entity`,{exact:true}).fill('sensor.reference');expect((await saved(editor))[key].at).toEqual({entity:'sensor.reference',...(key==='baseline'?{future:{keep:true}}:{})});
- await mode.focus();await mode.selectOption('percent');await percent.fill('50');
- await editor.locator(`[data-action="${key}-clear-percent"]`).click();const cleared=(await saved(editor))[key];expect(cleared.at).toEqual(key==='target'?undefined:{future:{keep:true}});
- for(const name of Object.keys(original[key]).filter(name=>name!=='at'))expect(cleared[name]).toEqual(original[key][name]);
- await percent.fill('101');await editor.evaluate(async(el,key)=>{el.setConfig({type:'custom:sensor-bar-card-plus-feature',[key]:{at:'0%'}});await el.updateComplete;},key);await expect(percent).toHaveValue('0');
+ for(const entry of ['0%','100%','35%']){await value.fill(entry);expect((await saved(editor))[key].at).toEqual(key==='target'?entry:{percent:Number(entry.slice(0,-1)),future:{keep:true}});}
+ await value.fill('20');expect((await saved(editor))[key].at).toEqual(key==='target'?20:{fixed:20,future:{keep:true}});
+ await value.fill('50%');expect((await saved(editor))[key].at).toEqual(key==='target'?'50%':{percent:50,future:{keep:true}});
+ await entity.fill('sensor.reference');expect((await saved(editor))[key].at).toEqual({entity:'sensor.reference',...(key==='baseline'?{percent:50,future:{keep:true}}:{percent:50})});
+ await editor.locator(`[data-kind="${key}-attribute"]`).fill('temperature');
+ expect((await saved(editor))[key].at).toEqual({entity:{id:'sensor.reference',attribute:'temperature'},percent:50,...(key==='baseline'?{future:{keep:true}}:{})});
+ await entity.fill('sensor.other');expect((await saved(editor))[key].at).toEqual({entity:{id:'sensor.other',attribute:'temperature'},percent:50,...(key==='baseline'?{future:{keep:true}}:{})});
+ await value.fill('25');expect((await saved(editor))[key].at).toEqual({entity:{id:'sensor.other',attribute:'temperature'},fixed:25,...(key==='baseline'?{future:{keep:true}}:{})});
+ await entity.fill('');expect((await saved(editor))[key].at).toEqual({fixed:25,...(key==='baseline'?{future:{keep:true}}:{})});
+ await entity.fill('sensor.reference');await editor.locator(`[data-kind="${key}-attribute"]`).fill('temperature');
+ await value.fill('');await value.press('Tab');expect((await saved(editor))[key].at).toEqual({entity:{id:'sensor.reference',attribute:'temperature'},...(key==='baseline'?{future:{keep:true}}:{})});
+ const cleared=(await saved(editor))[key];for(const name of Object.keys(original[key]).filter(name=>name!=='at'))expect(cleared[name]).toEqual(original[key][name]);
+ await editor.evaluate(async(el,key)=>{el.setConfig({type:'custom:sensor-bar-card-plus-feature',[key]:{at:'0%'}});await el.updateComplete;},key);await expect(value).toHaveValue('0%');
 });
 for(const source of ['src','dist'])test(`Feature CSS colors ${source}: all direct controls, raw text, keyboard, replacement and Gradient Stop boundary`,async({page})=>{
  const editor=await mount(page,source);await editor.locator('.generic-marker-toggle').click();

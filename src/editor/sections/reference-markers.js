@@ -1,6 +1,6 @@
 import { normalizeMarkerDirection } from '../../config/normalize.js';
 import { cloneDeep, isObject, setPathValue, deletePathValue, normalizeNumberValue, normalizeTextValue } from '../shared/editor-config.js';
-import { escapeAttribute, getEntityAttributeSuggestions, normalizeEditorColorValue, normalizeScalePercentageInput, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput, getColorPickerValue } from '../shared/editor-controls.js';
+import { escapeAttribute, getEntityAttributeSuggestions, normalizeEditorColorValue, normalizeScalePercentageInput, parseScaleValueInput, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput, getColorPickerValue } from '../shared/editor-controls.js';
 import { normalizeMarkerLabelField } from '../shared/editor-marker-controls.js';
 
 export function getReferenceMarkerSource(marker) {
@@ -446,13 +446,15 @@ export class ReferenceMarkersSection {
     const field = kind.replace(/^generic-marker-/, '');
     if (field === 'source-mode') return this._setGenericMarkerSourceMode(scope, markerIndex, value);
     if (field === 'fixed') {
-      const text = normalizeTextValue(value).trim();
-      const percentage = text.match(/^(.+?)\s*%$/);
-      if (percentage) {
-        const percent = normalizeScalePercentageInput(percentage[1]);
-        return percent === null ? false : this.context.setSource(scope, { type: 'reference-marker', index: markerIndex }, 'percent', percent);
+      const parsed = parseScaleValueInput(value);
+      const sourceKey = { type: 'reference-marker', index: markerIndex };
+      if (parsed) return this.context.setSource(scope, sourceKey, parsed.part, parsed.value);
+      if (!normalizeTextValue(value).trim()) {
+        this.context.setSource(scope, sourceKey, 'fixed', '');
+        this.context.setSource(scope, sourceKey, 'percent', '');
+        return true;
       }
-      return this.context.setSource(scope, { type: 'reference-marker', index: markerIndex }, 'fixed', text);
+      return false;
     }
     if (['fixed', 'fallback', 'entity', 'attribute', 'percent'].includes(field)) {
       if (field === 'entity') {

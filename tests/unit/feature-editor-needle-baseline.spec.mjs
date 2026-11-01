@@ -103,8 +103,8 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
     editor.setConfig({ ...config, baseline: { ...config.baseline, at: { fixed: 10, value: 5, percent: 30, ...metadata() } } }); await editor.updateComplete;
     await edit(editor, '#feature-baseline-entity', 'sensor.c');
     expect(editor._config.baseline.at).toEqual({ fixed: 10, value: 5, percent: 30, ...metadata(), entity: 'sensor.c' });
-    await edit(editor, '#baseline-value', '', 'change');
-    expect(editor._config.baseline.at).toEqual({ percent: 30, ...metadata(), entity: 'sensor.c' });
+    await edit(editor, '#baseline-value', '25%');
+    expect(editor._config.baseline.at).toEqual({ percent: 25, ...metadata(), entity: 'sensor.c' });
   });
   for (const at of [25, 'sensor.b', '50%', { percent: 50, ...metadata() }]) it(`preserves source representation ${JSON.stringify(at)} through unrelated Baseline/Needle edits`, async () => {
     const config = raw(); config.baseline.at = at;
@@ -112,10 +112,8 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
     await edit(editor, '#baseline-above-color', '#123456');
     await edit(editor, '#bar-needle-mode', 'enabled', 'change');
     expect(editor._config.baseline.at).toEqual(at);
-    if (at === '50%' || typeof at === 'object') {
-      expect(editor.shadowRoot.querySelector('#baseline-value').value).toBe('');
-      expect(editor.shadowRoot.innerHTML).toContain('baseline-percent');
-    }
+    if (at === '50%') expect(editor.shadowRoot.querySelector('#baseline-value').value).toBe('50%');
+    if (typeof at === 'object') expect(editor.shadowRoot.querySelector('#baseline-value').value).toBe('50%');
   });
   it('promotes only the source that needs another part, preserving scalar/percentage semantics', async () => {
     const config = raw(); config.baseline.at = 25;
@@ -123,8 +121,9 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
     await edit(editor, '#baseline-value', '30'); expect(editor._config.baseline.at).toBe(30);
     await edit(editor, '#feature-baseline-entity', 'sensor.c'); expect(editor._config.baseline.at).toEqual({ fixed: 30, entity: 'sensor.c' });
     editor.setConfig({ ...config, baseline: { ...config.baseline, at: '50%' } }); await editor.updateComplete;
-    await edit(editor, '#baseline-value', '', 'change'); expect(editor._config.baseline.at).toBe('50%');
-    await edit(editor, '#feature-baseline-entity', 'sensor.c'); expect(editor._config.baseline.at).toEqual({ percent: 50, entity: 'sensor.c' });
+    expect(editor.shadowRoot.querySelector('#baseline-value').value).toBe('50%');
+    await edit(editor, '#baseline-value', '25'); expect(editor._config.baseline.at).toBe(25);
+    await edit(editor, '#feature-baseline-entity', 'sensor.c'); expect(editor._config.baseline.at).toEqual({ fixed: 25, entity: 'sensor.c' });
   });
   it('promotes legacy Baseline scalars only for a field that requires an object', async () => {
     const config = raw(); config.baseline = 20;
@@ -133,6 +132,29 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
     await edit(editor, '#baseline-mode', 'disabled', 'change'); expect(editor._config.baseline).toEqual({ at: 30, enabled: false });
     await edit(editor, '#baseline-above-color', '#123456'); expect(editor._config.baseline).toEqual({ at: 30, enabled: false, above: { color: '#123456' } });
     expect(editor._config.bar.needle).toEqual(config.bar.needle);
+  });
+  it('switches the direct Value between fixed and percent with Entity/Attribute retained', async () => {
+    const config = raw(); config.baseline.at = { entity: { id: 'sensor.b', attribute: 'temperature' }, fixed: 20, future: true };
+    const { editor } = await setup(source, config);
+    expect(editor.shadowRoot.querySelector('#baseline-value').value).toBe('20');
+    await edit(editor, '#baseline-value', '25%');
+    expect(editor._config.baseline.at).toEqual({ entity: { id: 'sensor.b', attribute: 'temperature' }, percent: 25, future: true });
+    await edit(editor, '#feature-baseline-entity', 'sensor.changed');
+    expect(editor._config.baseline.at).toEqual({ entity: { id: 'sensor.changed', attribute: 'temperature' }, percent: 25, future: true });
+    await edit(editor, '#baseline-value', '0');
+    expect(editor._config.baseline.at).toEqual({ entity: { id: 'sensor.changed', attribute: 'temperature' }, fixed: 0, future: true });
+    const before = structuredClone(editor._config); await edit(editor, '#baseline-value', '101%');
+    expect(editor._config).toEqual(before);
+  });
+  it('keeps incomplete Baseline Value drafts through echoes and resets on foreign replacement', async () => {
+    const { editor } = await setup(source, raw());
+    const before = structuredClone(editor._config);
+    await edit(editor, '#baseline-value', '25e');
+    expect(editor._config).toEqual(before);
+    editor.setConfig(editor._config); await editor.updateComplete;
+    expect(editor.shadowRoot.querySelector('#baseline-value').value).toBe('25e');
+    editor.setConfig({ type, baseline: { at: 12 } }); await editor.updateComplete;
+    expect(editor.shadowRoot.querySelector('#baseline-value').value).toBe('12');
   });
   it('explicit removal owns Baseline only and does not touch Needle', async () => {
     const config = raw(), { editor, events } = await setup(source, config);

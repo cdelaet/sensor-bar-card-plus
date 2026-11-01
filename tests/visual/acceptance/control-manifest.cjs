@@ -23,11 +23,10 @@ for (const marker of ['target', 'peak', 'floor']) {
   const section = marker === 'target' ? 'Target' : marker === 'peak' ? 'Peak' : 'Floor';
   if (marker === 'target') {
     field('target-mode', section, 'select', 'target.enabled', ['disabled', 'enabled']);
-    field('target-value', section, 'number', 'target.at.fixed', '75');
+    field('target-value', section, 'value', null, '75%', { journey: 'sources' });
     kind('target-entity-source', section, 'entity', 'target.at.entity', 'sensor.changed');
+    kind('target-attribute', section, 'text', null, 'temperature', { hosts: ['feature'], conditional: true, journey: 'sources' });
     field('target-shape', section, 'select', 'target.shape', ['triangle', 'diamond']);
-    field('target-source-mode', section, 'select', null, null, { hosts: ['feature'], conditional: true, journey: 'sources' });
-    field('target-percent', section, 'number', null, '75', { hosts: ['feature'], drafts: 'percentage', conditional: true, journey: 'sources' });
     field('target-above-fill-enabled', section, 'checkbox', 'target.when_exceeded.fill_color', null);
     color('field', 'target-above-fill-color', section, 'target.when_exceeded.fill_color');
   } else {
@@ -50,10 +49,9 @@ color('field', 'bar-color', 'Bar Appearance', 'bar.color');
 field('bar-needle-mode', 'Needle', 'select', 'bar.needle.show', ['disabled', 'enabled']);
 color('field', 'bar-needle-color', 'Needle', 'bar.needle.color');
 field('baseline-mode', 'Baseline', 'select', 'baseline.enabled', ['disabled', 'enabled']);
-field('baseline-value', 'Baseline', 'number', 'baseline.at.fixed', '35');
+field('baseline-value', 'Baseline', 'value', null, '75%', { journey: 'sources' });
 kind('baseline-entity-source', 'Baseline', 'entity', 'baseline.at.entity', 'sensor.changed');
-field('baseline-source-mode', 'Baseline', 'select', null, null, { hosts: ['feature'], journey: 'sources', conditional: true });
-field('baseline-percent', 'Baseline', 'number', null, '75', { hosts: ['feature'], journey: 'sources', drafts: 'percentage', conditional: true });
+kind('baseline-attribute', 'Baseline', 'text', null, 'temperature', { hosts: ['feature'], conditional: true, journey: 'sources' });
 for (const side of ['above', 'below']) {
   field(`baseline-${side}-color-enabled`, 'Baseline', 'checkbox', `baseline.${side}.color`, null);
   color('field', `baseline-${side}-color`, 'Baseline', `baseline.${side}.color`);
@@ -118,7 +116,6 @@ for (const [section,names,hosts,journey] of [
  ['Markers',['toggle-card-group'],['standalone','feature'],'disclosures'],
  ['References',['add-generic-marker','remove-generic-marker','move-generic-marker-up','move-generic-marker-down','toggle-generic-marker'],['standalone','feature'],'references'],
  ['Baseline',['remove-baseline'],['standalone','feature'],'sources'],
- ['Target',['target-clear-percent'],['feature'],'sources'],['Baseline',['baseline-clear-percent'],['feature'],'sources'],
  ['Segments',['add-segment','remove-segment','add-entity-segment','remove-entity-segment'],['standalone','feature'],'palettes'],
  ['Gradient Stops',['add-gradient-stop','remove-gradient-stop','add-entity-gradient-stop','remove-entity-gradient-stop'],['standalone','feature'],'palettes'],
 ]) for (const name of names) add('action',name,section,'button',null,null,{hosts:name.includes('-entity-')?['standalone']:hosts,journey,structural:true,echo:journey!=='disclosures'});

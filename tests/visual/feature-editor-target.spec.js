@@ -67,14 +67,16 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
 for (const source of ['src', 'dist']) test(`Feature Target percentage and HA picker (${source})`, async ({ page }) => {
   await page.addInitScript(() => { customElements.define('ha-entity-picker', class extends HTMLElement {}); });
   const editor = await mount(page, source, 240, true);
-  await expect(editor.locator('#target-value')).toHaveValue(''); await expect(editor.locator('#target-percent')).toHaveCount(1);
+  const value = editor.locator('#target-value'); await expect(value).toHaveValue('70%'); await expect(editor.locator('#target-source-mode')).toHaveCount(0); await expect(editor.locator('#target-percent')).toHaveCount(0);
   await expect(editor.locator('[data-kind="target-label-entity"]')).toHaveCount(0);
   await editor.locator('#target-label-text').fill('Percentage goal'); await editor.locator('#target-mode').selectOption('enabled');
   await editor.locator('#formatting-unit').fill('W'); expect((await saved(editor)).target.at).toBe('70%');
   const picker = editor.locator('ha-entity-picker[data-kind="target-entity-source"]');
   await picker.evaluate(el => { el.dispatchEvent(new CustomEvent('value-changed', { bubbles: true, composed: true, detail: { value: 'sensor.changed' } })); });
   expect((await saved(editor)).target.at).toEqual({ percent: 70, entity: 'sensor.changed' });
+  await value.fill('25%'); expect((await saved(editor)).target.at).toEqual({ percent: 25, entity: 'sensor.changed' });
+  await value.fill('25'); expect((await saved(editor)).target.at).toEqual({ fixed: 25, entity: 'sensor.changed' });
   await picker.evaluate(el => { el.dispatchEvent(new CustomEvent('value-changed', { bubbles: true, composed: true, detail: { value: undefined } })); });
-  expect((await saved(editor)).target.at).toEqual({ percent: 70 });
+  expect((await saved(editor)).target.at).toEqual({ fixed: 25 });
   expect((await saved(editor)).target.label.entity).toBe('sensor.unsupported');
 });

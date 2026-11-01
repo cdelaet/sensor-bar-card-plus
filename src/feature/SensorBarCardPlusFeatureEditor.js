@@ -2,7 +2,7 @@ import {
   cloneDeep, serializeConfig, isObject, getPathValue, setPathValue, deletePathValue,
 } from '../editor/shared/editor-config.js';
 import {
-  escapeAttribute, renderEntitySourceInput, renderEntityAttributeInput, renderWindowOptions, getEntityAttributeSuggestions, getColorPickerValue, isHexColorValue,
+  escapeAttribute, formatScaleValueInput, renderEntitySourceInput, renderEntityAttributeInput, renderWindowOptions, getEntityAttributeSuggestions, getColorPickerValue, isHexColorValue,
 } from '../editor/shared/editor-controls.js';
 import { editorStyles } from '../editor/shared/editor-styles.js';
 import { renderCardGroup, renderMarkersSection } from '../editor/shared/editor-disclosures.js';
@@ -48,7 +48,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._numericDrafts = new NumericInputDrafts();
     this._expandedCardGroups = new Set();
     const context = this._createSectionContext();
-    const options = { cssText: true, percentSources: true };
+    const options = { cssText: true, directValue: true };
     this._needleSection = new NeedleSection(context, options);
     this._baselineSection = new BaselineSection(context, options);
     this._targetSection = new TargetSection(context, options);
@@ -439,17 +439,13 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       'bar-needle-color': getColorPickerValue(this._needleSection._getScopedNeedleConfig(root).color, '#ffffff'),
       'bar-needle-color-text-fallback': this._needleSection._getScopedNeedleConfig(root).color,
       'baseline-mode': this._baselineSection._getBaselineMode(root),
-      'baseline-value': getFeatureBaselineSource(this._config).fixed,
-      'baseline-source-mode': this._baselineSection._getSourceMode(),
-      'baseline-percent': this._baselineSection._percentageDraft ?? getFeatureBaselineSource(this._config).percent ?? '',
+      'baseline-value': formatScaleValueInput(getFeatureBaselineSource(this._config)),
       'baseline-above-color': getColorPickerValue(this._baselineSection._getBaselineDirectionalColorValue(root, 'above'), '#000000'),
       'baseline-above-color-text-fallback': this._baselineSection._getBaselineDirectionalColorValue(root, 'above'),
       'baseline-below-color': getColorPickerValue(this._baselineSection._getBaselineDirectionalColorValue(root, 'below'), '#000000'),
       'baseline-below-color-text-fallback': this._baselineSection._getBaselineDirectionalColorValue(root, 'below'),
       'target-mode': this._targetSection._getTargetMode(root),
-      'target-value': getFeatureTargetSource(this._config).fixed,
-      'target-source-mode': this._targetSection._getSourceMode(),
-      'target-percent': this._targetSection._percentageDraft ?? getFeatureTargetSource(this._config).percent ?? '',
+      'target-value': formatScaleValueInput(getFeatureTargetSource(this._config)),
       'target-shape': this._targetSection._getEffectiveTargetShapeValue(root),
       'target-direction': this._targetSection._getEffectiveMarkerDirection(root, 'target'),
       'target-color': getColorPickerValue(this._targetSection._getTargetColorValue(root), '#888'),
