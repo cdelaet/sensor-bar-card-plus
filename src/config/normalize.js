@@ -1,5 +1,5 @@
 import { isValidReset } from '../utils/extrema.js';
-import { parseHistoricalWindow } from '../history/time-window.js';
+import { canonicalizeHistoricalWindow, parseHistoricalWindow, isEligibleHistoricalWindow } from '../history/time-window.js';
 
 export const UNSUPPORTED_EXTREMA_ALIASES = Symbol.for('sensor-bar-card-plus.unsupported-extrema-aliases');
 
@@ -967,9 +967,10 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
   const hasWindow = rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, 'window');
   const rawWindow = hasWindow ? rawMarker.window : hasReset ? rawMarker.reset : inherited.window ?? 'today';
   const legacyInvalid = !hasWindow && hasReset && !isValidReset(rawWindow);
-  const window = !hasWindow && hasReset && typeof rawWindow === 'string' && rawWindow.trim().toLowerCase() === 'never'
+  const normalizedWindow = !hasWindow && hasReset && typeof rawWindow === 'string' && rawWindow.trim().toLowerCase() === 'never'
     ? 'today' : typeof rawWindow === 'string' ? rawWindow.trim().toLowerCase() : rawWindow;
-  const windowSpec = legacyInvalid ? null : parseHistoricalWindow(window);
+  const window = canonicalizeHistoricalWindow(normalizedWindow);
+  const windowSpec = legacyInvalid || !isEligibleHistoricalWindow(window) ? null : parseHistoricalWindow(window);
   const rawLabel = rawMarker?.label;
   const label = normalizeLabelConfig(rawMarker, inherited);
   const normalized = {

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { normalizeCardConfig } from '../../src/config/normalize.js';
 import { validateNormalizedConfig } from '../../src/config/validate.js';
 import { buildRowViewModel } from '../../src/view-model/row-view-model.js';
-import { renderMarker, patchMarker } from '../../src/render/bar-renderer.js';
+import { renderMarker, patchMarker, renderHistoryStatus } from '../../src/render/bar-renderer.js';
 import { historicalMarkerConsumers, historicalMarkerId } from '../../src/history/marker-consumers.js';
 import { resolveTimeWindow } from '../../src/history/time-window.js';
 import { HistoricalValueResolver } from '../../src/history/value-resolver.js';
@@ -53,18 +53,38 @@ describe('historical Peak/Floor', () => {
   });
 
   it('maps legacy and canonical windows and rejects unsupported input without fallback', () => {
-    const cases = [['quarterly', 'quarter_hour'], ['hourly', 'hour'], ['daily', 'day'], ['weekly', 'week'], ['monthly', 'month'], ['yearly', 'year']];
-    for (const [reset, period] of cases) {
-      expect(normalizeCardConfig({ entity, peak: { reset } }).peak_marker.window_spec).toEqual({ kind: 'calendar', period });
+    const cases = [
+      ['quarterly', 'quarterly', 'quarter_hour'], ['hourly', 'hourly', 'hour'], ['daily', 'today', 'day'],
+      ['weekly', 'this_week', 'week'], ['monthly', 'this_month', 'month'], ['yearly', 'this_year', 'year'],
+    ];
+    for (const [reset, canonical, period] of cases) {
+      const normalized = normalizeCardConfig({ entity, peak: { reset } });
+      expect(normalized.peak_marker.window).toBe(canonical);
+      expect(normalized.peak_marker.window_spec).toEqual({ kind: 'calendar', period });
     }
     for (const [window, unit] of [['1m', 'minute'], ['1h', 'hour'], ['24h', 'hour'], ['7d', 'day']]) {
       expect(normalizeCardConfig({ entity, peak: { window } }).peak_marker.window_spec.duration.unit).toBe(unit);
     }
-    for (const [window, period] of [['yesterday', 'day'], ['last_week', 'week'], ['last_month', 'month']]) {
-      expect(normalizeCardConfig({ entity, peak: { window } }).peak_marker.window_spec).toMatchObject({ kind: 'shifted_calendar', period });
+    for (const [window, canonical, kind, period] of [
+      ['yesterday', 'yesterday', 'shifted_calendar', 'day'], ['last_week', 'previous_week', 'shifted_calendar', 'week'],
+      ['last_month', 'previous_month', 'shifted_calendar', 'month'], ['last_year', 'previous_year', 'shifted_calendar', 'year'],
+      ['yearly', 'this_year', 'calendar', 'year'],
+    ]) {
+      const normalized = normalizeCardConfig({ entity, peak: { window } });
+      expect(normalized.peak_marker.window_spec).toMatchObject({ kind, period });
+      expect(normalized.peak_marker.window).toBe(canonical);
     }
-    const selected = normalizeCardConfig({ entity, peak: { window: '24h', reset: 'nonsense' } });
-    expect(selected.peak_marker.window).toBe('24h'); expect(selected.peak_marker.window_invalid).toBeUndefined();
+    const selected = normalizeCardConfig({ entity, peak: { window: 'last_week', reset: 'yearly' } });
+    expect(selected.peak_marker.window).toBe('previous_week'); expect(selected.peak.window).toBe('previous_week');
+    expect(selected.peak).not.toHaveProperty('reset'); expect(selected.peak_marker.window_invalid).toBeUndefined();
+    const entityAlias = normalizeCardConfig({ entity, entities: [{ entity, peak: { window: 'last_month' }, floor: { reset: 'yearly' } }] });
+    expect(entityAlias.entities[0].peak_marker.window).toBe('previous_month');
+    expect(entityAlias.entities[0].peak.window).toBe('previous_month');
+    expect(entityAlias.entities[0].floor_marker.window).toBe('this_year');
+    expect(entityAlias.entities[0].floor.window).toBe('this_year');
+    const validCanonical = normalizeCardConfig({ entity, peak: { window: 'previous_week' }, floor: { window: 'previous_month' } });
+    expect(validateNormalizedConfig(validCanonical).warnings.map(w => w.code)).not.toContain('peak_marker.invalid_window');
+    expect(validateNormalizedConfig(validCanonical).warnings.map(w => w.code)).not.toContain('floor_marker.invalid_window');
     const invalid = normalizeCardConfig({ entity, peak: { enabled: true, reset: '24h' } });
     expect(invalid.peak_marker.window_invalid).toBe(true);
     expect(invalid.entities[0].peak_marker.window_invalid).toBe(true);
@@ -93,8 +113,8 @@ describe('historical Peak/Floor', () => {
     for (const [type, status, text] of [['peak', 'partial', 'Partial history'], ['floor', 'stale', 'Stale history']]) {
       const marker = row(type, { value: 20, status }).markers.find(item => item.type === type);
       const html = renderMarker(marker);
-      expect(html).toContain(`aria-label="${type === 'peak' ? 'Peak' : 'Floor'}: ${text}"`);
-      expect(html).toContain(`title="${text}"`);
+      expect(html).toContain(`aria-label="${type === 'peak' ? 'Peak' : 'Floor'}: ${text}`);
+      expect(html).toContain(`title="${text}`);
       expect(html).not.toContain('tabindex=');
       const attributes = {}; const element = { dataset: {}, style: { setProperty() {}, removeProperty() {} },
         setAttribute: (name, value) => { attributes[name] = value; },
@@ -105,6 +125,20 @@ describe('historical Peak/Floor', () => {
       expect(attributes['aria-label']).toBeUndefined();
       expect(attributes.role).toBeUndefined();
     }
+  });
+
+  it('renders one safe explanation when unavailable markers have different reasons', () => {
+    const config = normalizeCardConfig({ entity, peak: { enabled: true }, floor: { enabled: true } }).entities[0];
+    const model = buildRowViewModel({ entityConfig: config, entityState: { state: '40', attributes: {} },
+      historicalExtrema: {
+        peak: { status: 'unavailable', value: null, provenance: { coverage: { reason: 'Statistics metadata is unavailable' } } },
+        floor: { status: 'unavailable', value: null, provenance: { coverage: { reason: 'Statistics and entity units are incompatible' } } },
+      } });
+    expect(model.peakVisible).toBe(false); expect(model.floorVisible).toBe(false);
+    expect(model.historyStatusSummary.text).toContain('Peak: Long-term statistics');
+    expect(model.historyStatusSummary.text).toContain('Floor: Statistics and Recorder units are incompatible');
+    expect(renderHistoryStatus(model.historyStatusSummary)).toContain('history-status-badge');
+    expect(model.markers.find(item => item.type === 'peak').position).toBeNull();
   });
 
   it('renders ordinary Recorder results without a partial badge while preserving unknown coverage', async () => {

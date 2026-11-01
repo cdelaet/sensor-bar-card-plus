@@ -8,6 +8,17 @@ function normalize(rawConfig) {
 }
 
 describe('validateNormalizedConfig', () => {
+  it.each(['peak', 'floor'])('validates %s duration policy at both scopes', marker => {
+    for (const window of ['1440m', '24h', '1500m', '48h']) {
+      const config = normalize({ [marker]: { enabled: true, window }, entities: [{ entity: 'sensor.one', [marker]: { window } }] });
+      expect(config[`${marker}_marker`].window_invalid).toBeUndefined();
+      expect(config.entities[0][`${marker}_marker`].window_invalid).toBeUndefined();
+    }
+    const config = normalize({ [marker]: { enabled: true, window: '1441m' }, entities: [{ entity: 'sensor.one', [marker]: { window: '1441m' } }] });
+    expect(config[`${marker}_marker`]).toMatchObject({ window: '1441m', window_invalid: true });
+    expect(config.entities[0][`${marker}_marker`]).toMatchObject({ window: '1441m', window_invalid: true });
+    expect(validateNormalizedConfig(config).warnings.filter(item => item.code === `${marker}_marker.invalid_window`).length).toBeGreaterThanOrEqual(2);
+  });
   it('warns on raw extrema aliases at card and entity scopes without using them', () => {
     const aliases = { peak_marker: { enabled: true, color: 'red', reset: 'daily' },
       floor_marker: { enabled: true, color: 'blue', reset: 'hourly' } };

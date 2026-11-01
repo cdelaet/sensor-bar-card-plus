@@ -13,13 +13,18 @@ async function mount(page, source, height, position, config, extraStates = {}) {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({ config, height, position, extraStates }) => {
     const states = { 'sensor.power': { state: '50', attributes: { unit_of_measurement: 'W' } }, ...extraStates };
+    const history = window.__sbcpHistoryFixture(states, [50]);
     const card = document.createElement('sensor-bar-card-plus');
     card.style.setProperty('--some-theme-color', '#aa55ff');
     card.setConfig({ ...config, entities: ['sensor.power'], layout: { label: { position: 'off' } } });
-    card.hass = { states }; document.querySelector('#mount').append(card);
-    await window.__sbcpRenderFeature({ config, height, position, width: 640, context: { entity_id: 'sensor.power' }, states });
+    card.hass = history.hass; document.querySelector('#mount').append(card);
+    await window.__sbcpRenderFeature({ config, height, position, width: 640, context: { entity_id: 'sensor.power' }, hass: history.hass });
     document.querySelector('.feature-host').style.setProperty('--some-theme-color', '#aa55ff');
   }, { config, height, position, extraStates });
+  if (config.peak?.enabled || config.floor?.enabled) await expect.poll(() => page.evaluate(() => {
+    const label = document.querySelector('sensor-bar-card-plus-feature')?.shadowRoot.querySelector('#surface')?.getAttribute('aria-label');
+    return label?.includes('Peak at 50') && label.includes('Floor at 50');
+  })).toBe(true);
   await frames(page);
 }
 async function colors(page) {

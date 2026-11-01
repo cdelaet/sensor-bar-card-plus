@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { loadCardClass } from '../support/load-card-class.cjs';
+import { patchFeatureExtremumField } from '../../src/feature/feature-editor-extrema.js';
 const type = 'custom:sensor-bar-card-plus-feature', root = { type: 'card' };
 const meta = () => ({ future: { values: [undefined, { keep: true }], unset: undefined }, unset: undefined });
 const extremum = () => ({ enabled: true, color: 'red', direction: 'outward', window: { mode: 'duration', duration: '15m', ...meta() },
@@ -22,8 +23,29 @@ async function edit(editor, field, value) {
   if (control.type === 'checkbox') control.checked = value; else control.value = value;
   editor._handleField({ type: 'change', target: control }); await editor.updateComplete;
 }
+
+describe('Feature historical window writes', () => {
+  it('canonicalizes legacy window aliases and preserves rolling duration values', () => {
+    const config = { peak: { window: 'today' }, floor: { window: '1500m' }, unrelated: { window: 'last_week' } };
+    const peak = patchFeatureExtremumField(config, { key: 'peak', path: ['window'], value: 'last_week' });
+    const floor = patchFeatureExtremumField(peak, { key: 'floor', path: ['window'], value: '1500m' });
+    expect(floor).toEqual({ peak: { window: 'previous_week' }, floor: { window: '1500m' }, unrelated: { window: 'last_week' } });
+  });
+});
+
 for (const source of ['src', 'dist']) describe(`Feature extrema (${source})`, () => {
   for (const key of ['peak', 'floor']) {
+    it(`${key}: preserves an unsupported duration on unrelated edits`, async () => {
+      const { editor } = await setup(source, { type, [key]: { enabled: true, window: '1441m' } });
+      await edit(editor, `${key}-direction`, 'outward');
+      expect(editor._config[key].window).toBe('1441m');
+    });
+    for (const [window, canonical] of [['yearly', 'this_year'], ['1500m', '1500m']]) it(`${key}: canonicalizes ${window} or retains it as a custom window`, async () => {
+      const { editor } = await setup(source, { type, [key]: { enabled: true, window } });
+      expect(editor.shadowRoot.querySelector(`#${key}-window`).value).toBe(canonical);
+      await edit(editor, `${key}-direction`, 'outward');
+      expect(editor._config[key].window).toBe(canonical);
+    });
     for (const marker of [undefined, { enabled: false, window: 'today' }, { window: ' 01M ' }, { window: 'quarterly' }, extremum()]) it(`${key}: preserves raw window, aliases and metadata on open/context/unrelated edit: ${JSON.stringify(marker)}`, async () => {
       const config = raw(); config[key] = marker;
       const { editor, events } = await setup(source, config);
@@ -60,14 +82,16 @@ for (const source of ['src', 'dist']) describe(`Feature extrema (${source})`, ()
       await edit(editor, `${key}-show`, false); expect(editor._config[key]).toEqual({ enabled: false, window: 'today' });
       await edit(editor, `${key}-label-show-unit`, true); expect(editor._config[key]).toEqual({ enabled: false, window: 'today', label: { show_unit: true } });
     });
-    it(`${key}: accepts all exposed presets and duration boundaries, rejects invalid window events without emissions`, async () => {
+    it(`${key}: accepts exposed presets and duration boundaries, rejects invalid window events without emissions`, async () => {
       const { editor, events } = await setup(source);
-      for (const window of [ 'quarterly', 'hourly', 'daily', 'weekly', 'monthly', 'yearly', 'today', 'yesterday', 'this_week', 'last_week', 'this_month', 'last_month', '24h', '7d', ...Array.from({ length: 59 }, (_, i) => `${i + 1}m`), ...Array.from({ length: 23 }, (_, i) => `${i + 1}h`), ' 01M ']) {
+      const presetWindows = ['today', 'yesterday', 'this_week', 'previous_week', 'this_month', 'previous_month', 'this_year', 'previous_year',
+        'quarterly', 'hourly', '5m', '10m', '15m', '30m', '1h', '2h', '3h', '6h', '12h', '24h', '48h', '7d', '14d', '30d'];
+      for (const window of presetWindows) {
         const before = events.length; await edit(editor, `${key}-window`, window);
         expect(editor._config[key].window).toBe(window.trim().toLowerCase()); expect(events).toHaveLength(before + 1);
       }
       const config = structuredClone(editor._config), count = events.length;
-      for (const window of ['0m', '0h', '1s', 'cron', 'duration', '[object Object]']) await edit(editor, `${key}-window`, window);
+      for (const window of ['0m', '0h', '1s', '1441m', 'cron', 'duration', '[object Object]']) await edit(editor, `${key}-window`, window);
       expect(editor._config).toEqual(config); expect(events).toHaveLength(count);
       expect(editor._extremaSection._resetDrafts).toBeUndefined();
     });
@@ -85,7 +109,8 @@ for (const source of ['src', 'dist']) describe(`Feature extrema (${source})`, ()
       await edit(editor, `${key}-label-text`, 'Edited');
       editor.setConfig({ type, [key]: { window: 'daily', label: { text: 'Foreign' } } }); await editor.updateComplete;
       expect(editor.shadowRoot.querySelector(`#${key}-label-text`).value).toBe('Foreign');
-      expect(editor.shadowRoot.querySelector(`#${key}-window`).value).toBe('daily'); expect(events).toHaveLength(1);
+      expect(editor.shadowRoot.querySelector(`#${key}-window`).value).toBe('today');
+      expect(editor._config[key].window).toBe('today');
       expect(editor._peakState).toBeUndefined(); expect(editor._floorState).toBeUndefined();
     });
   }

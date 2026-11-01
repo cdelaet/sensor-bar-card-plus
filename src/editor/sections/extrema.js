@@ -3,7 +3,7 @@ import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue,
 import { escapeAttribute, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderWindowOptions, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from '../shared/editor-marker-controls.js';
 import { isValidReset } from '../../utils/extrema.js';
-import { parseHistoricalWindow } from '../../history/time-window.js';
+import { canonicalizeHistoricalWindow, parseHistoricalWindow, isEligibleHistoricalWindow } from '../../history/time-window.js';
 
 export function migrateExtremaConfig(config) {
   let changed = false;
@@ -12,13 +12,20 @@ export function migrateExtremaConfig(config) {
     let next = scope;
     for (const key of ['peak', 'floor']) {
       const marker = scope[key];
-      if (!isObject(marker) || !Object.prototype.hasOwnProperty.call(marker, 'reset')) continue;
+      if (!isObject(marker)) continue;
+      const hasReset = Object.prototype.hasOwnProperty.call(marker, 'reset');
+      const hasWindow = Object.prototype.hasOwnProperty.call(marker, 'window');
+      const canonicalWindow = hasWindow ? canonicalizeHistoricalWindow(marker.window) : undefined;
+      const windowChanged = hasWindow && !Object.is(canonicalWindow, marker.window);
+      if (!hasReset && !windowChanged) continue;
       if (next === scope) next = { ...scope };
       const { reset, ...rest } = marker;
-      if (!Object.prototype.hasOwnProperty.call(rest, 'window')) {
+      if (hasWindow) {
+        if (windowChanged) rest.window = canonicalWindow;
+      } else {
         const normalized = typeof reset === 'string' ? reset.trim().toLowerCase() : reset;
-        const aliases = { never: 'today', daily: 'today', weekly: 'this_week', monthly: 'this_month' };
-        rest.window = isValidReset(reset) ? (aliases[normalized] ?? normalized)
+        rest.window = isValidReset(reset)
+          ? normalized === 'never' ? 'today' : canonicalizeHistoricalWindow(normalized)
           : parseHistoricalWindow(normalized) ? `invalid legacy reset: ${normalized}` : reset ?? null;
       }
       next[key] = rest;
@@ -348,13 +355,13 @@ export class ExtremaSection {
   }
 
   _setScopedExtremumWindow(scope, key, value) {
-    const normalized = normalizeTextValue(value).trim().toLowerCase();
+    const normalized = canonicalizeHistoricalWindow(normalizeTextValue(value).trim().toLowerCase());
     return this.context.mutate(scope, (target) => {
       let nextTarget = cloneDeep(target);
       const current = isObject(getPathValue(nextTarget, [key]))
         ? cloneDeep(getPathValue(nextTarget, [key]))
         : {};
-      if (!parseHistoricalWindow(normalized)) return target;
+      if (!isEligibleHistoricalWindow(normalized)) return target;
       current.window = normalized;
       if (Object.keys(current).length) nextTarget = setPathValue(nextTarget, [key], current);
       else nextTarget = deletePathValue(nextTarget, [key]);
@@ -475,6 +482,7 @@ ${indent}                          <input id="entity-${index}-${key}-inherit" ty
                         <select id="entity-${index}-${key}-window" data-kind="entity-${key}-window" data-index="${index}" value="${escapeAttribute(marker.window)}">
                           ${renderWindowOptions(marker.window)}
                         </select>
+                        <small class="section-note">Recent rolling windows include completed minutes and the current minute; longer windows include completed hours and the current hour. Older history requires Home Assistant statistics.</small>
                       </div>
                       <div class="field-row">
                         <label for="entity-${index}-${key}-direction">Direction</label>
@@ -509,6 +517,7 @@ ${indent}                          `;
               <select id="${key}-window" data-field="${key}-window" value="${escapeAttribute(marker.window)}">
                 ${renderWindowOptions(marker.window)}
               </select>
+              <small class="section-note">Recent rolling windows include completed minutes and the current minute; longer windows include completed hours and the current hour. Older history requires Home Assistant statistics.</small>
             </div>
             <div class="field-row">
               <label for="${key}-direction">Direction</label>

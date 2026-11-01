@@ -14,7 +14,8 @@ export function renderMarker(marker) {
   const shape = normalizeMarkerShape(marker.shape, defaultShape);
   const lane = marker.lane ?? (marker.type === 'peak' ? 'above' : 'below');
   const historyStatus = ['partial', 'stale'].includes(marker.historyStatus) ? marker.historyStatus : '';
-  const historyLabel = historyStatus === 'partial' ? 'Partial history' : historyStatus === 'stale' ? 'Stale history' : '';
+  const baseLabel = historyStatus === 'partial' ? 'Partial history' : historyStatus === 'stale' ? 'Stale history' : '';
+  const historyLabel = escapeHtml(baseLabel && marker.historyReason ? `${baseLabel}: ${marker.historyReason}` : baseLabel);
   const historyAttributes = historyStatus ? ` data-history-status="${historyStatus}" data-history-edge="${position > 90 ? 'end' : 'start'}" title="${historyLabel}" role="img" aria-label="${marker.type === 'peak' ? 'Peak' : 'Floor'}: ${historyLabel}"` : '';
   const historyIndicator = `<span class="history-indicator" aria-hidden="true" title="${historyLabel}">${historyStatus === 'partial' ? '!' : historyStatus === 'stale' ? '~' : ''}</span>`;
   const shapePaths = `<g class="marker-shape-paths">
@@ -67,7 +68,8 @@ export function patchMarker(markerEl, marker) {
   setDatasetIfChanged(markerEl, 'direction', marker.direction ?? 'inward');
   if (marker.type === 'peak' || marker.type === 'floor') {
     const status = ['partial', 'stale'].includes(marker.historyStatus) ? marker.historyStatus : '';
-    const label = status === 'partial' ? 'Partial history' : status === 'stale' ? 'Stale history' : '';
+    const base = status === 'partial' ? 'Partial history' : status === 'stale' ? 'Stale history' : '';
+    const label = base && marker.historyReason ? `${base}: ${marker.historyReason}` : base;
     setDatasetIfChanged(markerEl, 'historyStatus', status);
     setDatasetIfChanged(markerEl, 'historyEdge', marker.position > 90 ? 'end' : 'start');
     markerEl.setAttribute?.('title', label);
@@ -78,7 +80,7 @@ export function patchMarker(markerEl, marker) {
     }
     if (status) {
       markerEl.setAttribute?.('role', 'img');
-      markerEl.setAttribute?.('aria-label', `${marker.type === 'peak' ? 'Peak' : 'Floor'}: ${status === 'partial' ? 'Partial history' : 'Stale history'}`);
+      markerEl.setAttribute?.('aria-label', `${marker.type === 'peak' ? 'Peak' : 'Floor'}: ${label}`);
     } else {
       markerEl.removeAttribute?.('role');
       markerEl.removeAttribute?.('aria-label');
@@ -101,6 +103,18 @@ export function patchMarker(markerEl, marker) {
   const markerColor = getEffectiveMarkerColor(marker);
   setStyleIfChanged(markerEl, '--marker-color', markerColor);
   setStyleIfChanged(markerEl, '--marker-contrast-color', getMarkerContrastColor(markerColor));
+}
+
+export function renderHistoryStatus(summary) {
+  return `<span class="history-status-badge"${summary ? '' : ' hidden'} title="${escapeHtml(summary?.text ?? '')}" aria-hidden="true">${summary?.pending ? '…' : '!'}</span>`;
+}
+
+export function patchHistoryStatus(root, summary) {
+  const badge = root?.querySelector?.('.history-status-badge');
+  if (!badge) return;
+  badge.hidden = !summary;
+  badge.textContent = summary?.pending ? '…' : '!';
+  badge.setAttribute('title', summary?.text ?? '');
 }
 
 /** Patch persistent bar nodes. The adapter supplies transition timing. */

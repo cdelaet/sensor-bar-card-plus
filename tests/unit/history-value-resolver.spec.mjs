@@ -1,13 +1,90 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HistoricalValueResolver } from '../../src/history/value-resolver.js';
 import { SharedObservationService } from '../../src/history/observation-service.js';
+import { fetchPlannedHistory } from '../../src/history/history-provider.js';
 import { calculateObservationValue } from '../support/history-observation-oracle.mjs';
 
 const sourceKey = 'sensor.soil\u0000';
 const spec = { provider: 'recorder_history', source: { entityId: 'sensor.soil' }, calculation: 'max',
   window: { kind: 'calendar', period: 'day' } };
+const HOUR_MS = 60 * 60 * 1000;
+
+function statisticsFixture(now, missingBucket = null) {
+  const octoberStart = Date.parse('2026-10-01T00:00:00Z');
+  const novemberStart = Date.parse('2026-11-01T00:00:00Z');
+  const statisticsRequests = [];
+  const callWS = vi.fn(async request => {
+    if (request.type === 'recorder/get_statistics_metadata') {
+      return [{ statistic_id: 'sensor.soil', has_mean: true }];
+    }
+    statisticsRequests.push(request);
+    const start = Date.parse(request.start_time), end = Date.parse(request.end_time);
+    const rows = [];
+    for (let bucketStart = start; bucketStart < end; bucketStart += HOUR_MS) {
+      if (bucketStart === missingBucket) continue;
+      const october = bucketStart >= octoberStart && bucketStart < novemberStart;
+      rows.push({ start: bucketStart, end: bucketStart + HOUR_MS,
+        min: october ? 19.6 : 10, max: october ? 23.8 : 29.6 });
+    }
+    return { 'sensor.soil': rows };
+  });
+  const hass = { callWS, config: { time_zone: 'UTC' } };
+  const service = new SharedObservationService({ provider: fetchPlannedHistory, now: () => now });
+  const resolver = new HistoricalValueResolver({ service, now: () => now });
+  const october = { ...spec, window: { kind: 'shifted_calendar', period: 'month', shift: { amount: -1, unit: 'month' } } };
+  const year = { ...spec, window: { kind: 'calendar', period: 'year' } };
+  const resolvePair = async windowSpec => Promise.all([
+    resolver.resolve({ ...windowSpec, calculation: 'max' }, { hass, now }),
+    resolver.resolve({ ...windowSpec, calculation: 'min' }, { hass, now }),
+  ]);
+  return { resolver, october, year, resolvePair, statisticsRequests, service };
+}
 
 describe('historical value resolver', () => {
+  it.each(['October → year → October', 'year → October'])('keeps October values and coverage invariant for %s', async sequence => {
+    const now = Date.parse('2026-11-01T00:00:00Z');
+    const { october, year, resolvePair, statisticsRequests, service } = statisticsFixture(now,
+      Date.parse('2026-03-01T00:00:00Z'));
+    let firstOctober = null;
+    if (sequence.startsWith('October')) firstOctober = await resolvePair(october);
+    const yearValues = await resolvePair(year);
+    expect(yearValues.map(result => result.status)).toEqual(['partial', 'partial']);
+    const octoberValues = await resolvePair(october);
+    expect(octoberValues.map(({ value, status }) => ({ value, status }))).toEqual([
+      { value: 23.8, status: 'available' }, { value: 19.6, status: 'available' },
+    ]);
+    if (firstOctober) expect(octoberValues.map(({ value, status }) => ({ value, status })))
+      .toEqual(firstOctober.map(({ value, status }) => ({ value, status })));
+    expect(statisticsRequests).toHaveLength(11);
+    service.clear();
+  });
+
+  it('reuses a complete broad statistics acquisition for a narrower window', async () => {
+    const now = Date.parse('2026-11-01T00:00:00Z');
+    const { october, year, resolvePair, statisticsRequests, service } = statisticsFixture(now);
+    const yearValues = await resolvePair(year);
+    expect(yearValues.map(result => result.status)).toEqual(['available', 'available']);
+    const octoberValues = await resolvePair(october);
+    expect(octoberValues.map(({ value, status }) => ({ value, status }))).toEqual([
+      { value: 23.8, status: 'available' }, { value: 19.6, status: 'available' },
+    ]);
+    expect(octoberValues.map(result => result.freshness.cache)).toEqual(['hit', 'hit']);
+    expect(statisticsRequests).toHaveLength(10);
+    service.clear();
+  });
+
+  it('keeps a genuinely incomplete October window partial', async () => {
+    const now = Date.parse('2026-11-01T00:00:00Z');
+    const { october, resolvePair, statisticsRequests, service } = statisticsFixture(now,
+      Date.parse('2026-10-15T12:00:00Z'));
+    const octoberValues = await resolvePair(october);
+    expect(octoberValues.map(({ value, status }) => ({ value, status }))).toEqual([
+      { value: 23.8, status: 'partial' }, { value: 19.6, status: 'partial' },
+    ]);
+    expect(statisticsRequests).toHaveLength(1);
+    service.clear();
+  });
+
   it('reports unaligned Kathmandu calendar statistics as unavailable with a reason', async () => {
     const now = Date.parse('2026-10-31T12:00:00Z');
     const resolver = new HistoricalValueResolver({ now: () => now });

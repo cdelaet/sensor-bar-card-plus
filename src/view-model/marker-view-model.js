@@ -92,12 +92,14 @@ export function buildMarkerModels({
   peakLabelPresentation = null,
   peakVisible = Number.isFinite(peakPosition),
   peakStatus = null,
+  peakReason = null,
   floorValue = null,
   floorPosition = null,
   floorPresentation = null,
   floorLabelPresentation = null,
   floorVisible = Number.isFinite(floorPosition),
   floorStatus = null,
+  floorReason = null,
   genericMarkers = [],
 }) {
   const targetConfig = entityConfig?.target_marker;
@@ -133,7 +135,7 @@ export function buildMarkerModels({
         && hasMarkerLabelContent({ text: floorConfig.label_text, showValue: floorConfig.label_show_value, showUnit: floorConfig.label_show_unit }),
       shape: 'triangle',
       direction: floorConfig?.direction ?? 'inward',
-    }), historyStatus: floorStatus },
+    }), historyStatus: floorStatus, historyReason: floorReason },
     { ...createMarkerModel({
       id: 'peak',
       type: 'peak',
@@ -147,7 +149,7 @@ export function buildMarkerModels({
         && hasMarkerLabelContent({ text: peakConfig.label_text, showValue: peakConfig.label_show_value, showUnit: peakConfig.label_show_unit }),
       shape: 'triangle',
       direction: peakConfig?.direction ?? 'inward',
-    }), historyStatus: peakStatus },
+    }), historyStatus: peakStatus, historyReason: peakReason },
     ...genericMarkers.map((marker) => createMarkerModel({
       id: marker.id,
       type: 'generic',

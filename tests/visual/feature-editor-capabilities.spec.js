@@ -9,7 +9,7 @@ async function mount(page,source,width=240){
   const config={type,future:{keep:true,unset:undefined},scale:{min:0,max:100},bar:{animated:false,fill_style:'band_gradient',color:'#123456',solid_fill:false,needle:{show:true,color:'#abcdef',future:true},segments:[{from:0,color:'var(--success-color)',future:{keep:true}},{from:50,color:'orange',future:{keep:true}},{from:80,color:'red',future:{keep:true}}],gradient_stops:[{pos:0,color:'#123456'},{pos:100,color:'#abcdef'}],future:{keep:true}},
    baseline:{at:{percent:35,future:{keep:true}},above:{color:'var(--success-color)'},below:{color:'rgb(100, 0, 0)'},future:{keep:true}},
    target:{at:'75%',shape:'triangle',direction:'outward',color:'#abcdef',label:{show:true,text:'Limit',precision:1},when_exceeded:{fill_color:'red'},future:{keep:true}},
-   peak:{enabled:true,reset:'daily',color:'red'},floor:{enabled:true,color:'blue'},markers:[{at:'25%',color:'#abc',show_marker:false,label:{show:true,entity:'sensor.label'},future:{keep:true}}],formatting:{unit:'W'}};
+   peak:{enabled:true,window:'today',color:'red'},floor:{enabled:true,color:'blue'},markers:[{at:'25%',color:'#abc',show_marker:false,label:{show:true,entity:'sensor.label'},future:{keep:true}}],formatting:{unit:'W'}};
   window.__capabilityEvents=[];window.__capabilityOriginal=structuredClone(config);
   editor.addEventListener('config-changed',e=>{window.__capabilityEvents.push(structuredClone(e.detail.config));editor.setConfig(e.detail.config);});
   editor.setConfig(config);editor.context={entity_id:'sensor.parent'};editor.hass={states:{}};

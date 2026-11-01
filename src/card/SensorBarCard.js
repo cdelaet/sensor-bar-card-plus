@@ -968,6 +968,7 @@ export class SensorBarCard extends HTMLElement {
           margin-bottom: 14px;
         }
         .row {
+          position: relative;
           margin-bottom: 10px;
           cursor: pointer;
           border-radius: 8px;
@@ -3133,7 +3134,8 @@ ${barMarkerStyles}
       ? `<div class="icon-wrap"><ha-icon icon="${escapedIcon}"></ha-icon></div>`
       : '';
     return `
-      <div class="row" data-row-index="${rowIndex}" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${(rowViewModel?.attributes?.heightExplicit ?? layout.height_explicit) ? 'true' : 'false'}" data-bar-animated="${(rowViewModel?.attributes?.barAnimated ?? bar.animated) ? 'true' : 'false'}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? 'true' : 'false'}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? 'true' : 'false'}">
+      <div class="row" data-row-index="${rowIndex}" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${(rowViewModel?.attributes?.heightExplicit ?? layout.height_explicit) ? 'true' : 'false'}" data-bar-animated="${(rowViewModel?.attributes?.barAnimated ?? bar.animated) ? 'true' : 'false'}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? 'true' : 'false'}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? 'true' : 'false'}"${rowViewModel?.historyStatusSummary ? ` aria-description="${escapeHtml(rowViewModel.historyStatusSummary.text)}"` : ''}>
+        ${barRenderer.renderHistoryStatus(rowViewModel?.historyStatusSummary)}
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${heroHeader}
@@ -3246,10 +3248,11 @@ ${barMarkerStyles}
     const peakLabelEl = row.querySelector('.peak-value-label');
     const floorLabelEl = row.querySelector('.floor-value-label');
     const markerModels = rowViewModel.markers ?? [];
-    const historyDescription = markerModels
+    const historyDescription = [...markerModels
       .filter(marker => marker.visible && ['peak', 'floor'].includes(marker.type) && ['partial', 'stale'].includes(marker.historyStatus))
-      .map(marker => `${marker.type === 'peak' ? 'Peak' : 'Floor'}: ${marker.historyStatus === 'partial' ? 'partial' : 'stale'} history`)
-      .join('. ');
+      .map(marker => `${marker.type === 'peak' ? 'Peak' : 'Floor'}: ${marker.historyStatus === 'partial' ? 'partial' : 'stale'} history${marker.historyReason ? `: ${marker.historyReason}` : ''}`),
+      rowViewModel.historyStatusSummary?.text].filter(Boolean).join('. ');
+    barRenderer.patchHistoryStatus(row, rowViewModel.historyStatusSummary);
     if (historyDescription) row.setAttribute?.('aria-description', historyDescription);
     else row.removeAttribute?.('aria-description');
     (row.querySelectorAll?.('.generic-marker[data-marker-id]') ?? []).forEach((markerEl) => {

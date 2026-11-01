@@ -1,5 +1,5 @@
 import { normalizeTextValue, normalizeNumberValue } from './editor-config.js';
-import { parseHistoricalWindow } from '../../history/time-window.js';
+import { canonicalizeHistoricalWindow, isEligibleHistoricalWindow } from '../../history/time-window.js';
 
 // Templates preserve the existing IDs/data routing. The host supplies resolved
 // values and owns picker synchronization, event handling and persistence.
@@ -72,17 +72,19 @@ export function renderBuiltinMarkerLabelControls(scope, key, title, options) {
 }
 
 export function renderWindowOptions(value) {
-  const selected = normalizeTextValue(value).trim().toLowerCase() || 'today';
+  const normalized = normalizeTextValue(value).trim().toLowerCase() || 'today';
+  const selected = canonicalizeHistoricalWindow(normalized);
   const options = [
-    ['today', 'Today'], ['yesterday', 'Yesterday'], ['this_week', 'This week'], ['last_week', 'Last week'],
-    ['this_month', 'This month'], ['last_month', 'Last month'], ['this_year', 'This year'], ['last_year', 'Last year'],
-    ['quarterly', 'Current quarter hour'], ['hourly', 'Current hour'], ['yearly', 'Current year'],
-    ...Array.from({ length: 59 }, (_, index) => [`${index + 1}m`, `Last ${index + 1} minute${index ? 's' : ''}`]),
-    ...Array.from({ length: 24 }, (_, index) => [`${index + 1}h`, `Last ${index + 1} hour${index ? 's' : ''}`]),
-    ['7d', 'Last 7 days'],
+    ['quarterly', 'This quarter-hour'], ['hourly', 'This hour'], ['today', 'Today'], ['yesterday', 'Yesterday'],
+    ['this_week', 'This week'], ['previous_week', 'Previous week'], ['this_month', 'This month'], ['previous_month', 'Previous month'],
+    ['this_year', 'This year'], ['previous_year', 'Previous year'],
+    ['5m', 'Last 5 minutes'], ['10m', 'Last 10 minutes'], ['15m', 'Last 15 minutes'], ['30m', 'Last 30 minutes'],
+    ['1h', 'Last 1 hour'], ['2h', 'Last 2 hours'], ['3h', 'Last 3 hours'], ['6h', 'Last 6 hours'],
+    ['12h', 'Last 12 hours'], ['24h', 'Last 24 hours'], ['48h', 'Last 48 hours'],
+    ['7d', 'Last 7 days'], ['14d', 'Last 14 days'], ['30d', 'Last 30 days'],
   ];
   if (!options.some(([option]) => option === selected)) {
-    const valid = Boolean(parseHistoricalWindow(selected));
+    const valid = isEligibleHistoricalWindow(selected);
     options.push([selected, valid ? selected : `Invalid window: ${selected}`, !valid]);
   }
   return options.map(([option, label, disabled]) => `<option value="${escapeAttribute(option)}"${selected === option ? ' selected' : ''}${disabled ? ' disabled' : ''}>${escapeAttribute(label)}</option>`).join('');

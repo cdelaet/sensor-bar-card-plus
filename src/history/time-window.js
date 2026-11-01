@@ -6,16 +6,36 @@ const WEEK_MS = 7 * DAY_MS;
 
 const CALENDAR_UNITS = new Set(['quarter_hour', 'hour', 'day', 'week', 'month', 'year']);
 const SHIFT_UNITS = new Set(['quarter_hour', 'hour', 'day', 'week', 'month', 'year']);
+const HISTORICAL_WINDOW_ALIASES = {
+  'this week': 'this_week', last_week: 'previous_week', 'last week': 'previous_week',
+  'this month': 'this_month', last_month: 'previous_month', 'last month': 'previous_month',
+  'this year': 'this_year', last_year: 'previous_year', 'last year': 'previous_year', yearly: 'this_year',
+  daily: 'today', weekly: 'this_week', monthly: 'this_month',
+};
+
+export function canonicalizeHistoricalWindow(value) {
+  if (typeof value !== 'string') return value;
+  const normalized = value.trim().toLowerCase();
+  return HISTORICAL_WINDOW_ALIASES[normalized] ?? value;
+}
 
 // Configuration strings map to the same window specifications used by the resolver.
+export function isEligibleHistoricalWindow(value) {
+  const spec = parseHistoricalWindow(value);
+  if (!spec) return false;
+  if (spec.kind !== 'rolling') return true;
+  const duration = durationMilliseconds(spec.duration);
+  return duration <= DAY_MS || duration % HOUR_MS === 0;
+}
+
 export function parseHistoricalWindow(value) {
   if (typeof value !== 'string') return null;
   const text = value.trim().toLowerCase();
   const calendars = {
     today: ['day', 0], yesterday: ['day', -1],
-    this_week: ['week', 0], 'this week': ['week', 0], last_week: ['week', -1], 'last week': ['week', -1],
-    this_month: ['month', 0], 'this month': ['month', 0], last_month: ['month', -1], 'last month': ['month', -1],
-    this_year: ['year', 0], last_year: ['year', -1],
+    this_week: ['week', 0], 'this week': ['week', 0], previous_week: ['week', -1], last_week: ['week', -1], 'last week': ['week', -1],
+    this_month: ['month', 0], 'this month': ['month', 0], previous_month: ['month', -1], last_month: ['month', -1], 'last month': ['month', -1],
+    this_year: ['year', 0], previous_year: ['year', -1], last_year: ['year', -1], 'last year': ['year', -1],
     quarterly: ['quarter_hour', 0], hourly: ['hour', 0], daily: ['day', 0],
     weekly: ['week', 0], monthly: ['month', 0], yearly: ['year', 0],
   };

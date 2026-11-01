@@ -12,6 +12,9 @@ const result = (source, window, value = 5) => new Map([[key(source.entityId), {
   observedThrough: window.end, status: 'available', stale: false,
   coverage: { complete: false, kind: 'unknown' },
 }]]);
+const statisticsWindow = (start, end, cacheKey) => ({
+  ...win(start, end, cacheKey), acquisition: { mode: 'statistics', statistics: { start, end } },
+});
 
 describe('shared observation service', () => {
   it('expires the previous calendar window while the same source remains active', async () => {
@@ -150,6 +153,31 @@ describe('shared observation service', () => {
     expect(provider).toHaveBeenCalledOnce();
     expect(provider.mock.calls[0][2]).toMatchObject({ start: 100, end: 200 });
     expect(wider.get(key('sensor.one')).acquiredWindow).toEqual({ start: 100, end: 200 });
+  });
+
+  it('does not join a broader in-flight statistics request for a narrower interval', async () => {
+    const pending = [];
+    const provider = vi.fn((_hass, sources, window) => new Promise(resolve => {
+      pending.push(() => resolve(new Map(sources.map(source => [key(source.entityId), {
+        source, observations: [], statisticsWindow: { ...window.acquisition.statistics }, statistics: { buckets: [] },
+        retrievedAt: 1000, status: 'available', stale: false,
+        coverage: { kind: window.start === 100 ? 'incomplete' : 'unknown', requested: { start: window.start, end: window.end } },
+      }]))));
+    }));
+    const service = new SharedObservationService({ provider, now: () => 1000 });
+    const wide = statisticsWindow(100, 300, 'wide-statistics');
+    const narrow = statisticsWindow(200, 300, 'narrow-statistics');
+    const broadRequest = service.request({ hass: {}, sources: ['sensor.one'], window: wide });
+    await vi.waitFor(() => expect(provider).toHaveBeenCalledOnce());
+    const narrowRequest = service.request({ hass: {}, sources: ['sensor.one'], window: narrow });
+    await vi.waitFor(() => expect(provider).toHaveBeenCalledTimes(2));
+    pending[0](); pending[1]();
+    const [broad, small] = await Promise.all([broadRequest, narrowRequest]);
+    expect(broad.get(key('sensor.one')).coverage.kind).toBe('incomplete');
+    expect(small.get(key('sensor.one')).coverage.kind).toBe('unknown');
+    expect(provider.mock.calls.map(([, , requested]) => [requested.start, requested.end]))
+      .toEqual([[100, 300], [200, 300]]);
+    service.clear();
   });
 
   it('does not widen a recent raw acquisition to an aged-out consumer window', async () => {

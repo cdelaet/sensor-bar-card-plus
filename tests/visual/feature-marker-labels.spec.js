@@ -8,10 +8,13 @@ const textOnly = text => ({ show: true, text, show_value: false, show_unit: fals
 const frames = async page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 async function mount(page, config, options = {}) {
   await page.goto('/tests/visual/fixtures/harness.html');
-  await page.evaluate(({ config, options }) => window.__sbcpRenderFeature({
-    config, context: { entity_id: 'sensor.power' }, states: { 'sensor.power': { state: '50', attributes: { unit_of_measurement: 'W' } } },
-    ...options,
-  }), { config, options });
+  await page.evaluate(({ config, options }) => {
+    const states = options.states ?? { 'sensor.power': { state: '50', attributes: { unit_of_measurement: 'W' } } };
+    const history = window.__sbcpHistoryFixture(states, [50]);
+    return window.__sbcpRenderFeature({ config, context: { entity_id: 'sensor.power' }, ...options, hass: history.hass });
+  }, { config, options });
+  if (config.peak?.enabled || config.floor?.enabled) await expect.poll(() => feature(page).locator('#surface').getAttribute('aria-label'))
+    .toContain('Peak at 50');
 }
 
 for (const [height, position] of [[42, 'bottom'], [36, 'inline']]) {
@@ -283,7 +286,7 @@ test('observer/font lifecycle, config and entity changes keep only current persi
     await element.updateComplete;
     const restarted = !!element._labelObserver && observer !== element._labelObserver;
     element.context = { entity_id: 'sensor.other' };
-    element.hass = { states: { 'sensor.other': { state: '75', attributes: { unit_of_measurement: 'W' } } } };
+    element.hass = window.__sbcpHistoryFixture({ 'sensor.other': { state: '75', attributes: { unit_of_measurement: 'W' } } }, [75]).hass;
     element.setConfig({ markers: [{ at: 80, lane: 'above', label: { show: true, text: 'Energy', show_value: false, show_unit: false } }] });
     await element.updateComplete;
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -292,6 +295,9 @@ test('observer/font lifecycle, config and entity changes keep only current persi
       accessible: root.querySelector('#surface').getAttribute('aria-label') };
     element.setConfig({ target: { at: 50 }, peak: { enabled: true }, floor: { enabled: true }, markers: [{ at: 25 }] });
     await element.updateComplete;
+    for (let attempt = 0; attempt < 100 && getComputedStyle(root.querySelector('.peak-marker')).display === 'none'; attempt += 1) {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
     return { stopped, restarted, replaced, cleared: !element._labelObserver && !element._labelFonts && element._labelNodes.size === 0,
       rail: root.querySelector('.bar-track').getBoundingClientRect().height,
       compact: root.querySelector('#surface').dataset.compactGlyphs,

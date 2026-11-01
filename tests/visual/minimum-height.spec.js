@@ -15,7 +15,8 @@ async function renderRows(page, entities, { width = 720, position = 'off' } = {}
       state: String(value),
       attributes: { friendly_name: 'Power', icon: 'mdi:flash', unit_of_measurement: 'W' },
     }]));
-    const card = await window.__sbcpRenderCard({
+    const history = window.__sbcpHistoryFixture(states(50), [15, 75, 50]);
+    await window.__sbcpRenderCard({
       width,
       config: {
         layout: { height: 24, label: { position } },
@@ -23,14 +24,14 @@ async function renderRows(page, entities, { width = 720, position = 'off' } = {}
         bar: { animated: false },
         entities,
       },
-      states: states(15),
+      hass: history.hass,
     });
-    // Exercise the update path and separate Peak (75), Floor (15), and Target (45).
-    card.hass = { states: states(75) };
-    card.hass = { states: states(50) };
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   }, { entities, width, position });
   await expect(page.locator('sensor-bar-card-plus .row[data-entity]')).toHaveCount(entities.length);
+  for (const entity of entities.filter(item => item.peak?.enabled)) {
+    await expect(page.locator(`sensor-bar-card-plus .row[data-entity="${entity.entity}"] .peak-marker`)).not.toHaveCSS('display', 'none');
+  }
 }
 
 async function readGeometry(page) {
@@ -239,6 +240,8 @@ test('24px opposing inward markers at exactly 50% retain painted-glyph clearance
       { entity: 'sensor.aligned_peak_target', peak: { enabled: true }, target: { at: 50 } },
       { entity: 'sensor.aligned_peak_floor', peak: { enabled: true }, floor: { enabled: true } },
     ];
+    const states = Object.fromEntries(entities.map(({ entity }) => [entity, { state: '50', attributes: {} }]));
+    const history = window.__sbcpHistoryFixture(states, [50]);
     await window.__sbcpRenderCard({
       width: 720,
       config: {
@@ -248,9 +251,10 @@ test('24px opposing inward markers at exactly 50% retain painted-glyph clearance
         entities,
       },
       // Render extrema at 50 too; the pressure fixture's 15 → 75 updates would separate them.
-      states: Object.fromEntries(entities.map(({ entity }) => [entity, { state: '50', attributes: {} }])),
+      hass: history.hass,
     });
   });
+  await expect(page.locator('sensor-bar-card-plus .row[data-entity="sensor.aligned_peak_floor"] .peak-marker')).not.toHaveCSS('display', 'none');
   const { rows } = await readGeometry(page);
   expect(rows).toHaveLength(3);
   const expected = [

@@ -5,7 +5,10 @@ const configRow = (entity, index) => ({ entity, name: `Row ${index}`, target: { 
 const state = (index, value = (index + 1) * 10) => ({ state: String(value), attributes: { friendly_name: `Sensor ${index}`, unit_of_measurement: ['W', 'kWh', '°C'][index], icon: ['mdi:flash', 'mdi:home', 'mdi:thermometer'][index] } });
 test('a missing first entity never puts B reading and markers into C identity', async ({ page }) => {
   await render(page, ids.map(configRow), { [ids[1]]: state(1), [ids[2]]: state(2) });
+  await page.evaluate(() => { const card = document.querySelector('sensor-bar-card-plus');
+    card.hass = window.__sbcpHistoryFixture(card._hass.states, [30]).hass; });
   const c = page.locator('sensor-bar-card-plus .row[data-entity="sensor.c"]');
+  await expect(c.locator('.peak-marker')).not.toHaveCSS('display', 'none');
   await expect(c.locator('.above-bar-label-value')).toContainText('30');
   await expect(c.locator('.above-bar-label-value')).toContainText('°C');
   expect(await c.locator('.peak-marker').evaluate(n => n.style.left)).toBe('30%');
@@ -21,7 +24,14 @@ async function render(page, rows, states) {
   }, { rows, states });
 }
 async function update(page, states) {
-  await page.evaluate(states => { document.querySelector('sensor-bar-card-plus').hass = { states }; }, states);
+  await page.evaluate(states => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    if (window.__rowHistory) {
+      for (const [id, state] of Object.entries(states)) if (id === window.__historyEntity) window.__rowHistory.update(id, state.state);
+      card.hass = { ...window.__rowHistory.hass, states };
+    } else card.hass = { states };
+  }, states);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 async function checkRows(page, rows, states) {
   const actual = await page.locator('sensor-bar-card-plus .rows > .row').evaluateAll(nodes => nodes.map(node => ({
@@ -172,9 +182,12 @@ test('presence reconstruction preserves normalized rows, extrema and dynamic Sca
   await render(page, [configRow(ids[0], 0), configRow(ids[1], 1)], { [ids[0]]: state(0, 90), [ids[1]]: state(1, 20), 'sensor.min': { state: '0' }, 'sensor.max': { state: '200' } });
   await page.evaluate(() => {
     const card = document.querySelector('sensor-bar-card-plus');
+    window.__historyEntity = 'sensor.a'; window.__rowHistory = window.__sbcpHistoryFixture(card._hass.states, [90]);
+    card.hass = window.__rowHistory.hass;
     card.setConfig({ scale: { min: { entity: 'sensor.min' }, max: { entity: 'sensor.max' } }, bar: { animated: false }, entities: [{ entity: 'sensor.a', peak: { enabled: true }, floor: { enabled: true } }, { entity: 'sensor.b' }] });
     window.__ownedRows = card._config.entities; window.__ownedScales = card._rowScales;
   });
+  await expect(page.locator('sensor-bar-card-plus .row[data-entity="sensor.a"] .peak-marker')).not.toHaveCSS('display', 'none');
   await update(page, { [ids[0]]: state(0, 20), 'sensor.min': { state: '300' }, 'sensor.max': { state: '200' } });
   await update(page, { [ids[0]]: state(0, 70), [ids[1]]: state(1, 20), 'sensor.min': { state: '300' }, 'sensor.max': { state: '200' } });
   const result = await page.locator('sensor-bar-card-plus').evaluate(card => ({ same: card._config.entities === window.__ownedRows && card._rowScales === window.__ownedScales, scale: card._rowScales.get(card._config.entities[0]), peak: card.shadowRoot.querySelector('.peak-marker').style.left, floor: card.shadowRoot.querySelector('.floor-marker').style.left }));
@@ -187,10 +200,13 @@ test('ordinary updates preserve nodes and duplicate Scale caches remain independ
   await render(page, rows, states);
   await page.evaluate(() => {
     const card = document.querySelector('sensor-bar-card-plus');
+    window.__historyEntity = 'sensor.b'; window.__rowHistory = window.__sbcpHistoryFixture(card._hass.states, [90]);
+    card.hass = window.__rowHistory.hass;
     const rows = card._config.entities.map((row, index) => ({ entity: row.entity, name: row.name, peak: { enabled: index === 1 }, floor: { enabled: index === 2 }, scale: index === 2 ? { min: { entity: 'sensor.min' }, max: { entity: 'sensor.max' } } : { min: 0, max: 100 } }));
     card.setConfig({ bar: { animated: false }, entities: rows });
     window.__beforeNodes = [...card.shadowRoot.querySelectorAll('.row')];
   });
+  await expect(page.locator('sensor-bar-card-plus .row[data-entity="sensor.b"] .peak-marker').first()).not.toHaveCSS('display', 'none');
   await update(page, { ...states, [ids[1]]: state(1, 20) });
   expect(await page.locator('sensor-bar-card-plus').evaluate(card => [...card.shadowRoot.querySelectorAll('.row')].every((node, i) => node === window.__beforeNodes[i]))).toBe(true);
   await update(page, { [ids[1]]: state(1, 70), 'sensor.min': { state: '300' }, 'sensor.max': { state: '200' } });
@@ -276,13 +292,15 @@ test('container-only resize works after repeated same-instance reconnects and pr
   });
   const states = { [ids[0]]: state(0, 90), 'sensor.min': { state: '0' }, 'sensor.max': { state: '200' } };
   await page.evaluate(async states => {
+    window.__historyEntity = 'sensor.a'; window.__rowHistory = window.__sbcpHistoryFixture(states, [90]);
     window.__reconnectedCard = await window.__sbcpRenderCard({ width: 720, config: {
       layout: { label: { position: 'left' } }, bar: { animated: false },
       scale: { min: { entity: 'sensor.min' }, max: { entity: 'sensor.max' } },
       entities: [{ entity: 'sensor.a', name: 'Peak owner', peak: { enabled: true } },
         { entity: 'sensor.a', name: 'Floor owner', floor: { enabled: true } }, { entity: 'sensor.b' }],
-    }, states });
+    }, hass: window.__rowHistory.hass });
   }, states);
+  await expect(page.locator('sensor-bar-card-plus .row[data-entity="sensor.a"] .peak-marker').first()).not.toHaveCSS('display', 'none');
   const resize = async (width, height) => {
     await page.evaluate(width => { document.querySelector('#mount').style.width = `${width}px`; }, width);
     await expect.poll(() => page.locator('sensor-bar-card-plus .bar-track').first()

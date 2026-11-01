@@ -54,8 +54,17 @@ function revealInterval(clipPath) {
 async function render(page, { width = 720, config, states = baseStates }) {
   await page.goto('/tests/visual/fixtures/harness.html');
   await page.evaluate(async ({ width, config, states }) => {
-    await window.__sbcpRenderCard({ width, config, states });
+    const values = Object.fromEntries(Object.entries(states).map(([id, state]) => [id,
+      Number.isFinite(Number(state.state)) ? [Number(state.state)] : []]));
+    window.__visualHistory = window.__sbcpHistoryFixture(states, values);
+    await window.__sbcpRenderCard({ width, config, hass: window.__visualHistory.hass });
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   }, { width, config, states });
+  await page.waitForFunction(() => {
+    const runtime = document.querySelector('sensor-bar-card-plus')._historicalRuntime;
+    return [...runtime.entries.keys()].every(id => runtime.getResult(id) && runtime.getResult(id).status !== 'pending');
+  });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   return page.locator('#mount');
 }
 
@@ -1056,7 +1065,7 @@ test('above marker labels reserve responsive space while Hero spacing follows la
       for (const value of ['unavailable', '55', 'unavailable']) {
         await page.evaluate((nextValue) => {
           const element = document.querySelector('sensor-bar-card-plus');
-          element.hass = { states: {
+          element.hass = { ...element._hass, states: {
             ...element._hass.states,
             'sensor.above_dynamic_source': {
               state: nextValue,
@@ -1099,7 +1108,7 @@ test('above marker labels reserve responsive space while Hero spacing follows la
         for (const value of ['unavailable', '75']) {
           await page.evaluate((nextValue) => {
             const element = document.querySelector('sensor-bar-card-plus');
-            element.hass = { states: {
+            element.hass = { ...element._hass, states: {
               ...element._hass.states,
               'sensor.above_dynamic_source': {
                 state: nextValue,
@@ -1471,6 +1480,11 @@ test('built-in hover promotes only its own overlapping label and restores stacki
   });
   const card = page.locator('sensor-bar-card-plus');
   const targetGlyph = card.locator('.target-marker .marker-shape-svg path[data-shape="diamond"]');
+  await expect.poll(() => card.locator('.row[data-entity="sensor.builtins"]').evaluate(row => {
+    const target = row.querySelector('.target-value-label').getBoundingClientRect();
+    const floor = row.querySelector('.floor-value-label').getBoundingClientRect();
+    return target.left < floor.right && target.right > floor.left;
+  })).toBe(true);
   const resting = await page.evaluate(() => {
     const row = document.querySelector('sensor-bar-card-plus').shadowRoot.querySelector('.row[data-entity="sensor.builtins"]');
     return {
@@ -4086,7 +4100,10 @@ test('presentation update path keeps target recovery and peak maximum intact', a
       },
     });
 
+    const history = window.__sbcpHistoryFixture(card._hass.states, [20]);
+    card.hass = history.hass;
     const waitForUpdate = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await waitForUpdate();
     const readPresentation = () => {
       const row = card.shadowRoot.querySelector('.row[data-entity="sensor.presentation_value"]');
       const value = row.querySelector('.value-right');
@@ -4103,7 +4120,9 @@ test('presentation update path keeps target recovery and peak maximum intact', a
     };
 
     const initial = readPresentation();
+    history.update('sensor.presentation_value', 80);
     card.hass = {
+      ...history.hass,
       states: {
         'sensor.presentation_value': window.__sbcpCreateState(80, {
           friendly_name: 'Presentation value',
@@ -4119,6 +4138,7 @@ test('presentation update path keeps target recovery and peak maximum intact', a
     const unavailableTarget = readPresentation();
 
     card.hass = {
+      ...history.hass,
       states: {
         'sensor.presentation_value': window.__sbcpCreateState(40, {
           friendly_name: 'Presentation value',
@@ -4188,7 +4208,10 @@ test('target label precision override stays separate from primary precision', as
       },
     });
 
+    const history = window.__sbcpHistoryFixture(card._hass.states, [42]);
+    card.hass = history.hass;
     const waitForUpdate = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await waitForUpdate();
     const readPresentation = () => {
       const row = card.shadowRoot.querySelector('.row[data-entity="sensor.precision_value"]');
       return {
@@ -4202,6 +4225,7 @@ test('target label precision override stays separate from primary precision', as
 
     const initial = readPresentation();
     card.hass = {
+      ...history.hass,
       states: {
         'sensor.precision_value': window.__sbcpCreateState(42, {
           friendly_name: 'Precision value',
@@ -4217,6 +4241,7 @@ test('target label precision override stays separate from primary precision', as
     const unavailable = readPresentation();
 
     card.hass = {
+      ...history.hass,
       states: {
         'sensor.precision_value': window.__sbcpCreateState(42, {
           friendly_name: 'Precision value',

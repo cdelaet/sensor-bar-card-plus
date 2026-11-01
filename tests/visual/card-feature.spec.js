@@ -270,34 +270,34 @@ test('Baseline, Target overlay, Needle suppression and source recovery use share
   expect(result.needleSuppressed).toBe(true);
 });
 
-test('coexisting standalone card and same-entity features keep extrema and scale history isolated', async ({ page }) => {
+test('coexisting hosts share history while keeping feature scale state independent', async ({ page }) => {
   await page.goto('/tests/visual/fixtures/harness.html');
-  const result = await page.evaluate(async () => {
-    await window.__sbcpRenderCard({ config: { entity: 'sensor.power' }, states: { 'sensor.power': window.__sbcpCreateState(60) } });
+  await page.evaluate(async () => {
+    const fixture = window.__sbcpHistoryFixture({ 'sensor.power': window.__sbcpCreateState(80), 'sensor.min': window.__sbcpCreateState(0), 'sensor.max': window.__sbcpCreateState(100) });
+    window.historyFixture = fixture;
+    await window.__sbcpRenderCard({ config: { entity: 'sensor.power', peak: { enabled: true }, floor: { enabled: true } }, hass: fixture.hass });
     const config = { entity: 'sensor.power', bar: { animated: false }, peak: { enabled: true }, floor: { enabled: true },
       scale: { min: { entity: 'sensor.min' }, max: { entity: 'sensor.max' } } };
-    const a = await window.__sbcpRenderFeature({ config, states: { 'sensor.power': window.__sbcpCreateState(80), 'sensor.min': window.__sbcpCreateState(0), 'sensor.max': window.__sbcpCreateState(100) } });
-    const b = await window.__sbcpRenderFeature({ config, states: { 'sensor.power': window.__sbcpCreateState(20), 'sensor.min': window.__sbcpCreateState(-20), 'sensor.max': window.__sbcpCreateState(60) } });
-    const nodes = [a, b].map(element => [...element.shadowRoot.querySelectorAll('#bar *')]);
-    const nextHass = { states: { 'sensor.power': window.__sbcpCreateState(40), 'sensor.min': window.__sbcpCreateState(90), 'sensor.max': window.__sbcpCreateState(10) } };
-    a.hass = nextHass;
-    b.hass = nextHass;
-    await Promise.all([a.updateComplete, b.updateComplete]);
-    return {
-      features: [a, b].map((element, index) => ({
-        scale: element._scaleHistory, peak: element._extrema.peak.value, floor: element._extrema.floor.value,
-        persistent: nodes[index].every((node, i) => node === element.shadowRoot.querySelectorAll('#bar *')[i]),
-        peakLeft: getComputedStyle(element.shadowRoot.querySelector('.peak-marker')).left,
-        floorLeft: getComputedStyle(element.shadowRoot.querySelector('.floor-marker')).left,
-      })),
-      standalone: document.querySelector('sensor-bar-card-plus').shadowRoot.querySelector('.value-right').textContent,
-    };
+    await window.__sbcpRenderFeature({ config, hass: fixture.hass });
+    await window.__sbcpRenderFeature({ config, hass: { ...fixture.hass, states: { ...fixture.hass.states, 'sensor.min': window.__sbcpCreateState(-20), 'sensor.max': window.__sbcpCreateState(60) } } });
   });
-  expect(result.features).toEqual([
-    { scale: { min: 0, max: 100 }, peak: 80, floor: 40, persistent: true, peakLeft: '512px', floorLeft: '256px' },
-    { scale: { min: -20, max: 60 }, peak: 40, floor: 20, persistent: true, peakLeft: '480px', floorLeft: '320px' },
-  ]);
-  expect(result.standalone).toContain('60');
+  await expect.poll(() => page.evaluate(() => [...document.querySelectorAll('sensor-bar-card-plus-feature')].every(el => el.shadowRoot.querySelector('#surface')?.getAttribute('aria-label')?.includes('Peak at 80')))).toBe(true);
+  expect(await page.evaluate(() => window.historyFixture.subscriptions)).toBe(1);
+  expect(await page.evaluate(() => window.historyFixture.requests.length)).toBeGreaterThan(0);
+  await page.evaluate(async () => {
+    window.historyFixture.update('sensor.power', 40);
+    const next = { ...window.historyFixture.hass, states: { ...window.historyFixture.hass.states, 'sensor.min': window.__sbcpCreateState(90), 'sensor.max': window.__sbcpCreateState(10) } };
+    for (const el of document.querySelectorAll('sensor-bar-card-plus-feature')) el.hass = next;
+  });
+  await expect.poll(() => page.evaluate(() => [...document.querySelectorAll('sensor-bar-card-plus-feature')].every(el => {
+    const label = el.shadowRoot.querySelector('#surface')?.getAttribute('aria-label');
+    return label?.includes('Peak at 80') && label.includes('Floor at 40');
+  }))).toBe(true);
+  const features = page.locator('sensor-bar-card-plus-feature');
+  await expect(features.nth(0).locator('.peak-marker')).toHaveCSS('left', '512px');
+  await expect(features.nth(0).locator('.floor-marker')).toHaveCSS('left', '256px');
+  await expect(features.nth(1).locator('.peak-marker')).toHaveCSS('left', '640px');
+  await expect(features.nth(1).locator('.floor-marker')).toHaveCSS('left', '480px');
 });
 
 test('config and inherited entity replacements reconcile scale, glyph structure and accessibility', async ({ page }) => {
@@ -314,7 +314,7 @@ test('config and inherited entity replacements reconcile scale, glyph structure 
       clip: element.shadowRoot.querySelector('.bar-fill-reveal').style.clipPath,
       needle: element.shadowRoot.querySelector('.needle-marker'),
       peak: getComputedStyle(element.shadowRoot.querySelector('.peak-marker')).display,
-      extrema: element._extrema,
+      historyBadge: element.shadowRoot.querySelector('.history-status-badge').hidden,
     };
   });
   expect(result.replaced).toBe(true);
@@ -323,7 +323,7 @@ test('config and inherited entity replacements reconcile scale, glyph structure 
   expect(result.clip).toContain('50% 0px 25%');
   expect(result.needle).toBeNull();
   expect(result.peak).toBe('none');
-  expect(result.extrema).toEqual({});
+  expect(result.historyBadge).toBe(true);
 });
 
 for (const reducedMotion of ['no-preference', 'reduce']) {
@@ -401,46 +401,50 @@ test('reloading the resource in the browser preserves elements and discovery ent
   expect(result).toEqual({ sameConstructor: true, cards: 1, features: 1, visible: true });
 });
 
-test('same-instance reconnect retains history and nodes while a new instance starts fresh', async ({ page }) => {
-  await mount(page, { config: { entity, peak: { enabled: true }, floor: { enabled: true } }, states: { [entity]: state(80) } });
-  const result = await feature(page).evaluate(async element => {
-    const host = element.parentElement;
-    const track = element.shadowRoot.querySelector('.bar-track');
-    element.remove();
-    element.hass = { states: { 'sensor.power': { state: '20', attributes: {} } } };
-    await element.updateComplete;
-    host.append(element);
-    await element.updateComplete;
-    const fresh = document.createElement('sensor-bar-card-plus-feature');
-    fresh.setConfig(element._config);
-    fresh.hass = element.hass;
-    host.append(fresh);
-    await fresh.updateComplete;
-    return { retainedPeak: element._extrema.peak.value, retainedFloor: element._extrema.floor.value, freshPeak: fresh._extrema.peak.value, persistent: track === element.shadowRoot.querySelector('.bar-track') };
+test('feature reconnect and a new instance recover shared Recorder history', async ({ page }) => {
+  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.evaluate(async () => {
+    window.historyFixture = window.__sbcpHistoryFixture({ 'sensor.power': window.__sbcpCreateState(80) });
+    const config = { entity: 'sensor.power', peak: { enabled: true }, floor: { enabled: true } };
+    window.first = await window.__sbcpRenderFeature({ config, hass: window.historyFixture.hass });
+    window.keeper = await window.__sbcpRenderFeature({ config, hass: window.historyFixture.hass });
   });
-  expect(result).toEqual({ retainedPeak: 80, retainedFloor: 20, freshPeak: 20, persistent: true });
+  await expect.poll(() => page.evaluate(() => window.first.shadowRoot.querySelector('#surface')?.getAttribute('aria-label'))).toContain('Peak at 80');
+  await page.evaluate(async () => {
+    const first = window.first, host = first.parentElement;
+    window.oldTrack = first.shadowRoot.querySelector('.bar-track');
+    first.remove();
+    window.historyFixture.update('sensor.power', 20);
+    host.append(first);
+    window.fresh = document.createElement('sensor-bar-card-plus-feature');
+    window.fresh.setConfig(first._config); window.fresh.hass = window.historyFixture.hass;
+    host.append(window.fresh);
+  });
+  await expect.poll(() => page.evaluate(() => [window.first, window.keeper, window.fresh].every(el => {
+    const label = el.shadowRoot.querySelector('#surface')?.getAttribute('aria-label');
+    return label?.includes('Peak at 80') && label.includes('Floor at 20');
+  }))).toBe(true);
+  expect(await page.evaluate(() => window.oldTrack === window.first.shadowRoot.querySelector('.bar-track'))).toBe(true);
 });
 
-test('cosmetic inputs do not advance duration-reset history without a new numeric sample', async ({ page }) => {
-  await mount(page, { config: { entity, peak: { enabled: true, reset: '1h' } }, states: { [entity]: state(80) } });
-  const result = await feature(page).evaluate(async element => {
-    element.hass = { states: { 'sensor.power': { state: '20', attributes: {} } } };
-    await element.updateComplete;
-    const originalNow = Date.now;
-    const later = originalNow() + 2 * 60 * 60 * 1000;
-    Date.now = () => later;
-    try {
-      element.color = '#ff0000';
-      element.position = 'inline';
-      element.context = { entity_id: 'switch.unrelated' };
-      await element.updateComplete;
-      const retained = element._extrema.peak.value;
-      element.hass = { states: { 'sensor.power': { state: '20', attributes: {} } } };
-      await element.updateComplete;
-      return { retained, reset: element._extrema.peak.value };
-    } finally {
-      Date.now = originalNow;
-    }
+test('cosmetic inputs preserve historical extrema without another Recorder request', async ({ page }) => {
+  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.evaluate(async () => {
+    window.historyFixture = window.__sbcpHistoryFixture({ 'sensor.power': window.__sbcpCreateState(80) });
+    window.historyFeature = await window.__sbcpRenderFeature({ config: { entity: 'sensor.power', peak: { enabled: true, reset: '1h' }, floor: { enabled: true, reset: '1h' } }, hass: window.historyFixture.hass });
   });
-  expect(result).toEqual({ retained: 80, reset: 20 });
+  await expect(feature(page).locator('#surface')).toHaveAttribute('aria-label', /Peak at 80/);
+  await page.evaluate(() => window.historyFixture.update('sensor.power', 20));
+  await expect(feature(page).locator('#surface')).toHaveAttribute('aria-label', /Floor at 20/);
+  const before = await page.evaluate(() => window.historyFixture.requests.length);
+  await page.evaluate(async () => {
+    const el = window.historyFeature;
+    el.color = '#ff0000'; el.position = 'inline'; el.context = { entity_id: 'switch.unrelated' };
+    await el.updateComplete;
+  });
+  await expect(feature(page).locator('#surface')).toHaveAttribute('aria-label', /Peak at 80/);
+  await expect(feature(page).locator('#surface')).toHaveAttribute('aria-label', /Floor at 20/);
+  expect(await page.evaluate(() => window.historyFixture.requests.length)).toBe(before);
+  await expect(feature(page).locator('.peak-marker')).not.toHaveCSS('display', 'none');
+  await expect(feature(page).locator('.floor-marker')).not.toHaveCSS('display', 'none');
 });

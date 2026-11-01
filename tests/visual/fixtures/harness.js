@@ -12,9 +12,7 @@ window.__sbcpRenderCard = async function renderCard(options) {
 
   const card = document.createElement('sensor-bar-card-plus');
   card.setConfig(options.config);
-  card.hass = {
-    states: options.states,
-  };
+  card.hass = options.hass ?? { states: options.states };
   mount.appendChild(card);
 
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -22,6 +20,33 @@ window.__sbcpRenderCard = async function renderCard(options) {
 };
 
 window.__sbcpCreateState = createState;
+
+// A shared HA connection with deterministic Recorder and live state responses.
+window.__sbcpHistoryFixture = (states, values = [80]) => {
+  let subscriber = null, subscriptions = 0;
+  const listeners = new Map(), requests = [];
+  const connection = {
+    connected: true,
+    addEventListener: (name, callback) => listeners.set(name, callback),
+    removeEventListener: name => listeners.delete(name),
+    subscribeMessage: async callback => { subscriptions += 1; subscriber = callback; return () => { subscriber = null; }; },
+  };
+  const now = Date.now();
+  const rows = entity => {
+    const samples = Array.isArray(values) ? values : values[entity] ?? [];
+    return samples.map((value, index) => ({ s: String(value), lu: (now - (samples.length - index) * 60000) / 1000 }));
+  };
+  const hass = { connection, connected: true, states, config: { time_zone: 'UTC' }, locale: { language: 'en-GB' },
+    callWS: async request => { requests.push(request); return Object.fromEntries(request.entity_ids.map(id => [id, rows(id)])); } };
+  return { hass, connection, requests, get subscriptions() { return subscriptions; },
+    update: (entity, value) => {
+      const state = { state: String(value), attributes: {}, last_updated: new Date().toISOString() };
+      hass.states = { ...hass.states, [entity]: state };
+      subscriber?.({ data: { entity_id: entity, new_state: state } });
+    },
+    emit: name => listeners.get(name)?.(),
+  };
+};
 
 // Models the public HA feature inputs and inherited feature/theme variables.
 // Callers choose input order; the harness does not depend on Tile's private DOM.
@@ -32,7 +57,7 @@ window.__sbcpRenderFeature = async function renderFeature(options = {}) {
   const feature = document.createElement('sensor-bar-card-plus-feature');
   const inputs = {
     config: options.config ?? { type: 'custom:sensor-bar-card-plus-feature' },
-    hass: { states: options.states ?? {} },
+    hass: options.hass ?? { states: options.states ?? {} },
     context: options.context ?? {},
     color: options.color,
     position: options.position ?? 'bottom',

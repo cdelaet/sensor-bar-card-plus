@@ -1,6 +1,7 @@
 import { getNormalizedResolvableNumericValue, getResolvedScale, resolveEntitySource, resolveEntityState } from '../config/resolve.js';
 import { getFiniteNumber } from '../config/normalize.js';
 import { projectScalePercent } from './scale-projection.js';
+import { historyReason, historyStatusSummary } from '../history/history-status.js';
 import {
   createNumericPresentation,
   createMarkerLabelPresentation,
@@ -135,7 +136,8 @@ function getExtremumState(minValue, maxValue, result, enabled) {
     ? getFiniteNumber(result?.value) : null;
   return {
     value, percent: Number.isFinite(value) ? toScalePct(value, minValue, maxValue) : null,
-    visible: Number.isFinite(value), status: result?.status ?? 'pending',
+    visible: Number.isFinite(value), status: result?.status ?? 'pending', enabled,
+    reason: enabled ? historyReason(result ?? { status: 'pending' }) : null,
   };
 }
 
@@ -286,12 +288,14 @@ export function buildRowViewModel(options) {
     peakLabelPresentation,
     peakVisible: peakState.visible,
     peakStatus: peakState.status,
+    peakReason: peakState.reason,
     floorValue: floorState.value,
     floorPosition: projectScalePercent(floorState.percent, scaleDirection),
     floorPresentation,
     floorLabelPresentation,
     floorVisible: floorState.visible,
     floorStatus: floorState.status,
+    floorReason: floorState.reason,
     genericMarkers,
   });
 
@@ -339,6 +343,7 @@ export function buildRowViewModel(options) {
     floorLabelPresentation,
     floorVisible: floorState.visible,
     floorStatus: floorState.status,
+    historyStatusSummary: historyStatusSummary(peakState, floorState),
     markers,
     markerLaneOccupancy: getMarkerLaneOccupancy(entityConfig),
     markerLabelLaneOccupancy: getMarkerLabelLaneOccupancy(entityConfig),

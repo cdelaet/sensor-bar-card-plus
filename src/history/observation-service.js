@@ -205,23 +205,32 @@ export class SharedObservationService {
     return acquired.end >= window.end;
   }
 
+  _coverageCovers(record, window, acquisitionMode) {
+    if (acquisitionMode !== 'statistics' || record?.coverage?.kind !== 'incomplete') return true;
+    const scope = record.coverage.requested;
+    return scope?.start === window?.start && scope?.end === window?.end;
+  }
+
   _requestSource(hass, source, window, force, debugResolutionId = null) {
     const cacheKey = this._cacheKey(source, window);
     const sourceKey = historySourceKey(source);
     const sourceEpoch = this.sourceEpochs.get(sourceKey) ?? 0;
-    let cached = this._touch(cacheKey);
     const acquisitionMode = window.acquisition?.mode ?? 'raw';
+    let cached = this._touch(cacheKey);
+    if (!this._coverageCovers(cached, window, acquisitionMode)) cached = null;
     if (!force && (!cached || !this._covers(cached, window))) {
       const compatible = [...this.cache.entries()].find(([, record]) =>
         historySourceKey(record.source) === historySourceKey(source)
         && (record.acquisitionMode ?? 'raw') === acquisitionMode
         && (record.sourceEpoch ?? 0) === sourceEpoch
-        && !record.stale && this.now() - record.fetchedAt < this.ttlMs && this._covers(record, window));
+        && !record.stale && this.now() - record.fetchedAt < this.ttlMs
+        && this._covers(record, window) && this._coverageCovers(record, window, acquisitionMode));
       if (compatible) cached = this._touch(compatible[0]);
     }
     const cacheFresh = !force && cached && !cached.stale && (cached.sourceEpoch ?? 0) === sourceEpoch
       && this.now() - cached.fetchedAt < this.ttlMs;
-    const cacheCovered = cacheFresh ? this._covers(cached, window) : false;
+    const cacheCovered = cacheFresh ? this._covers(cached, window)
+      && this._coverageCovers(cached, window, acquisitionMode) : false;
     if (debugResolutionId) historyDebugLog('cache.check', { resolutionId: debugResolutionId, source, force,
       found: Boolean(cached), fresh: force ? null : Boolean(cacheFresh),
       coversRequested: cached ? (cacheFresh ? cacheCovered : this._covers(cached, window)) : false, acquiredWindow: cached?.acquiredWindow ?? null,
@@ -251,6 +260,7 @@ export class SharedObservationService {
       && (flight.window.acquisition?.mode ?? 'raw') === acquisitionMode
       && flight.generation === (this.generations.get(flight.cacheKey) ?? 0)
       && flight.sourceEpoch === sourceEpoch
+      && (acquisitionMode !== 'statistics' || (flight.window.start === window.start && flight.window.end === window.end))
       && flight.window.start <= window.start && flight.window.end >= window.end);
     if (existing) {
       if (debugResolutionId) historyDebugLog('acquisition.join_inflight', { resolutionId: debugResolutionId, acquisitionId: existing.id, source });
@@ -503,7 +513,10 @@ export class SharedObservationService {
             if (key === item.cacheKey || historySourceKey(cached.source) !== item.sourceKey
               || (cached.acquisitionMode ?? 'raw') !== record.acquisitionMode) continue;
             if (cached.acquiredWindow && this._covers(record, cached.acquiredWindow)) {
-              this.cache.set(key, cloneRecord(record, { requestedWindow: cached.requestedWindow }));
+              const cachedScope = cached.coverage?.requested ?? cached.requestedWindow ?? cached.acquiredWindow;
+              if (this._coverageCovers(record, cachedScope, record.acquisitionMode)) {
+                this.cache.set(key, cloneRecord(record, { requestedWindow: cached.requestedWindow }));
+              }
             } else if (!cached.acquiredWindow || !record.acquiredWindow
               || (cached.acquiredWindow.start < record.acquiredWindow.end
                 && record.acquiredWindow.start < cached.acquiredWindow.end)) this.cache.delete(key);

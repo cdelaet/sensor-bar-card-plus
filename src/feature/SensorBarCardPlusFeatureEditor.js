@@ -2,7 +2,7 @@ import {
   cloneDeep, serializeConfig, isObject, getPathValue, setPathValue, deletePathValue,
 } from '../editor/shared/editor-config.js';
 import {
-  escapeAttribute, renderEntitySourceInput, renderEntityAttributeInput, getEntityAttributeSuggestions, getColorPickerValue, isHexColorValue,
+  escapeAttribute, renderEntitySourceInput, renderEntityAttributeInput, renderWindowOptions, getEntityAttributeSuggestions, getColorPickerValue, isHexColorValue,
 } from '../editor/shared/editor-controls.js';
 import { editorStyles } from '../editor/shared/editor-styles.js';
 import { renderCardGroup, renderMarkersSection } from '../editor/shared/editor-disclosures.js';
@@ -467,7 +467,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       Object.assign(values, {
         [`${key}-color`]: getColorPickerValue(marker.color, '#888888'),
         [`${key}-color-text-fallback`]: marker.color,
-        [`${key}-reset`]: this._extremaSection._getEffectiveMarkerExtras(root, key).reset,
+        [`${key}-window`]: this._extremaSection._getEffectiveMarkerExtras(root, key).window,
         [`${key}-direction`]: this._extremaSection._getEffectiveMarkerDirection(root, key),
         [`${key}-label-text`]: label.text,
         [`${key}-label-precision`]: label.precision,
@@ -480,6 +480,8 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     }
     for (const [field, value] of Object.entries(values)) {
       const control = this.shadowRoot.querySelector(`[data-field="${field}"]`);
+      if (control && /^(peak|floor)-window$/.test(field) && control.options
+        && ![...control.options].some(option => option.value === String(value))) control.innerHTML = renderWindowOptions(value);
       if (control && (control !== this.shadowRoot.activeElement || this._configReplaced)) control.value = String(value);
       if (field === 'bar-color-text-fallback') control?.setAttribute('aria-label', 'Bar color (CSS value)');
     }

@@ -43,6 +43,10 @@ export const barTrackStyles = `
 `;
 
 export const barMarkerStyles = `
+        .history-status-badge { position: absolute; right: 2px; top: 2px; z-index: 4; padding: 0 3px;
+          color: var(--secondary-text-color, #888); background: var(--card-background-color, #fff);
+          border-radius: 2px; font: bold 10px/1 sans-serif; pointer-events: auto; }
+        .history-status-badge[hidden] { display: none; }
         :is(.peak-marker, .floor-marker) .history-indicator {
           position: absolute; left: 6px; top: 2px; color: var(--marker-color);
           background: var(--card-background-color, #fff); border-radius: 2px;

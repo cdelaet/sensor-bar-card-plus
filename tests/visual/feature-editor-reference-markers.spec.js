@@ -9,7 +9,7 @@ async function mount(page, source, width, empty = false) {
       markers:[{ at:25, show_marker:false, shape:'pin', lane:'above', direction:'outward', color:'var(--accent-color)', future:{keep:true}, label:{show:true,text:'Reference energy',entity:'sensor.label',decimal:1,show_value:true,show_unit:true,future:{keep:true}} },
         { at:{entity:'sensor.reference',value:50,future:{keep:true}}, shape:'arrow', future:{keep:true}, label:{show:true,text:'Other',entity:'sensor.other'} },
         { at:'75%', lane:'above', shape:'diamond', future:{keep:true} }],
-      scale:{min:0,max:100}, baseline:{at:'50%',future:true},target:{at:'70%',future:true},peak:{enabled:true,reset:'daily',future:true},floor:{enabled:true,future:true},formatting:{unit:'W',decimal:1},
+      scale:{min:0,max:100}, baseline:{at:'50%',future:true},target:{at:'70%',future:true},peak:{enabled:true,window:'today',future:true},floor:{enabled:true,future:true},formatting:{unit:'W',decimal:1},
       bar:{needle:true,animated:false,fill_style:'gradient',segments:[{from:50,color:'red'},{from:0,color:'blue'}],gradient_stops:[{pos:100,color:'red'},{pos:0,color:'blue'}]} };
     window.__referenceOriginal=structuredClone(config);window.__referenceEvents=[];
     editor.addEventListener('config-changed',event=>{window.__referenceEvents.push(structuredClone(event.detail.config));editor.setConfig(event.detail.config);});

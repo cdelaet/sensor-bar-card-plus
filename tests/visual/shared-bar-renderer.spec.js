@@ -1,5 +1,31 @@
 const { test, expect } = require('@playwright/test');
 
+test('card and feature expose unavailable history without drawing markers', async ({ page }) => {
+  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.evaluate(async () => {
+    const config = { peak: { enabled: true }, floor: { enabled: true } };
+    const states = { 'sensor.power': { state: '40', attributes: {} } };
+    const card = await window.__sbcpRenderCard({ config: { ...config, entities: ['sensor.power'] }, states });
+    const feature = await window.__sbcpRenderFeature({ config, states, context: { entity_id: 'sensor.power' } });
+    for (const host of [card, feature]) {
+      host._historicalRuntime.getResult = id => JSON.parse(id)[2] === 'peak'
+        ? { value: null, status: 'unavailable', provenance: { coverage: { reason: 'Statistics metadata is unavailable' } } }
+        : { value: null, status: 'unavailable', provenance: { coverage: { reason: 'Statistics and entity units are incompatible' } } };
+    }
+    card._update(); feature._requestUpdate(); await feature.updateComplete;
+  });
+  for (const host of [page.locator('sensor-bar-card-plus'), page.locator('sensor-bar-card-plus-feature')]) {
+    const badge = host.locator('.history-status-badge');
+    await expect(badge).toBeVisible();
+    await expect(badge).toHaveAttribute('title', /Peak: Long-term statistics.*Floor: Statistics and Recorder units/);
+    await badge.hover();
+    await expect(host.locator('.peak-marker')).toBeHidden();
+    await expect(host.locator('.floor-marker')).toBeHidden();
+  }
+  await expect(page.locator('sensor-bar-card-plus .row')).toHaveAttribute('aria-description', /Peak: Long-term statistics/);
+  await expect(page.locator('sensor-bar-card-plus-feature #surface')).toHaveAttribute('aria-label', /Floor: Statistics and Recorder units/);
+});
+
 test('historical status badges are hover targets with tooltips in card and feature styling', async ({ page }) => {
   await page.route('**/src/history/time-window.js', async route => {
     const response = await route.fetch();

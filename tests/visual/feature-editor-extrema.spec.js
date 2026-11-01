@@ -5,7 +5,7 @@ async function mount(page, source, width, empty = false) {
   await page.evaluate(async ({ width, empty }) => {
     await customElements.whenDefined('sensor-bar-card-plus-feature');
     const editor = await customElements.get('sensor-bar-card-plus-feature').getConfigElement();
-    const marker = color => ({ enabled: true, color, direction: 'outward', reset: '15m', future: { keep: true },
+    const marker = color => ({ enabled: true, color, direction: 'outward', window: '15m', future: { keep: true },
       label: { show: true, text: 'Energy', show_value: true, show_unit: true, decimal: 1, entity: 'sensor.unsupported', future: { keep: true } } });
     const config = empty ? { type: 'custom:sensor-bar-card-plus-feature' } : { type: 'custom:sensor-bar-card-plus-feature', future: true,
       peak: marker('var(--accent-color)'), floor: marker('#334455'), target: { at: '70%', future: true }, baseline: { at: '50%', future: true },
@@ -21,7 +21,7 @@ async function mount(page, source, width, empty = false) {
   return editor;
 }
 const saved = editor => editor.evaluate(el => structuredClone(el._config));
-for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feature extrema ${width}px (${source}): labels/reset/preservation/focus/echo`, async ({ page }) => {
+for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feature extrema ${width}px (${source}): labels/window/preservation/focus/echo`, async ({ page }) => {
   const editor = await mount(page, source, width), original = await saved(editor);
   expect(await page.evaluate(() => window.__extremaEvents)).toHaveLength(0);
   expect(await editor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -36,18 +36,21 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
     const color = editor.locator(`[data-field="${key}-color-text-fallback"]`);
     if (key === 'peak') { await color.fill('var(--primary-color)'); await expect(color).toBeFocused(); await color.press('Tab'); }
     else await editor.locator(`#${key}-color`).evaluate(el => { el.value = '#445566'; el.dispatchEvent(new Event('input', { bubbles: true })); });
-    const reset = editor.locator(`#${key}-reset`);
-    await expect(reset.locator('option')).toHaveCount(89);
-    for (const value of ['never', '1m', '59m', '1h', '23h', 'quarterly', 'hourly', 'daily', 'weekly', 'monthly', 'yearly']) {
-      await reset.focus(); await reset.selectOption(value); await expect(reset).toBeFocused(); expect((await saved(editor))[key].reset).toBe(value);
+    const windowControl = editor.locator(`#${key}-window`);
+    await expect(windowControl.locator('option')).toHaveCount(24);
+    for (const value of [
+      'today', 'yesterday', 'this_week', 'previous_week', 'this_month', 'previous_month', 'this_year', 'previous_year',
+      'quarterly', 'hourly', '5m', '10m', '15m', '30m', '1h', '2h', '3h', '6h', '12h', '24h', '48h', '7d', '14d', '30d',
+    ]) {
+      await windowControl.focus(); await windowControl.selectOption(value); await expect(windowControl).toBeFocused(); expect((await saved(editor))[key].window).toBe(value);
     }
     // Headless native selects on this platform do not advance via arrows.
     // Protect focus/traversal; selectOption above covers actual change commits.
-    await reset.selectOption('never'); await reset.press('ArrowDown'); await reset.press('Escape'); await expect(reset).toBeFocused();
-    await reset.press('Tab'); await expect(direction).toBeFocused();
+    await windowControl.selectOption('today'); await windowControl.press('ArrowDown'); await windowControl.press('Escape'); await expect(windowControl).toBeFocused();
+    await windowControl.press('Tab'); await expect(direction).toBeFocused();
     const config = await saved(editor), count = await page.evaluate(() => window.__extremaEvents.length);
-    for (const invalid of ['0m', '60m', '0h', '24h', '1s']) {
-      await reset.evaluate((el, value) => { const option = new Option(value, value); el.add(option); el.value = value; el.dispatchEvent(new Event('change', { bubbles: true })); option.remove(); }, invalid);
+    for (const invalid of ['0m', '1441m', '0h', '1s']) {
+      await windowControl.evaluate((el, value) => { const option = new Option(value, value); el.add(option); el.value = value; el.dispatchEvent(new Event('change', { bubbles: true })); option.remove(); }, invalid);
     }
     expect(await saved(editor)).toEqual(config); expect(await page.evaluate(() => window.__extremaEvents.length)).toBe(count);
     const label = editor.locator(`#${key}-label-text`); await label.evaluate(node => { window.__extremaLabelNode = node; });
@@ -79,14 +82,14 @@ for (const source of ['src', 'dist']) test(`Feature extrema (${source}): default
   const editor = await mount(page, source, 240, true);
   expect(await saved(editor)).toEqual({ type: 'custom:sensor-bar-card-plus-feature' });
   for (const key of ['peak', 'floor']) {
-    await expect(editor.locator(`#${key}-show`)).not.toBeChecked(); await expect(editor.locator(`#${key}-reset`)).toHaveValue('never');
-    await editor.locator(`#${key}-show`).check(); await editor.locator(`#${key}-show`).uncheck(); expect((await saved(editor))[key]).toEqual({ enabled: false });
+    await expect(editor.locator(`#${key}-show`)).not.toBeChecked(); await expect(editor.locator(`#${key}-window`)).toHaveValue('today');
+    await editor.locator(`#${key}-show`).check(); await editor.locator(`#${key}-show`).uncheck(); expect((await saved(editor))[key]).toEqual({ enabled: false, window: 'today' });
   }
   await editor.evaluate(async el => { el.setConfig({ type: 'custom:sensor-bar-card-plus-feature', peak: { reset: { mode: 'duration', duration: '15m', future: true } }, floor: { reset: { mode: 'calendar', future: true } } }); await el.updateComplete; });
   const raw = await saved(editor);
   await editor.locator('#peak-label-text').fill('Edited'); await editor.locator('#floor-color').evaluate(el => { el.value = '#556677'; el.dispatchEvent(new Event('input', { bubbles: true })); });
-  expect((await saved(editor)).peak.reset).toEqual(raw.peak.reset); expect((await saved(editor)).floor.reset).toEqual(raw.floor.reset);
-  await editor.locator('#peak-reset').selectOption('15m'); expect((await saved(editor)).peak.reset).toBe('15m'); expect((await saved(editor)).floor.reset).toEqual(raw.floor.reset);
+  expect((await saved(editor)).peak.window).toEqual(raw.peak.window); expect((await saved(editor)).floor.window).toEqual(raw.floor.window);
+  await editor.locator('#peak-window').selectOption('15m'); expect((await saved(editor)).peak.window).toBe('15m'); expect((await saved(editor)).floor.window).toEqual(raw.floor.window);
   await editor.evaluate(async el => { el.setConfig({ type: 'custom:sensor-bar-card-plus-feature', peak: { label: { text: 'Foreign' }, reset: 'daily' } }); await el.updateComplete; });
-  await expect(editor.locator('#peak-label-text')).toHaveValue('Foreign'); await expect(editor.locator('#peak-reset')).toHaveValue('daily');
+  await expect(editor.locator('#peak-label-text')).toHaveValue('Foreign'); await expect(editor.locator('#peak-window')).toHaveValue('today');
 });

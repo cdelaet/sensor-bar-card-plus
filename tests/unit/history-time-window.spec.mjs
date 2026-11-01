@@ -1,9 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { planHistoricalAcquisition, resolveTimeWindow } from '../../src/history/time-window.js';
+import { canonicalizeHistoricalWindow, isEligibleHistoricalWindow, parseHistoricalWindow, planHistoricalAcquisition, resolveTimeWindow } from '../../src/history/time-window.js';
 
 const brussels = { timeZone: 'Europe/Brussels', locale: 'en-GB' };
 
 describe('historical time windows', () => {
+  it('parses legacy calendar aliases while exposing canonical values', () => {
+    for (const [alias, canonical] of [
+      ['last_week', 'previous_week'], ['last_month', 'previous_month'], ['last_year', 'previous_year'], ['yearly', 'this_year'],
+    ]) {
+      expect(canonicalizeHistoricalWindow(alias)).toBe(canonical);
+      expect(parseHistoricalWindow(alias)).toEqual(parseHistoricalWindow(canonical));
+    }
+    for (const value of ['5m', '1500m', '24h', '7d', 'custom-window']) {
+      expect(canonicalizeHistoricalWindow(value)).toBe(value);
+    }
+  });
+
+  it('accepts whole-minute recent windows and whole-hour longer windows', () => {
+    for (const value of ['1m', '1440m', '24h', '1500m', '48h']) expect(isEligibleHistoricalWindow(value)).toBe(true);
+    for (const value of ['1441m', '0m', '1s', 'bad']) expect(isEligibleHistoricalWindow(value)).toBe(false);
+  });
   it('requires rolling durations to contain whole minutes without rounding observations', () => {
     const now = Date.parse('2026-10-31T12:34:56.789Z');
     expect(() => resolveTimeWindow({ kind: 'rolling', durationMs: 90001 }, { ...brussels, now })).toThrow('whole number of minutes');

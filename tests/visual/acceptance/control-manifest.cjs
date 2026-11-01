@@ -32,7 +32,7 @@ for (const marker of ['target', 'peak', 'floor']) {
     color('field', 'target-above-fill-color', section, 'target.when_exceeded.fill_color');
   } else {
     field(`${marker}-show`, section, 'checkbox', `${marker}.enabled`, null);
-    field(`${marker}-reset`, section, 'select', `${marker}.reset`, ['15m', 'daily', 'never']);
+    field(`${marker}-window`, section, 'select', `${marker}.window`, ['15m', '48h', 'today']);
   }
   field(`${marker}-direction`, section, 'select', `${marker}.direction`, ['outward', 'inward']);
   color('field', `${marker}-color`, section, `${marker}.color`);

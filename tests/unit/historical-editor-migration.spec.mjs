@@ -62,10 +62,27 @@ for (const source of ['src', 'dist']) {
         const Editor = loadCardClass({ source })[editorType]; const editor = new Editor(); const events = [];
         editor.dispatchEvent = event => { events.push(event.detail.config); return true; };
         editor.setConfig({ peak: { reset: 'monthly' }, floor: { reset: 'hourly' },
-          entities: [{ entity: 'sensor.a', peak: { reset: '23h' }, floor: { reset: 'quarterly' } }] });
+          entities: [{ entity: 'sensor.a', peak: { reset: '23h' }, floor: { reset: 'yearly' } }] });
         await Promise.resolve(); await Promise.resolve();
         expect(events[0]).toMatchObject({ peak: { window: 'this_month' }, floor: { window: 'hourly' },
-          entities: [{ peak: { window: '23h' }, floor: { window: 'quarterly' } }] });
+          entities: [{ peak: { window: '23h' }, floor: { window: 'this_year' } }] });
+      });
+
+      it('canonicalizes window aliases, honors window precedence and migrates only once', async () => {
+        const Editor = loadCardClass({ source })[editorType]; const editor = new Editor(); const events = [];
+        editor.dispatchEvent = event => { events.push(event.detail.config); editor.setConfig(event.detail.config); return true; };
+        const input = { peak: { window: 'last_week', reset: 'yearly', keep: true }, floor: { window: 'yearly' },
+          entities: [{ entity: 'sensor.a', peak: { window: 'last_month' }, floor: { reset: 'yearly', window: 'previous_year' } }],
+          unrelated: { window: 'last_month' } };
+        const original = structuredClone(input);
+        editor.setConfig(input); await Promise.resolve(); await Promise.resolve();
+        expect(input).toEqual(original);
+        expect(events).toHaveLength(1);
+        expect(events[0]).toEqual({ peak: { window: 'previous_week', keep: true }, floor: { window: 'this_year' },
+          entities: [{ entity: 'sensor.a', peak: { window: 'previous_month' }, floor: { window: 'previous_year' } }],
+          unrelated: { window: 'last_month' } });
+        editor.setConfig(events[0]); await Promise.resolve(); await Promise.resolve();
+        expect(events).toHaveLength(1);
       });
 
       it('does not migrate or interpret unsupported marker aliases', async () => {
