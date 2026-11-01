@@ -9,6 +9,9 @@
   "scripts": {
     "build": "node tools/build-dist.cjs",
     "verify-dist": "node tools/verify-dist.cjs",
+    "deploy-local": "./deploy-ha.sh",
+    "build-deploy-local": "npm run build && npm run deploy-local",
+    "build-verify-deploy-local": "npm run build && npm run verify-dist && npm run deploy-local",
     "test": "npm run build && npm run test:unit && npm run test:visual",
     "test:unit": "node tools/run-vitest.cjs",
     "test:visual": "playwright test",
