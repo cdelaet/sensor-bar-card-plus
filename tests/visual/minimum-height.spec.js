@@ -314,6 +314,10 @@ for (const position of ['left', 'above', 'inside', 'hero']) {
             Math.min(row.track.right - label.box.width / 2, marker.anchor.left))) < 0.1;
         }));
       }).toBe(true);
+      if (position === 'left') {
+        await expect.poll(async () => (await readGeometry(page)).rows.map((row) => row.topValueActive))
+          .toEqual(width === 320 ? ['true', 'true'] : ['false', 'false']);
+      }
       const geometry = await readGeometry(page);
       expectSafeRails(geometry);
       for (const row of geometry.rows) {

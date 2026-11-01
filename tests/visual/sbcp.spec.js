@@ -1164,7 +1164,25 @@ test('above marker labels reserve responsive space while Hero spacing follows la
       continue;
     }
     const marker = page.locator('sensor-bar-card-plus .row[data-entity="sensor.with_above_label"] .peak-marker .peak-inset');
+    let previousGeometry = null;
+    await expect.poll(async () => {
+      const currentGeometry = await page.evaluate(() => {
+        const row = document.querySelector('sensor-bar-card-plus').shadowRoot
+          .querySelector('.row[data-entity="sensor.with_above_label"]');
+        return [row, row.querySelector('.bar-track'), row.querySelector('.peak-marker'), row.querySelector('.peak-value-label')]
+          .flatMap((element) => {
+            const rect = element.getBoundingClientRect();
+            return [rect.left, rect.top, rect.width, rect.height].map((value) => Number(value.toFixed(2)));
+          });
+      });
+      const stable = previousGeometry?.every((value, index) => value === currentGeometry[index]) ?? false;
+      previousGeometry = currentGeometry;
+      return stable;
+    }).toBe(true);
     await marker.hover();
+    await expect.poll(() => page.evaluate(() => document.querySelector('sensor-bar-card-plus').shadowRoot
+      .querySelector('.row[data-entity="sensor.with_above_label"] .peak-value-label')?.dataset.markerHovered ?? null))
+      .toBe('true');
     const hoverState = await page.evaluate(({ selectors }) => {
       const row = document.querySelector('sensor-bar-card-plus').shadowRoot
         .querySelector('.row[data-entity="sensor.with_above_label"]');
