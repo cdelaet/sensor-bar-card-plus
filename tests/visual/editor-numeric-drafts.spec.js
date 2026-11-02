@@ -48,6 +48,45 @@ for (const source of ['src', 'dist']) for (const host of ['feature', 'standalone
   expect(await page.evaluate(() => window.__numericEvents.length)).toBe(foreignEvents);
 });
 
+for (const source of ['src', 'dist']) test(`Standalone Target/Baseline Value drafts ${source}: entity echoes preserve incomplete input and foreign config resets it`, async ({ page }) => {
+  const editor = await mount(page, source, 'standalone', {
+    target: { at: { entity: { id: 'sensor.target', attribute: 'limit' }, fixed: 30 } },
+    baseline: { at: { entity: { id: 'sensor.baseline', attribute: 'reading' }, percent: 20 } },
+  });
+  await editor.locator('#card-group-marker-target').click();
+  await editor.locator('[data-action="toggle-entity-overrides"]').click();
+  await editor.locator('#entity-0-group-target').click();
+  const targetValue = editor.locator('#entity-0-target-value');
+  await expect(targetValue).toHaveValue('30');
+  const beforeTarget = await saved(editor), targetEventCount = await page.evaluate(() => window.__numericEvents.length);
+  await targetValue.fill('-'); await expect(targetValue).toBeFocused();
+  expect(await saved(editor)).toEqual(beforeTarget);
+  await echoAndRender(editor); await expect(targetValue).toHaveValue('-'); await expect(targetValue).toBeFocused();
+  expect(await page.evaluate(() => window.__numericEvents.length)).toBe(targetEventCount);
+  await targetValue.fill('35%');
+  expect((await saved(editor)).entities[0].target.at).toEqual({ entity: { id: 'sensor.target', attribute: 'limit' }, percent: 35 });
+
+  await editor.locator('#card-group-baseline').click();
+  await editor.locator('#entity-0-group-baseline').click();
+  const baselineValue = editor.locator('#entity-0-baseline-value');
+  await expect(baselineValue).toHaveValue('20%');
+  const beforeBaseline = await saved(editor), baselineEventCount = await page.evaluate(() => window.__numericEvents.length);
+  await baselineValue.fill('.'); await expect(baselineValue).toBeFocused();
+  expect(await saved(editor)).toEqual(beforeBaseline);
+  await echoAndRender(editor); await expect(baselineValue).toHaveValue('.'); await expect(baselineValue).toBeFocused();
+  expect(await page.evaluate(() => window.__numericEvents.length)).toBe(baselineEventCount);
+  await baselineValue.fill('45');
+  expect((await saved(editor)).entities[0].baseline.at).toEqual({ entity: { id: 'sensor.baseline', attribute: 'reading' }, fixed: 45 });
+
+  await targetValue.fill('1e'); await expect(targetValue).toBeFocused();
+  await editor.evaluate(async el => {
+    el.setConfig({ entities: ['sensor.a'], target: { at: '65%' }, baseline: { at: 12 } });
+    await el.updateComplete;
+  });
+  await expect(targetValue).toHaveValue('65%');
+  expect((await saved(editor)).entities[0]).toBe('sensor.a');
+});
+
 const initial = {
   scale: { min: -100, max: 100 }, target: { at: { fixed: 30 }, label: { precision: 1 } },
   baseline: { at: { fixed: 20 } }, peak: { enabled: true, label: { precision: 1 } },

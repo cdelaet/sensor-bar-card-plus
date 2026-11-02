@@ -12,7 +12,8 @@ export class NumericInputDrafts {
     const route = input?.dataset?.field ?? input?.dataset?.kind ?? '';
     // innerHTML replacement can dispatch a native change before detaching the
     // old focused control; that is not a user's blank reset commit.
-    const scaleValue = ['generic-marker-fixed', 'target-value', 'baseline-value'].includes(route);
+    const scaleValue = input?.dataset?.resolvableSourceValue === 'true'
+      || route === 'generic-marker-fixed' || /^(?:entity-)?(?:target|baseline)-value$/.test(route);
     if (rendering && (input?.type === 'number' || scaleValue && input?.type === 'text')) return true;
     if (scaleValue && input?.type === 'text' && input.id) {
       if (input.isConnected === false) return true;

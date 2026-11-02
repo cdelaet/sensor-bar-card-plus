@@ -657,10 +657,10 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(markup).toContain('Min entity');
     expect(markup).toContain('Max fallback');
     expect(markup).toContain('Max entity');
-    expect(markup).toContain('Target fallback');
+    expect(markup).toContain('>Value</label>');
     expect(markup).toContain('Target entity');
     expect(markup).toContain('Above-target color');
-    expect(markup).toContain('Baseline fallback');
+    expect(markup).toContain('>Value</label>');
     expect(markup).toContain('Baseline entity');
     expect(markup).toContain('Above-baseline color');
     expect(markup).toContain('Below-baseline color');

@@ -1135,7 +1135,7 @@ baseline:
 
 Use `at: { entity: sensor.dynamic_baseline, fixed: 0 }` when you want a fixed fallback. A numeric `baseline.at` is a Scale value; a percentage string such as `50%` is a semantic position from Scale minimum to maximum, projected according to Scale Direction. Use percentage strings directly under `at`, not inside `fixed`. Legacy numeric shorthand remains accepted; see [compatibility](#legacy-compatibility-and-migration).
 
-In the Card Feature Visual Editor, the Baseline Value field accepts a number such as `25` or a Scale percentage such as `25%`; optional Entity and Attribute controls can be used with that fallback. The standalone Card editor retains its existing separate value/source controls. Both editors read and write the existing Baseline YAML forms; no new configuration key is required.
+Both the standalone Card and Card Feature Visual Editors use one Baseline Value field accepting a number such as `25` or a Scale percentage such as `25%`, alongside optional Entity and Attribute controls. Entity/Attribute remains primary when it resolves; the Value is retained as a fixed or percentage fallback. Per-entity Card settings inherit the card source until edited. Both editors read and write the existing Baseline YAML forms; no new configuration key is required.
 
 ### Centered zero baseline
 
@@ -1379,7 +1379,7 @@ Supported target features:
 - optional target value label
 - optional `target.when_exceeded.fill_color`
 
-In the Card Feature Visual Editor, enter a number for a fixed Target or append `%` for a percentage of the active Scale. Entity and optional Attribute can coexist with the Value fallback. The standalone Card editor keeps its established separate source/value controls. These are editor presentations of the existing Target configuration model.
+Both the standalone Card and Card Feature Visual Editors use one Target Value field accepting a number for a fixed value or a `%` suffix for a percentage of the active Scale. Optional Entity and Attribute controls can coexist with the Value fallback. Entity/Attribute remains primary when it resolves, and per-entity Card settings inherit the card source until edited. These are editor presentations of the existing Target configuration model; no new configuration key is required.
 
 Migration note: The default Target marker is a diamond, making it easier to distinguish from Floor. To retain the previous triangle, set `target.shape: triangle`.
 

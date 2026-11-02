@@ -4,7 +4,7 @@ import { canonicalizeHistoricalWindow, isEligibleHistoricalWindow } from '../../
 // Templates preserve the existing IDs/data routing. The host supplies resolved
 // values and owns picker synchronization, event handling and persistence.
 export function renderEntityInput(entry, index) {
-  if (customElements.get('ha-entity-picker')) {
+  if (globalThis.customElements?.get?.('ha-entity-picker')) {
     return `<ha-entity-picker data-kind="entity-picker" data-index="${index}"></ha-entity-picker>`;
   }
   return `<input type="text" data-kind="entity-input" data-index="${index}" value="${escapeAttribute(entry.entity)}" placeholder="sensor.example" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false">`;
@@ -14,7 +14,7 @@ export function renderEntitySourceInput(kind, index, value, placeholder = 'senso
   const extraAttrs = Object.entries(extraDataset)
     .map(([key, entry]) => `data-${key}="${escapeAttribute(entry)}"`)
     .join(' ');
-  if (customElements.get('ha-entity-picker')) {
+  if (globalThis.customElements?.get?.('ha-entity-picker')) {
     return `<ha-entity-picker data-kind="${kind}" data-index="${index}"${extraAttrs ? ` ${extraAttrs}` : ''}></ha-entity-picker>`;
   }
   return `<input type="text" data-kind="${kind}" data-index="${index}"${extraAttrs ? ` ${extraAttrs}` : ''} value="${escapeAttribute(value)}" placeholder="${escapeAttribute(placeholder)}" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false">`;
@@ -149,7 +149,9 @@ export function parseScaleValueInput(value) {
 
 export function formatScaleValueInput(source) {
   if (source?.fixed !== '' && source?.fixed !== undefined && source?.fixed !== null) return String(source.fixed);
-  if (Number.isFinite(source?.percent)) return `${source.percent}%`;
+  const percent = source?.percent !== '' && source?.percent !== undefined && source?.percent !== null
+    ? normalizeNumberValue(source.percent) : null;
+  if (Number.isFinite(percent)) return `${percent}%`;
   return '';
 }
 

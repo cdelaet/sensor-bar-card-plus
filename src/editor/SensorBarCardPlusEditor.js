@@ -42,6 +42,7 @@ import { TargetSection } from './sections/target.js';
 import { ExtremaSection, migrateExtremaConfig } from './sections/extrema.js';
 import { ReferenceMarkersSection, getReferenceMarkerSource, getMarkerLabelSource } from './sections/reference-markers.js';
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from './shared/editor-marker-controls.js';
+import { readResolvableSourceParts, updateResolvableSourceParts, writeResolvableSourceParts } from './shared/resolvable-source.js';
 
 export class SensorBarCardPlusEditor extends HTMLElement {
   get _gradientStopValidationMessages() { return this._gradientStopsSection._gradientStopValidationMessages; }
@@ -1510,13 +1511,21 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const legacyFixedValue = this._getPathValue(target, legacyFixedPath);
     const legacyEntityValue = this._getPathValue(target, legacyEntityPath);
     if (structuredValue !== undefined) {
-      const source = normalizeStructuredResolvableValue(structuredValue, options.inheritedSource ?? null, null, {
-        allowPercent: ['target', 'baseline'].includes(canonicalBasePath[0]),
-      });
+      // Scale keeps its established resolver display rules. Direct Value with
+      // percentage fallbacks is shared by Target and Baseline only.
+      if (canonicalBasePath[0] === 'scale') {
+        const source = normalizeStructuredResolvableValue(structuredValue, options.inheritedSource ?? null, null, { allowPercent: false });
+        return {
+          fixed: source.fixed ?? '', entity: source.entity ?? '',
+          ...(source.attribute ? { attribute: source.attribute } : {}),
+        };
+      }
+      const source = readResolvableSourceParts(structuredValue);
+      const inherited = options.inheritedSource ?? {};
       return {
-        fixed: source.fixed ?? '', entity: source.entity ?? '',
-        ...(source.attribute ? { attribute: source.attribute } : {}),
-        ...(Number.isFinite(source.percent) ? { percent: source.percent } : {}),
+        fixed: source.fixed ?? inherited.fixed ?? '', entity: source.entity ?? inherited.entity ?? '',
+        ...((source.attribute ?? inherited.attribute) ? { attribute: source.attribute ?? inherited.attribute } : {}),
+        ...(Number.isFinite(source.percent) ? { percent: source.percent } : Number.isFinite(inherited.percent) ? { percent: inherited.percent } : {}),
       };
     }
     return {
@@ -1549,37 +1558,36 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       entity: this._hasExplicitOverrideValue(localValue.entity) ? localValue.entity : inheritedValue.entity,
       ...((this._hasExplicitOverrideValue(localValue.attribute) ? localValue.attribute : inheritedValue.attribute)
         ? { attribute: this._hasExplicitOverrideValue(localValue.attribute) ? localValue.attribute : inheritedValue.attribute } : {}),
+      ...(Number.isFinite(this._hasExplicitOverrideValue(localValue.percent) ? localValue.percent : inheritedValue.percent)
+        ? { percent: this._hasExplicitOverrideValue(localValue.percent) ? localValue.percent : inheritedValue.percent } : {}),
     };
   }
 
-  _setCanonicalResolvablePart(scope, field, part, rawValue, options = {}) {
+  _persistResolvableSourcePart(scope, field, part, rawValue, options = {}) {
     const canonicalBasePath = options.canonicalBasePath ?? ['scale', field];
     const legacyFixedPath = options.legacyFixedPath ?? [field];
     const legacyEntityPath = options.legacyEntityPath ?? [`${field}_entity`];
     const prunePaths = options.prunePaths ?? [canonicalBasePath, canonicalBasePath.slice(0, -1)];
-    const normalizedValue = part === 'fixed'
-      ? this._normalizeNumberValue(rawValue)
-      : this._normalizeTextValue(rawValue).trim();
     return this._applyScopedMutation(scope, (target) => {
-      const currentParts = this._getResolvablePartsFromTarget(target ?? {}, field, {
+      const localFixed = this._getPathValue(target, legacyFixedPath);
+      const hasLocalSource = this._getPathValue(target, canonicalBasePath) !== undefined
+        || this._getPathValue(target, legacyEntityPath) !== undefined
+        || (localFixed !== undefined && localFixed !== null && !this._isObject(localFixed));
+      const currentParts = scope?.type === 'entity' && !hasLocalSource
+        ? this._getResolvableScopedValue({ type: 'card' }, field, { canonicalBasePath, legacyFixedPath, legacyEntityPath })
+        : this._getResolvablePartsFromTarget(target ?? {}, field, {
         canonicalBasePath,
         legacyFixedPath,
         legacyEntityPath,
-      });
-      const nextParts = { ...currentParts };
-
-      if (part === 'fixed') {
-        if (rawValue === '' || rawValue === null || rawValue === undefined || normalizedValue === null) {
-          delete nextParts.fixed;
-        } else {
-          nextParts.fixed = normalizedValue;
-        }
-      } else if (!normalizedValue) {
-        delete nextParts[part];
-      } else {
-        nextParts[part] = normalizedValue;
-      }
-      if (part === 'entity' && !nextParts.entity) delete nextParts.attribute;
+        });
+      const existingSource = this._getPathValue(target, canonicalBasePath);
+      const nextParts = { ...currentParts,
+        unknown: readResolvableSourceParts(existingSource).unknown,
+      };
+      const fixedDraft = part === 'fixed' && this._normalizeNumberValue(rawValue) === null && rawValue !== '' && rawValue !== null && rawValue !== undefined
+        ? '' : rawValue;
+      const update = updateResolvableSourceParts(nextParts, part, fixedDraft);
+      if (!update.valid) return target;
 
       let nextTarget = this._cloneDeep(target);
       nextTarget = this._deletePathValue(nextTarget, legacyEntityPath);
@@ -1589,17 +1597,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       }
       nextTarget = this._deletePathValue(nextTarget, canonicalBasePath);
 
-      const hasFixed = nextParts.fixed !== undefined && nextParts.fixed !== null && nextParts.fixed !== '';
-      const hasEntity = nextParts.entity !== undefined && nextParts.entity !== null && nextParts.entity !== '';
-      const hasAttribute = hasEntity && nextParts.attribute !== undefined && nextParts.attribute !== null && nextParts.attribute !== '';
-      const hasPercent = Number.isFinite(nextParts.percent);
-      if (hasFixed || hasEntity || hasPercent) {
-        const nextValue = {};
-        if (hasFixed) nextValue.fixed = nextParts.fixed;
-        if (hasEntity) nextValue.entity = hasAttribute
-          ? { id: nextParts.entity, attribute: nextParts.attribute }
-          : nextParts.entity;
-        if (hasPercent) nextValue.percent = nextParts.percent;
+      const nextValue = writeResolvableSourceParts(update.parts);
+      if (Object.keys(nextValue).length) {
         nextTarget = this._setPathValue(nextTarget, canonicalBasePath, nextValue);
       }
 
@@ -1610,6 +1609,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       });
       return nextTarget;
     }, options);
+  }
+
+  _setCanonicalResolvablePart(scope, field, part, rawValue, options = {}) {
+    return this._persistResolvableSourcePart(scope, field, part, rawValue, options);
   }
 
   _clearCanonicalResolvableValue(scope, field, options = {}) {
@@ -2682,48 +2685,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _persistBaselineSourcePart(scope, part, rawValue) {
-    const normalizedValue = part === 'fixed'
-      ? this._normalizeNumberValue(rawValue)
-      : this._normalizeTextValue(rawValue).trim();
-    return this._applyScopedMutation(scope, (target) => {
-      const currentParts = this._getResolvablePartsFromTarget(target ?? {}, 'baseline', {
-        canonicalBasePath: ['baseline', 'at'],
-        legacyFixedPath: ['baseline'],
-        legacyEntityPath: ['baseline', 'at', 'entity'],
-      });
-      const nextParts = { ...currentParts };
-
-      if (part === 'fixed') {
-        if (rawValue === '' || rawValue === null || rawValue === undefined || normalizedValue === null) {
-          delete nextParts.fixed;
-        } else {
-          nextParts.fixed = normalizedValue;
-        }
-      } else if (!normalizedValue) {
-        delete nextParts[part];
-      } else {
-        nextParts[part] = normalizedValue;
-      }
-      if (part === 'entity' && !nextParts.entity) delete nextParts.attribute;
-
-      let nextTarget = this._cloneDeep(target);
-      nextTarget = this._deletePathValue(nextTarget, ['baseline', 'at']);
-
-      const hasFixed = nextParts.fixed !== undefined && nextParts.fixed !== null && nextParts.fixed !== '';
-      const hasEntity = nextParts.entity !== undefined && nextParts.entity !== null && nextParts.entity !== '';
-      const hasAttribute = hasEntity && nextParts.attribute !== undefined && nextParts.attribute !== null && nextParts.attribute !== '';
-      if (hasFixed || hasEntity) {
-        const nextValue = {};
-        if (hasFixed) nextValue.fixed = nextParts.fixed;
-        if (hasEntity) nextValue.entity = hasAttribute
-          ? { id: nextParts.entity, attribute: nextParts.attribute }
-          : nextParts.entity;
-        nextTarget = this._setPathValue(nextTarget, ['baseline', 'at'], nextValue);
-      }
-
-      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['baseline', 'at']);
-      nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['baseline']);
-      return nextTarget;
+    return this._persistResolvableSourcePart(scope, 'baseline', part, rawValue, {
+      canonicalBasePath: ['baseline', 'at'],
+      legacyFixedPath: ['baseline'],
+      legacyEntityPath: ['baseline', 'at', 'entity'],
+      prunePaths: [['baseline', 'at'], ['baseline']],
     });
   }
 

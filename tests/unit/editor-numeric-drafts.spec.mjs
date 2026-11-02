@@ -42,6 +42,25 @@ it('keeps incomplete Value text local while accepting numeric and percent-suffix
   expect(drafts.handle({ type: 'change', target: input })).toBe(false);
 });
 
+it.each(['entity-target-value', 'entity-baseline-value'])('keeps incomplete %s drafts through config echoes', (kind) => {
+  const drafts = new NumericInputDrafts();
+  const input = { id: `${kind}-0`, type: 'text', dataset: { kind }, value: '-' };
+  expect(drafts.handle({ type: 'input', target: input })).toBe(true);
+  const root = { activeElement: input, getElementById: () => input };
+  const focusId = drafts.captureFocus(root);
+  input.value = 'native incomplete buffer';
+  drafts.apply(root);
+  expect(input.value).toBe('native incomplete buffer');
+  const echoed = { id: input.id, value: '25%', focus: () => {} };
+  root.activeElement = null;
+  root.getElementById = () => echoed;
+  drafts.apply(root, focusId);
+  expect(echoed.value).toBe('-');
+  input.value = '25%';
+  expect(drafts.handle({ type: 'input', target: input })).toBe(false);
+  expect(drafts.values.has(input.id)).toBe(false);
+});
+
 it('ignores Reference Value change events caused by rendering a focused incomplete draft', () => {
   const drafts = new NumericInputDrafts();
   const input = { id: 'marker-value', type: 'text', value: '', dataset: { kind: 'generic-marker-fixed' } };

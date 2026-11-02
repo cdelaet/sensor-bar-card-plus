@@ -48,7 +48,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._numericDrafts = new NumericInputDrafts();
     this._expandedCardGroups = new Set();
     const context = this._createSectionContext();
-    const options = { cssText: true, directValue: true };
+    const options = { cssText: true };
     this._needleSection = new NeedleSection(context, options);
     this._baselineSection = new BaselineSection(context, options);
     this._targetSection = new TargetSection(context, options);

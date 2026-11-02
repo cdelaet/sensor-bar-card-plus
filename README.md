@@ -218,6 +218,8 @@ The interactive Playground brings feature combinations together in larger workin
 
 Both presentations have a Home Assistant Visual Editor and live preview. The reorganized editor includes Scale and Bar Direction controls. The standalone editor also configures entity rows, supported attribute values, Layout, tap, hold and double-tap actions, Scale, Bar and markers. The Card Feature editor offers applicable shared sections: Entities, Scale, Markers, Bar Appearance, Segments, Gradient Stops and Formatting, with parent-entity inheritance or an explicit override. Home Assistant Tile cards continue to own interactions for Card Features.
 
+Target, Baseline and Generic Reference Marker positions use a direct **Value** field in both editors: enter `25` for an absolute value or `25%` for a percentage of the Scale. Optional Entity and Attribute controls can provide the primary value while the Value remains its fixed or percentage fallback. Standalone entity rows inherit the card source until edited. The `%` suffix refers to the Scale percentage, not the entity's unit of measurement.
+
 Target, Peak, Floor, Generic Reference Markers, and individual generic markers have collapsible editor groups. Baseline is configured under **Bar Appearance**; entity-level Baseline remains with the standalone entity overrides. The editor keeps its local disclosure state out of saved YAML. You can continue editing the same structured configuration manually at any time.
 
 ![Standalone Visual Editor screenshot](images/visual-editor.png)
