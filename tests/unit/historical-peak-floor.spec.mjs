@@ -109,21 +109,26 @@ describe('historical Peak/Floor', () => {
     expect(row('peak', { value: 70, status: 'available' }).peak).toBe(70);
   });
 
-  it('exposes partial and stale marker descriptions without additional tab stops and clears them on recovery', () => {
+  it('exposes partial and stale marker descriptions as keyboard tooltip triggers and clears them on recovery', () => {
     for (const [type, status, text] of [['peak', 'partial', 'Partial history'], ['floor', 'stale', 'Stale history']]) {
       const marker = row(type, { value: 20, status }).markers.find(item => item.type === type);
       const html = renderMarker(marker);
       expect(html).toContain(`aria-label="${type === 'peak' ? 'Peak' : 'Floor'}: ${text}`);
-      expect(html).toContain(`title="${text}`);
-      expect(html).not.toContain('tabindex=');
+      expect(html).toContain(`data-sbcp-tooltip="${text}`);
+      expect(html).toContain('tabindex="0"');
+      expect(html).not.toContain('title=');
       const attributes = {}; const element = { dataset: {}, style: { setProperty() {}, removeProperty() {} },
         setAttribute: (name, value) => { attributes[name] = value; },
         removeAttribute: name => { delete attributes[name]; }, querySelector: () => null };
+      const indicator = { attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute(name) { delete this.attributes[name]; } };
+      element.querySelector = () => indicator;
       patchMarker(element, marker);
-      expect(attributes['aria-label']).toContain(text);
+      expect(indicator.attributes['aria-label']).toContain(text);
+      expect(indicator.attributes['data-sbcp-tooltip']).toContain(text);
       patchMarker(element, { ...marker, historyStatus: 'available' });
-      expect(attributes['aria-label']).toBeUndefined();
-      expect(attributes.role).toBeUndefined();
+      expect(indicator.attributes['aria-label']).toBeUndefined();
+      expect(indicator.attributes.role).toBeUndefined();
+      expect(indicator.attributes['data-sbcp-tooltip']).toBeUndefined();
     }
   });
 
@@ -137,7 +142,7 @@ describe('historical Peak/Floor', () => {
     expect(model.peakVisible).toBe(false); expect(model.floorVisible).toBe(false);
     expect(model.historyStatusSummary.text).toContain('Peak: Long-term statistics');
     expect(model.historyStatusSummary.text).toContain('Floor: Statistics and Recorder units are incompatible');
-    expect(renderHistoryStatus(model.historyStatusSummary)).toContain('history-status-badge');
+    expect(renderHistoryStatus(model.historyStatusSummary)).toContain(`data-sbcp-tooltip="${model.historyStatusSummary.text}`);
     expect(model.markers.find(item => item.type === 'peak').position).toBeNull();
   });
 

@@ -96,6 +96,36 @@ for (const source of ['src', 'dist']) describe(`standalone Target characterizati
     expect(editor._getEffectiveTargetResolvableValue(row)).toMatchObject({ entity: 'sensor.goal', attribute: 'reading', percent: 25 });
   });
 
+  it('keeps inherited Target controls editable and restores inherited values after an override is cleared', () => {
+    const editor = createEditor({ source });
+    editor.setConfig({ target: { enabled: false, at: 20, shape: 'triangle', future: true }, entities: [{ entity: 'sensor.row', future_row: true }] });
+    const inheritedMarkup = editor._targetSection.render(row);
+    expect(inheritedMarkup).toContain('id="entity-0-target-inherit" type="checkbox" data-kind="entity-target-inherit" data-index="0" checked');
+    expect(inheritedMarkup).toContain('id="entity-0-target-show" type="checkbox" data-kind="entity-target-show" data-index="0"');
+    expect(inheritedMarkup).not.toMatch(/id="entity-0-target-(?:show|value|shape)[^>]* disabled/);
+    expect(inheritedMarkup).toContain('value="20"');
+    expect(inheritedMarkup).toContain('value="triangle"');
+
+    editor._targetSection.handleField({ kind: 'entity-target-show', index: 0, value: true });
+    expect(editor._draftConfig.entities[0].target).toEqual({ enabled: true });
+    expect(editor._targetSection.render(row)).not.toContain('id="entity-0-target-inherit" type="checkbox" data-kind="entity-target-inherit" data-index="0" checked');
+    expect(editor._targetSection.render(row)).not.toMatch(/id="entity-0-target-show"[^>]* disabled/);
+    editor._targetSection.handleField({ kind: 'entity-target-inherit', index: 0, value: true });
+    expect(editor._draftConfig.entities[0]).toEqual({ entity: 'sensor.row', future_row: true });
+    expect(editor._draftConfig.target).toEqual({ enabled: false, at: 20, shape: 'triangle', future: true });
+    expect(editor._targetSection.render(row)).toContain('value="20"');
+  });
+
+  it('keeps an explicitly selected inherited direction as an entity override', () => {
+    const editor = createEditor({ source });
+    editor.setConfig({ target: { at: 20, direction: 'outward' }, entities: [{ entity: 'sensor.row' }] });
+    editor._targetSection.handleField({ kind: 'entity-target-direction', index: 0, value: 'outward' });
+    expect(editor._draftConfig.entities[0].target.direction).toBe('outward');
+    expect(editor._targetSection.render(row)).not.toContain('id="entity-0-target-inherit" type="checkbox" data-kind="entity-target-inherit" data-index="0" checked');
+    editor._targetSection.handleField({ kind: 'entity-target-inherit', index: 0, value: true });
+    expect(editor._draftConfig.entities[0]).toEqual({ entity: 'sensor.row' });
+  });
+
   it('edits legacy scalar Target/target_entity forms through the direct Value field', () => {
     const editor = createEditor({ source });
     editor.setConfig({ target: 70, target_entity: 'sensor.legacy', target_color: 'red', future_target: true,

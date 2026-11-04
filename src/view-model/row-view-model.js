@@ -12,6 +12,7 @@ import {
   getMarkerLabelLaneOccupancy,
   getMarkerLaneOccupancy,
 } from './marker-view-model.js';
+import { getNeedleBorderColor } from './bar-render-model.js';
 
 function getDefaultEntityIcon(stateObj, entityId = '') {
   const deviceClass = String(stateObj?.attributes?.device_class ?? '').trim();
@@ -54,53 +55,6 @@ function toScalePct(value, minValue, maxValue) {
   const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
   const range = safeMax - safeMin || 1;
   return Math.min(100, Math.max(0, ((value - safeMin) / range) * 100));
-}
-
-function parseColorToRgb(color) {
-  const value = String(color || '').trim();
-  if (!value) return null;
-
-  const hexMatch = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
-  if (hexMatch) {
-    const hex = hexMatch[1];
-    const full = hex.length === 3
-      ? hex.split('').map((char) => char + char).join('')
-      : hex;
-    return {
-      r: parseInt(full.slice(0, 2), 16),
-      g: parseInt(full.slice(2, 4), 16),
-      b: parseInt(full.slice(4, 6), 16),
-    };
-  }
-
-  const rgbMatch = value.match(/^rgba?\(([^)]+)\)$/i);
-  if (rgbMatch) {
-    const parts = rgbMatch[1].split(',').map((part) => part.trim());
-    if (parts.length >= 3) {
-      return {
-        r: Math.max(0, Math.min(255, parseFloat(parts[0]))),
-        g: Math.max(0, Math.min(255, parseFloat(parts[1]))),
-        b: Math.max(0, Math.min(255, parseFloat(parts[2]))),
-      };
-    }
-  }
-
-  return null;
-}
-
-function getNeedleBorderColor(color) {
-  const rgb = parseColorToRgb(color);
-  if (!rgb) return '#000000';
-  const toLinear = (channel) => {
-    const srgb = channel / 255;
-    return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
-  };
-  const luminance = (
-    0.2126 * toLinear(rgb.r)
-    + 0.7152 * toLinear(rgb.g)
-    + 0.0722 * toLinear(rgb.b)
-  );
-  return luminance < 0.22 ? '#ffffff' : '#000000';
 }
 
 function getNeedleState(entityConfig, numericValue, minValue, maxValue, baselinePercent, scaleDirection) {

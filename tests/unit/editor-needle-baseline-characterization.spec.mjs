@@ -98,6 +98,35 @@ for (const source of ['src', 'dist']) describe(`standalone Needle/Baseline chara
     expect(editor._getEffectiveBaselineResolvableValue(row)).toMatchObject({ entity: 'sensor.base', attribute: 'reading', percent: 25 });
   });
 
+  it('labels Baseline as Enable Baseline and keeps inherited controls editable', () => {
+    const editor = createEditor({ source });
+    editor.setConfig({ baseline: { enabled: true, at: 25, above: { color: 'red' } }, entities: [{ entity: 'sensor.row', future_row: true }] });
+    const cardMarkup = editor._baselineSection.render(root);
+    const rowMarkup = editor._baselineSection.render(row);
+    expect(cardMarkup).toContain('<label for="baseline-show">Enable Baseline</label>');
+    expect(cardMarkup).not.toContain('<label for="baseline-show">Show marker</label>');
+    expect(rowMarkup).toContain('<label for="entity-0-baseline-show">Enable Baseline</label>');
+    expect(rowMarkup).toContain('value="25"');
+    expect(rowMarkup).toContain('value="red"');
+    expect(rowMarkup).toContain('id="entity-0-baseline-above-color-enabled" type="checkbox" data-kind="entity-baseline-above-color-enabled" data-index="0" checked');
+    expect(rowMarkup).not.toMatch(/id="entity-0-baseline-(?:show|value|above-color-enabled)[^>]* disabled/);
+
+    editor._baselineSection.handleField({ kind: 'entity-baseline-show', index: 0, value: false });
+    expect(editor._draftConfig.entities[0].baseline).toEqual({ enabled: false });
+    expect(editor._baselineSection.render(row)).not.toMatch(/id="entity-0-baseline-show"[^>]* disabled/);
+    editor._baselineSection.handleField({ kind: 'entity-baseline-inherit', index: 0, value: true });
+    expect(editor._draftConfig.entities[0]).toEqual({ entity: 'sensor.row', future_row: true });
+    expect(editor._draftConfig.baseline).toEqual({ enabled: true, at: 25, above: { color: 'red' } });
+    expect(editor._baselineSection.render(row)).toContain('<label for="entity-0-baseline-show">Enable Baseline</label>');
+
+    editor._baselineSection.handleField({ kind: 'entity-baseline-above-color-enabled', index: 0, value: false });
+    expect(editor._draftConfig.entities[0].baseline.above).toEqual({ color: null });
+    expect(editor._baselineSection.render(row)).not.toContain('id="entity-0-baseline-above-color-enabled" type="checkbox" data-kind="entity-baseline-above-color-enabled" data-index="0" checked');
+    editor._baselineSection.handleField({ kind: 'entity-baseline-inherit', index: 0, value: true });
+    expect(editor._draftConfig.entities[0]).toEqual({ entity: 'sensor.row', future_row: true });
+    expect(editor._baselineSection.render(row)).toContain('value="red"');
+  });
+
   it('reads legacy scalar Baseline as direct Value without materializing edits on open', () => {
     const editor = createEditor({ source });
     const config = { baseline: 12, entities: [{ entity: 'sensor.row', future_row: true }] };

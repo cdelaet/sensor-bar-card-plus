@@ -385,7 +385,7 @@ export class TargetSection {
                       </div>
 	                      <div class="field-row">
 	                        <div class="toggle">
-	                          <input id="entity-${index}-target-show" type="checkbox" data-kind="entity-target-show" data-index="${index}"${targetShow ? ' checked' : ''}${targetInherited ? ' disabled' : ''}>
+	                          <input id="entity-${index}-target-show" type="checkbox" data-kind="entity-target-show" data-index="${index}"${targetShow ? ' checked' : ''}>
 	                          <label for="entity-${index}-target-show">Show marker</label>
 	                        </div>
                       </div>

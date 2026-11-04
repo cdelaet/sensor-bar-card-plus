@@ -37,6 +37,18 @@ for (const section of ['needle', 'baseline']) test(`standalone ${section} root/e
   await page.mouse.move(0, 0);
   await expect(editor.locator(`.override-group:not(.card-subgroup)[data-group="${section}"]`)).toHaveScreenshot(`${section}-entity.png`);
   if (section === 'baseline') {
+    const inherit = editor.locator('#entity-0-baseline-inherit'), enable = editor.locator('#entity-0-baseline-show');
+    await expect(inherit).toBeChecked(); await expect(enable).not.toBeChecked(); await expect(enable).not.toBeDisabled();
+    const cardBaseline = (await editor.evaluate(el => el._draftConfig)).baseline;
+    await enable.check();
+    expect((await editor.evaluate(el => el._draftConfig)).entities[0].baseline.enabled).toBe(true);
+    await expect(inherit).not.toBeChecked(); await expect(enable).not.toBeDisabled();
+    await inherit.check();
+    expect((await editor.evaluate(el => el._draftConfig)).entities[0].baseline).toBeUndefined();
+    expect((await editor.evaluate(el => el._draftConfig)).baseline).toEqual(cardBaseline);
+    await expect(inherit).toBeChecked(); await expect(enable).not.toBeChecked();
+  }
+  if (section === 'baseline') {
     const entityValue = editor.locator('#entity-0-baseline-value');
     await expect(entityValue).toHaveAttribute('type', 'text'); await expect(entityValue).toHaveValue('0');
     await entityValue.fill('35%');

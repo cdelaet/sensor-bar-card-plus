@@ -42,17 +42,12 @@ export function setBuiltinMarkerLabelField(context, scope, key, field, value) {
     const label = isObject(marker.label) ? cloneDeep(marker.label) : {};
     const inheritedLabel = scope?.type === 'entity'
       ? (context.read({ type: 'card' }, [key, 'label']) ?? {}) : {};
-    const inheritedValue = field === 'precision'
-      ? (inheritedLabel.precision ?? inheritedLabel.decimal ?? null)
-      : inheritedLabel[publicField] ?? (field === 'show' ? false : field === 'showValue' || field === 'showUnit' ? true : undefined);
     if (normalized === null || (isText && !normalized)) {
       if (isText && scope?.type === 'entity' && typeof inheritedLabel.text === 'string' && inheritedLabel.text.trim()) {
         label[publicField] = '';
       } else {
         delete label[publicField];
       }
-    } else if (scope?.type === 'entity' && normalized === inheritedValue) {
-      delete label[publicField];
     } else if ((field === 'show' || field === 'showValue' || field === 'showUnit') && scope?.type !== 'entity'
       && normalized === (field === 'show' ? false : true)) {
       delete label[publicField];
@@ -81,9 +76,7 @@ export function getEffectiveMarkerDirection(context, scope, key) {
 
 export function setMarkerDirection(context, scope, key, rawValue) {
   const direction = normalizeMarkerDirection(rawValue);
-  const cardDirection = getEffectiveMarkerDirection(context, { type: 'card' }, key);
-  const value = (scope?.type !== 'entity' && direction === 'inward')
-    || (scope?.type === 'entity' && direction === cardDirection) ? undefined : direction;
+  const value = scope?.type !== 'entity' && direction === 'inward' ? undefined : direction;
   return context.mutate(scope, target => pruneEmptyObjectsInTarget(value === undefined
     ? deletePathValue(target, [key, 'direction']) : setPathValue(target, [key, 'direction'], value), [key]),
     { prunePaths: [[key]], markerEdit: { key, path: ['direction'], value: direction } });

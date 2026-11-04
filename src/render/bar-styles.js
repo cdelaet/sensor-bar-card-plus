@@ -118,20 +118,15 @@ export const barMarkerStyles = `
           position: absolute;
           top: 0;
           bottom: 0;
-          width: 7px;
+          width: 6px;
           transform: translateX(-50%);
           pointer-events: none;
           transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
-          background: linear-gradient(
-            to right,
-            var(--needle-border-color, #000000) 0 1px,
-            var(--needle-color, #ffffff) 1px 6px,
-            var(--needle-border-color, #000000) 6px 7px
-          );
+          background: var(--needle-color, #ffffff);
           border-radius: 0;
-          box-shadow:
-            0 0 3px var(--needle-color, #ffffff),
-            0 0 6px var(--needle-color, #ffffff);
+          filter:
+            drop-shadow(0 0 1.2px var(--needle-border-color, #f3f4f6))
+            drop-shadow(0 0 2.4px color-mix(in srgb, var(--needle-border-color, #f3f4f6) 68%, transparent));
         }
         .needle-layer .needle-marker[data-edge="right"] {
           transform: translateX(-100%);

@@ -5,6 +5,7 @@ import { validateNormalizedConfig } from '../config/validate.js';
 import { buildRowViewModel } from '../view-model/row-view-model.js';
 import { buildBarRenderModel, getRevealTransitionDuration, getEffectiveMarkerColor } from '../view-model/bar-render-model.js';
 import { renderBar, patchBar, renderHistoryStatus, patchHistoryStatus } from '../render/bar-renderer.js';
+import { attachTooltips } from '../render/tooltip-controller.js';
 import { barTrackStyles, barMarkerStyles, getBarAnimationStyles } from '../render/bar-styles.js';
 import { HistoricalHostRuntime } from '../history/host-runtime.js';
 import { historicalMarkerConsumers, historicalMarkerResults } from '../history/marker-consumers.js';
@@ -72,10 +73,15 @@ export class SensorBarCardPlusFeature extends HTMLElement {
   get position() { return this._position; }
   get updateComplete() { return this._updateComplete; }
 
-  connectedCallback() { this._historicalRuntime.attach(); this._requestUpdate(); }
+  connectedCallback() {
+    this._historicalRuntime.attach();
+    this._requestUpdate();
+  }
 
   disconnectedCallback() {
     this._historicalRuntime.detach();
+    this._tooltipController?.destroy();
+    this._tooltipController = null;
     this._stopLabelLayout();
   }
 
@@ -201,9 +207,9 @@ export class SensorBarCardPlusFeature extends HTMLElement {
           .surface *, .surface *::before, .surface *::after { transition: none !important; animation: none !important; }
         }
       </style>
-      <div id="surface" class="surface" role="img">
+      <div id="surface" class="surface" role="group">
         ${renderHistoryStatus(null)}
-        <div id="bar" aria-hidden="true" hidden></div>
+        <div id="bar" hidden></div>
         <div id="labels" class="compact-labels" aria-hidden="true"></div>
         <div id="status" class="status" aria-hidden="true"></div>
       </div>`;
@@ -215,6 +221,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
 
   _render(row, status) {
     this._ensureDom();
+    if (this.isConnected) this._tooltipController ??= attachTooltips(this.shadowRoot);
     const historySummary = status ? null : row?.historyStatusSummary;
     patchHistoryStatus(this._surface, historySummary);
     const textValue = !status ? this._textValue : null;

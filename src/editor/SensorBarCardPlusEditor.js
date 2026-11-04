@@ -872,8 +872,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       delete nextMarker.shape;
     }
 
-    if (direction === 'inward' && (scope?.type !== 'entity'
-      || direction === this._getEffectiveMarkerDirection({ type: 'card' }, 'target'))) {
+    if (direction === 'inward' && scope?.type !== 'entity') {
       delete nextMarker.direction;
     } else if (direction) {
       nextMarker.direction = direction;
@@ -888,7 +887,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return nextTarget;
   }
 
-  _cleanupBaselineForEmit(target) {
+  _cleanupBaselineForEmit(target, scope = { type: 'card' }) {
     if (!this._isObject(target) || !this._isObject(target.baseline)) {
       return target;
     }
@@ -914,7 +913,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       const color = this._normalizeTextValue(nextBaseline[direction].color).trim();
       if (color) {
         nextBaseline[direction] = { ...nextBaseline[direction], color };
-      } else {
+      } else if (scope?.type !== 'entity' || nextBaseline[direction].color !== null) {
         delete nextBaseline[direction];
       }
     });
@@ -945,8 +944,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (scope?.type !== 'entity' && nextPeak.reset === 'never') {
       delete nextPeak.reset;
     }
-    if (direction === 'inward' && (scope?.type !== 'entity'
-      || direction === this._getEffectiveMarkerDirection({ type: 'card' }, 'peak'))) {
+    if (direction === 'inward' && scope?.type !== 'entity') {
       delete nextPeak.direction;
     } else if (direction) {
       nextPeak.direction = direction;
@@ -994,8 +992,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       || nextFloor.reset === undefined || nextFloor.reset === null || nextFloor.reset === '') {
       delete nextFloor.reset;
     }
-    if (direction === 'inward' && (scope?.type !== 'entity'
-      || direction === this._getEffectiveMarkerDirection({ type: 'card' }, 'floor'))) {
+    if (direction === 'inward' && scope?.type !== 'entity') {
       delete nextFloor.direction;
     } else if (direction) {
       nextFloor.direction = direction;
@@ -1007,12 +1004,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _cleanBuiltinMarkerLabelForEmit(rawLabel, scope, key) {
     const label = this._isObject(rawLabel) ? this._cloneDeep(rawLabel) : {};
-    const cardLabel = scope?.type === 'entity'
-      ? (this._getScopedValue({ type: 'card' }, [key, 'label']) ?? {}) : {};
     if (label.show === false && scope?.type !== 'entity') delete label.show;
-    if (label.show === false && scope?.type === 'entity' && cardLabel.show !== true) delete label.show;
-    if (label.show_value === true && (scope?.type !== 'entity' || cardLabel.show_value !== false)) delete label.show_value;
-    if (label.show_unit === true && (scope?.type !== 'entity' || cardLabel.show_unit !== false)) delete label.show_unit;
+    if (label.show_value === true && scope?.type !== 'entity') delete label.show_value;
+    if (label.show_unit === true && scope?.type !== 'entity') delete label.show_unit;
     if (typeof label.text === 'string') {
       label.text = label.text.replace(/\s+/g, ' ').trim();
       if (!label.text && scope?.type !== 'entity') delete label.text;
@@ -1020,7 +1014,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const precision = this._normalizeDecimalValue(label.precision ?? label.decimal);
     delete label.decimal;
     if (precision === null) delete label.precision;
-    else if (scope?.type === 'entity' && precision === (cardLabel.precision ?? cardLabel.decimal)) delete label.precision;
     else label.precision = precision;
     return label;
   }
@@ -1195,7 +1188,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     let nextConfig = this._cleanupEntityIdentityForEmit(config);
     nextConfig = this._cleanupScaleForEmit(nextConfig);
     nextConfig = this._cleanupTargetForEmit(nextConfig, { type: 'card' });
-    nextConfig = this._cleanupBaselineForEmit(nextConfig);
+    nextConfig = this._cleanupBaselineForEmit(nextConfig, { type: 'card' });
     nextConfig = this._cleanupPeakForEmit(nextConfig, { type: 'card' });
     nextConfig = this._cleanupFloorForEmit(nextConfig, { type: 'card' });
     nextConfig = this._cleanupGenericMarkersForEmit(nextConfig);
@@ -1212,7 +1205,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         let cleanedEntry = this._cleanupEntityIdentityForEmit(entry);
         cleanedEntry = this._cleanupScaleForEmit(cleanedEntry);
         cleanedEntry = this._cleanupTargetForEmit(cleanedEntry, { type: 'entity', index });
-        cleanedEntry = this._cleanupBaselineForEmit(cleanedEntry);
+        cleanedEntry = this._cleanupBaselineForEmit(cleanedEntry, { type: 'entity', index });
         cleanedEntry = this._cleanupPeakForEmit(cleanedEntry, { type: 'entity', index });
         cleanedEntry = this._cleanupFloorForEmit(cleanedEntry, { type: 'entity', index });
         cleanedEntry = this._cleanupGenericMarkersForEmit(cleanedEntry);

@@ -3324,7 +3324,7 @@ describe('Sensor Bar Card Plus editor', () => {
       ['#entity-0-peak-enabled', true], ['#entity-0-floor-enabled', false],
     ]) {
       expect(editor.shadowRoot.querySelector(selector).checked).toBe(checked);
-      expect(editor.shadowRoot.querySelector(selector).disabled).toBe(true);
+      expect(editor.shadowRoot.querySelector(selector).disabled).toBe(false);
     }
     dispatchChange(editor.shadowRoot.querySelector('#entity-0-target-inherit'), false);
     editor.setConfig(events.at(-1).detail.config);
@@ -4445,7 +4445,7 @@ describe('Sensor Bar Card Plus editor', () => {
     toggle.checked = false;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', baseline: { custom_key: 'keep' } },
+      { entity: 'sensor.one', name: 'One', baseline: { above: { color: null }, custom_key: 'keep' } },
     ]);
 
     toggle.checked = true;
@@ -4488,7 +4488,7 @@ describe('Sensor Bar Card Plus editor', () => {
     toggle.checked = false;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', baseline: { custom_key: 'keep' } },
+      { entity: 'sensor.one', name: 'One', baseline: { below: { color: null }, custom_key: 'keep' } },
     ]);
 
     toggle.checked = true;
@@ -9445,16 +9445,16 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchChange(value, '25%');
     await flushTimers();
 
-    expect(editor._draftConfig.markers[0].at).toEqual({ percent: 25 });
+    expect(editor._draftConfig.markers[0].at).toBe('25%');
     expect(editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-fixed`).value).toBe('25%');
 
     dispatchChange(editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-fixed`), '101%');
     await flushTimers();
-    expect(editor._draftConfig.markers[0].at).toEqual({ percent: 25 });
+    expect(editor._draftConfig.markers[0].at).toBe('25%');
 
     dispatchChange(editor.shadowRoot.querySelector(`#card-card-generic-${markerUiId}-fixed`), '30');
     await flushTimers();
-    expect(editor._draftConfig.markers[0].at).toEqual({ fixed: 30 });
+    expect(editor._draftConfig.markers[0].at).toBe(30);
     expect(editor.shadowRoot.innerHTML).toContain('generic-marker-entity');
     expect(editor.shadowRoot.innerHTML).not.toContain('Use scale percentage');
   });

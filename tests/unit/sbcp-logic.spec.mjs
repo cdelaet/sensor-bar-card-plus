@@ -1430,7 +1430,7 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(html).toContain('needle-marker');
     expect(html).toContain('left:50%');
     expect(html).toContain('--needle-color:#ffffff');
-    expect(html).toContain('--needle-border-color:#000000');
+    expect(html).toContain(`--needle-border-color:${card._getMarkerContrastColor('#ffffff')}`);
     expect(html).toContain('display:block');
     expect(html).toContain('data-edge="middle"');
   });
@@ -2366,38 +2366,19 @@ describe('Sensor Bar Card Plus logic', () => {
     );
 
     expect(html).toContain('--needle-color:#00ffcc');
-    expect(html).toContain('--needle-border-color:#000000');
+    expect(html).toContain(`--needle-border-color:${card._getMarkerContrastColor('#00ffcc')}`);
   });
 
-  it('uses black needle side stripes for white needles', () => {
+  it('uses the shared marker contrast color for the Needle halo', () => {
     const card = createCard();
-    expect(card._getNeedleBorderColor('#ffffff')).toBe('#000000');
+    for (const color of ['#ffffff', '#ffff00', '#00ffff', '#000000', '#0f172a', '#3b0764']) {
+      expect(card._getNeedleBorderColor(color)).toBe(card._getMarkerContrastColor(color));
+    }
   });
 
-  it('uses black needle side stripes for yellow needles', () => {
+  it('uses the marker contrast fallback for invalid Needle colors', () => {
     const card = createCard();
-    expect(card._getNeedleBorderColor('#ffff00')).toBe('#000000');
-  });
-
-  it('uses black needle side stripes for cyan needles', () => {
-    const card = createCard();
-    expect(card._getNeedleBorderColor('#00ffff')).toBe('#000000');
-  });
-
-  it('uses white needle side stripes for black needles', () => {
-    const card = createCard();
-    expect(card._getNeedleBorderColor('#000000')).toBe('#ffffff');
-  });
-
-  it('uses white needle side stripes for dark blue and dark purple needles', () => {
-    const card = createCard();
-    expect(card._getNeedleBorderColor('#0f172a')).toBe('#ffffff');
-    expect(card._getNeedleBorderColor('#3b0764')).toBe('#ffffff');
-  });
-
-  it('falls back to black needle side stripes for invalid colors', () => {
-    const card = createCard();
-    expect(card._getNeedleBorderColor('not-a-color')).toBe('#000000');
+    expect(card._getNeedleBorderColor('not-a-color')).toBe(card._getMarkerContrastColor('not-a-color'));
   });
 
   it('clamps needle position between 0 and 100', () => {
@@ -2611,13 +2592,16 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(html).toContain('<div class="needle-marker"');
   });
 
-  it('keeps needle glow off CSS filters to avoid clipped animation trails', () => {
+  it('uses a sharp solid Needle core with the shared marker drop-shadow halo', () => {
     const source = readCardStyles();
     const needleRule = source.match(/\.needle-marker \{[\s\S]*?\n        \}/)?.[0] ?? '';
 
-    expect(needleRule).toContain('box-shadow:');
-    expect(needleRule).not.toContain('filter:');
-    expect(needleRule).not.toContain('drop-shadow');
+    expect(needleRule).toContain('width: 6px;');
+    expect(needleRule).toContain('background: var(--needle-color, #ffffff);');
+    expect(needleRule).not.toContain('linear-gradient');
+    expect(needleRule).toContain('drop-shadow(0 0 1.2px var(--needle-border-color');
+    expect(needleRule).toContain('drop-shadow(0 0 2.4px color-mix(in srgb, var(--needle-border-color');
+    expect(needleRule).not.toContain('box-shadow:');
   });
 
   it('defaults solid_fill to false', () => {

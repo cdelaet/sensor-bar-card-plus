@@ -709,18 +709,7 @@ export function getEffectiveMarkerColor(marker) {
 }
 
 export function getNeedleBorderColor(color) {
-  const rgb = parseColorToRgb(color);
-  if (!rgb) return '#000000';
-  const toLinear = (channel) => {
-    const srgb = channel / 255;
-    return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
-  };
-  const luminance = (
-    0.2126 * toLinear(rgb.r)
-    + 0.7152 * toLinear(rgb.g)
-    + 0.0722 * toLinear(rgb.b)
-  );
-  return luminance < 0.22 ? '#ffffff' : '#000000';
+  return getMarkerContrastColor(color);
 }
 
 /** Build physical-bar presentation from resolved row data and normalized appearance.

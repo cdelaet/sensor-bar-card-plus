@@ -31,7 +31,7 @@ export class BaselineSection {
   }
 
   _isBaselineDirectionalColorEnabled(scope, direction) {
-    return !!normalizeTextValue(this._getBaselineDirectionalColorValue(scope, direction)).trim();
+    return !!normalizeTextValue(this._getEffectiveBaselineDirectionalColorValue(scope, direction)).trim();
   }
 
   _setBaselineDirectionalColorEnabled(scope, direction, value) {
@@ -39,6 +39,14 @@ export class BaselineSection {
     if (!value) {
       if (currentValue) {
         this._setBaselineColorDraft(scope, direction, currentValue);
+      }
+      if (scope?.type === 'entity') {
+        return this.context.mutate(scope, (target) => {
+          const current = getPathValue(target, ['baseline', direction]);
+          const nextDirection = isObject(current) ? cloneDeep(current) : {};
+          nextDirection.color = null;
+          return setPathValue(target, ['baseline', direction], nextDirection);
+        }, { baselineEdit: { path: [direction, 'color'], value: null } });
       }
       return this._removeColor(scope, ['baseline', direction, 'color'], {
         prunePaths: [['baseline', direction], ['baseline']],
@@ -122,7 +130,7 @@ export class BaselineSection {
 
   _getEffectiveBaselineDirectionalColorValue(scope, direction) {
     const value = this.context.read(scope, ['baseline', direction, 'color']);
-    if (value !== undefined && value !== null && value !== '') return value;
+    if (value !== undefined) return value ?? '';
     return scope?.type === 'entity' ? this.context.read({ type: 'card' }, ['baseline', direction, 'color']) ?? '' : '';
   }
 
@@ -239,8 +247,8 @@ export class BaselineSection {
                       </div>
                       <div class="field-row">
 	                      <div class="toggle">
-	                        <input id="entity-${index}-baseline-show" type="checkbox" data-kind="entity-baseline-show" data-index="${index}"${baselineShow ? ' checked' : ''}${baselineInherited ? ' disabled' : ''}>
-	                        <label for="entity-${index}-baseline-show">Show marker</label>
+	                        <input id="entity-${index}-baseline-show" type="checkbox" data-kind="entity-baseline-show" data-index="${index}"${baselineShow ? ' checked' : ''}>
+	                        <label for="entity-${index}-baseline-show">Enable Baseline</label>
 	                      </div>
                       </div>
                       ${renderResolvableSourceControls({ source: baselineParts,
@@ -303,7 +311,7 @@ export class BaselineSection {
             <div class="field-row">
 	              <div class="toggle">
 	                <input id="baseline-show" type="checkbox" data-field="baseline-show"${baselineShow ? ' checked' : ''}>
-	                <label for="baseline-show">Show marker</label>
+	                <label for="baseline-show">Enable Baseline</label>
 	              </div>
             </div>
             ${renderResolvableSourceControls({ source: baseline,

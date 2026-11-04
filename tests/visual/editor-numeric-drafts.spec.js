@@ -37,7 +37,7 @@ for (const source of ['src', 'dist']) for (const host of ['feature', 'standalone
   await editor.evaluate(async el => { el.setConfig(el._draftConfig ?? el._config); el.hass = { states: {} }; await el.updateComplete; });
   await expect(input).toHaveValue(''); await expect(input).toBeFocused();
   await input.press('7'); await input.press('5'); await input.press('%'); await expect(input).toHaveValue('75%');
-  expect((await saved(editor)).markers[0].at).toEqual({ percent: 75 });
+  expect((await saved(editor)).markers[0].at).toBe('75%');
   await input.focus(); await input.press('End');
   const length = (await input.inputValue()).length;
   for (let index = 0; index < length; index++) await input.press('Backspace');

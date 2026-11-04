@@ -32,6 +32,10 @@ export function patchReferenceMarkerAt(marker, part, rawValue) {
 
   // Preserve established scalar forms when a marker has only one source.
   if (!hasEntity && !hasFallback && !Object.keys(nextParts.unknown).length) return { ...marker, at: null };
+  if (!hasEntity && nextParts.fixed === undefined && Number.isFinite(nextParts.percent)
+    && !Object.keys(nextParts.unknown).length) {
+    return { ...marker, at: `${nextParts.percent}%` };
+  }
   if (!isObject(rawAt) && part === 'entity' && hasEntity && !hasFallback && !Object.keys(nextParts.unknown).length) {
     return { ...marker, at: nextParts.entity };
   }

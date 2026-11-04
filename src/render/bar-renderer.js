@@ -16,8 +16,8 @@ export function renderMarker(marker) {
   const historyStatus = ['partial', 'stale'].includes(marker.historyStatus) ? marker.historyStatus : '';
   const baseLabel = historyStatus === 'partial' ? 'Partial history' : historyStatus === 'stale' ? 'Stale history' : '';
   const historyLabel = escapeHtml(baseLabel && marker.historyReason ? `${baseLabel}: ${marker.historyReason}` : baseLabel);
-  const historyAttributes = historyStatus ? ` data-history-status="${historyStatus}" data-history-edge="${position > 90 ? 'end' : 'start'}" title="${historyLabel}" role="img" aria-label="${marker.type === 'peak' ? 'Peak' : 'Floor'}: ${historyLabel}"` : '';
-  const historyIndicator = `<span class="history-indicator" aria-hidden="true" title="${historyLabel}">${historyStatus === 'partial' ? '!' : historyStatus === 'stale' ? '~' : ''}</span>`;
+  const historyAttributes = historyStatus ? ` data-history-status="${historyStatus}" data-history-edge="${position > 90 ? 'end' : 'start'}"` : '';
+  const historyIndicator = `<span class="history-indicator"${historyStatus ? ` data-sbcp-tooltip="${historyLabel}" role="img" aria-label="${marker.type === 'peak' ? 'Peak' : 'Floor'}: ${historyLabel}"${marker.visible ? ' tabindex="0"' : ''}` : ' aria-hidden="true"'}>${historyStatus === 'partial' ? '!' : historyStatus === 'stale' ? '~' : ''}</span>`;
   const shapePaths = `<g class="marker-shape-paths">
     <path data-shape="circle" d="M8 1A7 7 0 1 0 8 15A7 7 0 1 0 8 1Z"></path>
     <path data-shape="diamond" d="M8 1L15 8L8 15L1 8Z"></path>
@@ -72,18 +72,24 @@ export function patchMarker(markerEl, marker) {
     const label = base && marker.historyReason ? `${base}: ${marker.historyReason}` : base;
     setDatasetIfChanged(markerEl, 'historyStatus', status);
     setDatasetIfChanged(markerEl, 'historyEdge', marker.position > 90 ? 'end' : 'start');
-    markerEl.setAttribute?.('title', label);
+    markerEl.removeAttribute?.('title');
     const indicator = markerEl.querySelector?.('.history-indicator');
     if (indicator) {
       indicator.textContent = status === 'partial' ? '!' : status === 'stale' ? '~' : '';
-      indicator.setAttribute('title', label);
-    }
-    if (status) {
-      markerEl.setAttribute?.('role', 'img');
-      markerEl.setAttribute?.('aria-label', `${marker.type === 'peak' ? 'Peak' : 'Floor'}: ${label}`);
-    } else {
-      markerEl.removeAttribute?.('role');
-      markerEl.removeAttribute?.('aria-label');
+      indicator.removeAttribute('title');
+      if (status) {
+        indicator.setAttribute('data-sbcp-tooltip', label);
+        indicator.setAttribute('role', 'img');
+        indicator.setAttribute('aria-label', `${marker.type === 'peak' ? 'Peak' : 'Floor'}: ${label}`);
+        indicator.setAttribute('tabindex', marker.visible ? '0' : '-1');
+        indicator.removeAttribute('aria-hidden');
+      } else {
+        indicator.removeAttribute('data-sbcp-tooltip');
+        indicator.removeAttribute('role');
+        indicator.removeAttribute('aria-label');
+        indicator.removeAttribute('tabindex');
+        indicator.setAttribute('aria-hidden', 'true');
+      }
     }
   }
   if (marker.type === 'generic') {
@@ -106,7 +112,7 @@ export function patchMarker(markerEl, marker) {
 }
 
 export function renderHistoryStatus(summary) {
-  return `<span class="history-status-badge"${summary ? '' : ' hidden'} title="${escapeHtml(summary?.text ?? '')}" aria-hidden="true">${summary?.pending ? '…' : '!'}</span>`;
+  return `<span class="history-status-badge"${summary ? ` data-sbcp-tooltip="${escapeHtml(summary.text)}" role="img" aria-label="${escapeHtml(summary.text)}" tabindex="0"` : ' hidden aria-hidden="true"'}>${summary?.pending ? '…' : '!'}</span>`;
 }
 
 export function patchHistoryStatus(root, summary) {
@@ -114,7 +120,18 @@ export function patchHistoryStatus(root, summary) {
   if (!badge) return;
   badge.hidden = !summary;
   badge.textContent = summary?.pending ? '…' : '!';
-  badge.setAttribute('title', summary?.text ?? '');
+  badge.removeAttribute('title');
+  if (summary) {
+    badge.setAttribute('data-sbcp-tooltip', summary.text);
+    badge.setAttribute('aria-label', summary.text);
+    badge.removeAttribute('aria-hidden');
+    badge.setAttribute('tabindex', '0');
+  } else {
+    badge.removeAttribute('data-sbcp-tooltip');
+    badge.removeAttribute('aria-label');
+    badge.setAttribute('aria-hidden', 'true');
+    badge.removeAttribute('tabindex');
+  }
 }
 
 /** Patch persistent bar nodes. The adapter supplies transition timing. */

@@ -1,5 +1,6 @@
 import { createConfigEditor } from '../editor-loader.js';
 import { barTrackStyles, barMarkerStyles, getBarAnimationStyles } from '../render/bar-styles.js';
+import { attachTooltips } from '../render/tooltip-controller.js';
 import {
   clampSupportedRowHeight,
   colorModeToFillStyle,
@@ -226,6 +227,7 @@ export class SensorBarCard extends HTMLElement {
 
   connectedCallback() {
     this._historicalRuntime.attach();
+    this._tooltipController = attachTooltips(this.shadowRoot);
     window.addEventListener('resize', this._boundWindowResize, { passive: true });
     this._setupResizeObserver();
     // Row action handlers are cleared while the card is detached. Reattach
@@ -238,6 +240,8 @@ export class SensorBarCard extends HTMLElement {
 
   disconnectedCallback() {
     this._historicalRuntime.detach();
+    this._tooltipController?.destroy();
+    this._tooltipController = null;
     this._rowGeneration += 1;
     this._clearRowActionHandlers();
     window.removeEventListener('resize', this._boundWindowResize);

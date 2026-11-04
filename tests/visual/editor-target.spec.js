@@ -20,6 +20,16 @@ test('standalone Target root/entity controls, labels and focus retain their appe
   await editor.locator('#target-label-text').fill('Target energy'); await expect(editor.locator('#target-label-text')).toBeFocused();
   await editor.locator('button[data-action="toggle-entity-overrides"]').click(); await editor.locator('#entity-0-group-target').click();
   await expect(editor.locator('.override-group:not(.card-subgroup)[data-group="target"]')).toHaveScreenshot('target-entity.png');
+  const inherit = editor.locator('#entity-0-target-inherit'), show = editor.locator('#entity-0-target-show');
+  await expect(inherit).toBeChecked(); await expect(show).toBeChecked(); await expect(show).not.toBeDisabled();
+  const cardTarget = (await editor.evaluate(el => el._draftConfig)).target;
+  await show.uncheck();
+  expect((await editor.evaluate(el => el._draftConfig)).entities[0].target.enabled).toBe(false);
+  await expect(inherit).not.toBeChecked(); await expect(show).not.toBeDisabled();
+  await inherit.check();
+  expect((await editor.evaluate(el => el._draftConfig)).entities[0].target).toBeUndefined();
+  expect((await editor.evaluate(el => el._draftConfig)).target).toEqual(cardTarget);
+  await expect(inherit).toBeChecked(); await expect(show).toBeChecked();
   const entityValue = editor.locator('#entity-0-target-value');
   await expect(entityValue).toHaveAttribute('type', 'text'); await expect(entityValue).toHaveValue('70');
   await entityValue.fill('35%');

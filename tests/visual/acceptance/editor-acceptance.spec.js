@@ -105,7 +105,7 @@ for(const host of hosts) {
    const id=await row.getAttribute('data-marker-ui-id');await expect(input).toHaveValue('50');
    const originalFirst=(await d.saved(page)).markers[0];await input.focus();await d.replaceNumericDraft(page,editor,input,'75%','percentage');
    await expect(row).toHaveAttribute('data-marker-ui-id',id);await expect(row).toHaveAttribute('data-expanded','true');await expect(input).toBeFocused();await nearby(input,nested);
-   const config=await d.saved(page);expect(config.markers[1].at).toEqual({percent:75});expect(config.markers[0]).toEqual(originalFirst);
+   const config=await d.saved(page);expect(config.markers[1].at).toBe('75%');expect(config.markers[0]).toEqual(originalFirst);
    await d.reopen(page,editor);await refs(editor);await expect(ref(rootRows(editor).nth(1),'fixed')).toHaveValue('75%');
   });
   test(`${host} ${nested?'dialog':'page'} Journey B — Marker 2/3 Source ownership and viewport`,async({page})=>{
