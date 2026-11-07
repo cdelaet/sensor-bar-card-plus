@@ -53,7 +53,7 @@ features:
 
 ### Baseline and marker context
 
-For import/export power, Baseline starts the fill at zero. Target marks an import limit, Peak and Floor track the session range, and a Reference Marker identifies an export threshold. Compact labels use the same text/value/unit configuration as the standalone card and adapt to available width.
+For import/export power, Baseline starts the fill at zero. Target marks an import limit, Peak and Floor show the maximum and minimum from their configured Recorder history windows, and a Reference Marker identifies an export threshold. Compact labels use the same text/value/unit configuration as the standalone card and adapt to available width.
 
 ![A card feature with baseline and several markers](images/examples/feature-grid.png)
 
@@ -84,6 +84,19 @@ features:
 ```
 
 Peak/Floor use Home Assistant Recorder history and can recover their values after a dashboard reload when the selected history is available. Baseline takes precedence over a configured Needle while it resolves. See [Baseline](configuration.md#baseline), [Peak and Floor history windows](configuration.md#peak-and-floor-history-windows), [Reference Markers](configuration.md#generic-reference-markers) and [compact labels](configuration.md#compact-card-feature-marker-labels) for details.
+
+### Compact Peak and Floor history example
+
+Peak and Floor can use different windows. This example compares today's local calendar maximum with the minimum over a rolling seven days:
+
+```yaml
+type: custom:sensor-bar-card-plus
+entity: sensor.grid_power
+peak: { enabled: true, window: today }
+floor: { enabled: true, window: 7d }
+```
+
+Recorder retention, supported statistics and known coverage limits determine whether each result is available. See [Recorder, statistics, and coverage](configuration.md#recorder-statistics-and-coverage) for the details and status indicators.
 
 ### Choose a different history window
 
@@ -120,7 +133,11 @@ entities:
     floor: { enabled: true, window: 24h }
 ```
 
-Attributes do not have long-term statistics and therefore cannot supply windows longer than 24 hours. See [history requirements and coverage](configuration.md#recorder-statistics-and-coverage) for details.
+Attributes do not have long-term statistics and therefore cannot supply windows longer than 24 hours. See [Recorder, statistics, and coverage](configuration.md#recorder-statistics-and-coverage) for details.
+
+### History status indicators
+
+On a visible Peak or Floor marker, `!` means partial history and `~` means a stale cached result; hover or keyboard-focus the marker for the reason, or tap it on touch screens. A row-level badge shows `…` when all unresolved enabled Peak/Floor results are pending, and `!` when any such result is unresolved; hover, focus, or tap the badge for its explanation. Normally available history has no indicator. A missing historical result is not replaced with the current sensor reading, and Recorder retention gaps are not always detectable. See [Recorder, statistics, and coverage](configuration.md#recorder-statistics-and-coverage).
 
 ### Explicit entity override: power beside a switch
 
@@ -450,7 +467,7 @@ floor:
   color: "#60A5FA"
 ```
 
-The revealed portion above Target becomes vivid blue **#00B2FF**, distinct from the magenta palette color. Move the reading to 3000 W, then 9000 W, then 7200 W: Peak remains at 9000 and Floor at 3000, assuming no earlier samples outside that range. They track the card session and reset when the card is recreated, rather than providing stored history.
+The revealed portion above Target becomes vivid blue **#00B2FF**, distinct from the magenta palette color. Moving the reading to 3000 W, then 9000 W, then 7200 W adds samples to the configured Recorder windows. Peak and Floor show the highest and lowest values in those windows, which may include earlier samples and are not reset when the card is recreated. Detected partial or stale history is marked on a visible marker.
 
 Use just `target`, `peak`, or `floor` when only one reference is needed. See [Target](configuration.md#target-marker), [Peak](configuration.md#peak-marker), [Floor](configuration.md#floor-marker), and [history windows](configuration.md#peak-and-floor-history-windows).
 
@@ -508,6 +525,214 @@ markers:
 The state shorthand `entity: sensor.temperature` remains supported. Do not put `attribute` beside `entity` in a source object.
 
 ## Complete practical cards
+
+### Room Temperatures: Seven-Day Rolling Peak/Floor and Humidity
+
+This six-room dashboard uses card-level Peak/Floor settings, so every temperature row inherits the same rolling seven-day Recorder window and shared 15–25 °C Scale. Four rows add humidity as an independent label-only Reference Marker at the top of the Scale. The sensor entity IDs are examples; replace them with entities from your Home Assistant instance.
+
+![Room Temps, 7-day Peak/Floor and Humidity](images/examples/extrema-room-temp.png)
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Room Temp + 7 Day Rolling Min/Max + Humidity
+entities:
+  - entity: sensor.keuken_temperature
+    name: Kitchen
+  - entity: sensor.bureau_temperature
+    name: Office
+    markers:
+      - at: 100%
+        label:
+          entity: sensor.bureau_humidity
+          show: true
+          text: Hum.
+        show_marker: false
+        color: '#d4fb79'
+  - entity: sensor.berging_temperature
+    name: Storage
+    markers:
+      - at: 100%
+        label:
+          entity: sensor.berging_humidity
+          show: true
+          text: Hum.
+        show_marker: false
+        color: '#d4fb79'
+  - entity: sensor.nachthal_boven_temperature
+    name: Hallway
+    markers:
+      - at: 100%
+        label:
+          entity: sensor.nachthal_boven_humidity
+          show: true
+          text: Hum.
+        show_marker: false
+        color: '#d4fb79'
+  - entity: sensor.zolder_onder_cv_temperature
+    name: Attic
+  - entity: sensor.garage_onder_pomp_temperature
+    name: Garage
+
+scale:
+  min: { fixed: 15 }
+  max: { fixed: 25 }
+
+layout:
+  height: 28
+  label:
+    position: inside
+
+peak:
+  enabled: true
+  window: 7d
+  label: { show: true, text: Max }
+  color: '#8b7cff'
+
+floor:
+  enabled: true
+  window: 7d
+  label: { show: true, text: Min }
+  color: '#55c7f3'
+
+bar:
+  fill_style: band_gradient
+  needle:
+    show: true
+    color: '#ff2f92'
+  segments:
+    - { from: 5, to: 10, color: '#3949AB' }
+    - { from: 10, to: 15, color: '#1E88E5' }
+    - { from: 15, to: 18, color: '#29B6F6' }
+    - { from: 18, to: 20, color: '#26C6DA' }
+    - { from: 20, to: 22, color: '#26A69A' }
+    - { from: 22, to: 24, color: '#66BB6A' }
+    - { from: 24, to: 26, color: '#D4E157' }
+    - { from: 26, to: 28, color: '#FFCA28' }
+    - { from: 28, to: 30, color: '#FFA726' }
+    - { from: 30, to: 33, color: '#FB8C00' }
+    - { from: 33, to: 36, color: '#E53935' }
+    - { from: 36, to: 40, color: '#8E24AA' }
+```
+
+The historical extrema come directly from Home Assistant Recorder; no helper package is required. Recorder retention and compatible statistics must cover the requested window. See [Recorder, statistics, and coverage](configuration.md#recorder-statistics-and-coverage) for requirements and limitations. The fixed Scale keeps all six rooms comparable; optional dynamic minimum or maximum sources can be configured separately if the desired range varies.
+
+The example uses `at: 100%` for label-only humidity markers: the label reads the humidity entity, while the marker glyph is hidden. For reusable Home Assistant extrema entities, automation inputs, or a historical max-minus-min delta, see the [optional advanced helper-sensor guide](../examples/sbcp_historical_extrema_HOWTO.md).
+
+**Temperature color scale**
+
+The `band_gradient` uses a temperature palette inspired by weather-map colors, progressing from cool blues through greens and yellows to warm oranges, reds and purples. It is not an exact reproduction of an official Met Office palette.
+
+The temperature segments deliberately cover a wider range (5–40 °C) than the visible scale (15–25 °C). They extend beyond the visible scale intentionally, so the same colors support dynamic scale bounds without redefining the temperature bands. Each temperature retains its corresponding color as the displayed minimum and maximum change.
+
+### Daikin: One Entity, Seven Values
+
+![One Daikin climate entity supplying seven displayed values](images/examples/seven-attributes.png)
+
+Four rows read the attributes `min_temp`, `max_temp`, `temperature`, and `current_temperature` from the same `climate.daikin_living_room_temperature` entity. The final row adds three independent label-only Reference Markers: the entity state (operating mode) at 50%, `fan_mode` at 0%, and `swing_horizontal_mode` at 100%. Each uses `show_marker: false`, which hides the shape while leaving its label visible.
+
+The Scale is fixed at 4–36 °C. The temperature-based `band_gradient` segments cover 5–40 °C and keep their temperature colors if the Scale bounds later become dynamic. This example needs only the climate entity and its supported attributes; it does not require template sensors or additional helper entities.
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: DAIKIN · ONE ENTITY, SEVEN ATTRIBUTES
+entities:
+  - entity: climate.daikin_living_room_temperature
+    name: Min Temp
+    icon: false
+    markers: []
+    attribute: min_temp
+  - entity: climate.daikin_living_room_temperature
+    name: Max Temp
+    icon: false
+    markers: []
+    attribute: max_temp
+  - entity: climate.daikin_living_room_temperature
+    name: Set Temp
+    icon: false
+    markers: []
+    attribute: temperature
+  - entity: climate.daikin_living_room_temperature
+    name: Current Temp
+    icon: false
+    markers:
+      - at: 50%
+        label:
+          show: true
+          entity: climate.daikin_living_room_temperature
+          text: 'Mode:'
+        show_marker: false
+        color: '#c2c2c2'
+      - at: 0%
+        show_marker: false
+        label:
+          show: true
+          entity:
+            id: climate.daikin_living_room_temperature
+            attribute: fan_mode
+          text: 'Fan:'
+      - at: 100%
+        label:
+          show: true
+          entity:
+            id: climate.daikin_living_room_temperature
+            attribute: swing_horizontal_mode
+          text: 'Move:'
+        show_marker: false
+    attribute: current_temperature
+scale:
+  min:
+    fixed: 4
+  max:
+    fixed: 36
+layout:
+  height: 28
+  label:
+    position: inside
+formatting:
+  unit: °C
+bar:
+  fill_style: band_gradient
+  needle:
+    show: true
+    color: '#ff2f92'
+  segments:
+    - from: 5
+      to: 10
+      color: '#3949AB'
+    - from: 10
+      to: 15
+      color: '#1E88E5'
+    - from: 15
+      to: 18
+      color: '#29B6F6'
+    - from: 18
+      to: 20
+      color: '#26C6DA'
+    - from: 20
+      to: 22
+      color: '#26A69A'
+    - from: 22
+      to: 24
+      color: '#66BB6A'
+    - from: 24
+      to: 26
+      color: '#D4E157'
+    - from: 26
+      to: 28
+      color: '#FFCA28'
+    - from: 28
+      to: 30
+      color: '#FFA726'
+    - from: 30
+      to: 33
+      color: '#FB8C00'
+    - from: 33
+      to: 36
+      color: '#E53935'
+    - from: 36
+      to: 40
+      color: '#8E24AA'
+```
 
 ### Battery percentage at a glance
 

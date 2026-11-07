@@ -1,0 +1,36 @@
+sensor:
+  - platform: statistics
+    name: "SBCP Grid Power 1h Minimum Raw"
+    unique_id: sbcp_grid_power_1h_minimum_raw
+    entity_id: sensor.p1_meter_power
+    state_characteristic: value_min
+    max_age:
+      hours: 1
+
+  - platform: statistics
+    name: "SBCP Grid Power 1h Maximum Raw"
+    unique_id: sbcp_grid_power_1h_maximum_raw
+    entity_id: sensor.p1_meter_power
+    state_characteristic: value_max
+    max_age:
+      hours: 1
+
+template:
+  - sensor:
+      - name: "SBCP Grid Power Scale Minimum"
+        unique_id: sbcp_grid_power_scale_minimum
+        unit_of_measurement: W
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set v = states('sensor.sbcp_grid_power_1h_minimum_raw') | float(0) %}
+          {{ ((v / 500) | round(0, 'floor') * 500) | int }}
+
+      - name: "SBCP Grid Power Scale Maximum"
+        unique_id: sbcp_grid_power_scale_maximum
+        unit_of_measurement: W
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set v = states('sensor.sbcp_grid_power_1h_maximum_raw') | float(0) %}
+          {{ ((v / 500) | round(0, 'ceil') * 500) | int }}

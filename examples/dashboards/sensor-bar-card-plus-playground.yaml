@@ -2646,7 +2646,7 @@ views:
             Dedicated validation surface for needle position, fill styles, marker layering, label modes, colors, and compact heights.
 
             Notes:
-            - `Peak` uses the session-high behavior, so the "near peak" and "between target and peak" cards are interactive checks.
+            - `Peak` uses its configured Recorder history window; the "near peak" and "between target and peak" cards are interactive checks against the resolved history result.
             - Use the shared playground controls to move current, target, and baseline helpers while inspecting these cards.
         - type: entities
           title: Needle Controls
@@ -4051,12 +4051,12 @@ views:
                 decimal: 0
             peak:
               enabled: true
-              reset: never
+              window: today
               label:
                 show: true
             floor:
               enabled: true
-              reset: never
+              window: today
               label:
                 show: true
             markers:
@@ -4145,10 +4145,10 @@ views:
                   show: true
             peak:
               enabled: true
-              reset: never
+              window: today
             floor:
               enabled: true
-              reset: never
+              window: today
             layout:
               label:
                 position: inside
@@ -5648,12 +5648,12 @@ views:
                 show: true
             peak:
               enabled: true
-              reset: never
+              window: today
               label:
                 show: true
             floor:
               enabled: true
-              reset: never
+              window: today
               label:
                 show: true
             markers:
@@ -7873,7 +7873,7 @@ views:
           content: |
             # Marker System — Manual Acceptance
 
-            Work down the page. Each group keeps its instructions beside the cards that use them. Deliberate label overlaps are limited to the Collision Lab and the explicitly named five-card stress case. Peak/Floor state is in-memory and timing resets are lazy: the next finite sample after a boundary or expiry starts the new window.
+            Work down the page. Each group keeps its instructions beside the cards that use them. Deliberate label overlaps are limited to the Collision Lab and the explicitly named five-card stress case. Peak/Floor resolve from their configured Recorder windows; card recreation does not reset the selected history period.
 
         - type: markdown
           content: |
@@ -7936,11 +7936,11 @@ views:
               decimal: 0
           peak:
             enabled: true
-            reset: never
+            window: today
             color: '#A78BFA'
           floor:
             enabled: true
-            reset: never
+            window: today
             color: '#F97316'
           markers:
           - at: 35%
@@ -8129,12 +8129,12 @@ views:
               decimal: 0
             peak:
               enabled: true
-              reset: never
+              window: today
               label:
                 show: true
             floor:
               enabled: true
-              reset: never
+              window: today
               label:
                 show: true
             markers:
@@ -8374,12 +8374,12 @@ views:
                 fixed: 3000
             peak:
               enabled: true
-              reset: never
+              window: today
               label:
                 show: true
             floor:
               enabled: true
-              reset: never
+              window: today
               label:
                 show: true
           - type: custom:sensor-bar-card-plus
@@ -8500,13 +8500,13 @@ views:
               decimal: 0
           peak:
             enabled: true
-            reset: never
+            window: today
             label:
               show: true
               decimal: 0
           floor:
             enabled: true
-            reset: never
+            window: today
             label:
               show: true
               decimal: 0
@@ -9413,9 +9413,9 @@ views:
         cards:
         - type: markdown
           content: |
-            ## Peak and Floor — reset windows
+            ## Peak and Floor — history windows
 
-            Change the dedicated primary sample between highs and lows. Unavailable/unknown primary states should pause ingestion without erasing the tracked extrema. The never policy persists for the card instance; 1m starts at its initializing finite sample and resets lazily at the next finite update after expiry. Quarterly uses local quarter-hour boundaries and is intentionally different from relative 15m; hourly uses the local hour boundary.
+            Change the dedicated primary sample between highs and lows. Peak and Floor show the highest and lowest values in their selected Recorder-backed windows, not only samples observed during this card instance. Recreating the card does not reset the history period. `today` is a local calendar window; `1m` and `15m` are rolling windows. `quarterly` selects the current quarter-hour and `hourly` the current hour. Unavailable primary states do not erase previously recorded history.
 
         - type: entities
           title: Extrema sample controls
@@ -9428,12 +9428,12 @@ views:
 
         - type: markdown
           content: |
-            ### LIVE EXTREMA TRACKING — RESET NEVER
+            ### RECORDER-BACKED EXTREMA — TODAY
 
-            This card tests pure session extrema tracking with a continuously oscillating battery value. Reset is `never`: Max can only move upward and Min can only move downward, even as the current value reverses. If the value is stationary, confirm the existing SBCP Showcase Enabled helper is on. Use the timed reset examples below to test reset behavior separately.
+            This card shows the maximum and minimum from today's Recorder history while the battery value changes. Older samples from today can affect the result, and the values can be recovered after reload when Recorder retains the required history. If history is pending or incomplete, inspect its status badge or marker tooltip.
 
         - type: custom:sensor-bar-card-plus
-          title: Live extrema tracking — Reset never
+          title: Recorder extrema — Today
           entities:
           - entity: sensor.sbcp_showcase_battery
             name: Battery charge
@@ -9444,21 +9444,21 @@ views:
               fixed: 100
           peak:
             enabled: true
-            reset: never
+            window: today
             color: '#7C3AED'
             label:
               show: true
               text: Max
           floor:
             enabled: true
-            reset: never
+            window: today
             color: '#D97706'
             label:
               show: true
               text: Min
 
         - type: custom:sensor-bar-card-plus
-          title: Peak — never
+          title: Peak — today
           entities:
           - entity: sensor.sbcp_marker_primary
             name: Highest sample
@@ -9469,14 +9469,14 @@ views:
               fixed: 300
           peak:
             enabled: true
-            reset: never
+            window: today
             color: '#7C3AED'
             label:
               show: true
               decimal: 1
 
         - type: custom:sensor-bar-card-plus
-          title: Floor — never
+          title: Floor — today
           entities:
           - entity: sensor.sbcp_marker_primary
             name: Lowest sample
@@ -9487,14 +9487,14 @@ views:
               fixed: 300
           floor:
             enabled: true
-            reset: never
+            window: today
             color: '#D97706'
             label:
               show: true
               decimal: 1
 
         - type: custom:sensor-bar-card-plus
-          title: Peak and Floor — independent relative 1m windows
+          title: Peak and Floor — independent rolling 1m windows
           entities:
           - entity: sensor.sbcp_marker_primary
             name: Rolling extrema
@@ -9505,13 +9505,13 @@ views:
               fixed: 300
           peak:
             enabled: true
-            reset: 1m
+            window: 1m
             color: '#7C3AED'
             label:
               show: true
           floor:
             enabled: true
-            reset: 1m
+            window: 1m
             color: '#D97706'
             label:
               show: true
@@ -9528,13 +9528,13 @@ views:
               fixed: 300
           peak:
             enabled: true
-            reset: quarterly
+            window: quarterly
             color: '#7C3AED'
             label:
               show: true
           floor:
             enabled: true
-            reset: hourly
+            window: hourly
             color: '#D97706'
             label:
               show: true
@@ -9561,10 +9561,10 @@ views:
               fixed: 300
           peak:
             enabled: true
-            reset: never
+            window: today
           floor:
             enabled: true
-            reset: never
+            window: today
           markers:
           - at: 35%
             lane: above
@@ -9594,7 +9594,7 @@ views:
               decimal: 0
           floor:
             enabled: true
-            reset: never
+            window: today
             label:
               show: true
               decimal: 0
@@ -9734,10 +9734,10 @@ views:
                 fixed: 3000
             peak:
               enabled: true
-              reset: never
+              window: today
             floor:
               enabled: true
-              reset: never
+              window: today
           - entity: sensor.sbcp_hero_shot_grid
             name: Utility exchange — above label
             icon: mdi:transmission-tower
@@ -9782,7 +9782,7 @@ views:
                 fixed: 3000
             peak:
               enabled: true
-              reset: never
+              window: today
               label:
                 show: true
             markers:
@@ -9810,7 +9810,7 @@ views:
                 show: true
             floor:
               enabled: true
-              reset: never
+              window: today
               label:
                 show: true
             markers:
@@ -9875,13 +9875,13 @@ views:
                 show_unit: true
             peak:
               enabled: true
-              reset: never
+              window: today
               label:
                 show: true
                 text: Max
             floor:
               enabled: true
-              reset: never
+              window: today
               label:
                 show: true
                 text: Min
