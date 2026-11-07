@@ -44,6 +44,28 @@ for (const source of ['src', 'dist']) describe(`standalone extrema characterizat
       expect(configOf(editor, root, key).mode).toBe('enabled');
       setEnabled(editor, root, key, false); expect(editor._draftConfig[key]).toEqual({ enabled: false, window: 'today' });
     });
+    it(`${key}: inherited visibility is editable and clearing it restores card visibility`, () => {
+      const editor = createEditor({ source });
+      editor.setConfig({ [key]: { enabled: true, window: 'today' }, entities: [{ entity: 'sensor.row', future_row: true }] });
+      const inherited = editor._extremaSection.render(row, key);
+      expect(inherited).toContain(`id="entity-0-${key}-inherit"`);
+      expect(inherited).toContain(`id="entity-0-${key}-enabled" type="checkbox" data-kind="entity-${key}-enabled" data-index="0" checked`);
+      expect(inherited).not.toMatch(new RegExp(`id="entity-0-${key}-enabled"[^>]* disabled`));
+      editor._extremaSection.handleField({ kind: `entity-${key}-enabled`, index: 0, value: false });
+      expect(editor._draftConfig.entities[0][key]).toEqual({ enabled: false });
+      expect(editor._extremaSection.render(row, key)).not.toMatch(new RegExp(`id="entity-0-${key}-enabled"[^>]* disabled`));
+      editor._extremaSection.handleField({ kind: `entity-${key}-inherit`, index: 0, value: true });
+      expect(editor._draftConfig.entities[0]).toEqual({ entity: 'sensor.row', future_row: true });
+      expect(editor._draftConfig[key]).toEqual({ enabled: true, window: 'today' });
+      expect(editor._extremaSection.render(row, key)).toContain(`id="entity-0-${key}-enabled" type="checkbox" data-kind="entity-${key}-enabled" data-index="0" checked`);
+    });
+    it(`${key}: explicit inherited label visibility remains an entity override`, () => {
+      const editor = createEditor({ source });
+      editor.setConfig({ [key]: { enabled: true, label: { show: true } }, entities: [{ entity: 'sensor.row' }] });
+      editor._extremaSection.handleField({ kind: `entity-${key}-label-show`, index: 0, value: true });
+      expect(editor._draftConfig.entities[0][key].label.show).toBe(true);
+      expect(editor._extremaSection.render(row, key)).not.toContain(`id="entity-0-${key}-inherit" type="checkbox" data-kind="entity-${key}-inherit" data-index="0" checked`);
+    });
     it(`${key}: accepts supported windows and rejects invalid values`, () => {
       const editor = createEditor({ source }); editor.setConfig({ [key]: { enabled: true }, entities: ['sensor.a'] });
       for (const window of ['1m', '59m', '1h', '1440m', '24h', '1500m', '48h', '7d', 'today', 'yesterday',

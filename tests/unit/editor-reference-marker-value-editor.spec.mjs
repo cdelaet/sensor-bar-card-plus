@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { loadCardClass } from '../support/load-card-class.cjs';
+import { normalizeGenericMarkerList } from '../../src/config/normalize.js';
 
 const cardScope = { type: 'card' };
 const entityScope = { type: 'entity', index: 0 };
@@ -16,6 +17,17 @@ async function createHost(host, config) {
 const currentConfig = (host, editor) => host === 'card' ? editor._draftConfig : editor._config;
 
 describe('Reference Marker value editor', () => {
+  it('runtime accepts structured percentage positions and Entity/Attribute fallbacks', () => {
+    const { markers } = normalizeGenericMarkerList([
+      { at: { percent: 100 } },
+      { at: { entity: { id: 'sensor.reference', attribute: 'position' }, percent: 35 } },
+    ]);
+    expect(markers.map(marker => ({ valid: marker.valid, source: marker.source }))).toEqual([
+      { valid: true, source: expect.objectContaining({ percent: 100 }) },
+      { valid: true, source: expect.objectContaining({ entity: 'sensor.reference', attribute: 'position', percent: 35 }) },
+    ]);
+  });
+
   it('shows a direct value field without a Source selector for a fixed marker', () => {
     const { editor: Editor } = loadCardClass({ source: 'src' });
     const editor = new Editor();
@@ -143,6 +155,56 @@ describe('Reference Marker value editor', () => {
       section._setGenericMarkerField(cardScope, 0, 'generic-marker-fixed', '40%');
       expect(currentConfig(host, editor).markers[0].at).toEqual({ entity: { id: 'sensor.changed', attribute: 'temperature' }, percent: 40 });
       expect(section.render(cardScope)).toContain('value="40%"');
+    });
+  }
+
+  for (const [host, scope] of [['card', cardScope], ['card', entityScope], ['feature', cardScope]]) {
+    const location = scope.type === 'entity' ? 'entity override' : 'global';
+    it(`${host} ${location} canonicalizes percentage-only sources and round-trips`, async () => {
+      const config = {
+        markers: [{ at: { percent: 100 }, future: { keep: true } }],
+        ...(scope.type === 'entity' ? {
+          entities: [{ entity: 'sensor.row', markers: [{ at: { percent: 100 }, future: { keep: true } }] }],
+        } : {}),
+      };
+      const { editor, section } = await createHost(host, config);
+      const readMarker = () => {
+        const current = currentConfig(host, editor);
+        return scope.type === 'entity' ? current.entities[0].markers[0] : current.markers[0];
+      };
+
+      expect(section.render(scope)).toContain('value="100%"');
+      expect(readMarker().at).toEqual({ percent: 100 }); // Opening remains non-mutating.
+      section._setGenericMarkerField(scope, 0, 'generic-marker-fixed', '35%');
+      expect(readMarker()).toEqual({ at: '35%', future: { keep: true } });
+
+      const echoed = structuredClone(currentConfig(host, editor));
+      editor.setConfig(host === 'card' ? echoed : { type, ...echoed });
+      if (host === 'feature') await editor.updateComplete;
+      expect(section.render(scope)).toContain('value="35%"');
+      expect(readMarker()).toEqual({ at: '35%', future: { keep: true } });
+      if (scope.type === 'entity') expect(currentConfig(host, editor).markers[0].at).toEqual({ percent: 100 });
+    });
+
+    it(`${host} ${location} retains structured percentage fallback only while Entity is present`, async () => {
+      const config = {
+        markers: [{ at: { entity: { id: 'sensor.reference', attribute: 'reading' }, percent: 25 }, future: true }],
+        ...(scope.type === 'entity' ? {
+          entities: [{ entity: 'sensor.row', markers: [{ at: { entity: { id: 'sensor.reference', attribute: 'reading' }, percent: 25 }, future: true }] }],
+        } : {}),
+      };
+      const { editor, section } = await createHost(host, config);
+      const readMarker = () => {
+        const current = currentConfig(host, editor);
+        return scope.type === 'entity' ? current.entities[0].markers[0] : current.markers[0];
+      };
+
+      expect(section.render(scope)).toContain('value="25%"');
+      section._setGenericMarkerField(scope, 0, 'generic-marker-fixed', '40%');
+      expect(readMarker().at).toEqual({ entity: { id: 'sensor.reference', attribute: 'reading' }, percent: 40 });
+      section._setGenericMarkerField(scope, 0, 'generic-marker-entity', '');
+      expect(readMarker()).toEqual({ at: '40%', future: true });
+      expect(section.render(scope)).toContain('value="40%"');
     });
   }
 });

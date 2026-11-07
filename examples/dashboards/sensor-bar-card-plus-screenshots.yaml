@@ -9242,7 +9242,7 @@ views:
         decimal: 0
       peak:
         enabled: true
-        reset: never
+        window: today
         color: '#7C3AED'
         label:
           show: true
@@ -9250,7 +9250,7 @@ views:
           text: Max
       floor:
         enabled: true
-        reset: never
+        window: today
         color: '#EA580C'
         label:
           show: true
@@ -9647,7 +9647,7 @@ views:
         unit: W
       peak:
         enabled: true
-        reset: never
+        window: today
         color: '#7C3AED'
         label:
           show: true
@@ -9655,7 +9655,7 @@ views:
           text: Max
       floor:
         enabled: true
-        reset: never
+        window: today
         color: '#EA580C'
         label:
           show: true
@@ -10097,7 +10097,7 @@ views:
     - type: markdown
       content: |
         ## target-peak-floor
-        Start from Dawn, reset this view, advance the story through all phases, and capture at Night. Target is configured; Max and Min are the highest and lowest sampled battery-power values for this card session.
+        Start from Dawn, reset this view, advance the story through all phases, and capture at Night. Target is configured; Max and Min resolve from their `today` Recorder windows and may include battery-power history from earlier today. Recreating the card does not clear those history windows.
     - type: custom:sensor-bar-card-plus
       title: Target and observed range
       entity: sensor.sbcp_docs_battery_power
@@ -10123,14 +10123,14 @@ views:
           text: Charge target
       peak:
         enabled: true
-        reset: never
+        window: today
         color: '#A78BFA'
         label:
           show: true
           text: Max
       floor:
         enabled: true
-        reset: never
+        window: today
         color: '#FB923C'
         label:
           show: true
@@ -10560,7 +10560,7 @@ views:
                   color: '#6ec4ff'
               peak:
                 enabled: true
-                reset: never
+                window: today
                 label:
                   show: true
                   text: Max
@@ -10569,7 +10569,7 @@ views:
                 color: '#34fcec'
               floor:
                 enabled: true
-                reset: never
+                window: today
                 label:
                   show: true
                   text: Min
@@ -10847,7 +10847,7 @@ views:
               color: '#6ec4ff'
           peak:
             enabled: true
-            reset: never
+            window: today
             label:
               show: true
               text: Max
@@ -10856,7 +10856,7 @@ views:
             color: '#34fcec'
           floor:
             enabled: true
-            reset: never
+            window: today
             label:
               show: true
               text: Min
@@ -11341,7 +11341,7 @@ views:
       - type: markdown
         content: |
           ## Built-in and generic references
-          The first row has a live diamond Target, plus triangular Peak (above) and Floor (below). Move Power to **3000**, then **9000**, then back to **7200 W** to separate the session extrema. Fill above Target becomes vivid blue (**#00B2FF**), distinct from the magenta palette color. Peak/Floor history resets when the card is recreated.
+          The first row has a live diamond Target, plus triangular Peak (above) and Floor (below). Move Power to **3000**, then **9000**, then back to **7200 W** to add samples to the configured `today` history windows. The displayed extrema can also include earlier Recorder samples from today; they do not reset when the card is recreated. Fill above Target becomes vivid blue (**#00B2FF**), distinct from the magenta palette color.
 
           The second row separates a live inward Pin (above), a fixed **75%** outward Chevron (below), and a label-only endpoint. **Now** reads the primary sensor independently of its fixed endpoint position. Move Reference or change the Scale to compare value and percentage anchors. Labels can overlap at narrow widths; hover where available to raise a label.
       - type: markdown

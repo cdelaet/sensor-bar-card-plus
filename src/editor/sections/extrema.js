@@ -426,7 +426,7 @@ ${indent}                          <input id="entity-${index}-${key}-inherit" ty
                       </div>
                       <div class="field-row">
                         <div class="toggle">
-                          <input id="entity-${index}-${key}-enabled" type="checkbox" data-kind="entity-${key}-enabled" data-index="${index}"${marker.mode === 'enabled' ? ' checked' : ''}${inherited ? ' disabled' : ''}>
+                          <input id="entity-${index}-${key}-enabled" type="checkbox" data-kind="entity-${key}-enabled" data-index="${index}"${marker.mode === 'enabled' ? ' checked' : ''}>
                           <label for="entity-${index}-${key}-enabled">Show marker</label>
                         </div>
                       </div>

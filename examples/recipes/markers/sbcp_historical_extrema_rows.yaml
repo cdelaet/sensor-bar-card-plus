@@ -1,0 +1,164 @@
+# Replace your existing entities: entries with these, or copy only markers:
+entities:
+  - entity: sensor.keuken_temperature
+    name: Kitchen
+    markers:
+      - at:
+          entity: sensor.sbcp_kitchen_historical_max
+        lane: above
+        shape: triangle
+        direction: inward
+        color: "#8b7cff"
+        label:
+          show: true
+          text: Max
+          show_value: true
+          show_unit: true
+          precision: 1
+      - at:
+          entity: sensor.sbcp_kitchen_historical_min
+        lane: below
+        shape: triangle
+        direction: inward
+        color: "#55c7f3"
+        label:
+          show: true
+          text: Min
+          show_value: true
+          show_unit: true
+          precision: 1
+  - entity: sensor.bureau_temperature
+    name: Office Downstairs
+    markers:
+      - at:
+          entity: sensor.sbcp_office_downstairs_historical_max
+        lane: above
+        shape: triangle
+        direction: inward
+        color: "#8b7cff"
+        label:
+          show: true
+          text: Max
+          show_value: true
+          show_unit: true
+          precision: 1
+      - at:
+          entity: sensor.sbcp_office_downstairs_historical_min
+        lane: below
+        shape: triangle
+        direction: inward
+        color: "#55c7f3"
+        label:
+          show: true
+          text: Min
+          show_value: true
+          show_unit: true
+          precision: 1
+  - entity: sensor.berging_temperature
+    name: Storage Room
+    markers:
+      - at:
+          entity: sensor.sbcp_storage_room_historical_max
+        lane: above
+        shape: triangle
+        direction: inward
+        color: "#8b7cff"
+        label:
+          show: true
+          text: Max
+          show_value: true
+          show_unit: true
+          precision: 1
+      - at:
+          entity: sensor.sbcp_storage_room_historical_min
+        lane: below
+        shape: triangle
+        direction: inward
+        color: "#55c7f3"
+        label:
+          show: true
+          text: Min
+          show_value: true
+          show_unit: true
+          precision: 1
+  - entity: sensor.nachthal_boven_temperature
+    name: Hallway Upstairs
+    markers:
+      - at:
+          entity: sensor.sbcp_hallway_upstairs_historical_max
+        lane: above
+        shape: triangle
+        direction: inward
+        color: "#8b7cff"
+        label:
+          show: true
+          text: Max
+          show_value: true
+          show_unit: true
+          precision: 1
+      - at:
+          entity: sensor.sbcp_hallway_upstairs_historical_min
+        lane: below
+        shape: triangle
+        direction: inward
+        color: "#55c7f3"
+        label:
+          show: true
+          text: Min
+          show_value: true
+          show_unit: true
+          precision: 1
+  - entity: sensor.zolder_onder_cv_temperature
+    name: Attic
+    markers:
+      - at:
+          entity: sensor.sbcp_attic_historical_max
+        lane: above
+        shape: triangle
+        direction: inward
+        color: "#8b7cff"
+        label:
+          show: true
+          text: Max
+          show_value: true
+          show_unit: true
+          precision: 1
+      - at:
+          entity: sensor.sbcp_attic_historical_min
+        lane: below
+        shape: triangle
+        direction: inward
+        color: "#55c7f3"
+        label:
+          show: true
+          text: Min
+          show_value: true
+          show_unit: true
+          precision: 1
+  - entity: sensor.garage_onder_pomp_temperature
+    name: Garage
+    markers:
+      - at:
+          entity: sensor.sbcp_garage_historical_max
+        lane: above
+        shape: triangle
+        direction: inward
+        color: "#8b7cff"
+        label:
+          show: true
+          text: Max
+          show_value: true
+          show_unit: true
+          precision: 1
+      - at:
+          entity: sensor.sbcp_garage_historical_min
+        lane: below
+        shape: triangle
+        direction: inward
+        color: "#55c7f3"
+        label:
+          show: true
+          text: Min
+          show_value: true
+          show_unit: true
+          precision: 1

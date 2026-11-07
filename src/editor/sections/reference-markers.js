@@ -1,99 +1,49 @@
 import { normalizeMarkerDirection } from '../../config/normalize.js';
-import { cloneDeep, isObject, setPathValue, deletePathValue, normalizeNumberValue, normalizeTextValue } from '../shared/editor-config.js';
-import { escapeAttribute, getEntityAttributeSuggestions, normalizeEditorColorValue, normalizeScalePercentageInput, parseScaleValueInput, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput, getColorPickerValue } from '../shared/editor-controls.js';
+import { cloneDeep, isObject, setPathValue, deletePathValue, normalizeTextValue } from '../shared/editor-config.js';
+import { escapeAttribute, getEntityAttributeSuggestions, normalizeEditorColorValue, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput, getColorPickerValue } from '../shared/editor-controls.js';
+import { renderResolvableSourceControls } from '../shared/resolvable-source-controls.js';
+import { readResolvableSourceParts, updateResolvableSourceParts, writeResolvableSourceParts } from '../shared/resolvable-source.js';
 import { normalizeMarkerLabelField } from '../shared/editor-marker-controls.js';
 
 export function getReferenceMarkerSource(marker) {
-    const at = marker?.at;
-    if (typeof at === 'number') return { mode: 'fixed', fixed: at };
-    if (typeof at === 'string' && /^\s*[+-]?(?:\d+(?:\.\d+)?|\.\d+)\s*%\s*$/.test(at)) {
-      return { mode: 'percent', percent: at.replace(/%/g, '').trim() };
-    }
-    if (typeof at === 'string' && /^[a-z0-9_]+\.[a-z0-9_]+$/i.test(at.trim())) {
-      return { mode: 'entity', entity: at.trim(), fixed: '' };
-    }
-    if (typeof at === 'string' && normalizeNumberValue(at.trim()) !== null) {
-      return { mode: 'fixed', fixed: at.trim() };
-    }
-    const source = isObject(at) ? at : {};
-    const fixed = source.fixed ?? source.value ?? '';
-    const percent = source.percent ?? '';
-    const percentPart = percent !== '' && percent !== undefined && percent !== null ? { percent } : {};
-    if (Object.prototype.hasOwnProperty.call(source, 'entity')) {
-      const entitySource = isObject(source.entity) ? source.entity : {};
-      const entity = isObject(source.entity) ? entitySource.id : source.entity;
-      const attribute = isObject(source.entity) ? entitySource.attribute : undefined;
-      const hasFallback = fixed !== '' && fixed !== undefined && fixed !== null
-        || percent !== '' && percent !== undefined && percent !== null;
-      return {
-        mode: hasFallback ? 'entity-fallback' : 'entity',
-        entity: entity ?? '',
-        fixed,
-        ...percentPart,
-        ...(attribute ? { attribute } : {}),
-      };
-    }
-    return normalizeNumberValue(fixed) !== null
-      ? { mode: 'fixed', fixed, ...percentPart }
-      : Number.isFinite(normalizeNumberValue(percent))
-        ? { mode: 'percent', fixed: '', percent }
-        : { mode: 'fixed', fixed, ...percentPart };
+  const parts = readResolvableSourceParts(marker?.at);
+  const hasFallback = parts.fixed !== undefined || Number.isFinite(parts.percent);
+  const mode = parts.entity ? hasFallback ? 'entity-fallback' : 'entity'
+    : Number.isFinite(parts.percent) && parts.fixed === undefined ? 'percent' : 'fixed';
+  const scalarPercent = typeof marker?.at === 'string' && /^\s*[+-]?(?:\d+(?:\.\d+)?|\.\d+)\s*%\s*$/.test(marker.at);
+  return { mode, ...(!scalarPercent && (parts.fixed !== undefined || parts.entity || mode === 'percent') ? { fixed: parts.fixed ?? '' } : {}), ...(parts.entity ? { entity: parts.entity } : {}),
+    ...(Number.isFinite(parts.percent) ? { percent: scalarPercent ? String(parts.percent) : parts.percent } : {}),
+    ...(parts.attribute ? { attribute: parts.attribute } : {}),
+  };
 }
 
 export function patchReferenceMarkerAt(marker, part, rawValue) {
   const rawAt = marker?.at;
   const source = getReferenceMarkerSource(marker);
-  const rawText = normalizeTextValue(rawValue).trim();
-  const textPart = part === 'entity' || part === 'attribute';
-  const value = textPart ? rawText
-    : part === 'percent' ? normalizeScalePercentageInput(rawText) : normalizeNumberValue(rawText);
-  const empty = textPart ? !value : rawText === '';
-  if (!['entity', 'attribute', 'fixed', 'percent'].includes(part)) return marker;
-  if (!empty && value === null) return marker;
-  if (part === 'entity' && empty && !source.entity) return marker;
+  const sourceParts = readResolvableSourceParts(rawAt);
+  // Marker edits historically canonicalize the `value` alias to `fixed`.
+  delete sourceParts.unknown.value;
+  const update = updateResolvableSourceParts(sourceParts, part, rawValue);
+  if (part === 'value') delete update.parts?.unknown?.value;
+  if (!update.valid) return marker;
+  const nextParts = update.parts;
+  const hasEntity = !!nextParts.entity;
+  const hasFallback = nextParts.fixed !== undefined || Number.isFinite(nextParts.percent);
 
-  if (!isObject(rawAt) && part === 'fixed' && !source.entity) {
-    return { ...marker, ...(empty ? { at: null } : { at: value }) };
+  // Preserve established scalar forms when a marker has only one source.
+  if (!hasEntity && !hasFallback && !Object.keys(nextParts.unknown).length) return { ...marker, at: null };
+  if (!hasEntity && nextParts.fixed === undefined && Number.isFinite(nextParts.percent)
+    && !Object.keys(nextParts.unknown).length) {
+    return { ...marker, at: `${nextParts.percent}%` };
   }
-  if (!isObject(rawAt) && part === 'percent' && !source.entity) {
-    return { ...marker, ...(empty ? { at: null } : { at: `${value}%` }) };
+  if (!isObject(rawAt) && part === 'entity' && hasEntity && !hasFallback && !Object.keys(nextParts.unknown).length) {
+    return { ...marker, at: nextParts.entity };
   }
-  if (!isObject(rawAt) && part === 'entity' && source.mode === 'entity') {
-    return { ...marker, at: empty ? null : value };
+  if (!isObject(rawAt) && !hasEntity && !Object.keys(nextParts.unknown).length) {
+    if (nextParts.fixed !== undefined) return { ...marker, at: nextParts.fixed };
+    if (Number.isFinite(nextParts.percent)) return { ...marker, at: `${nextParts.percent}%` };
   }
-
-  const at = isObject(rawAt) ? cloneDeep(rawAt) : {};
-  if (!isObject(rawAt)) {
-    if (source.entity) at.entity = source.attribute
-      ? { id: source.entity, attribute: source.attribute } : source.entity;
-    if (source.fixed !== '' && source.fixed !== undefined && source.fixed !== null) at.fixed = source.fixed;
-    else if (source.percent !== '' && source.percent !== undefined && source.percent !== null) at.percent = normalizeNumberValue(source.percent);
-  }
-  if (Object.prototype.hasOwnProperty.call(at, 'value')) {
-    if (at.fixed === undefined || at.fixed === null || at.fixed === '') at.fixed = at.value;
-    delete at.value;
-  }
-
-  if (part === 'entity') {
-    if (empty) delete at.entity;
-    else if (isObject(at.entity)) at.entity = { ...at.entity, id: value };
-    else at.entity = value;
-  } else if (part === 'attribute') {
-    const entity = isObject(at.entity) ? { ...at.entity } : { id: at.entity ?? '' };
-    if (empty) delete entity.attribute;
-    else entity.attribute = value;
-    if (!entity.id) delete at.entity;
-    else at.entity = entity.attribute ? entity : entity.id;
-  } else if (part === 'fixed') {
-    delete at.percent;
-    if (empty) delete at.fixed;
-    else at.fixed = value;
-  } else {
-    delete at.fixed;
-    if (empty) delete at.percent;
-    else at.percent = value;
-  }
-
+  const at = writeResolvableSourceParts(nextParts);
   return { ...marker, at: Object.keys(at).length ? at : null };
 }
 
@@ -214,20 +164,12 @@ export class ReferenceMarkersSection {
       const markerUiId = markerUiIds[markerIndex];
       const rowId = `${scopeType}-${scopeIndex}-generic-${markerUiId}`;
       const expanded = this._expandedGenericMarkerUiIds.has(markerUiId);
-      const entitySource = renderEntitySourceInput('generic-marker-entity', scopeIndex, source.entity, 'sensor.reference', {
-          'scope-type': scopeType,
-          'marker-index': markerIndex,
-        })
       const labelEntitySource = renderEntitySourceInput(
         'generic-marker-label-entity', scopeIndex, labelSource.entity, 'sensor.information', {
           'scope-type': scopeType,
           'marker-index': markerIndex,
         }
       );
-      const entityAttribute = source.entity ? renderEntityAttributeInput('generic-marker-attribute', scopeIndex, source.attribute, source.entity, this.context.hass, {
-        'scope-type': scopeType,
-        'marker-index': markerIndex,
-      }) : '';
       const labelAttribute = labelSource.entity ? renderEntityAttributeInput('generic-marker-label-attribute', scopeIndex, labelSource.attribute, labelSource.entity, this.context.hass, {
         'scope-type': scopeType,
         'marker-index': markerIndex,
@@ -246,18 +188,15 @@ export class ReferenceMarkersSection {
             </div>
           </div>
           <div class="generic-marker-body" style="display:${expanded ? 'grid' : 'none'};">
-            <div class="field-row">
-              <label for="${rowId}-fixed">Value</label>
-              <input id="${rowId}-fixed" type="text" data-kind="generic-marker-fixed" data-scope-type="${scopeType}" data-index="${scopeIndex}" data-marker-index="${markerIndex}" value="${escapeAttribute(source.fixed !== '' && source.fixed !== undefined && source.fixed !== null ? source.fixed : source.percent !== '' && source.percent !== undefined && source.percent !== null ? `${source.percent}%` : '')}" placeholder="25 or 25%">
-            </div>
-            <div class="field-row">
-              <label>Entity</label>
-              ${entitySource}
-            </div>
-          ${entityAttribute ? `<div class="field-row">
-            <label>Attribute</label>
-            ${entityAttribute}
-          </div>` : ''}
+            ${renderResolvableSourceControls({ source,
+              value: { id: `${rowId}-fixed`, kind: 'generic-marker-fixed', index: scopeIndex,
+                extraDataset: { 'scope-type': scopeType, 'marker-index': markerIndex } },
+              entity: { kind: 'generic-marker-entity', index: scopeIndex,
+                extraDataset: { 'scope-type': scopeType, 'marker-index': markerIndex } },
+              attribute: { kind: 'generic-marker-attribute', index: scopeIndex,
+                extraDataset: { 'scope-type': scopeType, 'marker-index': markerIndex } },
+              hass: this.context.hass, placeholders: { entity: 'sensor.reference' },
+            })}
           <div class="inline-row generic-marker-pair">
             <div class="field-row">
               <label for="${rowId}-lane">Lane</label>
@@ -445,17 +384,7 @@ export class ReferenceMarkersSection {
   _setGenericMarkerField(scope, markerIndex, kind, value) {
     const field = kind.replace(/^generic-marker-/, '');
     if (field === 'source-mode') return this._setGenericMarkerSourceMode(scope, markerIndex, value);
-    if (field === 'fixed') {
-      const parsed = parseScaleValueInput(value);
-      const sourceKey = { type: 'reference-marker', index: markerIndex };
-      if (parsed) return this.context.setSource(scope, sourceKey, parsed.part, parsed.value);
-      if (!normalizeTextValue(value).trim()) {
-        this.context.setSource(scope, sourceKey, 'fixed', '');
-        this.context.setSource(scope, sourceKey, 'percent', '');
-        return true;
-      }
-      return false;
-    }
+    if (field === 'fixed') return this.context.setSource(scope, { type: 'reference-marker', index: markerIndex }, 'value', value);
     if (['fixed', 'fallback', 'entity', 'attribute', 'percent'].includes(field)) {
       if (field === 'entity') {
         const modeKey = this._getGenericMarkerSourceModeKey(scope, markerIndex);

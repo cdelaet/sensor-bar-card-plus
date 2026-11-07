@@ -45,6 +45,8 @@ for (const source of ['src', 'dist']) describe(`standalone Reference Marker char
   it('renders every shape/direction/lane plus percentage and CSS text fallback; defaults remain unchanged', () => {
     const editor = createEditor({ source }); editor.setConfig({ markers: [{ at: '25%', color: 'red' }] });
     const html = editor._renderGenericMarkersEditor(root);
+    expect(html).toContain('class="field-row resolvable-source-value"');
+    expect(html).toContain('data-resolvable-source-value="true"');
     for (const option of ['circle','diamond','triangle','chevron','arrow','pin','above','below','inward','outward']) expect(html).toContain(`value="${option}"`);
     expect(html).toContain('value="25%"');
     expect(html).not.toContain('generic-marker-source-mode');

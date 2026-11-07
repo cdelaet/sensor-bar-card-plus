@@ -7,9 +7,9 @@
 [![Validate](https://github.com/cdelaet/sensor-bar-card-plus/actions/workflows/validate.yml/badge.svg)](https://github.com/cdelaet/sensor-bar-card-plus/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/badge/License: MIT-yellow.svg)](https://github.com/cdelaet/sensor-bar-card-plus/blob/main/LICENSE)
 
-Sensor Bar Card Plus (SBCP) presents numeric sensor values as configurable bars or gauges in Home Assistant dashboards. Use it as a standalone card or as a native Card Feature inside a Tile card. It is useful when a value needs visual context: its scale, operating range, target, recent extrema, or relationship to a neutral point.
+Sensor Bar Card Plus (SBCP) presents numeric sensor values as configurable bars or gauges in Home Assistant dashboards. Use it as a standalone card or as a native Card Feature inside a Tile card. It is useful when a value needs visual context: its scale, operating range, target, historic extrema, or relationship to a neutral point.
 
-![Sensor Bar Card Plus showcase](images/hero-v17.gif)
+![Sensor Bar Card Plus showcase](images/showcase-v1.10.png)
 
 Both presentations support structured YAML, animated reveal fills, Needle gauges, five fill styles, dynamic Scales, independent Scale and Bar Direction, Baseline fill origins, Target/Peak/Floor and Reference Markers, and a Visual Editor. The standalone card also supports multiple entities, attribute values, tap, hold and double-tap actions, five label layouts including Hero, per-entity overrides, and responsive row content.
 
@@ -70,7 +70,7 @@ The filled track moves with the sensor reading, while the target marks the confi
 
 ## Card Feature
 
-New in v1.8.0, the native Home Assistant Card Feature puts a compact SBCP Bar inside a Tile card, in either Bottom or Inline placement. The same installed `sensor-bar-card-plus.js` resource provides both presentations; **no second JavaScript resource is needed**.
+The native Home Assistant Card Feature puts a compact SBCP Bar inside a Tile card, in either Bottom or Inline placement. The same installed `sensor-bar-card-plus.js` resource provides both presentations; **no second JavaScript resource is needed**.
 
 ![Grid power Tile with an SBCP Bar and compact marker labels](docs/images/examples/feature-grid.png)
 
@@ -92,7 +92,7 @@ The Feature reuses SBCP's Scale, Bar, Segments, Gradient Stops, Needle, Baseline
 
 ## How a card works
 
-Each standalone card row starts with a sensor state or a scalar entity attribute. SBCP compares that value with the row’s effective minimum and maximum to place it on a Scale. Those bounds, Baseline, Target, and generic marker values can also use live Home Assistant entity sources. The track represents the Scale; the fill or Needle shows the current value. Peak and Floor show observed extrema. Scale Direction controls where values appear; Bar Direction chooses whether a reveal fills left-to-right or right-to-left. A resolved Baseline sets its own reveal origin. Labels and layout determine how the value and its context fit around the track.
+Each standalone card row starts with a sensor state or a scalar entity attribute. SBCP compares that value with the row’s effective minimum and maximum to place it on a Scale. Those bounds, Baseline, Target, and generic marker values can also use live Home Assistant entity sources. The track represents the Scale; the fill or Needle shows the current value. Peak and Floor show extrema based on a calendar or rolling history window. Scale Direction controls where values appear (highest value right or left); Bar Direction chooses whether a reveal fills left-to-right or right-to-left. A Baseline sets its own reveal origin, where the card fills below or above the Baseline. Labels and layout determine how the value and its context fit around the track.
 
 Card settings provide defaults for supported row settings. Entity rows can override layout, scale, bar, Baseline, Target, Peak, Floor, generic markers, and formatting; card-only settings such as `title` and `entities` are not row overrides. Lists such as markers replace the inherited list. See [Configuration: scope and inheritance](docs/configuration.md#scope-inheritance-and-replacement) for the detailed rules.
 
@@ -104,15 +104,15 @@ Reveal fill runs from its fill origin to the current value. By default, the bar 
 
 ### Needle
 
-Needle mode keeps the full track visible and places a moving indicator at the current value. Use it when the full scale and its color regions should remain visible, even at low readings. Needle and Baseline are distinct rendering models; Needle does not use Baseline fill geometry.
+Needle mode keeps the full track visible and places a moving indicator at the current value. Use it when the full scale and its color regions should remain visible, even at low readings. Needle and Baseline are distinct rendering models; Needle cannot be combined with Baseline fill geometry.
 
 ### Fill styles
 
 The fill style controls how the track is colored:
 
 - `solid` uses one color.
-- `gradient` blends configured colors across the scale.
-- `bands` changes color at segment boundaries.
+- `gradient` blends configured colors across the scale (always 0-100%).
+- `bands` changes color at segment boundaries (absolute, dynamic, or %).
 - `soft_bands` blends across short transitions between segments.
 - `band_gradient` creates a continuous gradient from segment colors.
 
@@ -170,7 +170,7 @@ Target is a configured threshold or reference. It supports fixed, percentage, an
 
 ### Peak and Floor
 
-Peak and Floor show the highest and lowest values in a Home Assistant history window. Because Home Assistant Recorder supplies the history, results can be recovered after a dashboard reload or card recreation. Choose calendar windows such as `today` or `previous_week`, or rolling windows such as `24h` and `7d`. Recent windows use Recorder state history; longer windows require compatible long-term statistics. Missing or incomplete history can leave a marker partial or unavailable. See [Peak and Floor history windows](docs/configuration.md#peak-and-floor-history-windows) for retention, statistics, and timezone details.
+Peak and Floor show the highest and lowest values in a Home Assistant history window. Because Home Assistant Recorder supplies the history, results can be recovered after a dashboard reload or card recreation when the requested data is retained. Choose calendar windows such as `today` or `previous_week`, or rolling windows such as `24h` and `7d`. Recent windows use Recorder state history; longer windows require compatible long-term statistics. A visible `!` marks detected partial history and `~` marks a stale cached result; row-level `…` and `!` badges indicate pending or unresolved history and provide reason tooltips on hover, keyboard focus, or touch. The badge shows `…` when all unresolved enabled Peak/Floor results are pending. Recorder retention gaps are not always detectable, and Peak/Floor are not substituted with the current reading. See [Peak and Floor history windows](docs/configuration.md#peak-and-floor-history-windows) and [Recorder coverage and status indicators](docs/configuration.md#recorder-statistics-and-coverage).
 
 ### Generic Reference Markers
 
@@ -209,6 +209,8 @@ The [recipe catalogue](examples/recipes/README.md) contains copyable dashboard p
 
 - **Grid import/export** and **battery flow** use Baseline to show movement on either side of zero: [grid import/export](examples/recipes/energy/grid-import-export.yaml), [battery flow](examples/recipes/energy/battery-flow.yaml), and [bidirectional power](examples/recipes/baseline/bidirectional-power.yaml).
 - **Solar production** and **EV charging** show positive power and household demand: [solar production](examples/recipes/energy/solar-production.yaml) and [EV charging](examples/recipes/energy/ev-charging.yaml).
+- **Room Temperatures** demonstrates native seven-day Recorder-backed Peak/Floor with inherited settings and humidity labels: [Room Temperatures example](docs/examples.md#room-temperatures-seven-day-rolling-peakfloor-and-humidity).
+- **Multiple Attributes** demonstrates an airconditioning sensor card which shows 7 different attributes as multiple bars and markers: [Multiple Attributes example](docs/examples.md#daikin-one-entity-seven-values).
 - **Server health**, **network latency**, and **dense telemetry** demonstrate compact operational dashboards: [server health](examples/recipes/telemetry/server-health.yaml), [network latency](examples/recipes/telemetry/network-latency.yaml), and [dense AV telemetry](examples/recipes/telemetry/dense-av-telemetry.yaml).
 - [Needle basics](examples/recipes/gauges/needle-gauge-basics.yaml) and [Needle with soft bands](examples/recipes/gauges/needle-soft-bands.yaml) keep the whole scale in view.
 
@@ -217,6 +219,8 @@ The interactive Playground brings feature combinations together in larger workin
 ## Visual Editor
 
 Both presentations have a Home Assistant Visual Editor and live preview. The reorganized editor includes Scale and Bar Direction controls. The standalone editor also configures entity rows, supported attribute values, Layout, tap, hold and double-tap actions, Scale, Bar and markers. The Card Feature editor offers applicable shared sections: Entities, Scale, Markers, Bar Appearance, Segments, Gradient Stops and Formatting, with parent-entity inheritance or an explicit override. Home Assistant Tile cards continue to own interactions for Card Features.
+
+Target, Baseline and Generic Reference Marker positions use a direct **Value** field in both editors: enter `25` for an absolute value or `25%` for a percentage of the Scale. Optional Entity and Attribute controls can provide the primary value while the Value remains its fixed or percentage fallback. Standalone entity rows inherit the card source until edited. The `%` suffix refers to the Scale percentage, not the entity's unit of measurement.
 
 Target, Peak, Floor, Generic Reference Markers, and individual generic markers have collapsible editor groups. Baseline is configured under **Bar Appearance**; entity-level Baseline remains with the standalone entity overrides. The editor keeps its local disclosure state out of saved YAML. You can continue editing the same structured configuration manually at any time.
 

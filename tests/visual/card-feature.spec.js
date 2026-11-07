@@ -129,7 +129,7 @@ for (const fillStyle of ['solid', 'bands', 'soft_bands', 'gradient', 'band_gradi
         clip: root.querySelector('.bar-fill-reveal').style.clipPath,
         target: getComputedStyle(root.querySelector('.target-marker')).left,
         reference: getComputedStyle(root.querySelector('.generic-marker')).left,
-        label: root.querySelector('[role="img"]').getAttribute('aria-label'),
+        label: root.querySelector('#surface').getAttribute('aria-label'),
         excluded: root.querySelectorAll('ha-card, ha-icon, .row, .hero-header, .bar-inner-label, .target-value-label, .generic-value-label').length,
       };
     });

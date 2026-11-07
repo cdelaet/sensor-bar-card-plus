@@ -70,7 +70,7 @@ for (const source of ['src', 'dist']) describe(`Entity attributes (${source})`, 
     set('input[data-kind="scale-max-attribute"]', 'ceiling');
     set('input[data-kind="baseline-attribute"]', 'origin');
     set('input[data-kind="target-attribute"]', 'threshold');
-    expect(events.at(-1).scale).toEqual({ min: { entity: { id: 'sensor.min', attribute: 'bottom' } }, max: { entity: { id: 'sensor.max', attribute: 'ceiling' } } });
+    expect(events.at(-1).scale).toEqual({ min: { entity: { id: 'sensor.min', attribute: 'bottom' }, future: 1 }, max: { entity: { id: 'sensor.max', attribute: 'ceiling' } } });
     expect(events.at(-1).baseline).toEqual({ at: { entity: { id: 'sensor.base', attribute: 'origin' } }, above: { color: 'red' } });
     expect(events.at(-1).target).toEqual({ at: { entity: { id: 'sensor.target', attribute: 'threshold' } }, label: { text: 'Limit' } });
     set('input[data-kind="scale-min-attribute"]', '');

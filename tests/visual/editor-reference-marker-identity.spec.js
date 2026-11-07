@@ -60,7 +60,7 @@ for (const source of ['src', 'dist']) for (const host of ['feature', 'standalone
     await valueControl.press('7'); await valueControl.press('5'); await valueControl.press('%');
     await expect(valueControl).toHaveValue('75%'); await expect(valueControl).toBeFocused();
     await ownership(editor, row, nested);
-    expect((await saved(editor)).markers[index].at).toEqual({ percent: 75 });
+    expect((await saved(editor)).markers[index].at).toBe('75%');
     expect((await saved(editor)).markers[0]).toEqual({ at: { fixed: 50 } });
   }
 });
@@ -125,6 +125,6 @@ for (const source of ['src', 'dist']) test(`Reference identity ${source} standal
   await expect(value).toBeFocused(); await expect(value).toHaveValue('75%');
   await expect(row).toHaveAttribute('data-marker-ui-id', id);
   expect(await row.evaluate(el => el === window.__identityRow)).toBe(true);
-  expect((await saved(editor)).entities[0].markers[1].at).toEqual({ percent: 75 });
+  expect((await saved(editor)).entities[0].markers[1].at).toBe('75%');
   expect((await saved(editor)).markers).toEqual([{ at: { fixed: 20 } }]);
 });

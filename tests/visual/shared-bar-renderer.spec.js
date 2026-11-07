@@ -17,7 +17,9 @@ test('card and feature expose unavailable history without drawing markers', asyn
   for (const host of [page.locator('sensor-bar-card-plus'), page.locator('sensor-bar-card-plus-feature')]) {
     const badge = host.locator('.history-status-badge');
     await expect(badge).toBeVisible();
-    await expect(badge).toHaveAttribute('title', /Peak: Long-term statistics.*Floor: Statistics and Recorder units/);
+    await expect(badge).toHaveAttribute('data-sbcp-tooltip', /Peak: Long-term statistics.*Floor: Statistics and Recorder units/);
+    await expect(badge).toHaveAttribute('aria-label', /Peak: Long-term statistics.*Floor: Statistics and Recorder units/);
+    await expect(badge).not.toHaveAttribute('title');
     await badge.hover();
     await expect(host.locator('.peak-marker')).toBeHidden();
     await expect(host.locator('.floor-marker')).toBeHidden();
@@ -26,7 +28,7 @@ test('card and feature expose unavailable history without drawing markers', asyn
   await expect(page.locator('sensor-bar-card-plus-feature #surface')).toHaveAttribute('aria-label', /Floor: Statistics and Recorder units/);
 });
 
-test('historical status badges are hover targets with tooltips in card and feature styling', async ({ page }) => {
+test('historical markers expose shared tooltip descriptions in card and feature markup', async ({ page }) => {
   await page.route('**/src/history/time-window.js', async route => {
     const response = await route.fetch();
     await route.fulfill({ response, body: (await response.text()).replace("from 'weekstart'", "from '/node_modules/weekstart/dist/es-module/main.js'") });
@@ -49,12 +51,14 @@ test('historical status badges are hover targets with tooltips in card and featu
   for (const [id, title, glyph] of [['card', 'Partial history', '!'], ['feature', 'Stale history', '~']]) {
     const indicator = page.locator(`#${id} .history-indicator`);
     await expect(indicator).toHaveText(glyph);
-    await expect(indicator).toHaveAttribute('title', title);
+    await expect(indicator).toHaveAttribute('data-sbcp-tooltip', title);
+    await expect(indicator).toHaveAttribute('aria-label', new RegExp(title));
+    await expect(indicator).not.toHaveAttribute('title');
     await indicator.hover();
     await expect(indicator).toHaveCSS('pointer-events', 'auto');
     await page.evaluate(id => window[`patch_${id}`]('available'), id);
     await expect(indicator).toHaveText('');
-    await expect(indicator).toHaveAttribute('title', '');
+    await expect(indicator).not.toHaveAttribute('data-sbcp-tooltip');
   }
 });
 
@@ -94,6 +98,8 @@ for (const fillStyle of ['solid', 'bands', 'soft_bands', 'gradient', 'band_gradi
       });
       const { root, config, container } = hosts[0];
       const nodes = [...container.querySelectorAll('*')];
+      const needleHost = hosts[1];
+      const needleNodes = [...needleHost.container.querySelectorAll('*')];
       const otherHtml = hosts[1].container.innerHTML;
       const read = selector => {
         const node = root.querySelector(selector);
@@ -104,20 +110,43 @@ for (const fillStyle of ['solid', 'bands', 'soft_bands', 'gradient', 'band_gradi
         heights: hosts.map(({ root }) => root.querySelector('.bar-track').getBoundingClientRect().height),
         baseline: read('.baseline-indicator'),
         target: read('.target-marker'),
-        needle: getComputedStyle(hosts[1].root.querySelector('.needle-marker')).transitionDuration,
+        needle: getComputedStyle(needleHost.root.querySelector('.needle-marker')).transitionDuration,
+        needleAppearance: (() => {
+          const style = getComputedStyle(needleHost.root.querySelector('.needle-marker'));
+          return {
+            width: style.width,
+            backgroundImage: style.backgroundImage,
+            backgroundColor: style.backgroundColor,
+            filter: style.filter,
+            left: needleHost.root.querySelector('.needle-marker').style.left,
+          };
+        })(),
+        trackSize: (() => {
+          const { width, height } = needleHost.root.querySelector('.bar-track').getBoundingClientRect();
+          return { width, height };
+        })(),
         generic: read('.generic-marker'),
         paint: getComputedStyle(root.querySelector('.bar-paint-layer')).backgroundImage,
       };
       patchBar(container, makeModel(config, -10, 'unknown'), { revealDuration: 300 });
       const unavailable = read('.baseline-indicator').display;
       patchBar(container, makeModel(config, -10, '0'), { revealDuration: 300 });
+      const isolated = needleHost.container.innerHTML === otherHtml;
+      const movedModel = makeModel(needleHost.config, -10, '0');
+      movedModel.needle.pct = 25;
+      patchBar(needleHost.container, movedModel, { revealDuration: 300 });
+      const movedNeedle = needleHost.root.querySelector('.needle-marker').style.left;
+      const updatedTrack = needleHost.root.querySelector('.bar-track').getBoundingClientRect();
       return {
         initial, unavailable,
         recovered: read('.baseline-indicator').display,
+        movedNeedle,
+        updatedTrackSize: { width: updatedTrack.width, height: updatedTrack.height },
         clip: root.querySelector('.bar-fill-reveal').style.clipPath,
         duration: root.querySelector('.bar-fill-reveal').style.getPropertyValue('--sbcp-reveal-duration'),
         stable: nodes.every((node, index) => node === container.querySelectorAll('*')[index]),
-        isolated: hosts[1].container.innerHTML === otherHtml,
+        needleStable: needleNodes.every((node, index) => node === needleHost.container.querySelectorAll('*')[index]),
+        isolated,
         cards: document.querySelectorAll('sensor-bar-card-plus').length,
         labels: root.querySelectorAll('.bar-inner-label, .target-value-label, .generic-value-label').length,
       };
@@ -129,12 +158,18 @@ for (const fillStyle of ['solid', 'bands', 'soft_bands', 'gradient', 'band_gradi
     expect(result.initial.baseline.transition).toBe('0s');
     expect(result.initial.target.transition).toBe('0s');
     expect(result.initial.needle).toBe('0.6s');
+    expect(result.initial.needleAppearance.width).toBe('6px');
+    expect(result.initial.needleAppearance.backgroundImage).toBe('none');
+    expect(result.initial.needleAppearance.filter).toContain('drop-shadow');
+    expect(result.initial.needleAppearance.left).not.toBe(result.movedNeedle);
+    expect(result.initial.trackSize).toEqual(result.updatedTrackSize);
     expect(result.initial.paint).toContain('linear-gradient');
     expect(result.unavailable).toBe('none');
     expect(result.recovered).toBe('block');
     expect(result.clip).toContain('50% 0px 25%');
     expect(result.duration).toBe('300ms');
     expect(result.stable).toBe(true);
+    expect(result.needleStable).toBe(true);
     expect(result.isolated).toBe(true);
     expect(result.cards).toBe(0);
     expect(result.labels).toBe(0);

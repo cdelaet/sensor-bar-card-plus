@@ -1,7 +1,8 @@
 import { normalizeTargetMarkerShape } from '../../config/normalize.js';
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue, removePathsFromTarget,
   pruneEmptyObjectsInTarget, normalizeTextValue, normalizeDecimalValue, getEffectiveDisplayValue } from '../shared/editor-config.js';
-import { escapeAttribute, formatScaleValueInput, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
+import { renderResolvableSourceControls } from '../shared/resolvable-source-controls.js';
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from '../shared/editor-marker-controls.js';
 
 export class TargetSection {
@@ -24,7 +25,7 @@ export class TargetSection {
   }
 
   _handleValueField(control, value, scope) {
-    if (!this.options.directValue || control !== 'target-value') return false;
+    if (control !== 'target-value') return false;
     this._setTargetResolvablePart(scope, 'value', value);
     return true;
   }
@@ -384,14 +385,17 @@ export class TargetSection {
                       </div>
 	                      <div class="field-row">
 	                        <div class="toggle">
-	                          <input id="entity-${index}-target-show" type="checkbox" data-kind="entity-target-show" data-index="${index}"${targetShow ? ' checked' : ''}${targetInherited ? ' disabled' : ''}>
+	                          <input id="entity-${index}-target-show" type="checkbox" data-kind="entity-target-show" data-index="${index}"${targetShow ? ' checked' : ''}>
 	                          <label for="entity-${index}-target-show">Show marker</label>
 	                        </div>
                       </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-target-value">Target fallback</label>
-                        <input id="entity-${index}-target-value" type="number" step="any" data-kind="entity-target-value" data-index="${index}" value="${escapeAttribute(targetParts.fixed)}" placeholder="inherit card default">
-                      </div>
+                      ${renderResolvableSourceControls({ source: targetParts,
+                        value: { id: `entity-${index}-target-value`, kind: 'entity-target-value', index },
+                        entity: { kind: 'entity-target-entity-source', index },
+                        attribute: { kind: 'entity-target-attribute', index }, hass: this.context.hass,
+                        labels: { entity: 'Target entity', attribute: 'Target attribute' },
+                        placeholders: { entity: 'inherit card default' },
+                      })}
                       <div class="field-row">
                         <label for="entity-${index}-target-shape">Target shape</label>
                         <select id="entity-${index}-target-shape" data-kind="entity-target-shape" data-index="${index}" value="${escapeAttribute(targetShape)}">
@@ -406,14 +410,6 @@ export class TargetSection {
                           <option value="outward"${targetDirection === 'outward' ? ' selected' : ''}>Outward</option>
                         </select>
                       </div>
-                      <div class="field-row">
-                        <label>Target entity</label>
-                        ${renderEntitySourceInput('entity-target-entity-source', index, targetParts.entity, 'inherit card default')}
-                      </div>
-                      ${targetParts.entity ? `<div class="field-row">
-                        <label>Target attribute</label>
-                        ${renderEntityAttributeInput('entity-target-attribute', index, targetParts.attribute, targetParts.entity, this.context.hass)}
-                      </div>` : ''}
                       <div class="field-row">
                         <label for="entity-${index}-target-color">Target color</label>
                         ${renderColorInput({ cssText: this.options.cssText, label: 'Target color',
@@ -459,10 +455,12 @@ export class TargetSection {
 	                <label for="target-show">Show marker</label>
 	              </div>
             </div>
-            <div class="field-row">
-              <label for="target-value">${this.options.directValue ? 'Value' : 'Target fallback'}</label>
-              <input id="target-value" type="${this.options.directValue ? 'text' : 'number'}" ${this.options.directValue ? 'inputmode="decimal" placeholder="25 or 25%"' : 'step="any"'} data-field="target-value" value="${escapeAttribute(this.options.directValue ? formatScaleValueInput(target) : target.fixed)}">
-            </div>
+            ${renderResolvableSourceControls({ source: target,
+              value: { id: 'target-value', field: 'target-value' },
+              entity: { kind: 'target-entity-source', index: 'card' },
+              attribute: { kind: 'target-attribute', index: 'card' }, hass: this.context.hass,
+              labels: { entity: 'Target entity', attribute: 'Target attribute' },
+            })}
             <div class="field-row">
               <label for="target-shape">Target shape</label>
               <select id="target-shape" data-field="target-shape" value="${escapeAttribute(targetShape)}">
@@ -477,14 +475,6 @@ export class TargetSection {
                 <option value="outward"${targetDirection === 'outward' ? ' selected' : ''}>Outward</option>
               </select>
             </div>
-            <div class="field-row">
-              <label>Target entity</label>
-              ${renderEntitySourceInput('target-entity-source', 'card', target.entity)}
-            </div>
-            ${target.entity ? `<div class="field-row">
-              <label>Target attribute</label>
-              ${renderEntityAttributeInput('target-attribute', 'card', target.attribute, target.entity, this.context.hass)}
-            </div>` : ''}
             <div class="field-row">
               <label for="target-color">Target color</label>
               ${renderColorInput({ cssText: this.options.cssText, label: 'Target color',

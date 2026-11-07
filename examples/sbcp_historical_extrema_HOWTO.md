@@ -1,6 +1,6 @@
-# SBCP Historical Extrema for Home Assistant
+# Optional Historical Extrema Helper Sensors
 
-This package exposes historical minimum, maximum, and delta sensors for Sensor Bar Card Plus (SBCP).
+This is an optional advanced Home Assistant package that exposes historical minimum, maximum, and delta sensors; its YAML is in [`packages/sbcp_historical_extrema_package.yaml`](packages/sbcp_historical_extrema_package.yaml). It is not required for SBCP Peak/Floor markers: since v1.10, those markers read Home Assistant Recorder-backed history directly. Use this package when other Home Assistant features need extrema as sensor entities, when you need a reusable max-minus-min delta, or when an automation must select the calculation window programmatically.
 
 ## Included temperature sources
 
@@ -171,13 +171,11 @@ sensor.sbcp_download_historical_delta
 
 Delta always means `max - min` in the source sensor's unit.
 
-## Why not SBCP Peak/Floor?
+## SBCP Peak/Floor and these helper sensors
 
-SBCP Peak/Floor represents extrema observed while the frontend card is active. It cannot know what happened while the dashboard was closed.
+Since v1.10, SBCP Peak and Floor calculate extrema from configured Home Assistant Recorder-backed calendar or rolling windows. They can recover after a dashboard reload when the requested Recorder history or compatible long-term statistics are retained. Use those markers directly when their supported windows and coverage meet your needs.
 
-Use:
-- **SBCP Peak/Floor** for live/session extrema.
-- **Home Assistant historical extrema + Reference Markers** for true period-based historical extrema.
+This package remains useful when you also need a reusable Home Assistant min/max/delta entity, a value for automations or other cards, or custom aggregation outside SBCP's supported history sources and windows. Its Reference Marker examples can display those externally calculated entities. See the [SBCP history-window and coverage reference](../docs/configuration.md#peak-and-floor-history-windows) before relying on a period: a Recorder response does not guarantee complete retention, and attributes do not have long-term statistics.
 
 ## Notes
 

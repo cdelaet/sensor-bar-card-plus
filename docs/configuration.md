@@ -697,7 +697,7 @@ target:
 
 For a Scale from −100 to 100, `at: 50` places Target at value 50 (three-quarters across the rail), while `at: 50%` places it at the midpoint, value 0. A percentage Target label displays the corresponding Scale value.
 
-The structured fixed form `at: { fixed: 50 }` also means value 50. For Target and Baseline, `at: { percent: 50 }` is another percentage form. If a source object includes several supported sources, resolution tries a usable entity value, then a fixed fallback, then the percentage. Use `at: 50%` for a simple percentage position; **do not put `50%` inside `at.fixed`**. Generic markers use percentage strings and do not accept `at.percent`.
+The structured fixed form `at: { fixed: 50 }` also means value 50. For Target and Baseline, `at: { percent: 50 }` is another percentage form. If a source object includes several supported sources, resolution tries a usable entity value, then a fixed fallback, then the percentage. Use `at: 50%` for a simple percentage position; **do not put `50%` inside `at.fixed`**. Generic Reference Markers also accept structured `at.percent` for compatibility and for an Entity-backed percentage fallback.
 
 With `target.enabled` omitted, a configured and resolved source shows Target automatically. `enabled: false` disables it; `enabled: true` cannot create a position if no source resolves. A configured Target reserves one below-lane slot while enabled, including while its dynamic position is temporarily unavailable.
 
@@ -1135,7 +1135,7 @@ baseline:
 
 Use `at: { entity: sensor.dynamic_baseline, fixed: 0 }` when you want a fixed fallback. A numeric `baseline.at` is a Scale value; a percentage string such as `50%` is a semantic position from Scale minimum to maximum, projected according to Scale Direction. Use percentage strings directly under `at`, not inside `fixed`. Legacy numeric shorthand remains accepted; see [compatibility](#legacy-compatibility-and-migration).
 
-In the Card Feature Visual Editor, the Baseline Value field accepts a number such as `25` or a Scale percentage such as `25%`; optional Entity and Attribute controls can be used with that fallback. The standalone Card editor retains its existing separate value/source controls. Both editors read and write the existing Baseline YAML forms; no new configuration key is required.
+Both the standalone Card and Card Feature Visual Editors use one Baseline Value field accepting a number such as `25` or a Scale percentage such as `25%`, alongside optional Entity and Attribute controls. Entity/Attribute remains primary when it resolves; the Value is retained as a fixed or percentage fallback. Per-entity Card settings inherit the card source until edited. Both editors read and write the existing Baseline YAML forms; no new configuration key is required.
 
 ### Centered zero baseline
 
@@ -1379,7 +1379,7 @@ Supported target features:
 - optional target value label
 - optional `target.when_exceeded.fill_color`
 
-In the Card Feature Visual Editor, enter a number for a fixed Target or append `%` for a percentage of the active Scale. Entity and optional Attribute can coexist with the Value fallback. The standalone Card editor keeps its established separate source/value controls. These are editor presentations of the existing Target configuration model.
+Both the standalone Card and Card Feature Visual Editors use one Target Value field accepting a number for a fixed value or a `%` suffix for a percentage of the active Scale. Optional Entity and Attribute controls can coexist with the Value fallback. Entity/Attribute remains primary when it resolves, and per-entity Card settings inherit the card source until edited. These are editor presentations of the existing Target configuration model; no new configuration key is required.
 
 Migration note: The default Target marker is a diamond, making it easier to distinguish from Floor. To retain the previous triangle, set `target.shape: triangle`.
 
@@ -1444,7 +1444,17 @@ The Card and Card Feature Visual Editors use a direct Value field for a fixed re
 
 ### Position sources
 
-`at` accepts a finite Scale value (`75` or `{ fixed: 75 }`), a semantic percentage string such as `35%`, an entity ID, or `{ entity: sensor.limit, fixed: 75 }`. A usable entity value takes precedence over the fixed fallback. Generic percentages must be strings from `0%` through `100%`; Scale Direction projects them onto the rail, and `at.percent` is unsupported.
+`at` accepts a finite Scale value (`75` or `{ fixed: 75 }`), a semantic percentage string such as `35%`, an entity ID, or a source object. Use scalar `at: 35%` when percentage is the only position source. Runtime also accepts `{ percent: 35 }`; when Entity/Attribute and a percentage fallback coexist, the supported structured form is:
+
+```yaml
+at:
+  entity:
+    id: sensor.limit
+    attribute: position
+  percent: 35
+```
+
+A usable Entity/Attribute value takes precedence over the percentage fallback. The Visual Editor writes percentage-only positions as scalar strings such as `at: 35%`, and retains structured `at.percent` when it is an Entity/Attribute fallback. Percentages must be from `0%` through `100%`; Scale Direction projects them onto the rail.
 
 Percentage labels show the corresponding value on the effective Scale. Finite fixed/live values outside the Scale remain valid: the shape clamps to the nearest rail endpoint while its label retains the actual value. If no position resolves, the shape and label hide until recovery; an accepted marker still reserves its lane slot.
 
@@ -1700,9 +1710,23 @@ The Visual Editor offers these 24 presets:
 
 Windows up to and including 24 hours use Home Assistant Recorder state history. Longer windows use Recorder long-term statistics for completed hours and raw state history for the current hour. The statistics source must provide compatible min/max metadata, and its unit must match the entity's unit. Entity attributes use raw state history only; Home Assistant does not provide long-term statistics for attributes, so attribute-based windows requiring the longer statistics path are unavailable.
 
-Recorder history availability depends on the instance's Recorder configuration and retention. A returned history response does not prove that the requested period is complete. SBCP reports a `partial` result when it detects missing or malformed intervals or an uncovered boundary, but unknown Recorder retention is not automatically called partial. `pending` means acquisition is underway; `available` means a usable result was resolved without known incomplete coverage; `stale` means the prior result is being retained after a refresh failure; `unavailable` means no usable value can be produced; and `invalid` identifies an invalid window or source. When there is no usable historical result, the marker is not placed using the current reading as a substitute. Status text is exposed through the row's accessible description and, where applicable, a status badge.
+Recorder history availability depends on the instance's Recorder configuration and retention. A returned history response does not prove that the requested period is complete. SBCP reports `partial` when it detects missing or malformed intervals, ambiguous ordering, or an uncovered boundary. Unknown or unreported Recorder retention is not automatically called partial, so not every incomplete period can be detected. `pending` means acquisition is underway; `available` means a usable result was resolved without known incomplete coverage; `stale` means a prior result is being retained after refresh failed; `unavailable` means no usable value can be produced; and `invalid` identifies an invalid window or source. When there is no usable historical result, the marker is not placed using the current reading as a substitute.
+
+History indicators distinguish a visible historical marker from unresolved row status:
+
+| Where | State | Indicator | Tooltip |
+|---|---|---|---|
+| Visible Peak/Floor marker | `partial` | `!` on the marker | Says history is partial and gives the applicable reason. |
+| Visible Peak/Floor marker | `stale` | `~` on the marker | Says cached history is stale because refresh failed. |
+| Row-level badge | All unresolved enabled Peak/Floor results are pending | `…` | Says historical data is still loading. |
+| Row-level badge | Any unresolved enabled Peak/Floor result, including `unavailable`, `invalid`, or partial/stale history with no visible marker | `!` | Summarizes the affected marker(s) and the applicable reason. |
+| Visible Peak/Floor marker | Normally `available` | No indicator | No status tooltip is added. |
+
+The row-level badge is omitted when the enabled Peak/Floor results need no unresolved-status badge; visible partial or stale markers carry their own indicator instead. Hover or keyboard-focus an indicator to show its explanation; on touch screens, tap it. Status text is also exposed through the row's accessible description. A status indicator describes known acquisition/resolution state; it cannot reveal Recorder data that was already removed or otherwise not reported.
 
 Some local calendar boundaries in time zones with a non-whole-hour UTC offset cannot be represented by Home Assistant's UTC-hour statistics buckets. Those long-window requests can be unavailable; raw-history windows of 24 hours or less do not have that statistics boundary limitation.
+
+Native Peak and Floor resolve their values inside SBCP and do not create Home Assistant sensor entities. No helper package is needed to display them. Optional external helpers remain useful when automations or other integrations need reusable historical min/max entities, a max-minus-min delta, or programmatic selection of aggregation windows. These sensors are separate calculations with their own Recorder coverage and aggregation limitations.
 
 ### Legacy `reset` migration
 
@@ -1712,11 +1736,11 @@ Some local calendar boundaries in time zones with a non-whole-hour UTC offset ca
 
 ### Visibility defaults and compatibility
 
-Peak and Floor are both hidden when `enabled` is omitted (`false` by default). Set `enabled: true` to show a marker when its historical value resolves. Target and Baseline have different automatic visibility behavior: an omitted `enabled` can show them when their configured value resolves. The Visual Editor's **Show marker** checkbox reflects that effective behavior, but merely opening the editor or changing an unrelated field does not add an omitted `enabled` key. Entity-level settings inherit the card setting until explicitly overridden. Legacy `show_peak` and `peak_color` remain supported; canonical `peak.enabled` and `peak.color` take precedence where both are supplied. There is no legacy `show_floor` alias.
+Peak and Floor are both hidden when `enabled` is omitted (`false` by default). Set `enabled: true` to show a marker when its historical value resolves. Target and Baseline have different automatic visibility behavior: an omitted `enabled` can show them when their configured value resolves. The Visual Editor's **Show marker** checkbox for Target/Peak/Floor and **Enable Baseline** checkbox reflect effective visibility, but merely opening the editor or changing an unrelated field does not add an omitted `enabled` key. Entity-level settings inherit the card setting until explicitly overridden. Legacy `show_peak` and `peak_color` remain supported; canonical `peak.enabled` and `peak.color` take precedence where both are supplied. There is no legacy `show_floor` alias.
 
 ## Invalid and unsupported configuration
 
-Invalid configuration is reported through non-fatal diagnostics where applicable. A generic marker with an unusable source, lane, or structure is skipped. Recoverable invalid fields, such as shape, direction, visibility, or label options, fall back to supported defaults or inherited values, with a warning where applicable. Valid excess markers remain in configuration but do not render and produce a capacity warning. Invalid Peak/Floor windows remain invalid and their historical markers cannot resolve; legacy invalid `reset` values are not converted to `never`. Generic percentage positions use strings such as `35%`; an `at.percent` object field is unsupported. Entity-backed segment boundaries are unsupported and ignored with a configuration warning. The Card Feature rejects `entities`; standalone presentation options such as `title` and `layout` do not add content. See the relevant sections for details.
+Invalid configuration is reported through non-fatal diagnostics where applicable. A generic marker with an unusable source, lane, or structure is skipped. Recoverable invalid fields, such as shape, direction, visibility, or label options, fall back to supported defaults or inherited values, with a warning where applicable. Valid excess markers remain in configuration but do not render and produce a capacity warning. Invalid Peak/Floor windows remain invalid and their historical markers cannot resolve; legacy invalid `reset` values are not converted to `never`. Generic marker `at.percent` values must be finite and from 0 through 100, matching percentage strings such as `35%`. Entity-backed segment boundaries are unsupported and ignored with a configuration warning. The Card Feature rejects `entities`; standalone presentation options such as `title` and `layout` do not add content. See the relevant sections for details.
 
 ## Legacy Compatibility and Migration
 

@@ -1,6 +1,7 @@
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue,
   pruneEmptyObjectsInTarget, normalizeTextValue } from '../shared/editor-config.js';
-import { escapeAttribute, formatScaleValueInput, normalizeEditorColorValue, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeEditorColorValue, renderColorInput } from '../shared/editor-controls.js';
+import { renderResolvableSourceControls } from '../shared/resolvable-source-controls.js';
 
 export class BaselineSection {
   constructor(context, options = {}) { this.options = options;
@@ -30,7 +31,7 @@ export class BaselineSection {
   }
 
   _isBaselineDirectionalColorEnabled(scope, direction) {
-    return !!normalizeTextValue(this._getBaselineDirectionalColorValue(scope, direction)).trim();
+    return !!normalizeTextValue(this._getEffectiveBaselineDirectionalColorValue(scope, direction)).trim();
   }
 
   _setBaselineDirectionalColorEnabled(scope, direction, value) {
@@ -38,6 +39,14 @@ export class BaselineSection {
     if (!value) {
       if (currentValue) {
         this._setBaselineColorDraft(scope, direction, currentValue);
+      }
+      if (scope?.type === 'entity') {
+        return this.context.mutate(scope, (target) => {
+          const current = getPathValue(target, ['baseline', direction]);
+          const nextDirection = isObject(current) ? cloneDeep(current) : {};
+          nextDirection.color = null;
+          return setPathValue(target, ['baseline', direction], nextDirection);
+        }, { baselineEdit: { path: [direction, 'color'], value: null } });
       }
       return this._removeColor(scope, ['baseline', direction, 'color'], {
         prunePaths: [['baseline', direction], ['baseline']],
@@ -53,7 +62,7 @@ export class BaselineSection {
   }
 
   _handleValueField(control, value, scope) {
-    if (!this.options.directValue || control !== 'baseline-value') return false;
+    if (control !== 'baseline-value') return false;
     this._setBaselineResolvablePart(scope, 'value', value);
     return true;
   }
@@ -121,7 +130,7 @@ export class BaselineSection {
 
   _getEffectiveBaselineDirectionalColorValue(scope, direction) {
     const value = this.context.read(scope, ['baseline', direction, 'color']);
-    if (value !== undefined && value !== null && value !== '') return value;
+    if (value !== undefined) return value ?? '';
     return scope?.type === 'entity' ? this.context.read({ type: 'card' }, ['baseline', direction, 'color']) ?? '' : '';
   }
 
@@ -238,22 +247,17 @@ export class BaselineSection {
                       </div>
                       <div class="field-row">
 	                      <div class="toggle">
-	                        <input id="entity-${index}-baseline-show" type="checkbox" data-kind="entity-baseline-show" data-index="${index}"${baselineShow ? ' checked' : ''}${baselineInherited ? ' disabled' : ''}>
-	                        <label for="entity-${index}-baseline-show">Show marker</label>
+	                        <input id="entity-${index}-baseline-show" type="checkbox" data-kind="entity-baseline-show" data-index="${index}"${baselineShow ? ' checked' : ''}>
+	                        <label for="entity-${index}-baseline-show">Enable Baseline</label>
 	                      </div>
                       </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-baseline-value">Baseline fallback</label>
-                        <input id="entity-${index}-baseline-value" type="number" step="any" data-kind="entity-baseline-value" data-index="${index}" value="${escapeAttribute(baselineParts.fixed)}" placeholder="inherit card default">
-                      </div>
-                      <div class="field-row">
-                        <label>Baseline entity</label>
-                        ${renderEntitySourceInput('entity-baseline-entity-source', index, baselineParts.entity, 'inherit card default')}
-                      </div>
-                      ${baselineParts.entity ? `<div class="field-row">
-                        <label>Baseline attribute</label>
-                        ${renderEntityAttributeInput('entity-baseline-attribute', index, baselineParts.attribute, baselineParts.entity, this.context.hass)}
-                      </div>` : ''}
+                      ${renderResolvableSourceControls({ source: baselineParts,
+                        value: { id: `entity-${index}-baseline-value`, kind: 'entity-baseline-value', index },
+                        entity: { kind: 'entity-baseline-entity-source', index },
+                        attribute: { kind: 'entity-baseline-attribute', index }, hass: this.context.hass,
+                        labels: { entity: 'Baseline entity', attribute: 'Baseline attribute' },
+                        placeholders: { entity: 'inherit card default' },
+                      })}
                       <div class="field-row">
                         <div class="toggle">
                           <input id="entity-${index}-baseline-above-color-enabled" type="checkbox" data-kind="entity-baseline-above-color-enabled" data-index="${index}"${this._isBaselineDirectionalColorEnabled(scope, 'above') ? ' checked' : ''}>
@@ -307,21 +311,15 @@ export class BaselineSection {
             <div class="field-row">
 	              <div class="toggle">
 	                <input id="baseline-show" type="checkbox" data-field="baseline-show"${baselineShow ? ' checked' : ''}>
-	                <label for="baseline-show">Show marker</label>
+	                <label for="baseline-show">Enable Baseline</label>
 	              </div>
             </div>
-            <div class="field-row">
-              <label for="baseline-value">${this.options.directValue ? 'Value' : 'Baseline fallback'}</label>
-              <input id="baseline-value" type="${this.options.directValue ? 'text' : 'number'}" ${this.options.directValue ? 'inputmode="decimal" placeholder="25 or 25%"' : 'step="any"'} data-field="baseline-value" value="${escapeAttribute(this.options.directValue ? formatScaleValueInput(baseline) : baseline.fixed)}">
-            </div>
-            <div class="field-row">
-              <label>Baseline entity</label>
-              ${renderEntitySourceInput('baseline-entity-source', 'card', baseline.entity)}
-            </div>
-            ${baseline.entity ? `<div class="field-row">
-              <label>Baseline attribute</label>
-              ${renderEntityAttributeInput('baseline-attribute', 'card', baseline.attribute, baseline.entity, this.context.hass)}
-            </div>` : ''}
+            ${renderResolvableSourceControls({ source: baseline,
+              value: { id: 'baseline-value', field: 'baseline-value' },
+              entity: { kind: 'baseline-entity-source', index: 'card' },
+              attribute: { kind: 'baseline-attribute', index: 'card' }, hass: this.context.hass,
+              labels: { entity: 'Baseline entity', attribute: 'Baseline attribute' },
+            })}
             <div class="field-row">
               <div class="toggle">
                 <input id="baseline-above-color-enabled" type="checkbox" data-field="baseline-above-color-enabled"${this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'above') ? ' checked' : ''}>

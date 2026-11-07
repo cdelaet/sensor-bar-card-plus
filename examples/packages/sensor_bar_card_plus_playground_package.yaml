@@ -1613,10 +1613,10 @@ script:
       - service: input_boolean.turn_on
         target:
           entity_id: input_boolean.sbcp_docs_hero_capture_active
-      # Peak/Floor live in the connected card, not in HA. Confirm each sensor
-      # state, then keep it visible for the existing fixture's two-second
-      # observation interval so the frontend can receive both extrema.
-      # reset: never deliberately retains any wider history already observed.
+      # Peak/Floor resolve the selected Recorder-backed history window.
+      # Confirm each sensor state and keep it visible for the fixture's
+      # two-second observation interval so Recorder can store each transition.
+      # Earlier samples in the window may still determine either extremum.
       - repeat:
           for_each:
             - 2400

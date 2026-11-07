@@ -25,6 +25,10 @@ async function edit(editor, selector, value, type = 'input') {
   await editor.updateComplete;
 }
 for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${source})`, () => {
+  it('labels the Baseline checkbox Enable Baseline', async () => {
+    const { editor } = await setup(source);
+    expect(editor._baselineSection.render(root)).toContain('<label for="baseline-show">Enable Baseline</label>');
+  });
   for (const needle of [undefined, true, false, { show: true, color: '#fff' }, { show: false, color: 'red' }, { color: 'white', ...metadata() }]) {
     it(`preserves Needle representation on open, context and unrelated edits: ${JSON.stringify(needle)}`, async () => {
       const config = raw(); config.bar.needle = needle;
