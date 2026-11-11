@@ -24,6 +24,33 @@ const saved = editor => editor.evaluate(node => structuredClone(node._draftConfi
 const eventCount = page => page.evaluate(() => window.__opacityEvents.length);
 
 for (const source of ['src', 'dist']) {
+  for (const host of ['Card', 'Feature']) test(`${host} focused opacity buffer survives refresh and commits (${source})`, async ({ page }) => {
+    const config = host === 'Card'
+      ? { entities: [{ entity: 'sensor.power' }], bar: { paint: { opacity: 37 } } }
+      : { type: 'custom:sensor-bar-card-plus-feature', bar: { paint: { opacity: 37 } } };
+    const editor = await mount(page, host, source, config);
+    await editor.locator('#card-paint-editor > summary').click();
+    const opacity = editor.locator('#bar-opacity');
+    await expect(opacity).toHaveValue('37');
+
+    await opacity.focus();
+    await opacity.fill('37.0');
+    const eventsAfterEdit = await eventCount(page);
+    await editor.evaluate(async node => {
+      node.hass = { states: { 'sensor.other': { state: '10', attributes: {} } } };
+      await node.updateComplete;
+    });
+    await expect(opacity).toBeFocused();
+    await expect(opacity).toHaveValue('37.0');
+    expect(await eventCount(page)).toBe(eventsAfterEdit);
+
+    await opacity.press('End');
+    await opacity.press('5');
+    await expect(opacity).toHaveValue('37.05');
+    await opacity.press('Tab');
+    expect((await saved(editor)).bar.paint.opacity).toBe(37.05);
+  });
+
   test(`Card opacity sync follows parent changes, local overrides and clearing (${source})`, async ({ page }) => {
     const editor = await mount(page, 'Card', source, {
       entities: [{ entity: 'sensor.power' }], bar: { paint: { opacity: 35 } },

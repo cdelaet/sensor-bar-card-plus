@@ -80,5 +80,5 @@ export function syncPaintEditor(root, id, { paint, inherited, scale }, { numeric
   setStyleIfChanged(swatch, 'backgroundImage', swatchPaint(paint, scale));
   const opacity = editor.querySelector?.('[data-paint-property="opacity"]');
   const opacityValue = String(paint.opacity ?? 100);
-  if (opacity && !numericDrafts?.values?.has(opacity.id) && opacity.value !== opacityValue) opacity.value = opacityValue;
+  if (opacity && root.activeElement !== opacity && !numericDrafts?.values?.has(opacity.id) && opacity.value !== opacityValue) opacity.value = opacityValue;
 }

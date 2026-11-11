@@ -79,6 +79,16 @@ describe('shared Paint Editor', () => {
     expect(numericDrafts.values.get('bar-opacity')).toBe('-');
   });
 
+  it('preserves the focused opacity editing buffer without a tracked draft', () => {
+    const opacity = { id: 'bar-opacity', value: '37.0' };
+    const editor = { querySelector: selector => selector.includes('opacity') ? opacity : null };
+    const root = { activeElement: opacity, querySelector: () => editor };
+
+    syncPaintEditor(root, 'paint', { paint: { opacity: 37 } });
+
+    expect(opacity.value).toBe('37.0');
+  });
+
   it('keeps controls usable for an incomplete authored palette', () => {
     const { bindings } = bindingFor({ fill_style: 'gradient', gradient_stops: [null, null] }, []);
     const html = renderPaintEditor({ id: 'paint', bindings });
