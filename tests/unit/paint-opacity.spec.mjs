@@ -15,7 +15,26 @@ describe('pure paint opacity normalization', () => {
     expect(Object.prototype.hasOwnProperty.call(normalized, INVALID_PAINT_OPACITY)).toBe(false);
   });
 
-  it.each([null, false, true, '', '50', '50%', NaN, Infinity, -Infinity, -0.1, 100.1, [], {}, new Number(50)])(
+  it.each([
+    ['0', 0],
+    ['50', 50],
+    ['100', 100],
+    [' 50.5 ', 50.5],
+    [' \t0\n', 0],
+    [' \t100\n', 100],
+  ])('normalizes numeric-string opacity %j to %s without mutating the source', (opacity, expected) => {
+    const paint = Object.freeze({ color: '#123456', opacity });
+    const normalized = normalizePaintOpacity(paint);
+    expect(normalized).toEqual({ color: '#123456', opacity: expected });
+    expect(Object.prototype.hasOwnProperty.call(normalized, INVALID_PAINT_OPACITY)).toBe(false);
+    expect(paint.opacity).toBe(opacity);
+    expect(normalized).not.toBe(paint);
+  });
+
+  it.each([
+    null, false, true, '', ' \t\n', '50%', '50px', 'invalid', 'NaN', 'Infinity', '-Infinity',
+    ' -0.1 ', ' 100.1 ', NaN, Infinity, -Infinity, -0.1, 100.1, [], {}, new Number(50),
+  ])(
     'recovers invalid opacity %j independently and records the raw input', opacity => {
       const normalized = normalizePaintOpacity({ color: '#123456', opacity });
       expect(normalized.opacity).toBe(100);

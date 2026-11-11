@@ -6,11 +6,12 @@ export const INVALID_PAINT_OPACITY = Symbol.for('sensor-bar-card-plus.invalid-pa
 
 /** Normalize only opacity; private metadata retains the invalid input for later diagnostics. */
 export function normalizePaintOpacity(paint) {
-  const opacity = paint.opacity;
+  const rawOpacity = paint.opacity;
+  const opacity = getFiniteNumber(rawOpacity);
   const valid = Number.isFinite(opacity) && opacity >= 0 && opacity <= 100;
   const normalized = { ...paint, opacity: valid ? opacity : 100 };
-  if (opacity !== undefined && !valid) {
-    Object.defineProperty(normalized, INVALID_PAINT_OPACITY, { value: opacity });
+  if (rawOpacity !== undefined && !valid) {
+    Object.defineProperty(normalized, INVALID_PAINT_OPACITY, { value: rawOpacity });
   }
   return normalized;
 }
