@@ -1,4 +1,5 @@
 import { normalizeBarConfig, PAINT_PROPERTY_SOURCES } from '../../config/normalize.js';
+import { resolveScopedPaintPreset } from '../../view-model/paint-preset-resolver.js';
 import { createPaintBindings } from './paint-bindings.js';
 import { cloneDeep, getPathValue, isObject, removePathsFromTarget, pruneEmptyObjectsInTarget } from './editor-config.js';
 
@@ -9,6 +10,7 @@ const aliases = {
   segments: [['bar', 'segments'], ['segments'], ['severity']],
   gradient_stops: [['bar', 'gradient_stops'], ['gradient_stops']],
   opacity: [],
+  preset: [],
 };
 const owns = (object, key) => object != null && Object.prototype.hasOwnProperty.call(object, key);
 const legacyPaint = config => Object.values(aliases).flat().some(path => getPathValue(config, path) !== undefined);
@@ -29,6 +31,22 @@ export function barPaintSource(context, scope, property) {
 }
 
 export function readBarPaintProperty(context, scope, property) {
+  if (['segments', 'gradient_stops'].includes(property) && context.paintPresetRegistry) {
+    const local = context.read(scope, []) ?? {};
+    const inheritedConfig = scope?.type === 'entity' ? context.read({ type: 'card' }, []) : null;
+    const normalized = normalizeBarConfig(local, inheritedConfig, {
+      isCardScope: scope?.type !== 'entity',
+    }).paint;
+    const inherited = inheritedConfig
+      ? normalizeBarConfig(inheritedConfig, null, { isCardScope: true }).paint
+      : normalized;
+    if (normalized.preset !== undefined || inherited.preset !== undefined) {
+      const resolved = scope?.type === 'entity'
+        ? resolveScopedPaintPreset({ inheritedPaint: inherited, paint: normalized, registry: context.paintPresetRegistry })
+        : resolveScopedPaintPreset({ inheritedPaint: normalized, paint: {}, registry: context.paintPresetRegistry });
+      return cloneDeep(resolved.paint[property]);
+    }
+  }
   const path = barPaintSource(context, scope, property);
   if (!path) return undefined;
   return property === 'fill_style' ? normalizeBarConfig(context.read(scope, []), null).paint.fill_style : cloneDeep(context.read(scope, path));

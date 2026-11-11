@@ -14,6 +14,7 @@ import {
 import { editorStyles } from './shared/editor-styles.js';
 import { renderCardGroup, renderMarkersSection } from './shared/editor-disclosures.js';
 import { NumericInputDrafts } from './shared/editor-numeric-drafts.js';
+import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
 
 import {
   getScaleFixedValue, getScaleEntityValue, setScalePart,
@@ -31,7 +32,7 @@ import {
   getBarSolidFillValue, getEffectiveBarSolidFillValue, setBarSolidFill,
   clearBarAppearanceOverride, hasBarAppearanceOverride, getBarAppearanceSummary,
   renderBarAppearanceSection, handleBarAppearanceField,
-  syncBarPaintEditor,
+  syncBarPaintEditor, clearBarPaintPropertyOverride,
 } from './sections/bar-appearance.js';
 
 import { createBarPaintBindings, usesGroupedBarPaint, prepareBarPaintSegments } from './shared/bar-paint-bindings.js';
@@ -93,6 +94,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._numericDrafts = new NumericInputDrafts();
     this._draftConfig = {};
     this._hass = null;
+    this._paintPresetHandle = null;
+    this._paintPresetSubscriptionGeneration = 0;
+    this._paintPresetRegistry = { status: 'loading', presets: {} };
     this._isRendering = false;
     this._renderScheduled = false;
     this._lastRenderedConfigJson = null;
@@ -167,6 +171,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    this._syncPaintPresetRegistry();
     if (!this.shadowRoot?.innerHTML) {
       this._render();
       return;
@@ -176,7 +181,53 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._syncActionSelectors();
     const context = this._createSectionContext();
     for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) {
-      syncBarPaintEditor(this.shadowRoot, context, scope, this._paintPaletteValues(scope), { numericDrafts: this._numericDrafts });
+      syncBarPaintEditor(this.shadowRoot, context, scope, this._paintPaletteValues(scope), { numericDrafts: this._numericDrafts, registry: this._paintPresetRegistry });
+    }
+  }
+
+  connectedCallback() { this._syncPaintPresetRegistry(); }
+
+  disconnectedCallback() {
+    this._paintPresetSubscriptionGeneration += 1;
+    this._paintPresetHandle?.unsubscribe();
+    this._paintPresetHandle = null;
+    this._paintPresetRegistry = { status: 'loading', presets: {} };
+  }
+
+  _syncPaintPresetRegistry() {
+    if (!this.isConnected || !this._hass?.connection) {
+      if (this._paintPresetHandle) {
+        this._paintPresetSubscriptionGeneration += 1;
+        this._paintPresetHandle.unsubscribe();
+        this._paintPresetHandle = null;
+      }
+      this._paintPresetRegistry = this._hass?.connection
+        ? { status: 'loading', presets: {} }
+        : { status: 'empty', presets: {}, diagnostic: { code: 'connection_unavailable' } };
+      return;
+    }
+    const path = dashboardPathFromLocation();
+    if (!this._paintPresetHandle) {
+      const generation = ++this._paintPresetSubscriptionGeneration;
+      this._paintPresetHandle = subscribeDashboardPaintPresets(this._hass, path, snapshot => {
+        if (generation !== this._paintPresetSubscriptionGeneration || snapshot === this._paintPresetRegistry) return;
+        this._paintPresetRegistry = snapshot;
+        this._syncPaintEditors();
+      });
+      this._paintPresetRegistry = this._paintPresetHandle.getSnapshot();
+      this._syncPaintEditors();
+      return;
+    }
+    this._paintPresetHandle.update(this._hass, path);
+  }
+
+  _syncPaintEditors() {
+    if (!this.shadowRoot?.innerHTML) return;
+    const context = this._createSectionContext();
+    for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) {
+      syncBarPaintEditor(this.shadowRoot, context, scope, this._paintPaletteValues(scope), {
+        numericDrafts: this._numericDrafts, registry: this._paintPresetRegistry,
+      });
     }
   }
 
@@ -452,7 +503,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._setElementChecked('baseline-above-color-enabled', this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'above'));
     this._setElementChecked('baseline-below-color-enabled', this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'below'));
     this._refreshSegmentUi({ type: 'card' });
-    syncBarPaintEditor(this.shadowRoot, this._createSectionContext(), { type: 'card' }, this._paintPaletteValues({ type: 'card' }), { numericDrafts: this._numericDrafts });
+    syncBarPaintEditor(this.shadowRoot, this._createSectionContext(), { type: 'card' }, this._paintPaletteValues({ type: 'card' }), { numericDrafts: this._numericDrafts, registry: this._paintPresetRegistry });
   }
 
   _refreshEntityDerivedUi() {
@@ -482,7 +533,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementText(`entity-${index}-group-peak-summary`, this._getPeakSummary(scope));
       this._setElementText(`entity-${index}-group-floor-summary`, this._getFloorSummary(scope));
       this._setElementText(`entity-${index}-group-markers-summary`, this._getGenericMarkersSummary(scope));
-      syncBarPaintEditor(this.shadowRoot, this._createSectionContext(), scope, this._paintPaletteValues(scope), { numericDrafts: this._numericDrafts });
+      syncBarPaintEditor(this.shadowRoot, this._createSectionContext(), scope, this._paintPaletteValues(scope), { numericDrafts: this._numericDrafts, registry: this._paintPresetRegistry });
       this._setElementText(`entity-${index}-group-segments-summary`, this._getSegmentsSummary(scope));
       this._setElementText(`entity-${index}-group-gradient-stops-summary`, this._getGradientStopsSummary(scope));
       this._setElementText(`entity-${index}-group-layout-summary`, this._getLayoutSummary(scope));
@@ -1706,6 +1757,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         ? this._persistBaselineSourcePart(scope, part, value)
         : this._setCanonicalResolvablePart(scope, key, part, value, key === 'target' ? { canonicalBasePath: ['target', 'at'], legacyFixedPath: ['target'], legacyEntityPath: ['target_entity'], prunePaths: [['target', 'at'], ['target']] } : {}),
       get hass() { return editor._hass; },
+      get paintPresetRegistry() { return editor._paintPresetRegistry; },
     };
   }
 
@@ -3272,7 +3324,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                        });
 	                        const barGroup = `<div id="entity-${index}-bar-appearance" class="entity-fields" role="group" aria-label="Bar Appearance">
                           ${renderBarAppearanceSection(this._createSectionContext(), scope, () => '', { root: this.shadowRoot,
-                            paletteValues: this._paintPaletteValues(scope), paintChildren: () => `${segmentsGroup}${gradientStopsGroup}`,
+                            paletteValues: this._paintPaletteValues(scope), paintPresetRegistry: this._paintPresetRegistry,
+                            paintChildren: () => ({ segments: segmentsGroup, gradient_stops: gradientStopsGroup }),
                           })}
                         </div>`;
 	                        const baselineGroup = this._renderOverrideGroup({
@@ -3359,7 +3412,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         </div>
 ${this._renderScaleSection({ type: 'card' })}
 
-${renderBarAppearanceSection(this._createSectionContext(), { type: 'card' }, () => `${this._baselineSection.render({ type: 'card' }, options => this._renderCardGroup(options))}${this._renderCardGroup({ group: 'needle', title: 'Needle', summary: this._getNeedleSummary({ type: 'card' }), content: this._needleSection.render({ type: 'card' }) })}`, { heading: 'Bar', root: this.shadowRoot, paletteValues: this._paintPaletteValues({ type: 'card' }), paintChildren: () => `${this._segmentsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false })}${this._gradientStopsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false })}` })}
+${renderBarAppearanceSection(this._createSectionContext(), { type: 'card' }, () => `${this._baselineSection.render({ type: 'card' }, options => this._renderCardGroup(options))}${this._renderCardGroup({ group: 'needle', title: 'Needle', summary: this._getNeedleSummary({ type: 'card' }), content: this._needleSection.render({ type: 'card' }) })}`, { heading: 'Bar', root: this.shadowRoot, paintPresetRegistry: this._paintPresetRegistry, paletteValues: this._paintPaletteValues({ type: 'card' }), paintChildren: () => ({ segments: this._segmentsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false }), gradient_stops: this._gradientStopsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false }) }) })}
 
 ${renderMarkersSection({
   renderGroup: options => this._renderCardGroup(options),
@@ -3648,6 +3701,13 @@ ${this._renderFormattingSection({ type: 'card' })}
     const action = target?.dataset?.action;
     if (!action) return;
     if (target?.disabled) return;
+    if (action === 'clear-paint-property') {
+      const scope = target.dataset.index === undefined ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
+      if (target.dataset.property === 'segments') return this._segmentsSection._clearSegmentsOverride(scope);
+      if (target.dataset.property === 'gradient_stops') return this._gradientStopsSection._clearGradientStopsOverride(scope);
+      clearBarPaintPropertyOverride(this._createSectionContext(), scope, target.dataset.property);
+      return;
+    }
     if (['move-entity-up', 'move-entity-down', 'duplicate-entity', 'remove-entity'].includes(action)) this._entityIconCustomPending.clear();
     // Entity indices are positional; do not transfer an owned input draft when
     // an explicit list operation changes the row at that index.

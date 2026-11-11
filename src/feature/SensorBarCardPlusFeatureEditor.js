@@ -15,7 +15,7 @@ import {
 import {
   renderBarAppearanceSection, handleBarAppearanceField, getEffectiveFillStyleValue,
   getBarColorValue, getBarSolidFillValue,
-  getBarAnimatedValue, syncBarPaintEditor,
+  getBarAnimatedValue, syncBarPaintEditor, clearBarPaintPropertyOverride,
 } from '../editor/sections/bar-appearance.js';
 import { getFeatureScaleSource, patchFeatureScaleSource, getFeatureBaselineSource, patchFeatureBaselineSource, getFeatureTargetSource, patchFeatureTargetSource } from './feature-editor-config.js';
 
@@ -32,6 +32,7 @@ import { getFeatureReferenceMarkerSource, patchFeatureReferenceMarkerSource, pat
 import { patchFeatureExtremumField } from './feature-editor-extrema.js';
 import { patchFeatureTargetField } from './feature-editor-target.js';
 import { patchFeatureNeedle, patchFeatureBaselineField } from './feature-editor-needle-baseline.js';
+import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
 
 const root = { type: 'card' };
 
@@ -44,6 +45,9 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._chooseEntity = false;
     this._renderEpoch = 0;
     this._updateComplete = Promise.resolve();
+    this._paintPresetHandle = null;
+    this._paintPresetSubscriptionGeneration = 0;
+    this._paintPresetRegistry = { status: 'loading', presets: {} };
     this._cssColorDrafts = new Map();
     this._numericDrafts = new NumericInputDrafts();
     this._expandedCardGroups = new Set();
@@ -68,6 +72,12 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     for (const type of ['click', 'keydown']) this.shadowRoot.addEventListener(type, event => {
       if (type === 'click') {
         const target = event.target?.closest?.('[data-action]') ?? event.target;
+        if (target?.dataset?.action === 'clear-paint-property') {
+          if (target.dataset.property === 'segments') { this._segmentsSection._clearSegmentsOverride(root); return; }
+          if (target.dataset.property === 'gradient_stops') { this._gradientStopsSection._clearGradientStopsOverride(root); return; }
+          clearBarPaintPropertyOverride(this._createSectionContext(), root, target.dataset.property);
+          return;
+        }
         if (target?.dataset?.action === 'toggle-card-group') {
           this._toggleCardGroup(target.dataset.group);
           return;
@@ -130,20 +140,55 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       this._chooseEntity = false;
       this._configReplaced = true;
     }
+    this._syncPaintPresetRegistry();
     this._requestRender();
   }
 
-  set hass(value) { this._hass = value; this._requestRender(); }
+  set hass(value) { this._hass = value; this._syncPaintPresetRegistry(); this._requestRender(); }
   get hass() { return this._hass; }
-  set context(value) { this._context = value ?? {}; this._requestRender(); }
+  set context(value) { this._context = value ?? {}; this._syncPaintPresetRegistry(); this._requestRender(); }
   get context() { return this._context; }
   get updateComplete() { return this._updateComplete; }
   get _explicitEntity() { return typeof this._config.entity === 'string' ? this._config.entity.trim() : ''; }
   get _effectiveEntity() { return this._explicitEntity || this._context.entity_id || ''; }
   get _showEntityPicker() { return !!this._explicitEntity || this._chooseEntity || !this._context.entity_id; }
 
-  connectedCallback() { this._requestRender(); }
-  disconnectedCallback() { this._renderEpoch += 1; this._renderScheduled = false; }
+  connectedCallback() { this._syncPaintPresetRegistry(); this._requestRender(); }
+  disconnectedCallback() {
+    this._renderEpoch += 1; this._renderScheduled = false;
+    this._paintPresetSubscriptionGeneration += 1;
+    this._paintPresetHandle?.unsubscribe();
+    this._paintPresetHandle = null;
+    this._paintPresetRegistry = { status: 'loading', presets: {} };
+  }
+
+  _syncPaintPresetRegistry() {
+    if (!this.isConnected || !this._hass?.connection) {
+      if (this._paintPresetHandle) {
+        this._paintPresetSubscriptionGeneration += 1;
+        this._paintPresetHandle.unsubscribe();
+        this._paintPresetHandle = null;
+      }
+      this._paintPresetRegistry = this._hass?.connection
+        ? { status: 'loading', presets: {} }
+        : { status: 'empty', presets: {}, diagnostic: { code: 'connection_unavailable' } };
+      return;
+    }
+    const path = dashboardPathFromLocation();
+    if (!this._paintPresetHandle) {
+      const generation = ++this._paintPresetSubscriptionGeneration;
+      this._paintPresetHandle = subscribeDashboardPaintPresets(this._hass, path, snapshot => {
+        if (generation !== this._paintPresetSubscriptionGeneration || snapshot === this._paintPresetRegistry) return;
+        this._paintPresetRegistry = snapshot;
+        if (this.shadowRoot?.innerHTML) this._syncControls();
+        else this._requestRender();
+      });
+      this._paintPresetRegistry = this._paintPresetHandle.getSnapshot();
+      if (this.shadowRoot?.innerHTML) this._syncControls();
+      return;
+    }
+    this._paintPresetHandle.update(this._hass, path);
+  }
 
   _requestRender() {
     if (this._renderScheduled) return;
@@ -169,6 +214,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       setSource: (_scope, key, part, value) => this._mutate(config => key?.type === 'reference-marker' ? patchFeatureReferenceMarkerSource(config, key.index, part, value) : key?.type === 'reference-marker-label' ? patchFeatureReferenceMarkerLabelSource(config, key.index, part, value) : key === 'baseline' ? patchFeatureBaselineSource(config, part, value) : key === 'target' ? patchFeatureTargetSource(config, part, value) : patchFeatureScaleSource(config, key, part, value)),
     };
     Object.defineProperty(context, 'hass', { get: () => editor._hass });
+    Object.defineProperty(context, 'paintPresetRegistry', { get: () => editor._paintPresetRegistry });
     return context;
   }
 
@@ -385,9 +431,9 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
           floor: { summary: this._extremaSection._getMarkerResetSummary('floor'), content: this._extremaSection.render(root, 'floor') },
           references: { summary: this._referenceMarkersSection._getGenericMarkersSummary(root), content: this._referenceMarkersSection.render(root) },
         })}
-        ${renderBarAppearanceSection(context, root, () => `${this._baselineSection.render(root, options => this._renderCardGroup(options))}${this._needleSection.render(root)}`, { animation: true, cssText: true, root: this.shadowRoot,
+        ${renderBarAppearanceSection(context, root, () => `${this._baselineSection.render(root, options => this._renderCardGroup(options))}${this._needleSection.render(root)}`, { animation: true, cssText: true, root: this.shadowRoot, paintPresetRegistry: this._paintPresetRegistry,
           paletteValues: { segments: segmentRows, gradient_stops: gradientRows },
-          paintChildren: () => `${this._segmentsSection.render(root, options => this._renderCardGroup(options), { section: false })}${this._gradientStopsSection.render(root, options => this._renderCardGroup(options), { section: false })}`,
+          paintChildren: () => ({ segments: this._segmentsSection.render(root, options => this._renderCardGroup(options), { section: false }), gradient_stops: this._gradientStopsSection.render(root, options => this._renderCardGroup(options), { section: false }) }),
         })}
         ${renderFormattingSection(context, root, { includeUnit: false })}
       </div>`;
@@ -430,7 +476,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const paintState = syncBarPaintEditor(this.shadowRoot, context, root, {
       segments: this._segmentsSection._getScopedSegmentsValue(root),
       gradient_stops: this._gradientStopsSection._getScopedGradientStopsValue(root),
-    }, { numericDrafts: this._numericDrafts });
+    }, { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts, registry: this._paintPresetRegistry });
     const color = getBarColorValue(context, root);
     const values = {
       'scale-min': getFeatureScaleSource(this._config, 'min').fixed,

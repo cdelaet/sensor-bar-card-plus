@@ -24,7 +24,133 @@ async function mount(page, host, source, width = 360) {
   }, { host, width });
   return page.locator(host === 'Card' ? 'sensor-bar-card-plus-editor' : 'sensor-bar-card-plus-feature-editor');
 }
+async function mountWithPaintPresets(page, host, source, presets, config = { bar: { paint: {} } }, width = 300) {
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
+  await page.evaluate(async ({ host, presets, config, width }) => {
+    const tag = host === 'Card' ? 'sensor-bar-card-plus' : 'sensor-bar-card-plus-feature';
+    await customElements.whenDefined(tag);
+    const editor = await customElements.get(tag).getConfigElement();
+    let dashboard = { sbcp_fragments: { paint_presets: presets } };
+    let listener;
+    const connection = {
+      sendMessagePromise: async () => structuredClone(dashboard),
+      subscribeEvents: async callback => { listener = callback; return async () => { listener = null; }; },
+      addEventListener() {}, removeEventListener() {},
+    };
+    window.__paintEvents = [];
+    window.__updatePaintRegistry = async next => {
+      dashboard = { sbcp_fragments: { paint_presets: next } };
+      listener?.({ event_type: 'lovelace_updated' });
+    };
+    editor.addEventListener('config-changed', event => {
+      window.__paintEvents.push(structuredClone(event.detail.config));
+      editor.setConfig(event.detail.config);
+    });
+    editor.setConfig(structuredClone(config));
+    editor.hass = { states: {}, connection };
+    if (host !== 'Card') editor.context = { entity_id: 'sensor.power' };
+    document.querySelector('#mount').style.width = `${width}px`;
+    document.querySelector('#mount').append(editor);
+    await editor.updateComplete;
+  }, { host, presets, config, width });
+  return page.locator(host === 'Card' ? 'sensor-bar-card-plus-editor' : 'sensor-bar-card-plus-feature-editor');
+}
 const saved = editor => editor.evaluate(el => structuredClone(el._draftConfig ?? el._config));
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} selects dashboard paint by reference and refreshes live without losing drafts (${source})`, async ({ page }) => {
+    const editor = await mountWithPaintPresets(page, host, source, {
+      night: { fill_style: 'bands', color: '#123456', segments: [{ from: '10%', to: '90%', color: '#345678' }],
+        gradient_stops: [{ pos: 0, color: '#123456' }, { pos: 100, color: '#abcdef' }] },
+      soft: { fill_style: 'soft_bands', color: '#abcdef' },
+    }, { bar: { paint: { opacity: 35, future: true } } });
+    const paint = editor.locator('#card-paint-editor');
+    await paint.locator('summary').click();
+    const mode = paint.locator('[data-paint-mode="true"]');
+    await expect(mode.locator('option')).toContainText(['Inherited paint', 'Manual paint', 'night', 'soft']);
+    await mode.selectOption('preset:night');
+    expect((await saved(editor)).bar.paint).toEqual({ opacity: 35, future: true, preset: 'night' });
+    await expect(paint.locator('.paint-editor-description')).toContainText('Preset · night · Bands · 1 segment');
+    await expect(paint.locator('[data-paint-source="opacity"]')).toHaveText('Override');
+    await editor.locator('#card-group-segments').click();
+    await expect(editor.locator('input[data-kind="segment-from"]').first()).toHaveValue('10%');
+    await editor.locator('#card-group-gradient-stops').click();
+    await expect(editor.locator('input[data-kind="gradient-pos"]').first()).toHaveValue('0');
+    const opacity = paint.locator('#bar-opacity');
+    await opacity.focus();
+    await opacity.fill('37.0');
+    const eventCount = await page.evaluate(() => window.__paintEvents.length);
+    await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'solid', color: '#00aa88' }, soft: { fill_style: 'soft_bands', color: '#abcdef' }, added: { fill_style: 'gradient' } }));
+    await expect(mode.locator('option[value="preset:added"]')).toHaveCount(1);
+    await expect(opacity).toHaveValue('37.0');
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
+    await opacity.fill('0'); await opacity.press('Tab');
+    expect((await saved(editor)).bar.paint.opacity).toBe(0);
+    await paint.locator('button[data-action="clear-paint-property"][data-property="opacity"]').click();
+    expect((await saved(editor)).bar.paint).toEqual({ future: true, preset: 'night' });
+    await editor.locator('#bar-color').evaluate(node => {
+      node.value = '#abcdef';
+      node.dispatchEvent(new Event('input', { bubbles: true }));
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect((await saved(editor)).bar.paint.color).toBe('#abcdef');
+    await expect(paint.locator('[data-paint-source="color"]')).toHaveText('Override');
+    await paint.locator('button[data-action="clear-paint-property"][data-property="color"]').click();
+    expect((await saved(editor)).bar.paint.color).toBeUndefined();
+    const roundTrip = await saved(editor);
+    await editor.evaluate((node, value) => node.setConfig(structuredClone(value)), roundTrip);
+    expect(await saved(editor)).toEqual(roundTrip);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBeGreaterThan(eventCount);
+  });
+}
+
+for (const source of ['src', 'dist']) test(`Card entity inherits preset paint while opacity overrides stay local (${source})`, async ({ page }) => {
+  const editor = await mountWithPaintPresets(page, 'Card', source, {
+    night: { fill_style: 'solid', color: '#123456' },
+  }, { bar: { paint: { preset: 'night', opacity: 35 } }, entities: ['sensor.power'] });
+  await editor.locator('button[data-action="toggle-entity-overrides"]').click();
+  const child = editor.locator('#entity-0-paint-editor');
+  await expect(child.locator('.paint-editor-description')).toContainText('Inherited · Preset · night · Solid');
+  await child.locator('summary').click();
+  await editor.locator('#card-paint-editor summary').click();
+  const opacity = child.locator('#entity-0-bar-opacity');
+  await expect(opacity).toHaveValue('35');
+  const rootOpacity = editor.locator('#bar-opacity');
+  await rootOpacity.fill('60'); await rootOpacity.press('Tab');
+  await expect(opacity).toHaveValue('60');
+  await opacity.fill('0'); await opacity.press('Tab');
+  expect((await saved(editor)).entities[0].bar.paint.opacity).toBe(0);
+  await rootOpacity.fill('70'); await rootOpacity.press('Tab');
+  await expect(opacity).toHaveValue('0');
+  await child.locator('button[data-action="clear-paint-property"][data-property="opacity"]').click();
+  await expect(opacity).toHaveValue('70');
+  expect((await saved(editor)).entities[0].bar).toBeUndefined();
+});
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} reports an unavailable dashboard preset and preserves its reference (${source})`, async ({ page }) => {
+    const editor = await mountWithPaintPresets(page, host, source, { known: { fill_style: 'solid', color: 'red' } }, {
+      bar: { paint: { preset: 'missing', opacity: 0 } },
+    });
+    const paint = editor.locator('#card-paint-editor');
+    await paint.locator('summary').click();
+    await expect(paint.locator('.paint-preset-feedback')).toContainText('Preset “missing” was not found');
+    expect((await saved(editor)).bar.paint).toEqual({ preset: 'missing', opacity: 0 });
+    await expect(paint.locator('#bar-opacity')).toHaveValue('0');
+  });
+}
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} explains an invalid dashboard paint definition (${source})`, async ({ page }) => {
+    const editor = await mountWithPaintPresets(page, host, source, {
+      broken: { fill_style: 'not-a-fill-style', color: '#123456' },
+    }, { bar: { paint: { preset: 'broken' } } });
+    const paint = editor.locator('#card-paint-editor');
+    await paint.locator('summary').click();
+    await expect(paint.locator('.paint-preset-feedback')).toContainText('Preset “broken” is invalid');
+    expect((await saved(editor)).bar.paint.preset).toBe('broken');
+  });
+}
 
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
   test(`${host} Paint disclosure, styles and round-trips (${source})`, async ({ page }) => {

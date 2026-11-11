@@ -5,6 +5,7 @@ import {
   getFillStyleValue, getEffectiveFillStyleValue, getBarColorValue,
   getEffectiveBarSolidFillValue, getBarAppearanceSummary, hasBarAppearanceOverride,
   handleBarAppearanceField, renderBarAppearanceSection, clearBarAppearanceOverride,
+  getBarPaintEditorState, clearBarPaintPropertyOverride,
 } from '../../src/editor/sections/bar-appearance.js';
 
 const root = { type: 'card' };
@@ -154,6 +155,44 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     expect(editor.shadowRoot.querySelector('#bar-opacity').value).toBe('0');
     expect(editor._draftConfig).toEqual(events.at(-1).detail.config);
   });
+
+  it('selects a preset by reference, applies local overrides, and clears them individually', () => {
+    const { editor } = setup(source, { bar: { paint: { opacity: 35, future: true } } });
+    const context = editor._createSectionContext();
+    const registry = { status: 'ready', presets: { night: { fill_style: 'solid', color: '#112233' } } };
+    const before = getBarPaintEditorState(context, root, null, registry);
+    expect(before.presetOptions).toEqual([{ value: 'preset:night', label: 'night' }]);
+    expect(handleBarAppearanceField(context, { field: 'bar-paint-mode', value: 'preset:night' })).toBe(true);
+    expect(editor._draftConfig.bar.paint).toEqual({ opacity: 35, future: true, preset: 'night' });
+    expect(getBarPaintEditorState(context, root, null, registry).paint).toMatchObject({
+      fill_style: 'solid', color: '#112233', opacity: 35,
+    });
+    handleBarAppearanceField(context, { field: 'bar-opacity', value: 0 });
+    expect(editor._draftConfig.bar.paint.opacity).toBe(0);
+    clearBarPaintPropertyOverride(context, root, 'opacity');
+    expect(editor._draftConfig.bar.paint).toEqual({ future: true, preset: 'night' });
+    expect(getBarPaintEditorState(context, root, null, registry).paint.opacity).toBe(100);
+    expect(handleBarAppearanceField(context, { field: 'bar-paint-mode', value: 'manual' })).toBe(true);
+    expect(editor._draftConfig.bar.paint).toEqual({ future: true });
+  });
+
+  it('reports missing presets and retains the reference while using inherited paint', () => {
+    const { editor } = setup(source, { bar: { paint: { preset: 'missing', opacity: 0 }, color: 'red' } });
+    const state = getBarPaintEditorState(editor._createSectionContext(), root, null, { status: 'ready', presets: {} });
+    expect(state.mode).toBe('preset:missing');
+    expect(state.presetReference).toBe('missing');
+    expect(state.diagnostics).toContainEqual(expect.objectContaining({ code: 'paint_preset_missing', reference: 'missing' }));
+    expect(state.paint).toMatchObject({ color: 'red', opacity: 0 });
+  });
+
+  it('reports malformed preset definitions without discarding local overrides', () => {
+    const { editor } = setup(source, { bar: { paint: { preset: 'bad', opacity: 0 } } });
+    const state = getBarPaintEditorState(editor._createSectionContext(), root, null, {
+      status: 'ready', presets: { bad: { fill_style: 'invalid-style', color: '#123456' } },
+    });
+    expect(state.diagnostics).toContainEqual(expect.objectContaining({ code: 'paint_preset_invalid', reference: 'bad' }));
+    expect(state.paint.opacity).toBe(0);
+  });
 });
 
 describe('Bar Appearance with a root-only host context', () => {
@@ -190,7 +229,7 @@ describe('Bar Appearance with a root-only host context', () => {
     });
     expect(childCalls).toBe(1);
     expect(html).toContain('data-field="bar-fill-style" value="solid"');
-    expect(html).toContain('data-field="bar-color-text-fallback" value="red"');
+    expect(html).toContain('data-field="bar-color-text-fallback" data-paint-property="color" value="red"');
     expect(html.indexOf('id="host-child"')).toBeGreaterThan(html.indexOf('id="bar-color"'));
     expect(renderBarAppearanceSection(host.context, root)).not.toContain('host-child');
     expect(handleBarAppearanceField(host.context, { field: 'bar-fill-style', value: ' gradient ' })).toBe(true);

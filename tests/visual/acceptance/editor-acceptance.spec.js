@@ -46,7 +46,7 @@ for(const host of hosts) {
   // A new routed control cannot silently pass discovery.
   await editor.evaluate(el=>{const input=document.createElement('input');input.dataset.field='uncovered-example';el.shadowRoot.append(input);});
   expect((await d.discover(editor)).filter(id=>!declared.has(id))).toEqual(['field:uncovered-example']);
-  const journeys=new Set(['fields','sources','palettes','inheritance','entities','pickers','disclosures','references','direction']);
+  const journeys=new Set(['fields','sources','palettes','inheritance','entities','pickers','disclosures','references','direction','paint-source']);
   for(const entry of inventory.filter(c=>c.hosts.includes(host)))expect(journeys.has(entry.journey),entry.id).toBe(true);
  });
  test(`${host}: Scale and Bar Direction default, edit and canonicalize only their owned keys`,async({page})=>{
@@ -425,4 +425,24 @@ test('standalone: editing inherited Severity into entity grouped Segments keeps 
  await d.commit(page,editor,()=>editor.locator('#entity-0-segments-inherit').check());
  expect((await d.saved(page)).entities[0].bar?.paint?.segments).toBeUndefined();
  expect((await d.saved(page)).severity).toEqual(severity);
+});
+
+for(const host of hosts)test(`${host}: Paint source selection and property clearing preserve unrelated configuration`,async({page})=>{
+ const config=d.seed(host);config.bar.paint={opacity:35,future:{keep:true}};config.bar.direction='reverse';
+ if(host==='standalone')config.entities[0].bar.paint={opacity:25,local:{keep:true}};
+ const editor=await d.mount(page,host,config);await d.openSection(editor,{section:'Bar Appearance'});
+ const clear=editor.locator('#card-paint-editor button[data-action="clear-paint-property"][data-property="opacity"]');
+ await d.commit(page,editor,()=>clear.click());
+ expect((await d.saved(page)).bar.paint).toEqual({future:{keep:true}});
+ expect((await d.saved(page)).bar.direction).toBe('reverse');
+ const mode=editor.locator('#bar-paint-mode');
+ await d.commit(page,editor,()=>mode.selectOption('inherit'));
+ expect((await d.saved(page)).bar.paint).toEqual({future:{keep:true}});
+ expect((await d.saved(page)).bar.fill_style).toBeUndefined();
+ if(host==='standalone'){
+  await d.openSection(editor,{section:'Bar Appearance',scope:'entity'});
+  await d.commit(page,editor,()=>editor.locator('#entity-0-bar-paint-mode').selectOption('inherit'));
+  expect((await d.saved(page)).entities[0].bar.paint).toEqual({local:{keep:true}});
+  expect((await d.saved(page)).bar.direction).toBe('reverse');
+ }
 });

@@ -29,12 +29,16 @@ describe('shared Paint Editor', () => {
     const paint = { ...palettes, fill_style };
     const { bindings } = bindingFor(paint, []);
     const html = renderPaintEditor({ id: 'paint', bindings, paint });
-    expect(html.match(/<option /g)).toHaveLength(5);
+    expect(html.match(/<option /g)).toHaveLength(7);
+    for (const option of ['solid', 'gradient', 'bands', 'soft_bands', 'band_gradient']) {
+      expect(html).toContain(`data-paint-property="fill_style"`);
+      expect(html).toContain(`<option value="${option}"`);
+    }
     expect(html).toContain(`<option value="${fill_style}" selected>`);
     expect(html).toContain(`background-image:${compilePaint(paint).gradient}`);
     expect(html).toContain(describePaint(paint));
     expect(html).toMatch(/Opacity/);
-    expect(html).not.toMatch(/preset|simulator/);
+    expect(html).not.toMatch(/simulator/);
   });
 
   it('retains mounted disclosure state while accepting host field routing', () => {

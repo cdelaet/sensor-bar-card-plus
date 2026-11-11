@@ -1,4 +1,4 @@
-import { barPaintSource, createBarPaintBindings, usesGroupedBarPaint } from '../editor/shared/bar-paint-bindings.js';
+import { barPaintSource, createBarPaintBindings, readBarPaintProperty, usesGroupedBarPaint } from '../editor/shared/bar-paint-bindings.js';
 import { cloneDeep, getPathValue, setPathValue, isObject } from '../editor/shared/editor-config.js';
 
 // Resolve the authoritative raw palette without normalizing or deleting aliases.
@@ -22,6 +22,8 @@ export function createFeaturePaletteArray(context, kind) {
     const path = palettePath(context, config, kind);
     const stored = path ? getPathValue(config, path) : undefined;
     if (stored !== undefined) return Array.isArray(stored) ? stored : [];
+    const resolved = readBarPaintProperty(context, { type: 'card' }, kind);
+    if (Array.isArray(resolved)) return resolved;
     return kind === 'segments' ? section._getFallbackSegments({ type: 'card' }) : section._getDefaultGradientStops();
   };
   return {

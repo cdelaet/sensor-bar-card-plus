@@ -44,6 +44,7 @@ for (const marker of ['target', 'peak', 'floor']) {
 field('bar-fill-style', 'Bar Appearance', 'select', 'bar.fill_style', ['gradient', 'soft_bands', 'band_gradient', 'solid']);
 field('bar-solid-fill', 'Bar Appearance', 'checkbox', 'bar.solid_fill', null);
 field('bar-opacity', 'Bar Appearance', 'number', 'bar.paint.opacity', '37');
+field('bar-paint-mode', 'Bar Appearance', 'select', null, ['inherit'], { journey: 'paint-source' });
 field('bar-direction', 'Bar Appearance', 'select', 'bar.direction', ['normal', 'reverse'], { journey: 'direction' });
 field('bar-animated', 'Bar Appearance', 'checkbox', 'bar.animated', null, { hosts: ['feature'] });
 color('field', 'bar-color', 'Bar Appearance', 'bar.color');
@@ -119,6 +120,7 @@ for (const [section,names,hosts,journey] of [
  ['Baseline',['remove-baseline'],['standalone','feature'],'sources'],
  ['Segments',['add-segment','remove-segment','add-entity-segment','remove-entity-segment'],['standalone','feature'],'palettes'],
  ['Gradient Stops',['add-gradient-stop','remove-gradient-stop','add-entity-gradient-stop','remove-entity-gradient-stop'],['standalone','feature'],'palettes'],
+ ['Bar Appearance',['clear-paint-property'],['standalone','feature'],'paint-source'],
 ]) for (const name of names) add('action',name,section,'button',null,null,{hosts:name.includes('-entity-')?['standalone']:hosts,journey,structural:true,echo:journey!=='disclosures'});
 const inventory = controls.filter(c=>c.hosts.length);
 const selector = entry => `[data-${entry.route}="${entry.name}"]${entry.scope==='entity'?'[data-index="0"]':''}`;
