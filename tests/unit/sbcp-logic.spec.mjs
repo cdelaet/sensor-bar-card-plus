@@ -378,7 +378,8 @@ describe('Sensor Bar Card Plus logic', () => {
     );
 
     expect(row.bar.fill_style).toBe('solid');
-    expect(layers[0].paintStyle).toContain('#00ff00');
+    expect(layers[0].paintStyle).not.toContain('#00ff00');
+    expect(layers.find(layer => layer.id === 'baseline-above').paintStyle).toContain('#00ff00');
     expect(layers.find((layer) => layer.id === 'above-target')).toMatchObject({
       visible: true,
       paintStyle: expect.stringContaining('#ff00ff'),

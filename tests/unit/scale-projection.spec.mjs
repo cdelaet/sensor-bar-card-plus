@@ -283,9 +283,12 @@ describe('Scale Direction and Bar Direction', () => {
     });
     const paint = segments.model.fill.paintLayers[0].paintStyle;
     expect(paint).toContain('linear-gradient(to right, #ff0000 0%, #ff0000 50%, #00ff00 50%, #00ff00 100%)');
-    expect(paint).toContain('#ff0000 0%,#ff0000 50%');
-    expect(paint).toContain('#0000ff 50%,#0000ff 100%');
-    expect(segments.model.fill.paintLayers[1].revealStyle).toContain('inset(0 50% 0 0');
+    expect(segments.model.fill.paintLayers.find(layer => layer.id === 'baseline-above').paintStyle)
+      .toContain('#ff0000 0%,#ff0000 50%');
+    expect(segments.model.fill.paintLayers.find(layer => layer.id === 'baseline-below').paintStyle)
+      .toContain('#0000ff 50%,#0000ff 100%');
+    expect(segments.model.fill.paintLayers.find(layer => layer.id === 'above-target').revealStyle)
+      .toContain('inset(0 50% 0 0');
 
     const gradient = resolved({
       scale: { min: 0, max: 100, direction: 'reverse' },

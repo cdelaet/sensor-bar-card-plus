@@ -138,7 +138,6 @@ export function patchHistoryStatus(root, summary) {
 export function patchBar(root, model, { revealDuration = 600 } = {}) {
   const fillReveal = root.querySelector('.bar-fill-reveal');
   const baselineIndicator = root.querySelector('.baseline-indicator');
-  const paintLayer = root.querySelector('.bar-paint-layer[data-layer="base"]');
   if (fillReveal) {
     setStyleTextIfChanged(fillReveal, `${model.fill.revealStyle};--sbcp-reveal-duration:${revealDuration}ms`);
     setClassNameIfChanged(fillReveal, `bar-fill-reveal${model.animated ? '' : ' no-anim'}`);
@@ -150,17 +149,10 @@ export function patchBar(root, model, { revealDuration = 600 } = {}) {
       setStyleIfChanged(baselineIndicator, 'left', `${baselinePosition}%`);
     }
   }
-  if (paintLayer) {
-    const baseLayerState = model.fill.paintLayers.find(layer => layer.id === 'base');
-    if (baseLayerState) {
-      setStyleTextIfChanged(paintLayer, `z-index:${baseLayerState.zIndex};${baseLayerState.paintStyle}${baseLayerState.revealStyle}`);
-    }
-  }
-  const aboveTargetLayer = root.querySelector('.bar-paint-layer[data-layer="above-target"]');
-  if (aboveTargetLayer) {
-    const aboveTargetState = model.fill.paintLayers.find(layer => layer.id === 'above-target');
-    if (aboveTargetState) {
-      setStyleTextIfChanged(aboveTargetLayer, `z-index:${aboveTargetState.zIndex};${aboveTargetState.paintStyle}${aboveTargetState.revealStyle}`);
+  for (const layer of model.fill.paintLayers) {
+    const paintLayer = root.querySelector(`.bar-paint-layer[data-layer="${layer.id}"]`);
+    if (paintLayer) {
+      setStyleTextIfChanged(paintLayer, `z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}`);
     }
   }
   const needleEl = root.querySelector('.needle-marker');

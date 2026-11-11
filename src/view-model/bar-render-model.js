@@ -154,28 +154,32 @@ export function getAboveTargetLayerGeometry(targetPct = null, scaleDirection = '
   };
 }
 
-export function getFullScalePaintStyle(ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, scaleDirection = 'normal') {
-  const layers = [];
-  const basePaint = getBasePaintGradient(color, ecfg, minValue, maxValue, scaleDirection);
+function getBaselinePaintGradients(ecfg, baselinePct, scaleDirection) {
   const clampedBaseline = Number.isFinite(baselinePct)
     ? Math.min(100, Math.max(0, baselinePct))
     : null;
 
-  if (Number.isFinite(clampedBaseline)) {
-    const belowColor = ecfg.baseline?.below?.color ?? null;
-    const aboveColor = ecfg.baseline?.above?.color ?? null;
-    const below = projectScaleInterval(0, clampedBaseline, scaleDirection);
-    const above = projectScaleInterval(clampedBaseline, 100, scaleDirection);
-    const belowOverlay = below ? getOverlayGradient(below.start, below.end, belowColor) : null;
-    const aboveOverlay = above ? getOverlayGradient(above.start, above.end, aboveColor) : null;
-    if (belowOverlay) layers.push(belowOverlay);
-    if (aboveOverlay) layers.push(aboveOverlay);
-  }
+  const below = projectScaleInterval(0, clampedBaseline, scaleDirection);
+  const above = projectScaleInterval(clampedBaseline, 100, scaleDirection);
+  return {
+    below: below ? getOverlayGradient(below.start, below.end, ecfg.baseline?.below?.color) : null,
+    above: above ? getOverlayGradient(above.start, above.end, ecfg.baseline?.above?.color) : null,
+  };
+}
 
-  if (basePaint) layers.push(basePaint);
+function getFullScaleBackgroundStyle(gradients) {
+  const layers = gradients.filter(Boolean);
   if (!layers.length) return 'display:none;';
-
   return `display:block;inset:0;background-image:${layers.join(',')};background-repeat:no-repeat;background-size:100% 100%;`;
+}
+
+// Compatibility form for callers that still need one composed background.
+export function getFullScalePaintStyle(ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, scaleDirection = 'normal') {
+  const baseline = getBaselinePaintGradients(ecfg, baselinePct, scaleDirection);
+  return getFullScaleBackgroundStyle([
+    baseline.below, baseline.above,
+    getBasePaintGradient(color, ecfg, minValue, maxValue, scaleDirection),
+  ]);
 }
 
 export function getRevealShapeStyle(geometry, h) {
@@ -205,7 +209,9 @@ export function getStaticLayerRevealStyle(geometry) {
 }
 
 export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, scaleDirection = 'normal') {
-  const basePaintStyle = getFullScalePaintStyle(ecfg, color, targetPct, baselinePct, minValue, maxValue, scaleDirection);
+  const basePaintStyle = getFullScaleBackgroundStyle([
+    getBasePaintGradient(color, ecfg, minValue, maxValue, scaleDirection),
+  ]);
   const baseLayer = {
     id: 'base',
     zIndex: 1,
@@ -213,6 +219,18 @@ export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, b
     paintStyle: basePaintStyle,
     revealStyle: 'display:block;',
   };
+
+  const baseline = getBaselinePaintGradients(ecfg, baselinePct, scaleDirection);
+  // At equal z-indices, later nodes paint on top: Baseline-above covers
+  // ordinary fill, and Baseline-below covers both, matching background order.
+  // Keep inactive nodes too, allowing source recovery without rebuilding the bar.
+  const baselineLayers = ['above', 'below'].map(side => ({
+    id: `baseline-${side}`,
+    zIndex: 1,
+    visible: !!baseline[side],
+    paintStyle: getFullScaleBackgroundStyle([baseline[side]]),
+    revealStyle: baseline[side] ? 'display:block;' : 'display:none;',
+  }));
 
   const aboveTargetGeometry = getAboveTargetLayerGeometry(targetPct, scaleDirection);
   const aboveTargetLayer = {
@@ -227,7 +245,7 @@ export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, b
       : getStaticLayerRevealStyle({ start: 0, end: 0, hidden: true }),
   };
 
-  return [baseLayer, aboveTargetLayer];
+  return [baseLayer, ...baselineLayers, aboveTargetLayer];
 }
 
 export function getFillRenderState(
