@@ -216,11 +216,12 @@ export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, b
   const basePaintStyle = getFullScaleBackgroundStyle([
     getBasePaintGradient(color, ecfg, minValue, maxValue, scaleDirection),
   ]);
+  const opacity = ecfg?.bar?.paint?.opacity ?? 100;
   const baseLayer = {
     id: 'base',
     zIndex: 1,
     visible: true,
-    paintStyle: basePaintStyle,
+    paintStyle: opacity === 100 ? basePaintStyle : `${basePaintStyle}opacity:${opacity / 100};`,
     revealStyle: 'display:block;',
   };
 

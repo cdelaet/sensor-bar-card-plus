@@ -16,7 +16,7 @@ for (const fill_style of ['solid', 'gradient', 'bands', 'soft_bands', 'band_grad
       const paint = { fill_style, color: '#556677', solid_fill, segments, gradient_stops };
       const raw = { entities: [entity], scale: { max: { entity: 'sensor.maximum' }, direction: scaleDirection }, bar: { direction: barDirection } };
       const legacy = normalizeCardConfig({ ...raw, bar: { ...raw.bar, ...paint } });
-      const grouped = normalizeCardConfig({ ...raw, bar: { ...raw.bar, paint: { ...paint, opacity: 0 } } });
+      const grouped = normalizeCardConfig({ ...raw, bar: { ...raw.bar, paint: { ...paint, opacity: 100 } } });
       const original = structuredClone(grouped.entities[0].bar.paint);
       // Make the compatibility fields disagree: runtime must use canonical paint.
       Object.assign(grouped.entities[0].bar, { color: 'red', fill_style: 'solid', solid_fill: true, segments: [], gradient_stops: [] });

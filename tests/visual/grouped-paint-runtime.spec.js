@@ -8,7 +8,7 @@ for (const source of ['src', 'dist']) for (const scaleDirection of ['normal', 'r
       const { buildBarRenderModel } = await import('/src/view-model/bar-render-model.js');
       const { renderBar } = await import('/src/render/bar-renderer.js');
       const read = root => ({ clip: root.querySelector('.bar-fill-reveal').style.clipPath,
-        layers: [...root.querySelectorAll('.bar-paint-layer')].map(node => [node.dataset.layer, node.style.backgroundImage]) });
+        layers: [...root.querySelectorAll('.bar-paint-layer')].map(node => [node.dataset.layer, node.getAttribute('style')]) });
       const results = [];
       for (const fill_style of ['solid', 'gradient', 'bands', 'soft_bands', 'band_gradient']) for (const solid_fill of [false, true]) {
         const config = { scale: { min: 0, max: { entity: 'sensor.maximum' }, direction: scaleDirection },
