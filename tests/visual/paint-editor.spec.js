@@ -133,3 +133,63 @@ for (const host of ['Card', 'Feature']) test(`${host} swatch follows dynamic Sca
   expect(await swatch.evaluate(node => node === window.__swatchNode)).toBe(true);
   expect(await page.evaluate(() => window.__paintEvents)).toEqual([]);
 });
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} swatches composite translucent and opaque paint once (${source})`, async ({ page }) => {
+    const editor = await mount(page, host, source);
+    await editor.evaluate(el => el.style.setProperty('--card-background-color', '#fff'));
+    const swatch = editor.locator('#card-paint-editor .paint-editor-swatch');
+    for (const [paint, expected] of [
+      [{ fill_style: 'solid', color: 'rgba(255, 0, 0, 0.5)' }, 'rgba(255, 0, 0, 0.5)'],
+      [{ fill_style: 'solid', color: 'rgba(0, 255, 0, 0.25)' }, 'rgba(0, 255, 0, 0.25)'],
+      [{ fill_style: 'bands', solid_fill: true, color: 'rgba(255, 0, 0, 0.5)',
+        segments: [{ from: '0%', to: '100%', color: 'rgba(0, 0, 255, 0.25)' }] }, 'rgba(0, 0, 255, 0.25)'],
+      [{ fill_style: 'solid', color: '#123456' }, '#123456'],
+    ]) {
+      await editor.evaluate(async (el, paint) => {
+        el.setConfig({ ...(el._draftConfig ?? el._config), bar: paint });
+        await el.updateComplete;
+      }, paint);
+      await swatch.scrollIntoViewIfNeeded();
+      // Compare actual browser pixels against a single CSS color layer over white.
+      // The reference is test-only and does not use the paint compiler.
+      await page.evaluate(color => {
+        document.querySelector('#swatch-reference')?.remove();
+        const backdrop = document.createElement('div');
+        backdrop.id = 'swatch-reference';
+        backdrop.style.cssText = 'position:fixed;left:0;top:0;width:4px;height:4px;background:white;z-index:9999';
+        const layer = document.createElement('div');
+        layer.style.cssText = 'width:100%;height:100%';
+        layer.style.backgroundColor = color;
+        backdrop.append(layer); document.body.append(backdrop);
+      }, expected);
+      const bounds = await swatch.boundingBox();
+      const actualPixels = await page.screenshot({ clip: { x: Math.floor(bounds.x + bounds.width / 2), y: Math.floor(bounds.y + bounds.height / 2), width: 2, height: 2 } });
+      const expectedPixels = await page.screenshot({ clip: { x: 1, y: 1, width: 2, height: 2 } });
+      expect(actualPixels.equals(expectedPixels)).toBe(true);
+    }
+    expect(await page.evaluate(() => window.__paintEvents)).toEqual([]);
+  });
+}
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} promotes null bar on an explicit paint edit (${source})`, async ({ page }) => {
+    const editor = await mount(page, host, source);
+    const original = await saved(editor);
+    for (const [property, value] of [['fill_style', 'gradient'], ['color', '#abcdef'], ['solid_fill', true]]) {
+      await editor.evaluate(async (el, config) => { el.setConfig({ ...config, bar: null }); await el.updateComplete; }, original);
+      expect((await saved(editor)).bar).toBeNull();
+      const events = await page.evaluate(() => window.__paintEvents.length);
+      const paint = editor.locator('#card-paint-editor');
+      if (!await paint.evaluate(node => node.open)) await paint.locator('summary').click();
+      expect(await page.evaluate(() => window.__paintEvents.length)).toBe(events);
+      if (property === 'fill_style') await editor.locator('#bar-fill-style').selectOption(value);
+      else if (property === 'solid_fill') await editor.locator('#bar-solid-fill').check();
+      else await editor.locator('#bar-color').evaluate((node, value) => {
+        node.value = value; node.dispatchEvent(new Event('input', { bubbles: true }));
+      }, value);
+      expect(await page.evaluate(() => window.__paintEvents.length)).toBe(events + 1);
+      expect(await saved(editor)).toEqual({ ...original, bar: { [property]: value } });
+    }
+  });
+}

@@ -93,3 +93,62 @@ it('identifies a local legacy nested color mode as authored paint in the compact
   expect(state.paint.fill_style).toBe('solid');
   expect(state.inherited).toBe(false);
 });
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Card row', 'Feature']) {
+  describe(`null bar promotion (${host}, ${source})`, () => {
+    it.each([
+      ['fill_style', 'fill-style', 'gradient', 'change'],
+      ['color', 'color', '#abcdef', 'input'],
+      ['solid_fill', 'solid-fill', true, 'change'],
+    ])('emits one owned %s edit without materializing inherited properties', async (property, field, value, type) => {
+      const { loadCardClass } = await import('../support/load-card-class.cjs');
+      const classes = loadCardClass({ source });
+      const row = host === 'Card row';
+      const config = host === 'Feature'
+        ? { type: 'custom:sensor-bar-card-plus-feature', bar: null, extra: { keep: true } }
+        : { entities: [{ entity: 'sensor.power', ...(row ? { bar: null, extra: true } : {}) }, { entity: 'sensor.other' }],
+          bar: row ? { fill_style: 'bands', color: '#112233', solid_fill: false, future: true } : null, extra: { keep: true } };
+      const original = structuredClone(config);
+      const editor = new (host === 'Feature' ? classes.featureEditor : classes.editor)();
+      const events = [];
+      editor.dispatchEvent = event => { events.push(event); return true; };
+      editor.setConfig(config);
+      await editor.updateComplete;
+      expect(events).toHaveLength(0);
+      expect(row ? editor._draftConfig.entities[0].bar : (editor._draftConfig ?? editor._config).bar).toBeNull();
+      const control = editor.shadowRoot.querySelector(`#${row ? 'entity-0-' : ''}bar-${field}`);
+      if (typeof value === 'boolean') control.checked = value;
+      else control.value = value;
+      control.dispatchEvent({ type });
+      await editor.updateComplete;
+      expect(events).toHaveLength(1);
+      const emitted = events[0].detail.config;
+      const expected = structuredClone(original);
+      if (row) expected.entities[0].bar = { [property]: value };
+      else expected.bar = { [property]: value };
+      expect(emitted).toEqual(expected);
+      expect(events[0]).toMatchObject({ bubbles: true, composed: true });
+      expect(config).toEqual(original);
+      editor.setConfig(emitted);
+      await editor.updateComplete;
+      expect(events).toHaveLength(1);
+      expect(editor._draftConfig ?? editor._config).toEqual(emitted);
+    });
+  });
+}
+
+it.each([
+  { fill_style: 'solid', color: 'rgba(255, 0, 0, 0.5)' },
+  { fill_style: 'bands', solid_fill: true, color: 'rgba(0, 255, 0, 0.5)', segments: [{ from: 0, to: 100, color: 'rgba(0, 0, 255, 0.25)' }] },
+  { fill_style: 'solid', color: '#123456' },
+])('composites compiled paint once over a neutral backdrop: %j', paint => {
+  const { bindings } = bindingFor(paint, []);
+  const html = renderPaintEditor({ id: 'paint', bindings });
+  expect(html).toContain('background-color:var(--card-background-color, #fff)');
+  expect(html).toContain(`background-image:${compilePaint(paint).gradient}`);
+  const swatch = { style: { backgroundColor: paint.color } };
+  const editor = { querySelector: selector => selector.includes('swatch') ? swatch : null };
+  syncPaintEditor({ querySelector: () => editor }, 'paint', { paint });
+  expect(swatch.style.backgroundColor).toBe('var(--card-background-color, #fff)');
+  expect(swatch.style.backgroundImage).toBe(compilePaint(paint).gradient);
+});

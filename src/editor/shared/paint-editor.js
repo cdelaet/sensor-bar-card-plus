@@ -3,6 +3,7 @@ import { compilePaint } from '../../view-model/paint-compiler.js';
 import { setStyleIfChanged } from '../../utils/dom.js';
 
 const styleNames = { solid: 'Solid', gradient: 'Gradient', bands: 'Bands', soft_bands: 'Soft bands', band_gradient: 'Band gradient' };
+const swatchBackdrop = 'var(--card-background-color, #fff)';
 
 export function describePaint(paint, inherited = false) {
   const style = paint.fill_style ?? 'bands';
@@ -37,7 +38,7 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
   const fillStyle = paint.fill_style ?? 'bands';
   return `<details id="${id}" class="paint-editor"${open ? ' open' : ''}>
     <summary class="paint-editor-summary">
-      <span class="paint-editor-swatch" aria-hidden="true" style="background-color:${escapeAttribute(paint.color || 'var(--primary-color, #4a9eff)')};background-image:${escapeAttribute(swatchPaint(paint, scale))};"></span>
+      <span class="paint-editor-swatch" aria-hidden="true" style="background-color:${swatchBackdrop};background-image:${escapeAttribute(swatchPaint(paint, scale))};"></span>
       <span class="paint-editor-heading">Paint</span>
       <span class="paint-editor-description">${escapeAttribute(describePaint(paint, inherited))}</span>
     </summary>
@@ -68,6 +69,6 @@ export function syncPaintEditor(root, id, { paint, inherited, scale }) {
   const text = describePaint(paint, inherited);
   if (description && description.textContent !== text) description.textContent = text;
   const swatch = editor.querySelector?.('.paint-editor-swatch');
-  setStyleIfChanged(swatch, 'backgroundColor', paint.color || 'var(--primary-color, #4a9eff)');
+  setStyleIfChanged(swatch, 'backgroundColor', swatchBackdrop);
   setStyleIfChanged(swatch, 'backgroundImage', swatchPaint(paint, scale));
 }

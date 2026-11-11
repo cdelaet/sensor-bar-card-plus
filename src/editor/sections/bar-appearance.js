@@ -1,6 +1,6 @@
 import { normalizeBarConfig, normalizeGaugeSegments, normalizeScaleConfig } from '../../config/normalize.js';
 import {
-  isObject, normalizeTextValue,
+  isObject, normalizeTextValue, getPathValue,
   removePathsFromTarget, pruneEmptyObjectsInTarget,
 } from '../shared/editor-config.js';
 import { escapeAttribute, normalizeColorComparisonValue, normalizeEditorColorValue } from '../shared/editor-controls.js';
@@ -59,9 +59,12 @@ export function getEffectiveBarColorValue(context, scope) {
 function setAppearanceValue(context, scope, key, value, deprecatedKeys = []) {
   const options = { deprecatedKeys, prunePaths: [['bar']] };
   const cleanup = target => pruneEmptyObjectsInTarget(removePathsFromTarget(target, deprecatedKeys), ['bar']);
+  // Promotion belongs to this bar adapter. Present the promoted destination to
+  // the bindings and apply it atomically with the edit, without a separate emit.
+  const promoteBar = target => target?.bar === null ? { ...target, bar: {} } : target;
   const bindings = createPaintBindings({
-    read: (scope, path) => context.read(scope, path),
-    mutate: (scope, mutation, options) => context.mutate(scope, target => cleanup(mutation(target)), options),
+    read: (scope, path) => getPathValue(promoteBar(context.read(scope, [])), path),
+    mutate: (scope, mutation, options) => context.mutate(scope, target => cleanup(mutation(promoteBar(target))), options),
   }, { scope, path: ['bar'] });
   // Clearing an absent structured field must still remove its legacy alias.
   if (value === undefined && !bindings.hasOverride(key)) return context.mutate(scope, cleanup, options);

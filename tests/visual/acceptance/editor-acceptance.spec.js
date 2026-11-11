@@ -84,9 +84,14 @@ for(const host of hosts) {
  });
  test(`${host}: disclosures retain state through echo and normal close/reopen`,async({page})=>{
   const editor=await d.mount(page,host);await expect(editor.locator('.card-subgroup[data-expanded="true"]')).toHaveCount(0);
+  const paint=editor.locator('#card-paint-editor');
+  await expect(paint).not.toHaveAttribute('open');await expect(editor.locator('#card-group-segments')).toBeHidden();
+  await d.openSection(editor,{section:'Bar Appearance'});
+  await expect(paint).toHaveAttribute('open');await expect(editor.locator('#card-group-segments')).toBeVisible();
   for(const group of Object.values(groups)){
    const button=editor.locator(`#card-group-${group}`);if(!(await button.count()))continue;await d.openDisclosure(button);await d.echo(page,editor);await expect(button).toHaveAttribute('aria-expanded','true');await d.closeDisclosure(button);await d.openDisclosure(button);
   }
+  await expect(paint).toHaveAttribute('open');expect(await d.count(page)).toBe(0);
   await refs(editor);const row=rootRows(editor).nth(1);await d.commit(page,editor,()=>ref(row,'label-text').fill('Marker Two'));await expect(row).toHaveAttribute('data-expanded','true');
   await d.closeDisclosure(row.locator('.generic-marker-toggle'));await d.openDisclosure(row.locator('.generic-marker-toggle'));
  });
