@@ -3,6 +3,8 @@ import { canonicalizeHistoricalWindow, parseHistoricalWindow, isEligibleHistoric
 
 export const UNSUPPORTED_EXTREMA_ALIASES = Symbol.for('sensor-bar-card-plus.unsupported-extrema-aliases');
 export const INVALID_PAINT_OPACITY = Symbol.for('sensor-bar-card-plus.invalid-paint-opacity');
+export const BAR_PAINT_DIAGNOSTICS = Symbol.for('sensor-bar-card-plus.bar-paint-diagnostics');
+export const PAINT_PROPERTY_SOURCES = Symbol.for('sensor-bar-card-plus.paint-property-sources');
 
 /** Normalize only opacity; private metadata retains the invalid input for later diagnostics. */
 export function normalizePaintOpacity(paint) {
@@ -554,7 +556,111 @@ function hasExplicitColor(config) {
   return values.some((value) => value !== undefined && value !== null);
 }
 
+const barPaintAliases = {
+  color: [['bar', 'color'], ['color']],
+  fill_style: [['bar', 'fill_style'], ['bar', 'color_mode'], ['color_mode']],
+  solid_fill: [['bar', 'solid_fill']],
+  segments: [['bar', 'segments'], ['segments'], ['severity']],
+  gradient_stops: [['bar', 'gradient_stops'], ['gradient_stops']],
+};
+
+function paintAliasValue(config, path) {
+  return path.reduce((value, key) => value?.[key], config);
+}
+
+function isPaintObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isPaintColor(value) {
+  // Colors remain CSS strings, including variables and named colors. Do not
+  // make pure normalization depend on browser CSS.supports or a new parser.
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+function isValidGroupedPaintProperty(property, value) {
+  switch (property) {
+    case 'color': return isPaintColor(value);
+    case 'fill_style': return ['solid', 'gradient', 'bands', 'soft_bands', 'band_gradient'].includes(value);
+    case 'solid_fill': return typeof value === 'boolean';
+    case 'segments': {
+      if (!Array.isArray(value)) return false;
+      const normalized = normalizeGaugeSegments(value);
+      return normalized.length === value.length && normalized.every(segment => !segment.invalidBoundary && isPaintColor(segment.color));
+    }
+    case 'gradient_stops': return Array.isArray(value) && value.every(stop => {
+      const pos = parsePercentLiteral(stop?.pos) ?? getFiniteNumber(stop?.pos);
+      return isPaintObject(stop) && Number.isFinite(pos) && pos >= 0 && pos <= 100 && isPaintColor(stop.color);
+    });
+    default: return false;
+  }
+}
+
+function validPaintFallbacks(config, property) {
+  let result = config;
+  for (const path of barPaintAliases[property] ?? []) {
+    const value = paintAliasValue(config, path);
+    if (value === undefined) continue;
+    const valid = path.at(-1) === 'color_mode'
+      ? colorModeToFillStyle(value) !== null
+      : path.at(-1) === 'severity'
+        ? Array.isArray(value) && normalizeSeverityToSegments(value).length === value.length
+        : isValidGroupedPaintProperty(property, value);
+    if (valid) continue;
+    if (result === config) {
+      result = { ...config, bar: { ...config?.bar } };
+      if (hasOwnConfigValue(config?.bar, EXPLICIT_SEGMENT_SPACE)) {
+        Object.defineProperty(result.bar, EXPLICIT_SEGMENT_SPACE, { value: config.bar[EXPLICIT_SEGMENT_SPACE] });
+      }
+    }
+    if (path.length === 1) delete result[path[0]];
+    else delete result.bar[path[1]];
+  }
+  return result;
+}
+
+// Adapt only grouped properties into the established bar/alias pipeline. Legacy
+// inputs retain their released normalization, including malformed-value handling.
+function groupedBarPaintInput(config, authored = config) {
+  const paint = config?.bar?.paint;
+  const diagnostics = [];
+  const overrides = {};
+  if (hasOwnConfigValue(config?.bar, EXPLICIT_SEGMENT_SPACE) || paint === undefined) return { config, paint, diagnostics, overrides };
+  if (!isPaintObject(paint)) {
+    diagnostics.push({ kind: 'invalid', property: null, input: paint });
+    return { config, paint: null, diagnostics, overrides };
+  }
+  for (const property of Object.keys(barPaintAliases)) {
+    if (!hasOwnConfigValue(paint, property) || paint[property] === undefined) continue;
+    if (!isValidGroupedPaintProperty(property, paint[property])) {
+      diagnostics.push({ kind: 'invalid', property, input: paint[property] });
+      // Only a new invalid grouped property opts into finding a valid fallback;
+      // do not tighten released legacy-only normalization.
+      config = validPaintFallbacks(config, property);
+      continue;
+    }
+    overrides[property] = paint[property];
+    const alias = barPaintAliases[property].find(path => paintAliasValue(authored, path) != null);
+    if (alias) diagnostics.push({ kind: 'legacy_conflict', property, legacyPath: alias.join('.') });
+  }
+  return { config: { ...config, bar: { ...config?.bar, ...overrides } }, paint, diagnostics, overrides };
+}
+
+function paintPropertySources(config, overrides, paint) {
+  const sources = {};
+  for (const [property, aliases] of Object.entries(barPaintAliases)) {
+    if (hasOwnConfigValue(overrides, property)) sources[property] = `bar.paint.${property}`;
+    else {
+      const alias = aliases.find(path => paintAliasValue(config, path) != null);
+      if (alias) sources[property] = alias.join('.');
+    }
+  }
+  if (isPaintObject(paint) && hasOwnConfigValue(paint, 'opacity') && paint.opacity !== undefined) sources.opacity = 'bar.paint.opacity';
+  return sources;
+}
+
 function getPaintExplicitness(config) {
+  config = groupedBarPaintInput(config).config;
   const bar = config?.bar;
   const explicitPaintKeys = [
     [config, 'color_mode'],
@@ -653,6 +759,14 @@ export function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
     ?? cardConfig?.[PAINT_EXPLICITNESS]
     ?? getPaintExplicitness(cardConfig);
   const isCardScope = options.isCardScope ?? cardConfig == null;
+  const authored = options.rawConfig ?? entityConfig;
+  const local = groupedBarPaintInput(entityConfig, authored);
+  const inherited = groupedBarPaintInput(cardConfig);
+  entityConfig = local.config;
+  cardConfig = inherited.config;
+  for (const issue of local.diagnostics) {
+    if (issue.kind === 'invalid' && issue.property !== null) cardConfig = validPaintFallbacks(cardConfig, issue.property);
+  }
   const cardBar = cardConfig?.bar;
   const entityBar = entityConfig?.bar;
   // Normalized severity also uses percent space; only a configured legacy mode
@@ -683,7 +797,9 @@ export function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
     segments = normalizeSeverityToSegments(entityLegacySeverity);
     segment_space = 'percent';
   } else if (cardStructuredSegments !== null && cardStructuredSegments !== undefined) {
-    segments = cardStructuredSegments.map((segment) => ({ ...segment }));
+    segments = hasOwnConfigValue(inherited.overrides, 'segments')
+      ? normalizeGaugeSegments(cardStructuredSegments, { legacySegmentSpace: inheritedSegmentSpace })
+      : cardStructuredSegments.map((segment) => ({ ...segment }));
   } else if (cardTopLevelSegments !== null && cardTopLevelSegments !== undefined) {
     segments = normalizeGaugeSegments(cardTopLevelSegments);
   } else if (cardLegacySeverity !== null && cardLegacySeverity !== undefined) {
@@ -728,6 +844,27 @@ export function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
     above_target_color: structuredAboveTargetColor ?? entityConfig.above_target_color ?? cardBar?.above_target_color ?? inheritedStructuredAboveTargetColor ?? cardConfig?.above_target_color ?? null,
   };
   Object.defineProperty(normalizedBar, EXPLICIT_SEGMENT_SPACE, { value: explicitSegmentSpace });
+  const localOpacity = isPaintObject(local.paint) && hasOwnConfigValue(local.paint, 'opacity') && local.paint.opacity !== undefined;
+  const inheritedPaint = cardBar?.paint;
+  const paint = normalizePaintOpacity({
+    ...(isPaintObject(inheritedPaint) ? inheritedPaint : {}),
+    ...(isPaintObject(local.paint) ? local.paint : {}),
+    ...Object.fromEntries(Object.keys(barPaintAliases).map(key => [key, normalizedBar[key]])),
+    opacity: localOpacity ? local.paint.opacity : inheritedPaint?.opacity,
+  });
+  if (!localOpacity && hasOwnConfigValue(inheritedPaint, INVALID_PAINT_OPACITY)) {
+    Object.defineProperty(paint, INVALID_PAINT_OPACITY, { value: inheritedPaint[INVALID_PAINT_OPACITY] });
+  }
+  if (localOpacity && hasOwnConfigValue(paint, INVALID_PAINT_OPACITY)) {
+    local.diagnostics.push({ kind: 'invalid', property: 'opacity', input: paint[INVALID_PAINT_OPACITY] });
+  }
+  let sourceConfig = authored;
+  for (const issue of local.diagnostics) {
+    if (issue.kind === 'invalid' && issue.property !== null) sourceConfig = validPaintFallbacks(sourceConfig, issue.property);
+  }
+  Object.defineProperty(paint, PAINT_PROPERTY_SOURCES, { value: paintPropertySources(sourceConfig, local.overrides, local.paint) });
+  normalizedBar.paint = paint;
+  if (local.diagnostics.length) Object.defineProperty(normalizedBar, BAR_PAINT_DIAGNOSTICS, { value: local.diagnostics });
   return normalizedBar;
 }
 
@@ -1176,6 +1313,7 @@ export function normalizeCardConfig(rawConfig) {
   normalizedCard.layout = normalizeLayoutConfig(baseConfig, null);
   normalizedCard.scale = normalizeScaleConfig(rawConfig, null);
   normalizedCard.bar = normalizeBarConfig(baseConfig, null, {
+    rawConfig,
     scopeExplicitness: cardPaintExplicitness,
     inheritedExplicitness: null,
     isCardScope: true,

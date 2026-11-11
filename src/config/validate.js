@@ -1,4 +1,4 @@
-import { getFiniteNumber, UNSUPPORTED_EXTREMA_ALIASES } from './normalize.js';
+import { getFiniteNumber, UNSUPPORTED_EXTREMA_ALIASES, BAR_PAINT_DIAGNOSTICS } from './normalize.js';
 
 function createDiagnostic(code, message, path, entity = null) {
   return { code, message, path, entity };
@@ -267,6 +267,14 @@ function validateGradientStops(diagnostics, stops, path, entity = null) {
 }
 
 function validateConfigScope(diagnostics, config, path, entity = null) {
+  for (const issue of config?.bar?.[BAR_PAINT_DIAGNOSTICS] ?? []) {
+    const paintPath = `${path}.bar.paint${issue.property === null ? '' : `.${issue.property}`}`;
+    addWarning(diagnostics, `paint.${issue.kind === 'invalid' ? 'invalid_value' : 'legacy_conflict'}`,
+      issue.kind === 'legacy_conflict'
+        ? `Grouped paint overrides ${issue.legacyPath}.`
+        : issue.property === 'opacity' ? 'Invalid paint opacity; using 100.'
+          : 'Invalid grouped paint value; using the legacy, inherited or default value.', paintPath, entity);
+  }
   if (config?.scale?.direction_invalid) {
     addWarning(diagnostics, 'scale.invalid_direction',
       'Scale direction must be `normal` or `reverse`; using the inherited or default direction.',
