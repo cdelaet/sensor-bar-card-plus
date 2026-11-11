@@ -481,7 +481,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementText(`entity-${index}-group-peak-summary`, this._getPeakSummary(scope));
       this._setElementText(`entity-${index}-group-floor-summary`, this._getFloorSummary(scope));
       this._setElementText(`entity-${index}-group-markers-summary`, this._getGenericMarkersSummary(scope));
-      this._setElementText(`entity-${index}-group-bar-summary`, this._getBarAppearanceSummary(scope));
       syncBarPaintEditor(this.shadowRoot, this._createSectionContext(), scope, this._paintPaletteValues(scope));
       this._setElementText(`entity-${index}-group-segments-summary`, this._getSegmentsSummary(scope));
       this._setElementText(`entity-${index}-group-gradient-stops-summary`, this._getGradientStopsSummary(scope));
@@ -3266,15 +3265,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                          summary: this._getGradientStopsSummary(scope),
 	                          content: this._gradientStopsSection.render(scope),
 	                        });
-	                        const barGroup = this._renderOverrideGroup({
-	                          index,
-	                          group: 'bar',
-	                          title: 'Bar Appearance',
-	                          summary: this._getBarAppearanceSummary(scope),
-	                          content: renderBarAppearanceSection(this._createSectionContext(), scope, () => '', { root: this.shadowRoot,
+	                        const barGroup = `<div id="entity-${index}-bar-appearance" class="entity-fields" role="group" aria-label="Bar Appearance">
+                          ${renderBarAppearanceSection(this._createSectionContext(), scope, () => '', { root: this.shadowRoot,
                             paletteValues: this._paintPaletteValues(scope), paintChildren: () => `${segmentsGroup}${gradientStopsGroup}`,
-                          }),
-	                        });
+                          })}
+                        </div>`;
 	                        const baselineGroup = this._renderOverrideGroup({
 	                          index,
 	                          group: 'baseline',

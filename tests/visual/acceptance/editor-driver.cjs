@@ -72,7 +72,6 @@ async function openSection(editor, entry) {
  if(paintSection) {
   if(entry.scope==='entity') {
    await openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));
-   await openDisclosure(editor.locator('#entity-0-group-bar'));
   }
   const paint=editor.locator(entry.scope==='entity'?'#entity-0-paint-editor':'#card-paint-editor');
   if(!await paint.evaluate(node=>node.open))await paint.locator('summary').click();
@@ -80,7 +79,7 @@ async function openSection(editor, entry) {
  if(entry.scope==='entity') {
   await openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));
   const slug={'References':'markers','Bar Appearance':'bar','Gradient Stops':'gradient-stops'}[entry.section]??entry.section.toLowerCase();
-  await openDisclosure(editor.locator(`#entity-0-group-${slug}`));
+  if(entry.section!=='Bar Appearance')await openDisclosure(editor.locator(`#entity-0-group-${slug}`));
  } else if(groups[entry.section]) {
   const group=editor.locator(`#card-group-${groups[entry.section]}`);
   if(await group.count())await openDisclosure(group);

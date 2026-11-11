@@ -347,3 +347,33 @@ for(const host of hosts)test(`${host}: explicit Remove Baseline emits, echoes an
  await d.commit(page,editor,()=>editor.locator('[data-action="remove-baseline"][data-scope-type="card"]').click());expect((await d.saved(page)).baseline).toBeUndefined();expect((await d.saved(page)).bar.needle).toEqual(needle);
  await d.reopen(page,editor);await d.openSection(editor,{section:'Baseline'});await expect(editor.locator('#baseline-value')).toHaveValue('');
 });
+
+test('standalone: entity Paint is directly reachable by keyboard at 240px',async({page})=>{
+ const original=d.seed('standalone'),editor=await d.mount(page,'standalone',original,{tall:true});
+ const overrides=editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]');
+ await overrides.focus();await page.keyboard.press('Space');
+ const group=editor.getByRole('group',{name:'Bar Appearance',exact:true}).first();
+ const paint=group.locator('#entity-0-paint-editor'),summary=paint.locator('summary');
+ await expect(editor.locator('#entity-0-group-bar')).toHaveCount(0);
+ await expect(group.locator('#entity-0-bar-direction')).toBeVisible();await expect(summary).toBeVisible();
+ await expect(paint).not.toHaveAttribute('open');expect(await d.count(page)).toBe(0);
+ await d.commit(page,editor,()=>group.locator('#entity-0-bar-direction').selectOption('reverse'));
+ await group.locator('#entity-0-bar-direction').focus();await page.keyboard.press('Tab');await expect(summary).toBeFocused();
+ await page.keyboard.press('Enter');await expect(paint).toHaveAttribute('open');
+ for(const name of ['segments','gradient-stops']){
+  const toggle=paint.locator(`#entity-0-group-${name}`);await expect(toggle).toHaveAttribute('aria-expanded','false');
+  await toggle.focus();await page.keyboard.press('Space');await expect(toggle).toHaveAttribute('aria-expanded','true');
+ }
+ expect(await group.evaluate(el=>{
+  const bounds=el.getBoundingClientRect();
+  return [...el.querySelectorAll('input,select,button')].every(control=>{
+   const rect=control.getBoundingClientRect();return !rect.width||(rect.left>=bounds.left&&rect.right<=bounds.right);
+  });
+ })).toBe(true);
+ expect(await editor.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+ expect(await d.count(page)).toBe(1);expect((await d.saved(page)).entities[0].bar.direction).toBe('reverse');
+ expect((await d.saved(page)).bar).toEqual(original.bar);expect((await d.saved(page)).entities[1]).toEqual(original.entities[1]);
+ await summary.focus();await page.keyboard.press('Space');await expect(paint).not.toHaveAttribute('open');
+ await d.reopen(page,editor);await d.openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));
+ await expect(editor.locator('#entity-0-bar-direction')).toHaveValue('reverse');await expect(editor.locator('#entity-0-paint-editor')).not.toHaveAttribute('open');
+});

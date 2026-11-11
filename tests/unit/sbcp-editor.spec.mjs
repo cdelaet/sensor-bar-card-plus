@@ -546,7 +546,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-segments')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-group-target')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-group-baseline')).not.toBeNull();
-    expect(editor.shadowRoot.querySelector('#entity-0-group-bar')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-bar-appearance').getAttribute('role')).toBe('group');
     expect(editor.shadowRoot.querySelector('#entity-0-group-needle')).not.toBeNull();
   });
 
@@ -563,7 +563,7 @@ describe('Sensor Bar Card Plus editor', () => {
     const groups = [
       'entity-0-group-layout',
       'entity-0-group-scale',
-      'entity-0-group-bar',
+      'entity-0-bar-appearance',
       'entity-0-group-segments',
       'entity-0-group-gradient-stops',
       'entity-0-group-baseline',
@@ -687,7 +687,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-segments').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-target').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-baseline').getAttribute('aria-expanded')).toBe('false');
-    expect(editor.shadowRoot.querySelector('#entity-0-group-bar').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-paint-editor').getAttribute('open')).toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-group-needle').getAttribute('aria-expanded')).toBe('false');
   });
 
@@ -711,7 +711,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-segments').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-target').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-baseline').getAttribute('aria-expanded')).toBe('false');
-    expect(editor.shadowRoot.querySelector('#entity-0-group-bar').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-paint-editor').getAttribute('open')).toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-group-needle').getAttribute('aria-expanded')).toBe('false');
   });
 
@@ -955,7 +955,6 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-target'));
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-baseline'));
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-bar'));
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-needle'));
 
     expect(editor.shadowRoot.querySelector('#entity-0-min')).not.toBeNull();
@@ -1140,7 +1139,6 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-bar'));
     expect(editor.shadowRoot.querySelector('#entity-0-bar-inherit').checked).toBe(true);
     expect(editor.shadowRoot.querySelector('#entity-0-bar-fill-style').value).toBe('gradient');
     expect(editor.shadowRoot.querySelector('#entity-0-bar-color').value.toLowerCase()).toBe('#ff9800');
@@ -4943,7 +4941,6 @@ describe('Sensor Bar Card Plus editor', () => {
 
     editor.setConfig({ entities: [{ entity: 'sensor.one', name: 'One' }] });
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-bar'));
 
     const markup = editor.shadowRoot.innerHTML;
     const fillStylePos = markup.indexOf('for="entity-0-bar-fill-style"');

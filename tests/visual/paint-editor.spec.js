@@ -97,7 +97,6 @@ for (const host of ['Card', 'Feature']) for (const width of [240, 360]) {
 test('Card row Paint inherits without promotion, promotes on edit and clears only its owned appearance', async ({ page }) => {
   const editor = await mount(page, 'Card', 'src');
   await editor.locator('button[data-action="toggle-entity-overrides"]').click();
-  await editor.locator('#entity-0-group-bar').click();
   const paint = editor.locator('#entity-0-paint-editor');
   await expect(paint.locator('.paint-editor-description')).toHaveText('Inherited · Bands · 1 segment');
   await paint.locator('summary').click();
@@ -191,5 +190,78 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
       expect(await page.evaluate(() => window.__paintEvents.length)).toBe(events + 1);
       expect(await saved(editor)).toEqual({ ...original, bar: { [property]: value } });
     }
+  });
+}
+
+for (const source of ['src', 'dist']) for (const width of [240, 360]) {
+  test(`Card entity Paint navigation and editing at ${width}px (${source})`, async ({ page }) => {
+    const editor = await mount(page, 'Card', source, width);
+    const original = await saved(editor);
+    const overrides = editor.locator('button[data-action="toggle-entity-overrides"]');
+    await overrides.focus(); await page.keyboard.press('Space');
+    const group = editor.getByRole('group', { name: 'Bar Appearance', exact: true });
+    const paint = group.locator('#entity-0-paint-editor');
+    await expect(editor.locator('#entity-0-group-bar')).toHaveCount(0);
+    await expect(group.locator('#entity-0-bar-direction')).toBeVisible();
+    await expect(paint.locator('summary')).toBeVisible();
+    await expect(paint).not.toHaveAttribute('open');
+    expect(await page.evaluate(() => window.__paintEvents)).toEqual([]);
+    const geometry = await group.evaluate(el => {
+      const panel = el.closest('.override-panel'), bounds = el.getBoundingClientRect();
+      const style = getComputedStyle(panel), panelBounds = panel.getBoundingClientRect();
+      return { width: bounds.width, available: panel.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+        paintWidth: el.querySelector('.paint-editor').getBoundingClientRect().width,
+        inset: bounds.left - panelBounds.left - parseFloat(style.borderLeftWidth) - parseFloat(style.paddingLeft) };
+    });
+    expect(geometry.width).toBeCloseTo(geometry.available, 0);
+    expect(geometry.paintWidth).toBeCloseTo(geometry.width, 0);
+    expect(geometry.inset).toBeCloseTo(0, 0);
+    if (source === 'src') await expect(group).toHaveScreenshot(`entity-paint-${width}-collapsed.png`);
+    const direction = group.locator('#entity-0-bar-direction');
+    await direction.selectOption('reverse');
+    expect((await saved(editor)).entities[0]).toEqual({ entity: 'sensor.power', bar: { direction: 'reverse' } });
+    await direction.focus(); await page.keyboard.press('Tab');
+    await expect(paint.locator('summary')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(paint).toHaveAttribute('open');
+    for (const name of ['segments', 'gradient-stops']) {
+      const toggle = paint.locator(`#entity-0-group-${name}`);
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      await toggle.focus(); await page.keyboard.press('Enter');
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    }
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(1);
+    expect(await group.evaluate(el => {
+      const bounds = el.getBoundingClientRect();
+      return [...el.querySelectorAll('input, select, button')].every(control => {
+        const rect = control.getBoundingClientRect();
+        return !rect.width || (rect.left >= bounds.left && rect.right <= bounds.right);
+      });
+    })).toBe(true);
+    expect(await editor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    for (const id of ['paint-editor', 'bar-direction', 'bar-fill-style', 'bar-color', 'bar-solid-fill']) {
+      await expect(editor.locator(`#entity-0-${id}`)).toHaveCount(1);
+    }
+    if (source === 'src') {
+      await editor.evaluate(el => el.shadowRoot.activeElement?.blur()); await page.mouse.move(0, 0);
+      await expect(group).toHaveScreenshot(`entity-paint-${width}-expanded.png`);
+    }
+    await paint.locator('#entity-0-bar-fill-style').selectOption('gradient');
+    await paint.locator('#entity-0-bar-color').evaluate(node => {
+      node.value = '#abcdef'; node.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await paint.locator('#entity-0-bar-solid-fill').check();
+    expect((await saved(editor)).entities[0]).toEqual({ entity: 'sensor.power', bar: { direction: 'reverse', fill_style: 'gradient', color: '#abcdef', solid_fill: true } });
+    expect((await saved(editor)).bar).toEqual(original.bar);
+    const edited = await saved(editor);
+    await editor.evaluate(el => el.setConfig(structuredClone(el._draftConfig)));
+    expect(await saved(editor)).toEqual(edited);
+    await expect(paint).toHaveAttribute('open');
+    await group.locator('#entity-0-bar-inherit').check();
+    expect((await saved(editor)).entities[0].bar).toBeUndefined();
+    await expect(direction).toHaveValue('inherit');
+    await expect(paint.locator('.paint-editor-description')).toHaveText('Inherited · Bands · 1 segment');
+    await paint.locator('summary').focus(); await page.keyboard.press('Space');
+    await expect(paint).not.toHaveAttribute('open');
   });
 }

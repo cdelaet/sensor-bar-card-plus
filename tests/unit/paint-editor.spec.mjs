@@ -152,3 +152,27 @@ it.each([
   expect(swatch.style.backgroundColor).toBe('var(--card-background-color, #fff)');
   expect(swatch.style.backgroundImage).toBe(compilePaint(paint).gradient);
 });
+
+for (const source of ['src', 'dist']) it(`Card entity Paint has one disclosure and a non-indented Bar group (${source})`, async () => {
+  const { createEditor } = await import('../support/load-card-class.cjs');
+  const editor = createEditor({ source });
+  const config = { entities: ['sensor.power'], bar: { fill_style: 'bands', color: '#123456' } };
+  const events = [];
+  editor.dispatchEvent = event => { events.push(event); return true; };
+  editor.setConfig(config);
+  const group = editor.shadowRoot.querySelector('#entity-0-bar-appearance');
+  expect(group).toBeTruthy();
+  expect(group.getAttribute('role')).toBe('group');
+  expect(group.getAttribute('aria-label')).toBe('Bar Appearance');
+  expect(group.getAttribute('class')).not.toContain('override-group');
+  expect(editor.shadowRoot.querySelector('#entity-0-group-bar')).toBeNull();
+  for (const id of ['entity-0-paint-editor', 'entity-0-bar-direction', 'entity-0-bar-fill-style', 'entity-0-bar-color', 'entity-0-bar-solid-fill', 'entity-0-bar-inherit']) {
+    expect(editor.shadowRoot.innerHTML.match(new RegExp(`id="${id}"`, 'g'))).toHaveLength(1);
+  }
+  expect(editor.shadowRoot.querySelector('#entity-0-paint-editor').getAttribute('open')).toBeNull();
+  for (const group of ['segments', 'gradient-stops']) {
+    expect(editor.shadowRoot.querySelector(`#entity-0-group-${group}`).getAttribute('aria-expanded')).toBe('false');
+  }
+  expect(events).toHaveLength(0);
+  expect(editor._draftConfig).toEqual(config);
+});

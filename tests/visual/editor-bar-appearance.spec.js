@@ -30,7 +30,6 @@ test('Bar Appearance controls retain inherited behavior inside the Bar section',
     await expect(editor.locator('.card-subgroup[data-group="segments"]')).toHaveClass(['bands', 'soft_bands', 'band_gradient'].includes(style) ? 'override-group card-subgroup' : 'override-group card-subgroup is-inactive');
   }
   await editor.locator('button[data-action="toggle-entity-overrides"]').click();
-  await editor.locator('#entity-0-group-bar').click();
   await editor.locator('#entity-0-paint-editor > summary').click();
   await expect(editor.locator('#entity-0-bar-fill-style')).toHaveValue('band_gradient');
   await expect(editor.locator('#entity-0-bar-solid-fill')).toBeChecked();
@@ -38,7 +37,7 @@ test('Bar Appearance controls retain inherited behavior inside the Bar section',
   await expect.poll(() => editor.evaluate(element => element.shadowRoot.activeElement?.dataset.kind)).toBe('entity-bar-color-text-fallback');
   await editor.locator('#entity-0-bar-inherit').check();
   await expect(editor.locator('[data-kind="entity-bar-color-text-fallback"]')).toHaveValue('red');
-  await expect(editor.locator('#entity-0-group-bar')).toHaveAttribute('aria-expanded', 'true');
+  await expect(editor.locator('#entity-0-paint-editor')).toHaveAttribute('open');
 });
 
 test('Bar root and Bar Appearance override preserve their controls', async ({ page }) => {
@@ -46,8 +45,7 @@ test('Bar root and Bar Appearance override preserve their controls', async ({ pa
   await page.mouse.move(0, 0);
   await expect(editor.locator('.section').filter({ has: page.getByRole('heading', { name: 'Bar', exact: true }) })).toHaveScreenshot('editor-bar-appearance-root.png');
   await editor.locator('button[data-action="toggle-entity-overrides"]').click();
-  await editor.locator('#entity-0-group-bar').click();
   await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
   await page.mouse.move(0, 0);
-  await expect(editor.locator('.override-group[data-group="bar"]')).toHaveScreenshot('editor-bar-appearance-override.png');
+  await expect(editor.getByRole('group', { name: 'Bar Appearance', exact: true })).toHaveScreenshot('editor-bar-appearance-override.png');
 });
