@@ -2,6 +2,18 @@ import { isValidReset } from '../utils/extrema.js';
 import { canonicalizeHistoricalWindow, parseHistoricalWindow, isEligibleHistoricalWindow } from '../history/time-window.js';
 
 export const UNSUPPORTED_EXTREMA_ALIASES = Symbol.for('sensor-bar-card-plus.unsupported-extrema-aliases');
+export const INVALID_PAINT_OPACITY = Symbol.for('sensor-bar-card-plus.invalid-paint-opacity');
+
+/** Normalize only opacity; private metadata retains the invalid input for later diagnostics. */
+export function normalizePaintOpacity(paint) {
+  const opacity = paint.opacity;
+  const valid = Number.isFinite(opacity) && opacity >= 0 && opacity <= 100;
+  const normalized = { ...paint, opacity: valid ? opacity : 100 };
+  if (opacity !== undefined && !valid) {
+    Object.defineProperty(normalized, INVALID_PAINT_OPACITY, { value: opacity });
+  }
+  return normalized;
+}
 
 function recordUnsupportedExtremaAliases(normalized, raw) {
   const aliases = ['peak_marker', 'floor_marker'].filter(key => Object.prototype.hasOwnProperty.call(raw ?? {}, key));
