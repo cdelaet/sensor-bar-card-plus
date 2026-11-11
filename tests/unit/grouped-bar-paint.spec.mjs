@@ -184,3 +184,96 @@ it('skips malformed legacy candidates when an invalid grouped property requests 
   // Without grouped input the released malformed-value handling is unchanged.
   expect(normalize({ color: false }, { bar: { color: 0 } }).entities[0].bar.color).toBe(0);
 });
+
+it.each([123, true, {}, [], '   '].map(color => [color]))('rejects invalid Severity color %j before falling back to inherited grouped Segments', color => {
+  const parentSegments = Object.freeze([Object.freeze({ from: 0, to: 100, color: '#123456' })]);
+  const severity = Object.freeze([Object.freeze({ from: 0, to: 100, color })]);
+  const raw = Object.freeze({ bar: Object.freeze({ paint: Object.freeze({ segments: parentSegments }) }),
+    entities: Object.freeze([Object.freeze({ entity, severity, bar: Object.freeze({ paint: Object.freeze({ segments: null }) }) })]) });
+  const config = normalizeCardConfig(raw);
+  expect(config.entities[0].bar.segments).toEqual(config.bar.segments);
+  expect(config.entities[0].bar.paint.segments).toEqual(config.bar.paint.segments);
+  expect(config.entities[0].bar.paint[PAINT_PROPERTY_SOURCES].segments).toBeUndefined();
+  expect(config.entities[0].bar.fill_style).toBe('bands');
+  expect(raw.entities[0].severity[0].color).toBe(color);
+  // The invalid-grouped-input fallback is the only path whose acceptance changes.
+  const legacy = normalizeCardConfig({ entities: [{ entity, severity }] });
+  expect(legacy.entities[0].bar.segments[0].color).toBe(color);
+  expect(legacy.entities[0].bar.segment_space).toBe('percent');
+});
+
+it('retains valid Severity fallback colors and their percentage coordinates', () => {
+  const severity = [{ from: 0, to: 100, color: 'var(--accent-color)' }];
+  const config = normalize({ paint: { segments } }, { severity, bar: { paint: { segments: null } } });
+  expect(config.entities[0].bar.segments).toEqual([{ ...severity[0], label: null }]);
+  expect(config.entities[0].bar.segment_space).toBe('percent');
+  expect(config.entities[0].bar.paint[PAINT_PROPERTY_SOURCES].segments).toBe('severity');
+});
+
+describe('grouped palette diagnostic provenance', () => {
+  const duplicateStops = [{ pos: 50, color: 'red' }, { pos: 50, color: 'blue' }];
+  const duplicateWarnings = config => validateNormalizedConfig(config).warnings.filter(warning => warning.code === 'duplicate-gradient-stop-position');
+
+  it('reports an inherited grouped Gradient once at the authored card stop path', () => {
+    const config = normalizeCardConfig({ bar: { paint: { gradient_stops: duplicateStops } },
+      entities: [entity, 'sensor.second', { entity: 'sensor.third', bar: { paint: { color: 'red', gradient_stops: null } } }] });
+    expect(duplicateWarnings(config)).toEqual([expect.objectContaining({ path: 'card.bar.paint.gradient_stops[1]', entity: null })]);
+    expect(validateNormalizedConfig(config).warnings).toContainEqual(expect.objectContaining({ code: 'paint.invalid_value', path: 'entities[2].bar.paint.gradient_stops' }));
+  });
+
+  it('keeps independently authored grouped Gradient diagnostics even for identical palette values', () => {
+    const config = normalizeCardConfig({ bar: { paint: { gradient_stops: duplicateStops } }, entities: [
+      { entity, bar: { paint: { gradient_stops: duplicateStops } } },
+      { entity: 'sensor.second', bar: { paint: { gradient_stops: structuredClone(duplicateStops) } } },
+      'sensor.inherits',
+    ] });
+    expect(duplicateWarnings(config).map(({ path, entity }) => ({ path, entity }))).toEqual([
+      { path: 'card.bar.paint.gradient_stops[1]', entity: null },
+      { path: 'entities[0].bar.paint.gradient_stops[1]', entity },
+      { path: 'entities[1].bar.paint.gradient_stops[1]', entity: 'sensor.second' },
+    ]);
+  });
+
+  it('preserves legacy Gradient paths and inherited warning behavior', () => {
+    const config = normalizeCardConfig({ gradient_stops: duplicateStops, entities: [entity, 'sensor.second'] });
+    expect(duplicateWarnings(config).map(warning => warning.path)).toEqual([
+      'card.bar.gradient_stops[1]', 'entities[0].bar.gradient_stops[1]', 'entities[1].bar.gradient_stops[1]',
+    ]);
+    const mixed = normalizeCardConfig({ bar: { paint: { gradient_stops: duplicateStops } }, entities: [
+      { entity, gradient_stops: duplicateStops }, 'sensor.inherits',
+    ] });
+    expect(duplicateWarnings(mixed).map(warning => warning.path)).toEqual([
+      'card.bar.paint.gradient_stops[1]', 'entities[0].bar.gradient_stops[1]',
+    ]);
+  });
+
+  it('reports scale-independent Segment errors once per authored grouped palette', () => {
+    const inverted = [{ from: 80, to: 20, color: 'red' }];
+    const config = normalizeCardConfig({ bar: { paint: { segments: inverted } }, entities: [
+      entity, { entity: 'sensor.second', bar: { paint: { segments: inverted } } },
+    ] });
+    expect(validateNormalizedConfig(config).warnings.filter(warning => warning.code === 'segments.from_gt_to').map(warning => warning.path))
+      .toEqual(['card.bar.paint.segments[0]', 'entities[1].bar.paint.segments[0]']);
+    const overlap = normalizeCardConfig({ bar: { paint: { segments: [
+      { from: 0, to: 60, color: 'red' }, { from: 50, to: 90, color: 'blue' },
+    ] } }, entities: [entity, 'sensor.second'] });
+    expect(validateNormalizedConfig(overlap).warnings.filter(warning => warning.code === 'segments.overlap').map(warning => warning.path))
+      .toEqual(['card.bar.paint.segments[1]']);
+  });
+
+  it('retains entity-specific Scale checks for inherited grouped Segments at their authored path', () => {
+    const config = normalizeCardConfig({ bar: { paint: { segments: [{ from: 10, to: 90, color: 'red' }] } }, entities: [
+      entity, { entity: 'sensor.narrow', scale: { min: 0, max: 50 } },
+      { entity: 'sensor.override', scale: { min: 0, max: 50 }, bar: { paint: { segments: [{ from: 10, to: 90, color: 'blue' }] } } },
+    ] });
+    expect(validateNormalizedConfig(config).warnings.filter(warning => warning.code === 'segments.outside_scale').map(({ path, entity }) => ({ path, entity })))
+      .toEqual([{ path: 'card.bar.paint.segments[0]', entity: 'sensor.narrow' }, { path: 'entities[2].bar.paint.segments[0]', entity: 'sensor.override' }]);
+    expect(config.entities[1].bar.paint[PAINT_PROPERTY_SOURCES]).toEqual({});
+  });
+
+  it('preserves legacy Segment paths and inherited validation behavior', () => {
+    const config = normalizeCardConfig({ bar: { segments: [{ from: 80, to: 20, color: 'red' }] }, entities: [entity] });
+    expect(validateNormalizedConfig(config).warnings.filter(warning => warning.code === 'segments.from_gt_to').map(warning => warning.path))
+      .toEqual(['card.bar.segments[0]', 'entities[0].bar.segments[0]']);
+  });
+});

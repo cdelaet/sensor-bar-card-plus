@@ -1,4 +1,4 @@
-import { getFiniteNumber, UNSUPPORTED_EXTREMA_ALIASES, BAR_PAINT_DIAGNOSTICS } from './normalize.js';
+import { getFiniteNumber, UNSUPPORTED_EXTREMA_ALIASES, BAR_PAINT_DIAGNOSTICS, PAINT_PROPERTY_SOURCES } from './normalize.js';
 
 function createDiagnostic(code, message, path, entity = null) {
   return { code, message, path, entity };
@@ -183,7 +183,7 @@ function getStaticSegmentBound(boundary) {
   return getFiniteNumber(boundary.fixed ?? boundary.value);
 }
 
-function validateSegments(diagnostics, segments, scaleBounds, path, entity = null) {
+function validateSegments(diagnostics, segments, scaleBounds, path, entity = null, checkStatic = true) {
   if (!Array.isArray(segments) || !segments.length) return;
   const staticSegments = [];
   const { min, max } = scaleBounds;
@@ -195,19 +195,19 @@ function validateSegments(diagnostics, segments, scaleBounds, path, entity = nul
     const segmentPath = `${path}.segments[${index}]`;
 
     if (segment?.invalidBoundary === 'entity') {
-      addWarning(diagnostics, 'segments.unsupported_entity_boundary', 'Entity-backed segment boundaries are not supported; ignoring this segment.', segmentPath, entity);
+      if (checkStatic) addWarning(diagnostics, 'segments.unsupported_entity_boundary', 'Entity-backed segment boundaries are not supported; ignoring this segment.', segmentPath, entity);
       continue;
     }
     if (segment?.invalidBoundary === 'malformed_percent') {
-      addWarning(diagnostics, 'segments.invalid_percentage', 'Malformed percentage segment boundary; ignoring this segment.', segmentPath, entity);
+      if (checkStatic) addWarning(diagnostics, 'segments.invalid_percentage', 'Malformed percentage segment boundary; ignoring this segment.', segmentPath, entity);
       continue;
     }
     if (segment?.invalidBoundary) {
-      addWarning(diagnostics, 'segments.invalid_boundary', 'Segment boundary must be a numeric value or a percentage such as "35%"; ignoring this segment.', segmentPath, entity);
+      if (checkStatic) addWarning(diagnostics, 'segments.invalid_boundary', 'Segment boundary must be a numeric value or a percentage such as "35%"; ignoring this segment.', segmentPath, entity);
       continue;
     }
 
-    if (Number.isFinite(from) && Number.isFinite(to) && from > to) {
+    if (checkStatic && Number.isFinite(from) && Number.isFinite(to) && from > to) {
       addWarning(diagnostics, 'segments.from_gt_to', 'Segment start is greater than segment end.', segmentPath, entity);
     }
 
@@ -220,7 +220,7 @@ function validateSegments(diagnostics, segments, scaleBounds, path, entity = nul
       }
     }
 
-    if (Number.isFinite(from) && Number.isFinite(to)) {
+    if (checkStatic && Number.isFinite(from) && Number.isFinite(to)) {
       staticSegments.push({ from, to, path: segmentPath });
     }
   }
@@ -266,7 +266,18 @@ function validateGradientStops(diagnostics, stops, path, entity = null) {
   }
 }
 
-function validateConfigScope(diagnostics, config, path, entity = null) {
+function paletteValidationSource(config, inheritedConfig, path, property) {
+  const source = config?.bar?.paint?.[PAINT_PROPERTY_SOURCES]?.[property];
+  const groupedSource = `bar.paint.${property}`;
+  if (source === groupedSource) return { path: `${path}.bar.paint`, inherited: false };
+  if (source === undefined && inheritedConfig?.bar?.paint?.[PAINT_PROPERTY_SOURCES]?.[property] === groupedSource) {
+    return { path: 'card.bar.paint', inherited: true };
+  }
+  // Legacy diagnostics retain their existing resolved-scope paths and frequency.
+  return { path: `${path}.bar`, inherited: false };
+}
+
+function validateConfigScope(diagnostics, config, path, entity = null, inheritedConfig = null) {
   for (const issue of config?.bar?.[BAR_PAINT_DIAGNOSTICS] ?? []) {
     const paintPath = `${path}.bar.paint${issue.property === null ? '' : `.${issue.property}`}`;
     addWarning(diagnostics, `paint.${issue.kind === 'invalid' ? 'invalid_value' : 'legacy_conflict'}`,
@@ -301,8 +312,10 @@ function validateConfigScope(diagnostics, config, path, entity = null) {
   validateExtremumReset(diagnostics, config, path, entity);
   validateMarkerDirections(diagnostics, config, path, entity);
   validateBuiltinMarkerLabels(diagnostics, config, path, entity);
-  validateSegments(diagnostics, config?.bar?.segments, scaleBounds, `${path}.bar`, entity);
-  validateGradientStops(diagnostics, config?.bar?.gradient_stops, `${path}.bar`, entity);
+  const segments = paletteValidationSource(config, inheritedConfig, path, 'segments');
+  validateSegments(diagnostics, config?.bar?.segments, scaleBounds, segments.path, entity, !segments.inherited);
+  const gradientStops = paletteValidationSource(config, inheritedConfig, path, 'gradient_stops');
+  if (!gradientStops.inherited) validateGradientStops(diagnostics, config?.bar?.gradient_stops, gradientStops.path, entity);
 }
 
 export function validateNormalizedConfig(config) {
@@ -338,7 +351,7 @@ export function validateNormalizedConfig(config) {
       seenEntities.add(entityId);
     }
 
-    validateConfigScope(diagnostics, entityConfig, path, entityId);
+    validateConfigScope(diagnostics, entityConfig, path, entityId, config);
     if (Object.prototype.hasOwnProperty.call(entityConfig, 'markers')) {
       validateGenericMarkers(
         diagnostics,

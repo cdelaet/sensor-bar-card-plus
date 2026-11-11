@@ -601,10 +601,11 @@ function validPaintFallbacks(config, property) {
   for (const path of barPaintAliases[property] ?? []) {
     const value = paintAliasValue(config, path);
     if (value === undefined) continue;
+    const severity = path.at(-1) === 'severity' && Array.isArray(value) ? normalizeSeverityToSegments(value) : null;
     const valid = path.at(-1) === 'color_mode'
       ? colorModeToFillStyle(value) !== null
       : path.at(-1) === 'severity'
-        ? Array.isArray(value) && normalizeSeverityToSegments(value).length === value.length
+        ? severity !== null && severity.length === value.length && severity.every(segment => isPaintColor(segment.color))
         : isValidGroupedPaintProperty(property, value);
     if (valid) continue;
     if (result === config) {
