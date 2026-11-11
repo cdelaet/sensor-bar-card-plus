@@ -159,6 +159,13 @@ function reconcilePaintLayers(container, layers) {
   }
 }
 
+function renderNeedle(needleState) {
+  return needleState.configured ? `
+      <div class="needle-layer">
+        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${needleState.pct ?? 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? 'block' : 'none'};"></div>
+      </div>` : '';
+}
+
 /** Patch persistent bar nodes. The adapter supplies transition timing. */
 export function patchBar(root, model, { revealDuration = 600 } = {}) {
   const fillReveal = root.querySelector('.bar-fill-reveal');
@@ -175,7 +182,17 @@ export function patchBar(root, model, { revealDuration = 600 } = {}) {
       setStyleIfChanged(baselineIndicator, 'left', `${baselinePosition}%`);
     }
   }
-  const needleEl = root.querySelector('.needle-marker');
+  let needleEl = root.querySelector('.needle-marker');
+  if (!model.needle.configured) {
+    root.querySelector('.needle-layer')?.remove();
+    needleEl = null;
+  } else if (!needleEl) {
+    const track = root.querySelector('.bar-track');
+    if (track) {
+      track.insertAdjacentHTML('beforeend', renderNeedle(model.needle));
+      needleEl = track.querySelector('.needle-marker');
+    }
+  }
   if (needleEl) {
     setStyleIfChanged(needleEl, 'display', model.needle.show ? 'block' : 'none');
     setStyleIfChanged(needleEl, 'left', `${model.needle.pct ?? 0}%`);
@@ -206,10 +223,7 @@ export function renderBar(model, { insideContent = '' } = {}) {
   const targetMarker = renderMarker(getMarker('target'));
   const floorMarker = renderMarker(getMarker('floor'));
   const genericMarkers = model.markers.filter(marker => marker.type === 'generic').map(renderMarker).join('');
-  const needleMarker = needleState.configured ? `
-      <div class="needle-layer">
-        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${needleState.pct ?? 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? 'block' : 'none'};"></div>
-      </div>` : '';
+  const needleMarker = renderNeedle(needleState);
   const paintLayers = fillState.paintLayers.map(layer => `
                   <div class="bar-paint-layer" data-layer="${layer.id}" style="z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}"></div>`).join('');
   return `<div class="bar-track">

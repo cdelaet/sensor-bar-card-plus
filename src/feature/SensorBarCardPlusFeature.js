@@ -255,7 +255,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     model.animated = model.animated && Boolean(this._previousRow);
     this._surface.dataset.barAnimated = model.animated ? 'true' : 'false';
     const renderKey = JSON.stringify(model);
-    const structureKey = JSON.stringify([model.baseline.configured, model.needle.configured, model.markers.map(marker => [marker.type, marker.id])]);
+    const structureKey = JSON.stringify([model.baseline.configured, model.markers.map(marker => [marker.type, marker.id])]);
     if (structureKey !== this._structureKey) {
       this._bar.innerHTML = renderBar(model);
       this._structureKey = structureKey;
