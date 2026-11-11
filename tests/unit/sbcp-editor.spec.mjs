@@ -1370,7 +1370,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expectNoDeprecatedEditedKeys(finalConfig.entities[0]);
   });
 
-  it('per-entity color override writes entities[index].bar.color', () => {
+  it('new entity color override writes entities[index].bar.paint.color', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -1387,7 +1387,7 @@ describe('Sensor Bar Card Plus editor', () => {
 
     const finalConfig = events.at(-1).detail.config;
     expect(finalConfig.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', bar: { color: '#ffa500' } },
+      { entity: 'sensor.one', name: 'One', bar: { paint: { color: '#ffa500' } } },
     ]);
     expectNoDeprecatedEditedKeys(finalConfig.entities[0]);
   });
@@ -4724,14 +4724,14 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('card-level fill style writes bar.fill_style', () => {
+  it('new card fill style writes bar.paint.fill_style', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({ entity: 'sensor.one' });
     dispatchChange(editor.shadowRoot.querySelector('#bar-fill-style'), 'soft_bands');
 
-    expect(events.at(-1).detail.config.bar).toEqual({
+    expect(events.at(-1).detail.config.bar.paint).toEqual({
       fill_style: 'soft_bands',
     });
   });
@@ -4762,7 +4762,7 @@ describe('Sensor Bar Card Plus editor', () => {
     }
   });
 
-  it('card-level color writes bar.color', () => {
+  it('new card color writes bar.paint.color', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4771,12 +4771,12 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(colorInput.type).toBe('color');
     dispatchInput(colorInput, '#ff9800');
 
-    expect(events.at(-1).detail.config.bar).toEqual({
+    expect(events.at(-1).detail.config.bar.paint).toEqual({
       color: '#ff9800',
     });
   });
 
-  it('card-level solid fill true writes bar.solid_fill true', () => {
+  it('new card solid fill writes bar.paint.solid_fill', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4785,7 +4785,7 @@ describe('Sensor Bar Card Plus editor', () => {
     toggle.checked = true;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
 
-    expect(events.at(-1).detail.config.bar).toEqual({
+    expect(events.at(-1).detail.config.bar.paint).toEqual({
       solid_fill: true,
     });
   });
@@ -4805,7 +4805,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(barColorPos).toBeGreaterThan(solidFillPos);
   });
 
-  it('card-level solid fill false removes bar.solid_fill', () => {
+  it('card-level solid fill false preserves explicit bar.solid_fill', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4822,11 +4822,11 @@ describe('Sensor Bar Card Plus editor', () => {
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
 
     expect(events.at(-1).detail.config.bar).toEqual({
-      fill_style: 'soft_bands',
+      fill_style: 'soft_bands', solid_fill: false,
     });
   });
 
-  it('default card-level color is suppressed', () => {
+  it('explicit default card-level color is preserved', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4839,9 +4839,9 @@ describe('Sensor Bar Card Plus editor', () => {
 
     dispatchInput(editor.shadowRoot.querySelector('#bar-color'), '#4a9eff');
 
-    expect(events).toHaveLength(0);
+    expect(events).toHaveLength(1);
     expect(editor._draftConfig.bar).toEqual({
-      fill_style: 'soft_bands',
+      fill_style: 'soft_bands', color: '#4a9eff',
     });
   });
 
@@ -4895,7 +4895,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(events.at(-1).detail.config.color).toBeUndefined();
   });
 
-  it('per-entity fill style writes entities[index].bar.fill_style', () => {
+  it('new entity fill style writes entities[index].bar.paint.fill_style', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4904,11 +4904,11 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchChange(editor.shadowRoot.querySelectorAll('select[data-kind="entity-bar-fill-style"]')[0], 'gradient');
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', bar: { fill_style: 'gradient' } },
+      { entity: 'sensor.one', name: 'One', bar: { paint: { fill_style: 'gradient' } } },
     ]);
   });
 
-  it('per-entity color writes entities[index].bar.color', () => {
+  it('new entity color writes entities[index].bar.paint.color', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4917,11 +4917,11 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-bar-color"]')[0], '#ff9800');
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', bar: { color: '#ff9800' } },
+      { entity: 'sensor.one', name: 'One', bar: { paint: { color: '#ff9800' } } },
     ]);
   });
 
-  it('per-entity solid fill true writes entities[index].bar.solid_fill true', () => {
+  it('new entity solid fill writes entities[index].bar.paint.solid_fill', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4932,7 +4932,7 @@ describe('Sensor Bar Card Plus editor', () => {
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', bar: { solid_fill: true } },
+      { entity: 'sensor.one', name: 'One', bar: { paint: { solid_fill: true } } },
     ]);
   });
 
@@ -4952,7 +4952,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(barColorPos).toBeGreaterThan(solidFillPos);
   });
 
-  it('per-entity solid fill false removes entities[index].bar.solid_fill', () => {
+  it('per-entity solid fill false preserves explicit entities[index].bar.solid_fill', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4966,7 +4966,7 @@ describe('Sensor Bar Card Plus editor', () => {
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', bar: { fill_style: 'gradient' } },
+      { entity: 'sensor.one', name: 'One', bar: { fill_style: 'gradient', solid_fill: false } },
     ]);
   });
 

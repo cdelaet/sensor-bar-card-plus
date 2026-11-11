@@ -125,7 +125,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Card row', 'F
       const emitted = events[0].detail.config;
       const expected = structuredClone(original);
       if (row) expected.entities[0].bar = { [property]: value };
-      else expected.bar = { [property]: value };
+      else expected.bar = { paint: { [property]: value } };
       expect(emitted).toEqual(expected);
       expect(events[0]).toMatchObject({ bubbles: true, composed: true });
       expect(config).toEqual(original);

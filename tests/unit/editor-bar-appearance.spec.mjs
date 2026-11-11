@@ -116,7 +116,7 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     expect(editor._draftConfig.entities[0].bar.color).toBe('#abcdef');
   });
 
-  it('preserves default-color elision and false-solid-fill reverting to inheritance', () => {
+  it('preserves explicit default color and false-solid-fill overrides', () => {
     const { editor, events } = setup(source, {
       bar: { fill_style: 'gradient', color: 'red', solid_fill: true },
       entities: [{ entity: 'sensor.power', color: 'blue', bar: { solid_fill: false } }],
@@ -124,10 +124,10 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     expect(editor._getEffectiveScopedBarSolidFillValue(row)).toBe(false);
     edit(editor, 'entity-0-bar-solid-fill', false, 'change');
     expect(editor._getScopedBarSolidFillValue(row)).toBe(false);
-    expect(editor._getEffectiveScopedBarSolidFillValue(row)).toBe(true);
+    expect(editor._getEffectiveScopedBarSolidFillValue(row)).toBe(false);
     editor._setScopedBarColor(row, '#4A9EFF');
-    expect(editor._getEffectiveScopedBarColorValue(row)).toBe('red');
-    expect(events.at(-1).detail.config.entities[0]).toEqual({ entity: 'sensor.power' });
+    expect(editor._getEffectiveScopedBarColorValue(row)).toBe('#4A9EFF');
+    expect(events.at(-1).detail.config.entities[0]).toEqual({ entity: 'sensor.power', bar: { color: '#4A9EFF', solid_fill: false } });
     edit(editor, 'bar-solid-fill', false, 'change');
     expect(editor._getEffectiveScopedBarSolidFillValue(root)).toBe(false);
     edit(editor, 'bar-solid-fill', true, 'change');
@@ -184,7 +184,7 @@ describe('Bar Appearance with a root-only host context', () => {
     expect(host.config().entities).toBeUndefined();
   });
 
-  it('elides defaults and clears only appearance fields without whole-config cleanup', () => {
+  it('retains explicit defaults and clears only appearance fields without whole-config cleanup', () => {
     const host = hostFor({
       color: 'blue', color_mode: 'gradient', solid_fill: true,
       bar: { fill_style: 'gradient', color: 'red', solid_fill: true, color_mode: 'single', needle: { show: true }, segments: [], future: true },
@@ -192,7 +192,7 @@ describe('Bar Appearance with a root-only host context', () => {
     });
     handleBarAppearanceField(host.context, { field: 'bar-color', value: '#4A9EFF' });
     expect(host.config().color).toBeUndefined();
-    expect(host.config().bar.color).toBeUndefined();
+    expect(host.config().bar.color).toBe('#4A9EFF');
     handleBarAppearanceField(host.context, { field: 'bar-solid-fill', value: false });
     expect(getEffectiveBarSolidFillValue(host.context, root)).toBe(false);
     // There is no top-level solid_fill alias in the existing appearance reader.

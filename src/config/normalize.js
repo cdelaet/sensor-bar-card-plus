@@ -660,7 +660,7 @@ function paintPropertySources(config, overrides, paint) {
   return sources;
 }
 
-function getPaintExplicitness(config) {
+export function getPaintExplicitness(config) {
   config = groupedBarPaintInput(config).config;
   const bar = config?.bar;
   const explicitPaintKeys = [

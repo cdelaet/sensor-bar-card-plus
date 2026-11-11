@@ -1,7 +1,7 @@
 import { parsePercentLiteral } from '../../config/normalize.js';
-import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumberValue,
-  setPathValue, deletePathValue, pruneEmptyObjectsInTarget } from '../shared/editor-config.js';
+import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumberValue } from '../shared/editor-config.js';
 import { escapeAttribute, normalizeColorComparisonValue, renderColorInput } from '../shared/editor-controls.js';
+import { readBarPaintProperty, clearBarPaintProperties, ownsBarPaintProperty, usesGroupedBarPaint } from '../shared/bar-paint-bindings.js';
 import { PaletteSection } from '../shared/palette-section.js';
 
 export class GradientStopsSection extends PaletteSection {
@@ -157,19 +157,13 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   _getStoredScopedGradientStops(scope = { type: 'card' }) {
-    const structuredValue = this.context.read(scope, ['bar', 'gradient_stops']);
-    if (structuredValue !== undefined) {
-      return structuredValue;
-    }
-    const legacyValue = this.context.read(scope, ['gradient_stops']);
-    if (legacyValue !== undefined) {
-      return legacyValue;
-    }
-    return null;
+    return readBarPaintProperty(this.context, scope, 'gradient_stops') ?? null;
   }
 
   _getFallbackGradientStops(scope = { type: 'card' }) {
     if (scope?.type === 'entity') {
+      const stored = this._getStoredScopedGradientStops({ type: 'card' });
+      if (Array.isArray(stored) && stored.length === 0) return [];
       const inheritedStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue({ type: 'card' }));
       return inheritedStops.length ? inheritedStops : this._getDefaultGradientStops();
     }
@@ -279,11 +273,9 @@ export class GradientStopsSection extends PaletteSection {
     this._gradientStopsUiRows.delete(this._getGradientStopsDraftKey(scope));
     this._clearGradientStopScopeTextState(scope);
     const applied = this.context.mutate(scope, (target) => {
-      let nextTarget = deletePathValue(target, ['bar', 'gradient_stops']);
-      nextTarget = deletePathValue(nextTarget, ['gradient_stops']);
-      nextTarget = pruneEmptyObjectsInTarget(nextTarget, ['bar']);
+      const nextTarget = clearBarPaintProperties(target, ['gradient_stops']);
       return nextTarget;
-    }, { rerender: true });
+    }, { rerender: true, ...(usesGroupedBarPaint(this.context, scope) ? { preserveRawConfig: true } : {}) });
     if (applied === false && previousUiRowsJson !== serializeConfig([])) {
       this.ui.render();
     }
@@ -428,7 +420,7 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   _hasGradientStopsOverride(scope) {
-    if (this._getStoredScopedGradientStops(scope) !== null) {
+    if (ownsBarPaintProperty(this.context, scope, 'gradient_stops')) {
       return true;
     }
     const localRows = this._getGradientStopsUiRows(scope);

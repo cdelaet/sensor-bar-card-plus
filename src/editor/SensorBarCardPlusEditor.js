@@ -34,6 +34,7 @@ import {
   syncBarPaintEditor,
 } from './sections/bar-appearance.js';
 
+import { createBarPaintBindings, usesGroupedBarPaint, prepareBarPaintSegments } from './shared/bar-paint-bindings.js';
 import { SegmentsSection } from './sections/segments.js';
 import { GradientStopsSection } from './sections/gradient-stops.js';
 
@@ -1034,7 +1035,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       ? nextBar.segment_space
       : (scope?.type === 'entity' && ['percent', 'scale'].includes(inheritedSegmentSpace) ? inheritedSegmentSpace : null);
     const legacySegmentSpace = scopedSegmentSpace;
-    if (legacySegmentSpace === 'percent' && Array.isArray(nextBar.segments)) {
+    if (legacySegmentSpace === 'percent') {
       const asLegacyPercent = (boundary) => {
         if (typeof boundary === 'number' && Number.isFinite(boundary)) return `${boundary}%`;
         if (typeof boundary === 'string' && boundary.trim() !== '' && !boundary.includes('%') && Number.isFinite(Number(boundary.trim()))) {
@@ -1042,11 +1043,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         }
         return boundary;
       };
-      nextBar.segments = nextBar.segments.map((segment) => ({
+      const convert = palette => palette.map((segment) => ({
         ...segment,
         from: asLegacyPercent(segment?.from),
         ...(Object.prototype.hasOwnProperty.call(segment ?? {}, 'to') ? { to: asLegacyPercent(segment.to) } : {}),
       }));
+      if (Array.isArray(nextBar.segments)) nextBar.segments = convert(nextBar.segments);
+      if (Array.isArray(nextBar.paint?.segments)) nextBar.paint.segments = convert(nextBar.paint.segments);
     }
     delete nextBar.segment_space;
     const fillStyle = this._normalizeTextValue(nextBar.fill_style).trim();
@@ -2051,11 +2054,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _setScopedGradientStops(scope, stops, options = {}) {
     const sanitizedStops = this._sanitizeGradientStopsForEmit(stops);
-    const shouldRemove = sanitizedStops.length < 2 || this._isDefaultGradientStops(sanitizedStops);
+    const grouped = usesGroupedBarPaint(this._createSectionContext(), scope);
+    const shouldRemove = !grouped && sanitizedStops.length > 0 && (sanitizedStops.length < 2 || this._isDefaultGradientStops(sanitizedStops));
     const previousUiRowsJson = this._serializeConfig(this._getGradientStopsUiRows(scope) ?? []);
     this._clearGradientStopScopeTextState(scope);
     this._setGradientStopsUiRows(scope, sanitizedStops);
-    const applied = this._applyScopedMutation(scope, (target) => {
+    const applied = grouped ? createBarPaintBindings(this._createSectionContext(), scope).set('gradient_stops', sanitizedStops, options) : this._applyScopedMutation(scope, (target) => {
       let nextTarget = this._deletePathValue(target, ['gradient_stops']);
       nextTarget = this._deletePathValue(nextTarget, ['bar', 'gradient_stops']);
       if (!shouldRemove) {
@@ -2078,13 +2082,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _setScopedSegments(scope, segments, options = {}) {
-    const nextSegments = options?.sort === false ? this._cloneDeep(segments) : this._sortSegmentsForEditor(segments);
+    const grouped = usesGroupedBarPaint(this._createSectionContext(), scope);
+    const prepared = grouped ? prepareBarPaintSegments(this._createSectionContext(), scope, segments) : segments;
+    const nextSegments = options?.sort === false ? this._cloneDeep(prepared) : this._sortSegmentsForEditor(prepared);
     const fallbackSegments = this._getFallbackSegments(scope);
     const shouldRemove = !Array.isArray(nextSegments)
-      || !nextSegments.length
-      || (fallbackSegments.length > 0 && this._segmentsEqualForEditor(nextSegments, fallbackSegments));
+      || (!grouped && nextSegments.length > 0 && fallbackSegments.length > 0 && this._segmentsEqualForEditor(nextSegments, fallbackSegments));
     this._setSegmentsUiRows(scope, nextSegments);
-    const applied = this._applyScopedMutation(scope, (target) => {
+    const applied = grouped ? createBarPaintBindings(this._createSectionContext(), scope).set('segments', nextSegments, options) : this._applyScopedMutation(scope, (target) => {
       let nextTarget = this._deletePathValue(target, ['bar', 'segments']);
       nextTarget = this._deletePathValue(nextTarget, ['segments']);
       nextTarget = this._deletePathValue(nextTarget, ['severity']);

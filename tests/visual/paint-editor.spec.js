@@ -188,7 +188,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
         node.value = value; node.dispatchEvent(new Event('input', { bubbles: true }));
       }, value);
       expect(await page.evaluate(() => window.__paintEvents.length)).toBe(events + 1);
-      expect(await saved(editor)).toEqual({ ...original, bar: { [property]: value } });
+      expect(await saved(editor)).toEqual({ ...original, bar: { paint: { [property]: value } } });
     }
   });
 }
@@ -263,5 +263,57 @@ for (const source of ['src', 'dist']) for (const width of [240, 360]) {
     await expect(paint.locator('.paint-editor-description')).toHaveText('Inherited · Bands · 1 segment');
     await paint.locator('summary').focus(); await page.keyboard.press('Space');
     await expect(paint).not.toHaveAttribute('open');
+  });
+}
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} grouped/mixed paint saves and reopens (${source})`, async ({ page }) => {
+    const editor = await mount(page, host, source, 240);
+    await editor.evaluate(async el => {
+      const config = structuredClone(el._draftConfig ?? el._config);
+      config.bar.paint = { color: null, opacity: 35, future: { keep: true } };
+      config.bar.segments[0].metadata = { keep: true };
+      config.bar.gradient_stops[0].metadata = { keep: true };
+      window.__groupedOriginal = structuredClone(config);
+      el.setConfig(config); await el.updateComplete;
+    });
+    const paint = editor.locator('#card-paint-editor');
+    await paint.locator('summary').click();
+    await expect(editor.locator('#bar-color')).toHaveValue('#123456');
+    for (const style of ['solid', 'gradient', 'bands', 'soft_bands', 'band_gradient']) {
+      await editor.locator('#bar-fill-style').selectOption(style);
+      expect((await saved(editor)).bar.paint.fill_style).toBe(style);
+      expect((await saved(editor)).bar.fill_style).toBeUndefined();
+    }
+    await editor.locator('#bar-solid-fill').check(); await editor.locator('#bar-solid-fill').uncheck();
+    expect((await saved(editor)).bar.paint.solid_fill).toBe(false);
+    await editor.locator('#bar-color').evaluate(node => { node.value = '#4a9eff'; node.dispatchEvent(new Event('input', { bubbles: true })); });
+    expect((await saved(editor)).bar.paint.color).toBe('#4a9eff');
+    expect((await saved(editor)).bar.color).toBeUndefined();
+    await editor.locator('#card-group-segments').click();
+    const from = editor.locator('input[data-kind="segment-from"]').first();
+    await from.fill('10%'); await from.press('Enter');
+    expect((await saved(editor)).bar.paint.segments[0]).toMatchObject({ from: '10%', metadata: { keep: true } });
+    await editor.locator('button[data-action="remove-segment"]').first().click();
+    expect((await saved(editor)).bar.paint.segments).toEqual([]);
+    await editor.locator('#bar-fill-style').selectOption('gradient');
+    await editor.locator('#card-group-gradient-stops').click();
+    const pos = editor.locator('input[data-kind="gradient-pos"]').first();
+    await pos.fill('25'); await pos.press('Enter');
+    expect((await saved(editor)).bar.paint.gradient_stops[0]).toMatchObject({ pos: 25, metadata: { keep: true } });
+    const config = await saved(editor);
+    expect(config.bar.paint.opacity).toBe(35); expect(config.bar.paint.future).toEqual({ keep: true });
+    expect(config.bar.future).toBe(true);
+    expect(config.bar.gradient_stops).toBeUndefined(); expect(config.bar.segments).toBeUndefined();
+    await editor.evaluate(async el => {
+      const next = document.createElement(el.tagName.toLowerCase());
+      next.setConfig(structuredClone(el._draftConfig ?? el._config)); next.hass = { states: {} };
+      if (el._context) next.context = el._context;
+      el.replaceWith(next); await next.updateComplete;
+    });
+    await editor.locator('#card-paint-editor > summary').click();
+    await expect(editor.locator('#bar-fill-style')).toHaveValue('gradient');
+    await expect(editor.locator('#bar-solid-fill')).not.toBeChecked();
+    expect(await saved(editor)).toEqual(config);
   });
 }

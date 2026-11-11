@@ -1,4 +1,4 @@
-import { normalizeBarConfig, normalizeGaugeSegments, normalizeScaleConfig } from '../../config/normalize.js';
+import { normalizeBarConfig, normalizeGaugeSegments, normalizeScaleConfig, getPaintExplicitness } from '../../config/normalize.js';
 import {
   isObject, normalizeTextValue, getPathValue,
   removePathsFromTarget, pruneEmptyObjectsInTarget,
@@ -6,6 +6,7 @@ import {
 import { escapeAttribute, normalizeColorComparisonValue, normalizeEditorColorValue } from '../shared/editor-controls.js';
 import { renderDirectionControl, setDirectionValue } from '../shared/direction-control.js';
 import { createPaintBindings } from '../shared/paint-bindings.js';
+import { createBarPaintBindings, usesGroupedBarPaint, readBarPaintProperty, ownsBarPaintProperty, clearBarPaintProperties } from '../shared/bar-paint-bindings.js';
 import { renderPaintEditor, syncPaintEditor } from '../shared/paint-editor.js';
 import { getResolvedScale } from '../../config/resolve.js';
 
@@ -20,7 +21,7 @@ export function getFillStyleFromColorMode(colorMode) {
 }
 
 export function getFillStyleValue(context, scope) {
-  const fillStyle = context.read(scope, ['bar', 'fill_style']);
+  const fillStyle = readBarPaintProperty(context, scope, 'fill_style');
   if (fillStyle) return fillStyle;
   const colorMode = context.read(scope, ['bar', 'color_mode']) ?? context.read(scope, ['color_mode']);
   return getFillStyleFromColorMode(colorMode);
@@ -36,27 +37,20 @@ export function getEffectiveFillStyleValue(context, scope) {
 }
 
 export function getBarColorValue(context, scope) {
-  return context.read(scope, ['bar', 'color']) ?? context.read(scope, ['color']) ?? '#4a9eff';
+  return readBarPaintProperty(context, scope, 'color') ?? '#4a9eff';
 }
 
 export function getEffectiveBarColorValue(context, scope) {
-  const paths = [['bar', 'color'], ['color']];
-  for (const path of paths) {
-    const value = context.read(scope, path);
-    if (value !== undefined && value !== null && value !== '') return value || '#4a9eff';
-  }
-  if (scope?.type === 'entity') {
-    for (const path of paths) {
-      const value = context.read({ type: 'card' }, path);
-      if (value !== undefined && value !== null && value !== '') return value || '#4a9eff';
-    }
-  }
-  return '#4a9eff';
+  return getBarPaintEditorState(context, scope).paint.color;
 }
 
 // Field-specific canonical edits keep the existing alias removal and pruning.
 // Cleanup, emission and scheduling are entirely the host's mutation policy.
 function setAppearanceValue(context, scope, key, value, deprecatedKeys = []) {
+  if (key !== 'animated') {
+    const binding = createBarPaintBindings(context, scope);
+    return value === undefined ? binding.clear(key) : binding.set(key, value);
+  }
   const options = { deprecatedKeys, prunePaths: [['bar']] };
   const cleanup = target => pruneEmptyObjectsInTarget(removePathsFromTarget(target, deprecatedKeys), ['bar']);
   // Promotion belongs to this bar adapter. Present the promoted destination to
@@ -78,23 +72,20 @@ export function setBarFillStyle(context, scope, rawValue) {
 
 export function setBarColor(context, scope, rawValue, options = {}) {
   const value = normalizeEditorColorValue(rawValue, options.cssText);
-  const remove = !value || normalizeColorComparisonValue(value) === normalizeColorComparisonValue('#4a9eff');
+  const remove = !value;
   return setAppearanceValue(context, scope, 'color', remove ? undefined : value, [['color']]);
 }
 
 export function getBarSolidFillValue(context, scope) {
-  return !!context.read(scope, ['bar', 'solid_fill']);
+  return !!readBarPaintProperty(context, scope, 'solid_fill');
 }
 
 export function getEffectiveBarSolidFillValue(context, scope) {
-  if (scope?.type !== 'entity') return getBarSolidFillValue(context, scope);
-  const localValue = context.read(scope, ['bar', 'solid_fill']);
-  if (localValue !== undefined) return !!localValue;
-  return getBarSolidFillValue(context, { type: 'card' });
+  return !!getBarPaintEditorState(context, scope).paint.solid_fill;
 }
 
 export function setBarSolidFill(context, scope, value) {
-  return setAppearanceValue(context, scope, 'solid_fill', value ? true : undefined);
+  return setAppearanceValue(context, scope, 'solid_fill', !!value);
 }
 
 export function getBarAnimatedValue(context, scope) {
@@ -110,14 +101,15 @@ export function setBarAnimated(context, scope, value) {
 
 export function clearBarAppearanceOverride(context, scope) {
   return context.mutate(scope, target => {
-    const nextTarget = removePathsFromTarget(target, [
+    const nextTarget = removePathsFromTarget(usesGroupedBarPaint(context, scope) ? clearBarPaintProperties(target, ['color', 'fill_style', 'solid_fill']) : target, [
       ['bar', 'fill_style'], ['bar', 'color'], ['bar', 'solid_fill'], ['bar', 'direction'], ['color_mode'], ['color'],
     ]);
     return pruneEmptyObjectsInTarget(nextTarget, ['bar']);
-  }, { rerender: true });
+  }, { rerender: true, ...(usesGroupedBarPaint(context, scope) ? { preserveRawConfig: true } : {}) });
 }
 
 export function hasBarAppearanceOverride(context, scope) {
+  if (['color', 'fill_style', 'solid_fill'].some(key => Object.prototype.hasOwnProperty.call(context.read(scope, ['bar', 'paint']) ?? {}, key))) return true;
   const bar = context.read(scope, ['bar']) ?? {};
   if (isObject(bar) && (
     Object.prototype.hasOwnProperty.call(bar, 'fill_style')
@@ -131,7 +123,7 @@ export function hasBarAppearanceOverride(context, scope) {
 export function getBarAppearanceSummary(context, scope) {
   const parts = [];
   const fillStyle = getFillStyleValue(context, scope);
-  const color = context.read(scope, ['bar', 'color']) ?? context.read(scope, ['color']);
+  const color = readBarPaintProperty(context, scope, 'color');
   const direction = context.read(scope, ['bar', 'direction']);
   if (fillStyle && fillStyle !== 'bands') parts.push(fillStyle.replace(/_/g, ' '));
   if (color && normalizeColorComparisonValue(color) !== normalizeColorComparisonValue('#4a9eff')) parts.push('Custom color');
@@ -172,18 +164,16 @@ export function handleBarAppearanceField(context, { field, kind, index, value },
 export function getBarPaintEditorState(context, scope, paletteValues) {
   const local = context.read(scope, []) ?? {};
   const inheritedConfig = scope?.type === 'entity' ? context.read({ type: 'card' }, []) : null;
-  const paint = normalizeBarConfig(local, inheritedConfig, { isCardScope: scope?.type !== 'entity' });
-  // normalizeBarConfig normally inherits an already-normalized card palette.
-  // Editors retain raw authored configuration, so normalize that palette here.
-  if (inheritedConfig?.bar?.segments != null && local.bar?.segments == null && local.segments == null && local.severity == null) {
-    paint.segments = normalizeBarConfig(inheritedConfig, null).segments;
-  }
+  const parent = inheritedConfig ? { ...inheritedConfig, bar: normalizeBarConfig(inheritedConfig, null) } : null;
+  const paint = { ...normalizeBarConfig(local, parent, {
+    isCardScope: scope?.type !== 'entity', inheritedExplicitness: getPaintExplicitness(inheritedConfig),
+  }).paint };
   if (paint.segments == null && paletteValues?.segments) paint.segments = normalizeGaugeSegments(paletteValues.segments);
   if (paint.gradient_stops == null && paletteValues?.gradient_stops) paint.gradient_stops = paletteValues.gradient_stops;
   const scale = normalizeScaleConfig(local, inheritedConfig);
   const { min, max } = getResolvedScale(context.hass, scale);
-  const bindings = createPaintBindings(context, { scope, path: ['bar'] });
-  const owned = ['fill_style', 'color_mode', 'color', 'solid_fill', 'segments', 'gradient_stops'].some(key => bindings.hasOverride(key))
+  const bindings = createBarPaintBindings(context, scope);
+  const owned = context.read(scope, ['bar', 'color_mode']) !== undefined || ['fill_style', 'color', 'solid_fill', 'segments', 'gradient_stops'].some(key => ownsBarPaintProperty(context, scope, key))
     || ['color_mode', 'color', 'segments', 'severity', 'gradient_stops'].some(key => Object.prototype.hasOwnProperty.call(local, key));
   return { bindings, paint, inherited: scope?.type === 'entity' && !owned,
     scale: { minValue: min, maxValue: max, scaleDirection: scale.direction } };

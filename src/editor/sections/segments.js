@@ -1,10 +1,10 @@
-import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumberValue,
-  setPathValue, deletePathValue, pruneEmptyObjectsInTarget } from '../shared/editor-config.js';
+import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumberValue } from '../shared/editor-config.js';
 import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, normalizeEditorColorValue } from '../shared/editor-controls.js';
 import { normalizeGaugeSegments, normalizeScaleConfig } from '../../config/normalize.js';
 import { getResolvedScale } from '../../config/resolve.js';
 import { getSegmentsForRendering, resolveSegmentBoundaryPct } from '../../view-model/bar-render-model.js';
 import { getEffectiveBarColorValue } from './bar-appearance.js';
+import { readBarPaintProperty, clearBarPaintProperties, ownsBarPaintProperty, usesGroupedBarPaint } from '../shared/bar-paint-bindings.js';
 import { PaletteSection } from '../shared/palette-section.js';
 
 export const MIXED_INTERVAL_PREVIEW_WEIGHT = 10;
@@ -87,12 +87,9 @@ export class SegmentsSection extends PaletteSection {
     this._segmentUiRows.delete(this._getSegmentsScopeKey(scope));
     this._clearSegmentScopeTextState(scope);
     return this.context.mutate(scope, (target) => {
-      let nextTarget = deletePathValue(target, ['bar', 'segments']);
-      nextTarget = deletePathValue(nextTarget, ['segments']);
-      nextTarget = deletePathValue(nextTarget, ['severity']);
-      nextTarget = pruneEmptyObjectsInTarget(nextTarget, ['bar']);
+      const nextTarget = clearBarPaintProperties(target, ['segments']);
       return nextTarget;
-    }, { rerender: true });
+    }, { rerender: true, ...(usesGroupedBarPaint(this.context, scope) ? { preserveRawConfig: true } : {}) });
   }
 
   _getSegmentsValue() {
@@ -203,19 +200,7 @@ export class SegmentsSection extends PaletteSection {
   }
 
   _getStoredScopedSegments(scope = { type: 'card' }) {
-    const structuredValue = this.context.read(scope, ['bar', 'segments']);
-    if (structuredValue !== undefined) {
-      return structuredValue;
-    }
-    const legacySegments = this.context.read(scope, ['segments']);
-    if (legacySegments !== undefined) {
-      return legacySegments;
-    }
-    const legacySeverity = this.context.read(scope, ['severity']);
-    if (legacySeverity !== undefined) {
-      return legacySeverity;
-    }
-    return null;
+    return readBarPaintProperty(this.context, scope, 'segments') ?? null;
   }
 
   _parseSegmentBoundaryInput(rawValue) {
@@ -852,7 +837,7 @@ export class SegmentsSection extends PaletteSection {
   }
 
   _hasSegmentsOverride(scope) {
-    return this._getStoredScopedSegments(scope) !== null;
+    return ownsBarPaintProperty(this.context, scope, 'segments');
   }
 
   _getSegmentsSummary(scope) {

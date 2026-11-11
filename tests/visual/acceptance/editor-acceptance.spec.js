@@ -377,3 +377,52 @@ test('standalone: entity Paint is directly reachable by keyboard at 240px',async
  await d.reopen(page,editor);await d.openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));
  await expect(editor.locator('#entity-0-bar-direction')).toHaveValue('reverse');await expect(editor.locator('#entity-0-paint-editor')).not.toHaveAttribute('open');
 });
+
+for(const host of hosts)test(`${host}: canonical grouped paint editing, palettes and reopen`,async({page})=>{
+ const config=d.seed(host);config.bar.paint={opacity:35,future:{keep:true}};
+ for(const key of ['fill_style','color','solid_fill','segments','gradient_stops'])if(Object.hasOwn(config.bar,key)){config.bar.paint[key]=config.bar[key];delete config.bar[key];}
+ if(host==='standalone')config.entities[0].bar.paint={color:'#abcdef'};
+ const editor=await d.mount(page,host,config);await d.openSection(editor,{section:'Bar Appearance'});
+ for(const style of ['solid','gradient','soft_bands','band_gradient','bands']){
+  await d.commit(page,editor,()=>editor.locator('#bar-fill-style').selectOption(style));
+  expect((await d.saved(page)).bar.paint.fill_style).toBe(style);expect((await d.saved(page)).bar.fill_style).toBeUndefined();
+ }
+ await d.commit(page,editor,()=>d.colorPicker(editor.locator('#bar-color'),'#4a9eff'));
+ await d.commit(page,editor,()=>editor.locator('#bar-solid-fill').check());
+ await d.commit(page,editor,()=>editor.locator('#bar-solid-fill').uncheck());
+ expect((await d.saved(page)).bar.paint).toMatchObject({color:'#4a9eff',solid_fill:false,opacity:35,future:{keep:true}});
+ await d.openSection(editor,{section:'Segments'});
+ const from=editor.locator('input[data-kind="segment-from"]').first();
+ await d.commit(page,editor,async()=>{await from.fill('10%');await from.press('Enter');});
+ expect((await d.saved(page)).bar.paint.segments[0].from).toBe('10%');
+ expect((await d.saved(page)).bar.segments).toBeUndefined();
+ const saved=await d.saved(page);await d.reopen(page,editor);await d.openSection(editor,{section:'Bar Appearance'});
+ await expect(editor.locator('#bar-fill-style')).toHaveValue('bands');await expect(editor.locator('#bar-solid-fill')).not.toBeChecked();
+ expect(await d.saved(page)).toEqual(saved);
+ if(host==='standalone'){
+  await d.openSection(editor,{section:'Bar Appearance',scope:'entity'});
+  await d.commit(page,editor,()=>d.colorPicker(editor.locator('#entity-0-bar-color'),'#4a9eff'));
+  expect((await d.saved(page)).entities[0].bar.paint.color).toBe('#4a9eff');
+  expect((await d.saved(page)).entities[0].bar.color).toBeUndefined();
+  await d.commit(page,editor,()=>editor.locator('#entity-0-bar-inherit').check());
+  for(const key of ['color','fill_style','solid_fill'])expect((await d.saved(page)).entities[0].bar?.paint?.[key]).toBeUndefined();
+  expect((await d.saved(page)).bar).toEqual(saved.bar);
+ }
+});
+
+test('standalone: editing inherited Severity into entity grouped Segments keeps percent coordinates',async({page})=>{
+ const severity=[{from:0,to:100,color:'red'}];
+ const editor=await d.mount(page,'standalone',{type:'custom:sensor-bar-card-plus',scale:{min:0,max:200},severity,
+  entities:[{entity:'sensor.power',bar:{paint:{}}}]});
+ await d.openSection(editor,{section:'Segments',scope:'entity'});
+ const color=editor.locator('input[data-kind="entity-segment-color"][data-index="0"]').first();
+ await d.commit(page,editor,()=>d.colorPicker(color,'#abcdef'));
+ expect((await d.saved(page)).entities[0].bar.paint.segments).toEqual([{from:'0%',to:'100%',color:'#abcdef'}]);
+ expect((await d.saved(page)).severity).toEqual(severity);
+ await d.reopen(page,editor);await d.openSection(editor,{section:'Segments',scope:'entity'});
+ await expect(editor.locator('input[data-kind="entity-segment-from"]').first()).toHaveValue('0%');
+ await expect(editor.locator('input[data-kind="entity-segment-to"]').first()).toHaveValue('100%');
+ await d.commit(page,editor,()=>editor.locator('#entity-0-segments-inherit').check());
+ expect((await d.saved(page)).entities[0].bar?.paint?.segments).toBeUndefined();
+ expect((await d.saved(page)).severity).toEqual(severity);
+});

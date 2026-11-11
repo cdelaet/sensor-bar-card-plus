@@ -208,9 +208,9 @@ for (const source of ['src', 'dist']) describe(`Feature editor foundation (${sou
     expect(editor._config.formatting).toEqual(config.formatting);
     expect(editor._config.markers).toEqual(config.markers);
     await edit(editor, '#bar-color', '#4a9eff');
-    expect(editor._config.bar.color).toBeUndefined();
+    expect(editor._config.bar.color).toBe('#4a9eff');
     await edit(editor, '#bar-solid-fill', false, 'change');
-    expect(editor._config.bar.solid_fill).toBeUndefined();
+    expect(editor._config.bar.solid_fill).toBe(false);
   });
 
   it('patches Scale parts without dropping bound metadata, other parts or inactive aliases', async () => {

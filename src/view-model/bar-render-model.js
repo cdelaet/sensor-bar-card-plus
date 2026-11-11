@@ -44,40 +44,44 @@ export function getRevealTransitionDuration(previousGeometry, nextGeometry) {
   return crossesBaseline ? Math.min(ordinaryDuration, 300) : ordinaryDuration;
 }
 
+function ordinaryPaint(config) {
+  return config?.bar?.paint ? { ...config.bar.paint, segment_space: config.bar.segment_space } : config?.bar;
+}
+
 export function getSeverityInterpolationStops(ecfg, minValue = 0, maxValue = 100, preserveCssColors = false) {
-  return paintCompiler.getSeverityInterpolationStops(ecfg.bar, minValue, maxValue, preserveCssColors);
+  return paintCompiler.getSeverityInterpolationStops(ordinaryPaint(ecfg), minValue, maxValue, preserveCssColors);
 }
 
 export function getSeverityBandGradientCss(ecfg, minValue = 0, maxValue = 100, scaleDirection = 'normal') {
-  return paintCompiler.getSeverityBandGradientCss(ecfg.bar, minValue, maxValue, scaleDirection);
+  return paintCompiler.getSeverityBandGradientCss(ordinaryPaint(ecfg), minValue, maxValue, scaleDirection);
 }
 
 export function getSoftBandGradientStops(ecfg, minValue = 0, maxValue = 100) {
-  return paintCompiler.getSoftBandGradientStops(ecfg.bar, minValue, maxValue);
+  return paintCompiler.getSoftBandGradientStops(ordinaryPaint(ecfg), minValue, maxValue);
 }
 
 export function getSoftBandGradientCss(ecfg, minValue = 0, maxValue = 100, scaleDirection = 'normal') {
-  return paintCompiler.getSoftBandGradientCss(ecfg.bar, minValue, maxValue, scaleDirection);
+  return paintCompiler.getSoftBandGradientCss(ordinaryPaint(ecfg), minValue, maxValue, scaleDirection);
 }
 
 export function getEffectiveFillStyle(ecfg) {
-  return paintCompiler.getEffectiveFillStyle(ecfg?.bar);
+  return paintCompiler.getEffectiveFillStyle(ordinaryPaint(ecfg));
 }
 
 export function getSegmentsForRendering(ecfg, minValue = 0, maxValue = 100) {
-  return paintCompiler.getSegmentsForRendering(ecfg.bar, minValue, maxValue);
+  return paintCompiler.getSegmentsForRendering(ordinaryPaint(ecfg), minValue, maxValue);
 }
 
 export function getColor(pct, ecfg, minValue = 0, maxValue = 100) {
-  return paintCompiler.getColor(pct, ecfg.bar, minValue, maxValue);
+  return paintCompiler.getColor(pct, ordinaryPaint(ecfg), minValue, maxValue);
 }
 
 export function getGradientInterpolationStops(ecfg, minValue = 0, maxValue = 100) {
-  return paintCompiler.getGradientInterpolationStops(ecfg.bar, minValue, maxValue);
+  return paintCompiler.getGradientInterpolationStops(ordinaryPaint(ecfg), minValue, maxValue);
 }
 
 export function getBasePaintGradient(color, ecfg, minValue = 0, maxValue = 100, scaleDirection = 'normal') {
-  return paintCompiler.getBasePaintGradient(color, ecfg.bar, minValue, maxValue, scaleDirection);
+  return paintCompiler.getBasePaintGradient(color, ordinaryPaint(ecfg), minValue, maxValue, scaleDirection);
 }
 
 export function getOverlayGradient(startPct, endPct, color) {
