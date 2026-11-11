@@ -134,6 +134,31 @@ export function patchHistoryStatus(root, summary) {
   }
 }
 
+function reconcilePaintLayers(container, layers) {
+  const existing = new Map([...container.children]
+    .filter(node => node.matches('.bar-paint-layer[data-layer]'))
+    .map(node => [node.dataset.layer, node]));
+  const ids = new Set(layers.map(layer => layer.id));
+  for (const [id, node] of existing) {
+    if (!ids.has(id)) node.remove();
+  }
+
+  let nextNode = container.firstElementChild;
+  for (const layer of layers) {
+    let node = existing.get(layer.id);
+    if (!node) {
+      node = container.ownerDocument.createElement('div');
+      node.className = 'bar-paint-layer';
+      node.dataset.layer = layer.id;
+    }
+    const style = `z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}`;
+    // Compare the authored attribute; CSSOM serializes cssText differently.
+    if (node.getAttribute('style') !== style) node.setAttribute('style', style);
+    if (node !== nextNode) container.insertBefore(node, nextNode);
+    nextNode = node.nextElementSibling;
+  }
+}
+
 /** Patch persistent bar nodes. The adapter supplies transition timing. */
 export function patchBar(root, model, { revealDuration = 600 } = {}) {
   const fillReveal = root.querySelector('.bar-fill-reveal');
@@ -141,18 +166,13 @@ export function patchBar(root, model, { revealDuration = 600 } = {}) {
   if (fillReveal) {
     setStyleTextIfChanged(fillReveal, `${model.fill.revealStyle};--sbcp-reveal-duration:${revealDuration}ms`);
     setClassNameIfChanged(fillReveal, `bar-fill-reveal${model.animated ? '' : ' no-anim'}`);
+    reconcilePaintLayers(fillReveal, model.fill.paintLayers);
   }
   if (baselineIndicator) {
     const baselinePosition = model.baseline.positionPercent ?? model.baseline.percent;
     setStyleIfChanged(baselineIndicator, 'display', Number.isFinite(baselinePosition) ? 'block' : 'none');
     if (Number.isFinite(baselinePosition)) {
       setStyleIfChanged(baselineIndicator, 'left', `${baselinePosition}%`);
-    }
-  }
-  for (const layer of model.fill.paintLayers) {
-    const paintLayer = root.querySelector(`.bar-paint-layer[data-layer="${layer.id}"]`);
-    if (paintLayer) {
-      setStyleTextIfChanged(paintLayer, `z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}`);
     }
   }
   const needleEl = root.querySelector('.needle-marker');

@@ -93,17 +93,19 @@ for (const scaleDirection of ['normal', 'reverse']) {
         bar: { fill_style: 'solid', color: '#123456', direction: 'reverse', animated: false,
           needle: true, above_target_color: '#00ff00' },
         baseline: { at: { entity: 'sensor.baseline' }, above: { color: '#ff0000' }, below: { color: '#0000ff' } },
-        target: { at: 60 },
+        target: { at: { entity: 'sensor.target' } },
       };
-      const states = { 'sensor.power': window.__sbcpCreateState(85), 'sensor.baseline': window.__sbcpCreateState(25) };
+      const states = { 'sensor.power': window.__sbcpCreateState(85), 'sensor.baseline': window.__sbcpCreateState(25),
+        'sensor.target': window.__sbcpCreateState(60) };
       await window.__sbcpRenderCard({ config: { ...config, entities: ['sensor.power'] }, states });
       await window.__sbcpRenderFeature({ config, states, context: { entity_id: 'sensor.power' } });
     }, scaleDirection);
-    for (const [value, baseline] of [[85, 25], [10, 70], [85, 'unknown'], [85, 25]]) {
-      const result = await page.evaluate(async ([value, baseline]) => {
+    for (const [value, baseline, target] of [[85, 25, 60], [10, 70, 15], [85, 'unknown', 'unknown'], [85, 25, 60]]) {
+      const result = await page.evaluate(async ([value, baseline, target]) => {
         const card = document.querySelector('sensor-bar-card-plus');
         const feature = document.querySelector('sensor-bar-card-plus-feature');
-        const hass = { states: { 'sensor.power': window.__sbcpCreateState(value), 'sensor.baseline': window.__sbcpCreateState(baseline) } };
+        const hass = { states: { 'sensor.power': window.__sbcpCreateState(value), 'sensor.baseline': window.__sbcpCreateState(baseline),
+          'sensor.target': window.__sbcpCreateState(target) } };
         card.hass = hass;
         feature.hass = hass;
         await feature.updateComplete;
@@ -117,10 +119,11 @@ for (const scaleDirection of ['normal', 'reverse']) {
           };
         };
         return { card: read(card), feature: read(feature) };
-      }, [value, baseline]);
+      }, [value, baseline, target]);
       expect(result.card).toEqual(result.feature);
       expect(result.card.layers.filter(layer => layer.id.startsWith('baseline-')).map(layer => layer.display))
         .toEqual(baseline === 'unknown' ? ['none', 'none'] : ['block', 'block']);
+      expect(result.card.layers.find(layer => layer.id === 'above-target').display).toBe(target === 'unknown' ? 'none' : 'block');
     }
   });
 }

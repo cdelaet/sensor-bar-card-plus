@@ -5,6 +5,7 @@ import {
   buildBarRenderModel, getFillPaintLayers, getFillRenderState, getFullScalePaintStyle,
 } from '../../src/view-model/bar-render-model.js';
 import { patchBar, renderBar } from '../../src/render/bar-renderer.js';
+import { createPaintLayerContainer } from '../support/paint-layer-dom.mjs';
 
 const paint = { bar: { fill_style: 'solid', color: '#123456', above_target_color: '#ffff00' },
   baseline: { above: { color: '#ff0000' }, below: { color: '#0000ff' } } };
@@ -72,17 +73,16 @@ describe('independent Baseline paint layers', () => {
       entityConfig: appearance, entityState: { state: String(value), attributes: {} },
       hass: { states: { 'sensor.baseline': { state: String(baseline), attributes: {} } } },
     }), appearance, { height: 30 });
-    const renderedPaints = model => new Map([...renderBar(model).matchAll(/data-layer="([^"]+)" style="([^"]*)"/g)]
-      .map(([, id, cssText]) => [`.bar-paint-layer[data-layer="${id}"]`, { style: { cssText } }]));
+    const renderedPaints = model => [...renderBar(model).matchAll(/data-layer="([^"]+)" style="([^"]*)"/g)]
+      .map(([, id, style]) => ({ id, style }));
     const initial = modelFor(80, 25);
-    const nodes = renderedPaints(initial);
-    const fillReveal = { style: { cssText: initial.fill.revealStyle }, className: '' };
-    const root = { querySelector: selector => selector === '.bar-fill-reveal' ? fillReveal : nodes.get(selector) };
+    const fillReveal = createPaintLayerContainer(renderedPaints(initial));
+    const root = { querySelector: selector => selector === '.bar-fill-reveal' ? fillReveal : null };
     for (const [value, baseline] of [[10, 70], [80, 'unknown'], [80, 25]]) {
       const model = modelFor(value, baseline);
       patchBar(root, model);
-      expect([...nodes.values()].map(node => node.style.cssText))
-        .toEqual([...renderedPaints(model).values()].map(node => node.style.cssText));
+      expect(fillReveal.children.map(node => ({ id: node.dataset.layer, style: node.style.cssText })))
+        .toEqual(renderedPaints(model));
       expect(fillReveal.style.cssText).toContain(model.fill.revealStyle);
       expect(model.needle.show).toBe(baseline === 'unknown');
       if (baseline !== 'unknown') expect(model.fill.revealStyle).toContain('round ');

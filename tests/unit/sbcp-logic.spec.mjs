@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createCard } from '../support/load-card-class.cjs';
 import { historicalMarkerId } from '../../src/history/marker-consumers.js';
+import { createPaintLayerContainer } from '../support/paint-layer-dom.mjs';
 
 function seedPeak(card, cfg, value) {
   card._historicalRuntime.results.set(historicalMarkerId(cfg, 'peak'), { value, status: 'available' });
@@ -184,7 +185,7 @@ describe('Sensor Bar Card Plus logic', () => {
         'sensor.dynamic_baseline': { state: '100' },
       },
     };
-    const fillReveal = { style: { cssText: '' }, className: '' };
+    const fillReveal = createPaintLayerContainer();
     const row = {
       dataset: {},
       querySelector: (selector) => (selector === '.bar-fill-reveal' ? fillReveal : null),
@@ -5545,14 +5546,8 @@ describe('Sensor Bar Card Plus logic', () => {
       target: 60,
       entities: [{ entity: 'sensor.row', name: 'Sensor' }],
     }).entities[0];
-    const fillReveal = {
-      style: { cssText: '' },
-      className: '',
-    };
-    const aboveTargetLayer = {
-      style: { cssText: '' },
-      className: '',
-    };
+    const fillReveal = createPaintLayerContainer([{ id: 'base' }, { id: 'above-target' }]);
+    const aboveTargetLayer = fillReveal.children[1];
     const row = {
       dataset: {},
       querySelector: (selector) => (

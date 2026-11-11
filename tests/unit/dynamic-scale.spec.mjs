@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createCard } from '../support/load-card-class.cjs';
 import { historicalMarkerId } from '../../src/history/marker-consumers.js';
+import { createPaintLayerContainer } from '../support/paint-layer-dom.mjs';
 
 const state = (value) => ({ state: String(value), attributes: { unit_of_measurement: 'W' } });
 const dynamicScale = { min: { entity: 'sensor.min' }, max: { entity: 'sensor.max' } };
@@ -34,6 +35,7 @@ function setup(config = {}, initial = snapshot(50, 0, 100)) {
       '.bar-fill-reveal', '.baseline-indicator', '.target-marker', '.peak-marker',
       '.floor-marker', '.needle-marker', '.value-right', '.target-value-label',
     ].map((selector) => [selector, element()]));
+    elements['.bar-fill-reveal'] = createPaintLayerContainer();
     const generic = element({ markerId: 'generic-0' });
     return {
       dataset: { rowIndex: String(index) },
