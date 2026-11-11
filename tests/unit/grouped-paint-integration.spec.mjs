@@ -51,6 +51,36 @@ async function edit(editor, id, value, type = 'input') {
   control.dispatchEvent({ type }); await editor.updateComplete;
 }
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  it(`${host} edits and clears inherited grouped opacity without losing unrelated config (${source})`, async () => {
+    const raw = host === 'Card'
+      ? { extra: { keep: true }, bar: { paint: { opacity: 35, future: { keep: true } } },
+        entities: [{ entity, bar: { needle: { show: true }, future: true } }] }
+      : { extra: { keep: true }, bar: { paint: { opacity: 35, future: { keep: true } }, fill_style: 'gradient' } };
+    const original = structuredClone(raw);
+    const state = await setup(source, host, raw), { editor } = state;
+    if (host === 'Card') {
+      const scope = { type: 'entity', index: 0 };
+      const opacity = editor.shadowRoot.querySelector('#entity-0-bar-opacity');
+      expect(opacity.value).toBe('35');
+      expect(editor._hasEntityBarAppearanceOverride(scope)).toBe(false);
+      await edit(editor, 'entity-0-bar-opacity', '0');
+      expect(state.config().entities[0]).toEqual({ entity, bar: { needle: { show: true }, future: true, paint: { opacity: 0 } } });
+      expect(state.config().bar.paint).toEqual({ opacity: 35, future: { keep: true } });
+      const saved = structuredClone(state.config()); editor.setConfig(saved); await editor.updateComplete;
+      expect(editor.shadowRoot.querySelector('#entity-0-bar-opacity').value).toBe('0');
+      await edit(editor, 'entity-0-bar-inherit', true, 'change');
+      expect(state.config().entities[0]).toEqual({ entity, bar: { needle: { show: true }, future: true } });
+      expect(state.config().bar.paint.opacity).toBe(35);
+    } else {
+      expect(editor.shadowRoot.querySelector('#bar-opacity').value).toBe('35');
+      await edit(editor, 'bar-opacity', '0');
+      expect(state.config().bar).toEqual({ paint: { opacity: 0, future: { keep: true } }, fill_style: 'gradient' });
+      const saved = structuredClone(state.config()); editor.setConfig(saved); await editor.updateComplete;
+      expect(editor.shadowRoot.querySelector('#bar-opacity').value).toBe('0');
+    }
+    expect(raw).toEqual(original);
+  });
+
   it(`${host} edits grouped and mixed paint without changing unrelated legacy values (${source})`, async () => {
     const raw = { extra: { keep: true }, bar: { color: 'red', fill_style: 'gradient', solid_fill: true,
       segments, gradient_stops, direction: 'reverse', future: true, paint: { color: null, future: { keep: true }, opacity: 40 } } };

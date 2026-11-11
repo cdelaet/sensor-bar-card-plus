@@ -71,6 +71,38 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
   });
 }
 
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} edits canonical Paint opacity at narrow width (${source})`, async ({ page }) => {
+    const editor = await mount(page, host, source, 240);
+    const paint = editor.locator('#card-paint-editor');
+    const opacity = paint.locator('#bar-opacity');
+    await expect(paint).not.toHaveAttribute('open');
+    await expect(opacity).toBeHidden();
+    await expect(paint.locator('.paint-editor-description')).not.toContainText('opacity');
+    await paint.locator('summary').focus(); await page.keyboard.press('Enter');
+    await expect(opacity).toBeVisible();
+    await expect(opacity).toHaveValue('100');
+    await expect(opacity).toHaveAttribute('min', '0');
+    await expect(opacity).toHaveAttribute('max', '100');
+    await expect(opacity).toHaveAttribute('step', 'any');
+
+    for (const value of ['37', '0', '100']) {
+      await opacity.fill(value);
+      await opacity.press('Tab');
+      expect((await saved(editor)).bar.paint.opacity).toBe(Number(value));
+    }
+    const roundTrip = await saved(editor);
+    await editor.evaluate((el, config) => el.setConfig(structuredClone(config)), roundTrip);
+    expect(await saved(editor)).toEqual(roundTrip);
+    expect(await opacity.evaluate(node => {
+      const paintBox = node.closest('.paint-editor').getBoundingClientRect();
+      const bounds = node.getBoundingClientRect();
+      return bounds.width > 0 && bounds.left >= paintBox.left && bounds.right <= paintBox.right;
+    })).toBe(true);
+    expect(await page.evaluate(() => window.__paintEvents)).toHaveLength(3);
+  });
+}
+
 for (const host of ['Card', 'Feature']) for (const width of [240, 360]) {
   test(`${host} Paint fits ${width}px collapsed and expanded`, async ({ page }) => {
     const editor = await mount(page, host, 'src', width);
@@ -239,7 +271,7 @@ for (const source of ['src', 'dist']) for (const width of [240, 360]) {
       });
     })).toBe(true);
     expect(await editor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-    for (const id of ['paint-editor', 'bar-direction', 'bar-fill-style', 'bar-color', 'bar-solid-fill']) {
+    for (const id of ['paint-editor', 'bar-direction', 'bar-fill-style', 'bar-color', 'bar-solid-fill', 'bar-opacity']) {
       await expect(editor.locator(`#entity-0-${id}`)).toHaveCount(1);
     }
     if (source === 'src') {

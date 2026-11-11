@@ -133,6 +133,27 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     edit(editor, 'bar-solid-fill', true, 'change');
     expect(editor._draftConfig.bar.solid_fill).toBe(true);
   });
+
+  it('edits canonical opacity including zero while preserving legacy paint and config echo', () => {
+    const { editor, events } = setup(source, {
+      extra: { keep: true },
+      bar: { fill_style: 'gradient', color: 'red', solid_fill: true, future: { keep: true }, paint: { opacity: 35, future: true } },
+    });
+    const input = editor.shadowRoot.querySelector('#bar-opacity');
+    expect(input.value).toBe('35');
+    expect(input.getAttribute('min')).toBe('0');
+    expect(input.getAttribute('max')).toBe('100');
+    expect(input.getAttribute('step')).toBe('any');
+    edit(editor, 'bar-opacity', '0');
+    expect(events.at(-1).detail.config).toEqual({
+      extra: { keep: true },
+      bar: { fill_style: 'gradient', color: 'red', solid_fill: true, future: { keep: true }, paint: { opacity: 0, future: true } },
+    });
+    editor.setConfig(events.at(-1).detail.config);
+    editor._render();
+    expect(editor.shadowRoot.querySelector('#bar-opacity').value).toBe('0');
+    expect(editor._draftConfig).toEqual(events.at(-1).detail.config);
+  });
 });
 
 describe('Bar Appearance with a root-only host context', () => {

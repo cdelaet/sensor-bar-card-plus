@@ -1,6 +1,6 @@
 import { normalizeBarConfig, normalizeGaugeSegments, normalizeScaleConfig, getPaintExplicitness } from '../../config/normalize.js';
 import {
-  isObject, normalizeTextValue, getPathValue,
+  isObject, normalizeTextValue, normalizeNumberValue, getPathValue,
   removePathsFromTarget, pruneEmptyObjectsInTarget,
 } from '../shared/editor-config.js';
 import { escapeAttribute, normalizeColorComparisonValue, normalizeEditorColorValue } from '../shared/editor-controls.js';
@@ -88,6 +88,13 @@ export function setBarSolidFill(context, scope, value) {
   return setAppearanceValue(context, scope, 'solid_fill', !!value);
 }
 
+export function setBarOpacity(context, scope, rawValue) {
+  const value = rawValue === '' || rawValue === null || rawValue === undefined
+    ? undefined : normalizeNumberValue(rawValue);
+  if (value !== undefined && (value === null || value < 0 || value > 100)) return false;
+  return setAppearanceValue(context, scope, 'opacity', value);
+}
+
 export function getBarAnimatedValue(context, scope) {
   return !!normalizeBarConfig(context.read(scope, []), scope?.type === 'entity' ? context.read({ type: 'card' }, []) : null).animated;
 }
@@ -101,7 +108,7 @@ export function setBarAnimated(context, scope, value) {
 
 export function clearBarAppearanceOverride(context, scope) {
   return context.mutate(scope, target => {
-    const nextTarget = removePathsFromTarget(usesGroupedBarPaint(context, scope) ? clearBarPaintProperties(target, ['color', 'fill_style', 'solid_fill']) : target, [
+    const nextTarget = removePathsFromTarget(usesGroupedBarPaint(context, scope) ? clearBarPaintProperties(target, ['color', 'fill_style', 'solid_fill', 'opacity']) : clearBarPaintProperties(target, ['opacity']), [
       ['bar', 'fill_style'], ['bar', 'color'], ['bar', 'solid_fill'], ['bar', 'direction'], ['color_mode'], ['color'],
     ]);
     return pruneEmptyObjectsInTarget(nextTarget, ['bar']);
@@ -109,7 +116,7 @@ export function clearBarAppearanceOverride(context, scope) {
 }
 
 export function hasBarAppearanceOverride(context, scope) {
-  if (['color', 'fill_style', 'solid_fill'].some(key => Object.prototype.hasOwnProperty.call(context.read(scope, ['bar', 'paint']) ?? {}, key))) return true;
+  if (['color', 'fill_style', 'solid_fill', 'opacity'].some(key => Object.prototype.hasOwnProperty.call(context.read(scope, ['bar', 'paint']) ?? {}, key))) return true;
   const bar = context.read(scope, ['bar']) ?? {};
   if (isObject(bar) && (
     Object.prototype.hasOwnProperty.call(bar, 'fill_style')
@@ -141,7 +148,7 @@ export function handleBarAppearanceField(context, { field, kind, index, value },
     return true;
   }
   if (options.animation && field === 'bar-animated') { setBarAnimated(context, { type: 'card' }, value); return true; }
-  const rootSetters = { 'bar-fill-style': setBarFillStyle, 'bar-color': setBarColor, 'bar-solid-fill': setBarSolidFill };
+  const rootSetters = { 'bar-fill-style': setBarFillStyle, 'bar-color': setBarColor, 'bar-solid-fill': setBarSolidFill, 'bar-opacity': setBarOpacity };
   if (Object.prototype.hasOwnProperty.call(rootSetters, field)) {
     rootSetters[field](context, { type: 'card' }, value, options);
     return true;
@@ -151,7 +158,7 @@ export function handleBarAppearanceField(context, { field, kind, index, value },
     if (value) clearBarAppearanceOverride(context, scope);
     return true;
   }
-  const rowSetters = { 'entity-bar-fill-style': setBarFillStyle, 'entity-bar-color': setBarColor, 'entity-bar-solid-fill': setBarSolidFill };
+  const rowSetters = { 'entity-bar-fill-style': setBarFillStyle, 'entity-bar-color': setBarColor, 'entity-bar-solid-fill': setBarSolidFill, 'entity-bar-opacity': setBarOpacity };
   if (Object.prototype.hasOwnProperty.call(rowSetters, kind)) {
     rowSetters[kind](context, scope, value);
     return true;
@@ -173,7 +180,7 @@ export function getBarPaintEditorState(context, scope, paletteValues) {
   const scale = normalizeScaleConfig(local, inheritedConfig);
   const { min, max } = getResolvedScale(context.hass, scale);
   const bindings = createBarPaintBindings(context, scope);
-  const owned = context.read(scope, ['bar', 'color_mode']) !== undefined || ['fill_style', 'color', 'solid_fill', 'segments', 'gradient_stops'].some(key => ownsBarPaintProperty(context, scope, key))
+  const owned = context.read(scope, ['bar', 'color_mode']) !== undefined || ['fill_style', 'color', 'solid_fill', 'segments', 'gradient_stops', 'opacity'].some(key => ownsBarPaintProperty(context, scope, key))
     || ['color_mode', 'color', 'segments', 'severity', 'gradient_stops'].some(key => Object.prototype.hasOwnProperty.call(local, key));
   return { bindings, paint, inherited: scope?.type === 'entity' && !owned,
     scale: { minValue: min, maxValue: max, scaleDirection: scale.direction } };
@@ -193,7 +200,7 @@ export function renderBarAppearanceSection(context, scope, renderChildren = () =
   const paintEditor = renderPaintEditor({
     ...getBarPaintEditorState(context, scope, options.paletteValues),
     id: entity ? `entity-${index}-paint-editor` : 'card-paint-editor', root: options.root,
-    fields: { fill_style: field('fill-style'), color: field('color'), solid_fill: field('solid-fill') },
+    fields: { fill_style: field('fill-style'), color: field('color'), solid_fill: field('solid-fill'), opacity: field('opacity') },
     cssText: options.cssText, paletteContent: options.paintChildren?.() ?? '',
   });
   const direction = renderDirectionControl(context, scope, {

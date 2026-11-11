@@ -1,4 +1,4 @@
-import { escapeAttribute, renderColorInput } from './editor-controls.js';
+import { escapeAttribute, renderColorInput, renderScalePercentageInput } from './editor-controls.js';
 import { compilePaint } from '../../view-model/paint-compiler.js';
 import { setStyleIfChanged } from '../../utils/dom.js';
 
@@ -25,13 +25,17 @@ function fieldAttributes({ id, field, kind, index }) {
   return `id="${escapeAttribute(id)}"${field ? ` data-field="${escapeAttribute(field)}"` : ''}${kind ? ` data-kind="${escapeAttribute(kind)}"` : ''}${index !== undefined ? ` data-index="${index}"` : ''}`;
 }
 
+function fieldRoutingAttributes({ field, kind, index }) {
+  return `${field ? `data-field="${escapeAttribute(field)}"` : ''}${kind ? `${field ? ' ' : ''}data-kind="${escapeAttribute(kind)}"` : ''}${index !== undefined ? ` data-index="${index}"` : ''}`;
+}
+
 /** Destination-neutral paint controls. Bindings own raw properties; the host
  * supplies effective display paint, field routing and existing palette editors.
  * Native disclosure state survives host renders by reading the mounted node.
  */
 export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {}, inherited = false,
   scale, fields = {}, root, paletteContent = '', cssText = false }) {
-  const controls = Object.fromEntries(['fill_style', 'solid_fill', 'color'].map(key => [key,
+  const controls = Object.fromEntries(['fill_style', 'solid_fill', 'color', 'opacity'].map(key => [key,
     fields[key] ?? { id: `${id}-${key}`, field: key },
   ]));
   const open = root?.querySelector(`#${id}`)?.open === true;
@@ -55,6 +59,9 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
         </div></div>
         <div class="field-row"><label for="${controls.color.id}">Color</label>
           ${renderColorInput({ ...controls.color, value: paint.color, fallbackHex: '#4a9eff', cssText, label: 'Color', placeholder: 'CSS color value' })}
+        </div>
+        <div class="field-row"><label for="${controls.opacity.id}">Opacity</label>
+          ${renderScalePercentageInput(controls.opacity.id, fieldRoutingAttributes(controls.opacity), paint.opacity ?? 100)}
         </div>
       </div>
       ${paletteContent}

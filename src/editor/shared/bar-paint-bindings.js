@@ -8,6 +8,7 @@ const aliases = {
   solid_fill: [['bar', 'solid_fill']],
   segments: [['bar', 'segments'], ['segments'], ['severity']],
   gradient_stops: [['bar', 'gradient_stops'], ['gradient_stops']],
+  opacity: [],
 };
 const owns = (object, key) => object != null && Object.prototype.hasOwnProperty.call(object, key);
 const legacyPaint = config => Object.values(aliases).flat().some(path => getPathValue(config, path) !== undefined);
@@ -61,28 +62,38 @@ export function createBarPaintBindings(context, scope, { grouped = usesGroupedBa
     if (grouped && next?.bar?.paint !== undefined && !isObject(next.bar.paint)) next = { ...next, bar: { ...next.bar, paint: {} } };
     return next;
   };
-  const path = grouped ? ['bar', 'paint'] : ['bar'];
-  const binding = createPaintBindings({
-    read: (_scope, at) => getPathValue(promote(context.read(scope, [])), at),
-    mutate: (_scope, mutation, options) => context.mutate(scope, target => mutation(promote(target)), options),
-  }, { scope, path });
+  const createBinding = (useGrouped, cleanupProperty = null) => {
+    const path = useGrouped ? ['bar', 'paint'] : ['bar'];
+    return createPaintBindings({
+      read: (_scope, at) => getPathValue(promote(context.read(scope, [])), at),
+      mutate: (_scope, mutation, options) => context.mutate(scope, target => {
+        const edited = mutation(promote(target));
+        if (cleanupProperty === null) return edited;
+        const stale = useGrouped ? aliases[cleanupProperty] : aliases[cleanupProperty].filter(at => at.join('.') !== `bar.${cleanupProperty}` && at.join('.') !== 'bar.color_mode');
+        return removePathsFromTarget(edited, stale);
+      }, options),
+    }, { scope, path });
+  };
+  const binding = createBinding(grouped);
   return {
     ...binding,
+    read(property) {
+      if (property === 'opacity') return cloneDeep(context.read(scope, ['bar', 'paint', 'opacity']));
+      return binding.read(property);
+    },
+    hasOverride(property) {
+      if (property === 'opacity') return owns(context.read(scope, ['bar', 'paint']), property);
+      return binding.hasOverride(property);
+    },
     set(property, value, options = {}) {
       if (property === 'segments') value = prepareBarPaintSegments(context, scope, value);
-      const adapter = createPaintBindings({
-        read: (_scope, at) => getPathValue(promote(context.read(scope, [])), at),
-        mutate: (_scope, mutation, opts) => context.mutate(scope, target => {
-          const edited = mutation(promote(target));
-          const stale = grouped ? aliases[property] : aliases[property].filter(at => at.join('.') !== `bar.${property}` && at.join('.') !== 'bar.color_mode');
-          return removePathsFromTarget(edited, stale);
-        }, opts),
-      }, { scope, path });
-      return adapter.set(property, value, { ...options, ...(grouped || value === false || property === 'color' && String(value).toLowerCase() === '#4a9eff' ? { preserveRawConfig: true } : {}) });
+      const propertyGrouped = grouped || property === 'opacity';
+      return createBinding(propertyGrouped, property).set(property, value, { ...options, ...(propertyGrouped || value === false || property === 'color' && String(value).toLowerCase() === '#4a9eff' ? { preserveRawConfig: true } : {}) });
     },
     clear(property, options = {}) {
-      return context.mutate(scope, target => grouped ? clearBarPaintProperties(target, [property])
-        : pruneEmptyObjectsInTarget(removePathsFromTarget(target, aliases[property].filter(at => at.join('.') !== 'bar.color_mode')), ['bar']), { ...options, ...(grouped ? { preserveRawConfig: true } : {}) });
+      const propertyGrouped = grouped || property === 'opacity';
+      return context.mutate(scope, target => propertyGrouped ? clearBarPaintProperties(target, [property])
+        : pruneEmptyObjectsInTarget(removePathsFromTarget(target, aliases[property].filter(at => at.join('.') !== 'bar.color_mode')), ['bar']), { ...options, ...(propertyGrouped ? { preserveRawConfig: true } : {}) });
     },
   };
 }

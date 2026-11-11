@@ -33,7 +33,8 @@ describe('shared Paint Editor', () => {
     expect(html).toContain(`<option value="${fill_style}" selected>`);
     expect(html).toContain(`background-image:${compilePaint(paint).gradient}`);
     expect(html).toContain(describePaint(paint));
-    expect(html).not.toMatch(/opacity|preset|simulator/);
+    expect(html).toMatch(/Opacity/);
+    expect(html).not.toMatch(/preset|simulator/);
   });
 
   it('retains mounted disclosure state while accepting host field routing', () => {
