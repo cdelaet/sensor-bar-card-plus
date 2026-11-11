@@ -176,7 +176,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._syncActionSelectors();
     const context = this._createSectionContext();
     for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) {
-      syncBarPaintEditor(this.shadowRoot, context, scope, this._paintPaletteValues(scope));
+      syncBarPaintEditor(this.shadowRoot, context, scope, this._paintPaletteValues(scope), { numericDrafts: this._numericDrafts });
     }
   }
 
@@ -452,7 +452,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._setElementChecked('baseline-above-color-enabled', this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'above'));
     this._setElementChecked('baseline-below-color-enabled', this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'below'));
     this._refreshSegmentUi({ type: 'card' });
-    syncBarPaintEditor(this.shadowRoot, this._createSectionContext(), { type: 'card' }, this._paintPaletteValues({ type: 'card' }));
+    syncBarPaintEditor(this.shadowRoot, this._createSectionContext(), { type: 'card' }, this._paintPaletteValues({ type: 'card' }), { numericDrafts: this._numericDrafts });
   }
 
   _refreshEntityDerivedUi() {
@@ -482,7 +482,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementText(`entity-${index}-group-peak-summary`, this._getPeakSummary(scope));
       this._setElementText(`entity-${index}-group-floor-summary`, this._getFloorSummary(scope));
       this._setElementText(`entity-${index}-group-markers-summary`, this._getGenericMarkersSummary(scope));
-      syncBarPaintEditor(this.shadowRoot, this._createSectionContext(), scope, this._paintPaletteValues(scope));
+      syncBarPaintEditor(this.shadowRoot, this._createSectionContext(), scope, this._paintPaletteValues(scope), { numericDrafts: this._numericDrafts });
       this._setElementText(`entity-${index}-group-segments-summary`, this._getSegmentsSummary(scope));
       this._setElementText(`entity-${index}-group-gradient-stops-summary`, this._getGradientStopsSummary(scope));
       this._setElementText(`entity-${index}-group-layout-summary`, this._getLayoutSummary(scope));

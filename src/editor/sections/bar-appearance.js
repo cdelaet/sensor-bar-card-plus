@@ -186,9 +186,11 @@ export function getBarPaintEditorState(context, scope, paletteValues) {
     scale: { minValue: min, maxValue: max, scaleDirection: scale.direction } };
 }
 
-export function syncBarPaintEditor(root, context, scope, paletteValues) {
+export function syncBarPaintEditor(root, context, scope, paletteValues, options) {
   const id = scope?.type === 'entity' ? `entity-${scope.index}-paint-editor` : 'card-paint-editor';
-  syncPaintEditor(root, id, getBarPaintEditorState(context, scope, paletteValues));
+  const state = getBarPaintEditorState(context, scope, paletteValues);
+  syncPaintEditor(root, id, state, options);
+  return state;
 }
 
 export function renderBarAppearanceSection(context, scope, renderChildren = () => '', options = {}) {

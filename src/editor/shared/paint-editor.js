@@ -61,7 +61,7 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
           ${renderColorInput({ ...controls.color, value: paint.color, fallbackHex: '#4a9eff', cssText, label: 'Color', placeholder: 'CSS color value' })}
         </div>
         <div class="field-row"><label for="${controls.opacity.id}">Opacity</label>
-          ${renderScalePercentageInput(controls.opacity.id, fieldRoutingAttributes(controls.opacity), paint.opacity ?? 100)}
+          ${renderScalePercentageInput(controls.opacity.id, `${fieldRoutingAttributes(controls.opacity)} data-paint-property="opacity"`, paint.opacity ?? 100)}
         </div>
       </div>
       ${paletteContent}
@@ -69,7 +69,7 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
   </details>`;
 }
 
-export function syncPaintEditor(root, id, { paint, inherited, scale }) {
+export function syncPaintEditor(root, id, { paint, inherited, scale }, { numericDrafts } = {}) {
   const editor = root?.querySelector(`#${id}`);
   if (!editor) return;
   const description = editor.querySelector?.('.paint-editor-description');
@@ -78,4 +78,7 @@ export function syncPaintEditor(root, id, { paint, inherited, scale }) {
   const swatch = editor.querySelector?.('.paint-editor-swatch');
   setStyleIfChanged(swatch, 'backgroundColor', swatchBackdrop);
   setStyleIfChanged(swatch, 'backgroundImage', swatchPaint(paint, scale));
+  const opacity = editor.querySelector?.('[data-paint-property="opacity"]');
+  const opacityValue = String(paint.opacity ?? 100);
+  if (opacity && !numericDrafts?.values?.has(opacity.id) && opacity.value !== opacityValue) opacity.value = opacityValue;
 }

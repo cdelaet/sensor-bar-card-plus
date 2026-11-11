@@ -427,13 +427,17 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       }
     }
     const context = this._createSectionContext();
-    syncBarPaintEditor(this.shadowRoot, context, root, { segments: this._segmentsSection._getScopedSegmentsValue(root), gradient_stops: this._gradientStopsSection._getScopedGradientStopsValue(root) });
+    const paintState = syncBarPaintEditor(this.shadowRoot, context, root, {
+      segments: this._segmentsSection._getScopedSegmentsValue(root),
+      gradient_stops: this._gradientStopsSection._getScopedGradientStopsValue(root),
+    }, { numericDrafts: this._numericDrafts });
     const color = getBarColorValue(context, root);
     const values = {
       'scale-min': getFeatureScaleSource(this._config, 'min').fixed,
       'scale-max': getFeatureScaleSource(this._config, 'max').fixed,
       'scale-direction': getDirectionSelection(context, root, ['scale', 'direction']),
       'bar-fill-style': getEffectiveFillStyleValue(context, root),
+      'bar-opacity': paintState.paint.opacity,
       'bar-direction': getDirectionSelection(context, root, ['bar', 'direction']),
       'bar-color': getColorPickerValue(color, '#4a9eff'),
       'bar-color-text-fallback': color,

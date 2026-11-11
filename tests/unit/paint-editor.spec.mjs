@@ -55,14 +55,28 @@ describe('shared Paint Editor', () => {
   });
 
   it('updates the compact summary and swatch without replacing the editor or controls', () => {
-    const description = { textContent: 'old' }, swatch = { style: {} };
-    const editor = { querySelector: selector => selector.includes('description') ? description : swatch };
+    const description = { textContent: 'old' }, swatch = { style: {} }, opacity = { id: 'paint-opacity', value: '35' };
+    const editor = { querySelector: selector => selector.includes('description') ? description
+      : selector.includes('swatch') ? swatch : opacity };
     const root = { querySelector: () => editor };
-    const paint = { ...palettes, fill_style: 'solid' };
+    const paint = { ...palettes, fill_style: 'solid', opacity: 60 };
     syncPaintEditor(root, 'paint', { paint, inherited: true });
     expect(description.textContent).toBe('Inherited · Solid · #123456');
     expect(swatch.style.backgroundImage).toBe(compilePaint(paint).gradient);
+    expect(opacity.value).toBe('60');
     expect(root.querySelector()).toBe(editor);
+  });
+
+  it('preserves a pending numeric opacity draft during unrelated Paint synchronization', () => {
+    const opacity = { id: 'bar-opacity', value: '' };
+    const editor = { querySelector: selector => selector.includes('opacity') ? opacity : null };
+    const root = { querySelector: () => editor };
+    const numericDrafts = { values: new Map([['bar-opacity', '-']]) };
+
+    syncPaintEditor(root, 'paint', { paint: { opacity: 75 } }, { numericDrafts });
+
+    expect(opacity.value).toBe('');
+    expect(numericDrafts.values.get('bar-opacity')).toBe('-');
   });
 
   it('keeps controls usable for an incomplete authored palette', () => {
