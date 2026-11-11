@@ -1,5 +1,5 @@
 import {
-  BAR_PAINT_DIAGNOSTICS, INVALID_PAINT_OPACITY, normalizeBarConfig, normalizePaintOpacity,
+  BAR_PAINT_DIAGNOSTICS, INVALID_PAINT_OPACITY, PAINT_PROPERTY_SOURCES, normalizeBarConfig, normalizePaintOpacity,
 } from '../config/normalize.js';
 
 const PRESET_PROPERTIES = new Set(['fill_style', 'color', 'solid_fill', 'segments', 'gradient_stops']);
@@ -89,6 +89,16 @@ function makeDiagnostic(code, reference, fallback, reason = null) {
   };
 }
 
+function registryIsLoading(registry) {
+  return registry == null || registry.status === 'loading';
+}
+
+function registryIsUnavailable(registry) {
+  return registry?.status === 'error'
+    || ['connection_unavailable', 'dashboard_unavailable', 'dashboard_config_unavailable']
+      .includes(registry?.diagnostic?.code);
+}
+
 /** Resolve a local canonical paint against a supplied dashboard registry. */
 export function resolvePaintPreset({ paint, registry, inheritedPaint = null, themeAccent } = {}) {
   const inherited = normalizeDefinition(inheritedPaint, { canonical: true });
@@ -109,9 +119,14 @@ export function resolvePaintPreset({ paint, registry, inheritedPaint = null, the
   if (hasReference) {
     if (!hasValidReference) {
       diagnostics.push(makeDiagnostic('paint_preset_reference_invalid', reference, inherited.paint ? 'inherited' : 'default', 'reference_must_be_nonempty_string'));
+    } else if (registryIsLoading(registry)) {
+      // Do not report a missing name until the dashboard read has completed.
     } else {
       const presets = getPresetMap(registry);
-      if (!presets || !Object.prototype.hasOwnProperty.call(presets, reference)) {
+      if (registryIsUnavailable(registry)) {
+        diagnostics.push(makeDiagnostic('paint_registry_unavailable', reference,
+          inherited.paint ? 'inherited' : 'default', registry?.diagnostic?.code ?? 'registry_unavailable'));
+      } else if (!presets || !Object.prototype.hasOwnProperty.call(presets, reference)) {
         diagnostics.push(makeDiagnostic('paint_preset_missing', reference, inherited.paint ? 'inherited' : 'default'));
       } else {
         const normalizedPreset = normalizeDefinition(presets[reference], { preset: true });
@@ -162,5 +177,31 @@ export function resolvePaintPreset({ paint, registry, inheritedPaint = null, the
     paint: resultPaint,
     diagnostics,
     source,
+  };
+}
+
+/** Resolve normalized card and entity paint layers using their authored-source metadata. */
+export function authoredPaintProperties(normalizedPaint) {
+  return Object.fromEntries(
+    Object.keys(normalizedPaint?.[PAINT_PROPERTY_SOURCES] ?? {})
+      .filter(property => Object.prototype.hasOwnProperty.call(normalizedPaint, property))
+      .map(property => [property, normalizedPaint[property]]),
+  );
+}
+
+export function resolveScopedPaintPreset({ inheritedPaint, paint, registry, themeAccent } = {}) {
+  const inheritedProperties = authoredPaintProperties(inheritedPaint);
+  const inheritedFallback = { ...inheritedPaint };
+  delete inheritedFallback.preset;
+  const inherited = resolvePaintPreset({
+    paint: inheritedProperties, registry, inheritedPaint: inheritedFallback, themeAccent,
+  });
+  const local = resolvePaintPreset({
+    paint: authoredPaintProperties(paint), registry, inheritedPaint: inherited.paint, themeAccent,
+  });
+  return {
+    paint: local.paint,
+    diagnostics: [...inherited.diagnostics, ...local.diagnostics],
+    source: local.source,
   };
 }

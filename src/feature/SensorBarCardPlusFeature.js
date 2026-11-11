@@ -9,6 +9,8 @@ import { attachTooltips } from '../render/tooltip-controller.js';
 import { barTrackStyles, barMarkerStyles, getBarAnimationStyles } from '../render/bar-styles.js';
 import { HistoricalHostRuntime } from '../history/host-runtime.js';
 import { historicalMarkerConsumers, historicalMarkerResults } from '../history/marker-consumers.js';
+import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
+import { authoredPaintProperties, resolveScopedPaintPreset } from '../view-model/paint-preset-resolver.js';
 import { formatNumericDisplay } from '../utils/format.js';
 import { setStyleIfChanged } from '../utils/dom.js';
 import { getFeatureLabelGeometry, layoutFeatureMarkerLabels } from './marker-label-layout.js';
@@ -24,6 +26,11 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     super();
     this.attachShadow({ mode: 'open' });
     this._historicalRuntime = new HistoricalHostRuntime();
+    this._paintPresetHandle = null;
+    this._paintPresetSubscriptionGeneration = 0;
+    this._paintPresetRegistry = { status: 'loading', presets: {} };
+    this._paintPresetDiagnostics = [];
+    this._baseDiagnostics = { warnings: [], errors: [] };
     this._scaleHistory = null;
     this._previousRow = null;
     this._labelNodes = new Map();
@@ -57,14 +64,15 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     this._configKey = key;
     this._config = { ...config, ...(typeof config.entity === 'string' ? { entity: config.entity.trim() } : {}) };
     this._configChanged = true;
+    this._syncPaintPresetRegistry();
     this._requestUpdate();
   }
 
-  set hass(value) { this._hass = value; this._historicalRuntime.setHass(value); this._requestUpdate(); }
+  set hass(value) { this._hass = value; this._syncPaintPresetRegistry(); this._historicalRuntime.setHass(value); this._requestUpdate(); }
   get hass() { return this._hass; }
   set context(value) {
     if (!this._config?.entity && this._context?.entity_id !== value?.entity_id) this._historicalRuntime.setConsumers([]);
-    this._context = value; this._requestUpdate();
+    this._context = value; this._syncPaintPresetRegistry(); this._requestUpdate();
   }
   get context() { return this._context; }
   set color(value) { this._color = value; this._requestUpdate(); }
@@ -75,14 +83,46 @@ export class SensorBarCardPlusFeature extends HTMLElement {
 
   connectedCallback() {
     this._historicalRuntime.attach();
+    this._syncPaintPresetRegistry();
     this._requestUpdate();
   }
 
   disconnectedCallback() {
     this._historicalRuntime.detach();
+    this._paintPresetSubscriptionGeneration += 1;
+    this._paintPresetHandle?.unsubscribe();
+    this._paintPresetHandle = null;
+    this._paintPresetRegistry = { status: 'loading', presets: {} };
+    this._paintPresetDiagnostics = [];
     this._tooltipController?.destroy();
     this._tooltipController = null;
     this._stopLabelLayout();
+  }
+
+  _syncPaintPresetRegistry() {
+    const usesPreset = this._config?.bar?.paint?.preset !== undefined;
+    if (!this.isConnected || !this._hass?.connection || !usesPreset) {
+      if (this._paintPresetHandle) {
+        this._paintPresetSubscriptionGeneration += 1;
+        this._paintPresetHandle.unsubscribe();
+        this._paintPresetHandle = null;
+        this._paintPresetRegistry = { status: 'loading', presets: {} };
+        this._requestUpdate();
+      }
+      return;
+    }
+    const path = dashboardPathFromLocation();
+    if (!this._paintPresetHandle) {
+      const generation = ++this._paintPresetSubscriptionGeneration;
+      this._paintPresetHandle = subscribeDashboardPaintPresets(this._hass, path, snapshot => {
+        if (generation !== this._paintPresetSubscriptionGeneration || snapshot === this._paintPresetRegistry) return;
+        this._paintPresetRegistry = snapshot;
+        this._requestUpdate();
+      });
+      this._paintPresetRegistry = this._paintPresetHandle.getSnapshot();
+      return;
+    }
+    this._paintPresetHandle.update(this._hass, path);
   }
 
   _requestUpdate() {
@@ -109,8 +149,38 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         entity: undefined,
         entities: entity ? [{ entity, ...(this._config.attribute !== undefined ? { attribute: this._config.attribute } : {}) }] : [],
       }) : null;
-      this._diagnostics = validateNormalizedConfig(this._normalized);
+      this._baseDiagnostics = validateNormalizedConfig(this._normalized);
+      this._diagnostics = this._baseDiagnostics;
       this._historicalRuntime.setConsumers(historicalMarkerConsumers(this._normalized?.entities ?? []), () => this._requestUpdate());
+    }
+
+    const normalizedAppearance = this._normalized?.entities?.[0] ?? null;
+    this._resolvedAppearance = normalizedAppearance;
+    this._paintPresetDiagnostics = [];
+    this._diagnostics = this._baseDiagnostics;
+    if (normalizedAppearance && (Object.prototype.hasOwnProperty.call(authoredPaintProperties(this._normalized.bar.paint), 'preset')
+      || Object.prototype.hasOwnProperty.call(authoredPaintProperties(normalizedAppearance.bar.paint), 'preset'))) {
+      const resolved = resolveScopedPaintPreset({
+        inheritedPaint: this._normalized.bar.paint,
+        paint: normalizedAppearance.bar.paint,
+        registry: this._paintPresetRegistry,
+      });
+      this._resolvedAppearance = {
+        ...normalizedAppearance,
+        bar: { ...normalizedAppearance.bar, paint: resolved.paint },
+      };
+      this._paintPresetDiagnostics = resolved.diagnostics.map(diagnostic => ({
+        ...diagnostic,
+        path: `bar.${diagnostic.path}`,
+        entity,
+      }));
+      this._diagnostics = {
+        ...this._baseDiagnostics,
+        warnings: [...(this._baseDiagnostics.warnings ?? []), ...this._paintPresetDiagnostics.map(diagnostic => ({
+          ...diagnostic,
+          message: `${diagnostic.code}: ${diagnostic.reference ?? 'paint'}`,
+        }))],
+      };
     }
 
     const source = resolveEntitySource(this._hass, entity, this._normalized?.entities?.[0]?.attribute);
@@ -123,7 +193,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       : null;
     let textValue = null;
     if (state && this._normalized?.entities[0]) {
-      const appearance = this._normalized.entities[0];
+      const appearance = this._resolvedAppearance;
       row = buildRowViewModel({
         hass: this._hass, entityConfig: appearance, entityState: state,
         historicalExtrema: historicalMarkerResults(this._historicalRuntime, appearance), previousScale: this._scaleHistory,
@@ -250,7 +320,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       : `${name} (${this._entity}): ${row.primaryPresentation.text}. Range ${formatNumericDisplay(row.min)} to ${formatNumericDisplay(row.max)}${row.displayUnit ? ` ${row.displayUnit}` : ''}.${markerDescription ? ` ${markerDescription}` : ''}${historySummary ? ` ${historySummary.text}.` : ''}`);
     if (status || textValue !== null) return;
 
-    const model = buildBarRenderModel(row, this._normalized.entities[0], { height: 'var(--sbcp-row-height)' });
+    const model = buildBarRenderModel(row, this._resolvedAppearance, { height: 'var(--sbcp-row-height)' });
     // No initial/recovery motion; subsequent numeric updates use the shared timing.
     model.animated = model.animated && Boolean(this._previousRow);
     this._surface.dataset.barAnimated = model.animated ? 'true' : 'false';

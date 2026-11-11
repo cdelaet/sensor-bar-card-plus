@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { normalizeCardConfig } from '../../src/config/normalize.js';
 import { compilePaint, getSegmentsForRendering } from '../../src/view-model/paint-compiler.js';
-import { resolvePaintPreset } from '../../src/view-model/paint-preset-resolver.js';
+import { resolvePaintPreset, resolveScopedPaintPreset } from '../../src/view-model/paint-preset-resolver.js';
 
 const registryWith = presets => ({ presets });
 
@@ -57,6 +58,37 @@ describe('pure dashboard paint preset resolution', () => {
     expect(result).toMatchObject({ source: 'inherited', diagnostics: [] });
     expect(result.paint).toMatchObject({ fill_style: 'bands', color: '#ff0000', opacity: 65 });
     expect(result.paint.segments).toMatchObject([{ from: { fixed: 0 }, to: { fixed: 100 }, color: '#112233' }]);
+  });
+
+  it('uses normalized source metadata to resolve card and entity paint layers without default leakage', () => {
+    const normalized = normalizeCardConfig({
+      entities: [{ entity: 'sensor.power', bar: { paint: { color: '#ff0000' } } }],
+      bar: { paint: { preset: 'thermal', opacity: 35 } },
+    });
+    const result = resolveScopedPaintPreset({
+      inheritedPaint: normalized.bar.paint,
+      paint: normalized.entities[0].bar.paint,
+      registry: registryWith({ thermal: { fill_style: 'solid', color: '#123456' } }),
+    });
+
+    expect(result.paint).toMatchObject({ fill_style: 'solid', color: '#ff0000', opacity: 35 });
+    expect(result.paint).not.toHaveProperty('preset');
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it('preserves normalized ordinary paint when no preset reference is present', () => {
+    const normalized = normalizeCardConfig({ entities: [{ entity: 'sensor.power' }] });
+    const result = resolveScopedPaintPreset({
+      inheritedPaint: normalized.bar.paint,
+      paint: normalized.entities[0].bar.paint,
+      registry: { status: 'loading', presets: {} },
+    });
+
+    expect(result.paint.color).toBe(normalized.bar.paint.color);
+    expect(result.paint.fill_style).toBe(normalized.bar.paint.fill_style);
+    expect(compilePaint(result.paint, { samplePercent: 35 }))
+      .toEqual(compilePaint(normalized.bar.paint, { samplePercent: 35 }));
+    expect(result.diagnostics).toEqual([]);
   });
 
   it.each([
@@ -124,6 +156,12 @@ describe('pure dashboard paint preset resolution', () => {
     expect(result.diagnostics).toContainEqual(expect.objectContaining({
       code: 'paint_preset_missing', path: 'paint.preset', reference: 'absent', fallback: 'inherited',
     }));
+  });
+
+  it('waits for the registry before reporting a preset as missing', () => {
+    const result = resolvePaintPreset({ paint: { preset: 'pending' }, registry: { status: 'loading', presets: {} } });
+    expect(result.diagnostics).toEqual([]);
+    expect(result.source).toBe('default');
   });
 
   it.each([

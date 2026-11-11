@@ -50,6 +50,8 @@ import {
 } from '../utils/format.js';
 import { HistoricalHostRuntime } from '../history/host-runtime.js';
 import { historicalMarkerConsumers, historicalMarkerResults } from '../history/marker-consumers.js';
+import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
+import { authoredPaintProperties, resolvePaintPreset, resolveScopedPaintPreset } from '../view-model/paint-preset-resolver.js';
 import * as barRenderModel from '../view-model/bar-render-model.js';
 import * as barRenderer from '../render/bar-renderer.js';
 import { attachRowActionHandlers, resolveRowAction } from '../actions/row-actions.js';
@@ -193,6 +195,12 @@ export class SensorBarCard extends HTMLElement {
     this._config = {};
     this._actionConfig = {};
     this._diagnostics = { warnings: [], errors: [] };
+    this._baseDiagnostics = this._diagnostics;
+    this._paintPresetHandle = null;
+    this._paintPresetSubscriptionGeneration = 0;
+    this._paintPresetRegistry = { status: 'loading', presets: {} };
+    this._paintPresetEntityPaints = new WeakMap();
+    this._paintPresetDiagnostics = [];
     this._lastDiagnosticsSignature = null;
     this._hass = null;
     this._historicalRuntime = new HistoricalHostRuntime();
@@ -227,6 +235,7 @@ export class SensorBarCard extends HTMLElement {
 
   connectedCallback() {
     this._historicalRuntime.attach();
+    this._syncPaintPresetRegistry();
     this._tooltipController = attachTooltips(this.shadowRoot);
     window.addEventListener('resize', this._boundWindowResize, { passive: true });
     this._setupResizeObserver();
@@ -240,6 +249,11 @@ export class SensorBarCard extends HTMLElement {
 
   disconnectedCallback() {
     this._historicalRuntime.detach();
+    this._paintPresetSubscriptionGeneration += 1;
+    this._paintPresetHandle?.unsubscribe();
+    this._paintPresetHandle = null;
+    this._paintPresetRegistry = { status: 'loading', presets: {} };
+    this._refreshPaintPresetResolutions();
     this._tooltipController?.destroy();
     this._tooltipController = null;
     this._rowGeneration += 1;
@@ -268,8 +282,11 @@ export class SensorBarCard extends HTMLElement {
     this._rowScales = new WeakMap();
     this._reconcileRowHistory(previousConfig?.entities ?? []);
     this._historicalRuntime.setConsumers(historicalMarkerConsumers(this._config.entities), this._historicalUpdate);
-    this._diagnostics = validateNormalizedConfig(this._config);
+    this._baseDiagnostics = validateNormalizedConfig(this._config);
+    this._diagnostics = this._baseDiagnostics;
+    this._refreshPaintPresetResolutions();
     this._logDiagnostics();
+    this._syncPaintPresetRegistry();
     this._render();
   }
 
@@ -505,6 +522,7 @@ export class SensorBarCard extends HTMLElement {
   set hass(hass) {
     const oldHass = this._hass;
     this._hass = hass;
+    this._syncPaintPresetRegistry();
     this._historicalRuntime.setHass(hass);
     if (!this._config.entities) return;
     
@@ -524,9 +542,88 @@ export class SensorBarCard extends HTMLElement {
     const stateObj = this._hass?.states?.[ecfg.entity] ?? null;
     return {
       ...ecfg,
+      ...(this._paintPresetEntityPaints.get(entityCfg) ? {
+        bar: { ...ecfg.bar, paint: this._paintPresetEntityPaints.get(entityCfg) },
+      } : {}),
       icon: ecfg.icon === false ? false : (ecfg.icon ?? stateObj?.attributes?.icon ?? this._getDefaultEntityIcon(stateObj, ecfg.entity)),
       name: ecfg.name ?? null,
     };
+  }
+
+  _refreshPaintPresetResolutions() {
+    this._paintPresetEntityPaints = new WeakMap();
+    this._paintPresetDiagnostics = [];
+    this._diagnostics = this._baseDiagnostics ?? { warnings: [], errors: [] };
+    if (!this._config?.bar?.paint) return;
+    const inheritedProperties = authoredPaintProperties(this._config.bar.paint);
+    const entities = this._config.entities ?? [];
+    if (!Object.prototype.hasOwnProperty.call(inheritedProperties, 'preset')
+      && !entities.some(entity => Object.prototype.hasOwnProperty.call(authoredPaintProperties(entity.bar?.paint), 'preset'))) return;
+    const root = resolveScopedPaintPreset({
+      inheritedPaint: this._config.bar.paint,
+      paint: {},
+      registry: this._paintPresetRegistry,
+    });
+    const diagnostics = root.diagnostics.map(diagnostic => ({ ...diagnostic, path: `bar.${diagnostic.path}` }));
+    for (const entity of entities) {
+      const local = resolvePaintPreset({
+        paint: authoredPaintProperties(entity.bar?.paint),
+        inheritedPaint: root.paint,
+        registry: this._paintPresetRegistry,
+      });
+      this._paintPresetEntityPaints.set(entity, local.paint);
+      diagnostics.push(...local.diagnostics.map(diagnostic => ({
+        ...diagnostic,
+        path: `entities.${entity.entity}.bar.${diagnostic.path}`,
+        entity: entity.entity,
+      })));
+    }
+    this._paintPresetDiagnostics = diagnostics;
+    const base = this._baseDiagnostics ?? { warnings: [], errors: [] };
+    this._diagnostics = {
+      ...base,
+      warnings: [...(base.warnings ?? []), ...diagnostics.map(diagnostic => ({
+        ...diagnostic,
+        message: `${diagnostic.code}: ${diagnostic.reference ?? 'paint'}`,
+      }))],
+    };
+  }
+
+  _syncPaintPresetRegistry() {
+    const usesPreset = this._actionConfig?.bar?.paint?.preset !== undefined
+      || (this._actionConfig?.entities ?? []).some(entity => entity?.bar?.paint?.preset !== undefined);
+    if (!this.isConnected || !this._hass?.connection || !usesPreset) {
+      if (this._paintPresetHandle) {
+        this._paintPresetSubscriptionGeneration += 1;
+        this._paintPresetHandle.unsubscribe();
+        this._paintPresetHandle = null;
+        this._paintPresetRegistry = { status: 'loading', presets: {} };
+        this._refreshPaintPresetResolutions();
+      }
+      return;
+    }
+    const path = dashboardPathFromLocation();
+    if (!this._paintPresetHandle) {
+      const generation = ++this._paintPresetSubscriptionGeneration;
+      this._paintPresetHandle = subscribeDashboardPaintPresets(this._hass, path, snapshot => {
+        if (generation !== this._paintPresetSubscriptionGeneration) return;
+        if (snapshot === this._paintPresetRegistry) return;
+        this._paintPresetRegistry = snapshot;
+        this._refreshPaintPresetResolutions();
+        this._logDiagnostics();
+        if (this._config?.entities && this._hass) this._update();
+      });
+      this._paintPresetRegistry = this._paintPresetHandle.getSnapshot();
+      this._refreshPaintPresetResolutions();
+      return;
+    }
+    const previous = this._paintPresetHandle.getSnapshot();
+    const next = this._paintPresetHandle.update(this._hass, path);
+    if (next !== previous && next !== this._paintPresetRegistry) {
+      this._paintPresetRegistry = next;
+      this._refreshPaintPresetResolutions();
+      if (this._config?.entities && this._hass) this._update();
+    }
   }
 
   _getDefaultEntityIcon(stateObj, entityId = '') {

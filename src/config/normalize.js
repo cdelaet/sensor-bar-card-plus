@@ -656,6 +656,9 @@ function paintPropertySources(config, overrides, paint) {
       if (alias) sources[property] = alias.join('.');
     }
   }
+  if (isPaintObject(paint) && hasOwnConfigValue(paint, 'preset') && paint.preset !== undefined) {
+    sources.preset = 'bar.paint.preset';
+  }
   if (isPaintObject(paint) && hasOwnConfigValue(paint, 'opacity') && paint.opacity !== undefined) sources.opacity = 'bar.paint.opacity';
   return sources;
 }

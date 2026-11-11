@@ -162,7 +162,7 @@ it('does not reinterpret unsupported flat opacity or unknown nested settings as 
   const config = normalize({ opacity: 50, paint: { color: 'red', preset: 'future-name' } });
   expect(config.bar.paint.opacity).toBe(100);
   expect(config.bar.paint.preset).toBe('future-name');
-  expect(config.bar.paint[PAINT_PROPERTY_SOURCES]).toEqual({ color: 'bar.paint.color' });
+  expect(config.bar.paint[PAINT_PROPERTY_SOURCES]).toEqual({ color: 'bar.paint.color', preset: 'bar.paint.preset' });
 });
 
 it('records same-scope grouped/legacy conflicts without mistaking injected defaults for authored aliases', () => {
