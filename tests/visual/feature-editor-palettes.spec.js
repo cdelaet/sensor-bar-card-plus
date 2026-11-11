@@ -27,7 +27,7 @@ for (const source of ['src', 'dist']) for (const style of ['bands', 'gradient'])
   test(`Feature ${style} palette ${width}px (${source}): raw operations, validation, echo, draft and preview`, async ({ page }) => {
     const editor = await mount(page, source, style, width);
     const original = await page.evaluate(() => window.__paletteOriginal);
-    const section = editor.locator('.section').filter({ has: page.getByRole('heading', { name: style === 'bands' ? 'Segments' : 'Gradient Stops', exact: true }) });
+    const section = editor.locator(`.card-subgroup[data-group="${style === 'bands' ? 'segments' : 'gradient-stops'}"]`);
     await expect(section).toHaveScreenshot(`feature-${style}-${width}.png`);
     expect(await editor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     const segment = style === 'bands';

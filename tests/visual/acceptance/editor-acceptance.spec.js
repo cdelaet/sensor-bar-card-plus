@@ -96,7 +96,7 @@ for(const host of hosts) {
   const replacement=await d.saved(page);replacement.markers=[{at:'35%',label:{text:'Foreign'}}];replacement.future={keep:'foreign'};
   await d.foreign(editor,replacement);await expect(rootRows(editor)).toHaveCount(1);await expect(rootRows(editor).first()).toHaveAttribute('data-expanded','false');
   await d.openDisclosure(rootRows(editor).first().locator('.generic-marker-toggle'));await expect(ref(rootRows(editor).first(),'fixed')).toHaveValue('35%');expect(await d.count(page)).toBe(events);
-  await d.openDisclosure(editor.locator('#card-group-segments'));const from=editor.locator('[data-kind="segment-from"]').first();await from.fill('-.');await from.press('Tab');await d.echo(page,editor);await expect(from).toHaveValue('-.');
+  await d.openSection(editor,{section:'Segments'});const from=editor.locator('[data-kind="segment-from"]').first();await from.fill('-.');await from.press('Tab');await d.echo(page,editor);await expect(from).toHaveValue('-.');
   replacement.bar.segments=[{from:10,to:100,color:'#abcdef'}];await d.foreign(editor,replacement);await expect(from).toHaveValue('10');
  });
  for(const nested of [false,true]) {
@@ -334,7 +334,7 @@ for(const host of hosts)test(`${host}: blank numeric blur resets formatting and 
  }
 });
 test('feature: foreign config replaces an owned invalid CSS draft without emission',async({page})=>{
- const editor=await d.mount(page,'feature'),input=editor.locator('#bar-color-text-fallback'),events=await d.count(page);await input.fill('rgb(');await d.echo(page,editor);await expect(input).toHaveValue('rgb(');expect(await d.count(page)).toBe(events);
+ const editor=await d.mount(page,'feature'),input=editor.locator('#bar-color-text-fallback'),events=await d.count(page);await d.openSection(editor,{section:'Bar Appearance'});await input.fill('rgb(');await d.echo(page,editor);await expect(input).toHaveValue('rgb(');expect(await d.count(page)).toBe(events);
  const config=await d.saved(page);config.bar.color='blue';await d.foreign(editor,config);await expect(input).toHaveValue('blue');await expect(input).toHaveAttribute('aria-invalid','false');expect(await d.count(page)).toBe(events);
 });
 for(const host of hosts)test(`${host}: explicit Remove Baseline emits, echoes and persists without changing Needle`,async({page})=>{

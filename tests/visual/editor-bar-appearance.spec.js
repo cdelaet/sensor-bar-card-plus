@@ -18,6 +18,7 @@ async function mountEditor(page) {
 
 test('Bar Appearance controls retain inherited behavior inside the Bar section', async ({ page }) => {
   const editor = await mountEditor(page);
+  await editor.locator('#card-paint-editor > summary').click();
   await editor.locator('[data-field="bar-color-text-fallback"]').fill('red');
   await expect.poll(() => editor.evaluate(element => element.shadowRoot.activeElement?.dataset.field)).toBe('bar-color-text-fallback');
   for (const style of ['solid', 'gradient', 'bands', 'soft_bands', 'band_gradient']) {
@@ -30,6 +31,7 @@ test('Bar Appearance controls retain inherited behavior inside the Bar section',
   }
   await editor.locator('button[data-action="toggle-entity-overrides"]').click();
   await editor.locator('#entity-0-group-bar').click();
+  await editor.locator('#entity-0-paint-editor > summary').click();
   await expect(editor.locator('#entity-0-bar-fill-style')).toHaveValue('band_gradient');
   await expect(editor.locator('#entity-0-bar-solid-fill')).toBeChecked();
   await editor.locator('[data-kind="entity-bar-color-text-fallback"]').fill('blue');

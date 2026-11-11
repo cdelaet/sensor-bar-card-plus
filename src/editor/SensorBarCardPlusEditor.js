@@ -31,6 +31,7 @@ import {
   getBarSolidFillValue, getEffectiveBarSolidFillValue, setBarSolidFill,
   clearBarAppearanceOverride, hasBarAppearanceOverride, getBarAppearanceSummary,
   renderBarAppearanceSection, handleBarAppearanceField,
+  syncBarPaintEditor,
 } from './sections/bar-appearance.js';
 
 import { SegmentsSection } from './sections/segments.js';
@@ -172,6 +173,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._syncEntityPickers();
     this._syncEntityAttributePickers();
     this._syncActionSelectors();
+    const context = this._createSectionContext();
+    for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) {
+      syncBarPaintEditor(this.shadowRoot, context, scope, this._paintPaletteValues(scope));
+    }
   }
 
   _cloneContainer(value) {
@@ -446,6 +451,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._setElementChecked('baseline-above-color-enabled', this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'above'));
     this._setElementChecked('baseline-below-color-enabled', this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'below'));
     this._refreshSegmentUi({ type: 'card' });
+    syncBarPaintEditor(this.shadowRoot, this._createSectionContext(), { type: 'card' }, this._paintPaletteValues({ type: 'card' }));
   }
 
   _refreshEntityDerivedUi() {
@@ -476,6 +482,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementText(`entity-${index}-group-floor-summary`, this._getFloorSummary(scope));
       this._setElementText(`entity-${index}-group-markers-summary`, this._getGenericMarkersSummary(scope));
       this._setElementText(`entity-${index}-group-bar-summary`, this._getBarAppearanceSummary(scope));
+      syncBarPaintEditor(this.shadowRoot, this._createSectionContext(), scope, this._paintPaletteValues(scope));
       this._setElementText(`entity-${index}-group-segments-summary`, this._getSegmentsSummary(scope));
       this._setElementText(`entity-${index}-group-gradient-stops-summary`, this._getGradientStopsSummary(scope));
       this._setElementText(`entity-${index}-group-layout-summary`, this._getLayoutSummary(scope));
@@ -1642,6 +1649,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _getEffectiveScopedDisplayValue(...args) {
     return getEffectiveDisplayValue(this._createSectionContext(), ...args);
+  }
+
+  _paintPaletteValues(scope) {
+    return { segments: this._segmentsSection._getScopedSegmentsValue(scope), gradient_stops: this._gradientStopsSection._getScopedGradientStopsValue(scope) };
   }
 
   _paletteUi() {
@@ -3206,13 +3217,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                      </div>
 	                          `,
 	                        });
-	                        const barGroup = this._renderOverrideGroup({
-	                          index,
-	                          group: 'bar',
-	                          title: 'Bar Appearance',
-	                          summary: this._getBarAppearanceSummary(scope),
-	                          content: renderBarAppearanceSection(this._createSectionContext(), scope),
-	                        });
 	                        const needleGroup = this._renderOverrideGroup({
 	                          index,
 	                          group: 'needle',
@@ -3262,6 +3266,15 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 	                          summary: this._getGradientStopsSummary(scope),
 	                          content: this._gradientStopsSection.render(scope),
 	                        });
+	                        const barGroup = this._renderOverrideGroup({
+	                          index,
+	                          group: 'bar',
+	                          title: 'Bar Appearance',
+	                          summary: this._getBarAppearanceSummary(scope),
+	                          content: renderBarAppearanceSection(this._createSectionContext(), scope, () => '', { root: this.shadowRoot,
+                            paletteValues: this._paintPaletteValues(scope), paintChildren: () => `${segmentsGroup}${gradientStopsGroup}`,
+                          }),
+	                        });
 	                        const baselineGroup = this._renderOverrideGroup({
 	                          index,
 	                          group: 'baseline',
@@ -3289,8 +3302,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
                           ${barGroup}
                           ${baselineGroup}
                           ${needleGroup}
-	                          ${segmentsGroup}
-	                          ${gradientStopsGroup}
 	                          ${targetGroup}
 	                          ${peakGroup}
 	                          ${floorGroup}
@@ -3348,7 +3359,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         </div>
 ${this._renderScaleSection({ type: 'card' })}
 
-${renderBarAppearanceSection(this._createSectionContext(), { type: 'card' }, () => `${this._baselineSection.render({ type: 'card' }, options => this._renderCardGroup(options))}${this._renderCardGroup({ group: 'needle', title: 'Needle', summary: this._getNeedleSummary({ type: 'card' }), content: this._needleSection.render({ type: 'card' }) })}${this._segmentsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false })}${this._gradientStopsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false })}`, { heading: 'Bar' })}
+${renderBarAppearanceSection(this._createSectionContext(), { type: 'card' }, () => `${this._baselineSection.render({ type: 'card' }, options => this._renderCardGroup(options))}${this._renderCardGroup({ group: 'needle', title: 'Needle', summary: this._getNeedleSummary({ type: 'card' }), content: this._needleSection.render({ type: 'card' }) })}`, { heading: 'Bar', root: this.shadowRoot, paletteValues: this._paintPaletteValues({ type: 'card' }), paintChildren: () => `${this._segmentsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false })}${this._gradientStopsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false })}` })}
 
 ${renderMarkersSection({
   renderGroup: options => this._renderCardGroup(options),

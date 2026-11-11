@@ -8,10 +8,10 @@ for(const source of ['src','dist'])it(`canonical standalone structure and disclo
  expect(html.indexOf('id="bar-fill-style"')).toBeGreaterThan(html.indexOf('<h3>Bar</h3>'));
  expect(html.indexOf('id="card-group-baseline"')).toBeGreaterThan(html.indexOf('id="bar-color"'));
  expect(html.indexOf('id="card-group-needle"')).toBeGreaterThan(html.indexOf('id="card-group-baseline"'));
- expect(html.indexOf('id="card-group-segments"')).toBeGreaterThan(html.indexOf('id="card-group-needle"'));
+ expect(html.indexOf('id="card-group-segments"')).toBeGreaterThan(html.indexOf('id="card-paint-editor"'));
  expect(html.indexOf('id="card-group-gradient-stops"')).toBeGreaterThan(html.indexOf('id="card-group-segments"'));
  const cardGroups=[...html.matchAll(/id="card-group-([^"]+)"\s+class="override-group-toggle"/g)].map(m=>m[1]);
- expect(cardGroups).toEqual(['baseline','needle','segments','gradient-stops','marker-target','marker-peak','marker-floor','generic-markers']);
+ expect(cardGroups).toEqual(['segments','gradient-stops','baseline','needle','marker-target','marker-peak','marker-floor','generic-markers']);
  expect(editor._expandedCardGroups.size).toBe(0);editor._toggleCardGroupExpanded('marker-target');editor._render();expect(editor._isCardGroupExpanded('marker-target')).toBe(true);
  editor.setConfig(editor._draftConfig);expect(editor._isCardGroupExpanded('marker-target')).toBe(true);
  editor.setConfig({entities:['sensor.b']});expect(editor._isCardGroupExpanded('marker-target')).toBe(true);
@@ -22,9 +22,9 @@ for(const source of ['src','dist'])it(`Feature keeps its structure and shared se
  const config={type:'custom:sensor-bar-card-plus-feature',target:{at:'75%'},baseline:{at:{percent:35,future:true}},peak:{enabled:true,window:'today'},floor:{enabled:true},markers:[{at:'25%'}],bar:{animated:false,fill_style:'solid'},future:{unset:undefined}};
  const standalone=new classes.editor();standalone.setConfig({...config,entities:['sensor.a']});
  const editor=new classes.featureEditor(),events=[];editor.dispatchEvent=e=>{events.push(e.detail.config);editor.setConfig(e.detail.config);return true;};editor.setConfig(config);editor.context={entity_id:'sensor.parent'};await editor.updateComplete;
- const headings=html=>[...html.matchAll(/<h3>([^<]+)<\/h3>/g)].map(m=>m[1]);expect(headings(editor.shadowRoot.innerHTML)).toEqual(['Entities','Scale','Markers','Bar Appearance','Segments','Gradient Stops','Formatting']);
+ const headings=html=>[...html.matchAll(/<h3>([^<]+)<\/h3>/g)].map(m=>m[1]);expect(headings(editor.shadowRoot.innerHTML)).toEqual(['Entities','Scale','Markers','Bar Appearance','Formatting']);
  const groups=html=>[...html.matchAll(/id="card-group-([^"]+)"\s+class="override-group-toggle"/g)].map(m=>m[1]);
- expect(groups(editor.shadowRoot.innerHTML)).toEqual(['marker-target','marker-peak','marker-floor','generic-markers','baseline','segments','gradient-stops']);
+ expect(groups(editor.shadowRoot.innerHTML)).toEqual(['marker-target','marker-peak','marker-floor','generic-markers','segments','gradient-stops','baseline']);
  expect(groups(standalone.shadowRoot.innerHTML).filter(group=>group!=='needle').sort()).toEqual(groups(editor.shadowRoot.innerHTML).sort());
  for(const [group,title,summary] of [
   ['marker-target','Target',editor._targetSection._getCardTargetMarkerSummary()],['marker-peak','Peak',editor._extremaSection._getMarkerResetSummary('peak')],['marker-floor','Floor',editor._extremaSection._getMarkerResetSummary('floor')],['generic-markers','Generic Reference Markers',editor._referenceMarkersSection._getGenericMarkersSummary(root)],['baseline','Baseline',editor._baselineSection._getCardBaselineSummary()],['segments','Segments',editor._segmentsSection._getSegmentsSummary(root)],['gradient-stops','Gradient Stops',editor._gradientStopsSection._getGradientStopsSummary(root)]]){

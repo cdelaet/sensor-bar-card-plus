@@ -19,7 +19,9 @@ async function mountEditor(page, { source = 'src', width = 360, context = { enti
     document.querySelector('#mount').append(editor);
     await editor.updateComplete;
   }, { width, context, config });
-  return page.locator('sensor-bar-card-plus-feature-editor');
+  const editor = page.locator('sensor-bar-card-plus-feature-editor');
+  await editor.locator('#card-paint-editor > summary').click();
+  return editor;
 }
 const configOf = editor => editor.evaluate(element => structuredClone(element._config));
 

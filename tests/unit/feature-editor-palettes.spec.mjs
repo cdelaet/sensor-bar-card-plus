@@ -152,7 +152,7 @@ for (const source of ['src', 'dist']) describe(`shared Feature palettes (${sourc
     const segment = editor._segmentsSection, gradient = editor._gradientStopsSection;
     expect(segment.constructor).toBe(standalone._segmentsSection.constructor);
     expect(gradient.constructor).toBe(standalone._gradientStopsSection.constructor);
-    expect(editor.shadowRoot.innerHTML).toContain(segment.render(root, options => editor._renderCardGroup(options)));
+    expect(editor.shadowRoot.innerHTML).toContain(segment.render(root, options => editor._renderCardGroup(options), { section: false }));
     expect(standalone._renderSegmentPreview(root)).toBe(standalone._segmentsSection._renderSegmentPreview(root));
   });
 });

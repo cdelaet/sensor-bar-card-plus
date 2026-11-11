@@ -20,7 +20,7 @@ const saved=editor=>editor.evaluate(el=>structuredClone(el._config));
 const section=(editor,page,name)=>editor.locator('.section').filter({has:page.getByRole('heading',{name,exact:true})});
 async function end(editor,index,value){const control=editor.locator(`input[data-kind="segment-to"][data-index="${index}"]`);await control.fill(value);await control.press('Tab');return control;}
 for(const source of ['src','dist'])for(const width of [360,240])test(`Feature capabilities ${source} ${width}px: combined edit/echo, Auto ends and native CSS drafts`,async({page})=>{
- const editor=await mount(page,source,width),original=await saved(editor),segments=section(editor,page,'Segments');
+ const editor=await mount(page,source,width),original=await saved(editor),segments=editor.locator('.card-subgroup[data-group="segments"]');
  expect(await page.evaluate(()=>window.__capabilityEvents)).toHaveLength(0);
  await expect(section(editor,page,'Bar Appearance')).toHaveScreenshot(`feature-capabilities-bar-${width}.png`);
  await expect(segments).toHaveScreenshot(`feature-capabilities-segments-${width}.png`);

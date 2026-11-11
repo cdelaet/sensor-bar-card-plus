@@ -1,5 +1,33 @@
 // Standalone editor stylesheet, extracted verbatim. Hosts choose composition.
 export const editorStyles = `
+        .paint-editor { container-type: inline-size; min-width: 0; border: 1px solid var(--divider-color, #888); border-radius: 10px; }
+        .paint-editor-summary { display: grid; grid-template-columns: 12px 28px minmax(0, 1fr); gap: 2px 8px;
+          align-items: center; color: var(--primary-text-color, #111); padding: 10px; cursor: pointer; list-style: none; }
+        .paint-editor-summary::-webkit-details-marker { display: none; }
+        .paint-editor-summary::before { content: '▸'; grid-row: 1 / 3; }
+        .paint-editor[open] > .paint-editor-summary::before { content: '▾'; }
+        .paint-editor-summary:focus-visible { outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 2px; border-radius: 8px; }
+        .paint-editor-swatch { grid-row: 1 / 3; width: 26px; height: 26px; border: 1px solid var(--divider-color, #888); border-radius: 6px; }
+        .paint-editor-heading { font-weight: 600; }
+        .paint-editor-description { grid-column: 3; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          color: var(--secondary-text-color, #666); font-size: 0.82rem; }
+        .paint-editor-body { display: grid; gap: 12px; padding: 0 10px 10px; min-width: 0; }
+        .paint-editor-grid { display: grid; gap: 12px; align-items: end;
+          grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); min-width: 0; }
+        .paint-editor .field-grid { grid-template-columns: minmax(0, 1fr); }
+        @container (max-width: 360px) {
+          .paint-editor .list-row.segment-row, .paint-editor .list-row.gradient-stop-row {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .paint-editor .list-row.segment-row > button, .paint-editor .list-row.gradient-stop-row > button {
+            grid-column: 1 / -1; width: 100%;
+          }
+        }
+        @container (max-width: 220px) {
+          .paint-editor .list-row.segment-row, .paint-editor .list-row.gradient-stop-row {
+            grid-template-columns: minmax(0, 1fr);
+          }
+        }
 	        :host {
 	          display: block;
 	        }

@@ -257,7 +257,10 @@ for (const source of ['src', 'dist']) describe(`Feature editor foundation (${sou
         expect(editor.shadowRoot.innerHTML).toContain(render(editor._createSectionContext(), { type: 'card' }, undefined, { animation: true, cssText: true }));
       }
       expect(editor.shadowRoot.innerHTML).toContain(renderFormattingSection(editor._createSectionContext(), { type: 'card' }, { includeUnit: false }));
-      expect(editor.shadowRoot.innerHTML).toContain(renderBarAppearanceSection(editor._createSectionContext(), { type: 'card' }, () => `${editor._baselineSection.render({ type: 'card' }, options => editor._renderCardGroup(options))}${editor._needleSection.render({ type: 'card' })}`, { animation: true, cssText: true }));
+      expect(editor.shadowRoot.innerHTML).toContain(renderBarAppearanceSection(editor._createSectionContext(), { type: 'card' }, () => `${editor._baselineSection.render({ type: 'card' }, options => editor._renderCardGroup(options))}${editor._needleSection.render({ type: 'card' })}`, { animation: true, cssText: true,
+        paletteValues: { segments: editor._segmentsSection._getScopedSegmentsValue({ type: 'card' }), gradient_stops: editor._gradientStopsSection._getScopedGradientStopsValue({ type: 'card' }) },
+        paintChildren: () => `${editor._segmentsSection.render({ type: 'card' }, options => editor._renderCardGroup(options), { section: false })}${editor._gradientStopsSection.render({ type: 'card' }, options => editor._renderCardGroup(options), { section: false })}`,
+      }));
       for (const render of [renderScaleSection, renderFormattingSection]) {
         expect(standalone.shadowRoot.innerHTML).toContain(render(standalone._createSectionContext(), { type: 'card' }));
       }

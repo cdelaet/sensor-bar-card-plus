@@ -1,10 +1,13 @@
-import { normalizeBarConfig } from '../../config/normalize.js';
+import { normalizeBarConfig, normalizeGaugeSegments, normalizeScaleConfig } from '../../config/normalize.js';
 import {
-  isObject, normalizeTextValue, setPathValue, deletePathValue,
+  isObject, normalizeTextValue,
   removePathsFromTarget, pruneEmptyObjectsInTarget,
 } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, normalizeEditorColorValue } from '../shared/editor-controls.js';
-import { getDirectionSelection, renderDirectionControl, setDirectionValue } from '../shared/direction-control.js';
+import { escapeAttribute, normalizeColorComparisonValue, normalizeEditorColorValue } from '../shared/editor-controls.js';
+import { renderDirectionControl, setDirectionValue } from '../shared/direction-control.js';
+import { createPaintBindings } from '../shared/paint-bindings.js';
+import { renderPaintEditor, syncPaintEditor } from '../shared/paint-editor.js';
+import { getResolvedScale } from '../../config/resolve.js';
 
 export function getFillStyleFromColorMode(colorMode) {
   switch (colorMode) {
@@ -55,13 +58,14 @@ export function getEffectiveBarColorValue(context, scope) {
 // Cleanup, emission and scheduling are entirely the host's mutation policy.
 function setAppearanceValue(context, scope, key, value, deprecatedKeys = []) {
   const options = { deprecatedKeys, prunePaths: [['bar']] };
-  return context.mutate(scope, target => {
-    let nextTarget = value === undefined
-      ? deletePathValue(target, ['bar', key])
-      : setPathValue(target, ['bar', key], value);
-    nextTarget = removePathsFromTarget(nextTarget, deprecatedKeys);
-    return pruneEmptyObjectsInTarget(nextTarget, ['bar']);
-  }, options);
+  const cleanup = target => pruneEmptyObjectsInTarget(removePathsFromTarget(target, deprecatedKeys), ['bar']);
+  const bindings = createPaintBindings({
+    read: (scope, path) => context.read(scope, path),
+    mutate: (scope, mutation, options) => context.mutate(scope, target => cleanup(mutation(target)), options),
+  }, { scope, path: ['bar'] });
+  // Clearing an absent structured field must still remove its legacy alias.
+  if (value === undefined && !bindings.hasOverride(key)) return context.mutate(scope, cleanup, options);
+  return value === undefined ? bindings.clear(key, options) : bindings.set(key, value, options);
 }
 
 export function setBarFillStyle(context, scope, rawValue) {
@@ -160,96 +164,64 @@ export function handleBarAppearanceField(context, { field, kind, index, value },
   return false;
 }
 
-// The root's existing nested Baseline/Needle content is supplied by its host.
-// Shared Segments/Gradient Stops can be composed as children by the standalone host.
-// Entity content still belongs inside the host-owned override disclosure.
-export function renderBarAppearanceSection(context, scope, renderChildren = () => '', options = {}) {
-  if (scope?.type === 'entity') {
-    const index = scope.index;
-    const barAppearanceInherited = !hasBarAppearanceOverride(context, scope);
-    return `
-	                      <div class="field-row">
-	                        <div class="toggle">
-	                          <input id="entity-${index}-bar-inherit" type="checkbox" data-kind="entity-bar-inherit" data-index="${index}"${barAppearanceInherited ? ' checked' : ''}>
-                          <label for="entity-${index}-bar-inherit">Inherit card settings</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-bar-fill-style">Fill style</label>
-                        <select id="entity-${index}-bar-fill-style" data-kind="entity-bar-fill-style" data-index="${index}" value="${escapeAttribute(getEffectiveFillStyleValue(context, scope))}">
-                          <option value="bands"${getEffectiveFillStyleValue(context, scope) === 'bands' ? ' selected' : ''}>bands</option>
-                          <option value="solid"${getEffectiveFillStyleValue(context, scope) === 'solid' ? ' selected' : ''}>solid</option>
-                          <option value="gradient"${getEffectiveFillStyleValue(context, scope) === 'gradient' ? ' selected' : ''}>gradient</option>
-                          <option value="soft_bands"${getEffectiveFillStyleValue(context, scope) === 'soft_bands' ? ' selected' : ''}>soft_bands</option>
-                          <option value="band_gradient"${getEffectiveFillStyleValue(context, scope) === 'band_gradient' ? ' selected' : ''}>band_gradient</option>
-                        </select>
-                      </div>
-                      <div class="field-row">
-                        <div class="toggle">
-                          <input id="entity-${index}-bar-solid-fill" type="checkbox" data-kind="entity-bar-solid-fill" data-index="${index}"${getEffectiveBarSolidFillValue(context, scope) ? ' checked' : ''}>
-                          <label for="entity-${index}-bar-solid-fill">Solid fill</label>
-                        </div>
-                      </div>
-                      <div class="field-row">
-                        <label for="entity-${index}-bar-color">Bar color</label>
-                        ${renderColorInput({
-                          id: `entity-${index}-bar-color`,
-                          kind: 'entity-bar-color',
-                          index,
-                          value: getEffectiveBarColorValue(context, scope),
-                          fallbackHex: '#4a9eff',
-                          placeholder: 'inherit card default',
-                        })}
-                      </div>
-                      ${renderDirectionControl(context, scope, {
-                        path: ['bar', 'direction'], id: `entity-${index}-bar-direction`,
-                        kind: 'entity-bar-direction', label: 'Bar Direction',
-                      })}
-	                          `;
+// Ordinary-bar destination adapter. The Paint Editor itself has no bar paths,
+// inheritance rules, aliases or host mutation policy.
+export function getBarPaintEditorState(context, scope, paletteValues) {
+  const local = context.read(scope, []) ?? {};
+  const inheritedConfig = scope?.type === 'entity' ? context.read({ type: 'card' }, []) : null;
+  const paint = normalizeBarConfig(local, inheritedConfig, { isCardScope: scope?.type !== 'entity' });
+  // normalizeBarConfig normally inherits an already-normalized card palette.
+  // Editors retain raw authored configuration, so normalize that palette here.
+  if (inheritedConfig?.bar?.segments != null && local.bar?.segments == null && local.segments == null && local.severity == null) {
+    paint.segments = normalizeBarConfig(inheritedConfig, null).segments;
   }
-  const fillStyle = getEffectiveFillStyleValue(context, { type: 'card' });
-  const barColor = getBarColorValue(context, { type: 'card' });
-  const barSolidFill = getBarSolidFillValue(context, { type: 'card' });
-  return `	        <div class="section">
-	          <div class="section-head">
-	            <h3>${escapeAttribute(options.heading ?? 'Bar Appearance')}</h3>
-	            <div class="section-note">Choose the bar rendering mode and base bar colors. Direction sets the fill origin.</div>
-	          </div>
-          <div class="inline-row editor-grid">
-            <div class="field-row">
-              <label for="bar-fill-style">Fill style</label>
-              <select id="bar-fill-style" data-field="bar-fill-style" value="${escapeAttribute(fillStyle)}">
-                <option value="solid"${fillStyle === 'solid' ? ' selected' : ''}>solid</option>
-                <option value="gradient"${fillStyle === 'gradient' ? ' selected' : ''}>gradient</option>
-                <option value="bands"${fillStyle === 'bands' ? ' selected' : ''}>bands</option>
-                <option value="band_gradient"${fillStyle === 'band_gradient' ? ' selected' : ''}>band_gradient</option>
-                <option value="soft_bands"${fillStyle === 'soft_bands' ? ' selected' : ''}>soft_bands</option>
-              </select>
-            </div>
-            <div class="field-row">
-              <div class="toggle">
-                <input id="bar-solid-fill" type="checkbox" data-field="bar-solid-fill"${barSolidFill ? ' checked' : ''}>
-                <label for="bar-solid-fill">Solid fill</label>
-              </div>
-            </div>
-            ${options.animation ? `<div class="field-row"><div class="toggle">
-              <input id="bar-animated" type="checkbox" data-field="bar-animated"${getBarAnimatedValue(context, scope) ? ' checked' : ''}>
-              <label for="bar-animated">Animated</label>
-            </div></div>` : ''}<div class="field-row">
-              <label for="bar-color">Bar color</label>
-              ${renderColorInput({
-                cssText: options.cssText, label: 'Bar color',
-                id: 'bar-color',
-                field: 'bar-color',
-                value: barColor,
-                fallbackHex: '#4a9eff',
-                placeholder: '#4a9eff',
-              })}
-            </div>
-            ${renderDirectionControl(context, scope, {
-              path: ['bar', 'direction'], id: 'bar-direction',
-              field: 'bar-direction', label: 'Bar Direction',
-            })}
-          </div>${renderChildren()}
-	        </div>`;
+  if (paint.segments == null && paletteValues?.segments) paint.segments = normalizeGaugeSegments(paletteValues.segments);
+  if (paint.gradient_stops == null && paletteValues?.gradient_stops) paint.gradient_stops = paletteValues.gradient_stops;
+  const scale = normalizeScaleConfig(local, inheritedConfig);
+  const { min, max } = getResolvedScale(context.hass, scale);
+  const bindings = createPaintBindings(context, { scope, path: ['bar'] });
+  const owned = ['fill_style', 'color_mode', 'color', 'solid_fill', 'segments', 'gradient_stops'].some(key => bindings.hasOverride(key))
+    || ['color_mode', 'color', 'segments', 'severity', 'gradient_stops'].some(key => Object.prototype.hasOwnProperty.call(local, key));
+  return { bindings, paint, inherited: scope?.type === 'entity' && !owned,
+    scale: { minValue: min, maxValue: max, scaleDirection: scale.direction } };
+}
+
+export function syncBarPaintEditor(root, context, scope, paletteValues) {
+  const id = scope?.type === 'entity' ? `entity-${scope.index}-paint-editor` : 'card-paint-editor';
+  syncPaintEditor(root, id, getBarPaintEditorState(context, scope, paletteValues));
+}
+
+export function renderBarAppearanceSection(context, scope, renderChildren = () => '', options = {}) {
+  const entity = scope?.type === 'entity';
+  const index = scope?.index;
+  const field = key => entity
+    ? { id: `entity-${index}-bar-${key}`, kind: `entity-bar-${key}`, index }
+    : { id: `bar-${key}`, field: `bar-${key}` };
+  const paintEditor = renderPaintEditor({
+    ...getBarPaintEditorState(context, scope, options.paletteValues),
+    id: entity ? `entity-${index}-paint-editor` : 'card-paint-editor', root: options.root,
+    fields: { fill_style: field('fill-style'), color: field('color'), solid_fill: field('solid-fill') },
+    cssText: options.cssText, paletteContent: options.paintChildren?.() ?? '',
+  });
+  const direction = renderDirectionControl(context, scope, {
+    path: ['bar', 'direction'], ...field('direction'), label: 'Bar Direction',
+  });
+  if (entity) return `
+    <div class="field-row"><div class="toggle">
+      <input id="entity-${index}-bar-inherit" type="checkbox" data-kind="entity-bar-inherit" data-index="${index}"${!hasBarAppearanceOverride(context, scope) ? ' checked' : ''}>
+      <label for="entity-${index}-bar-inherit">Inherit card settings</label>
+    </div></div>
+    ${direction}${paintEditor}`;
+  return `<div class="section">
+    <div class="section-head"><h3>${escapeAttribute(options.heading ?? 'Bar Appearance')}</h3>
+      <div class="section-note">Configure bar direction, paint, Baseline and Needle.</div>
+    </div>
+    <div class="inline-row editor-grid">${direction}
+      ${options.animation ? `<div class="field-row"><div class="toggle">
+        <input id="bar-animated" type="checkbox" data-field="bar-animated"${getBarAnimatedValue(context, scope) ? ' checked' : ''}>
+        <label for="bar-animated">Animated</label>
+      </div></div>` : ''}
+    </div>
+    ${paintEditor}${renderChildren()}
+  </div>`;
 }

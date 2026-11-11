@@ -99,7 +99,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.innerHTML.indexOf('id="scale-direction"'))
       .toBeGreaterThan(editor.shadowRoot.innerHTML.indexOf('id="scale-max"'));
     expect(editor.shadowRoot.innerHTML.indexOf('id="bar-direction"'))
-      .toBeGreaterThan(editor.shadowRoot.innerHTML.indexOf('id="bar-color"'));
+      .toBeLessThan(editor.shadowRoot.innerHTML.indexOf('id="card-paint-editor"'));
     expect(events).toHaveLength(0);
 
     dispatchChange(editor.shadowRoot.querySelector('#scale-direction'), 'reverse');
@@ -564,10 +564,10 @@ describe('Sensor Bar Card Plus editor', () => {
       'entity-0-group-layout',
       'entity-0-group-scale',
       'entity-0-group-bar',
-      'entity-0-group-baseline',
-      'entity-0-group-needle',
       'entity-0-group-segments',
       'entity-0-group-gradient-stops',
+      'entity-0-group-baseline',
+      'entity-0-group-needle',
       'entity-0-group-target',
       'entity-0-group-peak',
       'entity-0-group-floor',

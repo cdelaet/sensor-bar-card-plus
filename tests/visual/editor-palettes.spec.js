@@ -17,6 +17,7 @@ async function mount(page, style) {
 for (const [style, group] of [['bands', 'segments'], ['gradient', 'gradient-stops']]) {
   test(`standalone ${group} root/override appearance and draft focus`, async ({ page }) => {
     const editor = await mount(page, style);
+    await editor.locator('#card-paint-editor > summary').click();
     await editor.locator(`#card-group-${group}`).click();
     await expect(editor.locator(`.card-subgroup[data-group="${group}"]`)).toHaveScreenshot(`palette-${group}-root.png`);
     const draft = editor.locator(style === 'bands' ? '#segment-draft-from' : '#gradient-draft-pos');
@@ -24,6 +25,8 @@ for (const [style, group] of [['bands', 'segments'], ['gradient', 'gradient-stop
     await draft.press('Enter');
     await expect.poll(() => editor.evaluate(element => element.shadowRoot.activeElement?.id ?? '')).toBe('');
     await editor.locator('button[data-action="toggle-entity-overrides"]').click();
+    await editor.locator('#entity-0-group-bar').click();
+    await editor.locator('#entity-0-paint-editor > summary').click();
     await editor.locator(`#entity-0-group-${group}`).click();
     await expect(editor.locator(`.override-group:not(.card-subgroup)[data-group="${group}"]`)).toHaveScreenshot(`palette-${group}-override.png`);
   });

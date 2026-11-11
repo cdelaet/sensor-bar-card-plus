@@ -15,7 +15,7 @@ import {
 import {
   renderBarAppearanceSection, handleBarAppearanceField, getEffectiveFillStyleValue,
   getBarColorValue, getBarSolidFillValue,
-  getBarAnimatedValue,
+  getBarAnimatedValue, syncBarPaintEditor,
 } from '../editor/sections/bar-appearance.js';
 import { getFeatureScaleSource, patchFeatureScaleSource, getFeatureBaselineSource, patchFeatureBaselineSource, getFeatureTargetSource, patchFeatureTargetSource } from './feature-editor-config.js';
 
@@ -385,9 +385,10 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
           floor: { summary: this._extremaSection._getMarkerResetSummary('floor'), content: this._extremaSection.render(root, 'floor') },
           references: { summary: this._referenceMarkersSection._getGenericMarkersSummary(root), content: this._referenceMarkersSection.render(root) },
         })}
-        ${renderBarAppearanceSection(context, root, () => `${this._baselineSection.render(root, options => this._renderCardGroup(options))}${this._needleSection.render(root)}`, { animation: true, cssText: true })}
-        ${this._segmentsSection.render(root, options => this._renderCardGroup(options))}
-        ${this._gradientStopsSection.render(root, options => this._renderCardGroup(options))}
+        ${renderBarAppearanceSection(context, root, () => `${this._baselineSection.render(root, options => this._renderCardGroup(options))}${this._needleSection.render(root)}`, { animation: true, cssText: true, root: this.shadowRoot,
+          paletteValues: { segments: segmentRows, gradient_stops: gradientRows },
+          paintChildren: () => `${this._segmentsSection.render(root, options => this._renderCardGroup(options), { section: false })}${this._gradientStopsSection.render(root, options => this._renderCardGroup(options), { section: false })}`,
+        })}
         ${renderFormattingSection(context, root, { includeUnit: false })}
       </div>`;
       } finally { this._isRendering = false; }
@@ -426,6 +427,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       }
     }
     const context = this._createSectionContext();
+    syncBarPaintEditor(this.shadowRoot, context, root, { segments: this._segmentsSection._getScopedSegmentsValue(root), gradient_stops: this._gradientStopsSection._getScopedGradientStopsValue(root) });
     const color = getBarColorValue(context, root);
     const values = {
       'scale-min': getFeatureScaleSource(this._config, 'min').fixed,

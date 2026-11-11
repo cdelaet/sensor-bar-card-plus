@@ -181,6 +181,7 @@ for (const source of ['src', 'dist']) test(`Built-in direct Values ${source}: pe
 
 for (const source of ['src', 'dist']) for (const host of ['feature', 'standalone']) test(`Palette numeric drafts ${host} ${source}: invalid boundary, Auto end and Gradient position`, async ({ page }) => {
   const editor = await mount(page, source, host, initial);
+  await editor.locator('#card-paint-editor > summary').click();
   await editor.locator('#card-group-segments').click(); const from = editor.locator('[data-kind="segment-from"]').first();
   for (const value of ['', '-', '.', '-.']) {
     const before = await saved(editor), count = await page.evaluate(() => window.__numericEvents.length);

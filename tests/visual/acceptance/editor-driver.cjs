@@ -68,6 +68,15 @@ async function foreign(editor, config) {
 async function openDisclosure(control) { if(await control.getAttribute('aria-expanded')==='false') await control.click(); await expect(control).toHaveAttribute('aria-expanded','true'); }
 async function closeDisclosure(control) { if(await control.getAttribute('aria-expanded')==='true') await control.click(); await expect(control).toHaveAttribute('aria-expanded','false'); }
 async function openSection(editor, entry) {
+ const paintSection=['Bar Appearance','Segments','Gradient Stops'].includes(entry.section);
+ if(paintSection) {
+  if(entry.scope==='entity') {
+   await openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));
+   await openDisclosure(editor.locator('#entity-0-group-bar'));
+  }
+  const paint=editor.locator(entry.scope==='entity'?'#entity-0-paint-editor':'#card-paint-editor');
+  if(!await paint.evaluate(node=>node.open))await paint.locator('summary').click();
+ }
  if(entry.scope==='entity') {
   await openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));
   const slug={'References':'markers','Bar Appearance':'bar','Gradient Stops':'gradient-stops'}[entry.section]??entry.section.toLowerCase();
