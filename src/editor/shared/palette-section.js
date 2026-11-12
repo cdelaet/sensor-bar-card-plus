@@ -14,7 +14,7 @@ export class PaletteSection {
   _getShadowElementById(id) { return this.shadowRoot?.getElementById?.(id) ?? this.shadowRoot?.querySelector(`#${id}`); }
   _renderListRows(items, renderItem) { return items.map(renderItem).join(''); }
 
-  _syncRows(scope, { inputSelector, rowSelector, draftSelector }) {
+  _syncRows(scope, { inputSelector, rowSelector, draftSelector, memberSelector, onDiscard }) {
     const root = this.shadowRoot;
     if (!root?.ownerDocument) return false;
     const template = root.ownerDocument.createElement('template');
@@ -24,9 +24,90 @@ export class PaletteSection {
     const liveInputs = [...root.querySelectorAll(inputSelector)];
     const liveRows = liveInputs.map(input => input.closest(rowSelector)).filter(Boolean);
     const draft = root.querySelector(draftSelector);
-    const list = liveRows[0]?.parentElement ?? draft?.closest('.list');
+    const list = liveRows[0]?.parentElement ?? draft?.closest('.list')
+      ?? root.querySelector(memberSelector ? `:scope ${memberSelector}` : rowSelector)?.parentElement;
     if (!list) return false;
     const active = root.activeElement;
+    if (memberSelector) {
+      const keyMembers = items => {
+        const occurrences = new Map();
+        return items.map((item, index) => {
+          const base = item.dataset.paletteKey;
+          const occurrence = occurrences.get(base) ?? 0;
+          occurrences.set(base, occurrence + 1);
+          return { item, index, key: `${base}#${occurrence}` };
+        });
+      };
+      const desiredEntries = keyMembers([...template.content.querySelectorAll(memberSelector)]);
+      const desiredByKey = new Map(desiredEntries.map(entry => [entry.key, entry]));
+      const liveMembers = [...list.children].filter(item => item.matches(memberSelector));
+      const liveEntries = keyMembers(liveMembers);
+      const activeMember = liveEntries.find(({ item }) => item.contains(active));
+      if (activeMember && !desiredByKey.has(activeMember.key)) return false;
+      const selection = active?.matches?.('input') && typeof active.selectionStart === 'number'
+        ? [active.selectionStart, active.selectionEnd, active.selectionDirection]
+        : null;
+      let changed = liveMembers.length !== desiredEntries.length;
+
+      const liveByKey = new Map(liveEntries.map(entry => [entry.key, entry]));
+      for (const entry of liveEntries) {
+        const { item, index, key } = entry;
+        const next = desiredByKey.get(key);
+        const oldRowIndex = item.querySelector('[data-segment-index]')?.dataset.segmentIndex;
+        const nextRowIndex = next?.item.querySelector('[data-segment-index]')?.dataset.segmentIndex;
+        if (!next || index !== next.index || oldRowIndex !== nextRowIndex) {
+          onDiscard?.(item, next?.item ?? desiredEntries.find(candidate => candidate.item.querySelector('[data-segment-index]')?.dataset.segmentIndex === oldRowIndex)?.item);
+        }
+      }
+      const reconciled = desiredEntries.map(({ item: desiredMember, key }) => {
+        const existing = liveByKey.get(key)?.item;
+        if (!existing) return desiredMember.cloneNode(true);
+        const syncElement = (current, next) => {
+          for (const attribute of [...current.attributes]) {
+            if (!next.hasAttribute(attribute.name)) { current.removeAttribute(attribute.name); changed = true; }
+          }
+          for (const attribute of [...next.attributes]) {
+            if (current.getAttribute(attribute.name) !== attribute.value) { current.setAttribute(attribute.name, attribute.value); changed = true; }
+          }
+          if (current.matches('input, button')) {
+            if (current !== active && current.matches('input')) {
+              if (current.value !== next.value) { current.value = next.value; changed = true; }
+              if (current.checked !== next.checked) { current.checked = next.checked; changed = true; }
+            }
+            if (current.matches('button') && current.textContent !== next.textContent) { current.textContent = next.textContent; changed = true; }
+          }
+          const currentChildren = [...current.children];
+          const nextChildren = [...next.children];
+          currentChildren.forEach((child, childIndex) => {
+            if (nextChildren[childIndex] && child.tagName === nextChildren[childIndex].tagName) syncElement(child, nextChildren[childIndex]);
+          });
+          if (!current.children.length && !current.matches('input, button') && current.textContent !== next.textContent) { current.textContent = next.textContent; changed = true; }
+        };
+        syncElement(existing, desiredMember);
+        return existing;
+      });
+      if (reconciled.some(item => !liveMembers.includes(item))) changed = true;
+
+      const anchor = list.querySelector(':scope > .segment-draft, :scope > .gradient-stop-draft');
+      const nextMember = item => {
+        let next = item?.nextElementSibling;
+        while (next && !next.matches(memberSelector)) next = next.nextElementSibling;
+        return next;
+      };
+      let cursor = liveMembers[0] ?? anchor;
+      for (const item of reconciled) {
+        if (item === cursor) cursor = nextMember(cursor) ?? anchor;
+        else list.insertBefore(item, cursor ?? anchor);
+      }
+      for (const entry of liveEntries) if (!desiredByKey.has(entry.key)) entry.item.remove();
+      if (liveEntries.some(entry => !desiredByKey.has(entry.key))) changed = true;
+      if (active?.isConnected && root.activeElement !== active) {
+        active.focus?.({ preventScroll: true });
+        if (selection) active.setSelectionRange?.(...selection);
+      }
+      return changed || liveMembers.some((item, index) => item !== reconciled[index]);
+    }
+
     if (liveRows.slice(desired.length).some(row => row.contains(active))) return false;
 
     let changed = liveRows.length !== desired.length;
@@ -86,6 +167,7 @@ export class PaletteSection {
         || !action.includes(prefix)) return false;
       if (action.startsWith('add-')) {
         if (segment && action.endsWith('-from-undefined')) {
+          if (!this._isCurrentSegmentGap(scope, target)) return true;
           this._prepareSegmentDraftFromUndefined(scope, target.dataset.from, target.dataset.to, Number(target.dataset.insertIndex));
           this.ui.focus(`#${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-from`);
         } else {
@@ -93,6 +175,7 @@ export class PaletteSection {
           commit();
         }
       } else {
+        if (segment && !this._isCurrentSegmentRow(scope, index, target)) return true;
         write(rows().filter((_, i) => i !== index), { rerender: true, ...(segment ? { sort: true } : {}) }, { type: 'remove', index });
       }
       return true;
@@ -105,6 +188,10 @@ export class PaletteSection {
     const draft = local.startsWith(`${prefix}-draft-`);
     const field = local.slice((draft ? `${prefix}-draft-` : `${prefix}-`).length);
     const value = event.detail?.value ?? target.value;
+    if (segment && !draft && !this._isCurrentSegmentRow(scope, index, target)) {
+      if (['from', 'to'].includes(field)) this._clearSegmentBoundaryText(scope, index, field);
+      return true;
+    }
     if (mode === 'keydown') {
       if (event.key === 'Escape' && draft) {
         event.preventDefault?.();

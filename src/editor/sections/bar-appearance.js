@@ -1,4 +1,4 @@
-import { normalizeBarConfig, normalizeGaugeSegments, normalizeScaleConfig, getPaintExplicitness } from '../../config/normalize.js';
+import { INVALID_PAINT_OPACITY, normalizeBarConfig, normalizeGaugeSegments, normalizeScaleConfig, getPaintExplicitness } from '../../config/normalize.js';
 import {
   isObject, normalizeTextValue, normalizeNumberValue, getPathValue,
   removePathsFromTarget, pruneEmptyObjectsInTarget,
@@ -177,9 +177,14 @@ export function getBarPaintEditorState(context, scope, paletteValues, registry =
     isCardScope: scope?.type !== 'entity', inheritedExplicitness: getPaintExplicitness(inheritedConfig),
   }).paint;
   const parentPaint = inheritedConfig ? normalizeBarConfig(inheritedConfig, null, { isCardScope: true }).paint : normalizedPaint;
-  const resolved = scope?.type === 'entity'
-    ? resolveScopedPaintPreset({ inheritedPaint: parentPaint, paint: normalizedPaint, registry })
-    : resolveScopedPaintPreset({ inheritedPaint: normalizedPaint, paint: {}, registry });
+  const presetApplies = normalizedPaint.preset !== undefined || parentPaint.preset !== undefined;
+  const resolved = presetApplies
+    ? scope?.type === 'entity'
+      ? resolveScopedPaintPreset({ inheritedPaint: parentPaint, paint: normalizedPaint, registry })
+      : resolveScopedPaintPreset({ inheritedPaint: normalizedPaint, paint: {}, registry })
+    : { paint: normalizedPaint, diagnostics: Object.hasOwn(normalizedPaint, INVALID_PAINT_OPACITY) ? [{
+      code: 'paint_opacity_invalid', severity: 'warning', path: 'paint.opacity', reference: null, fallback: 'default_opacity',
+    }] : [], source: 'canonical' };
   const paint = { ...resolved.paint };
   if (paint.segments == null && paletteValues?.segments) paint.segments = normalizeGaugeSegments(paletteValues.segments);
   if (paint.gradient_stops == null && paletteValues?.gradient_stops) paint.gradient_stops = paletteValues.gradient_stops;

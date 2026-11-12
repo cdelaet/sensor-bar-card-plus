@@ -144,6 +144,177 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
 }
 
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} rejects commits from a removed preset segment row (${source})`, async ({ page }) => {
+    const config = { bar: { paint: { preset: 'night' } } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {
+      night: { fill_style: 'bands', segments: [
+        { from: '0%', to: '30%', color: '#aa0000' },
+        { from: '30%', to: '65%', color: '#00aa00' },
+        { from: '65%', to: '100%', color: '#0000aa' },
+      ] },
+    }, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-segments').click();
+    const starts = editor.locator('input[data-kind="segment-from"]');
+    await expect(starts).toHaveCount(3);
+    await starts.nth(2).focus();
+    await starts.nth(2).evaluate(node => { node.value = '72%'; node.dispatchEvent(new Event('input', { bubbles: true })); });
+    const eventCount = await page.evaluate(() => window.__paintEvents.length);
+    await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [
+      { from: '0%', to: '50%', color: '#aa0000' },
+      { from: '50%', to: '100%', color: '#00aa00' },
+    ] } }));
+    await expect.poll(() => editor.evaluate(el => el._paintPresetRegistry.presets.night.segments.length)).toBe(2);
+    await expect(starts).toHaveCount(3);
+    await starts.nth(2).press('Enter');
+    expect(await saved(editor)).toEqual(config);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
+    await starts.nth(2).evaluate(node => node.blur());
+    await expect(starts).toHaveCount(2);
+    expect(await saved(editor)).toEqual(config);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
+  });
+}
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} removes obsolete Undefined segment gaps and actions (${source})`, async ({ page }) => {
+    const config = { bar: { paint: { preset: 'night' } } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {
+      night: { fill_style: 'bands', segments: [{ from: '10%', to: '90%', color: '#aa0000' }] },
+    }, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-segments').click();
+    const gaps = editor.locator('.segment-undefined-row');
+    await expect(gaps).toHaveCount(2);
+    await expect(gaps.locator('button[data-action$="from-undefined"]')).toHaveCount(2);
+    await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [
+      { from: '0%', to: '100%', color: '#aa0000' },
+    ] } }));
+    await expect(gaps).toHaveCount(0);
+    await expect(editor.locator('button[data-action$="from-undefined"]')).toHaveCount(0);
+    await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [
+      { from: '10%', to: '90%', color: '#aa0000' },
+    ] } }));
+    await expect(gaps).toHaveCount(2);
+    expect(await saved(editor)).toEqual(config);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
+  });
+}
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} ignores an obsolete Undefined gap action while rows are deferred (${source})`, async ({ page }) => {
+    const config = { bar: { paint: { preset: 'night' } } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {
+      night: { fill_style: 'bands', segments: [{ from: '10%', to: '90%', color: '#aa0000' }] },
+    }, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-segments').click();
+    const start = editor.locator('input[data-kind="segment-from"]').first();
+    const staleAction = await editor.locator('.segment-undefined-row button[data-action$="from-undefined"]').first().elementHandle();
+    await start.focus();
+    await start.evaluate(node => { node.value = '11%'; node.dispatchEvent(new Event('input', { bubbles: true })); });
+    const eventCount = await page.evaluate(() => window.__paintEvents.length);
+    await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [
+      { from: '0%', to: '100%', color: '#aa0000' },
+    ] } }));
+    await expect.poll(() => editor.evaluate(el => el._paintPresetRegistry.presets.night.segments[0].to)).toBe('100%');
+    await staleAction.evaluate(button => button.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(await saved(editor)).toEqual(config);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
+    await start.evaluate(node => { node.dispatchEvent(new Event('change', { bubbles: true })); node.blur(); });
+    await expect(editor.locator('.segment-undefined-row')).toHaveCount(0);
+    expect(await saved(editor)).toEqual(config);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
+  });
+}
+
+for (const source of ['src', 'dist']) {
+  test(`Feature reorders preset segment controls by authored identity (${source})`, async ({ page }) => {
+    const host = 'Feature';
+    const config = { bar: { paint: { preset: 'night' } } };
+    config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {
+      night: { fill_style: 'bands', segments: [
+        { from: { fixed: 60 }, to: { fixed: 100 }, color: '#00aa00' },
+        { from: '10%', to: '30%', color: '#aa0000' },
+      ] },
+    }, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-segments').click();
+    const starts = editor.locator('input[data-kind="segment-from"]');
+    await expect(starts).toHaveCount(2);
+    await editor.evaluate(el => {
+      window.__firstSegmentStart = el.shadowRoot.querySelectorAll('input[data-kind="segment-from"]')[0];
+      window.__secondSegmentStart = el.shadowRoot.querySelectorAll('input[data-kind="segment-from"]')[1];
+    });
+    const eventCount = await page.evaluate(() => window.__paintEvents.length);
+    await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [
+      { from: '10%', to: '30%', color: '#aa0000' },
+      { from: { fixed: 60 }, to: { fixed: 100 }, color: '#00aa00' },
+    ] } }));
+    await expect(starts.nth(0)).toHaveValue('10%');
+    await expect(starts.nth(1)).toHaveValue('60');
+    expect(await starts.nth(0).evaluate(node => node === window.__secondSegmentStart)).toBe(true);
+    expect(await starts.nth(1).evaluate(node => node === window.__firstSegmentStart)).toBe(true);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
+    expect(await saved(editor)).toEqual(config);
+  });
+}
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} keeps explicit local segments over preset palette updates (${source})`, async ({ page }) => {
+    const local = [{ from: '25%', to: '100%', color: '#123456' }];
+    const config = { bar: { paint: { preset: 'night', segments: local } } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {
+      night: { fill_style: 'bands', segments: [{ from: '0%', to: '100%', color: '#aa0000' }] },
+    }, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-segments').click();
+    const starts = editor.locator('input[data-kind="segment-from"]');
+    await expect(starts).toHaveCount(1);
+    await expect(starts.first()).toHaveValue('25%');
+    await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [
+      { from: '0%', to: '40%', color: '#aa0000' },
+      { from: '40%', to: '100%', color: '#00aa00' },
+    ] } }));
+    await expect(starts).toHaveCount(1);
+    await expect(starts.first()).toHaveValue('25%');
+    expect(await saved(editor)).toEqual(config);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
+  });
+}
+
+for (const source of ['src', 'dist']) {
+  test(`Card preserves legacy Solid inference beside an unrelated preset entity (${source})`, async ({ page }) => {
+    const config = { entities: [
+      { entity: 'sensor.preset', bar: { paint: { preset: 'night' } } },
+      { entity: 'sensor.power', color: '#123456' },
+    ] };
+    const editor = await mountWithPaintPresets(page, 'Card', source, {
+      night: { fill_style: 'bands', segments: [{ from: '0%', to: '100%', color: '#aa0000' }] },
+    }, config);
+    await editor.locator('button[data-action="toggle-entity-overrides"][data-index="1"]').click();
+    await editor.locator('#entity-1-paint-editor summary').click();
+    await expect(editor.locator('#entity-1-bar-fill-style')).toHaveValue('solid');
+    expect(await saved(editor)).toEqual(config);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
+  });
+
+  test(`Feature preserves legacy Solid inference for color-only paint (${source})`, async ({ page }) => {
+    const config = { type: 'custom:sensor-bar-card-plus-feature', color: '#123456' };
+    const editor = await mountWithPaintPresets(page, 'Feature', source, {}, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await expect(editor.locator('#bar-fill-style')).toHaveValue('solid');
+    expect(await saved(editor)).toEqual(config);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
+  });
+}
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
   test(`${host} clears palette drafts and cached rows when paint returns to inherited (${source})`, async ({ page }) => {
     const config = { bar: { paint: { fill_style: 'bands', color: '#123456', segments: [
       { from: '0%', to: '100%', color: '#abcdef' },

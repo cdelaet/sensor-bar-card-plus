@@ -44,6 +44,18 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     }
   });
 
+  it('keeps legacy color-only entity style inference when no preset applies', () => {
+    const { editor, events } = setup(source, { entities: [{ entity: 'sensor.power', color: '#123456' }] });
+    expect(editor._getEffectiveScopedFillStyleValue(row)).toBe('solid');
+    expect(editor.shadowRoot.querySelector('#entity-0-bar-fill-style').value).toBe('solid');
+    expect(events).toHaveLength(0);
+
+    const invalid = setup(source, { bar: { paint: { opacity: 120 } } }).editor;
+    expect(getBarPaintEditorState(invalid._createSectionContext(), root).diagnostics).toContainEqual({
+      code: 'paint_opacity_invalid', severity: 'warning', path: 'paint.opacity', reference: null, fallback: 'default_opacity',
+    });
+  });
+
   it('retains all legacy color modes, including nested read-only override behavior', () => {
     for (const [color_mode, expected] of [['single', 'solid'], ['gradient', 'gradient'], ['severity', 'bands'], ['severity_gradient', 'band_gradient']]) {
       const { editor } = setup(source, { color_mode, color: 'red', entities: [{ entity: 'sensor.power', color_mode, color: 'blue' }] });
