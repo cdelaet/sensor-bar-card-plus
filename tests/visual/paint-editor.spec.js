@@ -118,6 +118,144 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
 }
 
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} keeps gradient drafts isolated after editing and reinserting original content (${source})`, async ({ page }) => {
+    const config = {
+      bar: { fill_style: 'gradient', gradient_stops: [
+        { pos: 0, color: '#aa0000' }, { pos: 40, color: '#00aa00' }, { pos: 100, color: '#0000aa' },
+      ] },
+      ...(host === 'Card' ? { entities: ['sensor.power'] } : { type: 'custom:sensor-bar-card-plus-feature' }),
+    };
+    const editor = await mount(page, host, source);
+    await editor.evaluate((el, next) => el.setConfig(next), config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-gradient-stops').click();
+
+    const positions = editor.locator('input[data-kind="gradient-pos"]');
+    await positions.nth(1).fill('45');
+    await positions.nth(1).press('Enter');
+    await expect.poll(() => saved(editor)).toMatchObject({ bar: { gradient_stops: [
+      { pos: 0, color: '#aa0000' }, { pos: 45, color: '#00aa00' }, { pos: 100, color: '#0000aa' },
+    ] } });
+    await editor.locator('#gradient-draft-pos').fill('40');
+    await editor.locator('#gradient-draft-color').fill('#00aa00');
+    await editor.locator('button[data-action="add-gradient-stop"]').click();
+    await expect(positions).toHaveCount(4);
+
+    await editor.evaluate(el => {
+      const controls = [...el.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')];
+      window.__insertedGreenStop = controls.find(node => node.value === '40'
+        && node.closest('.gradient-stop-row').querySelector('input[data-kind="gradient-color"]').value === '#00aa00');
+      window.__editedGreenStop = controls.find(node => node.value === '45'
+        && node.closest('.gradient-stop-row').querySelector('input[data-kind="gradient-color"]').value === '#00aa00');
+    });
+    const getAuthoredIds = () => positions.evaluateAll(controls => controls.map(node => node.closest('.gradient-stop-row').dataset.paletteId));
+    const idsBeforeRefresh = await getAuthoredIds();
+    expect(new Set(idsBeforeRefresh).size).toBe(4);
+    await editor.evaluate(() => {
+      window.__insertedGreenStop.focus();
+      window.__insertedGreenStop.value = '42';
+      window.__insertedGreenStop.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const eventsBeforeRefresh = await page.evaluate(() => window.__paintEvents.length);
+    const configBeforeRefresh = await saved(editor);
+    await editor.evaluate(el => { el.hass = { states: { 'sensor.power': { state: '1', attributes: {} } } }; });
+
+    expect(await editor.evaluate(() => window.__insertedGreenStop.value)).toBe('42');
+    expect(await editor.evaluate(() => window.__editedGreenStop.value)).toBe('45');
+    expect(await editor.evaluate(() => window.__insertedGreenStop.closest('.gradient-stop-row')
+      .querySelector('input[data-kind="gradient-color"]').value)).toBe('#00aa00');
+    const idsAfterRefresh = await getAuthoredIds();
+    expect(new Set(idsAfterRefresh).size).toBe(4);
+    expect(idsAfterRefresh).toEqual(idsBeforeRefresh);
+    expect(await saved(editor)).toEqual(configBeforeRefresh);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventsBeforeRefresh);
+  });
+
+  test(`${host} keeps duplicate-start segment drafts unique through palette structure changes (${source})`, async ({ page }) => {
+    const config = { bar: { paint: { preset: 'night' } } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {
+      night: { fill_style: 'bands', segments: [
+        { from: '10%', to: '30%', color: '#aa0000' },
+        { from: '10%', to: '60%', color: '#00aa00' },
+        { from: '10%', to: '90%', color: '#0000aa' },
+      ] },
+    }, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-segments').click();
+    await editor.evaluate(el => {
+      const row = [...el.shadowRoot.querySelectorAll('.segment-editor-row')]
+        .find(item => item.querySelector('input[data-kind="segment-color"]')?.value === '#00aa00');
+      const input = row.querySelector('input[data-kind="segment-to"]');
+      window.__sameStartDraftControl = input;
+      input.focus();
+      input.value = '65%';
+      input.setSelectionRange(2, 4);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const getRows = () => editor.locator('.segment-editor-row');
+    const getIds = () => getRows().evaluateAll(rows => rows.map(row => row.dataset.paletteId));
+    const assertUniqueIds = async count => {
+      const ids = await getIds();
+      expect(ids).toHaveLength(count);
+      expect(new Set(ids).size).toBe(count);
+    };
+    await assertUniqueIds(3);
+
+    await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [
+      { from: '10%', to: '90%', color: '#0000aa' },
+      { from: '10%', to: '75%', color: '#ffff00' },
+      { from: '10%', to: '60%', color: '#00aa00' },
+      { from: '10%', to: '30%', color: '#aa0000' },
+    ] } }));
+    await assertUniqueIds(4);
+    const editedEnd = () => getRows().locator('input[data-kind="segment-to"]').evaluateAll(nodes =>
+      nodes.find(node => node === window.__sameStartDraftControl)?.value);
+    await expect.poll(editedEnd).toBe('65%');
+    expect(await editor.evaluate(el => window.__sameStartDraftControl.closest('.segment-editor-row')
+      .querySelector('input[data-kind="segment-color"]').value)).toBe('#00aa00');
+
+    await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [
+      { from: '10%', to: '60%', color: '#00aa00' },
+      { from: '10%', to: '90%', color: '#0000aa' },
+      { from: '10%', to: '75%', color: '#ffff00' },
+    ] } }));
+    await assertUniqueIds(3);
+    await expect.poll(editedEnd).toBe('65%');
+    expect(await saved(editor)).toEqual(config);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
+  });
+
+  test(`${host} invalidates a draft on an indistinguishable duplicate segment (${source})`, async ({ page }) => {
+    const config = { bar: { paint: { preset: 'night' } } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const duplicate = { from: '10%', to: '30%', color: '#aa0000' };
+    const editor = await mountWithPaintPresets(page, host, source, {
+      night: { fill_style: 'bands', segments: [duplicate, duplicate, duplicate] },
+    }, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-segments').click();
+    const ends = editor.locator('input[data-kind="segment-to"]');
+    await ends.nth(2).fill('25%');
+    const staleInput = await ends.nth(2).elementHandle();
+    await page.evaluate(() => window.__updatePaintRegistry({ night: {
+      fill_style: 'bands', segments: [
+        { from: '10%', to: '30%', color: '#aa0000' },
+        { from: '10%', to: '30%', color: '#aa0000' },
+      ],
+    } }));
+    // The active removed row may remain mounted until blur, but its draft has
+    // been pruned and its stale events cannot target either surviving row.
+    await expect(ends).toHaveCount(3);
+    await staleInput.evaluate(node => node.blur());
+    await expect(ends).toHaveCount(2);
+    expect(await ends.evaluateAll(nodes => nodes.map(node => node.value))).toEqual(['30%', '30%']);
+    const ids = await editor.locator('.segment-editor-row').evaluateAll(rows => rows.map(row => row.dataset.paletteId));
+    expect(new Set(ids).size).toBe(2);
+    expect(await saved(editor)).toEqual(config);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
+  });
+
   test(`${host} preserves a focused segment draft while preset rows change (${source})`, async ({ page }) => {
     const config = { bar: { paint: { preset: 'night' } } };
     if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';

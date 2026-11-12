@@ -36,6 +36,70 @@ describe('PaletteRowSession', () => {
     expect(session.idAt(1)).toBe(second);
   });
 
+  it('allocates unique fresh IDs after editing and reinserting the original gradient row', () => {
+    const session = new PaletteRowSession();
+    const initial = [{ pos: 0, color: 'red' }, { pos: 40, color: 'green' }, { pos: 100, color: 'blue' }];
+    const [redId, greenId, blueId] = session.reconcile(initial);
+    session.updateAt(1, { pos: 45, color: 'green' });
+    const rows = [{ pos: 0, color: 'red' }, { pos: 45, color: 'green' }, { pos: 100, color: 'blue' }];
+    expect(session.reconcile(rows)[1]).toBe(greenId);
+
+    const inserted = [rows[0], initial[1], rows[1], rows[2]];
+    const ids = session.reconcile(inserted);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toEqual([redId, expect.not.stringMatching(/^$/), greenId, blueId]);
+    expect(ids[1]).not.toBe(greenId);
+    session.setDraft(2, 'pos', '42');
+    expect(session.getDraft(2, 'pos')).toBe('42');
+    expect(session.getDraft(1, 'pos')).toBeUndefined();
+
+    expect(session.reconcile(inserted)).toEqual(ids);
+    expect(new Set(session.rows.map(({ id }) => id)).size).toBe(inserted.length);
+    expect(session.getDraft(2, 'pos')).toBe('42');
+    expect(session.getDraft(1, 'pos')).toBeUndefined();
+  });
+
+  it('does not reuse IDs for edited and reinserted segment content', () => {
+    const session = new PaletteRowSession(row => JSON.stringify({ from: row.from }));
+    const initial = [
+      { from: 0, to: 40, color: 'red' },
+      { from: 40, to: 70, color: 'green' },
+      { from: 70, to: 100, color: 'blue' },
+    ];
+    const [redId, greenId, blueId] = session.reconcile(initial);
+    session.updateAt(1, { from: 45, to: 70, color: 'green' });
+    const edited = [initial[0], { from: 45, to: 70, color: 'green' }, initial[2]];
+    expect(session.reconcile(edited)[1]).toBe(greenId);
+
+    const ids = session.reconcile([initial[0], initial[1], edited[1], initial[2]]);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids[0]).toBe(redId);
+    expect(ids[2]).toBe(greenId);
+    expect(ids[3]).toBe(blueId);
+    expect(ids[1]).not.toBe(greenId);
+    session.setDraft(2, 'to', '72');
+    expect(session.reconcile([initial[2], initial[0], initial[1], edited[1]])).toEqual([blueId, redId, ids[1], greenId]);
+    expect(new Set(session.rows.map(({ id }) => id)).size).toBe(4);
+    expect(session.getDraft(3, 'to')).toBe('72');
+    expect(session.getDraft(2, 'to')).toBeUndefined();
+  });
+
+  it('keeps IDs unique with equal-content rows across repeated insertion and removal', () => {
+    const session = new PaletteRowSession();
+    const duplicate = { pos: 40, color: 'green' };
+    const first = session.reconcile([duplicate, duplicate, duplicate]);
+    expect(new Set(first).size).toBe(3);
+    session.setDraft(0, 'pos', '42');
+    session.setDraft(2, 'pos', '43');
+    session.reconcile([duplicate, duplicate]);
+    expect(session.drafts.size).toBe(0);
+    const afterInsert = session.reconcile([duplicate, duplicate, duplicate]);
+    expect(new Set(afterInsert).size).toBe(3);
+    expect(afterInsert.slice(0, 2)).toEqual(first.slice(0, 2));
+    expect(afterInsert[2]).not.toBe(first[2]);
+    expect(session.reconcile([duplicate, duplicate])).toEqual(afterInsert.slice(0, 2));
+  });
+
   it('uses an unambiguous secondary anchor and invalidates ambiguous duplicate anchors', () => {
     const session = new PaletteRowSession(row => JSON.stringify({ from: row.from }));
     const [red, green] = session.reconcile([

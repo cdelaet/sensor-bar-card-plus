@@ -1,17 +1,6 @@
 import { getEffectiveFillStyleValue } from '../sections/bar-appearance.js';
 import { serializeConfig } from './editor-config.js';
 
-function paletteFingerprint(value) {
-  const text = serializeConfig(value);
-  let first = 0x811c9dc5;
-  let second = 0x9e3779b9;
-  for (let index = 0; index < text.length; index += 1) {
-    first = Math.imul(first ^ text.charCodeAt(index), 0x01000193);
-    second = Math.imul(second ^ text.charCodeAt(index), 0x85ebca6b);
-  }
-  return `${(first >>> 0).toString(36)}${(second >>> 0).toString(36)}`;
-}
-
 let paletteSessionRevision = 0;
 let paletteSessionKey = 0;
 
@@ -24,15 +13,30 @@ export class PaletteRowSession {
     this.rows = [];
     this.drafts = new Map();
     this.logicalKey = logicalKey;
+    this.nextRowId = 0;
   }
 
   reconcile(rows) {
     const previous = new Map();
+    const nextCounts = new Map();
+    for (const row of rows) {
+      const fingerprint = serializeConfig(row);
+      nextCounts.set(fingerprint, (nextCounts.get(fingerprint) ?? 0) + 1);
+    }
+    const ambiguousIds = new Set();
     this.rows.forEach((entry) => {
       const queue = previous.get(entry.fingerprint) ?? [];
       queue.push(entry.id);
       previous.set(entry.fingerprint, queue);
     });
+    for (const [fingerprint, entries] of previous) {
+      const nextCount = nextCounts.get(fingerprint) ?? 0;
+      // Occurrence order keeps IDs deterministic, but a changed duplicate
+      // group cannot safely retain edits from an individual occurrence.
+      if ((entries.length > 1 || nextCount > 1) && nextCount !== entries.length) {
+        entries.forEach(id => ambiguousIds.add(id));
+      }
+    }
     const usedIds = new Set();
     const next = rows.map((row) => {
       const fingerprint = serializeConfig(row);
@@ -60,16 +64,14 @@ export class PaletteRowSession {
       // on each side. Ambiguous same-anchor rows receive fresh identities.
       if (oldGroup.length === 1 && newGroup.length === 1) newGroup[0].id = oldGroup[0].id;
     }
-    const occurrences = new Map();
-    next.forEach((entry, index) => {
-      const occurrence = occurrences.get(entry.fingerprint) ?? 0;
-      occurrences.set(entry.fingerprint, occurrence + 1);
-      if (!entry.id) entry.id = `row-${paletteFingerprint(rows[index])}#${occurrence}`;
-    });
+    for (const entry of next) {
+      if (!entry.id) entry.id = `row-${++this.nextRowId}`;
+    }
     if (next.length !== this.rows.length || next.some((entry, index) => entry.id !== this.rows[index]?.id
       || entry.fingerprint !== this.rows[index]?.fingerprint)) this.revision = ++paletteSessionRevision;
     const liveIds = new Set(next.map(({ id }) => id));
     for (const id of this.drafts.keys()) if (!liveIds.has(id)) this.drafts.delete(id);
+    for (const id of ambiguousIds) this.drafts.delete(id);
     this.rows = next;
     return next.map(({ id }) => id);
   }
