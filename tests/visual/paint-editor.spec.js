@@ -231,35 +231,92 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
   });
 }
 
-for (const source of ['src', 'dist']) {
-  test(`Feature reorders preset segment controls by authored identity (${source})`, async ({ page }) => {
-    const host = 'Feature';
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} keeps focused boundary drafts with their segment during preset reorder (${source})`, async ({ page }) => {
     const config = { bar: { paint: { preset: 'night' } } };
-    config.type = 'custom:sensor-bar-card-plus-feature';
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
     const editor = await mountWithPaintPresets(page, host, source, {
       night: { fill_style: 'bands', segments: [
-        { from: { fixed: 60 }, to: { fixed: 100 }, color: '#00aa00' },
-        { from: '10%', to: '30%', color: '#aa0000' },
+        { from: '0%', to: '30%', color: '#aa0000' },
+        { from: { fixed: 40 }, to: { fixed: 60 }, color: '#00aa00' },
+        { from: '70%', to: '100%', color: '#0000aa' },
       ] },
     }, config);
     await editor.locator('#card-paint-editor summary').click();
     await editor.locator('#card-group-segments').click();
-    const starts = editor.locator('input[data-kind="segment-from"]');
-    await expect(starts).toHaveCount(2);
+    const ends = editor.locator('input[data-kind="segment-to"]');
+    await expect(ends).toHaveCount(3);
     await editor.evaluate(el => {
-      window.__firstSegmentStart = el.shadowRoot.querySelectorAll('input[data-kind="segment-from"]')[0];
-      window.__secondSegmentStart = el.shadowRoot.querySelectorAll('input[data-kind="segment-from"]')[1];
+      window.__firstSegmentEnd = el.shadowRoot.querySelectorAll('input[data-kind="segment-to"]')[0];
+    });
+    await ends.nth(0).fill('25%');
+    await editor.evaluate(() => {
+      window.__firstSegmentSelection = [window.__firstSegmentEnd.selectionStart, window.__firstSegmentEnd.selectionEnd, window.__firstSegmentEnd.selectionDirection];
     });
     const eventCount = await page.evaluate(() => window.__paintEvents.length);
     await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [
-      { from: '10%', to: '30%', color: '#aa0000' },
-      { from: { fixed: 60 }, to: { fixed: 100 }, color: '#00aa00' },
+      { from: '70%', to: '100%', color: '#0000aa' },
+      { from: { fixed: 40 }, to: { fixed: 60 }, color: '#00aa00' },
+      { from: '0%', to: '30%', color: '#aa0000' },
     ] } }));
-    await expect(starts.nth(0)).toHaveValue('10%');
-    await expect(starts.nth(1)).toHaveValue('60');
-    expect(await starts.nth(0).evaluate(node => node === window.__secondSegmentStart)).toBe(true);
-    expect(await starts.nth(1).evaluate(node => node === window.__firstSegmentStart)).toBe(true);
+    await expect.poll(() => editor.evaluate(el => el._paintPresetRegistry.presets.night.segments[0].from)).toBe('70%');
+    await expect(ends.nth(0)).toHaveValue('100%');
+    await expect(ends.nth(2)).toHaveValue('25%');
+    expect(await editor.evaluate(el => el.shadowRoot.activeElement === window.__firstSegmentEnd)).toBe(true);
+    expect(await ends.nth(2).evaluate(node => node === window.__firstSegmentEnd)).toBe(true);
+    expect(await ends.nth(2).evaluate(node => [node.selectionStart, node.selectionEnd, node.selectionDirection])).toEqual(
+      await editor.evaluate(() => window.__firstSegmentSelection));
     expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
+    expect(await saved(editor)).toEqual(config);
+  });
+}
+
+for (const source of ['src', 'dist']) for (const commit of ['blur', 'enter']) test(`Feature keeps row-count bookkeeping current while a boundary is edited and commits by ${commit} (${source})`, async ({ page }) => {
+  const config = { type: 'custom:sensor-bar-card-plus-feature', bar: { paint: { preset: 'night' } } };
+  const editor = await mountWithPaintPresets(page, 'Feature', source, {
+    night: { fill_style: 'bands', segments: [
+      { from: '0%', to: '30%', color: '#aa0000' },
+      { from: '40%', to: '60%', color: '#00aa00' },
+      { from: '70%', to: '100%', color: '#0000aa' },
+    ] },
+  }, config);
+  await editor.locator('#card-paint-editor summary').click();
+  await editor.locator('#card-group-segments').click();
+  const firstEnd = editor.locator('input[data-kind="segment-to"]').first();
+  await firstEnd.fill('2');
+  await editor.evaluate(el => { window.__focusedEnd = el.shadowRoot.querySelector('input[data-kind="segment-to"]'); });
+  const eventCount = await page.evaluate(() => window.__paintEvents.length);
+  await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [
+    { from: '0%', to: '30%', color: '#aa0000' },
+    { from: '40%', to: '60%', color: '#00aa00' },
+  ] } }));
+  await expect.poll(() => editor.evaluate(el => el._paintPresetRegistry.presets.night.segments.length)).toBe(2);
+  await expect(firstEnd).toHaveCount(1);
+  await expect(firstEnd).toHaveValue('2');
+  expect(await firstEnd.evaluate(node => node === window.__focusedEnd)).toBe(true);
+  await firstEnd.press('End');
+  await firstEnd.pressSequentially('5');
+  await expect(firstEnd).toHaveValue('25');
+  expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
+  if (commit === 'enter') await firstEnd.press('Enter');
+  else await firstEnd.evaluate(node => node.blur());
+  await expect.poll(() => page.evaluate(() => window.__paintEvents.length)).toBe(eventCount + 1);
+  expect((await saved(editor)).bar.paint.segments).toHaveLength(2);
+});
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} formats canonical absolute segment boundaries (${source})`, async ({ page }) => {
+    const config = { bar: { paint: { preset: 'numeric' } } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {
+      numeric: { fill_style: 'bands', segments: [
+        { from: { fixed: 25 }, to: { fixed: 75 }, color: '#123456' },
+      ] },
+    }, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-segments').click();
+    await expect(editor.locator('.segment-editor-row input[data-kind="segment-from"]')).toHaveValue('25');
+    await expect(editor.locator('.segment-editor-row input[data-kind="segment-to"]')).toHaveValue('75');
     expect(await saved(editor)).toEqual(config);
   });
 }

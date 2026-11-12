@@ -47,6 +47,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._paintPresetHandle = null;
     this._paintPresetSubscriptionGeneration = 0;
     this._paintPresetRegistry = { status: 'loading', presets: {} };
+    this._paletteStructureSyncPending = false;
     this._cssColorDrafts = new Map();
     this._numericDrafts = new NumericInputDrafts();
     this._expandedCardGroups = new Set();
@@ -155,6 +156,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
   connectedCallback() { this._syncPaintPresetRegistry(); this._requestRender(); }
   disconnectedCallback() {
     this._renderEpoch += 1; this._renderScheduled = false;
+    this._paletteStructureSyncPending = false;
     this._paintPresetSubscriptionGeneration += 1;
     this._paintPresetHandle?.unsubscribe();
     this._paintPresetHandle = null;
@@ -179,10 +181,12 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       this._paintPresetHandle = subscribeDashboardPaintPresets(this._hass, path, snapshot => {
         if (generation !== this._paintPresetSubscriptionGeneration || snapshot === this._paintPresetRegistry) return;
         this._paintPresetRegistry = snapshot;
+        this._paletteStructureSyncPending = true;
         if (this.shadowRoot?.innerHTML) this._syncControls();
         else this._requestRender();
       });
       this._paintPresetRegistry = this._paintPresetHandle.getSnapshot();
+      this._paletteStructureSyncPending = true;
       if (this.shadowRoot?.innerHTML) this._syncControls();
       return;
     }
@@ -397,6 +401,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const activeKind = this.shadowRoot.activeElement?.dataset?.kind;
     const defer = activeKind?.endsWith('-text-fallback') || activeField?.endsWith('-text-fallback')
       || activeField === 'feature-entity-override' && !this._context.entity_id && !this._explicitEntity
+      || this._paletteStructureSyncPending && ['segment-from', 'segment-to', 'entity-segment-from', 'entity-segment-to'].includes(activeKind)
       || this.shadowRoot.activeElement?.validity?.badInput && this._numericDrafts.captureFocus(this.shadowRoot);
     let replaceReferences = false;
     if (markerSignature !== this._referenceStructureSignature && !defer) {
@@ -453,6 +458,12 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       if (active?.type === 'text' && focus.start != null) active.setSelectionRange?.(focus.start, focus.end);
     } else {
       this._syncControls();
+    }
+    if (this._paletteStructureSyncPending) {
+      // The palette rows were reconciled through the shared section path. Keep
+      // the signature current so later typing does not force an editor rebuild.
+      this._structureSignature = signature;
+      this._paletteStructureSyncPending = false;
     }
     if (!defer) this._referenceStructureSignature = markerSignature;
     if (this._pendingPaletteFocus) {

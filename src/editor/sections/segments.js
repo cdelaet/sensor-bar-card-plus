@@ -1,6 +1,6 @@
 import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumberValue } from '../shared/editor-config.js';
 import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, normalizeEditorColorValue } from '../shared/editor-controls.js';
-import { normalizeGaugeSegments, normalizeScaleConfig } from '../../config/normalize.js';
+import { getFiniteNumber, normalizeGaugeSegments, normalizeScaleConfig } from '../../config/normalize.js';
 import { getResolvedScale } from '../../config/resolve.js';
 import { getSegmentsForRendering, resolveSegmentBoundaryPct } from '../../view-model/bar-render-model.js';
 import { getEffectiveBarColorValue } from './bar-appearance.js';
@@ -109,7 +109,12 @@ export class SegmentsSection extends PaletteSection {
   }
 
   _getSegmentBoundaryTextKey(scope, segmentIndex, field) {
-    return `${this._getSegmentsScopeKey(scope)}:${segmentIndex}:${field}`;
+    const segments = this._getScopedSegmentsValue(scope) ?? [];
+    const segment = segments[segmentIndex];
+    const identity = segmentPaletteKey(segment);
+    const occurrence = segments.slice(0, segmentIndex + 1)
+      .filter(candidate => segmentPaletteKey(candidate) === identity).length - 1;
+    return `${this._getSegmentsScopeKey(scope)}:${identity}#${occurrence}:${field}`;
   }
 
   _getSegmentBoundaryText(scope = { type: 'card' }, segmentIndex, field, fallbackValue = '') {
@@ -251,8 +256,9 @@ export class SegmentsSection extends PaletteSection {
       if (Number.isFinite(value.percent)) {
         return `${value.percent}%`;
       }
-      if (Number.isFinite(this._getFiniteNumber(value.fixed))) {
-        return String(this._getFiniteNumber(value.fixed));
+      const fixed = getFiniteNumber(value.fixed);
+      if (fixed !== null) {
+        return String(fixed);
       }
     }
     return '';
@@ -586,8 +592,8 @@ export class SegmentsSection extends PaletteSection {
       if (Number.isFinite(value.percent)) {
         return value.percent;
       }
-      const fixedValue = this._getFiniteNumber(value.fixed);
-      if (Number.isFinite(fixedValue)) {
+      const fixedValue = getFiniteNumber(value.fixed);
+      if (fixedValue !== null) {
         return fixedValue;
       }
     }
@@ -898,17 +904,27 @@ export class SegmentsSection extends PaletteSection {
       rowSelector: '.segment-editor-row',
       memberSelector: '.segment-editor-row, .segment-undefined-row',
       draftSelector: entity ? `#entity-${index}-segment-draft-from` : '#segment-draft-from',
-      onDiscard: (oldRow, nextRow) => {
-        const oldIndex = oldRow.querySelector('[data-segment-index]')?.dataset.segmentIndex;
-        const nextIndex = nextRow?.querySelector('[data-segment-index]')?.dataset.segmentIndex;
-        if (oldIndex !== undefined && (oldIndex !== nextIndex || oldRow.dataset.paletteKey !== nextRow?.dataset.paletteKey)) {
-          this._clearSegmentBoundaryText(scope, Number(oldIndex), 'from');
-          this._clearSegmentBoundaryText(scope, Number(oldIndex), 'to');
-        }
-      },
     });
+    this._pruneSegmentBoundaryTexts(scope);
     if (changed) this._refreshSegmentUi(scope);
     return changed;
+  }
+
+  _pruneSegmentBoundaryTexts(scope) {
+    const prefix = `${this._getSegmentsScopeKey(scope)}:`;
+    const segments = this._getScopedSegmentsValue(scope) ?? [];
+    const identities = new Set();
+    const occurrences = new Map();
+    for (const segment of segments) {
+      const identity = segmentPaletteKey(segment);
+      const occurrence = occurrences.get(identity) ?? 0;
+      occurrences.set(identity, occurrence + 1);
+      identities.add(`${prefix}${identity}#${occurrence}:from`);
+      identities.add(`${prefix}${identity}#${occurrence}:to`);
+    }
+    for (const key of this._segmentBoundaryTexts.keys()) {
+      if (key.startsWith(prefix) && !identities.has(key)) this._segmentBoundaryTexts.delete(key);
+    }
   }
 
   render(scope = { type: 'card' }, renderGroup = ({ content }) => content, { section = true } = {}) {
