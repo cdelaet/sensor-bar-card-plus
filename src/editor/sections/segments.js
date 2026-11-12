@@ -78,14 +78,19 @@ export class SegmentsSection extends PaletteSection {
     this._segmentBoundaryTexts = new Map();
   }
 
+  clearScopeState(scope) {
+    const key = this._getSegmentsScopeKey(scope);
+    this._segmentDrafts.delete(key);
+    this._segmentUiRows.delete(key);
+    this._clearSegmentScopeTextState(scope);
+  }
+
   _setSegments(segments, options = {}) {
     return this._setScopedSegments({ type: 'card' }, segments, options);
   }
 
   _clearSegmentsOverride(scope) {
-    this._segmentDrafts.delete(this._getSegmentsScopeKey(scope));
-    this._segmentUiRows.delete(this._getSegmentsScopeKey(scope));
-    this._clearSegmentScopeTextState(scope);
+    this.clearScopeState(scope);
     return this.context.mutate(scope, (target) => {
       const nextTarget = clearBarPaintProperties(target, ['segments']);
       return nextTarget;
@@ -856,6 +861,18 @@ export class SegmentsSection extends PaletteSection {
 
   _setScopedSegments(scope, rows, options = {}, operation) {
     return this.array.write(scope, rows, options, operation);
+  }
+
+  syncRows(scope = { type: 'card' }) {
+    const entity = scope?.type === 'entity';
+    const index = Number(scope?.index);
+    const changed = this._syncRows(scope, {
+      inputSelector: entity ? `input[data-kind="entity-segment-from"][data-index="${index}"]` : 'input[data-kind="segment-from"]',
+      rowSelector: '.segment-editor-row',
+      draftSelector: entity ? `#entity-${index}-segment-draft-from` : '#segment-draft-from',
+    });
+    if (changed) this._refreshSegmentUi(scope);
+    return changed;
   }
 
   render(scope = { type: 'card' }, renderGroup = ({ content }) => content, { section = true } = {}) {

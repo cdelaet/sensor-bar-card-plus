@@ -14,6 +14,53 @@ export class PaletteSection {
   _getShadowElementById(id) { return this.shadowRoot?.getElementById?.(id) ?? this.shadowRoot?.querySelector(`#${id}`); }
   _renderListRows(items, renderItem) { return items.map(renderItem).join(''); }
 
+  _syncRows(scope, { inputSelector, rowSelector, draftSelector }) {
+    const root = this.shadowRoot;
+    if (!root?.ownerDocument) return false;
+    const template = root.ownerDocument.createElement('template');
+    template.innerHTML = this.render(scope, ({ content }) => content, { section: false });
+    const desired = [...template.content.querySelectorAll(rowSelector)]
+      .filter(row => row.querySelector(inputSelector));
+    const liveInputs = [...root.querySelectorAll(inputSelector)];
+    const liveRows = liveInputs.map(input => input.closest(rowSelector)).filter(Boolean);
+    const draft = root.querySelector(draftSelector);
+    const list = liveRows[0]?.parentElement ?? draft?.closest('.list');
+    if (!list) return false;
+    const active = root.activeElement;
+    if (liveRows.slice(desired.length).some(row => row.contains(active))) return false;
+
+    let changed = liveRows.length !== desired.length;
+    for (let index = 0; index < Math.min(liveRows.length, desired.length); index += 1) {
+      const current = liveRows[index];
+      const next = desired[index];
+      for (const input of next.querySelectorAll('input')) {
+        const kind = input.dataset.kind;
+        const currentInput = [...current.querySelectorAll('input')].find(candidate => candidate.dataset.kind === kind);
+        if (!currentInput || currentInput === active) continue;
+        if (currentInput.value !== input.value) { currentInput.value = input.value; changed = true; }
+        if (currentInput.checked !== input.checked) { currentInput.checked = input.checked; changed = true; }
+      }
+      for (const hint of next.querySelectorAll('.section-note[id]')) {
+        const currentHint = current.querySelector(`#${hint.id}`);
+        if (!currentHint) continue;
+        if (currentHint.textContent !== hint.textContent) { currentHint.textContent = hint.textContent; changed = true; }
+        if (currentHint.getAttribute('style') !== hint.getAttribute('style')) {
+          if (hint.hasAttribute('style')) currentHint.setAttribute('style', hint.getAttribute('style'));
+          else currentHint.removeAttribute('style');
+          changed = true;
+        }
+      }
+    }
+
+    for (const row of liveRows.slice(desired.length)) row.remove();
+    const draftRow = list.querySelector(':scope > .segment-draft, :scope > .gradient-stop-draft');
+    for (let index = liveRows.length; index < desired.length; index += 1) {
+      list.insertBefore(desired[index].cloneNode(true), draftRow);
+      changed = true;
+    }
+    return changed;
+  }
+
   handle(event, mode = event.type) {
     const target = event.target;
     if (mode === 'input' && target?.type === 'checkbox') return false;

@@ -14,7 +14,6 @@ import {
 } from '../editor/sections/formatting.js';
 import {
   renderBarAppearanceSection, handleBarAppearanceField, getEffectiveFillStyleValue,
-  getBarColorValue, getBarSolidFillValue,
   getBarAnimatedValue, syncBarPaintEditor, clearBarPaintPropertyOverride,
 } from '../editor/sections/bar-appearance.js';
 import { getFeatureScaleSource, patchFeatureScaleSource, getFeatureBaselineSource, patchFeatureBaselineSource, getFeatureTargetSource, patchFeatureTargetSource } from './feature-editor-config.js';
@@ -213,6 +212,14 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       source: (_scope, key) => key?.type === 'reference-marker' ? getFeatureReferenceMarkerSource(key.marker) : key === 'baseline' ? getFeatureBaselineSource(this._config) : key === 'target' ? getFeatureTargetSource(this._config) : getFeatureScaleSource(this._config, key),
       setSource: (_scope, key, part, value) => this._mutate(config => key?.type === 'reference-marker' ? patchFeatureReferenceMarkerSource(config, key.index, part, value) : key?.type === 'reference-marker-label' ? patchFeatureReferenceMarkerLabelSource(config, key.index, part, value) : key === 'baseline' ? patchFeatureBaselineSource(config, part, value) : key === 'target' ? patchFeatureTargetSource(config, part, value) : patchFeatureScaleSource(config, key, part, value)),
     };
+    Object.defineProperty(context, 'clearPaintPaletteState', {
+      configurable: true,
+      value: scope => {
+        this._segmentsSection.clearScopeState(scope);
+        this._gradientStopsSection.clearScopeState(scope);
+      },
+      writable: true,
+    });
     Object.defineProperty(context, 'hass', { get: () => editor._hass });
     Object.defineProperty(context, 'paintPresetRegistry', { get: () => editor._paintPresetRegistry });
     return context;
@@ -477,12 +484,18 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       segments: this._segmentsSection._getScopedSegmentsValue(root),
       gradient_stops: this._gradientStopsSection._getScopedGradientStopsValue(root),
     }, { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts, registry: this._paintPresetRegistry });
-    const color = getBarColorValue(context, root);
+    this._segmentsSection.syncRows(root);
+    this._gradientStopsSection.syncRows(root);
+    const segmentSummary = this.shadowRoot.querySelector('#card-group-segments-summary');
+    if (segmentSummary) segmentSummary.textContent = this._segmentsSection._getSegmentsSummary(root);
+    const gradientSummary = this.shadowRoot.querySelector('#card-group-gradient-stops-summary');
+    if (gradientSummary) gradientSummary.textContent = this._gradientStopsSection._getGradientStopsSummary(root);
+    const color = paintState.paint.color;
     const values = {
       'scale-min': getFeatureScaleSource(this._config, 'min').fixed,
       'scale-max': getFeatureScaleSource(this._config, 'max').fixed,
       'scale-direction': getDirectionSelection(context, root, ['scale', 'direction']),
-      'bar-fill-style': getEffectiveFillStyleValue(context, root),
+      'bar-fill-style': paintState.paint.fill_style,
       'bar-opacity': paintState.paint.opacity,
       'bar-direction': getDirectionSelection(context, root, ['bar', 'direction']),
       'bar-color': getColorPickerValue(color, '#4a9eff'),
@@ -542,6 +555,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       for (const field of segment ? ['from', 'to', 'color', 'color-text-fallback'] : ['pos', 'color']) {
         for (const control of this.shadowRoot.querySelectorAll(`input[data-kind="${segment ? 'segment' : 'gradient'}-${field}"]`)) {
           const index = Number(control.dataset.index), row = rows[index];
+          if (!row) continue;
           const value = segment && !field.startsWith('color') ? section._getSegmentBoundaryText(root, index, field, row?.[field])
             : !segment && field === 'pos' ? section._getGradientStopPosText(root, index, row?.pos ?? '') : row?.color;
           if (control !== this.shadowRoot.activeElement || this._configReplaced) control.value = segment && control.type === 'color' ? getColorPickerValue(value, '#4a9eff') : value ?? '';
@@ -570,7 +584,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       if (control) control.checked = checked;
     }
     const solid = this.shadowRoot.querySelector('#bar-solid-fill');
-    if (solid) solid.checked = getBarSolidFillValue(context, root);
+    if (solid) solid.checked = !!paintState.paint.solid_fill;
     const animated = this.shadowRoot.querySelector('#bar-animated');
     if (animated) animated.checked = getBarAnimatedValue(context, root);
     const override = this.shadowRoot.querySelector('#feature-entity-override');

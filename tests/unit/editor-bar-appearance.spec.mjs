@@ -176,6 +176,20 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     expect(editor._draftConfig.bar.paint).toEqual({ future: true });
   });
 
+  it('clears scoped palette session state atomically with the inherited paint mutation', () => {
+    const { editor, events } = setup(source, { bar: { paint: {
+      fill_style: 'bands', segments: [{ from: '15%', to: '100%', color: '#123456' }],
+    } } });
+    const context = editor._createSectionContext();
+    let clearedScope = null;
+    context.clearPaintPaletteState = scope => { clearedScope = scope; };
+
+    expect(handleBarAppearanceField(context, { field: 'bar-paint-mode', value: 'inherit' })).toBe(true);
+    expect(clearedScope).toEqual(root);
+    expect(editor._draftConfig.bar?.paint).toBeUndefined();
+    expect(events).toHaveLength(1);
+  });
+
   it('reports missing presets and retains the reference while using inherited paint', () => {
     const { editor } = setup(source, { bar: { paint: { preset: 'missing', opacity: 0 }, color: 'red' } });
     const state = getBarPaintEditorState(editor._createSectionContext(), root, null, { status: 'ready', presets: {} });

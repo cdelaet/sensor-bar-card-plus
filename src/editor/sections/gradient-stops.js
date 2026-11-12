@@ -17,6 +17,13 @@ export class GradientStopsSection extends PaletteSection {
     this._gradientStopValidationMessages = new Map();
   }
 
+  clearScopeState(scope) {
+    const key = this._getGradientStopsDraftKey(scope);
+    this._gradientStopsDrafts.delete(key);
+    this._gradientStopsUiRows.delete(key);
+    this._clearGradientStopScopeTextState(scope);
+  }
+
   _setGradientStops(stops, options = {}) {
     return this._setScopedGradientStops({ type: 'card' }, stops, options);
   }
@@ -269,9 +276,7 @@ export class GradientStopsSection extends PaletteSection {
 
   _clearGradientStopsOverride(scope) {
     const previousUiRowsJson = serializeConfig(this._getGradientStopsUiRows(scope) ?? []);
-    this._gradientStopsDrafts.delete(this._getGradientStopsDraftKey(scope));
-    this._gradientStopsUiRows.delete(this._getGradientStopsDraftKey(scope));
-    this._clearGradientStopScopeTextState(scope);
+    this.clearScopeState(scope);
     const applied = this.context.mutate(scope, (target) => {
       const nextTarget = clearBarPaintProperties(target, ['gradient_stops']);
       return nextTarget;
@@ -509,6 +514,18 @@ export class GradientStopsSection extends PaletteSection {
 
   _setScopedGradientStops(scope, rows, options = {}, operation) {
     return this.array.write(scope, rows, options, operation);
+  }
+
+  syncRows(scope = { type: 'card' }) {
+    const entity = scope?.type === 'entity';
+    const index = Number(scope?.index);
+    const changed = this._syncRows(scope, {
+      inputSelector: entity ? `input[data-kind="entity-gradient-pos"][data-index="${index}"]` : 'input[data-kind="gradient-pos"]',
+      rowSelector: '.list-row.gradient-stop-row',
+      draftSelector: entity ? `#entity-${index}-gradient-draft-pos` : '#gradient-draft-pos',
+    });
+    if (changed) this._refreshGradientDraftUi(scope);
+    return changed;
   }
 
   render(scope = { type: 'card' }, renderGroup = ({ content }) => content, { section = true } = {}) {

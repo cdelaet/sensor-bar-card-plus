@@ -179,10 +179,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._syncEntityPickers();
     this._syncEntityAttributePickers();
     this._syncActionSelectors();
-    const context = this._createSectionContext();
-    for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) {
-      syncBarPaintEditor(this.shadowRoot, context, scope, this._paintPaletteValues(scope), { numericDrafts: this._numericDrafts, registry: this._paintPresetRegistry });
-    }
+    this._syncPaintEditors();
   }
 
   connectedCallback() { this._syncPaintPresetRegistry(); }
@@ -228,6 +225,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       syncBarPaintEditor(this.shadowRoot, context, scope, this._paintPaletteValues(scope), {
         numericDrafts: this._numericDrafts, registry: this._paintPresetRegistry,
       });
+      this._segmentsSection.syncRows(scope);
+      this._gradientStopsSection.syncRows(scope);
+      const prefix = scope.type === 'entity' ? `entity-${scope.index}-group-` : 'card-group-';
+      this._setElementText(`${prefix}segments-summary`, this._segmentsSection._getSegmentsSummary(scope));
+      this._setElementText(`${prefix}gradient-stops-summary`, this._gradientStopsSection._getGradientStopsSummary(scope));
     }
   }
 
@@ -502,6 +504,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._setElementChecked('target-above-fill-enabled', this._isTargetAboveFillEnabled({ type: 'card' }));
     this._setElementChecked('baseline-above-color-enabled', this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'above'));
     this._setElementChecked('baseline-below-color-enabled', this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'below'));
+    this._segmentsSection.syncRows({ type: 'card' });
+    this._gradientStopsSection.syncRows({ type: 'card' });
+    this._setElementText('card-group-segments-summary', this._getSegmentsSummary({ type: 'card' }));
+    this._setElementText('card-group-gradient-stops-summary', this._getGradientStopsSummary({ type: 'card' }));
     this._refreshSegmentUi({ type: 'card' });
     syncBarPaintEditor(this.shadowRoot, this._createSectionContext(), { type: 'card' }, this._paintPaletteValues({ type: 'card' }), { numericDrafts: this._numericDrafts, registry: this._paintPresetRegistry });
   }
@@ -533,6 +539,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementText(`entity-${index}-group-peak-summary`, this._getPeakSummary(scope));
       this._setElementText(`entity-${index}-group-floor-summary`, this._getFloorSummary(scope));
       this._setElementText(`entity-${index}-group-markers-summary`, this._getGenericMarkersSummary(scope));
+      this._segmentsSection.syncRows(scope);
+      this._gradientStopsSection.syncRows(scope);
       syncBarPaintEditor(this.shadowRoot, this._createSectionContext(), scope, this._paintPaletteValues(scope), { numericDrafts: this._numericDrafts, registry: this._paintPresetRegistry });
       this._setElementText(`entity-${index}-group-segments-summary`, this._getSegmentsSummary(scope));
       this._setElementText(`entity-${index}-group-gradient-stops-summary`, this._getGradientStopsSummary(scope));
@@ -1741,7 +1749,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _createSectionContext() {
     const editor = this;
-    return {
+    const context = {
       read: (scope, path) => this._getScopedValue(scope, path),
       mutate: (scope, mutation, options) => this._applySectionMutation(scope, mutation, options),
       source: (scope, key, effective = false) => {
@@ -1759,6 +1767,15 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       get hass() { return editor._hass; },
       get paintPresetRegistry() { return editor._paintPresetRegistry; },
     };
+    Object.defineProperty(context, 'clearPaintPaletteState', {
+      configurable: true,
+      value: scope => {
+        this._segmentsSection.clearScopeState(scope);
+        this._gradientStopsSection.clearScopeState(scope);
+      },
+      writable: true,
+    });
+    return context;
   }
 
   _renderScaleSection(scope) {
@@ -3456,6 +3473,11 @@ ${this._renderFormattingSection({ type: 'card' })}
     this.shadowRoot.addEventListener('input', this._boundHandleInput);
     this.shadowRoot.addEventListener('value-changed', this._boundHandleValueChanged);
     this.shadowRoot.addEventListener('keydown', this._boundHandleKeydown);
+    this.shadowRoot.addEventListener('focusout', event => {
+      if (/^(?:entity-)?(?:segment|gradient)-/.test(event.target?.dataset?.kind ?? '')) {
+        queueMicrotask(() => this._syncPaintEditors());
+      }
+    });
     this._shadowListenersAttached = true;
   }
 

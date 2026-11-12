@@ -29,12 +29,7 @@ export function getFillStyleValue(context, scope) {
 }
 
 export function getEffectiveFillStyleValue(context, scope) {
-  // Reuse existing bar normalization/paint explicitness; never normalize or
-  // persist a whole card. Empty-path reads supply raw root/local scope data.
-  if (scope?.type === 'entity') {
-    return normalizeBarConfig(context.read(scope, []), context.read({ type: 'card' }, []), { isCardScope: false }).fill_style;
-  }
-  return normalizeBarConfig(context.read({ type: 'card' }, []), null, { isCardScope: true }).fill_style;
+  return getBarPaintEditorState(context, scope).paint.fill_style;
 }
 
 export function getBarColorValue(context, scope) {
@@ -226,9 +221,12 @@ export function clearBarPaintPropertyOverride(context, scope, property) {
 
 function setBarPaintMode(context, scope, value) {
   const binding = createBarPaintBindings(context, scope, { grouped: true });
-  if (value === 'inherit') return context.mutate(scope, target => pruneEmptyObjectsInTarget(
-    clearBarPaintProperties(target, ['preset', 'color', 'fill_style', 'solid_fill', 'segments', 'gradient_stops', 'opacity']), ['bar']),
-  { preserveRawConfig: true, rerender: true });
+  if (value === 'inherit') {
+    context.clearPaintPaletteState?.(scope);
+    return context.mutate(scope, target => pruneEmptyObjectsInTarget(
+      clearBarPaintProperties(target, ['preset', 'color', 'fill_style', 'solid_fill', 'segments', 'gradient_stops', 'opacity']), ['bar']),
+    { preserveRawConfig: true, rerender: true });
+  }
   if (value === 'manual') return binding.clear('preset', { preserveRawConfig: true, rerender: true });
   if (typeof value === 'string' && value.startsWith('preset:')) {
     return binding.set('preset', value.slice('preset:'.length), { preserveRawConfig: true, rerender: true });

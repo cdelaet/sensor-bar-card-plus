@@ -57,6 +57,150 @@ async function mountWithPaintPresets(page, host, source, presets, config = { bar
 }
 const saved = editor => editor.evaluate(el => structuredClone(el._draftConfig ?? el._config));
 
+for (const source of ['src', 'dist']) test(`Feature controls synchronize from effective preset paint (${source})`, async ({ page }) => {
+  const editor = await mountWithPaintPresets(page, 'Feature', source, {
+    vivid: { fill_style: 'gradient', color: 'red', solid_fill: true },
+  }, { bar: { paint: { preset: 'vivid' } }, type: 'custom:sensor-bar-card-plus-feature' });
+  await editor.locator('#card-paint-editor summary').click();
+  await expect(editor.locator('#bar-fill-style')).toHaveValue('gradient');
+  await expect(editor.locator('#bar-color-text-fallback')).toHaveValue('red');
+  await expect(editor.locator('#bar-solid-fill')).toBeChecked();
+});
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} reconciles preset palette rows without replacing unchanged controls (${source})`, async ({ page }) => {
+    const config = { bar: { paint: { preset: 'night', opacity: 37 } } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {
+      night: { fill_style: 'bands', segments: [{ from: '10%', to: '100%', color: '#aa0000' }],
+        gradient_stops: [{ pos: 0, color: '#000000' }, { pos: 100, color: '#ffffff' }] },
+    }, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-segments').click();
+    await editor.locator('#card-group-gradient-stops').click();
+    const segmentRows = editor.locator('input[data-kind="segment-from"]');
+    const gradientRows = editor.locator('input[data-kind="gradient-pos"]');
+    await expect(segmentRows).toHaveCount(1);
+    await expect(segmentRows.first()).toHaveValue('10%');
+    await expect(gradientRows).toHaveCount(2);
+    await editor.evaluate(el => {
+      window.__stableSegmentControl = el.shadowRoot.querySelector('input[data-kind="segment-from"]');
+      window.__stablePaintControl = el.shadowRoot.querySelector('#bar-opacity');
+    });
+    const eventCount = await page.evaluate(() => window.__paintEvents.length);
+
+    await page.evaluate(() => window.__updatePaintRegistry({ night: {
+      fill_style: 'bands',
+      segments: [{ from: '10%', to: '55%', color: '#aa0000' }, { from: '55%', to: '100%', color: '#00aa00' }],
+      gradient_stops: [{ pos: 0, color: '#000000' }],
+    } }));
+    await expect(segmentRows).toHaveCount(2);
+    await expect(segmentRows.nth(0)).toHaveValue('10%');
+    await expect(segmentRows.nth(1)).toHaveValue('55%');
+    await expect(gradientRows).toHaveCount(1);
+    expect(await editor.evaluate(el => el.shadowRoot.querySelector('input[data-kind="segment-from"]') === window.__stableSegmentControl)).toBe(true);
+    expect(await editor.evaluate(el => el.shadowRoot.querySelector('#bar-opacity') === window.__stablePaintControl)).toBe(true);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
+
+    await page.evaluate(() => window.__updatePaintRegistry({ night: {
+      fill_style: 'bands', segments: [{ from: '20%', to: '100%', color: '#0000aa' }], gradient_stops: [],
+    } }));
+    await expect(segmentRows).toHaveCount(1);
+    await expect(segmentRows.first()).toHaveValue('20%');
+    await expect(gradientRows).toHaveCount(0);
+    await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [], gradient_stops: [] } }));
+    await expect(segmentRows).toHaveCount(0);
+    await expect(gradientRows).toHaveCount(0);
+    await expect(editor.locator('#card-group-segments-summary')).not.toContainText('1 segment');
+    expect(await saved(editor)).toEqual(config);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
+  });
+}
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} preserves a focused segment draft while preset rows change (${source})`, async ({ page }) => {
+    const config = { bar: { paint: { preset: 'night' } } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {
+      night: { fill_style: 'bands', segments: [{ from: '10%', to: '100%', color: '#aa0000' }] },
+    }, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-segments').click();
+    const start = editor.locator('input[data-kind="segment-from"]').first();
+    await start.focus();
+    await start.evaluate(node => { node.value = '37%'; node.setSelectionRange(2, 3); node.dispatchEvent(new Event('input', { bubbles: true })); });
+    await editor.evaluate(el => { window.__focusedSegmentStart = el.shadowRoot.querySelector('input[data-kind="segment-from"]'); });
+    await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [
+      { from: '10%', to: '55%', color: '#aa0000' }, { from: '55%', to: '100%', color: '#00aa00' },
+    ] } }));
+    await expect(editor.locator('input[data-kind="segment-from"]')).toHaveCount(2);
+    await expect(start).toBeFocused();
+    await expect(start).toHaveValue('37%');
+    expect(await start.evaluate(node => [node.selectionStart, node.selectionEnd])).toEqual([2, 3]);
+    expect(await editor.evaluate(el => el.shadowRoot.querySelector('input[data-kind="segment-from"]') === window.__focusedSegmentStart)).toBe(true);
+    await start.evaluate(node => { node.dispatchEvent(new Event('change', { bubbles: true })); node.blur(); });
+    await expect.poll(async () => (await saved(editor)).bar.paint.segments?.[0]?.from).toBe('37%');
+  });
+}
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} clears palette drafts and cached rows when paint returns to inherited (${source})`, async ({ page }) => {
+    const config = { bar: { paint: { fill_style: 'bands', color: '#123456', segments: [
+      { from: '0%', to: '100%', color: '#abcdef' },
+    ] } } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {}, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-segments').click();
+    const start = editor.locator('input[data-kind="segment-from"]').first();
+    await start.fill('15%');
+    await start.press('Tab');
+    await expect.poll(async () => (await saved(editor)).bar.paint.segments?.[0]?.from).toBe('15%');
+    await editor.locator('[data-paint-mode="true"]').selectOption('inherit');
+    const configAfterClear = await saved(editor);
+    expect(configAfterClear.bar?.paint?.segments).toBeUndefined();
+    await expect(editor.locator('#card-group-segments-summary')).toHaveText('Default bands');
+    await expect(editor.locator('input[data-kind="segment-from"]')).toHaveCount(3);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBeGreaterThan(0);
+  });
+}
+
+for (const source of ['src', 'dist']) test(`Feature setConfig replaces the effective preset palette without localizing it (${source})`, async ({ page }) => {
+  const initial = { type: 'custom:sensor-bar-card-plus-feature', bar: { paint: { preset: 'night' } } };
+  const editor = await mountWithPaintPresets(page, 'Feature', source, {
+    night: { fill_style: 'bands', segments: [{ from: '10%', to: '100%', color: '#aa0000' }] },
+    day: { fill_style: 'gradient', gradient_stops: [{ pos: 0, color: '#000000' }, { pos: 50, color: '#888888' }, { pos: 100, color: '#ffffff' }] },
+  }, initial);
+  await editor.locator('#card-paint-editor summary').click();
+  await editor.evaluate(el => el.setConfig({ type: 'custom:sensor-bar-card-plus-feature', bar: { paint: { preset: 'day' } } }));
+  await expect(editor.locator('#bar-fill-style')).toHaveValue('gradient');
+  await expect(editor.locator('input[data-kind="gradient-pos"]')).toHaveCount(3);
+  await expect(editor.locator('input[data-kind="gradient-pos"]').nth(1)).toHaveValue('50');
+  expect(await saved(editor)).toEqual({ type: 'custom:sensor-bar-card-plus-feature', bar: { paint: { preset: 'day' } } });
+  expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
+});
+
+for (const source of ['src', 'dist']) test(`Card registry updates reconcile inherited entity palettes (${source})`, async ({ page }) => {
+  const editor = await mountWithPaintPresets(page, 'Card', source, {
+    night: { fill_style: 'bands', segments: [{ from: '10%', to: '100%', color: '#aa0000' }] },
+  }, { bar: { paint: { preset: 'night' } }, entities: ['sensor.power'] });
+  await editor.locator('button[data-action="toggle-entity-overrides"]').click();
+  const childPaint = editor.locator('#entity-0-paint-editor');
+  await childPaint.locator('summary').click();
+  await editor.locator('#card-paint-editor summary').click();
+  await editor.locator('#card-group-segments').click();
+  const entityRows = editor.locator('input[data-kind="entity-segment-from"][data-index="0"]');
+  await expect(entityRows).toHaveCount(1);
+  const events = await page.evaluate(() => window.__paintEvents.length);
+  await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [
+    { from: '10%', to: '55%', color: '#aa0000' }, { from: '55%', to: '100%', color: '#00aa00' },
+  ] } }));
+  await expect(entityRows).toHaveCount(2);
+  await expect(childPaint.locator('.paint-editor-description')).toContainText('2 segments');
+  expect(await saved(editor)).toEqual({ bar: { paint: { preset: 'night' } }, entities: ['sensor.power'] });
+  expect(await page.evaluate(() => window.__paintEvents.length)).toBe(events);
+});
+
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
   test(`${host} selects dashboard paint by reference and refreshes live without losing drafts (${source})`, async ({ page }) => {
     const editor = await mountWithPaintPresets(page, host, source, {
@@ -88,11 +232,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
     expect((await saved(editor)).bar.paint.opacity).toBe(0);
     await paint.locator('button[data-action="clear-paint-property"][data-property="opacity"]').click();
     expect((await saved(editor)).bar.paint).toEqual({ future: true, preset: 'night' });
-    await editor.locator('#bar-color').evaluate(node => {
-      node.value = '#abcdef';
-      node.dispatchEvent(new Event('input', { bubbles: true }));
-      node.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    await editor.locator('#bar-color').fill('#abcdef');
     expect((await saved(editor)).bar.paint.color).toBe('#abcdef');
     await expect(paint.locator('[data-paint-source="color"]')).toHaveText('Override');
     await paint.locator('button[data-action="clear-paint-property"][data-property="color"]').click();
