@@ -91,6 +91,45 @@ describe('pure dashboard paint preset resolution', () => {
     expect(result.diagnostics).toEqual([]);
   });
 
+  it.each([[0, 200], [-100, 300]])('keeps normalized default percentage bands canonical at Scale %s–%s', (minValue, maxValue) => {
+    const normalized = normalizeCardConfig({
+      scale: { min: minValue, max: maxValue },
+      bar: { paint: { preset: 'missing' } },
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const before = getSegmentsForRendering(normalized.bar.paint, minValue, maxValue);
+    const resolved = resolveScopedPaintPreset({
+      inheritedPaint: normalized.bar.paint,
+      paint: normalized.entities[0].bar.paint,
+      registry: registryWith({}),
+    });
+
+    expect(before.map(segment => [segment.from, segment.to])).toEqual([[0, 33], [33, 75], [75, 100]]);
+    expect(getSegmentsForRendering(resolved.paint, minValue, maxValue)).toEqual(before);
+    expect(resolved.diagnostics).toContainEqual(expect.objectContaining({ code: 'paint_preset_missing' }));
+  });
+
+  it('preserves canonical percentage and absolute coordinates plus normalized gradient stops', () => {
+    const normalized = normalizeCardConfig({
+      scale: { min: 0, max: 200 },
+      bar: { paint: { preset: 'missing', fill_style: 'bands', segments: [
+        { from: '33%', to: '75%', color: '#112233' },
+        { from: 100, to: 150, color: '#abcdef' },
+      ], gradient_stops: [{ pos: '33%', color: '#112233' }, { pos: '75%', color: '#abcdef' }] } },
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const before = normalized.bar.paint;
+    const resolved = resolveScopedPaintPreset({
+      inheritedPaint: before,
+      paint: normalized.entities[0].bar.paint,
+      registry: registryWith({}),
+    });
+
+    expect(resolved.paint.segments).toEqual(before.segments);
+    expect(resolved.paint.gradient_stops).toEqual(before.gradient_stops);
+    expect(getSegmentsForRendering(resolved.paint, 0, 200)).toEqual(getSegmentsForRendering(before, 0, 200));
+  });
+
   it.each([
     ['solid', '#112233', 'linear-gradient(to right,#112233 0%,#112233 100%)'],
     ['gradient', 'rgb(64,64,64)', 'linear-gradient(to right,rgb(0,0,0) 0%,rgb(255,255,255) 100%)'],

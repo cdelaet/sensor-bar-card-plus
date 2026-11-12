@@ -31,8 +31,8 @@ function normalizeDefinition(definition, { preset = false, canonical = false } =
 
   const input = cloneValue(definition);
   if (canonical) {
-    // Normalized paints include null inactive collections; omit them when
-    // passing back through the raw-config normalizer.
+    // Normalized paints include null inactive collections; omit them before
+    // passing the remaining canonical fields through the raw normalizer.
     if (input.segments === null) delete input.segments;
     if (input.gradient_stops === null) delete input.gradient_stops;
   }
@@ -45,6 +45,15 @@ function normalizeDefinition(definition, { preset = false, canonical = false } =
     } };
   }
   return { paint: normalized.paint, issue: null };
+}
+
+function cloneCanonicalDefinition(definition) {
+  if (!isRecord(definition)) return { paint: null, issue: { property: null, reason: 'definition_must_be_object' } };
+  const paint = cloneValue(definition);
+  if (Object.prototype.hasOwnProperty.call(definition, INVALID_PAINT_OPACITY)) {
+    Object.defineProperty(paint, INVALID_PAINT_OPACITY, { value: definition[INVALID_PAINT_OPACITY] });
+  }
+  return { paint, issue: null };
 }
 
 function inheritedOpacity(inheritedPaint) {
@@ -99,9 +108,12 @@ function registryIsUnavailable(registry) {
       .includes(registry?.diagnostic?.code);
 }
 
-/** Resolve a local canonical paint against a supplied dashboard registry. */
-export function resolvePaintPreset({ paint, registry, inheritedPaint = null, themeAccent } = {}) {
-  const inherited = normalizeDefinition(inheritedPaint, { canonical: true });
+/** Resolve paint against a registry. canonicalPaint is used only for normalized
+ * card/entity scopes; raw public paint definitions retain their normal path. */
+export function resolvePaintPreset({ paint, registry, inheritedPaint = null, themeAccent, canonicalPaint = false } = {}) {
+  const inherited = canonicalPaint
+    ? cloneCanonicalDefinition(inheritedPaint)
+    : normalizeDefinition(inheritedPaint, { canonical: true });
   const fallbackPaint = inherited.paint ?? defaultPaint(themeAccent);
   const diagnostics = [];
   const localIsRecord = isRecord(paint);
@@ -142,7 +154,7 @@ export function resolvePaintPreset({ paint, registry, inheritedPaint = null, the
   }
 
   let validLocalOverrides = true;
-  if (Object.keys(local).length) {
+  if (Object.keys(local).length && !canonicalPaint) {
     const checkedLocal = normalizeDefinition(local);
     if (checkedLocal.issue) {
       validLocalOverrides = false;
@@ -159,7 +171,10 @@ export function resolvePaintPreset({ paint, registry, inheritedPaint = null, the
   const opacity = Object.prototype.hasOwnProperty.call(local, 'opacity') && local.opacity !== undefined
     ? local.opacity
     : inheritedOpacity(inheritedPaint);
-  const effective = normalizeDefinition(mergeBase(base, overrides, opacity), { canonical: true });
+  const effectivePaint = mergeBase(base, overrides, opacity);
+  const effective = canonicalPaint
+    ? cloneCanonicalDefinition(effectivePaint)
+    : normalizeDefinition(effectivePaint, { canonical: true });
   const resultPaint = effective.paint ?? defaultPaint(themeAccent);
 
   if (!inherited.paint && inheritedPaint != null) {
@@ -194,10 +209,10 @@ export function resolveScopedPaintPreset({ inheritedPaint, paint, registry, them
   const inheritedFallback = { ...inheritedPaint };
   delete inheritedFallback.preset;
   const inherited = resolvePaintPreset({
-    paint: inheritedProperties, registry, inheritedPaint: inheritedFallback, themeAccent,
+    paint: inheritedProperties, registry, inheritedPaint: inheritedFallback, themeAccent, canonicalPaint: true,
   });
   const local = resolvePaintPreset({
-    paint: authoredPaintProperties(paint), registry, inheritedPaint: inherited.paint, themeAccent,
+    paint: authoredPaintProperties(paint), registry, inheritedPaint: inherited.paint, themeAccent, canonicalPaint: true,
   });
   return {
     paint: local.paint,

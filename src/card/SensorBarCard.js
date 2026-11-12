@@ -559,17 +559,23 @@ export class SensorBarCard extends HTMLElement {
     const entities = this._config.entities ?? [];
     if (!Object.prototype.hasOwnProperty.call(inheritedProperties, 'preset')
       && !entities.some(entity => Object.prototype.hasOwnProperty.call(authoredPaintProperties(entity.bar?.paint), 'preset'))) return;
-    const root = resolveScopedPaintPreset({
-      inheritedPaint: this._config.bar.paint,
-      paint: {},
-      registry: this._paintPresetRegistry,
-    });
+    const cardHasPreset = Object.prototype.hasOwnProperty.call(inheritedProperties, 'preset');
+    const root = cardHasPreset
+      ? resolveScopedPaintPreset({
+        inheritedPaint: this._config.bar.paint,
+        paint: {},
+        registry: this._paintPresetRegistry,
+      })
+      : { paint: this._config.bar.paint, diagnostics: [] };
     const diagnostics = root.diagnostics.map(diagnostic => ({ ...diagnostic, path: `bar.${diagnostic.path}` }));
     for (const entity of entities) {
+      const entityPaint = authoredPaintProperties(entity.bar?.paint);
+      if (!cardHasPreset && !Object.prototype.hasOwnProperty.call(entityPaint, 'preset')) continue;
       const local = resolvePaintPreset({
-        paint: authoredPaintProperties(entity.bar?.paint),
+        paint: entityPaint,
         inheritedPaint: root.paint,
         registry: this._paintPresetRegistry,
+        canonicalPaint: true,
       });
       this._paintPresetEntityPaints.set(entity, local.paint);
       diagnostics.push(...local.diagnostics.map(diagnostic => ({

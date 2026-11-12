@@ -152,3 +152,143 @@ test('missing runtime preset falls back to normalized inherited paint in Card an
   await expect(page.locator('sensor-bar-card-plus .bar-paint-layer').first()).toHaveAttribute('style', /#228844/i);
   await expect(page.locator('sensor-bar-card-plus-feature .bar-paint-layer').first()).toHaveAttribute('style', /#228844/i);
 });
+
+for (const source of ['src', 'dist']) {
+  test(`card-level presets inherit into entities without replacing local paint overrides (${source})`, async ({ page }) => {
+    await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
+    await page.evaluate(async () => {
+      const connection = {
+        connected: true, addEventListener() {}, removeEventListener() {},
+        sendMessagePromise: async () => ({ sbcp_fragments: { paint_presets: {
+          house: { fill_style: 'solid', color: '#aa2200' },
+        } } }),
+        subscribeEvents: async () => () => {},
+      };
+      const hass = { connected: true, connection, states: {
+        'sensor.inherited': window.__sbcpCreateState(40),
+        'sensor.override': window.__sbcpCreateState(40),
+      } };
+      await window.__sbcpRenderCard({ hass, config: {
+        scale: { min: 0, max: 100 }, bar: { animated: false, paint: { preset: 'house' } },
+        entities: [
+          { entity: 'sensor.inherited' },
+          { entity: 'sensor.override', bar: { paint: { color: '#123456' } } },
+        ],
+      } });
+      await window.__sbcpRenderFeature({ hass, context: { entity_id: 'sensor.inherited' }, config: {
+        type: 'custom:sensor-bar-card-plus-feature', entity: 'sensor.inherited',
+        scale: { min: 0, max: 100 }, bar: { animated: false, paint: { preset: 'house' } },
+      } });
+    });
+    const cardLayers = page.locator('sensor-bar-card-plus .bar-paint-layer[data-layer="base"]');
+    const featureLayer = page.locator('sensor-bar-card-plus-feature .bar-paint-layer[data-layer="base"]');
+    await expect(cardLayers.nth(0)).toHaveAttribute('style', /#aa2200/i);
+    await expect(featureLayer).toHaveAttribute('style', /#aa2200/i);
+    await expect(cardLayers.nth(1)).toHaveAttribute('style', /#123456/i);
+    expect(await cardLayers.nth(0).getAttribute('style')).toBe(await featureLayer.getAttribute('style'));
+  });
+}
+
+for (const source of ['src', 'dist']) {
+  test(`preset resolution leaves unrelated legacy Card entities intact and matches Feature (${source})`, async ({ page }) => {
+    await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
+    await page.evaluate(async () => {
+      const listeners = new Map();
+      let eventCallback = null;
+      let presetColor = '#aa2200';
+      const connection = {
+        connected: true,
+        addEventListener: (name, callback) => {
+          const callbacks = listeners.get(name) ?? new Set(); callbacks.add(callback); listeners.set(name, callbacks);
+        },
+        removeEventListener: (name, callback) => listeners.get(name)?.delete(callback),
+        sendMessagePromise: async () => ({ sbcp_fragments: { paint_presets: {
+          house: { fill_style: 'solid', color: presetColor },
+        } } }),
+        subscribeEvents: async callback => { eventCallback = callback; return async () => { eventCallback = null; }; },
+        update: color => { presetColor = color; eventCallback?.({ event_type: 'lovelace_updated' }); },
+      };
+      const hass = { connected: true, connection, states: {
+        'sensor.named': window.__sbcpCreateState(40),
+        'sensor.legacy': window.__sbcpCreateState(40),
+      } };
+      const cardConfig = {
+        scale: { min: 0, max: 100 }, bar: { animated: false },
+        entities: [
+          { entity: 'sensor.named', bar: { paint: { preset: 'house' } } },
+          { entity: 'sensor.legacy', color: '#123456' },
+        ],
+      };
+      const presetFeatureConfig = { type: 'custom:sensor-bar-card-plus-feature', entity: 'sensor.named',
+        scale: { min: 0, max: 100 }, bar: { animated: false, paint: { preset: 'house' } } };
+      const legacyFeatureConfig = { type: 'custom:sensor-bar-card-plus-feature', entity: 'sensor.legacy',
+        scale: { min: 0, max: 100 }, bar: { animated: false, color: '#123456' } };
+      await window.__sbcpRenderCard({ hass, config: cardConfig });
+      await window.__sbcpRenderFeature({ hass, context: { entity_id: 'sensor.named' }, config: presetFeatureConfig });
+      await window.__sbcpRenderFeature({ hass, context: { entity_id: 'sensor.legacy' }, config: legacyFeatureConfig });
+      window.__presetIsolation = {
+        connection, hass, cardConfig, presetFeatureConfig, legacyFeatureConfig,
+        card: document.querySelector('sensor-bar-card-plus'),
+        presetFeature: document.querySelector('sensor-bar-card-plus-feature'),
+        legacyFeature: [...document.querySelectorAll('sensor-bar-card-plus-feature')].at(-1),
+      };
+    });
+
+    const card = page.locator('sensor-bar-card-plus');
+    const cardRows = card.locator('.bar-paint-layer[data-layer="base"]');
+    const presetFeature = page.locator('sensor-bar-card-plus-feature').nth(0).locator('.bar-paint-layer[data-layer="base"]');
+    const legacyFeature = page.locator('sensor-bar-card-plus-feature').nth(1).locator('.bar-paint-layer[data-layer="base"]');
+    const initialPreset = await cardRows.nth(0).getAttribute('style');
+    const initialLegacy = await cardRows.nth(1).getAttribute('style');
+    await expect(cardRows.nth(0)).toHaveAttribute('style', /#aa2200/i);
+    await expect(presetFeature).toHaveAttribute('style', /#aa2200/i);
+    await expect(cardRows.nth(1)).toHaveAttribute('style', /#123456/i);
+    await expect(legacyFeature).toHaveAttribute('style', /#123456/i);
+    expect(initialLegacy).toMatch(/linear-gradient\(to right,?#123456 0%,#123456 100%\)/i);
+
+    await page.evaluate(() => window.__presetIsolation.connection.update('#0066cc'));
+    await expect(cardRows.nth(0)).toHaveAttribute('style', /#0066cc/i);
+    await expect(presetFeature).toHaveAttribute('style', /#0066cc/i);
+    await expect(cardRows.nth(1)).toHaveAttribute('style', /#123456/i);
+    expect(await cardRows.nth(1).getAttribute('style')).toBe(initialLegacy);
+    expect(await cardRows.nth(0).getAttribute('style')).not.toBe(initialPreset);
+
+    const freshStyle = await page.evaluate(async () => {
+      const runtime = document.createElement('sensor-bar-card-plus');
+      runtime.setConfig(structuredClone(window.__presetIsolation.cardConfig));
+      runtime.hass = window.__presetIsolation.hass;
+      document.querySelector('#mount').append(runtime);
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const style = runtime.shadowRoot.querySelectorAll('.bar-paint-layer')[0].getAttribute('style');
+      runtime.remove();
+      return style;
+    });
+    expect(freshStyle).toBe(await cardRows.nth(0).getAttribute('style'));
+  });
+}
+
+for (const source of ['src', 'dist']) {
+  test(`missing preset fallback preserves canonical segment coordinates at non-default scales (${source})`, async ({ page }) => {
+    await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
+    await page.evaluate(async () => {
+      const connection = {
+        connected: true, addEventListener() {}, removeEventListener() {},
+        sendMessagePromise: async () => ({ sbcp_fragments: { paint_presets: {} } }),
+        subscribeEvents: async () => () => {},
+      };
+      const hass = { connected: true, connection, states: { 'sensor.scale': window.__sbcpCreateState(50) } };
+      const config = { scale: { min: 0, max: 200, direction: 'reverse' }, bar: { animated: false, paint: { preset: 'missing' } },
+        entities: [{ entity: 'sensor.scale' }] };
+      await window.__sbcpRenderCard({ hass, config });
+      await window.__sbcpRenderFeature({ hass, context: { entity_id: 'sensor.scale' }, config: {
+        type: 'custom:sensor-bar-card-plus-feature', entity: 'sensor.scale', scale: config.scale, bar: config.bar,
+      } });
+    });
+    const cardStyle = await page.locator('sensor-bar-card-plus .bar-paint-layer[data-layer="base"]').first().getAttribute('style');
+    const featureStyle = await page.locator('sensor-bar-card-plus-feature .bar-paint-layer[data-layer="base"]').first().getAttribute('style');
+    expect(cardStyle).toBe(featureStyle);
+    expect(cardStyle).toMatch(/25%/);
+    expect(cardStyle).toMatch(/67%/);
+    expect(cardStyle).not.toMatch(/16\.5%|37\.5%/);
+  });
+}
