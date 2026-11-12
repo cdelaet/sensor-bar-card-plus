@@ -290,11 +290,19 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       if (markerId && markerId !== ids[Number(target.dataset.markerIndex)]) return;
     }
     if (this._referenceMarkersSection.handleField({ target, kind, value })) return;
-    if (this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event)) { this._requestRender(); return; }
+    if (this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event)) {
+      if (event.type !== 'input') this._requestRender();
+      return;
+    }
     if (this._needleSection.handleField({ field, kind, value }) || this._baselineSection.handleField({ field, kind, value }) || this._targetSection.handleField({ field, kind, value }) || this._extremaSection.handleField({ field, kind, value })) return;
     const context = this._createSectionContext();
     if (handleScaleField(context, { field, kind, value })) return;
     if (handleFormattingField(context, { field, kind, value })) return;
+    if (field === 'bar-paint-mode' || kind === 'entity-bar-paint-mode') {
+      this._segmentsSection.clearScopeState(root);
+      this._gradientStopsSection.clearScopeState(root);
+      this._paletteStructureSyncPending = true;
+    }
     handleBarAppearanceField(context, { field, kind, value }, { animation: true, cssText: true });
   }
 
@@ -401,7 +409,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const activeKind = this.shadowRoot.activeElement?.dataset?.kind;
     const defer = activeKind?.endsWith('-text-fallback') || activeField?.endsWith('-text-fallback')
       || activeField === 'feature-entity-override' && !this._context.entity_id && !this._explicitEntity
-      || this._paletteStructureSyncPending && ['segment-from', 'segment-to', 'entity-segment-from', 'entity-segment-to'].includes(activeKind)
+      || this._paletteStructureSyncPending && !!this.shadowRoot.activeElement?.closest?.('.segment-editor-row, .gradient-stop-row')
       || this.shadowRoot.activeElement?.validity?.badInput && this._numericDrafts.captureFocus(this.shadowRoot);
     let replaceReferences = false;
     if (markerSignature !== this._referenceStructureSignature && !defer) {

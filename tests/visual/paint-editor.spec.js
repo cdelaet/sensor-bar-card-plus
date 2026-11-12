@@ -144,6 +144,172 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
 }
 
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} keeps duplicate-start segment drafts with the uniquely matched row (${source})`, async ({ page }) => {
+    const config = { bar: { paint: { preset: 'night' } } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {
+      night: { fill_style: 'bands', segments: [
+        { from: '10%', to: '30%', color: '#aa0000' },
+        { from: '10%', to: '60%', color: '#00aa00' },
+        { from: '70%', to: '100%', color: '#0000aa' },
+      ] },
+    }, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-segments').click();
+    const ends = editor.locator('input[data-kind="segment-to"]');
+    await ends.nth(0).evaluate(node => { node.focus(); node.value = '25%'; node.setSelectionRange(2, 3); node.dispatchEvent(new Event('input', { bubbles: true })); });
+    await editor.evaluate(el => { window.__duplicateDraftEnd = el.shadowRoot.querySelectorAll('input[data-kind="segment-to"]')[0]; });
+    await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [
+      { from: '70%', to: '100%', color: '#0000aa' },
+      { from: '10%', to: '60%', color: '#00aa00' },
+      { from: '10%', to: '30%', color: '#aa0000' },
+    ] } }));
+    const ownedIndex = await ends.evaluateAll(nodes => nodes.findIndex(node => node === window.__duplicateDraftEnd));
+    const ownedEnd = ends.nth(ownedIndex);
+    await expect(ownedEnd).toHaveValue('25%');
+    expect(ownedIndex).toBeGreaterThanOrEqual(0);
+    expect(await ownedEnd.evaluate(node => [node.selectionStart, node.selectionEnd])).toEqual([2, 3]);
+    expect(await saved(editor)).toEqual(config);
+  });
+
+  test(`${host} rejects a gradient event after switching paint source (${source})`, async ({ page }) => {
+    const config = { bar: { paint: { preset: 'night' } } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {
+      night: { fill_style: 'gradient', gradient_stops: [
+        { pos: 0, color: '#aa0000' }, { pos: 60, color: '#00aa00' }, { pos: 100, color: '#0000aa' },
+      ] },
+    }, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-gradient-stops').click();
+    const position = editor.locator('input[data-kind="gradient-pos"]').nth(1);
+    await position.evaluate(node => { node.focus(); node.value = '45'; node.dispatchEvent(new Event('input', { bubbles: true })); });
+    const oldControl = await position.elementHandle();
+    const mode = editor.locator('#bar-paint-mode');
+    await mode.evaluate(node => { node.value = 'manual'; node.dispatchEvent(new Event('change', { bubbles: true })); });
+    const eventCount = await page.evaluate(() => window.__paintEvents.length);
+    expect(await saved(editor)).not.toHaveProperty('bar.paint.gradient_stops');
+    await editor.evaluate((el, node) => el._handleChange
+      ? el._handleChange({ target: node }) : el._handleField({ type: 'change', target: node }), oldControl);
+    expect(await saved(editor)).not.toHaveProperty('bar.paint.gradient_stops');
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
+  });
+
+  test(`${host} rejects a pending palette event after external config replacement (${source})`, async ({ page }) => {
+    const config = { bar: { fill_style: 'gradient', gradient_stops: [
+      { pos: 0, color: '#aa0000' }, { pos: 60, color: '#00aa00' }, { pos: 100, color: '#0000aa' },
+    ] } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mount(page, host, source);
+    await editor.evaluate((el, next) => el.setConfig(next), config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-gradient-stops').click();
+    const oldControl = await editor.locator('input[data-kind="gradient-pos"]').nth(1).elementHandle();
+    await oldControl.evaluate(node => { node.focus(); node.value = '45'; node.dispatchEvent(new Event('input', { bubbles: true })); });
+    const replacement = host === 'Card' ? { bar: { fill_style: 'solid', color: '#123456' } }
+      : { type: 'custom:sensor-bar-card-plus-feature', bar: { fill_style: 'solid', color: '#123456' } };
+    const eventsBefore = await page.evaluate(() => window.__paintEvents.length);
+    await editor.evaluate((el, next) => el.setConfig(next), replacement);
+    await expect.poll(() => saved(editor)).toEqual(replacement);
+    await editor.evaluate((el, node) => el._handleChange
+      ? el._handleChange({ target: node }) : el._handleField({ type: 'change', target: node }), oldControl);
+    expect(await saved(editor)).toEqual(replacement);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventsBefore);
+  });
+
+  test(`${host} rejects commits from a removed focused preset gradient stop (${source})`, async ({ page }) => {
+    const config = { bar: { paint: { preset: 'night' } } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {
+      night: { fill_style: 'gradient', gradient_stops: [
+        { pos: 0, color: '#aa0000' }, { pos: 45, color: '#00aa00' }, { pos: 100, color: '#0000aa' },
+      ] },
+    }, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-gradient-stops').click();
+    const positions = editor.locator('input[data-kind="gradient-pos"]');
+    await expect(positions).toHaveCount(3);
+    const removed = positions.nth(1);
+    await removed.fill('55');
+    const removedHandle = await removed.elementHandle();
+    const eventCount = await page.evaluate(() => window.__paintEvents.length);
+    await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'gradient', gradient_stops: [
+      { pos: 0, color: '#aa0000' }, { pos: 100, color: '#0000aa' },
+    ] } }));
+    await expect.poll(() => editor.evaluate(el => el._paintPresetRegistry.presets.night.gradient_stops.length)).toBe(2);
+    await expect(positions).toHaveCount(2);
+    expect(await removedHandle.evaluate(node => node.isConnected)).toBe(false);
+    await editor.evaluate((el, node) => el._handleChange
+      ? el._handleChange({ target: node }) : el._handleField({ type: 'change', target: node }), removedHandle);
+    expect(await saved(editor)).toEqual(config);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
+  });
+
+  test(`${host} keeps a gradient draft and color node with its stop through insertion, removal, and reorder (${source})`, async ({ page }) => {
+    const config = { bar: { paint: { preset: 'night' } } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {
+      night: { fill_style: 'gradient', gradient_stops: [
+        { pos: 0, color: '#aa0000' }, { pos: 60, color: '#00aa00' }, { pos: 100, color: '#0000aa' },
+      ] },
+    }, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-gradient-stops').click();
+    const positions = editor.locator('input[data-kind="gradient-pos"]');
+    const originalPosition = positions.nth(1);
+    const originalColor = editor.locator('input[data-kind="gradient-color"]').nth(1);
+    await editor.evaluate(el => {
+      window.__originPosition = el.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[1];
+      window.__originColor = el.shadowRoot.querySelectorAll('input[data-kind="gradient-color"]')[1];
+    });
+    await originalPosition.evaluate(node => { node.focus(); node.value = '45'; node.dispatchEvent(new Event('input', { bubbles: true })); });
+    await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'gradient', gradient_stops: [
+      { pos: 100, color: '#0000aa' }, { pos: 30, color: '#ffff00' },
+      { pos: 60, color: '#00aa00' },
+    ] } }));
+    await expect.poll(() => editor.evaluate(el => el._paintPresetRegistry.presets.night.gradient_stops[0].pos)).toBe(100);
+    await expect(positions).toHaveCount(3);
+    const originIndex = await positions.evaluateAll(nodes => nodes.findIndex(node => node === window.__originPosition));
+    expect(originIndex).toBeGreaterThanOrEqual(0);
+    const originRow = positions.nth(originIndex);
+    await expect(originRow).toHaveValue('45');
+    expect(await originRow.evaluate(node => node === window.__originPosition)).toBe(true);
+    expect(await originRow.evaluate(node => node.closest('.gradient-stop-row').querySelector('input[data-kind="gradient-color"]') === window.__originColor)).toBe(true);
+    expect(await editor.evaluate(() => window.__originColor.value)).toBe('#00aa00');
+    expect(await saved(editor)).toEqual(config);
+    await originRow.press('Enter');
+    await expect.poll(() => page.evaluate(() => window.__paintEvents.length)).toBe(1);
+    expect((await saved(editor)).bar.paint.gradient_stops.find(stop => stop.color === '#00aa00')).toMatchObject({ pos: 45, color: '#00aa00' });
+  });
+
+  test(`${host} keeps typing mounted across preset gradient row-count changes (${source})`, async ({ page }) => {
+    const config = { bar: { paint: { preset: 'night' } } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {
+      night: { fill_style: 'gradient', gradient_stops: [
+        { pos: 0, color: '#aa0000' }, { pos: 60, color: '#00aa00' }, { pos: 100, color: '#0000aa' },
+      ] },
+    }, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-gradient-stops').click();
+    const position = editor.locator('input[data-kind="gradient-pos"]').nth(1);
+    await position.fill('4');
+    await editor.evaluate(el => { window.__typingPosition = el.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[1]; });
+    await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'gradient', gradient_stops: [
+      { pos: 0, color: '#aa0000' }, { pos: 60, color: '#00aa00' },
+      { pos: 80, color: '#ffff00' }, { pos: 100, color: '#0000aa' },
+    ] } }));
+    await expect.poll(() => editor.evaluate(el => el._paintPresetRegistry.presets.night.gradient_stops.length)).toBe(4);
+    await expect(position).toBeFocused();
+    expect(await position.evaluate(node => node === window.__typingPosition)).toBe(true);
+    await position.pressSequentially('5');
+    await expect(position).toHaveValue('45');
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
+    await position.press('Enter');
+    await expect.poll(() => page.evaluate(() => window.__paintEvents.length)).toBe(1);
+    expect((await saved(editor)).bar.paint.gradient_stops[1]).toMatchObject({ pos: 45, color: '#00aa00' });
+  });
+
   test(`${host} rejects commits from a removed preset segment row (${source})`, async ({ page }) => {
     const config = { bar: { paint: { preset: 'night' } } };
     if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';

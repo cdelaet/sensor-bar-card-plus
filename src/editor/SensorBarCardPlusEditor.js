@@ -3458,6 +3458,10 @@ ${this._renderFormattingSection({ type: 'card' })}
       this._syncEntityAttributePickers();
       this._syncEntityIconPickers();
       this._syncActionSelectors();
+      for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) {
+        this._segmentsSection.syncRows(scope);
+        this._gradientStopsSection.syncRows(scope);
+      }
       this._numericDrafts.apply(this.shadowRoot, numericFocus);
       this._lastRenderedConfigJson = this._serializeConfig(this._draftConfig);
       this._applyPendingFocus();
@@ -3866,6 +3870,11 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (field === 'layout-height') return void this._setLayoutHeight(value);
     if (field === 'layout-label-width') return void this._setScopedLayoutLabelWidth({ type: 'card' }, value);
     if (handleScaleField(this._createSectionContext(), { field, value })) return;
+    if (field === 'bar-paint-mode' || kind === 'entity-bar-paint-mode') {
+      const scope = target.dataset?.index === undefined ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
+      this._segmentsSection.clearScopeState(scope);
+      this._gradientStopsSection.clearScopeState(scope);
+    }
     if (handleBarAppearanceField(this._createSectionContext(), { field, value })) return;
     if (this._needleSection.handleField({ field, kind, index: target.dataset?.index, value })) return;
     if (this._baselineSection.handleField({ field, kind, index: target.dataset?.index, value })) {

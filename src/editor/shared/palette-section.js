@@ -12,13 +12,18 @@ function paletteFingerprint(value) {
   return `${(first >>> 0).toString(36)}${(second >>> 0).toString(36)}`;
 }
 
+let paletteSessionRevision = 0;
+let paletteSessionKey = 0;
+
 // Row IDs live only for the lifetime of a section session. Configurations do
 // not carry row IDs, so identical rows are matched by occurrence order.
 export class PaletteRowSession {
-  constructor() {
-    this.revision = 0;
+  constructor(logicalKey = serializeConfig) {
+    this.sessionKey = ++paletteSessionKey;
+    this.revision = ++paletteSessionRevision;
     this.rows = [];
     this.drafts = new Map();
+    this.logicalKey = logicalKey;
   }
 
   reconcile(rows) {
@@ -28,16 +33,41 @@ export class PaletteRowSession {
       queue.push(entry.id);
       previous.set(entry.fingerprint, queue);
     });
-    const occurrences = new Map();
+    const usedIds = new Set();
     const next = rows.map((row) => {
       const fingerprint = serializeConfig(row);
-      const occurrence = occurrences.get(fingerprint) ?? 0;
-      occurrences.set(fingerprint, occurrence + 1);
-      const id = previous.get(fingerprint)?.shift() ?? `row-${paletteFingerprint(row)}#${occurrence}`;
-      return { id, fingerprint };
+      const id = previous.get(fingerprint)?.shift() ?? null;
+      if (id) usedIds.add(id);
+      return { id, fingerprint, logicalKey: this.logicalKey(row) };
+    });
+    const oldUnmatched = this.rows.filter(entry => !usedIds.has(entry.id));
+    const newUnmatched = next.filter(entry => entry.id === null);
+    const oldByKey = new Map();
+    const newByKey = new Map();
+    for (const entry of oldUnmatched) {
+      const group = oldByKey.get(entry.logicalKey) ?? [];
+      group.push(entry);
+      oldByKey.set(entry.logicalKey, group);
+    }
+    for (const entry of newUnmatched) {
+      const group = newByKey.get(entry.logicalKey) ?? [];
+      group.push(entry);
+      newByKey.set(entry.logicalKey, group);
+    }
+    for (const [key, oldGroup] of oldByKey) {
+      const newGroup = newByKey.get(key) ?? [];
+      // A secondary match is safe only when there is one unmatched candidate
+      // on each side. Ambiguous same-anchor rows receive fresh identities.
+      if (oldGroup.length === 1 && newGroup.length === 1) newGroup[0].id = oldGroup[0].id;
+    }
+    const occurrences = new Map();
+    next.forEach((entry, index) => {
+      const occurrence = occurrences.get(entry.fingerprint) ?? 0;
+      occurrences.set(entry.fingerprint, occurrence + 1);
+      if (!entry.id) entry.id = `row-${paletteFingerprint(rows[index])}#${occurrence}`;
     });
     if (next.length !== this.rows.length || next.some((entry, index) => entry.id !== this.rows[index]?.id
-      || entry.fingerprint !== this.rows[index]?.fingerprint)) this.revision += 1;
+      || entry.fingerprint !== this.rows[index]?.fingerprint)) this.revision = ++paletteSessionRevision;
     const liveIds = new Set(next.map(({ id }) => id));
     for (const id of this.drafts.keys()) if (!liveIds.has(id)) this.drafts.delete(id);
     this.rows = next;
@@ -51,7 +81,8 @@ export class PaletteRowSession {
     const fingerprint = serializeConfig(row);
     if (entry.fingerprint === fingerprint) return true;
     entry.fingerprint = fingerprint;
-    this.revision += 1;
+    entry.logicalKey = this.logicalKey(row);
+    this.revision = ++paletteSessionRevision;
     return true;
   }
   tokenAt(index) { return { id: this.idAt(index), revision: this.revision }; }
@@ -92,13 +123,29 @@ export class PaletteSection {
   _getShadowElementById(id) { return this.shadowRoot?.getElementById?.(id) ?? this.shadowRoot?.querySelector(`#${id}`); }
   _renderListRows(items, renderItem) { return items.map(renderItem).join(''); }
 
-  _syncRows(scope, { inputSelector, rowSelector, draftSelector, memberSelector, onDiscard }) {
+  _syncRows(scope, { inputSelector, rowSelector, draftSelector, memberSelector, onDiscard, sessionRevision, sessionKey, rowIds, deferRemovedActive = false }) {
     const root = this.shadowRoot;
     if (!root?.ownerDocument) return false;
     const template = root.ownerDocument.createElement('template');
     template.innerHTML = this.render(scope, ({ content }) => content, { section: false });
     const desired = [...template.content.querySelectorAll(rowSelector)]
       .filter(row => row.querySelector(inputSelector));
+    if (memberSelector && sessionRevision !== undefined) {
+      for (const member of template.content.querySelectorAll(memberSelector)) {
+        member.dataset.paletteRevision = String(sessionRevision);
+        member.dataset.paletteSession = String(sessionKey);
+        if (member.classList.contains('segment-undefined-row')) {
+          member.dataset.paletteKey = `${sessionKey}:${member.dataset.paletteKey}`;
+        } else {
+          const rowInput = member.querySelector('[data-segment-index], [data-stop-index], [data-kind="segment-from"], [data-kind="gradient-pos"]');
+          const rowIndex = Number(rowInput?.dataset.segmentIndex ?? rowInput?.dataset.stopIndex ?? rowInput?.dataset.index);
+          if (Number.isInteger(rowIndex) && rowIds?.[rowIndex]) {
+            member.dataset.paletteId = `${sessionKey}:${rowIds[rowIndex]}`;
+            member.dataset.paletteKey = member.dataset.paletteId;
+          }
+        }
+      }
+    }
     const liveInputs = [...root.querySelectorAll(inputSelector)];
     const liveRows = liveInputs.map(input => input.closest(rowSelector)).filter(Boolean);
     const draft = root.querySelector(draftSelector);
@@ -121,7 +168,9 @@ export class PaletteSection {
       const liveMembers = [...list.children].filter(item => item.matches(memberSelector));
       const liveEntries = keyMembers(liveMembers);
       const activeMember = liveEntries.find(({ item }) => item.contains(active));
-      if (activeMember && !desiredByKey.has(activeMember.key)) return false;
+      const activeRemoved = !!activeMember && !desiredByKey.has(activeMember.key);
+      if (activeRemoved && deferRemovedActive
+        && String(activeMember.item.dataset.paletteSession) === String(sessionKey)) return false;
       const selection = active?.matches?.('input') && typeof active.selectionStart === 'number'
         ? [active.selectionStart, active.selectionEnd, active.selectionDirection]
         : null;
@@ -179,7 +228,7 @@ export class PaletteSection {
       }
       for (const entry of liveEntries) if (!desiredByKey.has(entry.key)) entry.item.remove();
       if (liveEntries.some(entry => !desiredByKey.has(entry.key))) changed = true;
-      if (active?.isConnected && root.activeElement !== active) {
+      if (!activeRemoved && active?.isConnected && root.activeElement !== active) {
         active.focus?.({ preventScroll: true });
         if (selection) active.setSelectionRange?.(...selection);
       }
@@ -222,6 +271,7 @@ export class PaletteSection {
 
   handle(event, mode = event.type) {
     const target = event.target;
+    if (target?.isConnected === false) return true;
     if (mode === 'input' && target?.type === 'checkbox') return false;
     const rawKind = target?.dataset?.kind;
     const kind = rawKind?.replace(/-text-fallback$/, '');
@@ -254,7 +304,10 @@ export class PaletteSection {
         }
       } else {
         if (segment && !this._isCurrentSegmentRow(scope, index, target)
-          || !segment && !this._isCurrentGradientStopRow(scope, index, target)) return true;
+          || !segment && !this._isCurrentGradientStopRow(scope, index, target)) {
+          this.syncRows?.(scope);
+          return true;
+        }
         write(rows().filter((_, i) => i !== index), { rerender: true, ...(segment ? { sort: true } : {}) }, { type: 'remove', index });
       }
       return true;
@@ -269,7 +322,7 @@ export class PaletteSection {
     const value = event.detail?.value ?? target.value;
     if (segment && !draft && !this._isCurrentSegmentRow(scope, index, target)
       || !segment && !draft && !this._isCurrentGradientStopRow(scope, index, target)) {
-      if (['from', 'to'].includes(field)) this._clearSegmentBoundaryText(scope, index, field);
+      this.syncRows?.(scope);
       return true;
     }
     if (mode === 'keydown') {
@@ -307,7 +360,10 @@ export class PaletteSection {
     const next = current.map((row, i) => i !== index ? row : segment ? { ...row, color: value }
       : { ...row, pos: this._normalizeGradientStopPosValue(row?.pos) ?? 0, color: field === 'color' ? value : row?.color ?? '#4a9eff' });
     if (segment || serializeConfig(next) !== serializeConfig(this._sanitizeGradientStopsForEmit(current))) {
-      this._getPaletteSession(scope, current).updateAt(index, next[index]);
+      const session = this._getPaletteSession(scope, current);
+      session.updateAt(index, next[index]);
+      const row = target.closest?.(segment ? '.segment-editor-row' : '.gradient-stop-row');
+      if (row) row.dataset.paletteRevision = String(session.revision);
       write(next, segment ? { sort: false } : {}, { type: 'edit', index, field: 'color', value });
     }
     return true;

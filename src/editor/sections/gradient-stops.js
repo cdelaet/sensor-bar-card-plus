@@ -282,7 +282,8 @@ export class GradientStopsSection extends PaletteSection {
     const session = this._getPaletteSession(scope, rows);
     const row = target?.closest?.('.gradient-stop-row');
     return Number.isInteger(stopIndex) && stopIndex >= 0 && rows[stopIndex] !== undefined
-      && (!row || row.dataset.paletteId === session.idAt(stopIndex)
+      && (!row || row.dataset.paletteSession === String(session.sessionKey)
+        && row.dataset.paletteId === `${session.sessionKey}:${session.idAt(stopIndex)}`
         && Number(row.dataset.paletteRevision) === session.revision);
   }
 
@@ -419,8 +420,11 @@ export class GradientStopsSection extends PaletteSection {
         ? { ...stop, pos: nextPos }
         : stop
     ));
-    this._getPaletteSession(scope, currentStops).updateAt(stopIndex, nextStops[stopIndex]);
     this._clearGradientStopPosText(scope, stopIndex);
+    const session = this._getPaletteSession(scope, currentStops);
+    session.updateAt(stopIndex, nextStops[stopIndex]);
+    const row = inputEl?.closest?.('.gradient-stop-row');
+    if (row) row.dataset.paletteRevision = String(session.revision);
     return this._setScopedGradientStops(scope, nextStops, { rerender: true }, { type: 'edit', index: stopIndex, field: 'pos', value: nextPos });
   }
 
@@ -534,10 +538,14 @@ export class GradientStopsSection extends PaletteSection {
     const index = Number(scope?.index);
     const rows = this._getScopedGradientStopsValue(scope) ?? [];
     const session = this._getPaletteSession(scope, rows);
+    const rowIds = session.rows.map(({ id }) => id);
     const changed = this._syncRows(scope, {
       inputSelector: entity ? `input[data-kind="entity-gradient-pos"][data-index="${index}"]` : 'input[data-kind="gradient-pos"]',
       rowSelector: '.list-row.gradient-stop-row',
       memberSelector: '.authored-gradient-stop-row',
+      sessionRevision: session.revision,
+      sessionKey: session.sessionKey,
+      rowIds,
       draftSelector: entity ? `#entity-${index}-gradient-draft-pos` : '#gradient-draft-pos',
     });
     if (changed) this._refreshGradientDraftUi(scope);
@@ -570,7 +578,7 @@ export class GradientStopsSection extends PaletteSection {
                         <label>Gradient stops</label>
                         <div class="list gradient-stop-list">
                           ${this._renderListRows(entityGradientStops, (stop, stopIndex) => `
-                            <div class="list-row gradient-stop-row authored-gradient-stop-row" data-palette-id="${escapeAttribute(this._getPaletteSession(scope, entityGradientStops).idAt(stopIndex))}" data-palette-revision="${this._getPaletteSession(scope, entityGradientStops).revision}" data-palette-key="${escapeAttribute(this._getPaletteSession(scope, entityGradientStops).idAt(stopIndex))}">
+                            <div class="list-row gradient-stop-row authored-gradient-stop-row" data-palette-id="${escapeAttribute(this._getPaletteSession(scope, entityGradientStops).idAt(stopIndex))}" data-palette-key="${escapeAttribute(this._getPaletteSession(scope, entityGradientStops).idAt(stopIndex))}">
                               <input type="number" min="0" max="100" step="any" data-kind="entity-gradient-pos" data-index="${index}" data-stop-index="${stopIndex}" value="${escapeAttribute(this._getGradientStopPosText(scope, stopIndex, stop?.pos ?? ''))}" placeholder="0">
                               ${renderColorInput({
                                 id: `entity-${index}-gradient-color-${stopIndex}`,
@@ -629,7 +637,7 @@ export class GradientStopsSection extends PaletteSection {
 	                <label>Gradient stops</label>
 	                <div class="list gradient-stop-list">
 	                  ${this._renderListRows(gradientStops, (stop, index) => `
-	                    <div class="list-row gradient-stop-row authored-gradient-stop-row" data-palette-id="${escapeAttribute(this._getPaletteSession({ type: 'card' }, gradientStops).idAt(index))}" data-palette-revision="${this._getPaletteSession({ type: 'card' }, gradientStops).revision}" data-palette-key="${escapeAttribute(this._getPaletteSession({ type: 'card' }, gradientStops).idAt(index))}">
+	                    <div class="list-row gradient-stop-row authored-gradient-stop-row" data-palette-id="${escapeAttribute(this._getPaletteSession({ type: 'card' }, gradientStops).idAt(index))}" data-palette-key="${escapeAttribute(this._getPaletteSession({ type: 'card' }, gradientStops).idAt(index))}">
 	                      <input type="number" min="0" max="100" step="any" data-kind="gradient-pos" data-index="${index}" value="${escapeAttribute(this._getGradientStopPosText({ type: 'card' }, index, stop?.pos ?? ''))}" placeholder="0">
 	                      ${renderColorInput({
 	                        id: `gradient-color-${index}`,
