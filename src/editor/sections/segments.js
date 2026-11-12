@@ -5,7 +5,7 @@ import { getResolvedScale } from '../../config/resolve.js';
 import { getSegmentsForRendering, resolveSegmentBoundaryPct } from '../../view-model/bar-render-model.js';
 import { getEffectiveBarColorValue } from './bar-appearance.js';
 import { readBarPaintProperty, clearBarPaintProperties, ownsBarPaintProperty, usesGroupedBarPaint } from '../shared/bar-paint-bindings.js';
-import { PaletteSection } from '../shared/palette-section.js';
+import { PaletteRowSession, PaletteSection } from '../shared/palette-section.js';
 
 export const MIXED_INTERVAL_PREVIEW_WEIGHT = 10;
 export const MIN_SEGMENT_PREVIEW_WIDTH = 1;
@@ -76,16 +76,16 @@ export class SegmentsSection extends PaletteSection {
   }
 
   reset() {
+    this._paletteSessions = new Map();
     this._segmentDrafts = new Map();
     this._segmentUiRows = new Map();
-    this._segmentBoundaryTexts = new Map();
   }
 
   clearScopeState(scope) {
     const key = this._getSegmentsScopeKey(scope);
     this._segmentDrafts.delete(key);
     this._segmentUiRows.delete(key);
-    this._clearSegmentScopeTextState(scope);
+    this._paletteSessions.delete(key);
   }
 
   _setSegments(segments, options = {}) {
@@ -108,28 +108,37 @@ export class SegmentsSection extends PaletteSection {
     return scope?.type === 'entity' ? `entity:${scope.index}` : 'card';
   }
 
+  _getPaletteSession(scope, rows = this._getScopedSegmentsValue(scope)) {
+    const key = this._getSegmentsScopeKey(scope);
+    if (!this._paletteSessions.has(key)) this._paletteSessions.set(key, new PaletteRowSession());
+    const session = this._paletteSessions.get(key);
+    session.reconcile(rows ?? []);
+    return session;
+  }
+
+  _clearSegmentScopeTextState(scope) {
+    this._paletteSessions.get(this._getSegmentsScopeKey(scope))?.drafts.clear();
+  }
+
   _getSegmentBoundaryTextKey(scope, segmentIndex, field) {
-    const segments = this._getScopedSegmentsValue(scope) ?? [];
-    const segment = segments[segmentIndex];
-    const identity = segmentPaletteKey(segment);
-    const occurrence = segments.slice(0, segmentIndex + 1)
-      .filter(candidate => segmentPaletteKey(candidate) === identity).length - 1;
-    return `${this._getSegmentsScopeKey(scope)}:${identity}#${occurrence}:${field}`;
+    const session = this._getPaletteSession(scope);
+    return { session, index: segmentIndex, field };
   }
 
   _getSegmentBoundaryText(scope = { type: 'card' }, segmentIndex, field, fallbackValue = '') {
-    const key = this._getSegmentBoundaryTextKey(scope, segmentIndex, field);
-    if (this._segmentBoundaryTexts.has(key)) {
-      return this._segmentBoundaryTexts.get(key);
-    }
+    const { session, index, field: draftField } = this._getSegmentBoundaryTextKey(scope, segmentIndex, field);
+    const draft = session.getDraft(index, draftField);
+    if (draft !== undefined) return draft;
     return this._formatSegmentBoundaryValue(fallbackValue);
   }
 
   _isCurrentSegmentRow(scope, segmentIndex, target) {
     const current = this._getScopedSegmentsValue(scope)?.[segmentIndex];
     const row = target?.closest?.('.segment-editor-row');
+    const session = this._getPaletteSession(scope);
     return Number.isInteger(segmentIndex) && segmentIndex >= 0 && current !== undefined
-      && (!row || row.dataset.paletteKey === segmentPaletteKey(current));
+      && (!row || row.dataset.paletteId === session.idAt(segmentIndex)
+        && Number(row.dataset.paletteRevision) === session.revision);
   }
 
   _isCurrentSegmentGap(scope, target) {
@@ -141,23 +150,13 @@ export class SegmentsSection extends PaletteSection {
   }
 
   _setSegmentBoundaryText(scope, segmentIndex, field, rawValue) {
-    this._segmentBoundaryTexts.set(
-      this._getSegmentBoundaryTextKey(scope, segmentIndex, field),
-      normalizeTextValue(rawValue),
-    );
+    const { session, index, field: draftField } = this._getSegmentBoundaryTextKey(scope, segmentIndex, field);
+    session.setDraft(index, draftField, normalizeTextValue(rawValue));
   }
 
   _clearSegmentBoundaryText(scope, segmentIndex, field) {
-    this._segmentBoundaryTexts.delete(this._getSegmentBoundaryTextKey(scope, segmentIndex, field));
-  }
-
-  _clearSegmentScopeTextState(scope) {
-    const prefix = `${this._getSegmentsScopeKey(scope)}:`;
-    for (const key of this._segmentBoundaryTexts.keys()) {
-      if (key.startsWith(prefix)) {
-        this._segmentBoundaryTexts.delete(key);
-      }
-    }
+    const { session, index, field: draftField } = this._getSegmentBoundaryTextKey(scope, segmentIndex, field);
+    session.clearDraft(index, draftField);
   }
 
   _getSegmentsUiRows(scope = { type: 'card' }) {
@@ -845,6 +844,7 @@ export class SegmentsSection extends PaletteSection {
         ? { ...segment, [field]: nextValue }
         : segment
     ));
+    this._getPaletteSession(scope, currentSegments).updateAt(segmentIndex, nextSegments[segmentIndex]);
     this._clearSegmentBoundaryText(scope, segmentIndex, field);
     const applied = this._setScopedSegments(scope, nextSegments, { rerender: true }, { type: 'edit', index: segmentIndex, field, value: nextValue });
     if (applied !== false && nextSegments[segmentIndex]) {
@@ -899,37 +899,23 @@ export class SegmentsSection extends PaletteSection {
   syncRows(scope = { type: 'card' }) {
     const entity = scope?.type === 'entity';
     const index = Number(scope?.index);
+    const rows = this._getScopedSegmentsValue(scope) ?? [];
+    const session = this._getPaletteSession(scope, rows);
     const changed = this._syncRows(scope, {
       inputSelector: entity ? `input[data-kind="entity-segment-from"][data-index="${index}"]` : 'input[data-kind="segment-from"]',
       rowSelector: '.segment-editor-row',
       memberSelector: '.segment-editor-row, .segment-undefined-row',
       draftSelector: entity ? `#entity-${index}-segment-draft-from` : '#segment-draft-from',
+      memberKey: item => item.classList.contains('segment-undefined-row') ? item.dataset.paletteKey : item.dataset.paletteId,
     });
-    this._pruneSegmentBoundaryTexts(scope);
     if (changed) this._refreshSegmentUi(scope);
     return changed;
-  }
-
-  _pruneSegmentBoundaryTexts(scope) {
-    const prefix = `${this._getSegmentsScopeKey(scope)}:`;
-    const segments = this._getScopedSegmentsValue(scope) ?? [];
-    const identities = new Set();
-    const occurrences = new Map();
-    for (const segment of segments) {
-      const identity = segmentPaletteKey(segment);
-      const occurrence = occurrences.get(identity) ?? 0;
-      occurrences.set(identity, occurrence + 1);
-      identities.add(`${prefix}${identity}#${occurrence}:from`);
-      identities.add(`${prefix}${identity}#${occurrence}:to`);
-    }
-    for (const key of this._segmentBoundaryTexts.keys()) {
-      if (key.startsWith(prefix) && !identities.has(key)) this._segmentBoundaryTexts.delete(key);
-    }
   }
 
   render(scope = { type: 'card' }, renderGroup = ({ content }) => content, { section = true } = {}) {
     if (scope?.type === 'entity') {
       const index = scope.index;
+      const entitySegments = this._getScopedSegmentsValue(scope) ?? [];
       const segmentsInherited = !this._hasSegmentsOverride(scope);
       return `
 	                      <div class="field-row">
@@ -947,7 +933,7 @@ export class SegmentsSection extends PaletteSection {
                         <label>Segments</label>
                         <div class="list">
                           ${this._renderSegmentListRows(scope, (segment, segmentIndex) => `
-                            <div class="segment-editor-row" data-palette-key="${escapeAttribute(segmentPaletteKey(segment))}">
+                            <div class="segment-editor-row" data-palette-id="${escapeAttribute(this._getPaletteSession(scope, entitySegments).idAt(segmentIndex))}" data-palette-revision="${this._getPaletteSession(scope, entitySegments).revision}" data-palette-key="${escapeAttribute(this._getPaletteSession(scope, entitySegments).idAt(segmentIndex))}">
                             <div class="list-row triple segment-row">
                               <input type="text" data-kind="entity-segment-from" data-index="${index}" data-segment-index="${segmentIndex}" value="${escapeAttribute(this._getSegmentBoundaryText(scope, segmentIndex, 'from', segment?.from))}" placeholder="0%">
                               <input type="text" data-kind="entity-segment-to" data-index="${index}" data-segment-index="${segmentIndex}" value="${escapeAttribute(this._getSegmentBoundaryText(scope, segmentIndex, 'to', segment?.to))}" placeholder="100%">
@@ -992,7 +978,7 @@ export class SegmentsSection extends PaletteSection {
                     : ''
                   }
                   ${this._renderSegmentListRows({ type: 'card' }, (segment, index) => `
-                    <div class="segment-editor-row" data-palette-key="${escapeAttribute(segmentPaletteKey(segment))}">
+                    <div class="segment-editor-row" data-palette-id="${escapeAttribute(this._getPaletteSession({ type: 'card' }).idAt(index))}" data-palette-revision="${this._getPaletteSession({ type: 'card' }).revision}" data-palette-key="${escapeAttribute(this._getPaletteSession({ type: 'card' }).idAt(index))}">
                     <div class="list-row triple segment-row">
                       <input type="text"${this.array.autoEnds ? ` aria-label="Segment ${index + 1} start"` : ''} data-kind="segment-from" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: 'card' }, index, 'from', segment?.from))}" placeholder="0%">
                       <input type="text"${this.array.autoEnds ? ` aria-label="Segment ${index + 1} end (blank = Auto)"` : ''} data-kind="segment-to" data-index="${index}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: 'card' }, index, 'to', segment?.to))}" placeholder="${this.array.autoEnds ? 'Auto' : '100%'}">

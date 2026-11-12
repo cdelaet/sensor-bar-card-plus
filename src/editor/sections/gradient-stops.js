@@ -2,7 +2,7 @@ import { parsePercentLiteral } from '../../config/normalize.js';
 import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumberValue } from '../shared/editor-config.js';
 import { escapeAttribute, normalizeColorComparisonValue, renderColorInput } from '../shared/editor-controls.js';
 import { readBarPaintProperty, clearBarPaintProperties, ownsBarPaintProperty, usesGroupedBarPaint } from '../shared/bar-paint-bindings.js';
-import { PaletteSection } from '../shared/palette-section.js';
+import { PaletteRowSession, PaletteSection } from '../shared/palette-section.js';
 
 export class GradientStopsSection extends PaletteSection {
   constructor(context, ui, array) {
@@ -11,9 +11,9 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   reset() {
+    this._paletteSessions = new Map();
     this._gradientStopsDrafts = new Map();
     this._gradientStopsUiRows = new Map();
-    this._gradientStopPosTexts = new Map();
     this._gradientStopValidationMessages = new Map();
   }
 
@@ -21,6 +21,7 @@ export class GradientStopsSection extends PaletteSection {
     const key = this._getGradientStopsDraftKey(scope);
     this._gradientStopsDrafts.delete(key);
     this._gradientStopsUiRows.delete(key);
+    this._paletteSessions.delete(key);
     this._clearGradientStopScopeTextState(scope);
   }
 
@@ -111,15 +112,22 @@ export class GradientStopsSection extends PaletteSection {
     return scope?.type === 'entity' ? `entity:${scope.index}` : 'card';
   }
 
+  _getPaletteSession(scope, rows = this._getScopedGradientStopsValue(scope)) {
+    const key = this._getGradientStopsDraftKey(scope);
+    if (!this._paletteSessions.has(key)) this._paletteSessions.set(key, new PaletteRowSession());
+    const session = this._paletteSessions.get(key);
+    session.reconcile(rows ?? []);
+    return session;
+  }
+
   _getGradientStopPosTextKey(scope, stopIndex) {
-    return `${this._getGradientStopsDraftKey(scope)}:pos:${stopIndex}`;
+    return { session: this._getPaletteSession(scope), index: stopIndex };
   }
 
   _getGradientStopPosText(scope = { type: 'card' }, stopIndex, fallbackValue = '') {
-    const key = this._getGradientStopPosTextKey(scope, stopIndex);
-    if (this._gradientStopPosTexts.has(key)) {
-      return this._gradientStopPosTexts.get(key);
-    }
+    const { session, index } = this._getGradientStopPosTextKey(scope, stopIndex);
+    const draft = session.getDraft(index, 'pos');
+    if (draft !== undefined) return draft;
     if (fallbackValue === '' || fallbackValue === null || fallbackValue === undefined) {
       return '';
     }
@@ -127,23 +135,18 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   _setGradientStopPosText(scope, stopIndex, rawValue) {
-    this._gradientStopPosTexts.set(
-      this._getGradientStopPosTextKey(scope, stopIndex),
-      normalizeTextValue(rawValue),
-    );
+    const { session, index } = this._getGradientStopPosTextKey(scope, stopIndex);
+    session.setDraft(index, 'pos', normalizeTextValue(rawValue));
   }
 
   _clearGradientStopPosText(scope, stopIndex) {
-    this._gradientStopPosTexts.delete(this._getGradientStopPosTextKey(scope, stopIndex));
+    const { session, index } = this._getGradientStopPosTextKey(scope, stopIndex);
+    session.clearDraft(index, 'pos');
   }
 
   _clearGradientStopScopeTextState(scope) {
+    this._paletteSessions.get(this._getGradientStopsDraftKey(scope))?.drafts.clear();
     const prefix = `${this._getGradientStopsDraftKey(scope)}:pos:`;
-    for (const key of this._gradientStopPosTexts.keys()) {
-      if (key.startsWith(prefix)) {
-        this._gradientStopPosTexts.delete(key);
-      }
-    }
     for (const key of this._gradientStopValidationMessages.keys()) {
       if (key.startsWith(prefix)) {
         this._gradientStopValidationMessages.delete(key);
@@ -272,6 +275,15 @@ export class GradientStopsSection extends PaletteSection {
       stop.pos === defaultStops[index].pos
       && normalizeColorComparisonValue(stop.color) === normalizeColorComparisonValue(defaultStops[index].color)
     ));
+  }
+
+  _isCurrentGradientStopRow(scope, stopIndex, target) {
+    const rows = this._getScopedGradientStopsValue(scope) ?? [];
+    const session = this._getPaletteSession(scope, rows);
+    const row = target?.closest?.('.gradient-stop-row');
+    return Number.isInteger(stopIndex) && stopIndex >= 0 && rows[stopIndex] !== undefined
+      && (!row || row.dataset.paletteId === session.idAt(stopIndex)
+        && Number(row.dataset.paletteRevision) === session.revision);
   }
 
   _clearGradientStopsOverride(scope) {
@@ -407,6 +419,7 @@ export class GradientStopsSection extends PaletteSection {
         ? { ...stop, pos: nextPos }
         : stop
     ));
+    this._getPaletteSession(scope, currentStops).updateAt(stopIndex, nextStops[stopIndex]);
     this._clearGradientStopPosText(scope, stopIndex);
     return this._setScopedGradientStops(scope, nextStops, { rerender: true }, { type: 'edit', index: stopIndex, field: 'pos', value: nextPos });
   }
@@ -519,9 +532,12 @@ export class GradientStopsSection extends PaletteSection {
   syncRows(scope = { type: 'card' }) {
     const entity = scope?.type === 'entity';
     const index = Number(scope?.index);
+    const rows = this._getScopedGradientStopsValue(scope) ?? [];
+    const session = this._getPaletteSession(scope, rows);
     const changed = this._syncRows(scope, {
       inputSelector: entity ? `input[data-kind="entity-gradient-pos"][data-index="${index}"]` : 'input[data-kind="gradient-pos"]',
       rowSelector: '.list-row.gradient-stop-row',
+      memberSelector: '.authored-gradient-stop-row',
       draftSelector: entity ? `#entity-${index}-gradient-draft-pos` : '#gradient-draft-pos',
     });
     if (changed) this._refreshGradientDraftUi(scope);
@@ -554,7 +570,7 @@ export class GradientStopsSection extends PaletteSection {
                         <label>Gradient stops</label>
                         <div class="list gradient-stop-list">
                           ${this._renderListRows(entityGradientStops, (stop, stopIndex) => `
-                            <div class="list-row gradient-stop-row">
+                            <div class="list-row gradient-stop-row authored-gradient-stop-row" data-palette-id="${escapeAttribute(this._getPaletteSession(scope, entityGradientStops).idAt(stopIndex))}" data-palette-revision="${this._getPaletteSession(scope, entityGradientStops).revision}" data-palette-key="${escapeAttribute(this._getPaletteSession(scope, entityGradientStops).idAt(stopIndex))}">
                               <input type="number" min="0" max="100" step="any" data-kind="entity-gradient-pos" data-index="${index}" data-stop-index="${stopIndex}" value="${escapeAttribute(this._getGradientStopPosText(scope, stopIndex, stop?.pos ?? ''))}" placeholder="0">
                               ${renderColorInput({
                                 id: `entity-${index}-gradient-color-${stopIndex}`,
@@ -613,7 +629,7 @@ export class GradientStopsSection extends PaletteSection {
 	                <label>Gradient stops</label>
 	                <div class="list gradient-stop-list">
 	                  ${this._renderListRows(gradientStops, (stop, index) => `
-	                    <div class="list-row gradient-stop-row">
+	                    <div class="list-row gradient-stop-row authored-gradient-stop-row" data-palette-id="${escapeAttribute(this._getPaletteSession({ type: 'card' }, gradientStops).idAt(index))}" data-palette-revision="${this._getPaletteSession({ type: 'card' }, gradientStops).revision}" data-palette-key="${escapeAttribute(this._getPaletteSession({ type: 'card' }, gradientStops).idAt(index))}">
 	                      <input type="number" min="0" max="100" step="any" data-kind="gradient-pos" data-index="${index}" value="${escapeAttribute(this._getGradientStopPosText({ type: 'card' }, index, stop?.pos ?? ''))}" placeholder="0">
 	                      ${renderColorInput({
 	                        id: `gradient-color-${index}`,

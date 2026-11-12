@@ -1,6 +1,84 @@
 import { getEffectiveFillStyleValue } from '../sections/bar-appearance.js';
 import { serializeConfig } from './editor-config.js';
 
+function paletteFingerprint(value) {
+  const text = serializeConfig(value);
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  for (let index = 0; index < text.length; index += 1) {
+    first = Math.imul(first ^ text.charCodeAt(index), 0x01000193);
+    second = Math.imul(second ^ text.charCodeAt(index), 0x85ebca6b);
+  }
+  return `${(first >>> 0).toString(36)}${(second >>> 0).toString(36)}`;
+}
+
+// Row IDs live only for the lifetime of a section session. Configurations do
+// not carry row IDs, so identical rows are matched by occurrence order.
+export class PaletteRowSession {
+  constructor() {
+    this.revision = 0;
+    this.rows = [];
+    this.drafts = new Map();
+  }
+
+  reconcile(rows) {
+    const previous = new Map();
+    this.rows.forEach((entry) => {
+      const queue = previous.get(entry.fingerprint) ?? [];
+      queue.push(entry.id);
+      previous.set(entry.fingerprint, queue);
+    });
+    const occurrences = new Map();
+    const next = rows.map((row) => {
+      const fingerprint = serializeConfig(row);
+      const occurrence = occurrences.get(fingerprint) ?? 0;
+      occurrences.set(fingerprint, occurrence + 1);
+      const id = previous.get(fingerprint)?.shift() ?? `row-${paletteFingerprint(row)}#${occurrence}`;
+      return { id, fingerprint };
+    });
+    if (next.length !== this.rows.length || next.some((entry, index) => entry.id !== this.rows[index]?.id
+      || entry.fingerprint !== this.rows[index]?.fingerprint)) this.revision += 1;
+    const liveIds = new Set(next.map(({ id }) => id));
+    for (const id of this.drafts.keys()) if (!liveIds.has(id)) this.drafts.delete(id);
+    this.rows = next;
+    return next.map(({ id }) => id);
+  }
+
+  idAt(index) { return this.rows[index]?.id ?? null; }
+  updateAt(index, row) {
+    const entry = this.rows[index];
+    if (!entry) return false;
+    const fingerprint = serializeConfig(row);
+    if (entry.fingerprint === fingerprint) return true;
+    entry.fingerprint = fingerprint;
+    this.revision += 1;
+    return true;
+  }
+  tokenAt(index) { return { id: this.idAt(index), revision: this.revision }; }
+  isCurrent(token, index = null) {
+    return !!token?.id && token.revision === this.revision
+      && (index === null || this.idAt(index) === token.id);
+  }
+  setDraft(index, field, value) {
+    const id = this.idAt(index);
+    if (id) {
+      if (!this.drafts.has(id)) this.drafts.set(id, new Map());
+      this.drafts.get(id).set(field, value);
+    }
+  }
+  getDraft(index, field) {
+    const id = this.idAt(index);
+    return id ? this.drafts.get(id)?.get(field) : undefined;
+  }
+  clearDraft(index, field) {
+    const id = this.idAt(index);
+    if (id) {
+      this.drafts.get(id)?.delete(field);
+      if (!this.drafts.get(id)?.size) this.drafts.delete(id);
+    }
+  }
+}
+
 // Narrow UI/session boundary: sections own drafts; hosts own DOM replacement,
 // focus restoration and persistence. The four-operation section context stays intact.
 export class PaletteSection {
@@ -175,7 +253,8 @@ export class PaletteSection {
           commit();
         }
       } else {
-        if (segment && !this._isCurrentSegmentRow(scope, index, target)) return true;
+        if (segment && !this._isCurrentSegmentRow(scope, index, target)
+          || !segment && !this._isCurrentGradientStopRow(scope, index, target)) return true;
         write(rows().filter((_, i) => i !== index), { rerender: true, ...(segment ? { sort: true } : {}) }, { type: 'remove', index });
       }
       return true;
@@ -188,7 +267,8 @@ export class PaletteSection {
     const draft = local.startsWith(`${prefix}-draft-`);
     const field = local.slice((draft ? `${prefix}-draft-` : `${prefix}-`).length);
     const value = event.detail?.value ?? target.value;
-    if (segment && !draft && !this._isCurrentSegmentRow(scope, index, target)) {
+    if (segment && !draft && !this._isCurrentSegmentRow(scope, index, target)
+      || !segment && !draft && !this._isCurrentGradientStopRow(scope, index, target)) {
       if (['from', 'to'].includes(field)) this._clearSegmentBoundaryText(scope, index, field);
       return true;
     }
@@ -227,6 +307,7 @@ export class PaletteSection {
     const next = current.map((row, i) => i !== index ? row : segment ? { ...row, color: value }
       : { ...row, pos: this._normalizeGradientStopPosValue(row?.pos) ?? 0, color: field === 'color' ? value : row?.color ?? '#4a9eff' });
     if (segment || serializeConfig(next) !== serializeConfig(this._sanitizeGradientStopsForEmit(current))) {
+      this._getPaletteSession(scope, current).updateAt(index, next[index]);
       write(next, segment ? { sort: false } : {}, { type: 'edit', index, field: 'color', value });
     }
     return true;
