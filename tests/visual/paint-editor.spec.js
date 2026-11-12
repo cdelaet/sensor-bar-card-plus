@@ -226,35 +226,94 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
     expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
   });
 
-  test(`${host} invalidates a draft on an indistinguishable duplicate segment (${source})`, async ({ page }) => {
-    const config = { bar: { paint: { preset: 'night' } } };
-    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
-    const duplicate = { from: '10%', to: '30%', color: '#aa0000' };
-    const editor = await mountWithPaintPresets(page, host, source, {
-      night: { fill_style: 'bands', segments: [duplicate, duplicate, duplicate] },
-    }, config);
-    await editor.locator('#card-paint-editor summary').click();
-    await editor.locator('#card-group-segments').click();
-    const ends = editor.locator('input[data-kind="segment-to"]');
-    await ends.nth(2).fill('25%');
-    const staleInput = await ends.nth(2).elementHandle();
-    await page.evaluate(() => window.__updatePaintRegistry({ night: {
-      fill_style: 'bands', segments: [
-        { from: '10%', to: '30%', color: '#aa0000' },
-        { from: '10%', to: '30%', color: '#aa0000' },
-      ],
-    } }));
-    // The active removed row may remain mounted until blur, but its draft has
-    // been pruned and its stale events cannot target either surviving row.
-    await expect(ends).toHaveCount(3);
-    await staleInput.evaluate(node => node.blur());
-    await expect(ends).toHaveCount(2);
-    expect(await ends.evaluateAll(nodes => nodes.map(node => node.value))).toEqual(['30%', '30%']);
-    const ids = await editor.locator('.segment-editor-row').evaluateAll(rows => rows.map(row => row.dataset.paletteId));
-    expect(new Set(ids).size).toBe(2);
-    expect(await saved(editor)).toEqual(config);
-    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
-  });
+  for (const focusedIndex of [0, 1, 2]) {
+    test(`${host} invalidates the ${['first', 'middle', 'final'][focusedIndex]} duplicate segment edit (${source})`, async ({ page }) => {
+      const config = { bar: { paint: { preset: 'night' } } };
+      if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+      const duplicate = { from: '10%', to: '30%', color: '#aa0000' };
+      const editor = await mountWithPaintPresets(page, host, source, {
+        night: { fill_style: 'bands', segments: [duplicate, duplicate, duplicate,
+          { from: '70%', to: '100%', color: '#0000aa' }] },
+      }, config);
+      await editor.locator('#card-paint-editor summary').click();
+      await editor.locator('#card-group-segments').click();
+      const ends = editor.locator('input[data-kind="segment-to"]');
+      const unrelated = ends.nth(3);
+      const unrelatedInput = await unrelated.elementHandle();
+      await unrelated.evaluate(node => { node.value = '95%'; node.dispatchEvent(new Event('input', { bubbles: true })); });
+      const staleInput = await ends.nth(focusedIndex).elementHandle();
+      await staleInput.evaluate(node => {
+        node.focus();
+        node.value = '25%';
+        node.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await page.evaluate(duplicateRow => window.__updatePaintRegistry({ night: {
+        fill_style: 'bands', segments: [duplicateRow, duplicateRow,
+          { from: '70%', to: '100%', color: '#0000aa' }],
+      } }), duplicate);
+      await expect(ends).toHaveCount(3);
+      expect(await staleInput.evaluate(node => node.isConnected)).toBe(false);
+      expect(await ends.evaluateAll(nodes => nodes.map(node => node.value))).toEqual(['30%', '30%', '95%']);
+      expect(await unrelatedInput.evaluate(node => node.isConnected)).toBe(true);
+      const ids = await editor.locator('.segment-editor-row').evaluateAll(rows => rows.map(row => row.dataset.paletteId));
+      expect(new Set(ids).size).toBe(3);
+
+      await editor.evaluate((el, node) => {
+        const staleEvent = { target: node, key: 'Enter', preventDefault() {}, stopPropagation() {} };
+        if (el._handleKeydown) el._handleKeydown(staleEvent);
+        else el._handleField({ ...staleEvent, type: 'keydown' });
+        if (el._handleChange) el._handleChange({ target: node });
+        else el._handleField({ type: 'change', target: node });
+        node.blur();
+      }, staleInput);
+      expect(await saved(editor)).toEqual(config);
+      expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
+    });
+  }
+
+  for (const focusedIndex of [0, 1, 2]) {
+    test(`${host} invalidates the ${['first', 'middle', 'final'][focusedIndex]} duplicate gradient stop edit (${source})`, async ({ page }) => {
+      const config = { bar: { paint: { preset: 'night' } } };
+      if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+      const duplicate = { pos: 40, color: '#00aa00' };
+      const editor = await mountWithPaintPresets(page, host, source, {
+        night: { fill_style: 'gradient', gradient_stops: [duplicate, duplicate, duplicate,
+          { pos: 100, color: '#0000aa' }] },
+      }, config);
+      await editor.locator('#card-paint-editor summary').click();
+      await editor.locator('#card-group-gradient-stops').click();
+      const positions = editor.locator('input[data-kind="gradient-pos"]');
+      const unrelated = positions.nth(3);
+      const unrelatedInput = await unrelated.elementHandle();
+      await unrelated.evaluate(node => { node.value = '95'; node.dispatchEvent(new Event('input', { bubbles: true })); });
+      const staleInput = await positions.nth(focusedIndex).elementHandle();
+      await staleInput.evaluate(node => {
+        node.focus();
+        node.value = '42';
+        node.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await page.evaluate(duplicateRow => window.__updatePaintRegistry({ night: {
+        fill_style: 'gradient', gradient_stops: [duplicateRow, duplicateRow, { pos: 100, color: '#0000aa' }],
+      } }), duplicate);
+      await expect(positions).toHaveCount(3);
+      expect(await staleInput.evaluate(node => node.isConnected)).toBe(false);
+      expect(await positions.evaluateAll(nodes => nodes.map(node => node.value))).toEqual(['40', '40', '95']);
+      expect(await unrelatedInput.evaluate(node => node.isConnected)).toBe(true);
+      const ids = await positions.evaluateAll(nodes => nodes.map(node => node.closest('.gradient-stop-row').dataset.paletteId));
+      expect(new Set(ids).size).toBe(3);
+
+      await editor.evaluate((el, node) => {
+        const staleEvent = { target: node, key: 'Enter', preventDefault() {}, stopPropagation() {} };
+        if (el._handleKeydown) el._handleKeydown(staleEvent);
+        else el._handleField({ ...staleEvent, type: 'keydown' });
+        if (el._handleChange) el._handleChange({ target: node });
+        else el._handleField({ type: 'change', target: node });
+        node.blur();
+      }, staleInput);
+      expect(await saved(editor)).toEqual(config);
+      expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
+    });
+  }
 
   test(`${host} preserves a focused segment draft while preset rows change (${source})`, async ({ page }) => {
     const config = { bar: { paint: { preset: 'night' } } };

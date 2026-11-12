@@ -908,6 +908,7 @@ export class SegmentsSection extends PaletteSection {
     const rows = this._getScopedSegmentsValue(scope) ?? [];
     const session = this._getPaletteSession(scope, rows);
     const rowIds = session.rows.map(({ id }) => id);
+    const invalidatedIds = new Set([...session.takeInvalidatedIds()].map(id => `${session.sessionKey}:${id}`));
     const changed = this._syncRows(scope, {
       inputSelector: entity ? `input[data-kind="entity-segment-from"][data-index="${index}"]` : 'input[data-kind="segment-from"]',
       rowSelector: '.segment-editor-row',
@@ -915,6 +916,7 @@ export class SegmentsSection extends PaletteSection {
       sessionRevision: session.revision,
       sessionKey: session.sessionKey,
       rowIds,
+      invalidatedIds,
       deferRemovedActive: true,
       draftSelector: entity ? `#entity-${index}-segment-draft-from` : '#segment-draft-from',
       memberKey: item => item.classList.contains('segment-undefined-row') ? item.dataset.paletteKey : item.dataset.paletteId,

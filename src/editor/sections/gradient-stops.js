@@ -539,6 +539,7 @@ export class GradientStopsSection extends PaletteSection {
     const rows = this._getScopedGradientStopsValue(scope) ?? [];
     const session = this._getPaletteSession(scope, rows);
     const rowIds = session.rows.map(({ id }) => id);
+    const invalidatedIds = new Set([...session.takeInvalidatedIds()].map(id => `${session.sessionKey}:${id}`));
     const changed = this._syncRows(scope, {
       inputSelector: entity ? `input[data-kind="entity-gradient-pos"][data-index="${index}"]` : 'input[data-kind="gradient-pos"]',
       rowSelector: '.list-row.gradient-stop-row',
@@ -546,6 +547,7 @@ export class GradientStopsSection extends PaletteSection {
       sessionRevision: session.revision,
       sessionKey: session.sessionKey,
       rowIds,
+      invalidatedIds,
       draftSelector: entity ? `#entity-${index}-gradient-draft-pos` : '#gradient-draft-pos',
     });
     if (changed) this._refreshGradientDraftUi(scope);

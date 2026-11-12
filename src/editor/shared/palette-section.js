@@ -14,6 +14,7 @@ export class PaletteRowSession {
     this.drafts = new Map();
     this.logicalKey = logicalKey;
     this.nextRowId = 0;
+    this.pendingInvalidatedIds = new Set();
   }
 
   reconcile(rows) {
@@ -24,6 +25,7 @@ export class PaletteRowSession {
       nextCounts.set(fingerprint, (nextCounts.get(fingerprint) ?? 0) + 1);
     }
     const ambiguousIds = new Set();
+    const ambiguousFingerprints = new Set();
     this.rows.forEach((entry) => {
       const queue = previous.get(entry.fingerprint) ?? [];
       queue.push(entry.id);
@@ -32,15 +34,18 @@ export class PaletteRowSession {
     for (const [fingerprint, entries] of previous) {
       const nextCount = nextCounts.get(fingerprint) ?? 0;
       // Occurrence order keeps IDs deterministic, but a changed duplicate
-      // group cannot safely retain edits from an individual occurrence.
+      // group cannot safely retain either edits or DOM commit authority.
       if ((entries.length > 1 || nextCount > 1) && nextCount !== entries.length) {
+        ambiguousFingerprints.add(fingerprint);
         entries.forEach(id => ambiguousIds.add(id));
       }
     }
     const usedIds = new Set();
     const next = rows.map((row) => {
       const fingerprint = serializeConfig(row);
-      const id = previous.get(fingerprint)?.shift() ?? null;
+      const matchedId = previous.get(fingerprint)?.shift() ?? null;
+      const id = ambiguousFingerprints.has(fingerprint) ? null : matchedId;
+      if (ambiguousFingerprints.has(fingerprint) && matchedId) ambiguousIds.add(matchedId);
       if (id) usedIds.add(id);
       return { id, fingerprint, logicalKey: this.logicalKey(row) };
     });
@@ -62,7 +67,11 @@ export class PaletteRowSession {
       const newGroup = newByKey.get(key) ?? [];
       // A secondary match is safe only when there is one unmatched candidate
       // on each side. Ambiguous same-anchor rows receive fresh identities.
-      if (oldGroup.length === 1 && newGroup.length === 1) newGroup[0].id = oldGroup[0].id;
+      if (oldGroup.length === 1 && newGroup.length === 1) {
+        newGroup[0].id = oldGroup[0].id;
+      } else if (newGroup.length) {
+        oldGroup.forEach(({ id }) => ambiguousIds.add(id));
+      }
     }
     for (const entry of next) {
       if (!entry.id) entry.id = `row-${++this.nextRowId}`;
@@ -71,9 +80,18 @@ export class PaletteRowSession {
       || entry.fingerprint !== this.rows[index]?.fingerprint)) this.revision = ++paletteSessionRevision;
     const liveIds = new Set(next.map(({ id }) => id));
     for (const id of this.drafts.keys()) if (!liveIds.has(id)) this.drafts.delete(id);
-    for (const id of ambiguousIds) this.drafts.delete(id);
+    for (const id of ambiguousIds) {
+      this.drafts.delete(id);
+      this.pendingInvalidatedIds.add(id);
+    }
     this.rows = next;
     return next.map(({ id }) => id);
+  }
+
+  takeInvalidatedIds() {
+    const ids = this.pendingInvalidatedIds;
+    this.pendingInvalidatedIds = new Set();
+    return ids;
   }
 
   idAt(index) { return this.rows[index]?.id ?? null; }
@@ -125,7 +143,7 @@ export class PaletteSection {
   _getShadowElementById(id) { return this.shadowRoot?.getElementById?.(id) ?? this.shadowRoot?.querySelector(`#${id}`); }
   _renderListRows(items, renderItem) { return items.map(renderItem).join(''); }
 
-  _syncRows(scope, { inputSelector, rowSelector, draftSelector, memberSelector, onDiscard, sessionRevision, sessionKey, rowIds, deferRemovedActive = false }) {
+  _syncRows(scope, { inputSelector, rowSelector, draftSelector, memberSelector, onDiscard, sessionRevision, sessionKey, rowIds, invalidatedIds, deferRemovedActive = false }) {
     const root = this.shadowRoot;
     if (!root?.ownerDocument) return false;
     const template = root.ownerDocument.createElement('template');
@@ -171,7 +189,8 @@ export class PaletteSection {
       const liveEntries = keyMembers(liveMembers);
       const activeMember = liveEntries.find(({ item }) => item.contains(active));
       const activeRemoved = !!activeMember && !desiredByKey.has(activeMember.key);
-      if (activeRemoved && deferRemovedActive
+      const activeInvalidated = !!activeMember && invalidatedIds?.has(activeMember.item.dataset.paletteId);
+      if (activeRemoved && !activeInvalidated && deferRemovedActive
         && String(activeMember.item.dataset.paletteSession) === String(sessionKey)) return false;
       const selection = active?.matches?.('input') && typeof active.selectionStart === 'number'
         ? [active.selectionStart, active.selectionEnd, active.selectionDirection]

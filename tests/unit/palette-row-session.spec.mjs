@@ -10,11 +10,14 @@ describe('PaletteRowSession', () => {
     expect(session.reconcile([{ pos: 100 }, { pos: 40 }])).toEqual([c, b]);
   });
 
-  it('uses occurrence order for duplicates and does not claim to distinguish them', () => {
+  it('uses occurrence order only while the duplicate group is unchanged', () => {
     const session = new PaletteRowSession();
     const [first, second] = session.reconcile([{ pos: 20, color: 'red' }, { pos: 20, color: 'red' }]);
     expect(session.reconcile([{ pos: 20, color: 'red' }, { pos: 20, color: 'red' }])).toEqual([first, second]);
-    expect(session.reconcile([{ pos: 20, color: 'red' }])).toEqual([first]);
+    const [remaining] = session.reconcile([{ pos: 20, color: 'red' }]);
+    expect(remaining).not.toBe(first);
+    expect(remaining).not.toBe(second);
+    expect(session.takeInvalidatedIds()).toEqual(new Set([first, second]));
   });
 
   it('bounds stale tokens to the source revision', () => {
@@ -91,13 +94,19 @@ describe('PaletteRowSession', () => {
     expect(new Set(first).size).toBe(3);
     session.setDraft(0, 'pos', '42');
     session.setDraft(2, 'pos', '43');
-    session.reconcile([duplicate, duplicate]);
+    const afterRemove = session.reconcile([duplicate, duplicate]);
+    expect(new Set(afterRemove).size).toBe(2);
+    expect(afterRemove.some(id => first.includes(id))).toBe(false);
+    expect(session.takeInvalidatedIds()).toEqual(new Set(first));
     expect(session.drafts.size).toBe(0);
     const afterInsert = session.reconcile([duplicate, duplicate, duplicate]);
     expect(new Set(afterInsert).size).toBe(3);
-    expect(afterInsert.slice(0, 2)).toEqual(first.slice(0, 2));
-    expect(afterInsert[2]).not.toBe(first[2]);
-    expect(session.reconcile([duplicate, duplicate])).toEqual(afterInsert.slice(0, 2));
+    expect(afterInsert.some(id => afterRemove.includes(id))).toBe(false);
+    expect(session.takeInvalidatedIds()).toEqual(new Set(afterRemove));
+    const afterSecondRemove = session.reconcile([duplicate, duplicate]);
+    expect(new Set(afterSecondRemove).size).toBe(2);
+    expect(afterSecondRemove.some(id => afterInsert.includes(id))).toBe(false);
+    expect(session.takeInvalidatedIds()).toEqual(new Set(afterInsert));
   });
 
   it('uses an unambiguous secondary anchor and invalidates ambiguous duplicate anchors', () => {
@@ -121,6 +130,23 @@ describe('PaletteRowSession', () => {
     ]);
     expect(newIds.some(id => oldIds.includes(id))).toBe(false);
     expect(ambiguous.drafts.size).toBe(0);
+    expect(ambiguous.takeInvalidatedIds()).toEqual(new Set(oldIds));
+  });
+
+  it('invalidates ambiguous rows without disturbing a unique row draft', () => {
+    const session = new PaletteRowSession();
+    const duplicate = { pos: 40, color: 'green' };
+    const unique = { pos: 100, color: 'blue' };
+    const ids = session.reconcile([duplicate, duplicate, duplicate, unique]);
+    session.setDraft(0, 'pos', '42');
+    session.setDraft(3, 'pos', '95');
+    const nextIds = session.reconcile([duplicate, duplicate, unique]);
+    expect(nextIds.slice(0, 2).some(id => ids.slice(0, 3).includes(id))).toBe(false);
+    expect(nextIds[2]).toBe(ids[3]);
+    expect(session.takeInvalidatedIds()).toEqual(new Set(ids.slice(0, 3)));
+    expect(session.getDraft(0, 'pos')).toBeUndefined();
+    expect(session.getDraft(1, 'pos')).toBeUndefined();
+    expect(session.getDraft(2, 'pos')).toBe('95');
   });
 
   it('gives replacement sessions a fresh event revision', () => {
