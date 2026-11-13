@@ -918,6 +918,107 @@ for (const source of ['src', 'dist']) test(`Card external entity palette replace
   expect(await page.evaluate(() => window.__paintEvents.length)).toBe(events);
 });
 
+for (const source of ['src', 'dist']) for (const palette of ['segments', 'gradient_stops']) {
+  const segment = palette === 'segments';
+  const label = segment ? 'Segments' : 'Gradient Stops';
+  test(`Card entity ${label} draft colors stay scoped and match Add (${source})`, async ({ page }) => {
+    const editor = await mount(page, 'Card', source);
+    const fillStyle = segment ? 'bands' : 'gradient';
+    const config = { bar: { fill_style: fillStyle, color: '#998877', [palette]: segment
+      ? [{ from: 0, to: 100, color: '#998877' }]
+      : [{ pos: 0, color: '#998877' }, { pos: 100, color: '#998877' }] }, entities: [
+      { entity: 'sensor.a', bar: { color: '#dd0000', [palette]: segment
+        ? [{ from: 0, to: 50, color: '#dd0000' }]
+        : [{ pos: 0, color: '#dd0000' }, { pos: 100, color: '#dd0000' }] } },
+      { entity: 'sensor.b', bar: { color: '#0000dd', [palette]: segment
+        ? [{ from: 0, to: 50, color: '#0000dd' }]
+        : [{ pos: 0, color: '#0000dd' }, { pos: 100, color: '#0000dd' }] } },
+    ] };
+    await editor.evaluate((el, value) => el.setConfig(value), config);
+    await editor.locator('button[data-action="toggle-entity-overrides"]').nth(0).click();
+    await editor.locator('button[data-action="toggle-entity-overrides"]').nth(1).click();
+    for (const index of [0, 1]) {
+      await editor.locator(`#entity-${index}-paint-editor summary`).click();
+      await editor.locator(`#entity-${index}-group-${segment ? 'segments' : 'gradient-stops'}`).click();
+    }
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator(`#card-group-${segment ? 'segments' : 'gradient-stops'}`).click();
+    const colorSelector = index => segment ? `input[data-kind="entity-segment-draft-color"][data-index="${index}"]`
+      : `#entity-${index}-gradient-draft-color`;
+    await expect(editor.locator(colorSelector(0))).toHaveValue('#dd0000');
+    await expect(editor.locator(colorSelector(1))).toHaveValue('#0000dd');
+    const rootColorKind = segment ? 'segment-draft-color' : 'gradient-draft-color';
+    const rootColor = await editor.locator(`input[data-kind="${rootColorKind}"]`).first().inputValue();
+    const events = await page.evaluate(() => window.__paintEvents.length);
+
+    const replacement = structuredClone(config);
+    replacement.entities[0].bar[palette] = segment
+      ? [{ from: 0, to: 60, color: '#dd0000' }]
+      : [{ pos: 0, color: '#dd0000' }, { pos: 100, color: '#dd0000' }];
+    replacement.entities[1].bar[palette] = segment
+      ? [{ from: 0, to: 70, color: '#0000dd' }]
+      : [{ pos: 0, color: '#0000dd' }, { pos: 100, color: '#0000dd' }];
+    await editor.evaluate((el, value) => el.setConfig(value), replacement);
+
+    await expect(editor.locator(colorSelector(0))).toHaveValue('#dd0000');
+    await expect(editor.locator(colorSelector(1))).toHaveValue('#0000dd');
+    expect(await editor.locator(`input[data-kind="${rootColorKind}"]`).first().inputValue()).toBe(rootColor);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(events);
+
+    await editor.locator(colorSelector(0)).fill('#00aa00');
+    await expect(editor.locator(colorSelector(1))).toHaveValue('#0000dd');
+    if (segment) {
+      await editor.locator('#entity-0-segment-draft-from').fill('60%');
+      await editor.locator('#entity-0-segment-draft-to').fill('100%');
+      await editor.locator('button[data-action="add-entity-segment"][data-index="0"]').click();
+      expect((await saved(editor)).entities[0].bar.segments.at(-1).color).toBe('#00aa00');
+    } else {
+      await editor.locator('#entity-0-gradient-draft-pos').fill('50');
+      await editor.locator('button[data-action="add-entity-gradient-stop"][data-index="0"]').click();
+      expect((await saved(editor)).entities[0].bar.gradient_stops.find(stop => stop.pos === 50).color).toBe('#00aa00');
+    }
+    expect((await saved(editor)).entities[1].bar[palette].every(row => row.color !== '#00aa00')).toBe(true);
+    await expect(editor.locator(colorSelector(1))).toHaveValue('#0000dd');
+  });
+}
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) for (const palette of ['segments', 'gradient_stops']) {
+  const segment = palette === 'segments';
+  test(`${host} ${segment ? 'segment' : 'gradient'} draft color stays aligned with Add (${source})`, async ({ page }) => {
+    const editor = await mount(page, host, source);
+    const type = segment ? 'bands' : 'gradient';
+    const config = { bar: { fill_style: type, color: '#556677', [palette]: segment
+      ? [{ from: 0, to: 50, color: '#556677' }]
+      : [{ pos: 0, color: '#112233' }, { pos: 100, color: '#445566' }] } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    await editor.evaluate((el, value) => el.setConfig(value), config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator(`#card-group-${segment ? 'segments' : 'gradient-stops'}`).click();
+    const color = editor.locator(`input[data-kind="${segment ? 'segment-draft-color' : 'gradient-draft-color'}"]`).first();
+    const expectedColor = segment ? '#556677' : '#445566';
+    await expect(color).toHaveValue(expectedColor);
+    const events = await page.evaluate(() => window.__paintEvents.length);
+    const replacement = structuredClone(config);
+    replacement.bar[palette] = segment
+      ? [{ from: 0, to: 60, color: '#556677' }]
+      : [{ pos: 0, color: '#112233' }, { pos: 100, color: '#abcdef' }];
+    await editor.evaluate((el, value) => el.setConfig(value), replacement);
+    const afterSyncColor = segment ? '#556677' : '#abcdef';
+    await expect(color).toHaveValue(afterSyncColor);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(events);
+    if (segment) {
+      await editor.locator('#segment-draft-from').fill('60%');
+      await editor.locator('#segment-draft-to').fill('100%');
+      await editor.locator('button[data-action="add-segment"]').click();
+      expect((await saved(editor)).bar.segments.at(-1).color).toBe(afterSyncColor);
+    } else {
+      await editor.locator('#gradient-draft-pos').fill('50');
+      await editor.locator('button[data-action="add-gradient-stop"]').click();
+      expect((await saved(editor)).bar.gradient_stops.find(stop => stop.pos === 50).color).toBe(afterSyncColor);
+    }
+  });
+}
+
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
   test(`${host} selects dashboard paint by reference and refreshes live without losing drafts (${source})`, async ({ page }) => {
     const editor = await mountWithPaintPresets(page, host, source, {

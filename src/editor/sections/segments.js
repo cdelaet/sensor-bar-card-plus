@@ -935,7 +935,8 @@ export class SegmentsSection extends PaletteSection {
       if (control) control.value = draft[field];
     }
     const kind = entity ? 'entity-segment-draft-color' : 'segment-draft-color';
-    for (const control of this.shadowRoot?.querySelectorAll?.(`input[data-kind="${kind}"], input[data-kind="${kind}-text-fallback"]`) ?? []) {
+    const container = this._getShadowElementById(`${prefix}segment-draft-from`)?.closest?.('.segment-draft');
+    for (const control of container?.querySelectorAll?.(`input[data-kind="${kind}"], input[data-kind="${kind}-text-fallback"]`) ?? []) {
       control.value = control.type === 'color' ? getColorPickerValue(draft.color, '#4a9eff') : draft.color;
     }
   }

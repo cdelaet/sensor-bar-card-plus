@@ -575,7 +575,8 @@ export class GradientStopsSection extends PaletteSection {
     const position = this._getShadowElementById(`${prefix}gradient-draft-pos`);
     if (position) position.value = draft.pos;
     const kind = entity ? 'entity-gradient-draft-color' : 'gradient-draft-color';
-    for (const control of this.shadowRoot?.querySelectorAll?.(`input[data-kind="${kind}"], input[data-kind="${kind}-text-fallback"]`) ?? []) {
+    const container = position?.closest?.('.gradient-stop-draft');
+    for (const control of container?.querySelectorAll?.(`input[data-kind="${kind}"], input[data-kind="${kind}-text-fallback"]`) ?? []) {
       control.value = control.type === 'color' ? getColorPickerValue(draft.color, '#4CAF50') : draft.color;
     }
   }

@@ -58,7 +58,7 @@ export class PaletteSection {
     const template = root.ownerDocument.createElement('template');
     template.innerHTML = this.render(scope, ({ content }) => content, { section: false });
     const desired = [...template.content.querySelectorAll(rowSelector)].filter(row => row.querySelector(inputSelector));
-    const members = memberSelector ? [...template.content.querySelectorAll(memberSelector)] : [];
+    const members = [...template.content.querySelectorAll(memberSelector)];
     const draftContainerSelector = rowSelector === '.segment-editor-row' ? '.segment-draft' : '.gradient-stop-draft';
     const desiredDraft = template.content.querySelector(draftSelector)?.closest(draftContainerSelector);
     for (const member of members) {
@@ -90,56 +90,20 @@ export class PaletteSection {
     if (liveDraft?.dataset.paletteGeneration === String(generation)) {
       for (const control of liveDraft.querySelectorAll('input, button')) control.dataset.paletteGeneration = String(generation);
     }
-    const active = root.activeElement;
-    if (memberSelector && !generationChanged && liveMembers.length === members.length
+    if (!generationChanged && liveMembers.length === members.length
       && liveMembers.every(item => item.dataset.paletteGeneration === String(generation))) return false;
 
-    if (memberSelector) {
-      this._reconcilingRows = true;
-      try {
-        liveMembers.forEach(item => item.remove());
-        if (generationChanged) liveDraft?.remove();
-        const draftAnchor = list.querySelector(':scope > .segment-draft, :scope > .gradient-stop-draft');
-        members.forEach(member => list.insertBefore(member.cloneNode(true), draftAnchor));
-        if (generationChanged && desiredDraft) list.appendChild(desiredDraft.cloneNode(true));
-      } finally {
-        this._reconcilingRows = false;
-      }
-      return true;
+    this._reconcilingRows = true;
+    try {
+      liveMembers.forEach(item => item.remove());
+      if (generationChanged) liveDraft?.remove();
+      const draftAnchor = list.querySelector(':scope > .segment-draft, :scope > .gradient-stop-draft');
+      members.forEach(member => list.insertBefore(member.cloneNode(true), draftAnchor));
+      if (generationChanged && desiredDraft) list.appendChild(desiredDraft.cloneNode(true));
+    } finally {
+      this._reconcilingRows = false;
     }
-
-    if (liveRows.slice(desired.length).some(row => row.contains(active))) return false;
-
-    let changed = liveRows.length !== desired.length;
-    for (let index = 0; index < Math.min(liveRows.length, desired.length); index += 1) {
-      const current = liveRows[index];
-      const next = desired[index];
-      for (const input of next.querySelectorAll('input')) {
-        const kind = input.dataset.kind;
-        const currentInput = [...current.querySelectorAll('input')].find(candidate => candidate.dataset.kind === kind);
-        if (!currentInput || currentInput === active) continue;
-        if (currentInput.value !== input.value) { currentInput.value = input.value; changed = true; }
-        if (currentInput.checked !== input.checked) { currentInput.checked = input.checked; changed = true; }
-      }
-      for (const hint of next.querySelectorAll('.section-note[id]')) {
-        const currentHint = current.querySelector(`#${hint.id}`);
-        if (!currentHint) continue;
-        if (currentHint.textContent !== hint.textContent) { currentHint.textContent = hint.textContent; changed = true; }
-        if (currentHint.getAttribute('style') !== hint.getAttribute('style')) {
-          if (hint.hasAttribute('style')) currentHint.setAttribute('style', hint.getAttribute('style'));
-          else currentHint.removeAttribute('style');
-          changed = true;
-        }
-      }
-    }
-
-    for (const row of liveRows.slice(desired.length)) row.remove();
-    const draftRow = list.querySelector(':scope > .segment-draft, :scope > .gradient-stop-draft');
-    for (let index = liveRows.length; index < desired.length; index += 1) {
-      list.insertBefore(desired[index].cloneNode(true), draftRow);
-      changed = true;
-    }
-    return changed;
+    return true;
   }
 
   handle(event, mode = event.type) {
