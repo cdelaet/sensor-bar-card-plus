@@ -137,6 +137,7 @@ export class PaletteSection {
     this.context = context;
     this.ui = ui;
     this.array = array;
+    this._reconcilingRows = false;
   }
   get shadowRoot() { return this.ui.root(); }
   fillStyle(scope) { return getEffectiveFillStyleValue(this.context, scope); }
@@ -192,6 +193,7 @@ export class PaletteSection {
       const activeInvalidated = !!activeMember && invalidatedIds?.has(activeMember.item.dataset.paletteId);
       if (activeRemoved && !activeInvalidated && deferRemovedActive
         && String(activeMember.item.dataset.paletteSession) === String(sessionKey)) return false;
+      const activePreserved = !!activeMember && !activeRemoved && !activeInvalidated;
       const selection = active?.matches?.('input') && typeof active.selectionStart === 'number'
         ? [active.selectionStart, active.selectionEnd, active.selectionDirection]
         : null;
@@ -237,21 +239,42 @@ export class PaletteSection {
       if (reconciled.some(item => !liveMembers.includes(item))) changed = true;
 
       const anchor = list.querySelector(':scope > .segment-draft, :scope > .gradient-stop-draft');
-      const nextMember = item => {
-        let next = item?.nextElementSibling;
-        while (next && !next.matches(memberSelector)) next = next.nextElementSibling;
-        return next;
-      };
-      let cursor = liveMembers[0] ?? anchor;
-      for (const item of reconciled) {
-        if (item === cursor) cursor = nextMember(cursor) ?? anchor;
-        else list.insertBefore(item, cursor ?? anchor);
-      }
-      for (const entry of liveEntries) if (!desiredByKey.has(entry.key)) entry.item.remove();
-      if (liveEntries.some(entry => !desiredByKey.has(entry.key))) changed = true;
-      if (!activeRemoved && active?.isConnected && root.activeElement !== active) {
-        active.focus?.({ preventScroll: true });
-        if (selection) active.setSelectionRange?.(...selection);
+      this._reconcilingRows = true;
+      try {
+        // Remove obsolete siblings before ordering the desired rows. Keeping
+        // the active row in place avoids a native blur/change during insertBefore.
+        for (const entry of liveEntries) if (!desiredByKey.has(entry.key)) entry.item.remove();
+        if (liveEntries.some(entry => !desiredByKey.has(entry.key))) changed = true;
+
+        const activeItem = activePreserved ? activeMember.item : null;
+        const activeIndex = activeItem ? reconciled.indexOf(activeItem) : -1;
+        if (activeIndex >= 0) {
+          let reference = anchor;
+          for (let index = reconciled.length - 1; index > activeIndex; index -= 1) {
+            const item = reconciled[index];
+            if (item.nextElementSibling !== reference) list.insertBefore(item, reference);
+            reference = item;
+          }
+          reference = activeItem;
+          for (let index = activeIndex - 1; index >= 0; index -= 1) {
+            const item = reconciled[index];
+            if (item.nextElementSibling !== reference) list.insertBefore(item, reference);
+            reference = item;
+          }
+        } else {
+          let reference = anchor;
+          for (let index = reconciled.length - 1; index >= 0; index -= 1) {
+            const item = reconciled[index];
+            if (item.nextElementSibling !== reference) list.insertBefore(item, reference);
+            reference = item;
+          }
+        }
+        if (activePreserved && active?.isConnected && root.activeElement !== active) {
+          active.focus?.({ preventScroll: true });
+          if (selection) active.setSelectionRange?.(...selection);
+        }
+      } finally {
+        this._reconcilingRows = false;
       }
       return changed || liveMembers.some((item, index) => item !== reconciled[index]);
     }
@@ -292,7 +315,7 @@ export class PaletteSection {
 
   handle(event, mode = event.type) {
     const target = event.target;
-    if (target?.isConnected === false) return true;
+    if (this._reconcilingRows || target?.isConnected === false) return true;
     if (mode === 'input' && target?.type === 'checkbox') return false;
     const rawKind = target?.dataset?.kind;
     const kind = rawKind?.replace(/-text-fallback$/, '');

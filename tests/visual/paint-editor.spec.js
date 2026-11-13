@@ -118,6 +118,113 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
 }
 
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} continues typing in an unaffected row after duplicate removal (${source})`, async ({ page }) => {
+    const config = { bar: { paint: { preset: 'night' } } };
+    if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+    const duplicate = { from: '10%', to: '30%', color: '#aa0000' };
+    const unique = { from: '70%', to: '100%', color: '#0000aa' };
+    const editor = await mountWithPaintPresets(page, host, source, {
+      night: { fill_style: 'bands', segments: [duplicate, duplicate, duplicate, unique] },
+    }, config);
+    await editor.locator('#card-paint-editor summary').click();
+    await editor.locator('#card-group-segments').click();
+    const end = editor.locator('.segment-editor-row:has(input[data-kind="segment-color"][value="#0000aa"]) input[data-kind="segment-to"]');
+    await end.evaluate(node => {
+      node.focus();
+      node.value = '9';
+      node.setSelectionRange(1, 1);
+      node.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await page.evaluate(segments => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments } }), [duplicate, duplicate, unique]);
+    await expect(end).toBeFocused();
+    await expect(end).toHaveValue('9');
+    expect(await end.evaluate(node => [node.selectionStart, node.selectionEnd])).toEqual([1, 1]);
+    expect(await saved(editor)).toEqual(config);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
+
+    await end.pressSequentially('5%');
+    await expect(end).toHaveValue('95%');
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
+    await end.press('Enter');
+    await expect.poll(() => page.evaluate(() => window.__paintEvents.length)).toBe(1);
+    expect((await saved(editor)).bar.paint.segments.find(segment => segment.color === '#0000aa').to).toBe('95%');
+  });
+
+  for (const groupChange of ['remove', 'insert']) for (const activePosition of ['before', 'after']) for (const commitMode of ['enter', 'blur']) {
+    test(`${host} keeps an unaffected focused row through duplicate ${groupChange} and later ${commitMode} commit (${activePosition}, ${source})`, async ({ page }) => {
+      const config = { bar: { paint: { preset: 'night' } } };
+      if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
+      const duplicate = { from: '10%', to: '30%', color: '#aa0000' };
+      const unique = { from: '70%', to: '100%', color: '#0000aa' };
+      const beforeCount = groupChange === 'remove' ? 3 : 2;
+      const afterCount = groupChange === 'remove' ? 2 : 3;
+      const beforeDuplicates = Array.from({ length: beforeCount }, () => duplicate);
+      const afterDuplicates = Array.from({ length: afterCount }, () => duplicate);
+      const initialSegments = activePosition === 'before'
+        ? [unique, ...beforeDuplicates]
+        : [...beforeDuplicates, unique];
+      const nextSegments = activePosition === 'before'
+        ? [unique, ...afterDuplicates]
+        : [...afterDuplicates, unique];
+      const editor = await mountWithPaintPresets(page, host, source, {
+        night: { fill_style: 'bands', segments: initialSegments },
+      }, config);
+      await editor.locator('#card-paint-editor summary').click();
+      await editor.locator('#card-group-segments').click();
+      const end = editor.locator('.segment-editor-row:has(input[data-kind="segment-color"][value="#0000aa"]) input[data-kind="segment-to"]');
+      await expect(end).toHaveCount(1);
+      await end.evaluate(node => {
+        node.focus();
+        node.value = '95%';
+        node.setSelectionRange(1, 3);
+        node.dispatchEvent(new Event('input', { bubbles: true }));
+        window.__unaffectedEnd = node;
+      });
+      const eventsBefore = await page.evaluate(() => window.__paintEvents.length);
+      await editor.evaluate(el => {
+        window.__paletteDomMethods = {
+          insertBefore: Node.prototype.insertBefore,
+          remove: Element.prototype.remove,
+        };
+        Node.prototype.insertBefore = function (node, reference) {
+          const active = this.getRootNode().activeElement;
+          if (node?.matches?.('.segment-editor-row') && node.contains(active)) {
+            active.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          return window.__paletteDomMethods.insertBefore.call(this, node, reference);
+        };
+        Element.prototype.remove = function () {
+          const active = this.getRootNode().activeElement;
+          if (this.matches('.segment-editor-row') && active?.matches?.('input[data-kind="segment-to"]')) {
+            active.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          return window.__paletteDomMethods.remove.call(this);
+        };
+      });
+      await page.evaluate(segments => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments } }), nextSegments);
+      await editor.evaluate(() => {
+        Node.prototype.insertBefore = window.__paletteDomMethods.insertBefore;
+        Element.prototype.remove = window.__paletteDomMethods.remove;
+        delete window.__paletteDomMethods;
+      });
+
+      await expect(editor.locator('.segment-editor-row')).toHaveCount(afterCount + 1);
+      await expect(end).toBeFocused();
+      await expect(end).toHaveValue('95%');
+      expect(await end.evaluate(node => node === window.__unaffectedEnd)).toBe(true);
+      expect(await end.evaluate(node => [node.selectionStart, node.selectionEnd])).toEqual([1, 3]);
+      expect(await saved(editor)).toEqual(config);
+      expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventsBefore);
+
+      if (commitMode === 'enter') await end.press('Enter');
+      else await end.evaluate(node => { node.dispatchEvent(new Event('change', { bubbles: true })); node.blur(); });
+      await expect.poll(() => page.evaluate(() => window.__paintEvents.length)).toBe(eventsBefore + 1);
+      const committed = await saved(editor);
+      expect(committed).not.toEqual(config);
+      expect(committed.bar.paint.segments.find(segment => segment.color === '#0000aa').to).toBe('95%');
+    });
+  }
+
   test(`${host} keeps gradient drafts isolated after editing and reinserting original content (${source})`, async ({ page }) => {
     const config = {
       bar: { fill_style: 'gradient', gradient_stops: [
