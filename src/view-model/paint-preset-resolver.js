@@ -2,7 +2,7 @@ import {
   BAR_PAINT_DIAGNOSTICS, INVALID_PAINT_OPACITY, PAINT_PROPERTY_SOURCES, normalizeBarConfig, normalizePaintOpacity,
 } from '../config/normalize.js';
 
-const PRESET_PROPERTIES = new Set(['fill_style', 'color', 'solid_fill', 'segments', 'gradient_stops']);
+const PRESET_PROPERTIES = new Set(['fill_style', 'color', 'solid_fill', 'segments', 'gradient_stops', 'opacity']);
 const PRESET_PATH = 'paint.preset';
 const THEME_ACCENT_FALLBACK = 'var(--accent-color, #4a9eff)';
 
@@ -30,6 +30,17 @@ function normalizeDefinition(definition, { preset = false, canonical = false } =
   }
 
   const input = cloneValue(definition);
+  let normalizedOpacity = null;
+  let presetOpacity = null;
+  if ((preset || canonical) && Object.prototype.hasOwnProperty.call(input, 'opacity') && input.opacity !== undefined) {
+    normalizedOpacity = normalizePaintOpacity({ opacity: input.opacity });
+    if (preset) presetOpacity = {
+      authored: true,
+      value: normalizedOpacity.opacity,
+      invalid: Object.prototype.hasOwnProperty.call(normalizedOpacity, INVALID_PAINT_OPACITY),
+    };
+    delete input.opacity;
+  }
   if (canonical) {
     // Normalized paints include null inactive collections; omit them before
     // passing the remaining canonical fields through the raw normalizer.
@@ -44,7 +55,15 @@ function normalizeDefinition(definition, { preset = false, canonical = false } =
       reason: 'invalid_paint_property',
     } };
   }
-  return { paint: normalized.paint, issue: null };
+  if (normalizedOpacity) {
+    normalized.paint.opacity = normalizedOpacity.opacity;
+    if (Object.prototype.hasOwnProperty.call(normalizedOpacity, INVALID_PAINT_OPACITY)) {
+      Object.defineProperty(normalized.paint, INVALID_PAINT_OPACITY, {
+        value: normalizedOpacity[INVALID_PAINT_OPACITY],
+      });
+    }
+  }
+  return { paint: normalized.paint, issue: null, presetOpacity };
 }
 
 function cloneCanonicalDefinition(definition) {
@@ -128,6 +147,7 @@ export function resolvePaintPreset({ paint, registry, inheritedPaint = null, the
 
   let base = fallbackPaint;
   let source = inherited.paint ? 'inherited' : 'default';
+  let presetOpacity = null;
   if (hasReference) {
     if (!hasValidReference) {
       diagnostics.push(makeDiagnostic('paint_preset_reference_invalid', reference, inherited.paint ? 'inherited' : 'default', 'reference_must_be_nonempty_string'));
@@ -148,6 +168,13 @@ export function resolvePaintPreset({ paint, registry, inheritedPaint = null, the
         } else {
           base = normalizedPreset.paint;
           source = 'preset';
+          presetOpacity = normalizedPreset.presetOpacity;
+          if (presetOpacity?.invalid) {
+            diagnostics.push({
+              code: 'paint_opacity_invalid', severity: 'warning', path: 'paint.opacity',
+              reference, fallback: 'default_opacity',
+            });
+          }
         }
       }
     }
@@ -155,7 +182,11 @@ export function resolvePaintPreset({ paint, registry, inheritedPaint = null, the
 
   let validLocalOverrides = true;
   if (Object.keys(local).length && !canonicalPaint) {
-    const checkedLocal = normalizeDefinition(local);
+    // Opacity is independently recoverable. Validate the palette fields apart
+    // from it so an invalid opacity cannot discard an otherwise valid preset.
+    const localPalette = { ...local };
+    delete localPalette.opacity;
+    const checkedLocal = Object.keys(localPalette).length ? normalizeDefinition(localPalette) : { issue: null };
     if (checkedLocal.issue) {
       validLocalOverrides = false;
       diagnostics.push(makeDiagnostic('paint_definition_invalid', reference, inherited.paint ? 'inherited' : 'default',
@@ -170,7 +201,7 @@ export function resolvePaintPreset({ paint, registry, inheritedPaint = null, the
   );
   const opacity = Object.prototype.hasOwnProperty.call(local, 'opacity') && local.opacity !== undefined
     ? local.opacity
-    : inheritedOpacity(inheritedPaint);
+    : presetOpacity?.authored ? presetOpacity.value : inheritedOpacity(inheritedPaint);
   const effectivePaint = mergeBase(base, overrides, opacity);
   const effective = canonicalPaint
     ? cloneCanonicalDefinition(effectivePaint)

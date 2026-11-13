@@ -4,6 +4,7 @@ import { loadCardClass } from '../support/load-card-class.cjs';
 import { normalizeCardConfig } from '../../src/config/normalize.js';
 import { historicalMarkerId } from '../../src/history/marker-consumers.js';
 import { buildBarRenderModel } from '../../src/view-model/bar-render-model.js';
+import { buildRowViewModel } from '../../src/view-model/row-view-model.js';
 
 const entity = 'sensor.power';
 const sensor = (value, attributes = {}, last_updated) => ({ state: String(value), attributes, last_updated });
@@ -20,6 +21,75 @@ async function update(element, value, others = {}) {
   element.hass = hass(value, others);
   await element.updateComplete;
 }
+
+it.each(['Card', 'Tile Feature'])('%s applies preset opacity once to the base layer and refreshes registry values', async host => {
+  const classes = loadCardClass();
+  const paintPreset = Object.assign(Object.create(null), {
+    fill_style: 'solid', color: 'rgb(18 52 86 / 50%)', opacity: 42,
+  });
+  const registry = () => ({ status: 'ready', presets: Object.assign(Object.create(null), { translucent: paintPreset }) });
+  const raw = {
+    baseline: { at: 20, color: '#123456' },
+    target: { at: 80, color: '#abcdef' },
+    ...(host === 'Card'
+      ? { entities: [{ entity, bar: { paint: { preset: 'translucent' } } }] }
+      : { type: 'custom:sensor-bar-card-plus-feature', bar: { paint: { preset: 'translucent' } } }),
+  };
+  const original = structuredClone(raw);
+  const render = (appearance, row) => buildBarRenderModel(row, appearance, { height: 30 });
+  const expectPresetModel = (appearance, row, opacity) => {
+    const layers = render(appearance, row).fill.paintLayers;
+    expect(layers[0].paintStyle).toMatch(new RegExp(`opacity:${opacity};$`));
+    expect(layers[0].paintStyle.match(/opacity:/g)).toHaveLength(1);
+    expect(layers[0].paintStyle).toContain('rgb(18 52 86 / 50%)');
+    expect(layers.slice(1).every(layer => !layer.paintStyle.includes('opacity:'))).toBe(true);
+  };
+
+  let appearance;
+  let row;
+  let hostInstance;
+  if (host === 'Card') {
+    const card = new classes.card();
+    card._render = () => {};
+    card._logDiagnostics = () => {};
+    card.setConfig(raw);
+    card.hass = hass(42);
+    card._paintPresetRegistry = registry();
+    card._refreshPaintPresetResolutions();
+    const resolved = card._resolve(card._config.entities[0]);
+    appearance = resolved;
+    row = buildRowViewModel({ entityConfig: resolved, entityState: sensor(42) });
+    hostInstance = card;
+  } else {
+    const element = new classes.feature();
+    element._render = () => {};
+    element.setConfig(raw);
+    element._paintPresetRegistry = registry();
+    element.context = { entity_id: entity };
+    element.hass = hass(42);
+    await element.updateComplete;
+    appearance = element._resolvedAppearance;
+    row = element._row;
+    hostInstance = element;
+  }
+
+  expectPresetModel(appearance, row, '0.42');
+  paintPreset.opacity = 25;
+  if (host === 'Card') {
+    hostInstance._paintPresetRegistry = registry();
+    hostInstance._refreshPaintPresetResolutions();
+    appearance = hostInstance._resolve(hostInstance._config.entities[0]);
+    row = buildRowViewModel({ entityConfig: appearance, entityState: sensor(42) });
+  } else {
+    hostInstance._paintPresetRegistry = registry();
+    hostInstance._requestUpdate();
+    await hostInstance.updateComplete;
+    appearance = hostInstance._resolvedAppearance;
+    row = hostInstance._row;
+  }
+  expectPresetModel(appearance, row, '0.25');
+  expect(raw).toEqual(original);
+});
 
 describe('native feature registration', () => {
   it('warns and ignores unsupported extrema aliases in both runtime hosts', async () => {

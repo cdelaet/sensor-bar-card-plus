@@ -32,6 +32,7 @@ describe('pure dashboard paint preset resolution', () => {
       fill_style: 'gradient', color: '#112233', solid_fill: false,
       gradient_stops: [{ pos: 0, color: '#000000' }, { pos: 100, color: '#ffffff' }],
       segments: [{ from: 0, to: 100, color: '#abcdef' }],
+      opacity: 55,
     };
     const result = resolvePaintPreset({
       paint: { preset: 'thermal', color: '#ff0000', opacity: 0 }, registry: registryWith({ thermal: definition }),
@@ -52,6 +53,71 @@ describe('pure dashboard paint preset resolution', () => {
     });
     expect(result.paint).toMatchObject({ fill_style: 'solid', color: '#abcdef', opacity: 40 });
   });
+
+  it('treats an undefined preset opacity as omitted', () => {
+    const result = resolvePaintPreset({
+      paint: { preset: 'plain' },
+      registry: registryWith({ plain: { fill_style: 'solid', color: '#abcdef', opacity: undefined } }),
+      inheritedPaint: inherited,
+    });
+    expect(result.paint.opacity).toBe(40);
+  });
+
+  it.each([[0, 0], [100, 100], [37.5, 37.5], ['42.25', 42.25]])(
+    'uses authored preset opacity %s and keeps raw/canonical resolution in parity', (opacity, expected) => {
+      const paint = { preset: 'fade' };
+      const registry = registryWith({ fade: { fill_style: 'gradient', color: 'rgb(20 40 60 / 50%)', opacity } });
+      const raw = resolvePaintPreset({ paint, registry, inheritedPaint: inherited });
+      const canonical = resolvePaintPreset({ paint, registry, inheritedPaint: inherited, canonicalPaint: true });
+
+      expect(raw.paint.opacity).toBe(expected);
+      expect(canonical.paint).toEqual(raw.paint);
+      expect(raw.paint.fill_style).toBe('gradient');
+      expect(raw.paint.color).toBe('rgb(20 40 60 / 50%)');
+      expect(raw.diagnostics).toEqual([]);
+    },
+  );
+
+  it('uses explicit local opacity before the preset opacity', () => {
+    const result = resolvePaintPreset({
+      paint: { preset: 'fade', opacity: '12.5' },
+      registry: registryWith({ fade: { fill_style: 'gradient', color: '#abcdef', opacity: 55 } }),
+      inheritedPaint: inherited,
+    });
+    expect(result.paint).toMatchObject({ fill_style: 'gradient', color: '#abcdef', opacity: 12.5 });
+  });
+
+  it('recovers invalid local opacity without discarding the selected preset', () => {
+    const result = resolvePaintPreset({
+      paint: { preset: 'fade', opacity: 'invalid' },
+      registry: registryWith({ fade: { fill_style: 'gradient', color: '#abcdef', opacity: 55 } }),
+      inheritedPaint: inherited,
+    });
+    expect(result.source).toBe('preset');
+    expect(result.paint).toMatchObject({ fill_style: 'gradient', color: '#abcdef', opacity: 100 });
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: 'paint_opacity_invalid', path: 'paint.opacity', reference: 'fade', fallback: 'default_opacity',
+    }));
+  });
+
+  it.each([['invalid', 100], [101, 100], [-1, 100]])(
+    'recovers invalid preset opacity %j without discarding its valid paint', (opacity, expected) => {
+      const result = resolvePaintPreset({
+        paint: { preset: 'fade' },
+        registry: registryWith({ fade: { fill_style: 'gradient', color: '#abcdef',
+          gradient_stops: [{ pos: 0, color: '#123456' }, { pos: 100, color: '#654321' }], opacity } }),
+        inheritedPaint: inherited,
+      });
+
+      expect(result.source).toBe('preset');
+      expect(result.paint).toMatchObject({ fill_style: 'gradient', color: '#abcdef', opacity: expected });
+      expect(result.paint.gradient_stops).toHaveLength(2);
+      expect(result.diagnostics).toContainEqual(expect.objectContaining({
+        code: 'paint_opacity_invalid', path: 'paint.opacity', reference: 'fade', fallback: 'default_opacity',
+      }));
+      expect(result.diagnostics.some(diagnostic => diagnostic.code === 'paint_preset_invalid')).toBe(false);
+    },
+  );
 
   it('merges ordinary local paint fields property by property over inherited paint', () => {
     const result = resolvePaintPreset({ paint: { color: '#ff0000', opacity: 65 }, inheritedPaint: inherited });
@@ -74,6 +140,29 @@ describe('pure dashboard paint preset resolution', () => {
     expect(result.paint).toMatchObject({ fill_style: 'solid', color: '#ff0000', opacity: 35 });
     expect(result.paint).not.toHaveProperty('preset');
     expect(result.diagnostics).toEqual([]);
+  });
+
+  it('inherits Card preset opacity through entity presets only when the child preset omits it', () => {
+    const normalized = normalizeCardConfig({
+      bar: { paint: { preset: 'card' } },
+      entities: [{ entity: 'sensor.power', bar: { paint: { preset: 'entity' } } }],
+    });
+    const registry = registryWith({
+      card: { fill_style: 'solid', color: '#123456', opacity: 28 },
+      entity: { fill_style: 'gradient', color: '#abcdef' },
+      opaque: { fill_style: 'gradient', color: '#fedcba', opacity: 72 },
+    });
+    const inherited = resolveScopedPaintPreset({ inheritedPaint: normalized.bar.paint, paint: {}, registry });
+    const child = resolvePaintPreset({
+      paint: { preset: 'entity' }, inheritedPaint: inherited.paint, registry,
+    });
+    const explicitChild = resolvePaintPreset({
+      paint: { preset: 'opaque' }, inheritedPaint: inherited.paint, registry,
+    });
+
+    expect(inherited.paint.opacity).toBe(28);
+    expect(child.paint.opacity).toBe(28);
+    expect(explicitChild.paint.opacity).toBe(72);
   });
 
   it('preserves normalized ordinary paint when no preset reference is present', () => {
@@ -205,7 +294,7 @@ describe('pure dashboard paint preset resolution', () => {
 
   it.each([
     ['not an object', 'paint_preset_invalid'],
-    [{ opacity: 30, color: '#123456' }, 'paint_preset_invalid'],
+    [{ future: true, color: '#123456' }, 'paint_preset_invalid'],
     [{ fill_style: 'unknown', color: '#123456' }, 'paint_preset_invalid'],
   ])('uses inherited paint and diagnoses invalid preset definitions: %j', (definition, code) => {
     const result = resolvePaintPreset({ paint: { preset: 'broken' }, registry: registryWith({ broken: definition }), inheritedPaint: inherited });

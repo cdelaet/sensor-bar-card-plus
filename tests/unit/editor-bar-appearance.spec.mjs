@@ -171,7 +171,7 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
   it('selects a preset by reference, applies local overrides, and clears them individually', () => {
     const { editor } = setup(source, { bar: { paint: { opacity: 35, future: true } } });
     const context = editor._createSectionContext();
-    const registry = { status: 'ready', presets: { night: { fill_style: 'solid', color: '#112233' } } };
+    const registry = { status: 'ready', presets: { night: { fill_style: 'solid', color: '#112233', opacity: 42 } } };
     const before = getBarPaintEditorState(context, root, null, registry);
     expect(before.presetOptions).toEqual([{ value: 'preset:night', label: 'night' }]);
     expect(handleBarAppearanceField(context, { field: 'bar-paint-mode', value: 'preset:night' })).toBe(true);
@@ -183,7 +183,7 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     expect(editor._draftConfig.bar.paint.opacity).toBe(0);
     clearBarPaintPropertyOverride(context, root, 'opacity');
     expect(editor._draftConfig.bar.paint).toEqual({ future: true, preset: 'night' });
-    expect(getBarPaintEditorState(context, root, null, registry).paint.opacity).toBe(100);
+    expect(getBarPaintEditorState(context, root, null, registry).paint.opacity).toBe(42);
     expect(handleBarAppearanceField(context, { field: 'bar-paint-mode', value: 'manual' })).toBe(true);
     expect(editor._draftConfig.bar.paint).toEqual({ future: true });
   });
