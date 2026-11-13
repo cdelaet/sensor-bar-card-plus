@@ -123,6 +123,47 @@ it('identifies a local legacy nested color mode as authored paint in the compact
   expect(state.inherited).toBe(false);
 });
 
+it.each(['bands', 'soft_bands', 'band_gradient'])('uses authored fixed extent for the %s header swatch only', fill_style => {
+  const colors = ['#3949AB', '#1E88E5', '#29B6F6', '#26C6DA', '#26A69A', '#66BB6A', '#D4E157', '#FFCA28',
+    '#FFA726', '#FB8C00', '#E53935', '#8E24AA'];
+  const boundaries = [5, 10, 15, 18, 20, 22, 24, 26, 28, 30, 33, 36, 40];
+  const segments = colors.map((color, index) => ({ from: boundaries[index], to: boundaries[index + 1], color }));
+  const config = { scale: { min: { fixed: 15 }, max: { fixed: 25 }, direction: 'reverse' }, bar: { fill_style, segments } };
+  const context = { read: (_scope, path) => getPathValue(config, path), hass: { states: {} } };
+  const state = getBarPaintEditorState(context, { type: 'card' });
+  const html = renderPaintEditor({ id: 'paint', ...state });
+  const previewGradient = compilePaint(state.paint, state.previewScale).gradient;
+
+  expect(state.scale).toEqual({ minValue: 15, maxValue: 25, scaleDirection: 'reverse' });
+  expect(state.previewScale).toEqual({ minValue: 5, maxValue: 40, scaleDirection: 'reverse' });
+  expect(html).toContain(`background-image:${previewGradient}`);
+  for (const color of colors) {
+    const [red, green, blue] = color.slice(1).match(/.{2}/g).map(channel => parseInt(channel, 16));
+    expect(previewGradient.includes(color) || previewGradient.includes(`rgb(${red},${green},${blue})`)).toBe(true);
+  }
+  expect(compilePaint(state.paint, state.scale).gradient).not.toContain(colors[0]);
+  const [red, green, blue] = colors[0].slice(1).match(/.{2}/g).map(channel => parseInt(channel, 16));
+  const completeGradient = compilePaint(state.paint, state.previewScale).gradient;
+  expect(completeGradient.includes(colors[0]) || completeGradient.includes(`rgb(${red},${green},${blue})`)).toBe(true);
+  expect(config.scale).toEqual({ min: { fixed: 15 }, max: { fixed: 25 }, direction: 'reverse' });
+  expect(config.bar.segments).toEqual(segments);
+});
+
+it('keeps percentage segment swatches on their existing percentage scale', () => {
+  const segments = [
+    { from: '0%', to: '25%', color: '#112233' }, { from: '25%', to: '50%', color: '#223344' },
+    { from: '50%', to: '75%', color: '#334455' }, { from: '75%', to: '100%', color: '#445566' },
+  ];
+  const config = { scale: { min: { fixed: 15 }, max: { fixed: 25 } }, bar: { fill_style: 'band_gradient', segments } };
+  const context = { read: (_scope, path) => getPathValue(config, path), hass: { states: {} } };
+  const state = getBarPaintEditorState(context, { type: 'card' });
+  const html = renderPaintEditor({ id: 'paint', ...state });
+
+  expect(state.previewScale).toEqual(state.scale);
+  expect(html).toContain(`background-image:${compilePaint(state.paint, state.scale).gradient}`);
+  expect(config.bar.segments).toEqual(segments);
+});
+
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Card row', 'Feature']) {
   describe(`null bar promotion (${host}, ${source})`, () => {
     it.each([

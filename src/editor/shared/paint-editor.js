@@ -34,7 +34,7 @@ function fieldRoutingAttributes({ field, kind, index }) {
  * Native disclosure state survives host renders by reading the mounted node.
  */
 export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {}, inherited = false,
-  scale, fields = {}, root, paletteContent = '', paletteFields = null, cssText = false,
+  scale, previewScale = scale, fields = {}, root, paletteContent = '', paletteFields = null, cssText = false,
   mode = 'inherit', presetReference, presetOptions = [], overrides = {}, diagnostics = [], registryStatus = 'unknown' }) {
   const controls = Object.fromEntries(['fill_style', 'solid_fill', 'color', 'opacity'].map(key => [key,
     fields[key] ?? { id: `${id}-${key}`, field: key },
@@ -82,7 +82,7 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
       ? 'No dashboard paint presets available.' : '';
   return `<details id="${id}" class="paint-editor"${open ? ' open' : ''}>
     <summary class="paint-editor-summary">
-      <span class="paint-editor-swatch" aria-hidden="true" style="background-color:${swatchBackdrop};background-image:${escapeAttribute(swatchPaint(paint, scale))};"></span>
+      <span class="paint-editor-swatch" aria-hidden="true" style="background-color:${swatchBackdrop};background-image:${escapeAttribute(swatchPaint(paint, previewScale))};"></span>
       <span class="paint-editor-heading">Paint</span>
       <span class="paint-editor-description">${escapeAttribute(description)}</span>
     </summary>
@@ -113,6 +113,7 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
   const editor = root?.querySelector(`#${id}`);
   if (!editor) return;
   const { paint, inherited, scale } = state;
+  const previewScale = state.previewScale ?? scale;
   const description = editor.querySelector?.('.paint-editor-description');
   const reference = state.presetReference == null ? '' : String(state.presetReference);
   const mode = state.mode ?? 'inherit';
@@ -123,7 +124,7 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
   if (description && description.textContent !== text) description.textContent = text;
   const swatch = editor.querySelector?.('.paint-editor-swatch');
   setStyleIfChanged(swatch, 'backgroundColor', swatchBackdrop);
-  setStyleIfChanged(swatch, 'backgroundImage', swatchPaint(paint, scale));
+  setStyleIfChanged(swatch, 'backgroundImage', swatchPaint(paint, previewScale));
   const modeControl = editor.querySelector?.('[data-paint-mode="true"]');
   if (modeControl?.options) {
     const optionHtml = `<option value="inherit">Inherited paint</option><option value="manual">Manual paint</option>${state.presetOptions?.length

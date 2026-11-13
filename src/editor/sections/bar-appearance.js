@@ -28,6 +28,28 @@ export function getFillStyleValue(context, scope) {
   return getFillStyleFromColorMode(colorMode);
 }
 
+function getPaintPreviewScale(paint, scale) {
+  if (!['bands', 'soft_bands', 'band_gradient'].includes(paint.fill_style) || paint.solid_fill) return scale;
+  const segments = Array.isArray(paint.segments) ? paint.segments.filter(segment => !segment?.invalidBoundary) : [];
+  const fixedBoundaries = segments.flatMap(segment => [segment?.from?.fixed, segment?.to?.fixed])
+    .filter(Number.isFinite);
+  if (!fixedBoundaries.length) return scale;
+
+  const fixedStarts = [...new Set(segments.map(segment => segment?.from?.fixed).filter(Number.isFinite))]
+    .sort((left, right) => left - right);
+  const minValue = Math.min(...fixedBoundaries);
+  let maxValue = Math.max(...fixedBoundaries);
+  const lastStart = fixedStarts.at(-1);
+  const lastSegment = segments.filter(segment => segment?.from?.fixed === lastStart).at(-1);
+  if (lastSegment && lastSegment.to == null && Number.isFinite(lastStart)) {
+    const previousStart = fixedStarts.at(-2);
+    const scaleRange = Math.abs(scale.maxValue - scale.minValue);
+    const step = Number.isFinite(previousStart) ? lastStart - previousStart : scaleRange || 1;
+    maxValue = Math.max(maxValue, lastStart + (step || scaleRange || 1));
+  }
+  return { ...scale, minValue, maxValue };
+}
+
 export function getEffectiveFillStyleValue(context, scope) {
   return getBarPaintEditorState(context, scope).paint.fill_style;
 }
@@ -190,6 +212,7 @@ export function getBarPaintEditorState(context, scope, paletteValues, registry =
   if (paint.gradient_stops == null && paletteValues?.gradient_stops) paint.gradient_stops = paletteValues.gradient_stops;
   const scale = normalizeScaleConfig(local, inheritedConfig);
   const { min, max } = getResolvedScale(context.hass, scale);
+  const previewScale = getPaintPreviewScale(paint, { minValue: min, maxValue: max, scaleDirection: scale.direction });
   const bindings = createBarPaintBindings(context, scope);
   const properties = ['fill_style', 'color', 'solid_fill', 'segments', 'gradient_stops', 'opacity'];
   const overrides = Object.fromEntries(properties.map(property => [property, ownsBarPaintProperty(context, scope, property)]));
@@ -207,7 +230,7 @@ export function getBarPaintEditorState(context, scope, paletteValues, registry =
     || properties.some(key => ownsBarPaintProperty(context, scope, key))
     || ['color_mode', 'color', 'segments', 'severity', 'gradient_stops'].some(key => Object.prototype.hasOwnProperty.call(local, key));
   return { bindings, paint, inherited: scope?.type === 'entity' && !owned, mode, presetReference,
-    presetOptions, overrides, diagnostics: resolved.diagnostics, registryStatus: registry?.status ?? 'loading',
+    presetOptions, overrides, diagnostics: resolved.diagnostics, registryStatus: registry?.status ?? 'loading', previewScale,
     scale: { minValue: min, maxValue: max, scaleDirection: scale.direction } };
 }
 
