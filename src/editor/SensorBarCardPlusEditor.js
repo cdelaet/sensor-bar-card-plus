@@ -2852,7 +2852,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     } else {
       this._expandedEntityOverrides.add(index);
     }
-    this._render();
+    const expanded = this._isEntityOverrideExpanded(index);
+    const button = this.shadowRoot.querySelector(`.override-toggle[data-index="${index}"]`);
+    button?.setAttribute('aria-expanded', String(expanded));
+    if (button) button.textContent = `${expanded ? '▾' : '▸'} Overrides`;
+    const panel = button?.nextElementSibling;
+    if (panel?.classList.contains('override-panel')) panel.style.display = expanded ? 'grid' : 'none';
   }
 
   _syncExpandedEntityOverrides(entityCount) {
@@ -2882,7 +2887,15 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     } else {
       this._expandedCardGroups.add(group);
     }
-    this._render();
+    const expanded = this._isCardGroupExpanded(group);
+    const button = this.shadowRoot.querySelector(`#card-group-${group}`);
+    const wrapper = button?.closest('.override-group');
+    button?.setAttribute('aria-expanded', String(expanded));
+    wrapper?.setAttribute('data-expanded', String(expanded));
+    const title = button?.querySelector('.override-group-title');
+    if (title?.textContent) title.textContent = `${expanded ? '▾' : '▸'} ${title.textContent.slice(2)}`;
+    const body = wrapper?.querySelector('.override-group-body');
+    if (body) body.style.display = expanded ? 'grid' : 'none';
   }
 
   _toggleGenericMarkerExpanded(...args) {
@@ -2904,7 +2917,15 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     } else {
       this._expandedOverrideGroups.add(key);
     }
-    this._render();
+    const expanded = this._isOverrideGroupExpanded(index, group);
+    const button = this.shadowRoot.querySelector(`#entity-${index}-group-${group}`);
+    const wrapper = button?.closest('.override-group');
+    button?.setAttribute('aria-expanded', String(expanded));
+    wrapper?.setAttribute('data-expanded', String(expanded));
+    const title = button?.querySelector('.override-group-title');
+    if (title?.textContent) title.textContent = `${expanded ? '▾' : '▸'} ${title.textContent.slice(2)}`;
+    const body = wrapper?.querySelector('.override-group-body');
+    if (body) body.style.display = expanded ? 'grid' : 'none';
   }
 
   _hasExplicitOverrideValue(...args) {
