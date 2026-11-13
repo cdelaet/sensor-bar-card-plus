@@ -425,16 +425,15 @@ export class SegmentsSection extends PaletteSection {
     return getSegmentsForRendering({ bar: { segments } }, scale.min, scale.max);
   }
 
-  _getAutomaticEndValidationMessage(scope, rows, index) {
+  _getAutomaticEndValidationMessage(scope, rows, index, resolvedRows = this._resolveAutomaticEndRows(scope, rows)) {
     const row = rows[index];
     if (!row) return '';
     const from = this._parseSegmentBoundaryText(row.from);
     const to = this._parseSegmentBoundaryText(row.to);
     if (from.state !== 'valid' || to.state === 'invalid') return 'Enter valid from/to values.';
-    const resolved = this._resolveAutomaticEndRows(scope, rows);
-    const candidate = resolved.find(segment => segment.label === index);
+    const candidate = resolvedRows.find(segment => segment.label === index);
     if (!candidate || candidate.from >= candidate.to) return 'From must be below To.';
-    for (const other of resolved) {
+    for (const other of resolvedRows) {
       if (other.label === index || other.from >= other.to) continue;
       if (candidate.from === other.from) return 'Duplicate segment start.';
       if (candidate.from < other.to && candidate.to > other.from) return 'Segments overlap.';
@@ -444,7 +443,20 @@ export class SegmentsSection extends PaletteSection {
 
   _getSegmentRowValidationMessage(scope = { type: 'card' }, segmentIndex) {
     if (this.array.autoEnds) return this._getAutomaticEndValidationMessage(scope, this._getAutomaticEndInputRows(scope), segmentIndex);
+    return this._getSegmentRowValidationMessageFromRows(scope, this._buildSegmentValidationRows(scope), segmentIndex);
+  }
+
+  _getSegmentRowValidationMessages(scope = { type: 'card' }) {
+    if (this.array.autoEnds) {
+      const rows = this._getAutomaticEndInputRows(scope);
+      const resolvedRows = this._resolveAutomaticEndRows(scope, rows);
+      return rows.map((_, index) => this._getAutomaticEndValidationMessage(scope, rows, index, resolvedRows));
+    }
     const rows = this._buildSegmentValidationRows(scope);
+    return rows.map((_, index) => this._getSegmentRowValidationMessageFromRows(scope, rows, index));
+  }
+
+  _getSegmentRowValidationMessageFromRows(scope, rows, segmentIndex) {
     const row = rows[segmentIndex];
     if (!row) {
       return '';
@@ -481,49 +493,7 @@ export class SegmentsSection extends PaletteSection {
   }
 
   _getValidSegmentDraft(scope = { type: 'card' }) {
-    const draft = this._getSegmentDraftState(scope);
-    if (this.array.autoEnds) {
-      if (!draft.color.trim() || !CSS.supports('color', draft.color)) return null;
-      const rows = [...this._getAutomaticEndInputRows(scope), draft];
-      if (this._getAutomaticEndValidationMessage(scope, rows, rows.length - 1)) return null;
-      const from = this._parseSegmentBoundaryInput(draft.from), to = this._parseSegmentBoundaryInput(draft.to);
-      return { from, ...(draft.to.trim() ? { to } : {}), color: draft.color };
-    }
-    const parsedFrom = this._parseSegmentBoundaryText(draft.from);
-    const parsedTo = this._parseSegmentBoundaryText(draft.to);
-    const color = normalizeTextValue(draft.color).trim();
-    if (parsedFrom.state !== 'valid' || parsedTo.state !== 'valid' || !color) {
-      return null;
-    }
-    const boundaryOrder = this._compareSegmentBoundaries(parsedFrom.value, parsedTo.value);
-    if (boundaryOrder !== null && boundaryOrder !== -1) {
-      return null;
-    }
-    if (boundaryOrder === null) {
-      const rows = this._buildSegmentValidationRows(scope);
-      const mixedRow = { index: rows.length, segment: draft, rawFrom: draft.from, rawTo: draft.to,
-        parsedFrom, parsedTo };
-      if (this._getResolvedMixedRangeValidationMessage(scope, [...rows, mixedRow], mixedRow.index)) return null;
-    }
-    const candidateFrom = this._getSegmentPreviewBoundaryValue(parsedFrom.value);
-    const candidateTo = this._getSegmentPreviewBoundaryValue(parsedTo.value);
-    const rows = this._buildSegmentValidationRows(scope);
-    for (const row of rows) {
-      if (row.parsedFrom.state !== 'valid' || row.parsedTo.state !== 'valid') continue;
-      if (this._compareSegmentBoundaries(parsedFrom.value, row.parsedFrom.value) === null
-        || this._compareSegmentBoundaries(parsedFrom.value, parsedTo.value) === null
-        || this._compareSegmentBoundaries(row.parsedFrom.value, row.parsedTo.value) === null) continue;
-      const otherFrom = this._getSegmentPreviewBoundaryValue(row.parsedFrom.value);
-      const otherTo = this._getSegmentPreviewBoundaryValue(row.parsedTo.value);
-      if (candidateFrom === otherFrom || (candidateFrom < otherTo && candidateTo > otherFrom)) {
-        return null;
-      }
-    }
-    return {
-      from: parsedFrom.value,
-      to: parsedTo.value,
-      color,
-    };
+    return this._getSegmentDraftValidationState(scope).segment;
   }
 
   _canAddSegment(scope = { type: 'card' }) {
@@ -531,39 +501,49 @@ export class SegmentsSection extends PaletteSection {
   }
 
   _getSegmentDraftValidationMessage(scope = { type: 'card' }) {
+    return this._getSegmentDraftValidationState(scope).message;
+  }
+
+  _getSegmentDraftValidationState(scope = { type: 'card' }) {
     const draft = this._getSegmentDraftState(scope);
     if (this.array.autoEnds) {
-      if (!draft.from.trim()) return 'Enter a start value to add a segment.';
-      if (!draft.color.trim() || !CSS.supports('color', draft.color)) return 'Enter a valid CSS color.';
+      let message = '';
+      if (!draft.from.trim()) message = 'Enter a start value to add a segment.';
+      else if (!draft.color.trim() || !CSS.supports('color', draft.color)) message = 'Enter a valid CSS color.';
       const rows = [...this._getAutomaticEndInputRows(scope), draft];
-      return this._getAutomaticEndValidationMessage(scope, rows, rows.length - 1);
+      if (!message) message = this._getAutomaticEndValidationMessage(scope, rows, rows.length - 1);
+      let segment = null;
+      if (draft.color.trim() && CSS.supports('color', draft.color) && !message) {
+        const from = this._parseSegmentBoundaryInput(draft.from), to = this._parseSegmentBoundaryInput(draft.to);
+        segment = { from, ...(draft.to.trim() ? { to } : {}), color: draft.color };
+      }
+      return { segment, message };
     }
     const parsedFrom = this._parseSegmentBoundaryText(draft.from);
     const parsedTo = this._parseSegmentBoundaryText(draft.to);
     const color = normalizeTextValue(draft.color).trim();
     if (!normalizeTextValue(draft.from).trim() && !normalizeTextValue(draft.to).trim()) {
-      return '';
+      return { segment: null, message: '' };
     }
     if (parsedFrom.state !== 'valid' || parsedTo.state !== 'valid') {
-      return 'Enter valid from/to values.';
+      return { segment: null, message: 'Enter valid from/to values.' };
     }
     const boundaryOrder = this._compareSegmentBoundaries(parsedFrom.value, parsedTo.value);
     if (boundaryOrder !== null && boundaryOrder !== -1) {
-      return 'From must be below To.';
+      return { segment: null, message: 'From must be below To.' };
     }
+    const rows = this._buildSegmentValidationRows(scope);
     if (boundaryOrder === null) {
-      const rows = this._buildSegmentValidationRows(scope);
       const mixedRow = { index: rows.length, segment: { from: parsedFrom.value, to: parsedTo.value, color },
         parsedFrom, parsedTo };
       const resolvedMessage = this._getResolvedMixedRangeValidationMessage(scope, [...rows, mixedRow], mixedRow.index);
-      if (resolvedMessage) return resolvedMessage;
+      if (resolvedMessage) return { segment: null, message: resolvedMessage };
     }
     if (!color) {
-      return 'Choose a color to add a segment.';
+      return { segment: null, message: 'Choose a color to add a segment.' };
     }
     const candidateFrom = this._getSegmentPreviewBoundaryValue(parsedFrom.value);
     const candidateTo = this._getSegmentPreviewBoundaryValue(parsedTo.value);
-    const rows = this._buildSegmentValidationRows(scope);
     for (const row of rows) {
       if (row.parsedFrom.state !== 'valid' || row.parsedTo.state !== 'valid') continue;
       if (this._compareSegmentBoundaries(parsedFrom.value, row.parsedFrom.value) === null
@@ -572,13 +552,13 @@ export class SegmentsSection extends PaletteSection {
       const otherFrom = this._getSegmentPreviewBoundaryValue(row.parsedFrom.value);
       const otherTo = this._getSegmentPreviewBoundaryValue(row.parsedTo.value);
       if (candidateFrom === otherFrom) {
-        return 'Duplicate segment start.';
+        return { segment: null, message: 'Duplicate segment start.' };
       }
       if (candidateFrom < otherTo && candidateTo > otherFrom) {
-        return 'Segments overlap.';
+        return { segment: null, message: 'Segments overlap.' };
       }
     }
-    return '';
+    return { segment: { from: parsedFrom.value, to: parsedTo.value, color }, message: '' };
   }
 
   _getSegmentPreviewBoundaryValue(value) {
@@ -778,13 +758,15 @@ export class SegmentsSection extends PaletteSection {
     }
     const { hintPrefix, draftHintId, addSelector } = this._getSegmentDomIds(scope);
     const addButton = this.shadowRoot.querySelector(addSelector);
+    const draftValidation = this._getSegmentDraftValidationState(scope);
     if (addButton) {
-      addButton.disabled = !this._canAddSegment(scope);
+      addButton.disabled = !draftValidation.segment;
     }
     const rows = this._getSegmentsUiRows(scope) ?? this._getScopedSegmentsValue(scope);
+    const validationMessages = this._getSegmentRowValidationMessages(scope);
     rows.forEach((_, index) => {
       const hint = this._getShadowElementById(`${hintPrefix}${index}`);
-      const message = this._getSegmentRowValidationMessage(scope, index);
+      const message = validationMessages[index] ?? '';
       if (hint) {
         hint.textContent = message;
         hint.setAttribute?.('style', message ? '' : 'display:none');
@@ -792,7 +774,7 @@ export class SegmentsSection extends PaletteSection {
     });
     const draftHint = this._getShadowElementById(draftHintId);
     if (draftHint) {
-      const message = this._getSegmentDraftValidationMessage(scope);
+      const message = draftValidation.message;
       draftHint.textContent = message;
       draftHint.setAttribute?.('style', message ? '' : 'display:none');
     }
@@ -917,6 +899,7 @@ export class SegmentsSection extends PaletteSection {
       rowSelector: '.segment-editor-row',
       memberSelector: '.segment-editor-row, .segment-undefined-row',
       generation: session.generation,
+      rowCount: rows.length,
       draftSelector: entity ? `#entity-${index}-segment-draft-from` : '#segment-draft-from',
     });
     if (changed) {
@@ -945,6 +928,8 @@ export class SegmentsSection extends PaletteSection {
     if (scope?.type === 'entity') {
       const index = scope.index;
       const entitySegments = this._getScopedSegmentsValue(scope) ?? [];
+      const validationMessages = this._getSegmentRowValidationMessages(scope);
+      const draftValidation = this._getSegmentDraftValidationState(scope);
       const segmentsInherited = !this._hasSegmentsOverride(scope);
       return `
 	                      <div class="field-row">
@@ -961,7 +946,9 @@ export class SegmentsSection extends PaletteSection {
                       <div class="field-row">
                         <label>Segments</label>
                         <div class="list">
-                          ${this._renderSegmentListRows(scope, (segment, segmentIndex) => `
+                          ${this._renderSegmentListRows(scope, (segment, segmentIndex) => {
+                            const validationMessage = validationMessages[segmentIndex] ?? '';
+                            return `
                             <div class="segment-editor-row" data-palette-index="${segmentIndex}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}">
                             <div class="list-row triple segment-row">
                               <input type="text" data-kind="entity-segment-from" data-index="${index}" data-segment-index="${segmentIndex}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}" value="${escapeAttribute(this._getSegmentBoundaryText(scope, segmentIndex, 'from', segment?.from))}" placeholder="0%">
@@ -969,24 +956,27 @@ export class SegmentsSection extends PaletteSection {
                               <input type="color" data-kind="entity-segment-color" data-index="${index}" data-segment-index="${segmentIndex}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}" value="${escapeAttribute(segment?.color ?? '#4a9eff')}">
                               <button type="button" data-action="remove-entity-segment" data-index="${index}" data-segment-index="${segmentIndex}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}" aria-label="Remove" title="Remove">🗑</button>
                             </div>
-                            <div id="entity-${index}-segment-row-hint-${segmentIndex}" class="section-note"${this._getSegmentRowValidationMessage(scope, segmentIndex) ? '' : ' style="display:none"'}>${escapeAttribute(this._getSegmentRowValidationMessage(scope, segmentIndex))}</div>
+                            <div id="entity-${index}-segment-row-hint-${segmentIndex}" class="section-note"${validationMessage ? '' : ' style="display:none"'}>${escapeAttribute(validationMessage)}</div>
                             </div>
-                          `)}
+                          `;
+                          })}
                           <div class="segment-draft">
                             <div class="segment-draft-heading">Add Segment</div>
                             <div class="list-row triple segment-row">
                               <input id="entity-${index}-segment-draft-from" type="text" data-kind="entity-segment-draft-from" data-index="${index}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}" value="${escapeAttribute(this._getSegmentDraftState(scope).from)}" placeholder="0%">
                               <input id="entity-${index}-segment-draft-to" type="text" data-kind="entity-segment-draft-to" data-index="${index}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}" value="${escapeAttribute(this._getSegmentDraftState(scope).to)}" placeholder="100%">
                               <input type="color" data-kind="entity-segment-draft-color" data-index="${index}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}" value="${escapeAttribute(this._getSegmentDraftState(scope).color || '#4a9eff')}">
-                              <button type="button" data-action="add-entity-segment" data-index="${index}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}"${this._canAddSegment(scope) ? '' : ' disabled'}>Add</button>
+                              <button type="button" data-action="add-entity-segment" data-index="${index}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}"${draftValidation.segment ? '' : ' disabled'}>Add</button>
                             </div>
-                            <div id="entity-${index}-segment-draft-hint" class="section-note"${this._getSegmentDraftValidationMessage(scope) ? '' : ' style="display:none"'}>${escapeAttribute(this._getSegmentDraftValidationMessage(scope))}</div>
+                            <div id="entity-${index}-segment-draft-hint" class="section-note"${draftValidation.message ? '' : ' style="display:none"'}>${escapeAttribute(draftValidation.message)}</div>
                           </div>
                         </div>
                       </div>
 	                          `;
     }
     const fillStyle = this.fillStyle(scope);
+    const validationMessages = this._getSegmentRowValidationMessages({ type: 'card' });
+    const draftValidation = this._getSegmentDraftValidationState({ type: 'card' });
     const defaultSegmentsVisible = !this._hasSegmentsOverride(scope) && this._isSegmentFillStyle(fillStyle);
     const group = renderGroup({
       group: 'segments',
@@ -1006,7 +996,9 @@ export class SegmentsSection extends PaletteSection {
                     ? '<div class="section-note">Default bands</div>'
                     : ''
                   }
-                  ${this._renderSegmentListRows({ type: 'card' }, (segment, index) => `
+                  ${this._renderSegmentListRows({ type: 'card' }, (segment, index) => {
+                    const validationMessage = validationMessages[index] ?? '';
+                    return `
                     <div class="segment-editor-row" data-palette-index="${index}" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}">
                     <div class="list-row triple segment-row">
                       <input type="text"${this.array.autoEnds ? ` aria-label="Segment ${index + 1} start"` : ''} data-kind="segment-from" data-index="${index}" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: 'card' }, index, 'from', segment?.from))}" placeholder="0%">
@@ -1014,18 +1006,19 @@ export class SegmentsSection extends PaletteSection {
                         ${this.array.cssText ? renderColorInput({ id: `segment-color-${index}`, kind: 'segment-color', index, value: segment?.color ?? '#4a9eff', fallbackHex: '#4a9eff', cssText: true, label: `Segment ${index + 1} color`, extraDataset: { 'palette-generation': this._getPaletteSession({ type: 'card' }).generation } }) : `<input type="color" data-kind="segment-color" data-index="${index}" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}" value="${escapeAttribute(segment?.color ?? '#4a9eff')}">`}
                       <button type="button" data-action="remove-segment" data-index="${index}" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}" aria-label="Remove" title="Remove">🗑</button>
                     </div>
-                      <div id="segment-row-hint-${index}" class="section-note"${this._getSegmentRowValidationMessage({ type: 'card' }, index) ? '' : ' style="display:none"'}>${escapeAttribute(this._getSegmentRowValidationMessage({ type: 'card' }, index))}</div>
+                      <div id="segment-row-hint-${index}" class="section-note"${validationMessage ? '' : ' style="display:none"'}>${escapeAttribute(validationMessage)}</div>
                       </div>
-                  `)}
+                  `;
+                  })}
                     <div class="segment-draft">
                       <div class="segment-draft-heading">Add Segment</div>
                       <div class="list-row triple segment-row">
                         <input id="segment-draft-from" type="text"${this.array.autoEnds ? ' aria-label="New segment start"' : ''} data-kind="segment-draft-from" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}" value="${escapeAttribute(this._getSegmentDraftState({ type: 'card' }).from)}" placeholder="0%">
                         <input id="segment-draft-to" type="text"${this.array.autoEnds ? ' aria-label="New segment end (blank = Auto)"' : ''} data-kind="segment-draft-to" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}" value="${escapeAttribute(this._getSegmentDraftState({ type: 'card' }).to)}" placeholder="${this.array.autoEnds ? 'Auto' : '100%'}">
                         ${this.array.cssText ? renderColorInput({ id: 'segment-draft-color', kind: 'segment-draft-color', value: this._getSegmentDraftState({ type: 'card' }).color || '#4a9eff', fallbackHex: '#4a9eff', cssText: true, label: 'New segment color', extraDataset: { 'palette-generation': this._getPaletteSession({ type: 'card' }).generation } }) : `<input type="color" data-kind="segment-draft-color" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}" value="${escapeAttribute(this._getSegmentDraftState({ type: 'card' }).color || '#4a9eff')}">`}
-                        <button type="button" data-action="add-segment" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}"${this._canAddSegment({ type: 'card' }) ? '' : ' disabled'}>Add</button>
+                        <button type="button" data-action="add-segment" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}"${draftValidation.segment ? '' : ' disabled'}>Add</button>
                       </div>
-                      <div id="segment-draft-hint" class="section-note"${this._getSegmentDraftValidationMessage({ type: 'card' }) ? '' : ' style="display:none"'}>${escapeAttribute(this._getSegmentDraftValidationMessage({ type: 'card' }))}</div>
+                      <div id="segment-draft-hint" class="section-note"${draftValidation.message ? '' : ' style="display:none"'}>${escapeAttribute(draftValidation.message)}</div>
                     </div>
                 </div>
               </div>`,

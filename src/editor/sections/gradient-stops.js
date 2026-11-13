@@ -559,6 +559,7 @@ export class GradientStopsSection extends PaletteSection {
       rowSelector: '.list-row.gradient-stop-row',
       memberSelector: '.authored-gradient-stop-row',
       generation: session.generation,
+      rowCount: rows.length,
       draftSelector: entity ? `#entity-${index}-gradient-draft-pos` : '#gradient-draft-pos',
     });
     if (changed) {

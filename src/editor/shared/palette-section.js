@@ -52,9 +52,24 @@ export class PaletteSection {
   _getShadowElementById(id) { return this.shadowRoot?.getElementById?.(id) ?? this.shadowRoot?.querySelector(`#${id}`); }
   _renderListRows(items, renderItem) { return items.map(renderItem).join(''); }
 
-  _syncRows(scope, { inputSelector, rowSelector, draftSelector, memberSelector, generation }) {
+  _syncRows(scope, { inputSelector, rowSelector, draftSelector, memberSelector, generation, rowCount }) {
     const root = this.shadowRoot;
     if (!root?.ownerDocument) return false;
+    const liveInputs = [...root.querySelectorAll(inputSelector)];
+    const liveRows = liveInputs.map(input => input.closest(rowSelector)).filter(Boolean);
+    const draft = root.querySelector(draftSelector);
+    const list = liveRows[0]?.parentElement ?? draft?.closest('.list')
+      ?? root.querySelector(memberSelector ? `:scope ${memberSelector}` : rowSelector)?.parentElement;
+    if (list && Number.isInteger(rowCount)) {
+      const liveMembers = [...list.children].filter(item => item.matches(memberSelector));
+      const liveDraft = list.querySelector(`:scope > ${rowSelector === '.segment-editor-row' ? '.segment-draft' : '.gradient-stop-draft'}`);
+      const session = this._getPaletteSession?.(scope);
+      const hasBoundaryDrafts = session?.drafts?.size > 0;
+      if (!hasBoundaryDrafts && liveInputs.length === rowCount && liveMembers.length === rowCount
+        && liveDraft?.dataset.paletteGeneration === String(generation)
+        && liveMembers.every(item => item.dataset.paletteGeneration === String(generation))) return false;
+    }
+
     const template = root.ownerDocument.createElement('template');
     template.innerHTML = this.render(scope, ({ content }) => content, { section: false });
     const desired = [...template.content.querySelectorAll(rowSelector)].filter(row => row.querySelector(inputSelector));
@@ -74,11 +89,6 @@ export class PaletteSection {
       desiredDraft.dataset.paletteGeneration = String(generation);
       for (const control of desiredDraft.querySelectorAll('input, button')) control.dataset.paletteGeneration = String(generation);
     }
-    const liveInputs = [...root.querySelectorAll(inputSelector)];
-    const liveRows = liveInputs.map(input => input.closest(rowSelector)).filter(Boolean);
-    const draft = root.querySelector(draftSelector);
-    const list = liveRows[0]?.parentElement ?? draft?.closest('.list')
-      ?? root.querySelector(memberSelector ? `:scope ${memberSelector}` : rowSelector)?.parentElement;
     if (!list) return false;
     const liveMembers = [...list.children].filter(item => item.matches(memberSelector));
     const liveDraft = list.querySelector(`:scope > ${draftContainerSelector}`);
