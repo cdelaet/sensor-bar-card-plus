@@ -58,6 +58,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._extremaSection = new ExtremaSection(context, options);
     const ui = {
       root: () => this.shadowRoot,
+      isRendering: () => this._isRendering,
       render: () => this._requestRender(),
       focus: selector => { this._pendingPaletteFocus = selector; },
       hass: () => this._hass,
@@ -129,11 +130,13 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         getPathValue(this._config, ['bar', 'fill_style']),
         getPathValue(this._config, ['bar', 'color_mode']),
         getPathValue(this._config, ['color_mode']),
+        getPathValue(this._config, ['bar', 'paint', 'preset']),
       ]);
       const nextPaintSource = serializeConfig([
         getPathValue(config, ['bar', 'fill_style']),
         getPathValue(config, ['bar', 'color_mode']),
         getPathValue(config, ['color_mode']),
+        getPathValue(config, ['bar', 'paint', 'preset']),
       ]);
       this._lastMigrationSignature = null;
       this._config = cloneDeep(config);
@@ -573,12 +576,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
           const value = segment && !field.startsWith('color') ? section._getSegmentBoundaryText(root, index, field, row?.[field])
             : !segment && field === 'pos' ? section._getGradientStopPosText(root, index, row?.pos ?? '') : row?.color;
           if (rebuilt) control.value = segment && control.type === 'color' ? getColorPickerValue(value, '#4a9eff') : value ?? '';
-        }
-      }
-      if (rebuilt) {
-        const draft = segment ? section._getSegmentDraftState(root) : section._getGradientStopsDraftState(root);
-        for (const field of Object.keys(draft)) for (const suffix of ['', '-text-fallback']) for (const control of this.shadowRoot.querySelectorAll(`input[data-kind="${segment ? 'segment' : 'gradient'}-draft-${field}${suffix}"]`)) {
-          control.value = field === 'color' && control.type === 'color' ? getColorPickerValue(draft[field], '#4CAF50') : draft[field];
         }
       }
       if (segment) section._refreshSegmentUi(root);

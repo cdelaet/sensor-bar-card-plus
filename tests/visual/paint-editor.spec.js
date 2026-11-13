@@ -257,10 +257,10 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
     });
     const getPaletteEpochs = () => positions.evaluateAll(controls => controls.map(node => {
       const row = node.closest('.gradient-stop-row');
-      return [row.dataset.paletteSession, row.dataset.paletteRevision];
+      return row.dataset.paletteGeneration;
     }));
     const epochsBeforeRefresh = await getPaletteEpochs();
-    expect(new Set(epochsBeforeRefresh.map(epoch => epoch.join(':'))).size).toBe(1);
+    expect(new Set(epochsBeforeRefresh).size).toBe(1);
     await editor.evaluate(() => {
       window.__insertedGreenStop.focus();
       window.__insertedGreenStop.value = '42';
@@ -874,6 +874,47 @@ for (const source of ['src', 'dist']) test(`Card registry updates reconcile inhe
   await expect(entityRows).toHaveCount(2);
   await expect(childPaint.locator('.paint-editor-description')).toContainText('2 segments');
   expect(await saved(editor)).toEqual({ bar: { paint: { preset: 'night' } }, entities: ['sensor.power'] });
+  expect(await page.evaluate(() => window.__paintEvents.length)).toBe(events);
+});
+
+for (const source of ['src', 'dist']) test(`Card external entity palette replacement rebuilds only that palette (${source})`, async ({ page }) => {
+  const editor = await mount(page, 'Card', source);
+  const config = { bar: { fill_style: 'bands', segments: [{ from: 0, to: 100, color: '#123456' }] }, entities: [
+    { entity: 'sensor.a', bar: { segments: [{ from: 0, to: 100, color: '#aa0000' }] } },
+    { entity: 'sensor.b', bar: { segments: [{ from: 0, to: 100, color: '#0000aa' }] } },
+  ] };
+  await editor.evaluate((el, value) => el.setConfig(value), config);
+  await editor.locator('button[data-action="toggle-entity-overrides"]').first().click();
+  await editor.locator('button[data-action="toggle-entity-overrides"]').nth(1).click();
+  await editor.locator('#entity-0-paint-editor summary').click();
+  await editor.locator('#entity-1-paint-editor summary').click();
+  await editor.locator('#card-paint-editor summary').click();
+  await editor.locator('#entity-0-group-segments').click();
+  await editor.locator('#entity-1-group-segments').click();
+  await editor.locator('#card-group-segments').click();
+  await editor.evaluate(el => { window.__cardPaletteControls = {
+    root: el.shadowRoot.querySelector('input[data-kind="segment-from"]'),
+    changed: el.shadowRoot.querySelector('input[data-kind="entity-segment-from"][data-index="0"]'),
+    stable: el.shadowRoot.querySelector('input[data-kind="entity-segment-from"][data-index="1"]'),
+  }; });
+  await editor.locator('#entity-0-segment-draft-from').fill('draft-0');
+  await editor.locator('#entity-1-segment-draft-from').fill('draft-1');
+  const events = await page.evaluate(() => window.__paintEvents.length);
+
+  await editor.evaluate(el => el.setConfig({ ...el._config, entities: [
+    { entity: 'sensor.a', bar: { segments: [{ from: 0, to: 40, color: '#aa0000' }, { from: 40, to: 100, color: '#00aa00' }] } },
+    structuredClone(el._config.entities[1]),
+  ] }));
+
+  expect(await editor.evaluate(el => el.shadowRoot.querySelector('input[data-kind="segment-from"]') === window.__cardPaletteControls.root)).toBe(true);
+  expect(await editor.evaluate(el => el.shadowRoot.querySelector('input[data-kind="entity-segment-from"][data-index="0"]') === window.__cardPaletteControls.changed)).toBe(false);
+  expect(await editor.evaluate(el => el.shadowRoot.querySelector('input[data-kind="entity-segment-from"][data-index="1"]') === window.__cardPaletteControls.stable)).toBe(true);
+  await expect(editor.locator('#entity-0-segment-draft-from')).toHaveValue('');
+  await expect(editor.locator('#entity-1-segment-draft-from')).toHaveValue('draft-1');
+  expect(await saved(editor)).toEqual({ ...config, entities: [
+    { entity: 'sensor.a', bar: { segments: [{ from: 0, to: 40, color: '#aa0000' }, { from: 40, to: 100, color: '#00aa00' }] } },
+    config.entities[1],
+  ] });
   expect(await page.evaluate(() => window.__paintEvents.length)).toBe(events);
 });
 

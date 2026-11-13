@@ -1,6 +1,6 @@
 import { parsePercentLiteral } from '../../config/normalize.js';
 import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumberValue } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeColorComparisonValue, renderColorInput } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, getColorPickerValue } from '../shared/editor-controls.js';
 import { readBarPaintProperty, clearBarPaintProperties, ownsBarPaintProperty, usesGroupedBarPaint } from '../shared/bar-paint-bindings.js';
 import { PaletteRowSession, PaletteSection } from '../shared/palette-section.js';
 
@@ -293,16 +293,11 @@ export class GradientStopsSection extends PaletteSection {
     const rows = this._getScopedGradientStopsValue(scope) ?? [];
     const session = this._getPaletteSession(scope, rows);
     const row = target?.closest?.('.gradient-stop-row');
-    const controlIsCurrent = target?.dataset?.paletteSession === undefined
-      ? !row || row.dataset.paletteSession === String(session.sessionKey)
-        && Number(row.dataset.paletteRevision) === session.revision
-      : target.dataset.paletteSession === String(session.sessionKey)
-        && Number(target.dataset.paletteRevision) === session.revision;
+    const generation = Number(target?.dataset?.paletteGeneration ?? row?.dataset.paletteGeneration);
     return Number.isInteger(stopIndex) && stopIndex >= 0 && rows[stopIndex] !== undefined
-      && controlIsCurrent
-      && (!row || row.dataset.paletteSession === String(session.sessionKey)
-        && row.dataset.paletteIndex === String(stopIndex)
-        && Number(row.dataset.paletteRevision) === session.revision);
+      && generation === session.generation
+      && (!row || row.dataset.paletteGeneration === String(session.generation)
+        && row.dataset.paletteIndex === String(stopIndex));
   }
 
   _clearGradientStopsOverride(scope) {
@@ -441,7 +436,7 @@ export class GradientStopsSection extends PaletteSection {
     this._clearGradientStopPosText(scope, stopIndex);
     const session = this._getPaletteSession(scope, currentStops);
     const row = inputEl?.closest?.('.gradient-stop-row');
-    if (row) row.dataset.paletteRevision = String(session.revision);
+    if (row) row.dataset.paletteGeneration = String(session.generation);
     return this._setScopedGradientStops(scope, nextStops, { rerender: true }, { type: 'edit', index: stopIndex, field: 'pos', value: nextPos });
   }
 
@@ -563,13 +558,26 @@ export class GradientStopsSection extends PaletteSection {
       inputSelector: entity ? `input[data-kind="entity-gradient-pos"][data-index="${index}"]` : 'input[data-kind="gradient-pos"]',
       rowSelector: '.list-row.gradient-stop-row',
       memberSelector: '.authored-gradient-stop-row',
-      sessionRevision: session.revision,
-      sessionKey: session.sessionKey,
-      replacement: session.takeReplacement(),
+      generation: session.generation,
       draftSelector: entity ? `#entity-${index}-gradient-draft-pos` : '#gradient-draft-pos',
     });
-    if (changed) this._refreshGradientDraftUi(scope);
+    if (changed) {
+      this._refreshGradientDraftUi(scope);
+      this._syncGradientDraftControls(scope);
+    }
     return changed;
+  }
+
+  _syncGradientDraftControls(scope) {
+    const entity = scope?.type === 'entity';
+    const prefix = entity ? `entity-${scope.index}-` : '';
+    const draft = this._getGradientStopsDraftState(scope);
+    const position = this._getShadowElementById(`${prefix}gradient-draft-pos`);
+    if (position) position.value = draft.pos;
+    const kind = entity ? 'entity-gradient-draft-color' : 'gradient-draft-color';
+    for (const control of this.shadowRoot?.querySelectorAll?.(`input[data-kind="${kind}"], input[data-kind="${kind}-text-fallback"]`) ?? []) {
+      control.value = control.type === 'color' ? getColorPickerValue(draft.color, '#4CAF50') : draft.color;
+    }
   }
 
   render(scope = { type: 'card' }, renderGroup = ({ content }) => content, { section = true } = {}) {
@@ -598,8 +606,8 @@ export class GradientStopsSection extends PaletteSection {
                         <label>Gradient stops</label>
                         <div class="list gradient-stop-list">
                           ${this._renderListRows(entityGradientStops, (stop, stopIndex) => `
-                            <div class="list-row gradient-stop-row authored-gradient-stop-row" data-palette-index="${stopIndex}" data-palette-session="${this._getPaletteSession(scope, entityGradientStops).sessionKey}" data-palette-revision="${this._getPaletteSession(scope, entityGradientStops).revision}">
-                              <input type="number" min="0" max="100" step="any" data-kind="entity-gradient-pos" data-index="${index}" data-stop-index="${stopIndex}" data-palette-session="${this._getPaletteSession(scope, entityGradientStops).sessionKey}" data-palette-revision="${this._getPaletteSession(scope, entityGradientStops).revision}" value="${escapeAttribute(this._getGradientStopPosText(scope, stopIndex, stop?.pos ?? ''))}" placeholder="0">
+                            <div class="list-row gradient-stop-row authored-gradient-stop-row" data-palette-index="${stopIndex}" data-palette-generation="${this._getPaletteSession(scope, entityGradientStops).generation}">
+                              <input type="number" min="0" max="100" step="any" data-kind="entity-gradient-pos" data-index="${index}" data-stop-index="${stopIndex}" data-palette-generation="${this._getPaletteSession(scope, entityGradientStops).generation}" value="${escapeAttribute(this._getGradientStopPosText(scope, stopIndex, stop?.pos ?? ''))}" placeholder="0">
                               ${renderColorInput({
                                 id: `entity-${index}-gradient-color-${stopIndex}`,
                                 kind: 'entity-gradient-color',
@@ -607,14 +615,14 @@ export class GradientStopsSection extends PaletteSection {
                                 value: stop?.color ?? '#4a9eff',
                                 fallbackHex: '#4CAF50',
                                 placeholder: 'CSS color value',
-                                extraDataset: { 'stop-index': stopIndex },
+                                extraDataset: { 'stop-index': stopIndex, 'palette-generation': this._getPaletteSession(scope, entityGradientStops).generation },
                               })}
-                              <button type="button" data-action="remove-entity-gradient-stop" data-index="${index}" data-stop-index="${stopIndex}" aria-label="Remove" title="Remove">🗑</button>
+                              <button type="button" data-action="remove-entity-gradient-stop" data-index="${index}" data-stop-index="${stopIndex}" data-palette-generation="${this._getPaletteSession(scope, entityGradientStops).generation}" aria-label="Remove" title="Remove">🗑</button>
                             </div>
                           `)}
                           <div class="gradient-stop-draft">
                             <div class="list-row gradient-stop-row">
-                              <input id="entity-${index}-gradient-draft-pos" type="number" min="0" max="100" step="any" data-kind="entity-gradient-draft-pos" data-index="${index}" value="${escapeAttribute(entityGradientDraft.pos)}" placeholder="0">
+                              <input id="entity-${index}-gradient-draft-pos" type="number" min="0" max="100" step="any" data-kind="entity-gradient-draft-pos" data-index="${index}" data-palette-generation="${this._getPaletteSession(scope, entityGradientStops).generation}" value="${escapeAttribute(entityGradientDraft.pos)}" placeholder="0">
                               ${renderColorInput({
                                 id: `entity-${index}-gradient-draft-color`,
                                 kind: 'entity-gradient-draft-color',
@@ -622,8 +630,9 @@ export class GradientStopsSection extends PaletteSection {
                                 value: entityGradientDraft.color,
                                 fallbackHex: '#4CAF50',
                                 placeholder: 'CSS color value',
+                                extraDataset: { 'palette-generation': this._getPaletteSession(scope, entityGradientStops).generation },
                               })}
-                              <button type="button" data-action="add-entity-gradient-stop" data-index="${index}"${this._canAddGradientStop(scope) ? '' : ' disabled'}>Add</button>
+                              <button type="button" data-action="add-entity-gradient-stop" data-index="${index}" data-palette-generation="${this._getPaletteSession(scope, entityGradientStops).generation}"${this._canAddGradientStop(scope) ? '' : ' disabled'}>Add</button>
                             </div>
                             ${entityGradientDraftMessage
                               ? `<div id="entity-${index}-gradient-draft-hint" class="section-note">${escapeAttribute(entityGradientDraftMessage)}</div>`
@@ -657,8 +666,8 @@ export class GradientStopsSection extends PaletteSection {
 	                <label>Gradient stops</label>
 	                <div class="list gradient-stop-list">
 	                  ${this._renderListRows(gradientStops, (stop, index) => `
-	                    <div class="list-row gradient-stop-row authored-gradient-stop-row" data-palette-index="${index}" data-palette-session="${this._getPaletteSession({ type: 'card' }, gradientStops).sessionKey}" data-palette-revision="${this._getPaletteSession({ type: 'card' }, gradientStops).revision}">
-	                      <input type="number" min="0" max="100" step="any" data-kind="gradient-pos" data-index="${index}" data-palette-session="${this._getPaletteSession({ type: 'card' }, gradientStops).sessionKey}" data-palette-revision="${this._getPaletteSession({ type: 'card' }, gradientStops).revision}" value="${escapeAttribute(this._getGradientStopPosText({ type: 'card' }, index, stop?.pos ?? ''))}" placeholder="0">
+	                    <div class="list-row gradient-stop-row authored-gradient-stop-row" data-palette-index="${index}" data-palette-generation="${this._getPaletteSession({ type: 'card' }, gradientStops).generation}">
+	                      <input type="number" min="0" max="100" step="any" data-kind="gradient-pos" data-index="${index}" data-palette-generation="${this._getPaletteSession({ type: 'card' }, gradientStops).generation}" value="${escapeAttribute(this._getGradientStopPosText({ type: 'card' }, index, stop?.pos ?? ''))}" placeholder="0">
 	                      ${renderColorInput({
 	                        id: `gradient-color-${index}`,
 	                        kind: 'gradient-color',
@@ -666,13 +675,14 @@ export class GradientStopsSection extends PaletteSection {
 	                        value: stop?.color ?? '#4a9eff',
 	                        fallbackHex: '#4CAF50',
 	                        placeholder: 'CSS color value',
+                          extraDataset: { 'palette-generation': this._getPaletteSession({ type: 'card' }, gradientStops).generation },
 	                      })}
-	                      <button type="button" data-action="remove-gradient-stop" data-index="${index}" aria-label="Remove" title="Remove">🗑</button>
+	                      <button type="button" data-action="remove-gradient-stop" data-index="${index}" data-palette-generation="${this._getPaletteSession({ type: 'card' }, gradientStops).generation}" aria-label="Remove" title="Remove">🗑</button>
 	                    </div>
 	                  `)}
 	                  <div class="gradient-stop-draft">
 	                    <div class="list-row gradient-stop-row">
-	                      <input id="gradient-draft-pos" type="number" min="0" max="100" step="any" data-kind="gradient-draft-pos" value="${escapeAttribute(gradientDraft.pos)}" placeholder="0">
+	                      <input id="gradient-draft-pos" type="number" min="0" max="100" step="any" data-kind="gradient-draft-pos" data-palette-generation="${this._getPaletteSession({ type: 'card' }, gradientStops).generation}" value="${escapeAttribute(gradientDraft.pos)}" placeholder="0">
 	                      ${renderColorInput({
 	                        id: 'gradient-draft-color',
 	                        kind: 'gradient-draft-color',
@@ -680,8 +690,9 @@ export class GradientStopsSection extends PaletteSection {
 	                        value: gradientDraft.color,
 	                        fallbackHex: '#4CAF50',
 	                        placeholder: 'CSS color value',
+                          extraDataset: { 'palette-generation': this._getPaletteSession({ type: 'card' }, gradientStops).generation },
 	                      })}
-	                      <button type="button" data-action="add-gradient-stop"${this._canAddGradientStop({ type: 'card' }) ? '' : ' disabled'}>Add</button>
+	                      <button type="button" data-action="add-gradient-stop" data-palette-generation="${this._getPaletteSession({ type: 'card' }, gradientStops).generation}"${this._canAddGradientStop({ type: 'card' }) ? '' : ' disabled'}>Add</button>
 	                    </div>
 	                    ${gradientDraftMessage
 	                      ? `<div id="gradient-draft-hint" class="section-note">${escapeAttribute(gradientDraftMessage)}</div>`

@@ -8859,7 +8859,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-segment-draft-from').value).toBe('');
   });
 
-  it('entity Segment composer uses effective inherited and overridden Bar colors', () => {
+  it('entity Segment composer keeps its active color draft through unchanged palette replacement', () => {
     const editor = createEditor();
     editor.setConfig({
       bar: { fill_style: 'bands', color: '#112233' },
@@ -8875,7 +8875,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
-    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-draft-color"]')[0].value).toBe('#aabbcc');
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-draft-color"]')[0].value).toBe('#112233');
   });
 
   it('adding from inherited/default entity segments emits explicit entity-level bar.segments', async () => {

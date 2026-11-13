@@ -40,13 +40,32 @@ import { SegmentsSection } from './sections/segments.js';
 import { GradientStopsSection } from './sections/gradient-stops.js';
 
 function paletteComparableConfig(config) {
-  const comparable = cloneDeep(config ?? {});
-  for (const path of [
+  let comparable = cloneDeep(config ?? {});
+  const palettePaths = [
     ['bar', 'segments'], ['bar', 'gradient_stops'], ['bar', 'paint', 'segments'],
     ['bar', 'paint', 'gradient_stops'], ['bar', 'paint', 'preset'],
     ['segments'], ['severity'], ['gradient_stops'],
-  ]) deletePathValue(comparable, path);
+  ];
+  for (const path of palettePaths) comparable = deletePathValue(comparable, path);
+  if (Array.isArray(comparable.entities)) {
+    comparable.entities = comparable.entities.map(entity => {
+      let paletteFreeEntity = entity;
+      for (const path of palettePaths) paletteFreeEntity = deletePathValue(paletteFreeEntity, path);
+      return paletteFreeEntity;
+    });
+  }
   return comparable;
+}
+
+function paletteSourceSignature(config) {
+  const source = value => [
+    getPathValue(value, ['bar', 'fill_style']), getPathValue(value, ['bar', 'color_mode']),
+    getPathValue(value, ['color_mode']), getPathValue(value, ['bar', 'paint', 'preset']),
+  ];
+  return serializeConfig({
+    root: source(config),
+    entities: Array.isArray(config?.entities) ? config.entities.map(source) : [],
+  });
 }
 
 import { NeedleSection } from './sections/needle.js';
@@ -58,13 +77,6 @@ import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveM
 import { readResolvableSourceParts, updateResolvableSourceParts, writeResolvableSourceParts } from './shared/resolvable-source.js';
 
 export class SensorBarCardPlusEditor extends HTMLElement {
-  get _gradientStopValidationMessages() { return this._gradientStopsSection._gradientStopValidationMessages; }
-  get _gradientStopPosTexts() { return this._gradientStopsSection._gradientStopPosTexts; }
-  get _gradientStopsUiRows() { return this._gradientStopsSection._gradientStopsUiRows; }
-  get _gradientStopsDrafts() { return this._gradientStopsSection._gradientStopsDrafts; }
-  get _segmentBoundaryTexts() { return this._segmentsSection._segmentBoundaryTexts; }
-  get _segmentUiRows() { return this._segmentsSection._segmentUiRows; }
-  get _segmentDrafts() { return this._segmentsSection._segmentDrafts; }
   get _baselineColorDrafts() { return this._baselineSection._baselineColorDrafts; }
 
   get _targetAboveFillDrafts() { return this._targetSection._targetAboveFillDrafts; }
@@ -162,15 +174,16 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return;
     }
 
-    const paletteOnlyReplacement = this.shadowRoot?.innerHTML
+    const sourceChanged = paletteSourceSignature(nextConfig) !== paletteSourceSignature(this._config);
+    const paletteOnlyReplacement = !sourceChanged && this.shadowRoot?.innerHTML
       && this._serializeConfig(paletteComparableConfig(nextConfig))
         === this._serializeConfig(paletteComparableConfig(this._config));
+    this._segmentsSection.prepareExternalSync();
+    this._gradientStopsSection.prepareExternalSync();
     if (paletteOnlyReplacement) {
       this._lastEmittedConfigJson = null;
       this._config = nextConfig;
       this._draftConfig = this._cloneDeep(nextConfig);
-      this._segmentsSection.prepareExternalSync();
-      this._gradientStopsSection.prepareExternalSync();
       this._syncPaintEditors();
       this._lastRenderedConfigJson = nextConfigJson;
       return;
@@ -181,8 +194,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._entityIconCustomPending.clear();
     this._config = nextConfig;
     this._draftConfig = this._cloneDeep(nextConfig);
-    this._segmentsSection.reset();
-    this._gradientStopsSection.reset();
+    if (sourceChanged) {
+      this._segmentsSection.reset();
+      this._gradientStopsSection.reset();
+    }
     this._targetSection.reset();
     this._baselineSection.reset();
     this._referenceMarkersSection.reset();
@@ -1743,6 +1758,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   _paletteUi() {
     return {
       root: () => this.shadowRoot,
+      isRendering: () => this._isRendering,
       render: () => this._render(),
       focus: selector => this._queuePostRenderFocus(selector),
     };

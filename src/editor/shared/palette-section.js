@@ -1,24 +1,21 @@
 import { getEffectiveFillStyleValue } from '../sections/bar-appearance.js';
 import { serializeConfig } from './editor-config.js';
 
-let paletteSessionKey = 0;
+let paletteGeneration = 0;
 
 export class PaletteRowSession {
   constructor() {
-    this.sessionKey = ++paletteSessionKey;
-    this.generation = 1;
+    this.generation = ++paletteGeneration;
     this.drafts = new Map();
     this.snapshot = null;
-    this.replaced = false;
   }
 
   reconcile(rows) {
     const snapshot = rows.map(row => serializeConfig(row));
     const changed = this.snapshot && serializeConfig(snapshot) !== serializeConfig(this.snapshot);
     if (changed) {
-      this.generation += 1;
+      this.generation = ++paletteGeneration;
       this.drafts.clear();
-      this.replaced = true;
     }
     this.snapshot = snapshot;
     return !!changed;
@@ -28,18 +25,6 @@ export class PaletteRowSession {
     this.snapshot = rows.map(row => serializeConfig(row));
   }
 
-  takeReplacement() {
-    const replaced = this.replaced;
-    this.replaced = false;
-    return replaced;
-  }
-
-  get revision() { return this.generation; }
-  tokenAt(index) { return { sessionKey: this.sessionKey, generation: this.generation, index }; }
-  isCurrent(token, index = null) {
-    return token?.sessionKey === this.sessionKey && token.generation === this.generation
-      && (index === null || token.index === index);
-  }
   setDraft(index, field, value) {
     if (!this.drafts.has(index)) this.drafts.set(index, new Map());
     this.drafts.get(index).set(field, value);
@@ -67,23 +52,27 @@ export class PaletteSection {
   _getShadowElementById(id) { return this.shadowRoot?.getElementById?.(id) ?? this.shadowRoot?.querySelector(`#${id}`); }
   _renderListRows(items, renderItem) { return items.map(renderItem).join(''); }
 
-  _syncRows(scope, { inputSelector, rowSelector, draftSelector, memberSelector, sessionRevision, sessionKey, replacement = false }) {
+  _syncRows(scope, { inputSelector, rowSelector, draftSelector, memberSelector, generation }) {
     const root = this.shadowRoot;
     if (!root?.ownerDocument) return false;
     const template = root.ownerDocument.createElement('template');
     template.innerHTML = this.render(scope, ({ content }) => content, { section: false });
     const desired = [...template.content.querySelectorAll(rowSelector)].filter(row => row.querySelector(inputSelector));
     const members = memberSelector ? [...template.content.querySelectorAll(memberSelector)] : [];
+    const draftContainerSelector = rowSelector === '.segment-editor-row' ? '.segment-draft' : '.gradient-stop-draft';
+    const desiredDraft = template.content.querySelector(draftSelector)?.closest(draftContainerSelector);
     for (const member of members) {
-      member.dataset.paletteRevision = String(sessionRevision);
-      member.dataset.paletteSession = String(sessionKey);
+      member.dataset.paletteGeneration = String(generation);
       for (const control of member.querySelectorAll('input, button')) {
-        control.dataset.paletteRevision = String(sessionRevision);
-        control.dataset.paletteSession = String(sessionKey);
+        control.dataset.paletteGeneration = String(generation);
       }
       const rowInput = member.querySelector('[data-segment-index], [data-stop-index], [data-kind="segment-from"], [data-kind="gradient-pos"]');
       const rowIndex = Number(rowInput?.dataset.segmentIndex ?? rowInput?.dataset.stopIndex ?? rowInput?.dataset.index);
       if (Number.isInteger(rowIndex)) member.dataset.paletteIndex = String(rowIndex);
+    }
+    if (desiredDraft) {
+      desiredDraft.dataset.paletteGeneration = String(generation);
+      for (const control of desiredDraft.querySelectorAll('input, button')) control.dataset.paletteGeneration = String(generation);
     }
     const liveInputs = [...root.querySelectorAll(inputSelector)];
     const liveRows = liveInputs.map(input => input.closest(rowSelector)).filter(Boolean);
@@ -92,17 +81,27 @@ export class PaletteSection {
       ?? root.querySelector(memberSelector ? `:scope ${memberSelector}` : rowSelector)?.parentElement;
     if (!list) return false;
     const liveMembers = [...list.children].filter(item => item.matches(memberSelector));
+    const liveDraft = list.querySelector(`:scope > ${draftContainerSelector}`);
+    const generationChanged = liveMembers.some(item => item.dataset.paletteGeneration !== String(generation))
+      || liveDraft?.dataset.paletteGeneration !== String(generation);
+    for (const member of liveMembers) if (member.dataset.paletteGeneration === String(generation)) {
+      for (const control of member.querySelectorAll('input, button')) control.dataset.paletteGeneration = String(generation);
+    }
+    if (liveDraft?.dataset.paletteGeneration === String(generation)) {
+      for (const control of liveDraft.querySelectorAll('input, button')) control.dataset.paletteGeneration = String(generation);
+    }
     const active = root.activeElement;
-    if (memberSelector && !replacement && liveMembers.length === members.length
-      && liveMembers.every(item => item.dataset.paletteSession === String(sessionKey)
-        && item.dataset.paletteRevision === String(sessionRevision))) return false;
+    if (memberSelector && !generationChanged && liveMembers.length === members.length
+      && liveMembers.every(item => item.dataset.paletteGeneration === String(generation))) return false;
 
     if (memberSelector) {
       this._reconcilingRows = true;
       try {
         liveMembers.forEach(item => item.remove());
+        if (generationChanged) liveDraft?.remove();
         const draftAnchor = list.querySelector(':scope > .segment-draft, :scope > .gradient-stop-draft');
         members.forEach(member => list.insertBefore(member.cloneNode(true), draftAnchor));
+        if (generationChanged && desiredDraft) list.appendChild(desiredDraft.cloneNode(true));
       } finally {
         this._reconcilingRows = false;
       }
@@ -145,7 +144,7 @@ export class PaletteSection {
 
   handle(event, mode = event.type) {
     const target = event.target;
-    if (this._reconcilingRows || target?.isConnected === false) return true;
+    if (this._reconcilingRows || this.ui.isRendering?.() || target?.isConnected === false) return true;
     if (mode === 'input' && target?.type === 'checkbox') return false;
     const rawKind = target?.dataset?.kind;
     const kind = rawKind?.replace(/-text-fallback$/, '');
@@ -167,6 +166,8 @@ export class PaletteSection {
         'add-segment-from-undefined', 'add-entity-segment-from-undefined',
         'add-gradient-stop', 'remove-gradient-stop', 'add-entity-gradient-stop', 'remove-entity-gradient-stop'].includes(action)
         || !action.includes(prefix)) return false;
+      const session = this._getPaletteSession(scope, rows());
+      if (Number(target?.dataset?.paletteGeneration) !== session.generation) return true;
       if (action.startsWith('add-')) {
         if (segment && action.endsWith('-from-undefined')) {
           if (!this._isCurrentSegmentGap(scope, target)) return true;
@@ -194,6 +195,8 @@ export class PaletteSection {
     const draft = local.startsWith(`${prefix}-draft-`);
     const field = local.slice((draft ? `${prefix}-draft-` : `${prefix}-`).length);
     const value = event.detail?.value ?? target.value;
+    const session = this._getPaletteSession(scope, rows());
+    if (Number(target?.dataset?.paletteGeneration) !== session.generation) return true;
     if (segment && !draft && !this._isCurrentSegmentRow(scope, index, target)
       || !segment && !draft && !this._isCurrentGradientStopRow(scope, index, target)) {
       this.syncRows?.(scope);
@@ -236,7 +239,7 @@ export class PaletteSection {
     if (segment || serializeConfig(next) !== serializeConfig(this._sanitizeGradientStopsForEmit(current))) {
       const session = this._getPaletteSession(scope, current);
       const row = target.closest?.(segment ? '.segment-editor-row' : '.gradient-stop-row');
-      if (row) row.dataset.paletteRevision = String(session.revision);
+      if (row) row.dataset.paletteGeneration = String(session.generation);
       write(next, segment ? { sort: false } : {}, { type: 'edit', index, field: 'color', value });
     }
     return true;

@@ -75,7 +75,7 @@ for (const source of ['src', 'dist']) describe(`shared Feature palettes (${sourc
     const key = kind === 'segment' ? 'segments' : 'gradient_stops';
     expect(editor._config.bar[key].slice(0, 2)).toEqual(config.bar[key]);
     expect(editor._config.bar[key]).toHaveLength(3);
-    section.handle({ type: 'click', target: { dataset: { action: kind === 'segment' ? 'remove-segment' : 'remove-gradient-stop', index: '0' } } });
+    section.handle({ type: 'click', target: { dataset: { action: kind === 'segment' ? 'remove-segment' : 'remove-gradient-stop', index: '0', paletteGeneration: String(section._getPaletteSession(root).generation) } } });
     await editor.updateComplete;
     expect(editor._config.bar[key][0]).toEqual(config.bar[key][1]);
     expect(editor._config.bar[key]).toHaveLength(2);
@@ -154,7 +154,7 @@ for (const source of ['src', 'dist']) describe(`shared Feature palettes (${sourc
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[0]).not.toBe(oldInput);
     expect(gradient._getGradientStopPosText(root, 0, replacement.bar.gradient_stops[0].pos)).toBe('0');
     expect(editor._config).toEqual(replacement);
-    expect(oldInput.dataset.paletteRevision).not.toBe(String(gradient._getPaletteSession(root).generation));
+    expect(oldInput.dataset.paletteGeneration).not.toBe(String(gradient._getPaletteSession(root).generation));
     for (const type of ['keydown', 'change', 'blur']) {
       editor._handleField({ type, key: 'Enter', target: oldInput, preventDefault() {} });
     }

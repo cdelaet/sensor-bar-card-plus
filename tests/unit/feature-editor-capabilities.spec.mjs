@@ -88,7 +88,7 @@ for(const source of ['src','dist']) describe(`Feature capability closure (${sour
   expect(section._getValidSegmentDraft(root)).toEqual({from:80,color:'var(--high)'});section._commitSegmentDraft(root);await editor.updateComplete;
   expect(editor._config.bar.segments).toEqual([...config.bar.segments,{from:80,color:'var(--high)'}]);
   expect(section._getSegmentPreviewRows(root)).not.toEqual(committedPreview);
-  section.handle({type:'click',target:{dataset:{action:'remove-segment',index:'2'}}});await editor.updateComplete;expect(editor._config).toEqual(config);
+  section.handle({type:'click',target:{dataset:{action:'remove-segment',index:'2',paletteGeneration:String(section._getPaletteSession(root).generation)}}});await editor.updateComplete;expect(editor._config).toEqual(config);
   const count=events.length;await segment(editor,'to',0,'70');expect(editor._config).toEqual(config);expect(section._getSegmentRowValidationMessage(root,0)).toBe('Segments overlap.');expect(events).toHaveLength(count);
   await segment(editor,'to',0,'-1');expect(editor._config).toEqual(config);
  });
@@ -97,7 +97,7 @@ for(const source of ['src','dist']) describe(`Feature capability closure (${sour
   const {editor,events}=await setup(source,config),section=editor._segmentsSection;
   expect(section._getSegmentDraftState(root).color).toBe('#123456');
   const session=section._getPaletteSession(root);
-  section.handle({type:'click',target:{dataset:{action:'add-segment-from-undefined',from:'50',to:'60',paletteSession:String(session.sessionKey),paletteRevision:String(session.revision)}}});
+  section.handle({type:'click',target:{dataset:{action:'add-segment-from-undefined',from:'50',to:'60',paletteGeneration:String(session.generation)}}});
   await editor.updateComplete;
   expect(section._getSegmentDraftState(root)).toEqual({from:'50',to:'60',color:'#123456'});
   expect(editor._config).toEqual(config);expect(events).toHaveLength(0);

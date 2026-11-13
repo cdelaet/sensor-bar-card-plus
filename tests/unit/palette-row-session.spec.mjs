@@ -7,12 +7,11 @@ describe('PaletteRowSession', () => {
     const session = new PaletteRowSession();
     session.reconcile(rows);
     session.setDraft(1, 'pos', '42');
-    const token = session.tokenAt(1);
+    const generation = session.generation;
 
     expect(session.reconcile(structuredClone(rows))).toBe(false);
-    expect(session.generation).toBe(token.generation);
+    expect(session.generation).toBe(generation);
     expect(session.getDraft(1, 'pos')).toBe('42');
-    expect(session.isCurrent(token, 1)).toBe(true);
   });
 
   it.each([
@@ -24,28 +23,24 @@ describe('PaletteRowSession', () => {
     const session = new PaletteRowSession();
     session.reconcile([{ pos: 0 }, { pos: 40 }]);
     session.setDraft(1, 'pos', '42');
-    const oldToken = session.tokenAt(1);
+    const oldGeneration = session.generation;
 
     expect(session.reconcile(nextRows)).toBe(true);
-    expect(session.generation).toBe(oldToken.generation + 1);
+    expect(session.generation).not.toBe(oldGeneration);
     expect(session.getDraft(1, 'pos')).toBeUndefined();
-    expect(session.isCurrent(oldToken, 1)).toBe(false);
-    expect(session.takeReplacement()).toBe(true);
-    expect(session.takeReplacement()).toBe(false);
   });
 
   it('records user edits without ending the session', () => {
     const session = new PaletteRowSession();
     session.reconcile([{ pos: 0 }, { pos: 40 }]);
     session.setDraft(1, 'pos', '42');
-    const token = session.tokenAt(1);
+    const generation = session.generation;
     const edited = [{ pos: 0 }, { pos: 42 }];
 
     session.record(edited);
     expect(session.reconcile(edited)).toBe(false);
-    expect(session.generation).toBe(token.generation);
+    expect(session.generation).toBe(generation);
     expect(session.getDraft(1, 'pos')).toBe('42');
-    expect(session.isCurrent(token, 1)).toBe(true);
   });
 
   it('owns drafts by position and cancels every draft on replacement', () => {
@@ -60,12 +55,11 @@ describe('PaletteRowSession', () => {
     expect(session.drafts.size).toBe(0);
   });
 
-  it('rejects tokens from another scope session', () => {
+  it('allocates a distinct generation when a new scope session starts', () => {
     const first = new PaletteRowSession();
     first.reconcile([{ pos: 0 }]);
-    const token = first.tokenAt(0);
     const second = new PaletteRowSession();
     second.reconcile([{ pos: 0 }]);
-    expect(second.isCurrent(token, 0)).toBe(false);
+    expect(second.generation).not.toBe(first.generation);
   });
 });
