@@ -14,6 +14,25 @@ const aliases = {
 };
 const owns = (object, key) => object != null && Object.prototype.hasOwnProperty.call(object, key);
 const legacyPaint = config => Object.values(aliases).flat().some(path => getPathValue(config, path) !== undefined);
+const legacySolidToggleWrites = new WeakSet();
+
+function isLegacyColorOnlyPaint(config) {
+  const bar = config?.bar;
+  if (bar?.color === undefined || owns(bar, 'paint') || owns(bar, 'solid_fill')) return false;
+  if (['fill_style', 'color_mode', 'segments', 'gradient_stops'].some(key => bar[key] !== undefined)) return false;
+  return !['color_mode', 'segments', 'severity', 'gradient_stops'].some(key => config[key] !== undefined);
+}
+
+function shouldClearLegacySolidToggle(context, scope) {
+  const local = context.read(scope, []) ?? {};
+  if (local.bar?.solid_fill !== true || !legacySolidToggleWrites.has(local.bar)) return false;
+
+  // A local false is redundant for this legacy color-only shape, unless it
+  // needs to override an inherited true value.
+  if (scope?.type !== 'entity') return true;
+  const inherited = context.read({ type: 'card' }, []);
+  return normalizeBarConfig(inherited, null, { isCardScope: true }).paint.solid_fill !== true;
+}
 
 // Ordinary-bar destinations and promotion belong to this adapter, never the
 // generic bindings. Existing legacy documents keep their editing convention.
@@ -84,12 +103,21 @@ export function createBarPaintBindings(context, scope, { grouped = usesGroupedBa
     const path = useGrouped ? ['bar', 'paint'] : ['bar'];
     return createPaintBindings({
       read: (_scope, at) => getPathValue(promote(context.read(scope, [])), at),
-      mutate: (_scope, mutation, options) => context.mutate(scope, target => {
-        const edited = mutation(promote(target));
-        if (cleanupProperty === null) return edited;
-        const stale = useGrouped ? aliases[cleanupProperty] : aliases[cleanupProperty].filter(at => at.join('.') !== `bar.${cleanupProperty}` && at.join('.') !== 'bar.color_mode');
-        return removePathsFromTarget(edited, stale);
-      }, options),
+      mutate: (_scope, mutation, options) => {
+        const legacyToggleWrite = options?.legacySolidToggleWrite
+          && isLegacyColorOnlyPaint(context.read(scope, []));
+        const result = context.mutate(scope, target => {
+          const edited = mutation(promote(target));
+          if (cleanupProperty === null) return edited;
+          const stale = useGrouped ? aliases[cleanupProperty] : aliases[cleanupProperty].filter(at => at.join('.') !== `bar.${cleanupProperty}` && at.join('.') !== 'bar.color_mode');
+          return removePathsFromTarget(edited, stale);
+        }, options);
+        if (legacyToggleWrite) {
+          const committed = context.read(scope, []);
+          if (committed?.bar) legacySolidToggleWrites.add(committed.bar);
+        }
+        return result;
+      },
     }, { scope, path });
   };
   const binding = createBinding(grouped);
@@ -105,8 +133,13 @@ export function createBarPaintBindings(context, scope, { grouped = usesGroupedBa
     },
     set(property, value, options = {}) {
       if (property === 'segments') value = prepareBarPaintSegments(context, scope, value);
+      if (property === 'solid_fill' && value === false && shouldClearLegacySolidToggle(context, scope)) {
+        return createBinding(grouped, property).clear(property, { ...options, preserveRawConfig: true });
+      }
       const propertyGrouped = grouped || property === 'opacity';
-      return createBinding(propertyGrouped, property).set(property, value, { ...options, ...(propertyGrouped || value === false || property === 'color' && String(value).toLowerCase() === '#4a9eff' ? { preserveRawConfig: true } : {}) });
+      return createBinding(propertyGrouped, property).set(property, value, { ...options,
+        ...(property === 'solid_fill' && value === true && isLegacyColorOnlyPaint(context.read(scope, [])) ? { legacySolidToggleWrite: true } : {}),
+        ...(propertyGrouped || value === false || property === 'color' && String(value).toLowerCase() === '#4a9eff' ? { preserveRawConfig: true } : {}) });
     },
     clear(property, options = {}) {
       const propertyGrouped = grouped || property === 'opacity';

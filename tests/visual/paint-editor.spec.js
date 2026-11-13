@@ -57,6 +57,42 @@ async function mountWithPaintPresets(page, host, source, presets, config = { bar
 }
 const saved = editor => editor.evaluate(el => structuredClone(el._draftConfig ?? el._config));
 
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
+  test(`${host} preserves legacy color-only Solid inference after toggling Solid fill off (${source})`, async ({ page }) => {
+    const config = { bar: { color: '#7799aa', animated: false }, extra: { keep: true } };
+    if (host === 'Card') config.entity = 'sensor.a';
+    else config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {}, config);
+    await editor.locator('#card-paint-editor summary').click();
+
+    const solidFill = editor.locator('#bar-solid-fill');
+    await solidFill.check();
+    await solidFill.uncheck();
+
+    const savedConfig = await saved(editor);
+    expect(savedConfig.bar).toEqual({ color: '#7799aa', animated: false });
+    expect(savedConfig.extra).toEqual({ keep: true });
+    await editor.evaluate((el, next) => el.setConfig(next), savedConfig);
+    await expect(editor.locator('#bar-fill-style')).toHaveValue('solid');
+    await expect(editor.locator('#bar-color')).toHaveValue('#7799aa');
+    expect(await saved(editor)).toEqual(savedConfig);
+  });
+
+  test(`${host} retains an authored false Solid fill through a toggle round trip (${source})`, async ({ page }) => {
+    const config = { bar: { color: '#7799aa', solid_fill: false } };
+    if (host === 'Card') config.entity = 'sensor.a';
+    else config.type = 'custom:sensor-bar-card-plus-feature';
+    const editor = await mountWithPaintPresets(page, host, source, {}, config);
+    await editor.locator('#card-paint-editor summary').click();
+
+    const solidFill = editor.locator('#bar-solid-fill');
+    await solidFill.check();
+    await solidFill.uncheck();
+
+    expect((await saved(editor)).bar).toEqual({ color: '#7799aa', solid_fill: false });
+  });
+}
+
 for (const source of ['src', 'dist']) test(`Feature controls synchronize from effective preset paint (${source})`, async ({ page }) => {
   const editor = await mountWithPaintPresets(page, 'Feature', source, {
     vivid: { fill_style: 'gradient', color: 'red', solid_fill: true },
