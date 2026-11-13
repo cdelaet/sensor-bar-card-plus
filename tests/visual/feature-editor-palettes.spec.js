@@ -82,3 +82,40 @@ for (const source of ['src', 'dist']) for (const style of ['bands', 'gradient'])
     expect((await saved(editor)).bar[key]).toEqual(config.bar[key]);
   });
 }
+
+test('unchanged refresh preserves authored focus and selection; external replacement cancels the palette session', async ({ page }) => {
+  const editor = await mount(page, 'src', 'bands', 360);
+  const position = editor.locator('input[data-kind="segment-from"]').first();
+  await position.fill('65%');
+  await position.evaluate(node => node.setSelectionRange(1, 3));
+  await position.evaluate(node => { window.__activePaletteControl = node; });
+  const eventsBeforeRefresh = await page.evaluate(() => window.__paletteEvents.length);
+
+  await editor.evaluate(element => {
+    element.hass = { states: { 'sensor.unrelated': { state: '1' } } };
+    element.context = { entity_id: 'sensor.unrelated' };
+    element.setConfig(element._config);
+  });
+  await expect(position).toBeFocused();
+  expect(await position.evaluate(node => node === window.__activePaletteControl)).toBe(true);
+  expect(await position.evaluate(node => [node.selectionStart, node.selectionEnd])).toEqual([1, 3]);
+  expect(await page.evaluate(() => window.__paletteEvents.length)).toBe(eventsBeforeRefresh);
+
+  const replacement = await saved(editor);
+  replacement.bar.segments.splice(1, 0, { from: '30%', to: '50%', color: '#abcdef' });
+  await editor.evaluate((element, config) => element.setConfig(config), replacement);
+  const rebuiltPosition = editor.locator('input[data-kind="segment-from"]').first();
+  await expect(rebuiltPosition).toHaveValue('60%');
+  expect(await rebuiltPosition.evaluate(node => node === window.__activePaletteControl)).toBe(false);
+  expect(await page.evaluate(() => window.__paletteEvents.length)).toBe(eventsBeforeRefresh);
+
+  await editor.evaluate(element => {
+    const stale = window.__activePaletteControl;
+    stale.value = '99%';
+    for (const type of ['keydown', 'change', 'blur']) {
+      element._handleField({ type, key: 'Enter', target: stale, preventDefault() {} });
+    }
+  });
+  expect((await saved(editor)).bar.segments).toEqual(replacement.bar.segments);
+  expect(await page.evaluate(() => window.__paletteEvents.length)).toBe(eventsBeforeRefresh);
+});

@@ -1,132 +1,55 @@
 import { getEffectiveFillStyleValue } from '../sections/bar-appearance.js';
 import { serializeConfig } from './editor-config.js';
 
-let paletteSessionRevision = 0;
 let paletteSessionKey = 0;
 
-// Row IDs live only for the lifetime of a section session. Configurations do
-// not carry row IDs, so identical rows are matched by occurrence order.
 export class PaletteRowSession {
-  constructor(logicalKey = serializeConfig) {
+  constructor() {
     this.sessionKey = ++paletteSessionKey;
-    this.revision = ++paletteSessionRevision;
-    this.rows = [];
+    this.generation = 1;
     this.drafts = new Map();
-    this.logicalKey = logicalKey;
-    this.nextRowId = 0;
-    this.pendingInvalidatedIds = new Set();
+    this.snapshot = null;
+    this.replaced = false;
   }
 
   reconcile(rows) {
-    const previous = new Map();
-    const nextCounts = new Map();
-    for (const row of rows) {
-      const fingerprint = serializeConfig(row);
-      nextCounts.set(fingerprint, (nextCounts.get(fingerprint) ?? 0) + 1);
+    const snapshot = rows.map(row => serializeConfig(row));
+    const changed = this.snapshot && serializeConfig(snapshot) !== serializeConfig(this.snapshot);
+    if (changed) {
+      this.generation += 1;
+      this.drafts.clear();
+      this.replaced = true;
     }
-    const ambiguousIds = new Set();
-    const ambiguousFingerprints = new Set();
-    this.rows.forEach((entry) => {
-      const queue = previous.get(entry.fingerprint) ?? [];
-      queue.push(entry.id);
-      previous.set(entry.fingerprint, queue);
-    });
-    for (const [fingerprint, entries] of previous) {
-      const nextCount = nextCounts.get(fingerprint) ?? 0;
-      // Occurrence order keeps IDs deterministic, but a changed duplicate
-      // group cannot safely retain either edits or DOM commit authority.
-      if ((entries.length > 1 || nextCount > 1) && nextCount !== entries.length) {
-        ambiguousFingerprints.add(fingerprint);
-        entries.forEach(id => ambiguousIds.add(id));
-      }
-    }
-    const usedIds = new Set();
-    const next = rows.map((row) => {
-      const fingerprint = serializeConfig(row);
-      const matchedId = previous.get(fingerprint)?.shift() ?? null;
-      const id = ambiguousFingerprints.has(fingerprint) ? null : matchedId;
-      if (ambiguousFingerprints.has(fingerprint) && matchedId) ambiguousIds.add(matchedId);
-      if (id) usedIds.add(id);
-      return { id, fingerprint, logicalKey: this.logicalKey(row) };
-    });
-    const oldUnmatched = this.rows.filter(entry => !usedIds.has(entry.id));
-    const newUnmatched = next.filter(entry => entry.id === null);
-    const oldByKey = new Map();
-    const newByKey = new Map();
-    for (const entry of oldUnmatched) {
-      const group = oldByKey.get(entry.logicalKey) ?? [];
-      group.push(entry);
-      oldByKey.set(entry.logicalKey, group);
-    }
-    for (const entry of newUnmatched) {
-      const group = newByKey.get(entry.logicalKey) ?? [];
-      group.push(entry);
-      newByKey.set(entry.logicalKey, group);
-    }
-    for (const [key, oldGroup] of oldByKey) {
-      const newGroup = newByKey.get(key) ?? [];
-      // A secondary match is safe only when there is one unmatched candidate
-      // on each side. Ambiguous same-anchor rows receive fresh identities.
-      if (oldGroup.length === 1 && newGroup.length === 1) {
-        newGroup[0].id = oldGroup[0].id;
-      } else if (newGroup.length) {
-        oldGroup.forEach(({ id }) => ambiguousIds.add(id));
-      }
-    }
-    for (const entry of next) {
-      if (!entry.id) entry.id = `row-${++this.nextRowId}`;
-    }
-    if (next.length !== this.rows.length || next.some((entry, index) => entry.id !== this.rows[index]?.id
-      || entry.fingerprint !== this.rows[index]?.fingerprint)) this.revision = ++paletteSessionRevision;
-    const liveIds = new Set(next.map(({ id }) => id));
-    for (const id of this.drafts.keys()) if (!liveIds.has(id)) this.drafts.delete(id);
-    for (const id of ambiguousIds) {
-      this.drafts.delete(id);
-      this.pendingInvalidatedIds.add(id);
-    }
-    this.rows = next;
-    return next.map(({ id }) => id);
+    this.snapshot = snapshot;
+    return !!changed;
   }
 
-  takeInvalidatedIds() {
-    const ids = this.pendingInvalidatedIds;
-    this.pendingInvalidatedIds = new Set();
-    return ids;
+  record(rows) {
+    this.snapshot = rows.map(row => serializeConfig(row));
   }
 
-  idAt(index) { return this.rows[index]?.id ?? null; }
-  updateAt(index, row) {
-    const entry = this.rows[index];
-    if (!entry) return false;
-    const fingerprint = serializeConfig(row);
-    if (entry.fingerprint === fingerprint) return true;
-    entry.fingerprint = fingerprint;
-    entry.logicalKey = this.logicalKey(row);
-    this.revision = ++paletteSessionRevision;
-    return true;
+  takeReplacement() {
+    const replaced = this.replaced;
+    this.replaced = false;
+    return replaced;
   }
-  tokenAt(index) { return { id: this.idAt(index), revision: this.revision }; }
+
+  get revision() { return this.generation; }
+  tokenAt(index) { return { sessionKey: this.sessionKey, generation: this.generation, index }; }
   isCurrent(token, index = null) {
-    return !!token?.id && token.revision === this.revision
-      && (index === null || this.idAt(index) === token.id);
+    return token?.sessionKey === this.sessionKey && token.generation === this.generation
+      && (index === null || token.index === index);
   }
   setDraft(index, field, value) {
-    const id = this.idAt(index);
-    if (id) {
-      if (!this.drafts.has(id)) this.drafts.set(id, new Map());
-      this.drafts.get(id).set(field, value);
-    }
+    if (!this.drafts.has(index)) this.drafts.set(index, new Map());
+    this.drafts.get(index).set(field, value);
   }
   getDraft(index, field) {
-    const id = this.idAt(index);
-    return id ? this.drafts.get(id)?.get(field) : undefined;
+    return this.drafts.get(index)?.get(field);
   }
   clearDraft(index, field) {
-    const id = this.idAt(index);
-    if (id) {
-      this.drafts.get(id)?.delete(field);
-      if (!this.drafts.get(id)?.size) this.drafts.delete(id);
-    }
+    this.drafts.get(index)?.delete(field);
+    if (!this.drafts.get(index)?.size) this.drafts.delete(index);
   }
 }
 
@@ -144,28 +67,23 @@ export class PaletteSection {
   _getShadowElementById(id) { return this.shadowRoot?.getElementById?.(id) ?? this.shadowRoot?.querySelector(`#${id}`); }
   _renderListRows(items, renderItem) { return items.map(renderItem).join(''); }
 
-  _syncRows(scope, { inputSelector, rowSelector, draftSelector, memberSelector, onDiscard, sessionRevision, sessionKey, rowIds, invalidatedIds, deferRemovedActive = false }) {
+  _syncRows(scope, { inputSelector, rowSelector, draftSelector, memberSelector, sessionRevision, sessionKey, replacement = false }) {
     const root = this.shadowRoot;
     if (!root?.ownerDocument) return false;
     const template = root.ownerDocument.createElement('template');
     template.innerHTML = this.render(scope, ({ content }) => content, { section: false });
-    const desired = [...template.content.querySelectorAll(rowSelector)]
-      .filter(row => row.querySelector(inputSelector));
-    if (memberSelector && sessionRevision !== undefined) {
-      for (const member of template.content.querySelectorAll(memberSelector)) {
-        member.dataset.paletteRevision = String(sessionRevision);
-        member.dataset.paletteSession = String(sessionKey);
-        if (member.classList.contains('segment-undefined-row')) {
-          member.dataset.paletteKey = `${sessionKey}:${member.dataset.paletteKey}`;
-        } else {
-          const rowInput = member.querySelector('[data-segment-index], [data-stop-index], [data-kind="segment-from"], [data-kind="gradient-pos"]');
-          const rowIndex = Number(rowInput?.dataset.segmentIndex ?? rowInput?.dataset.stopIndex ?? rowInput?.dataset.index);
-          if (Number.isInteger(rowIndex) && rowIds?.[rowIndex]) {
-            member.dataset.paletteId = `${sessionKey}:${rowIds[rowIndex]}`;
-            member.dataset.paletteKey = member.dataset.paletteId;
-          }
-        }
+    const desired = [...template.content.querySelectorAll(rowSelector)].filter(row => row.querySelector(inputSelector));
+    const members = memberSelector ? [...template.content.querySelectorAll(memberSelector)] : [];
+    for (const member of members) {
+      member.dataset.paletteRevision = String(sessionRevision);
+      member.dataset.paletteSession = String(sessionKey);
+      for (const control of member.querySelectorAll('input, button')) {
+        control.dataset.paletteRevision = String(sessionRevision);
+        control.dataset.paletteSession = String(sessionKey);
       }
+      const rowInput = member.querySelector('[data-segment-index], [data-stop-index], [data-kind="segment-from"], [data-kind="gradient-pos"]');
+      const rowIndex = Number(rowInput?.dataset.segmentIndex ?? rowInput?.dataset.stopIndex ?? rowInput?.dataset.index);
+      if (Number.isInteger(rowIndex)) member.dataset.paletteIndex = String(rowIndex);
     }
     const liveInputs = [...root.querySelectorAll(inputSelector)];
     const liveRows = liveInputs.map(input => input.closest(rowSelector)).filter(Boolean);
@@ -173,110 +91,22 @@ export class PaletteSection {
     const list = liveRows[0]?.parentElement ?? draft?.closest('.list')
       ?? root.querySelector(memberSelector ? `:scope ${memberSelector}` : rowSelector)?.parentElement;
     if (!list) return false;
+    const liveMembers = [...list.children].filter(item => item.matches(memberSelector));
     const active = root.activeElement;
+    if (memberSelector && !replacement && liveMembers.length === members.length
+      && liveMembers.every(item => item.dataset.paletteSession === String(sessionKey)
+        && item.dataset.paletteRevision === String(sessionRevision))) return false;
+
     if (memberSelector) {
-      const keyMembers = items => {
-        const occurrences = new Map();
-        return items.map((item, index) => {
-          const base = item.dataset.paletteKey;
-          const occurrence = occurrences.get(base) ?? 0;
-          occurrences.set(base, occurrence + 1);
-          return { item, index, key: `${base}#${occurrence}` };
-        });
-      };
-      const desiredEntries = keyMembers([...template.content.querySelectorAll(memberSelector)]);
-      const desiredByKey = new Map(desiredEntries.map(entry => [entry.key, entry]));
-      const liveMembers = [...list.children].filter(item => item.matches(memberSelector));
-      const liveEntries = keyMembers(liveMembers);
-      const activeMember = liveEntries.find(({ item }) => item.contains(active));
-      const activeRemoved = !!activeMember && !desiredByKey.has(activeMember.key);
-      const activeInvalidated = !!activeMember && invalidatedIds?.has(activeMember.item.dataset.paletteId);
-      if (activeRemoved && !activeInvalidated && deferRemovedActive
-        && String(activeMember.item.dataset.paletteSession) === String(sessionKey)) return false;
-      const activePreserved = !!activeMember && !activeRemoved && !activeInvalidated;
-      const selection = active?.matches?.('input') && typeof active.selectionStart === 'number'
-        ? [active.selectionStart, active.selectionEnd, active.selectionDirection]
-        : null;
-      let changed = liveMembers.length !== desiredEntries.length;
-
-      const liveByKey = new Map(liveEntries.map(entry => [entry.key, entry]));
-      for (const entry of liveEntries) {
-        const { item, index, key } = entry;
-        const next = desiredByKey.get(key);
-        const oldRowIndex = item.querySelector('[data-segment-index]')?.dataset.segmentIndex;
-        const nextRowIndex = next?.item.querySelector('[data-segment-index]')?.dataset.segmentIndex;
-        if (!next || index !== next.index || oldRowIndex !== nextRowIndex) {
-          onDiscard?.(item, next?.item ?? desiredEntries.find(candidate => candidate.item.querySelector('[data-segment-index]')?.dataset.segmentIndex === oldRowIndex)?.item);
-        }
-      }
-      const reconciled = desiredEntries.map(({ item: desiredMember, key }) => {
-        const existing = liveByKey.get(key)?.item;
-        if (!existing) return desiredMember.cloneNode(true);
-        const syncElement = (current, next) => {
-          for (const attribute of [...current.attributes]) {
-            if (!next.hasAttribute(attribute.name)) { current.removeAttribute(attribute.name); changed = true; }
-          }
-          for (const attribute of [...next.attributes]) {
-            if (current.getAttribute(attribute.name) !== attribute.value) { current.setAttribute(attribute.name, attribute.value); changed = true; }
-          }
-          if (current.matches('input, button')) {
-            if (current !== active && current.matches('input')) {
-              if (current.value !== next.value) { current.value = next.value; changed = true; }
-              if (current.checked !== next.checked) { current.checked = next.checked; changed = true; }
-            }
-            if (current.matches('button') && current.textContent !== next.textContent) { current.textContent = next.textContent; changed = true; }
-          }
-          const currentChildren = [...current.children];
-          const nextChildren = [...next.children];
-          currentChildren.forEach((child, childIndex) => {
-            if (nextChildren[childIndex] && child.tagName === nextChildren[childIndex].tagName) syncElement(child, nextChildren[childIndex]);
-          });
-          if (!current.children.length && !current.matches('input, button') && current.textContent !== next.textContent) { current.textContent = next.textContent; changed = true; }
-        };
-        syncElement(existing, desiredMember);
-        return existing;
-      });
-      if (reconciled.some(item => !liveMembers.includes(item))) changed = true;
-
-      const anchor = list.querySelector(':scope > .segment-draft, :scope > .gradient-stop-draft');
       this._reconcilingRows = true;
       try {
-        // Remove obsolete siblings before ordering the desired rows. Keeping
-        // the active row in place avoids a native blur/change during insertBefore.
-        for (const entry of liveEntries) if (!desiredByKey.has(entry.key)) entry.item.remove();
-        if (liveEntries.some(entry => !desiredByKey.has(entry.key))) changed = true;
-
-        const activeItem = activePreserved ? activeMember.item : null;
-        const activeIndex = activeItem ? reconciled.indexOf(activeItem) : -1;
-        if (activeIndex >= 0) {
-          let reference = anchor;
-          for (let index = reconciled.length - 1; index > activeIndex; index -= 1) {
-            const item = reconciled[index];
-            if (item.nextElementSibling !== reference) list.insertBefore(item, reference);
-            reference = item;
-          }
-          reference = activeItem;
-          for (let index = activeIndex - 1; index >= 0; index -= 1) {
-            const item = reconciled[index];
-            if (item.nextElementSibling !== reference) list.insertBefore(item, reference);
-            reference = item;
-          }
-        } else {
-          let reference = anchor;
-          for (let index = reconciled.length - 1; index >= 0; index -= 1) {
-            const item = reconciled[index];
-            if (item.nextElementSibling !== reference) list.insertBefore(item, reference);
-            reference = item;
-          }
-        }
-        if (activePreserved && active?.isConnected && root.activeElement !== active) {
-          active.focus?.({ preventScroll: true });
-          if (selection) active.setSelectionRange?.(...selection);
-        }
+        liveMembers.forEach(item => item.remove());
+        const draftAnchor = list.querySelector(':scope > .segment-draft, :scope > .gradient-stop-draft');
+        members.forEach(member => list.insertBefore(member.cloneNode(true), draftAnchor));
       } finally {
         this._reconcilingRows = false;
       }
-      return changed || liveMembers.some((item, index) => item !== reconciled[index]);
+      return true;
     }
 
     if (liveRows.slice(desired.length).some(row => row.contains(active))) return false;
@@ -405,7 +235,6 @@ export class PaletteSection {
       : { ...row, pos: this._normalizeGradientStopPosValue(row?.pos) ?? 0, color: field === 'color' ? value : row?.color ?? '#4a9eff' });
     if (segment || serializeConfig(next) !== serializeConfig(this._sanitizeGradientStopsForEmit(current))) {
       const session = this._getPaletteSession(scope, current);
-      session.updateAt(index, next[index]);
       const row = target.closest?.(segment ? '.segment-editor-row' : '.gradient-stop-row');
       if (row) row.dataset.paletteRevision = String(session.revision);
       write(next, segment ? { sort: false } : {}, { type: 'edit', index, field: 'color', value });

@@ -255,9 +255,12 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
       window.__editedGreenStop = controls.find(node => node.value === '45'
         && node.closest('.gradient-stop-row').querySelector('input[data-kind="gradient-color"]').value === '#00aa00');
     });
-    const getAuthoredIds = () => positions.evaluateAll(controls => controls.map(node => node.closest('.gradient-stop-row').dataset.paletteId));
-    const idsBeforeRefresh = await getAuthoredIds();
-    expect(new Set(idsBeforeRefresh).size).toBe(4);
+    const getPaletteEpochs = () => positions.evaluateAll(controls => controls.map(node => {
+      const row = node.closest('.gradient-stop-row');
+      return [row.dataset.paletteSession, row.dataset.paletteRevision];
+    }));
+    const epochsBeforeRefresh = await getPaletteEpochs();
+    expect(new Set(epochsBeforeRefresh.map(epoch => epoch.join(':'))).size).toBe(1);
     await editor.evaluate(() => {
       window.__insertedGreenStop.focus();
       window.__insertedGreenStop.value = '42';
@@ -271,9 +274,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
     expect(await editor.evaluate(() => window.__editedGreenStop.value)).toBe('45');
     expect(await editor.evaluate(() => window.__insertedGreenStop.closest('.gradient-stop-row')
       .querySelector('input[data-kind="gradient-color"]').value)).toBe('#00aa00');
-    const idsAfterRefresh = await getAuthoredIds();
-    expect(new Set(idsAfterRefresh).size).toBe(4);
-    expect(idsAfterRefresh).toEqual(idsBeforeRefresh);
+    expect(await getPaletteEpochs()).toEqual(epochsBeforeRefresh);
     expect(await saved(editor)).toEqual(configBeforeRefresh);
     expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventsBeforeRefresh);
   });
@@ -301,13 +302,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
     const getRows = () => editor.locator('.segment-editor-row');
-    const getIds = () => getRows().evaluateAll(rows => rows.map(row => row.dataset.paletteId));
-    const assertUniqueIds = async count => {
-      const ids = await getIds();
-      expect(ids).toHaveLength(count);
-      expect(new Set(ids).size).toBe(count);
-    };
-    await assertUniqueIds(3);
+    await expect(getRows()).toHaveCount(3);
 
     await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [
       { from: '10%', to: '90%', color: '#0000aa' },
@@ -315,20 +310,18 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
       { from: '10%', to: '60%', color: '#00aa00' },
       { from: '10%', to: '30%', color: '#aa0000' },
     ] } }));
-    await assertUniqueIds(4);
-    const editedEnd = () => getRows().locator('input[data-kind="segment-to"]').evaluateAll(nodes =>
-      nodes.find(node => node === window.__sameStartDraftControl)?.value);
-    await expect.poll(editedEnd).toBe('65%');
-    expect(await editor.evaluate(el => window.__sameStartDraftControl.closest('.segment-editor-row')
-      .querySelector('input[data-kind="segment-color"]').value)).toBe('#00aa00');
+    await expect(getRows()).toHaveCount(4);
+    expect(await editor.evaluate(() => window.__sameStartDraftControl.isConnected)).toBe(false);
+    await expect.poll(() => getRows().locator('input[data-kind="segment-to"]').evaluateAll(nodes => nodes.map(node => node.value)))
+      .toEqual(['90%', '75%', '60%', '30%']);
 
     await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [
       { from: '10%', to: '60%', color: '#00aa00' },
       { from: '10%', to: '90%', color: '#0000aa' },
       { from: '10%', to: '75%', color: '#ffff00' },
     ] } }));
-    await assertUniqueIds(3);
-    await expect.poll(editedEnd).toBe('65%');
+    await expect(getRows()).toHaveCount(3);
+    expect(await editor.evaluate(() => window.__sameStartDraftControl.isConnected)).toBe(false);
     expect(await saved(editor)).toEqual(config);
     expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
   });
@@ -360,10 +353,8 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
       } }), duplicate);
       await expect(ends).toHaveCount(3);
       expect(await staleInput.evaluate(node => node.isConnected)).toBe(false);
-      expect(await ends.evaluateAll(nodes => nodes.map(node => node.value))).toEqual(['30%', '30%', '95%']);
-      expect(await unrelatedInput.evaluate(node => node.isConnected)).toBe(true);
-      const ids = await editor.locator('.segment-editor-row').evaluateAll(rows => rows.map(row => row.dataset.paletteId));
-      expect(new Set(ids).size).toBe(3);
+      expect(await ends.evaluateAll(nodes => nodes.map(node => node.value))).toEqual(['30%', '30%', '100%']);
+      expect(await unrelatedInput.evaluate(node => node.isConnected)).toBe(false);
 
       await editor.evaluate((el, node) => {
         const staleEvent = { target: node, key: 'Enter', preventDefault() {}, stopPropagation() {} };
@@ -404,10 +395,8 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
       } }), duplicate);
       await expect(positions).toHaveCount(3);
       expect(await staleInput.evaluate(node => node.isConnected)).toBe(false);
-      expect(await positions.evaluateAll(nodes => nodes.map(node => node.value))).toEqual(['40', '40', '95']);
-      expect(await unrelatedInput.evaluate(node => node.isConnected)).toBe(true);
-      const ids = await positions.evaluateAll(nodes => nodes.map(node => node.closest('.gradient-stop-row').dataset.paletteId));
-      expect(new Set(ids).size).toBe(3);
+      expect(await positions.evaluateAll(nodes => nodes.map(node => node.value))).toEqual(['40', '40', '100']);
+      expect(await unrelatedInput.evaluate(node => node.isConnected)).toBe(false);
 
       await editor.evaluate((el, node) => {
         const staleEvent = { target: node, key: 'Enter', preventDefault() {}, stopPropagation() {} };
@@ -422,7 +411,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
     });
   }
 
-  test(`${host} preserves a focused segment draft while preset rows change (${source})`, async ({ page }) => {
+  test(`${host} cancels a focused segment draft when effective preset rows change (${source})`, async ({ page }) => {
     const config = { bar: { paint: { preset: 'night' } } };
     if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
     const editor = await mountWithPaintPresets(page, host, source, {
@@ -438,17 +427,18 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
       { from: '10%', to: '55%', color: '#aa0000' }, { from: '55%', to: '100%', color: '#00aa00' },
     ] } }));
     await expect(editor.locator('input[data-kind="segment-from"]')).toHaveCount(2);
-    await expect(start).toBeFocused();
-    await expect(start).toHaveValue('37%');
-    expect(await start.evaluate(node => [node.selectionStart, node.selectionEnd])).toEqual([2, 3]);
-    expect(await editor.evaluate(el => el.shadowRoot.querySelector('input[data-kind="segment-from"]') === window.__focusedSegmentStart)).toBe(true);
-    await start.evaluate(node => { node.dispatchEvent(new Event('change', { bubbles: true })); node.blur(); });
-    await expect.poll(async () => (await saved(editor)).bar.paint.segments?.[0]?.from).toBe('37%');
+    expect(await editor.evaluate(() => window.__focusedSegmentStart.isConnected)).toBe(false);
+    await expect.poll(() => editor.locator('input[data-kind="segment-from"]').evaluateAll(nodes => nodes.map(node => node.value)))
+      .toEqual(['10%', '55%']);
+    expect(await saved(editor)).toEqual(config);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
+    expect(await saved(editor)).toEqual(config);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
   });
 }
 
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
-  test(`${host} keeps duplicate-start segment drafts with the uniquely matched row (${source})`, async ({ page }) => {
+  test(`${host} cancels duplicate-start segment drafts when preset rows reorder (${source})`, async ({ page }) => {
     const config = { bar: { paint: { preset: 'night' } } };
     if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
     const editor = await mountWithPaintPresets(page, host, source, {
@@ -468,12 +458,10 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
       { from: '10%', to: '60%', color: '#00aa00' },
       { from: '10%', to: '30%', color: '#aa0000' },
     ] } }));
-    const ownedIndex = await ends.evaluateAll(nodes => nodes.findIndex(node => node === window.__duplicateDraftEnd));
-    const ownedEnd = ends.nth(ownedIndex);
-    await expect(ownedEnd).toHaveValue('25%');
-    expect(ownedIndex).toBeGreaterThanOrEqual(0);
-    expect(await ownedEnd.evaluate(node => [node.selectionStart, node.selectionEnd])).toEqual([2, 3]);
+    expect(await editor.evaluate(() => window.__duplicateDraftEnd.isConnected)).toBe(false);
+    await expect(ends).toHaveCount(3);
     expect(await saved(editor)).toEqual(config);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
   });
 
   test(`${host} rejects a gradient event after switching paint source (${source})`, async ({ page }) => {
@@ -549,7 +537,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
     expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
   });
 
-  test(`${host} keeps a gradient draft and color node with its stop through insertion, removal, and reorder (${source})`, async ({ page }) => {
+  test(`${host} cancels a gradient draft when preset rows are replaced (${source})`, async ({ page }) => {
     const config = { bar: { paint: { preset: 'night' } } };
     if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
     const editor = await mountWithPaintPresets(page, host, source, {
@@ -573,20 +561,14 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
     ] } }));
     await expect.poll(() => editor.evaluate(el => el._paintPresetRegistry.presets.night.gradient_stops[0].pos)).toBe(100);
     await expect(positions).toHaveCount(3);
-    const originIndex = await positions.evaluateAll(nodes => nodes.findIndex(node => node === window.__originPosition));
-    expect(originIndex).toBeGreaterThanOrEqual(0);
-    const originRow = positions.nth(originIndex);
-    await expect(originRow).toHaveValue('45');
-    expect(await originRow.evaluate(node => node === window.__originPosition)).toBe(true);
-    expect(await originRow.evaluate(node => node.closest('.gradient-stop-row').querySelector('input[data-kind="gradient-color"]') === window.__originColor)).toBe(true);
-    expect(await editor.evaluate(() => window.__originColor.value)).toBe('#00aa00');
+    expect(await editor.evaluate(() => window.__originPosition.isConnected)).toBe(false);
+    expect(await editor.evaluate(() => window.__originColor.isConnected)).toBe(false);
+    await expect(positions).toHaveCount(3);
     expect(await saved(editor)).toEqual(config);
-    await originRow.press('Enter');
-    await expect.poll(() => page.evaluate(() => window.__paintEvents.length)).toBe(1);
-    expect((await saved(editor)).bar.paint.gradient_stops.find(stop => stop.color === '#00aa00')).toMatchObject({ pos: 45, color: '#00aa00' });
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
   });
 
-  test(`${host} keeps typing mounted across preset gradient row-count changes (${source})`, async ({ page }) => {
+  test(`${host} cancels typing when preset gradient rows change (${source})`, async ({ page }) => {
     const config = { bar: { paint: { preset: 'night' } } };
     if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
     const editor = await mountWithPaintPresets(page, host, source, {
@@ -604,14 +586,11 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
       { pos: 80, color: '#ffff00' }, { pos: 100, color: '#0000aa' },
     ] } }));
     await expect.poll(() => editor.evaluate(el => el._paintPresetRegistry.presets.night.gradient_stops.length)).toBe(4);
-    await expect(position).toBeFocused();
-    expect(await position.evaluate(node => node === window.__typingPosition)).toBe(true);
-    await position.pressSequentially('5');
-    await expect(position).toHaveValue('45');
+    expect(await position.evaluate(node => node === window.__typingPosition)).toBe(false);
+    await expect.poll(() => editor.locator('input[data-kind="gradient-pos"]').evaluateAll(nodes => nodes.map(node => node.value)))
+      .toEqual(['0', '60', '80', '100']);
     expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
-    await position.press('Enter');
-    await expect.poll(() => page.evaluate(() => window.__paintEvents.length)).toBe(1);
-    expect((await saved(editor)).bar.paint.gradient_stops[1]).toMatchObject({ pos: 45, color: '#00aa00' });
+    expect(await saved(editor)).toEqual(config);
   });
 
   test(`${host} rejects commits from a removed preset segment row (${source})`, async ({ page }) => {
@@ -683,6 +662,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
     await editor.locator('#card-paint-editor summary').click();
     await editor.locator('#card-group-segments').click();
     const start = editor.locator('input[data-kind="segment-from"]').first();
+    const staleStart = await start.elementHandle();
     const staleAction = await editor.locator('.segment-undefined-row button[data-action$="from-undefined"]').first().elementHandle();
     await start.focus();
     await start.evaluate(node => { node.value = '11%'; node.dispatchEvent(new Event('input', { bubbles: true })); });
@@ -694,7 +674,8 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
     await staleAction.evaluate(button => button.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(await saved(editor)).toEqual(config);
     expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
-    await start.evaluate(node => { node.dispatchEvent(new Event('change', { bubbles: true })); node.blur(); });
+    expect(await staleStart.evaluate(node => node.isConnected)).toBe(false);
+    await staleStart.evaluate(node => { node.dispatchEvent(new Event('change', { bubbles: true })); node.blur(); });
     await expect(editor.locator('.segment-undefined-row')).toHaveCount(0);
     expect(await saved(editor)).toEqual(config);
     expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
@@ -702,7 +683,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
 }
 
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
-  test(`${host} keeps focused boundary drafts with their segment during preset reorder (${source})`, async ({ page }) => {
+  test(`${host} cancels focused boundary drafts during preset reorder (${source})`, async ({ page }) => {
     const config = { bar: { paint: { preset: 'night' } } };
     if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
     const editor = await mountWithPaintPresets(page, host, source, {
@@ -730,12 +711,8 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
       { from: '0%', to: '30%', color: '#aa0000' },
     ] } }));
     await expect.poll(() => editor.evaluate(el => el._paintPresetRegistry.presets.night.segments[0].from)).toBe('70%');
-    await expect(ends.nth(0)).toHaveValue('100%');
-    await expect(ends.nth(2)).toHaveValue('25%');
-    expect(await editor.evaluate(el => el.shadowRoot.activeElement === window.__firstSegmentEnd)).toBe(true);
-    expect(await ends.nth(2).evaluate(node => node === window.__firstSegmentEnd)).toBe(true);
-    expect(await ends.nth(2).evaluate(node => [node.selectionStart, node.selectionEnd, node.selectionDirection])).toEqual(
-      await editor.evaluate(() => window.__firstSegmentSelection));
+    expect(await editor.evaluate(el => window.__firstSegmentEnd.isConnected)).toBe(false);
+    await expect.poll(() => ends.evaluateAll(nodes => nodes.map(node => node.value))).toEqual(['100%', '60', '30%']);
     expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
     expect(await saved(editor)).toEqual(config);
   });
