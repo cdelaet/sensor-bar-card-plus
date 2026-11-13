@@ -2,7 +2,7 @@ import {
   cloneDeep, serializeConfig, isObject, getPathValue, setPathValue, deletePathValue,
 } from '../editor/shared/editor-config.js';
 import {
-  escapeAttribute, formatScaleValueInput, renderEntitySourceInput, renderEntityAttributeInput, renderWindowOptions, getEntityAttributeSuggestions, getColorPickerValue, isHexColorValue,
+  escapeAttribute, formatScaleValueInput, renderEntitySourceInput, renderEntityAttributeInput, renderWindowOptions, getEntityAttributeSuggestions, getColorPickerValue,
 } from '../editor/shared/editor-controls.js';
 import { editorStyles } from '../editor/shared/editor-styles.js';
 import { renderCardGroup, renderMarkersSection } from '../editor/shared/editor-disclosures.js';
@@ -47,7 +47,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._paintPresetHandle = null;
     this._paintPresetSubscriptionGeneration = 0;
     this._paintPresetRegistry = { status: 'loading', presets: {} };
-    this._paletteStructureSyncPending = false;
     this._cssColorDrafts = new Map();
     this._numericDrafts = new NumericInputDrafts();
     this._expandedCardGroups = new Set();
@@ -59,7 +58,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._extremaSection = new ExtremaSection(context, options);
     const ui = {
       root: () => this.shadowRoot,
-      render: () => { this._paletteRenderRequested = true; this._requestRender(); },
+      render: () => this._requestRender(),
       focus: selector => { this._pendingPaletteFocus = selector; },
       hass: () => this._hass,
     };
@@ -126,17 +125,27 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       return;
     }
     if (serializeConfig(config) !== serializeConfig(this._config)) {
+      const previousPaintSource = serializeConfig([
+        getPathValue(this._config, ['bar', 'fill_style']),
+        getPathValue(this._config, ['bar', 'color_mode']),
+        getPathValue(this._config, ['color_mode']),
+      ]);
+      const nextPaintSource = serializeConfig([
+        getPathValue(config, ['bar', 'fill_style']),
+        getPathValue(config, ['bar', 'color_mode']),
+        getPathValue(config, ['color_mode']),
+      ]);
       this._lastMigrationSignature = null;
-      this._paletteRenderRequested ||= ['bar.segments', 'bar.gradient_stops', 'segments', 'severity', 'gradient_stops']
-        .some(path => serializeConfig(getPathValue(config, path.split('.'))) !== serializeConfig(getPathValue(this._config, path.split('.'))));
       this._config = cloneDeep(config);
+      if (previousPaintSource !== nextPaintSource) {
+        this._segmentsSection.clearScopeState(root);
+        this._gradientStopsSection.clearScopeState(root);
+      }
       this._cssColorDrafts.clear();
       this._numericDrafts.reset();
       this._baselineSection.reset();
       this._targetSection.reset();
       this._referenceMarkersSection.reset();
-      this._segmentsSection.reset();
-      this._gradientStopsSection.reset();
       this._chooseEntity = false;
       this._configReplaced = true;
     }
@@ -156,7 +165,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
   connectedCallback() { this._syncPaintPresetRegistry(); this._requestRender(); }
   disconnectedCallback() {
     this._renderEpoch += 1; this._renderScheduled = false;
-    this._paletteStructureSyncPending = false;
     this._paintPresetSubscriptionGeneration += 1;
     this._paintPresetHandle?.unsubscribe();
     this._paintPresetHandle = null;
@@ -181,12 +189,10 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       this._paintPresetHandle = subscribeDashboardPaintPresets(this._hass, path, snapshot => {
         if (generation !== this._paintPresetSubscriptionGeneration || snapshot === this._paintPresetRegistry) return;
         this._paintPresetRegistry = snapshot;
-        this._paletteStructureSyncPending = true;
         if (this.shadowRoot?.innerHTML) this._syncControls();
         else this._requestRender();
       });
       this._paintPresetRegistry = this._paintPresetHandle.getSnapshot();
-      this._paletteStructureSyncPending = true;
       if (this.shadowRoot?.innerHTML) this._syncControls();
       return;
     }
@@ -301,7 +307,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     if (field === 'bar-paint-mode' || kind === 'entity-bar-paint-mode') {
       this._segmentsSection.clearScopeState(root);
       this._gradientStopsSection.clearScopeState(root);
-      this._paletteStructureSyncPending = true;
     }
     handleBarAppearanceField(context, { field, kind, value }, { animation: true, cssText: true });
   }
@@ -399,9 +404,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       !!(this._context.entity_id || this._explicitEntity), this._showEntityPicker,
       !!getFeatureScaleSource(this._config, 'min').entity, !!getFeatureScaleSource(this._config, 'max').entity,
       !!getFeatureBaselineSource(this._config).entity, !!getFeatureTargetSource(this._config).entity,
-      fillStyle, segmentRows.length, gradientRows.length,
-      !isHexColorValue(this._gradientStopsSection._getGradientStopsDraftState(root).color),
-      ...gradientRows.map(row => !isHexColorValue(row.color)),
+      fillStyle,
       !!customElements.get('ha-entity-picker'), !!customElements.get('ha-entity-attribute-picker'),
     ]);
     // Keep active controls mounted through their native input/change sequence.
@@ -409,7 +412,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const activeKind = this.shadowRoot.activeElement?.dataset?.kind;
     const defer = activeKind?.endsWith('-text-fallback') || activeField?.endsWith('-text-fallback')
       || activeField === 'feature-entity-override' && !this._context.entity_id && !this._explicitEntity
-      || this._paletteStructureSyncPending && !!this.shadowRoot.activeElement?.closest?.('.segment-editor-row, .gradient-stop-row')
       || this.shadowRoot.activeElement?.validity?.badInput && this._numericDrafts.captureFocus(this.shadowRoot);
     let replaceReferences = false;
     if (markerSignature !== this._referenceStructureSignature && !defer) {
@@ -417,7 +419,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       try { replaceReferences = !this._referenceMarkersSection.syncStructure(root); }
       finally { this._isRendering = false; }
     }
-    if ((signature !== this._structureSignature || this._paletteRenderRequested || replaceReferences) && !defer) {
+    if ((signature !== this._structureSignature || replaceReferences) && !defer) {
       const focus = this._captureFocus();
       const context = this._createSectionContext();
       this._isRendering = true;
@@ -459,19 +461,12 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       </div>`;
       } finally { this._isRendering = false; }
       this._structureSignature = signature;
-      this._paletteRenderRequested = false;
       this._syncControls();
       const active = focus && this.shadowRoot.querySelector(focus.selector);
       active?.focus?.({ preventScroll: true });
       if (active?.type === 'text' && focus.start != null) active.setSelectionRange?.(focus.start, focus.end);
     } else {
       this._syncControls();
-    }
-    if (this._paletteStructureSyncPending) {
-      // The palette rows were reconciled through the shared section path. Keep
-      // the signature current so later typing does not force an editor rebuild.
-      this._structureSignature = signature;
-      this._paletteStructureSyncPending = false;
     }
     if (!defer) this._referenceStructureSignature = markerSignature;
     if (this._pendingPaletteFocus) {
@@ -503,8 +498,8 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       segments: this._segmentsSection._getScopedSegmentsValue(root),
       gradient_stops: this._gradientStopsSection._getScopedGradientStopsValue(root),
     }, { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts, registry: this._paintPresetRegistry });
-    this._segmentsSection.syncRows(root);
-    this._gradientStopsSection.syncRows(root);
+    const segmentsRebuilt = this._segmentsSection.syncRows(root);
+    const gradientStopsRebuilt = this._gradientStopsSection.syncRows(root);
     const segmentSummary = this.shadowRoot.querySelector('#card-group-segments-summary');
     if (segmentSummary) segmentSummary.textContent = this._segmentsSection._getSegmentsSummary(root);
     const gradientSummary = this.shadowRoot.querySelector('#card-group-gradient-stops-summary');
@@ -568,7 +563,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       const control = this.shadowRoot.querySelector(`#${id}`);
       if (control) control.checked = checked;
     }
-    for (const section of [this._segmentsSection, this._gradientStopsSection]) {
+    for (const [section, rebuilt] of [[this._segmentsSection, segmentsRebuilt], [this._gradientStopsSection, gradientStopsRebuilt]]) {
       const segment = section === this._segmentsSection;
       const rows = segment ? section._getScopedSegmentsValue(root) : section._getScopedGradientStopsValue(root);
       for (const field of segment ? ['from', 'to', 'color', 'color-text-fallback'] : ['pos', 'color']) {
@@ -577,13 +572,13 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
           if (!row) continue;
           const value = segment && !field.startsWith('color') ? section._getSegmentBoundaryText(root, index, field, row?.[field])
             : !segment && field === 'pos' ? section._getGradientStopPosText(root, index, row?.pos ?? '') : row?.color;
-          if (control !== this.shadowRoot.activeElement || this._configReplaced) control.value = segment && control.type === 'color' ? getColorPickerValue(value, '#4a9eff') : value ?? '';
+          if (rebuilt) control.value = segment && control.type === 'color' ? getColorPickerValue(value, '#4a9eff') : value ?? '';
         }
       }
-      if (segment || this._configReplaced) {
+      if (rebuilt) {
         const draft = segment ? section._getSegmentDraftState(root) : section._getGradientStopsDraftState(root);
         for (const field of Object.keys(draft)) for (const suffix of ['', '-text-fallback']) for (const control of this.shadowRoot.querySelectorAll(`input[data-kind="${segment ? 'segment' : 'gradient'}-draft-${field}${suffix}"]`)) {
-          if (control !== this.shadowRoot.activeElement || this._configReplaced) control.value = field === 'color' && control.type === 'color' ? getColorPickerValue(draft[field], '#4CAF50') : draft[field];
+          control.value = field === 'color' && control.type === 'color' ? getColorPickerValue(draft[field], '#4CAF50') : draft[field];
         }
       }
       if (segment) section._refreshSegmentUi(root);

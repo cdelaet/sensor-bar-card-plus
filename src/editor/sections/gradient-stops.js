@@ -25,6 +25,11 @@ export class GradientStopsSection extends PaletteSection {
     this._clearGradientStopScopeTextState(scope);
   }
 
+  prepareExternalSync(scope) {
+    if (scope) this._gradientStopsUiRows.delete(this._getGradientStopsDraftKey(scope));
+    else this._gradientStopsUiRows.clear();
+  }
+
   _setGradientStops(stops, options = {}) {
     return this._setScopedGradientStops({ type: 'card' }, stops, options);
   }

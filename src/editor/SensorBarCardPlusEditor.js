@@ -39,6 +39,16 @@ import { createBarPaintBindings, usesGroupedBarPaint, prepareBarPaintSegments } 
 import { SegmentsSection } from './sections/segments.js';
 import { GradientStopsSection } from './sections/gradient-stops.js';
 
+function paletteComparableConfig(config) {
+  const comparable = cloneDeep(config ?? {});
+  for (const path of [
+    ['bar', 'segments'], ['bar', 'gradient_stops'], ['bar', 'paint', 'segments'],
+    ['bar', 'paint', 'gradient_stops'], ['bar', 'paint', 'preset'],
+    ['segments'], ['severity'], ['gradient_stops'],
+  ]) deletePathValue(comparable, path);
+  return comparable;
+}
+
 import { NeedleSection } from './sections/needle.js';
 import { BaselineSection } from './sections/baseline.js';
 import { TargetSection } from './sections/target.js';
@@ -149,6 +159,20 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
     if (this._getEmittedConfigJson(nextConfig) === this._getEmittedConfigJson(this._draftConfig)) {
       this._config = nextConfig;
+      return;
+    }
+
+    const paletteOnlyReplacement = this.shadowRoot?.innerHTML
+      && this._serializeConfig(paletteComparableConfig(nextConfig))
+        === this._serializeConfig(paletteComparableConfig(this._config));
+    if (paletteOnlyReplacement) {
+      this._lastEmittedConfigJson = null;
+      this._config = nextConfig;
+      this._draftConfig = this._cloneDeep(nextConfig);
+      this._segmentsSection.prepareExternalSync();
+      this._gradientStopsSection.prepareExternalSync();
+      this._syncPaintEditors();
+      this._lastRenderedConfigJson = nextConfigJson;
       return;
     }
 

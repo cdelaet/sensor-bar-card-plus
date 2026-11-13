@@ -98,7 +98,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
     await expect(segmentRows.nth(0)).toHaveValue('10%');
     await expect(segmentRows.nth(1)).toHaveValue('55%');
     await expect(gradientRows).toHaveCount(1);
-    expect(await editor.evaluate(el => el.shadowRoot.querySelector('input[data-kind="segment-from"]') === window.__stableSegmentControl)).toBe(true);
+    expect(await editor.evaluate(el => el.shadowRoot.querySelector('input[data-kind="segment-from"]') !== window.__stableSegmentControl)).toBe(true);
     expect(await editor.evaluate(el => el.shadowRoot.querySelector('#bar-opacity') === window.__stablePaintControl)).toBe(true);
     expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
 
@@ -118,7 +118,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
 }
 
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
-  test(`${host} continues typing in an unaffected row after duplicate removal (${source})`, async ({ page }) => {
+  test(`${host} cancels the palette session after external duplicate removal (${source})`, async ({ page }) => {
     const config = { bar: { paint: { preset: 'night' } } };
     if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
     const duplicate = { from: '10%', to: '30%', color: '#aa0000' };
@@ -136,13 +136,12 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
       node.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await page.evaluate(segments => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments } }), [duplicate, duplicate, unique]);
-    await expect(end).toBeFocused();
-    await expect(end).toHaveValue('9');
-    expect(await end.evaluate(node => [node.selectionStart, node.selectionEnd])).toEqual([1, 1]);
+    await expect(end).not.toBeFocused();
+    await expect(end).toHaveValue('100%');
     expect(await saved(editor)).toEqual(config);
     expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
 
-    await end.pressSequentially('5%');
+    await end.fill('95%');
     await expect(end).toHaveValue('95%');
     expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
     await end.press('Enter');
@@ -151,7 +150,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
   });
 
   for (const groupChange of ['remove', 'insert']) for (const activePosition of ['before', 'after']) for (const commitMode of ['enter', 'blur']) {
-    test(`${host} keeps an unaffected focused row through duplicate ${groupChange} and later ${commitMode} commit (${activePosition}, ${source})`, async ({ page }) => {
+    test(`${host} rejects stale events after external duplicate ${groupChange} (${activePosition}, ${commitMode}, ${source})`, async ({ page }) => {
       const config = { bar: { paint: { preset: 'night' } } };
       if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
       const duplicate = { from: '10%', to: '30%', color: '#aa0000' };
@@ -209,13 +208,14 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
       });
 
       await expect(editor.locator('.segment-editor-row')).toHaveCount(afterCount + 1);
-      await expect(end).toBeFocused();
-      await expect(end).toHaveValue('95%');
-      expect(await end.evaluate(node => node === window.__unaffectedEnd)).toBe(true);
-      expect(await end.evaluate(node => [node.selectionStart, node.selectionEnd])).toEqual([1, 3]);
+      await expect(end).not.toBeFocused();
+      await expect(end).toHaveValue('100%');
+      expect(await end.evaluate(node => node !== window.__unaffectedEnd)).toBe(true);
+      expect(await editor.evaluate(el => window.__unaffectedEnd.isConnected)).toBe(false);
       expect(await saved(editor)).toEqual(config);
       expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventsBefore);
 
+      await end.fill('95%');
       if (commitMode === 'enter') await end.press('Enter');
       else await end.evaluate(node => { node.dispatchEvent(new Event('change', { bubbles: true })); node.blur(); });
       await expect.poll(() => page.evaluate(() => window.__paintEvents.length)).toBe(eventsBefore + 1);
@@ -607,20 +607,20 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
     await editor.locator('#card-group-segments').click();
     const starts = editor.locator('input[data-kind="segment-from"]');
     await expect(starts).toHaveCount(3);
-    await starts.nth(2).focus();
-    await starts.nth(2).evaluate(node => { node.value = '72%'; node.dispatchEvent(new Event('input', { bubbles: true })); });
+    const removedStart = starts.nth(2);
+    await removedStart.focus();
+    await removedStart.evaluate(node => { window.__removedStart = node; node.value = '72%'; node.dispatchEvent(new Event('input', { bubbles: true })); });
     const eventCount = await page.evaluate(() => window.__paintEvents.length);
     await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'bands', segments: [
       { from: '0%', to: '50%', color: '#aa0000' },
       { from: '50%', to: '100%', color: '#00aa00' },
     ] } }));
     await expect.poll(() => editor.evaluate(el => el._paintPresetRegistry.presets.night.segments.length)).toBe(2);
-    await expect(starts).toHaveCount(3);
-    await starts.nth(2).press('Enter');
-    expect(await saved(editor)).toEqual(config);
-    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
-    await starts.nth(2).evaluate(node => node.blur());
     await expect(starts).toHaveCount(2);
+    expect(await editor.evaluate(() => window.__removedStart.isConnected)).toBe(false);
+    await editor.evaluate(() => {
+      for (const type of ['keydown', 'change', 'blur']) window.__removedStart.dispatchEvent(new Event(type, { bubbles: true }));
+    });
     expect(await saved(editor)).toEqual(config);
     expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
   });
@@ -718,7 +718,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
   });
 }
 
-for (const source of ['src', 'dist']) for (const commit of ['blur', 'enter']) test(`Feature keeps row-count bookkeeping current while a boundary is edited and commits by ${commit} (${source})`, async ({ page }) => {
+for (const source of ['src', 'dist']) for (const commit of ['blur', 'enter']) test(`Feature rejects a focused boundary event after palette rows are removed by ${commit} (${source})`, async ({ page }) => {
   const config = { type: 'custom:sensor-bar-card-plus-feature', bar: { paint: { preset: 'night' } } };
   const editor = await mountWithPaintPresets(page, 'Feature', source, {
     night: { fill_style: 'bands', segments: [
@@ -739,16 +739,17 @@ for (const source of ['src', 'dist']) for (const commit of ['blur', 'enter']) te
   ] } }));
   await expect.poll(() => editor.evaluate(el => el._paintPresetRegistry.presets.night.segments.length)).toBe(2);
   await expect(firstEnd).toHaveCount(1);
-  await expect(firstEnd).toHaveValue('2');
-  expect(await firstEnd.evaluate(node => node === window.__focusedEnd)).toBe(true);
-  await firstEnd.press('End');
-  await firstEnd.pressSequentially('5');
-  await expect(firstEnd).toHaveValue('25');
+  await expect(firstEnd).toHaveValue('30%');
+  expect(await firstEnd.evaluate(node => node !== window.__focusedEnd)).toBe(true);
   expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
-  if (commit === 'enter') await firstEnd.press('Enter');
-  else await firstEnd.evaluate(node => node.blur());
-  await expect.poll(() => page.evaluate(() => window.__paintEvents.length)).toBe(eventCount + 1);
-  expect((await saved(editor)).bar.paint.segments).toHaveLength(2);
+  await editor.evaluate((_, commit) => {
+    const event = new Event(commit === 'enter' ? 'keydown' : 'change', { bubbles: true });
+    if (commit === 'enter') Object.defineProperty(event, 'key', { value: 'Enter' });
+    window.__focusedEnd.dispatchEvent(event);
+    window.__focusedEnd.blur();
+  }, commit);
+  expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
+  expect(await saved(editor)).toEqual(config);
 });
 
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {

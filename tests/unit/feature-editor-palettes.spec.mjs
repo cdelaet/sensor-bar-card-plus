@@ -123,17 +123,17 @@ for (const source of ['src', 'dist']) describe(`shared Feature palettes (${sourc
     expect(editor._config.bar).toEqual(config.bar);
     expect(editor._config.bar).not.toHaveProperty('gradient_stops');
   });
-  it('discards local drafts on foreign config replacement without emitting', async () => {
+  it('preserves palette drafts on unchanged external config replacement without emitting', async () => {
     const { editor, events, segment, gradient } = await setup(source, raw('gradient'));
     gradient._setGradientStopsDraftField(root, 'pos', '55');
     gradient._setGradientStopsDraftField(root, 'color', 'var(--accent-color)');
     segment._setSegmentDraftField(root, 'from', '-');
     await editor.updateComplete;
     editor.setConfig({ ...raw('gradient'), futureReplacement: true }); await editor.updateComplete;
-    expect(gradient._getGradientStopsDraftState(root).pos).toBe('100');
-    expect(gradient._getGradientStopsDraftState(root).color).toBe('red');
-    expect(segment._getSegmentDraftState(root).from).not.toBe('-');
-    expect(editor.shadowRoot.querySelector('#gradient-draft-pos').value).toBe('100');
+    expect(gradient._getGradientStopsDraftState(root).pos).toBe('55');
+    expect(gradient._getGradientStopsDraftState(root).color).toBe('var(--accent-color)');
+    expect(segment._getSegmentDraftState(root).from).toBe('-');
+    expect(editor.shadowRoot.querySelector('#gradient-draft-pos').value).toBe('55');
     expect(events).toHaveLength(0);
   });
   it('rebuilds on external palette replacement and rejects stale field events', async () => {
@@ -154,7 +154,7 @@ for (const source of ['src', 'dist']) describe(`shared Feature palettes (${sourc
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[0]).not.toBe(oldInput);
     expect(gradient._getGradientStopPosText(root, 0, replacement.bar.gradient_stops[0].pos)).toBe('0');
     expect(editor._config).toEqual(replacement);
-    expect(oldInput.dataset.paletteSession).not.toBe(String(gradient._getPaletteSession(root).sessionKey));
+    expect(oldInput.dataset.paletteRevision).not.toBe(String(gradient._getPaletteSession(root).generation));
     for (const type of ['keydown', 'change', 'blur']) {
       editor._handleField({ type, key: 'Enter', target: oldInput, preventDefault() {} });
     }

@@ -85,6 +85,11 @@ export class SegmentsSection extends PaletteSection {
     this._paletteSessions.delete(key);
   }
 
+  prepareExternalSync(scope) {
+    if (scope) this._segmentUiRows.delete(this._getSegmentsScopeKey(scope));
+    else this._segmentUiRows.clear();
+  }
+
   _setSegments(segments, options = {}) {
     return this._setScopedSegments({ type: 'card' }, segments, options);
   }
