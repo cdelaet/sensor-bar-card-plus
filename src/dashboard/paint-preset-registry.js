@@ -1,5 +1,26 @@
 const registriesByConnection = new WeakMap();
 const REGISTRY_PATH = 'sbcp_fragments.paint_presets';
+const MASTER_TYPE = 'custom:sensor-bar-card-plus';
+
+function findMasters(config) {
+  const masters = [];
+  const visitCard = card => {
+    if (!isRecord(card)) return;
+    if (card.type === MASTER_TYPE && Object.hasOwn(card, 'preset_library')) masters.push(card);
+    for (const key of ['cards', 'card', 'elements']) {
+      const children = card[key];
+      if (Array.isArray(children)) children.forEach(visitCard);
+      else visitCard(children);
+    }
+  };
+  if (Array.isArray(config?.views)) {
+    for (const view of config.views) {
+      if (Array.isArray(view?.cards)) view.cards.forEach(visitCard);
+      for (const section of view?.sections ?? []) section?.cards?.forEach(visitCard);
+    }
+  }
+  return masters;
+}
 
 function isRecord(value) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -17,13 +38,15 @@ function freezeClone(value) {
   return Object.freeze(clone);
 }
 
-function freezeSnapshot({ dashboardPath, status, presets, diagnostic, revision }) {
+function freezeSnapshot({ dashboardPath, status, presets, diagnostic, revision, masterCount = 0, masterLibrary = null }) {
   return Object.freeze({
     dashboardPath,
     status,
     presets: freezeClone(presets),
     diagnostic: diagnostic ? Object.freeze({ ...diagnostic }) : null,
     revision,
+    masterCount,
+    masterLibrary: masterLibrary === null ? null : freezeClone(masterLibrary),
   });
 }
 
@@ -39,6 +62,14 @@ function stableValue(value) {
 }
 
 function readPaintPresets(config) {
+  const masters = findMasters(config);
+  if (masters.length > 1) return { status: 'conflict', presets: {}, masterCount: masters.length,
+    diagnostic: { code: 'multiple_preset_masters', path: 'views', message: `Dashboard has ${masters.length} master Cards with preset_library; preset resolution is disabled.` } };
+  if (masters.length === 1) {
+    const library = masters[0].preset_library;
+    const presets = isRecord(library) && isRecord(library.paint) ? library.paint : {};
+    return { status: 'ready', presets, masterCount: 1, masterLibrary: library, diagnostic: null };
+  }
   const fragments = config?.sbcp_fragments;
   if (fragments === undefined) return { status: 'empty', presets: {}, diagnostic: {
     code: 'paint_presets_missing', path: REGISTRY_PATH, message: 'Dashboard has no sbcp_fragments.paint_presets registry.',
@@ -53,7 +84,7 @@ function readPaintPresets(config) {
   if (!isRecord(presets)) return { status: 'empty', presets: {}, diagnostic: {
     code: 'paint_presets_malformed', path: REGISTRY_PATH, message: 'Dashboard paint_presets must be an object.',
   } };
-  return { status: 'ready', presets, diagnostic: null };
+  return { status: 'ready', presets, masterCount: 0, diagnostic: null };
 }
 
 function report(entry, snapshot) {
@@ -72,11 +103,14 @@ function publish(entry, result) {
     status: result.status,
     presets: result.presets,
     diagnostic: result.diagnostic,
+    masterCount: result.masterCount ?? 0,
+    masterLibrary: result.masterLibrary ?? null,
   };
   const current = entry.snapshot;
   if (current.status === next.status
     && current.diagnostic?.code === next.diagnostic?.code
     && current.diagnostic?.message === next.diagnostic?.message
+    && current.masterCount === next.masterCount
     && stableValue(current.presets) === stableValue(next.presets)) return;
   report(entry, freezeSnapshot({ ...next, revision: current.revision + 1 }));
 }

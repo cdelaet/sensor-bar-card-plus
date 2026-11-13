@@ -64,6 +64,60 @@ describe('dashboard paint preset registry', () => {
     expect(connection.removeEventListener).toHaveBeenCalledTimes(2);
   });
 
+  it('uses the sole saved master library across views and nested cards, preserving unknown categories', async () => {
+    const library = { paint: { warm: { fill_style: 'solid', color: '#ff9800', opacity: 80 } }, layout: { future: true } };
+    const connection = createConnection({ views: [
+      { cards: [{ type: 'vertical-stack', cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: library }] }] },
+      { cards: [] },
+    ], sbcp_fragments: { paint_presets: { ignored: { color: 'red' } } } });
+    const consumer = subscribeDashboardPaintPresets(hassFor(connection), 'dashboard-a', vi.fn());
+    await flush();
+    expect(consumer.getSnapshot()).toMatchObject({ status: 'ready', masterCount: 1, presets: library.paint, masterLibrary: library });
+    expect(Object.isFrozen(consumer.getSnapshot().masterLibrary.layout)).toBe(true);
+    consumer.unsubscribe();
+  });
+
+  it('uses legacy dashboard presets only when no master exists and reports duplicate masters', async () => {
+    const legacy = createConnection({ views: [{ cards: [] }], sbcp_fragments: { paint_presets: { old: { color: 'red' } } } });
+    const legacyConsumer = subscribeDashboardPaintPresets(hassFor(legacy), 'legacy', vi.fn());
+    await flush();
+    expect(legacyConsumer.getSnapshot()).toMatchObject({ status: 'ready', masterCount: 0, presets: { old: { color: 'red' } } });
+    legacyConsumer.unsubscribe();
+
+    const duplicate = createConnection({ views: [{ cards: [
+      { type: 'custom:sensor-bar-card-plus', preset_library: {} },
+      { type: 'grid', cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: { paint: { hidden: { color: 'blue' } } } }] },
+    ] }], sbcp_fragments: { paint_presets: { old: { color: 'red' } } } });
+    const consumer = subscribeDashboardPaintPresets(hassFor(duplicate), 'duplicate', vi.fn());
+    await flush();
+    expect(consumer.getSnapshot()).toMatchObject({ status: 'conflict', masterCount: 2, presets: {}, diagnostic: { code: 'multiple_preset_masters' } });
+    consumer.unsubscribe();
+  });
+
+  it('treats an empty master library as authoritative', async () => {
+    const connection = createConnection({ views: [{ cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: {} }] }],
+      sbcp_fragments: { paint_presets: { legacy: { color: 'red' } } } });
+    const consumer = subscribeDashboardPaintPresets(hassFor(connection), 'empty-master', vi.fn());
+    await flush();
+    expect(consumer.getSnapshot()).toMatchObject({ status: 'ready', masterCount: 1, presets: {} });
+    consumer.unsubscribe();
+  });
+
+  it('publishes saved master updates after refresh but ignores unsaved local edits', async () => {
+    const saved = { type: 'custom:sensor-bar-card-plus', preset_library: { paint: { warm: { color: 'red' } } } };
+    const connection = createConnection({ views: [{ cards: [saved] }] });
+    const consumer = subscribeDashboardPaintPresets(hassFor(connection), 'master-updates', vi.fn());
+    await flush();
+    saved.preset_library.paint.warm.color = 'unsaved';
+    expect(consumer.getSnapshot().presets.warm.color).toBe('red');
+    connection.setResponse({ views: [{ cards: [{ type: 'custom:sensor-bar-card-plus',
+      preset_library: { paint: { warm: { color: 'blue' } } } }] }] });
+    connection.subscriptions[0].callback({ event_type: 'lovelace_updated' });
+    await flush();
+    expect(consumer.getSnapshot().presets.warm.color).toBe('blue');
+    consumer.unsubscribe();
+  });
+
   it('isolates registries between dashboards and Home Assistant connections', async () => {
     const firstConnection = createConnection({ sbcp_fragments: { paint_presets: { one: { color: 'red' } } } });
     const secondConnection = createConnection({ sbcp_fragments: { paint_presets: { two: { color: 'blue' } } } });
