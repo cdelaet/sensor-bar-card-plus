@@ -41,6 +41,7 @@ import { renderPaintSwatch, syncPaintSwatch } from './shared/paint-swatch.js';
 import { resolvePaintEditorPaint } from './shared/paint-editor-paint.js';
 import { SegmentsSection } from './sections/segments.js';
 import { GradientStopsSection } from './sections/gradient-stops.js';
+import { createBaselinePaintContext } from './shared/baseline-paint-bindings.js';
 
 function paletteComparableConfig(config) {
   let comparable = cloneDeep(config ?? {});
@@ -98,6 +99,24 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._gradientStopsSection = new GradientStopsSection(this._createSectionContext(), this._paletteUi({ paint: true }), {
       write: (scope, rows, options) => this._setScopedGradientStops(scope, rows, options),
     });
+    this._baselinePaintSections = {};
+    for (const direction of ['above', 'below']) {
+      const paintContext = createBaselinePaintContext(this._createSectionContext(), direction);
+      const rootSelector = scope => `#${scope?.type === 'entity' ? `entity-${scope.index}-` : ''}baseline-${direction}-paint-editor`;
+      const ui = { ...this._paletteUi({ paint: true }),
+        root: scope => this.shadowRoot?.querySelector(rootSelector(scope)),
+        focus: (selector, scope) => this._queuePostRenderFocus(`${rootSelector(scope)} ${selector}`),
+      };
+      this._baselinePaintSections[direction] = {
+        segments: new SegmentsSection(paintContext, ui, {
+          write: (scope, rows, options) => createBarPaintBindings(paintContext, scope).set('segments', rows, options),
+          autoEnds: true, cssText: true,
+        }),
+        gradientStops: new GradientStopsSection(paintContext, ui, {
+          write: (scope, rows, options) => createBarPaintBindings(paintContext, scope).set('gradient_stops', rows, options),
+        }),
+      };
+    }
     this._needleSection = new NeedleSection(this._createSectionContext());
     this._baselineSection = new BaselineSection(this._createSectionContext());
     this._targetSection = new TargetSection(this._createSectionContext());
@@ -272,6 +291,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       syncBarPaintEditor(this.shadowRoot, context, scope, this._paintPaletteValues(scope), {
         numericDrafts: this._numericDrafts, registry: this._paintPresetRegistry,
       });
+      const baselinePalettes = Object.fromEntries(['above', 'below'].map(direction => [direction,
+        this._baselinePaintPaletteValues(scope, direction)]));
+      this._baselineSection.syncPaintEditors(this.shadowRoot, scope, baselinePalettes, this._paintPresetRegistry,
+        { numericDrafts: this._numericDrafts });
+      for (const direction of ['above', 'below']) {
+        this._baselinePaintSections[direction].segments.syncRows(scope);
+        this._baselinePaintSections[direction].gradientStops.syncRows(scope);
+      }
       this._segmentsSection.syncRows(scope);
       this._gradientStopsSection.syncRows(scope);
       const prefix = scope.type === 'entity' ? `entity-${scope.index}-group-` : 'card-group-';
@@ -1805,6 +1832,29 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _paintPaletteValues(scope) {
     return { segments: this._segmentsSection._getScopedSegmentsValue(scope), gradient_stops: this._gradientStopsSection._getScopedGradientStopsValue(scope) };
+  }
+
+  _renderBaselinePaintPalette(scope, direction) {
+    const sections = this._baselinePaintSections[direction];
+    const renderGroup = options => this._renderCardGroup({ ...options, group: `baseline-${direction}-${options.group}` });
+    return {
+      segments: sections.segments.render(scope, renderGroup, { section: false }),
+      gradient_stops: sections.gradientStops.render(scope, renderGroup, { section: false }),
+    };
+  }
+
+  _baselinePaintPaletteValues(scope, direction) {
+    const sections = this._baselinePaintSections[direction];
+    return { segments: sections.segments._getScopedSegmentsValue(scope),
+      gradient_stops: sections.gradientStops._getScopedGradientStopsValue(scope) };
+  }
+
+  _handleBaselinePaletteEvent(event, mode) {
+    for (const direction of ['above', 'below']) {
+      const sections = this._baselinePaintSections[direction];
+      if (sections.segments.handle(event, mode) || sections.gradientStops.handle(event, mode)) return true;
+    }
+    return false;
   }
 
   _paletteUi({ paint = false } = {}) {
@@ -3459,7 +3509,11 @@ ${this._renderPresetMasterControls()}
 	                          group: 'baseline',
 	                          title: 'Baseline',
 	                          summary: this._getBaselineOverrideSummary(scope),
-	                          content: this._baselineSection.render(scope),
+                          content: this._baselineSection.render(scope, undefined, { root: this.shadowRoot,
+                            registry: this._paintPresetRegistry,
+                            paletteValues: (paintScope, direction) => this._baselinePaintPaletteValues(paintScope, direction),
+                            paintChildren: (paintScope, direction) => this._renderBaselinePaintPalette(paintScope, direction),
+                          }),
 	                        });
 	                        const targetGroup = this._renderOverrideGroup({
 	                          index,
@@ -3538,7 +3592,9 @@ ${this._renderPresetMasterControls()}
         </div>
 ${this._renderScaleSection({ type: 'card' })}
 
-${renderBarAppearanceSection(this._createSectionContext(), { type: 'card' }, () => `${this._baselineSection.render({ type: 'card' }, options => this._renderCardGroup(options))}${this._renderCardGroup({ group: 'needle', title: 'Needle', summary: this._getNeedleSummary({ type: 'card' }), content: this._needleSection.render({ type: 'card' }) })}`, { heading: 'Bar', root: this.shadowRoot, paintPresetRegistry: this._paintPresetRegistry, paletteValues: this._paintPaletteValues({ type: 'card' }), paintChildren: () => ({ segments: this._segmentsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false }), gradient_stops: this._gradientStopsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false }) }) })}
+${renderBarAppearanceSection(this._createSectionContext(), { type: 'card' }, () => `${this._baselineSection.render({ type: 'card' }, options => this._renderCardGroup(options), { root: this.shadowRoot,
+  registry: this._paintPresetRegistry, paletteValues: (paintScope, direction) => this._baselinePaintPaletteValues(paintScope, direction),
+  paintChildren: (paintScope, direction) => this._renderBaselinePaintPalette(paintScope, direction) })}${this._renderCardGroup({ group: 'needle', title: 'Needle', summary: this._getNeedleSummary({ type: 'card' }), content: this._needleSection.render({ type: 'card' }) })}`, { heading: 'Bar', root: this.shadowRoot, paintPresetRegistry: this._paintPresetRegistry, paletteValues: this._paintPaletteValues({ type: 'card' }), paintChildren: () => ({ segments: this._segmentsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false }), gradient_stops: this._gradientStopsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false }) }) })}
 
 ${renderMarkersSection({
   renderGroup: options => this._renderCardGroup(options),
@@ -4086,11 +4142,23 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (presetManager) {
       if (this._presetPaintSections
         && (this._presetPaintSections.segments.handle(event, 'click') || this._presetPaintSections.gradientStops.handle(event, 'click'))) return;
-    } else if (this._segmentsSection.handle(event, 'click') || this._gradientStopsSection.handle(event, 'click')) return;
+    } else if (this._segmentsSection.handle(event, 'click') || this._gradientStopsSection.handle(event, 'click')
+      || this._handleBaselinePaletteEvent(event, 'click')) return;
     const target = event.target?.closest?.('[data-action]') ?? event.target;
     const action = target?.dataset?.action;
     if (!action) return;
     if (target?.disabled) return;
+    if (['above', 'below'].includes(target.closest?.('.baseline-paint-destination')?.dataset?.baselineDirection)
+      || target.closest?.('.paint-editor')?.id?.startsWith('baseline-')
+      || target.closest?.('.paint-editor')?.id?.includes('-baseline-')) {
+      if (action === 'reset-paint') {
+        const confirm = this.ownerDocument?.defaultView?.confirm;
+        if (typeof confirm !== 'function' || !confirm.call(this.ownerDocument.defaultView,
+          `${target.dataset.index === undefined ? 'Reset paint to its default' : 'Reset this Entity to Card paint'}?`)) return;
+      }
+      this._baselineSection.handleClick(target);
+      return;
+    }
     if (action === 'reset-paint') {
       const scope = target.dataset.index === undefined ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
       const context = this._createSectionContext();
@@ -4195,7 +4263,8 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (presetManager) {
       if (this._presetPaintSections
         && (this._presetPaintSections.segments.handle(event, 'change') || this._presetPaintSections.gradientStops.handle(event, 'change'))) return;
-    } else if (this._segmentsSection.handle(event, 'change') || this._gradientStopsSection.handle(event, 'change')) return;
+    } else if (this._segmentsSection.handle(event, 'change') || this._gradientStopsSection.handle(event, 'change')
+      || this._handleBaselinePaletteEvent(event, 'change')) return;
     const kind = event.target?.dataset?.kind;
     this._handleFieldEvent(event);
   }
@@ -4206,7 +4275,8 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (presetManager) {
       if (this._presetPaintSections
         && (this._presetPaintSections.segments.handle(event, 'input') || this._presetPaintSections.gradientStops.handle(event, 'input'))) return;
-    } else if (this._segmentsSection.handle(event, 'input') || this._gradientStopsSection.handle(event, 'input')) return;
+    } else if (this._segmentsSection.handle(event, 'input') || this._gradientStopsSection.handle(event, 'input')
+      || this._handleBaselinePaletteEvent(event, 'input')) return;
     const target = event.target;
     if (!target) return;
     if (target.tagName === 'HA-ENTITY-PICKER' || target.tagName === 'HA-ENTITY-ATTRIBUTE-PICKER') return;
@@ -4229,11 +4299,13 @@ ${this._renderFormattingSection({ type: 'card' })}
         && (this._presetPaintSections.segments.handle(event, 'keydown') || this._presetPaintSections.gradientStops.handle(event, 'keydown'))) return;
       return;
     }
-    this._segmentsSection.handle(event, 'keydown') || this._gradientStopsSection.handle(event, 'keydown');
+    this._segmentsSection.handle(event, 'keydown') || this._gradientStopsSection.handle(event, 'keydown')
+      || this._handleBaselinePaletteEvent(event, 'keydown');
   }
 
   _handleFieldEvent(event) {
-    if (this._segmentsSection.handle(event, 'field') || this._gradientStopsSection.handle(event, 'field')) return;
+    if (this._segmentsSection.handle(event, 'field') || this._gradientStopsSection.handle(event, 'field')
+      || this._handleBaselinePaletteEvent(event, 'field')) return;
     const target = event.target;
     const rawField = target?.dataset?.field;
     const rawKind = target?.dataset?.kind;
@@ -4307,6 +4379,25 @@ ${this._renderFormattingSection({ type: 'card' })}
           `Applying paint preset “${name}” replaces local paint properties. Continue?`),
       });
       if (!applied) target.value = currentPreset == null ? '' : String(currentPreset);
+      return;
+    }
+    const baselinePresetControl = (field ?? kind?.replace(/^entity-/, ''))?.match(/^baseline-(above|below)-paint-preset$/);
+    if (baselinePresetControl) {
+      const [, direction] = baselinePresetControl;
+      const scope = target.dataset?.index === undefined ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
+      const context = this._createSectionContext();
+      const local = context.read(scope, ['baseline', direction, 'paint']) ?? {};
+      const current = local.preset ?? (scope.type === 'entity' ? context.read({ type: 'card' }, ['baseline', direction, 'paint', 'preset']) : undefined);
+      const hasProperties = Object.keys(local).some(property => property !== 'preset')
+        || context.read(scope, ['baseline', direction, 'color']) !== undefined;
+      const confirm = this.ownerDocument?.defaultView?.confirm;
+      if (value !== '' && value !== current && hasProperties
+        && (typeof confirm !== 'function' || !confirm.call(this.ownerDocument.defaultView,
+          `Applying paint preset “${value}” replaces local paint properties. Continue?`))) {
+        target.value = current == null ? '' : String(current);
+        return;
+      }
+      this._baselineSection._setBaselinePaintProperty(scope, direction, 'preset', value === '' ? undefined : value);
       return;
     }
     if (handleBarAppearanceField(this._createSectionContext(), { field, value })) return;

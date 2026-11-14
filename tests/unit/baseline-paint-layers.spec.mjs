@@ -6,6 +6,7 @@ import {
 } from '../../src/view-model/bar-render-model.js';
 import { patchBar, renderBar } from '../../src/render/bar-renderer.js';
 import { createPaintLayerContainer } from '../support/paint-layer-dom.mjs';
+import { resolveBaselinePaints } from '../../src/view-model/baseline-paint-resolver.js';
 
 const paint = { bar: { fill_style: 'solid', color: '#123456', above_target_color: '#ffff00' },
   baseline: { above: { color: '#ff0000' }, below: { color: '#0000ff' } } };
@@ -13,6 +14,59 @@ const background = gradient => `display:block;inset:0;background-image:${gradien
 const overlay = (start, end, color) => `linear-gradient(to right,transparent 0%,transparent ${start}%,${color} ${start}%,${color} ${end}%,transparent ${end}%,transparent 100%)`;
 
 describe('independent Baseline paint layers', () => {
+  it('normalizes directional Paint with matching-side inheritance, null disablement, and property overrides', () => {
+    const config = normalizeCardConfig({
+      bar: { paint: { color: '#111111', fill_style: 'solid' } },
+      baseline: {
+        above: { paint: { fill_style: 'gradient', opacity: 0, gradient_stops: [
+          { pos: 0, color: '#000000' }, { pos: 100, color: '#ffffff' },
+        ] } },
+        below: { paint: { fill_style: 'solid', color: '#0000ff', opacity: 35 } },
+      },
+      entities: [
+        { entity: 'sensor.inherit' },
+        { entity: 'sensor.override', baseline: { above: { paint: { color: '#ff0000' } }, below: { paint: null } } },
+      ],
+    });
+    const [inherited, local] = config.entities.map(entity => entity.baseline);
+    expect(inherited.above.paint).toMatchObject({ fill_style: 'gradient', opacity: 0 });
+    expect(inherited.below.paint).toMatchObject({ fill_style: 'solid', color: '#0000ff', opacity: 35 });
+    expect(local.above.paint).toMatchObject({ fill_style: 'gradient', color: '#ff0000', opacity: 0 });
+    expect(local.below.paint).toBeNull();
+    expect(config.baseline.above.paint.color).toBe('#4a9eff');
+  });
+
+  it('compiles full-scale Baseline gradients with independent clipping and opacity', () => {
+    const config = normalizeCardConfig({ baseline: { at: 50, above: { paint: {
+      fill_style: 'gradient', opacity: 0,
+      gradient_stops: [{ pos: 0, color: '#000000' }, { pos: 100, color: '#ffffff' }],
+    } } }, entities: [{ entity: 'sensor.x' }] }).entities[0];
+    const layer = getFillPaintLayers(null, 30, config, '#123456', null, 50).find(item => item.id === 'baseline-above');
+    expect(layer.visible).toBe(true);
+    expect(layer.paintStyle).toContain('background-image:linear-gradient(to right,rgb(0,0,0) 0%,rgb(255,255,255) 100%)');
+    expect(layer.paintStyle).toContain('opacity:0;');
+    expect(layer.revealStyle).toContain('clip-path:inset(0 0% 0 50%');
+  });
+
+  it('resolves named presets independently by direction and falls back without stale paint', () => {
+    const config = normalizeCardConfig({ baseline: {
+      above: { paint: { preset: 'warm', color: '#ff0000' } },
+      below: { paint: { preset: 'missing' } },
+    }, entities: [{ entity: 'sensor.x', baseline: { above: { paint: { opacity: 0 } } } }] });
+    const cardBaseline = config.baseline;
+    const entityBaseline = config.entities[0].baseline;
+    const registry = { status: 'ready', presets: { warm: { fill_style: 'gradient',
+      gradient_stops: [{ pos: 0, color: '#000000' }, { pos: 100, color: '#ffffff' }], opacity: 40 } } };
+    const resolved = resolveBaselinePaints(entityBaseline, cardBaseline, registry);
+    expect(resolved.paints.above).toMatchObject({ fill_style: 'gradient', color: '#ff0000', opacity: 0 });
+    expect(resolved.paints.below.color).toBe('var(--accent-color, #4a9eff)');
+    expect(resolved.diagnostics).toContainEqual(expect.objectContaining({
+      code: 'paint_preset_missing', path: 'below.paint.preset', reference: 'missing', fallback: 'default',
+    }));
+    expect(resolveBaselinePaints({ ...entityBaseline, below: { ...entityBaseline.below, paint: null } }, cardBaseline, registry).paints)
+      .not.toHaveProperty('below');
+  });
+
   it('keeps ordinary fill free of Baseline colors and retains inactive layer identities', () => {
     const layers = getFillPaintLayers(null, 30, paint, '#123456');
     expect(layers.map(layer => layer.id)).toEqual(['base', 'baseline-above', 'baseline-below', 'above-target']);

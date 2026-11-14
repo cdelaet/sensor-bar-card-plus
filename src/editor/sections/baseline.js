@@ -2,6 +2,75 @@ import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue,
   pruneEmptyObjectsInTarget, normalizeTextValue } from '../shared/editor-config.js';
 import { escapeAttribute, normalizeEditorColorValue, renderColorInput } from '../shared/editor-controls.js';
 import { renderResolvableSourceControls } from '../shared/resolvable-source-controls.js';
+import { renderPaintEditor, syncPaintEditor } from '../shared/paint-editor.js';
+import { createPaintBindings } from '../shared/paint-bindings.js';
+import { resolvePaintEditorPaint } from '../shared/paint-editor-paint.js';
+import { resolvePaintPreset, authoredPaintProperties } from '../../view-model/paint-preset-resolver.js';
+import { normalizeBaselineDirectionConfig, normalizeScaleConfig } from '../../config/normalize.js';
+import { getResolvedScale } from '../../config/resolve.js';
+import { getPaintPreviewScale } from '../shared/paint-swatch.js';
+
+const PAINT_PROPERTIES = ['fill_style', 'color', 'solid_fill', 'segments', 'gradient_stops', 'opacity'];
+
+function baselinePaintPath(direction) { return ['baseline', direction, 'paint']; }
+
+function baselinePaintState(context, scope, direction, paletteValues = {}, registry = context.paintPresetRegistry) {
+  const local = context.read(scope, ['baseline', direction]) ?? {};
+  const parent = scope?.type === 'entity' ? context.read({ type: 'card' }, ['baseline', direction]) : null;
+  const inheritedDirection = normalizeBaselineDirectionConfig(parent);
+  const normalized = normalizeBaselineDirectionConfig(local, inheritedDirection);
+  const inheritedPaint = inheritedDirection.paint;
+  const localPaint = normalized.paint;
+  const presetApplies = authoredPaintProperties(localPaint).preset !== undefined
+    || authoredPaintProperties(inheritedPaint).preset !== undefined;
+  const resolved = presetApplies
+    ? resolvePaintPreset({ paint: authoredPaintProperties(localPaint), inheritedPaint, registry, canonicalPaint: true })
+    : { paint: localPaint ?? inheritedPaint, diagnostics: [] };
+  const legacyColor = Object.prototype.hasOwnProperty.call(local, 'color') ? local.color
+    : normalized.color ?? inheritedDirection.color;
+  const paint = resolvePaintEditorPaint(resolved.paint ?? (legacyColor ? {
+    fill_style: 'solid', color: legacyColor, solid_fill: false, opacity: 100,
+  } : {}), paletteValues);
+  const scaleConfig = normalizeScaleConfig(context.read(scope, []), scope?.type === 'entity' ? context.read({ type: 'card' }, []) : null);
+  const { min, max } = getResolvedScale(context.hass, scaleConfig);
+  const previewScale = getPaintPreviewScale(paint, { minValue: min, maxValue: max, scaleDirection: scaleConfig.direction });
+  const bindings = createPaintBindings(context, { scope, path: baselinePaintPath(direction) });
+  const overrides = Object.fromEntries(PAINT_PROPERTIES.map(property => [property, bindings.hasOverride(property)]));
+  const presetReference = bindings.read('preset') ?? inheritedPaint?.preset;
+  const presetOptions = Object.keys(registry?.presets ?? {}).filter(name => name.trim()).map(name => ({ value: name, label: name }));
+  if (presetReference !== undefined && !presetOptions.some(option => option.value === String(presetReference))) {
+    presetOptions.push({ value: String(presetReference ?? ''), label: `${String(presetReference || '(empty name)')} (unavailable)` });
+  }
+  const explicitlyDisabled = Object.prototype.hasOwnProperty.call(local, 'paint') && local.paint === null;
+  const configured = Object.prototype.hasOwnProperty.call(local, 'paint') || local.color !== undefined;
+  return { bindings, paint, overrides, diagnostics: resolved.diagnostics, presetOptions, presetReference,
+    inherited: scope?.type === 'entity' && !configured, explicitlyDisabled,
+    mode: explicitlyDisabled ? 'disabled' : configured ? 'paint' : inheritedPaint ? 'inherit' : 'disabled',
+    previewScale, scale: { minValue: min, maxValue: max, scaleDirection: scaleConfig.direction },
+    resetDisabled: !configured, registryStatus: registry?.status ?? 'loading' };
+}
+
+function renderBaselinePaintEditor(context, scope, direction, options = {}) {
+  const state = baselinePaintState(context, scope, direction, options.paletteValues?.(scope, direction), options.registry);
+  const entity = scope?.type === 'entity';
+  const prefix = entity ? `entity-${scope.index}-` : '';
+  const destination = `baseline-${direction}-paint`;
+  const fields = Object.fromEntries(['fill_style', 'color', 'solid_fill', 'opacity'].map(property => [property, {
+    id: `${prefix}${destination}-${property}`, field: `${destination}-${property}`, index: scope?.index,
+  }]));
+  fields.preset = { id: `${prefix}${destination}-preset`, field: `${destination}-preset`, index: scope?.index };
+  fields.index = scope?.index;
+  const modes = entity ? [['inherit', 'Inherit card paint'], ['paint', 'Enable Paint'], ['disabled', 'Disable Paint']]
+    : [['paint', 'Enable Paint'], ['disabled', 'Disable Paint']];
+  const palette = options.paintChildren?.(scope, direction);
+  return `<div class="baseline-paint-destination" data-baseline-direction="${direction}"><div class="field-row"><label for="${prefix}${destination}-mode">${direction === 'above' ? 'Above' : 'Below'} Baseline Paint</label>
+    <select id="${prefix}${destination}-mode" data-${entity ? 'kind' : 'field'}="${entity ? `entity-${destination}-mode` : `${destination}-mode`}"${entity ? ` data-index="${scope.index}"` : ''}>
+      ${modes.map(([value, label]) => `<option value="${value}"${state.mode === value ? ' selected' : ''}>${label}</option>`).join('')}
+    </select><button type="button" data-action="reset-paint"${entity ? ` data-index="${scope.index}"` : ''}${state.resetDisabled ? ' disabled' : ''}>${entity ? 'Reset to Card paint' : 'Reset paint'}</button></div>
+    ${state.mode === 'disabled' ? '' : renderPaintEditor({ ...state, id: `${prefix}${destination}-editor`, root: options.root,
+      fields, cssText: options.cssText, showPropertyMeta: true,
+      ...(palette && typeof palette === 'object' ? { paletteFields: palette } : {}) })}</div>`;
+}
 
 export class BaselineSection {
   constructor(context, options = {}) { this.options = options;
@@ -35,30 +104,21 @@ export class BaselineSection {
   }
 
   _setBaselineDirectionalColorEnabled(scope, direction, value) {
-    const currentValue = normalizeEditorColorValue(this._getBaselineDirectionalColorValue(scope, direction), this.options.cssText);
+    const currentValue = normalizeEditorColorValue(this._getEffectiveBaselineDirectionalColorValue(scope, direction), this.options.cssText);
     if (!value) {
       if (currentValue) {
         this._setBaselineColorDraft(scope, direction, currentValue);
       }
-      if (scope?.type === 'entity') {
-        return this.context.mutate(scope, (target) => {
-          const current = getPathValue(target, ['baseline', direction]);
-          const nextDirection = isObject(current) ? cloneDeep(current) : {};
-          nextDirection.color = null;
-          return setPathValue(target, ['baseline', direction], nextDirection);
-        }, { baselineEdit: { path: [direction, 'color'], value: null } });
-      }
-      return this._removeColor(scope, ['baseline', direction, 'color'], {
-        prunePaths: [['baseline', direction], ['baseline']],
-      });
+      return this.context.mutate(scope, target => {
+        let next = deletePathValue(target, ['baseline', direction, 'color']);
+        return setPathValue(next, baselinePaintPath(direction), null);
+      }, { baselineEdit: { path: [direction, 'paint'], value: null }, preserveRawConfig: true });
     }
     const nextValue = this._getBaselineColorDraft(scope, direction)
       || normalizeEditorColorValue(this._getEffectiveBaselineDirectionalColorValue(scope, direction), this.options.cssText)
       || currentValue
       || '#000000';
-    return this._setColor(scope, ['baseline', direction, 'color'], nextValue, {
-      prunePaths: [['baseline', direction], ['baseline']],
-    });
+    return this._setBaselinePaintProperty(scope, direction, 'color', nextValue);
   }
 
   _handleValueField(control, value, scope) {
@@ -110,28 +170,27 @@ export class BaselineSection {
   _setBaselineDirectionalColor(scope, direction, rawValue) {
     const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
     this._setBaselineColorDraft(scope, direction, normalizedValue);
-    const path = ['baseline', direction, 'color'];
     if (!normalizedValue) {
-      return this._removeColor(scope, path, {
-        prunePaths: [['baseline', direction], ['baseline']],
-      });
+      return this._setBaselinePaintProperty(scope, direction, 'color', undefined);
     }
     if (!this._isBaselineDirectionalColorEnabled(scope, direction)) {
       return this._setBaselineDirectionalColorEnabled(scope, direction, true);
     }
-    return this.context.mutate(scope, (target) => {
-      return setPathValue(target, path, normalizedValue);
-    }, { baselineEdit: { path: [direction, 'color'], value: normalizedValue } });
+    return this._setBaselinePaintProperty(scope, direction, 'color', normalizedValue);
   }
 
   _getBaselineDirectionalColorValue(scope, direction) {
-    return this.context.read(scope, ['baseline', direction, 'color']) ?? '';
+    return this.context.read(scope, ['baseline', direction, 'color'])
+      ?? this.context.read(scope, baselinePaintPath(direction).concat('color')) ?? '';
   }
 
   _getEffectiveBaselineDirectionalColorValue(scope, direction) {
-    const value = this.context.read(scope, ['baseline', direction, 'color']);
+    if (this.context.read(scope, baselinePaintPath(direction)) === null) return '';
+    const value = this.context.read(scope, ['baseline', direction, 'color'])
+      ?? this.context.read(scope, baselinePaintPath(direction).concat('color'));
     if (value !== undefined) return value ?? '';
-    return scope?.type === 'entity' ? this.context.read({ type: 'card' }, ['baseline', direction, 'color']) ?? '' : '';
+    return scope?.type === 'entity'
+      ? this._getEffectiveBaselineDirectionalColorValue({ type: 'card' }, direction) : '';
   }
 
   _clearBaselineOverride(scope) {
@@ -142,7 +201,9 @@ export class BaselineSection {
         nextTarget = deletePathValue(nextTarget, ['baseline', 'enabled']);
         nextTarget = deletePathValue(nextTarget, ['baseline', 'at']);
         nextTarget = deletePathValue(nextTarget, ['baseline', 'above', 'color']);
+        nextTarget = deletePathValue(nextTarget, ['baseline', 'above', 'paint']);
         nextTarget = deletePathValue(nextTarget, ['baseline', 'below', 'color']);
+        nextTarget = deletePathValue(nextTarget, ['baseline', 'below', 'paint']);
       } else {
         nextTarget = deletePathValue(nextTarget, ['baseline']);
       }
@@ -192,6 +253,55 @@ export class BaselineSection {
     return this.context.setSource(scope, 'baseline', part, value);
   }
 
+  _setBaselinePaintMode(scope, direction, mode) {
+    const path = ['baseline', direction, 'paint'];
+    return this.context.mutate(scope, target => {
+      if (mode === 'inherit') {
+        let next = deletePathValue(target, path);
+        next = deletePathValue(next, ['baseline', direction, 'color']);
+        return pruneEmptyObjectsInTarget(next, ['baseline', direction]);
+      }
+      return setPathValue(target, path, mode === 'disabled' ? null : {});
+    }, { rerender: true, preserveRawConfig: true });
+  }
+
+  _setBaselinePaintProperty(scope, direction, property, value) {
+    if (!['preset', ...PAINT_PROPERTIES].includes(property)) return false;
+    const bindings = createPaintBindings(this.context, { scope, path: baselinePaintPath(direction) });
+    if (value === undefined) {
+      if (property === 'color') return this.context.mutate(scope, target => {
+        let next = deletePathValue(target, [...baselinePaintPath(direction), 'color']);
+        next = deletePathValue(next, ['baseline', direction, 'color']);
+        return pruneEmptyObjectsInTarget(next, ['baseline', direction]);
+      }, { preserveRawConfig: true });
+      return bindings.clear(property, { preserveRawConfig: true });
+    }
+    if (property === 'preset' && value !== '') {
+      return this.context.mutate(scope, target => {
+        let next = setPathValue(target, baselinePaintPath(direction), { preset: value });
+        next = deletePathValue(next, ['baseline', direction, 'color']);
+        return next;
+      }, { preserveRawConfig: true, rerender: true });
+    }
+    if (property === 'color') {
+      return this.context.mutate(scope, target => {
+        let next = setPathValue(target, [...baselinePaintPath(direction), 'color'], value);
+        next = deletePathValue(next, ['baseline', direction, 'color']);
+        return next;
+      }, { preserveRawConfig: true });
+    }
+    const result = bindings.set(property, value, { preserveRawConfig: true });
+    return result;
+  }
+
+  _resetBaselinePaint(scope, direction) {
+    return this.context.mutate(scope, target => {
+      let next = deletePathValue(target, baselinePaintPath(direction));
+      next = deletePathValue(next, ['baseline', direction, 'color']);
+      return pruneEmptyObjectsInTarget(next, ['baseline', direction]);
+    }, { rerender: true, preserveRawConfig: true });
+  }
+
   _setColor(scope, path, value, options = {}) {
     return this.context.mutate(scope, target => {
       let next = value === undefined ? deletePathValue(target, path) : setPathValue(target, path, value);
@@ -216,6 +326,21 @@ export class BaselineSection {
     if (control === 'baseline-entity-source') { this._setBaselineResolvablePart(scope, 'entity', value); return true; }
     if (control === 'baseline-attribute') { this._setBaselineResolvablePart(scope, 'attribute', value); return true; }
     for (const direction of ['above', 'below']) {
+      if (control === `baseline-${direction}-paint-mode`) {
+        this._setBaselinePaintMode(scope, direction, value);
+        return true;
+      }
+      const paintPrefix = `baseline-${direction}-paint-`;
+      if (control?.startsWith(paintPrefix)) {
+        const property = control.slice(paintPrefix.length).replace(/-/g, '_');
+        const paintValue = property === 'solid_fill' ? !!value
+          : property === 'opacity' ? (value === '' ? undefined : Number(value))
+            : property === 'color' ? normalizeEditorColorValue(value, this.options.cssText) || undefined
+              : value;
+        this._setBaselinePaintProperty(scope, direction, property,
+          paintValue);
+        return true;
+      }
       if (control === `baseline-${direction}-color`) { this._setBaselineDirectionalColor(scope, direction, value); return true; }
       if (control === `baseline-${direction}-color-enabled`) { this._setBaselineDirectionalColorEnabled(scope, direction, value); return true; }
     }
@@ -223,18 +348,44 @@ export class BaselineSection {
   }
 
   handleClick(target) {
+    if (target?.dataset?.action === 'clear-paint-property') {
+      const direction = target.closest?.('.baseline-paint-destination')?.dataset?.baselineDirection;
+      if (!direction || !PAINT_PROPERTIES.includes(target.dataset.property)) return false;
+      const scope = target.dataset.index !== undefined ? { type: 'entity', index: Number(target.dataset.index) } : { type: 'card' };
+      this._setBaselinePaintProperty(scope, direction, target.dataset.property, undefined);
+      return true;
+    }
+    if (target?.dataset?.action === 'reset-paint') {
+      const direction = target.closest?.('.baseline-paint-destination')?.dataset?.baselineDirection;
+      if (!direction) return false;
+      const scope = target.dataset.index !== undefined
+        ? { type: 'entity', index: Number(target.dataset.index) } : { type: 'card' };
+      this._resetBaselinePaint(scope, direction);
+      return true;
+    }
     if (target?.dataset?.action !== 'remove-baseline') return false;
     this._removeBaseline(target.dataset.scopeType === 'entity'
       ? { type: 'entity', index: Number(target.dataset.index) } : { type: 'card' });
     return true;
   }
 
-  render(scope = { type: 'card' }, renderGroup = ({ content }) => content) {
+  syncPaintEditors(root, scope, paletteValues = {}, registry = this.context.paintPresetRegistry, options = {}) {
+    for (const direction of ['above', 'below']) {
+      const id = `${scope?.type === 'entity' ? `entity-${scope.index}-` : ''}baseline-${direction}-paint-editor`;
+      syncPaintEditor(root, id, baselinePaintState(this.context, scope, direction,
+        paletteValues[direction], registry), options);
+    }
+  }
+
+  render(scope = { type: 'card' }, renderGroup = ({ content }) => content, renderOptions = {}) {
     if (scope?.type === 'entity') {
       const index = scope.index;
       const baselineInherited = !this._hasBaselineOverride(scope);
       const baselineParts = this._getEffectiveBaselineResolvableValue(scope);
       const baselineShow = this._getBaselineShow(scope);
+      const baselinePaintEditors = ['above', 'below'].map(direction => renderBaselinePaintEditor(
+        this.context, scope, direction, { ...this.options, ...renderOptions },
+      )).join('');
       return `
 	                      <div class="field-row">
 	                        <div class="toggle">
@@ -242,6 +393,7 @@ export class BaselineSection {
 	                          <label for="entity-${index}-baseline-inherit">Inherit card settings</label>
                         </div>
                       </div>
+                      ${baselinePaintEditors}
                       <div class="field-row">
                         <button type="button" data-action="remove-baseline" data-scope-type="entity" data-index="${index}" aria-label="Remove Baseline" title="Remove Baseline">🗑</button>
                       </div>
@@ -298,6 +450,9 @@ export class BaselineSection {
     const baselineShow = this._getBaselineShow(scope);
     const baselineAboveColor = this._getBaselineDirectionalColorValue(scope, 'above');
     const baselineBelowColor = this._getBaselineDirectionalColorValue(scope, 'below');
+    const baselinePaintEditors = ['above', 'below'].map(direction => renderBaselinePaintEditor(
+      this.context, scope, direction, { ...this.options, ...renderOptions },
+    )).join('');
     return `
           ${renderGroup({
             group: 'baseline',
@@ -320,6 +475,7 @@ export class BaselineSection {
               attribute: { kind: 'baseline-attribute', index: 'card' }, hass: this.context.hass,
               labels: { entity: 'Baseline entity', attribute: 'Baseline attribute' },
             })}
+            ${baselinePaintEditors}
             <div class="field-row">
               <div class="toggle">
                 <input id="baseline-above-color-enabled" type="checkbox" data-field="baseline-above-color-enabled"${this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'above') ? ' checked' : ''}>

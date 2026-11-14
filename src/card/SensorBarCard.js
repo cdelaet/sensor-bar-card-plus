@@ -52,6 +52,7 @@ import { HistoricalHostRuntime } from '../history/host-runtime.js';
 import { historicalMarkerConsumers, historicalMarkerResults } from '../history/marker-consumers.js';
 import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
 import { authoredPaintProperties, resolvePaintPreset, resolveScopedPaintPreset } from '../view-model/paint-preset-resolver.js';
+import { resolveBaselinePaints } from '../view-model/baseline-paint-resolver.js';
 import * as barRenderModel from '../view-model/bar-render-model.js';
 import * as barRenderer from '../render/bar-renderer.js';
 import { attachRowActionHandlers, resolveRowAction } from '../actions/row-actions.js';
@@ -200,6 +201,7 @@ export class SensorBarCard extends HTMLElement {
     this._paintPresetSubscriptionGeneration = 0;
     this._paintPresetRegistry = { status: 'loading', presets: {} };
     this._paintPresetEntityPaints = new WeakMap();
+    this._paintPresetEntityBaselinePaints = new WeakMap();
     this._paintPresetDiagnostics = [];
     this._lastDiagnosticsSignature = null;
     this._hass = null;
@@ -540,11 +542,19 @@ export class SensorBarCard extends HTMLElement {
   _resolve(entityCfg) {
     const ecfg = entityCfg?._normalized ? entityCfg : this.normalizeEntityConfig(entityCfg, this._config);
     const stateObj = this._hass?.states?.[ecfg.entity] ?? null;
+    const resolvedBaselinePaints = this._paintPresetEntityBaselinePaints.get(entityCfg);
+    const baseline = resolvedBaselinePaints ? { ...ecfg.baseline } : ecfg.baseline;
+    if (resolvedBaselinePaints) for (const side of ['above', 'below']) {
+      if (Object.prototype.hasOwnProperty.call(resolvedBaselinePaints, side)) {
+        baseline[side] = { ...ecfg.baseline?.[side], paint: resolvedBaselinePaints[side] };
+      }
+    }
     return {
       ...ecfg,
       ...(this._paintPresetEntityPaints.get(entityCfg) ? {
         bar: { ...ecfg.bar, paint: this._paintPresetEntityPaints.get(entityCfg) },
       } : {}),
+      ...(resolvedBaselinePaints ? { baseline } : {}),
       icon: ecfg.icon === false ? false : (ecfg.icon ?? stateObj?.attributes?.icon ?? this._getDefaultEntityIcon(stateObj, ecfg.entity)),
       name: ecfg.name ?? null,
     };
@@ -552,13 +562,21 @@ export class SensorBarCard extends HTMLElement {
 
   _refreshPaintPresetResolutions() {
     this._paintPresetEntityPaints = new WeakMap();
+    this._paintPresetEntityBaselinePaints = new WeakMap();
     this._paintPresetDiagnostics = [];
     this._diagnostics = this._baseDiagnostics ?? { warnings: [], errors: [] };
-    if (!this._config?.bar?.paint) return;
+    if (!this._config) return;
     const inheritedProperties = authoredPaintProperties(this._config.bar.paint);
     const entities = this._config.entities ?? [];
+    const rootBaseline = resolveBaselinePaints(this._config.baseline, null, this._paintPresetRegistry);
+    const diagnostics = rootBaseline.diagnostics.map(diagnostic => ({
+      ...diagnostic, path: `baseline.${diagnostic.path}`, entity: null,
+    }));
     if (!Object.prototype.hasOwnProperty.call(inheritedProperties, 'preset')
-      && !entities.some(entity => Object.prototype.hasOwnProperty.call(authoredPaintProperties(entity.bar?.paint), 'preset'))) return;
+      && !entities.some(entity => Object.prototype.hasOwnProperty.call(authoredPaintProperties(entity.bar?.paint), 'preset'))
+      && !Object.keys(rootBaseline.paints).length
+      && !diagnostics.length
+      && !entities.some(entity => ['above', 'below'].some(side => entity.baseline?.[side]?.paint?.preset !== undefined))) return;
     const cardHasPreset = Object.prototype.hasOwnProperty.call(inheritedProperties, 'preset');
     const root = cardHasPreset
       ? resolveScopedPaintPreset({
@@ -567,8 +585,15 @@ export class SensorBarCard extends HTMLElement {
         registry: this._paintPresetRegistry,
       })
       : { paint: this._config.bar.paint, diagnostics: [] };
-    const diagnostics = root.diagnostics.map(diagnostic => ({ ...diagnostic, path: `bar.${diagnostic.path}` }));
+    diagnostics.push(...root.diagnostics.map(diagnostic => ({ ...diagnostic, path: `bar.${diagnostic.path}` })));
     for (const entity of entities) {
+      const baseline = resolveBaselinePaints(entity.baseline, this._config.baseline, this._paintPresetRegistry);
+      if (Object.keys(baseline.paints).length) this._paintPresetEntityBaselinePaints.set(entity, baseline.paints);
+      diagnostics.push(...baseline.diagnostics.map(diagnostic => ({
+        ...diagnostic,
+        path: `entities.${entity.entity}.baseline.${diagnostic.path}`,
+        entity: entity.entity,
+      })));
       const entityPaint = authoredPaintProperties(entity.bar?.paint);
       if (!cardHasPreset && !Object.prototype.hasOwnProperty.call(entityPaint, 'preset')) continue;
       const local = resolvePaintPreset({
@@ -597,7 +622,10 @@ export class SensorBarCard extends HTMLElement {
 
   _syncPaintPresetRegistry() {
     const usesPreset = this._actionConfig?.bar?.paint?.preset !== undefined
-      || (this._actionConfig?.entities ?? []).some(entity => entity?.bar?.paint?.preset !== undefined);
+      || this._actionConfig?.baseline?.above?.paint?.preset !== undefined
+      || this._actionConfig?.baseline?.below?.paint?.preset !== undefined
+      || (this._actionConfig?.entities ?? []).some(entity => entity?.bar?.paint?.preset !== undefined
+        || entity?.baseline?.above?.paint?.preset !== undefined || entity?.baseline?.below?.paint?.preset !== undefined);
     if (!this.isConnected || !this._hass?.connection || !usesPreset) {
       if (this._paintPresetHandle) {
         this._paintPresetSubscriptionGeneration += 1;

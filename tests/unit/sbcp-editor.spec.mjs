@@ -3954,7 +3954,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
   });
 
-  it('above-baseline color writes baseline.above.color', () => {
+  it('editing legacy above-baseline color migrates only that property to Paint', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -3964,7 +3964,7 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchInput(colorInput, '#00ff00');
 
     expect(events.at(-1).detail.config.baseline).toEqual({
-      above: { color: '#00ff00' },
+      above: { paint: { color: '#00ff00' } },
     });
   });
 
@@ -3983,17 +3983,17 @@ describe('Sensor Bar Card Plus editor', () => {
     const toggle = editor.shadowRoot.querySelector('#baseline-above-color-enabled');
     toggle.checked = false;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.baseline).toEqual({ custom_key: 'keep' });
+    expect(events.at(-1).detail.config.baseline).toEqual({ above: { paint: null }, custom_key: 'keep' });
 
     toggle.checked = true;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
     expect(events.at(-1).detail.config.baseline).toEqual({
-      above: { color: '#00ff00' },
+      above: { paint: { color: '#00ff00' } },
       custom_key: 'keep',
     });
   });
 
-  it('below-baseline color writes baseline.below.color', () => {
+  it('editing legacy below-baseline color migrates only that property to Paint', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4003,8 +4003,26 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchInput(colorInput, '#ff0000');
 
     expect(events.at(-1).detail.config.baseline).toEqual({
-      below: { color: '#ff0000' },
+      below: { paint: { color: '#ff0000' } },
     });
+  });
+
+  it('Baseline Paint modes retain disabled, enabled and inherited states', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({ entity: 'sensor.one', baseline: {
+      above: { paint: { fill_style: 'solid', color: '#ff0000' } },
+      below: { paint: { fill_style: 'solid', color: '#0000ff' } },
+    } });
+    dispatchChange(editor.shadowRoot.querySelector('#baseline-above-paint-mode'), 'disabled');
+    expect(events.at(-1).detail.config.baseline).toMatchObject({
+      above: { paint: null }, below: { paint: { color: '#0000ff' } },
+    });
+
+    editor.setConfig({ baseline: { above: { paint: { color: '#00ff00' } } },
+      entities: [{ entity: 'sensor.one' }] });
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-baseline-above-paint-mode'), 'paint');
+    expect(editor._draftConfig.entities[0].baseline.above.paint).toEqual({});
   });
 
   it('card-level below-baseline enable/disable removes and restores color', () => {
@@ -4022,12 +4040,12 @@ describe('Sensor Bar Card Plus editor', () => {
     const toggle = editor.shadowRoot.querySelector('#baseline-below-color-enabled');
     toggle.checked = false;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.baseline).toEqual({ custom_key: 'keep' });
+    expect(events.at(-1).detail.config.baseline).toEqual({ below: { paint: null }, custom_key: 'keep' });
 
     toggle.checked = true;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
     expect(events.at(-1).detail.config.baseline).toEqual({
-      below: { color: '#ff0000' },
+      below: { paint: { color: '#ff0000' } },
       custom_key: 'keep',
     });
   });
@@ -4305,7 +4323,7 @@ describe('Sensor Bar Card Plus editor', () => {
         name: 'One',
         baseline: {
           above: {
-            color: '#00cc66',
+            paint: { color: '#00cc66' },
           },
         },
       },
@@ -4380,7 +4398,7 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('per-entity baseline above color writes entities[index].baseline.above.color', () => {
+  it('per-entity legacy Baseline above color migrates to Paint', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4389,7 +4407,7 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-above-color"]')[0], '#4caf50');
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', baseline: { above: { color: '#4caf50' } } },
+      { entity: 'sensor.one', name: 'One', baseline: { above: { paint: { color: '#4caf50' } } } },
     ]);
   });
 
@@ -4413,17 +4431,17 @@ describe('Sensor Bar Card Plus editor', () => {
     toggle.checked = false;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', baseline: { above: { color: null }, custom_key: 'keep' } },
+      { entity: 'sensor.one', name: 'One', baseline: { above: { paint: null }, custom_key: 'keep' } },
     ]);
 
     toggle.checked = true;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', baseline: { above: { color: '#4caf50' }, custom_key: 'keep' } },
+      { entity: 'sensor.one', name: 'One', baseline: { above: { paint: { color: '#4caf50' } }, custom_key: 'keep' } },
     ]);
   });
 
-  it('per-entity baseline below color writes entities[index].baseline.below.color', () => {
+  it('per-entity legacy Baseline below color migrates to Paint', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4432,7 +4450,7 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-below-color"]')[0], '#f44336');
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', baseline: { below: { color: '#f44336' } } },
+      { entity: 'sensor.one', name: 'One', baseline: { below: { paint: { color: '#f44336' } } } },
     ]);
   });
 
@@ -4456,13 +4474,13 @@ describe('Sensor Bar Card Plus editor', () => {
     toggle.checked = false;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', baseline: { below: { color: null }, custom_key: 'keep' } },
+      { entity: 'sensor.one', name: 'One', baseline: { below: { paint: null }, custom_key: 'keep' } },
     ]);
 
     toggle.checked = true;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', baseline: { below: { color: '#f44336' }, custom_key: 'keep' } },
+      { entity: 'sensor.one', name: 'One', baseline: { below: { paint: { color: '#f44336' } }, custom_key: 'keep' } },
     ]);
   });
 

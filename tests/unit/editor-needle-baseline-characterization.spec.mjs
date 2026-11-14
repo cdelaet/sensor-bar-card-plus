@@ -45,7 +45,7 @@ for (const source of ['src', 'dist']) describe(`standalone Needle/Baseline chara
     editor.setConfig(editor._draftConfig); editor._render();
     expect(editor._getBaselineColorDraft(root, 'above')).toBe('red');
     editor._setBaselineDirectionalColorEnabled(root, 'above', true);
-    expect(editor._draftConfig.baseline.above.color).toBe('red');
+    expect(editor._draftConfig.baseline.above.paint.color).toBe('red');
     editor._clearBaselineOverride(root); expect(editor._draftConfig.baseline).toBeUndefined();
   });
 
@@ -120,7 +120,7 @@ for (const source of ['src', 'dist']) describe(`standalone Needle/Baseline chara
     expect(editor._baselineSection.render(row)).toContain('<label for="entity-0-baseline-show">Enable Baseline</label>');
 
     editor._baselineSection.handleField({ kind: 'entity-baseline-above-color-enabled', index: 0, value: false });
-    expect(editor._draftConfig.entities[0].baseline.above).toEqual({ color: null });
+    expect(editor._draftConfig.entities[0].baseline.above).toEqual({ paint: null });
     expect(editor._baselineSection.render(row)).not.toContain('id="entity-0-baseline-above-color-enabled" type="checkbox" data-kind="entity-baseline-above-color-enabled" data-index="0" checked');
     editor._baselineSection.handleField({ kind: 'entity-baseline-inherit', index: 0, value: true });
     expect(editor._draftConfig.entities[0]).toEqual({ entity: 'sensor.row', future_row: true });

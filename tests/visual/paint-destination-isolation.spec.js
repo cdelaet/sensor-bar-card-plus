@@ -173,7 +173,70 @@ for (const source of ['src', 'dist']) {
         expect(await page.evaluate(() => window.__destinationEvents.feature)).toEqual([]);
       });
     }
+
   }
+
+  test(`Baseline Above and Below palettes remain isolated across Card, Entity and Feature (${source})`, async ({ page }) => {
+    const configs = structuredClone(initial);
+    configs.card.bar.paint = paint(['#111111', '#222222'], 'bands');
+    configs.card.baseline = {
+      above: { paint: { ...paint(['#aa0000'], 'bands'), segments: [{ from: '0%', to: '100%', color: '#aa0000' }] } },
+      below: { paint: { ...paint(['#0000bb'], 'bands'), segments: [{ from: '0%', to: '100%', color: '#0000bb' }] } },
+    };
+    configs.card.entities[0].baseline = {
+      above: { paint: { ...paint(['#aa55aa'], 'bands'), segments: [{ from: '0%', to: '100%', color: '#aa55aa' }] } },
+    };
+    configs.feature.bar.paint = paint(['#333333', '#444444'], 'bands');
+    configs.feature.baseline = {
+      above: { paint: { ...paint(['#cc5500'], 'bands'), segments: [{ from: '0%', to: '100%', color: '#cc5500' }] } },
+      below: { paint: { ...paint(['#0055cc'], 'bands'), segments: [{ from: '0%', to: '100%', color: '#0055cc' }] } },
+    };
+    await mount(page, source, configs);
+    const card = editorFor(page, 'Card');
+    const feature = editorFor(page, 'Feature');
+    const editBaseline = async (editor, id, expectedBefore, selected) => {
+      if (id.includes('entity-0-')) {
+        const toggle = editor.locator('button[data-action="toggle-entity-overrides"][data-index="0"]');
+        if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
+      }
+      const baselineGroup = id.includes('entity-0-')
+        ? editor.locator('button[data-group="baseline"][data-action="toggle-override-group"][data-index="0"]')
+        : editor.locator('button[data-group="baseline"][data-action="toggle-card-group"]');
+      if (await baselineGroup.count() && await baselineGroup.getAttribute('aria-expanded') === 'false') await baselineGroup.click();
+      const root = editor.locator(`#${id}`);
+      if (!await root.evaluate(node => node.open)) await root.locator(':scope > summary').press('Enter');
+      await expect(root).toHaveJSProperty('open', true);
+      const palette = root.locator('button[data-group*="baseline-"][data-group$="-segments"]');
+      if (await palette.count() && await palette.getAttribute('aria-expanded') === 'false') await palette.click();
+      const input = root.locator(`input[data-kind="${id.includes('entity-0-') ? 'entity-segment-color' : 'segment-color'}"]`).first();
+      await expect(input).toHaveValue(expectedBefore);
+      await root.evaluate(node => { window.__baselinePaintRoot = node; window.__baselinePaintInputs = [...node.querySelectorAll('input')]; });
+      await input.evaluate((node, value) => {
+        node.value = value;
+        node.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        node.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+      }, selected);
+      await expect(input).toHaveValue(selected);
+      expect(await root.evaluate(node => node === window.__baselinePaintRoot
+        && window.__baselinePaintInputs.every((control, index) => control === node.querySelectorAll('input')[index]))).toBe(true);
+    };
+    await editBaseline(card, 'baseline-above-paint-editor', '#aa0000', '#000000');
+    await expect.poll(() => page.evaluate(() => window.__destinationEvents.card.at(-1)?.config.baseline.above.paint.segments[0].color)).toBe('#000000');
+    let observed = await page.evaluate(() => window.__destinationEvents.card.at(-1).config);
+    expect(observed.baseline.below.paint.segments[0].color).toBe('#0000bb');
+    expect(observed.entities[0].baseline.above.paint.segments[0].color).toBe('#aa55aa');
+    expect(observed.bar.paint.segments[0].color).toBe('#111111');
+    await editBaseline(card, 'entity-0-baseline-above-paint-editor', '#aa55aa', '#0055aa');
+    await expect.poll(() => page.evaluate(() => window.__destinationEvents.card.at(-1)?.config.entities[0].baseline.above.paint.segments[0].color)).toBe('#0055aa');
+    observed = await page.evaluate(() => window.__destinationEvents.card.at(-1).config);
+    expect(observed.baseline.above.paint.segments[0].color).toBe('#000000');
+    expect(observed.baseline.below.paint.segments[0].color).toBe('#0000bb');
+    await editBaseline(feature, 'baseline-above-paint-editor', '#cc5500', '#ff5500');
+    await expect.poll(() => page.evaluate(() => window.__destinationEvents.feature.at(-1)?.config.baseline.above.paint.segments[0].color)).toBe('#ff5500');
+    const featureConfig = await page.evaluate(() => window.__destinationEvents.feature.at(-1).config);
+    expect(featureConfig.baseline.below.paint.segments[0].color).toBe('#0055cc');
+    expect(featureConfig.bar.paint.segments[0].color).toBe('#333333');
+  });
 
   for (const destination of destinations) for (const palette of ['gradient_stops', 'segments']) {
     test(`${destination} ${palette} track updates during color input without replacing controls (${source})`, async ({ page, browserName }) => {

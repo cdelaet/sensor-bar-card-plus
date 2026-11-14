@@ -171,6 +171,28 @@ function getBaselinePaintGradients(ecfg, baselinePct, scaleDirection) {
   };
 }
 
+function getBaselinePaintLayer(side, ecfg, baselinePct, minValue, maxValue, scaleDirection) {
+  const direction = ecfg?.baseline?.[side];
+  if (!direction || direction.paint === null) return null;
+  const interval = side === 'below'
+    ? projectScaleInterval(0, baselinePct, scaleDirection)
+    : projectScaleInterval(baselinePct, 100, scaleDirection);
+  if (!interval) return null;
+  if (direction.paint && typeof direction.paint === 'object') {
+    const gradient = paintCompiler.getBasePaintGradient(
+      direction.paint.color, direction.paint, minValue, maxValue, scaleDirection,
+    );
+    if (!gradient) return null;
+    const opacity = direction.paint.opacity ?? 100;
+    return {
+      paintStyle: `display:block;inset:0;background-image:${gradient};background-repeat:no-repeat;background-size:100% 100%;${opacity === 100 ? '' : `opacity:${opacity / 100};`}`,
+      revealStyle: getStaticLayerRevealStyle({ start: interval.start, end: interval.end, hidden: false }),
+    };
+  }
+  const legacy = getBaselinePaintGradients(ecfg, baselinePct, scaleDirection)[side];
+  return legacy ? { paintStyle: getFullScaleBackgroundStyle([legacy]), revealStyle: 'display:block;' } : null;
+}
+
 function getFullScaleBackgroundStyle(gradients) {
   const layers = gradients.filter(Boolean);
   if (!layers.length) return 'display:none;';
@@ -232,9 +254,9 @@ export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, b
   const baselineLayers = ['above', 'below'].map(side => ({
     id: `baseline-${side}`,
     zIndex: 1,
-    visible: !!baseline[side],
-    paintStyle: getFullScaleBackgroundStyle([baseline[side]]),
-    revealStyle: baseline[side] ? 'display:block;' : 'display:none;',
+    visible: !!getBaselinePaintLayer(side, ecfg, baselinePct, minValue, maxValue, scaleDirection),
+    paintStyle: getBaselinePaintLayer(side, ecfg, baselinePct, minValue, maxValue, scaleDirection)?.paintStyle ?? 'display:none;',
+    revealStyle: getBaselinePaintLayer(side, ecfg, baselinePct, minValue, maxValue, scaleDirection)?.revealStyle ?? 'display:none;',
   }));
 
   const aboveTargetGeometry = getAboveTargetLayerGeometry(targetPct, scaleDirection);

@@ -91,6 +91,42 @@ it.each(['Card', 'Tile Feature'])('%s applies preset opacity once to the base la
   expect(raw).toEqual(original);
 });
 
+it.each(['Card', 'Tile Feature'])('%s resolves Baseline presets without a Bar preset', async host => {
+  const classes = loadCardClass();
+  const raw = {
+    baseline: { at: 50, above: { paint: { preset: 'warm' } } },
+    ...(host === 'Card'
+      ? { entities: [{ entity }] }
+      : { type: 'custom:sensor-bar-card-plus-feature' }),
+  };
+  const registry = { status: 'ready', presets: Object.assign(Object.create(null), { warm: Object.assign(Object.create(null), {
+    fill_style: 'solid', color: '#ff5500', opacity: 35,
+  }) }) };
+  let appearance;
+  if (host === 'Card') {
+    const card = new classes.card();
+    card._render = () => {};
+    card._logDiagnostics = () => {};
+    card.setConfig(raw);
+    card.hass = hass(42);
+    card._paintPresetRegistry = registry;
+    card._refreshPaintPresetResolutions();
+    appearance = card._resolve(card._config.entities[0]);
+  } else {
+    const element = new classes.feature();
+    element._render = () => {};
+    element.setConfig(raw);
+    element._paintPresetRegistry = registry;
+    element.context = { entity_id: entity };
+    element.hass = hass(42);
+    await element.updateComplete;
+    appearance = element._resolvedAppearance;
+  }
+  expect(appearance.baseline.above.paint).toMatchObject({
+    fill_style: 'solid', color: '#ff5500', opacity: 35,
+  });
+});
+
 describe('native feature registration', () => {
   it('warns and ignores unsupported extrema aliases in both runtime hosts', async () => {
     const { card: Card, feature: Feature } = loadCardClass();

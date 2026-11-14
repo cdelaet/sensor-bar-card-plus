@@ -274,8 +274,26 @@ export function normalizeBaselineDirectionConfig(input, inheritedDirection = nul
     return { color: null };
   }
   if (typeof input === 'object' && !Array.isArray(input)) {
+    const color = hasOwnConfigValue(input, 'color') ? input.color : inherited.color ?? null;
+    if (Object.prototype.hasOwnProperty.call(input, 'paint') && input.paint === null) {
+      return { color, paint: null };
+    }
+    const hasPaint = Object.prototype.hasOwnProperty.call(input, 'paint')
+      && input.paint !== undefined;
+    const inheritedPaint = inherited.paint;
+    if (!hasPaint && !inheritedPaint) return { color };
+
+    const normalized = normalizeBarConfig({
+      bar: {
+        ...(hasPaint ? { paint: input.paint } : {}),
+        ...(input.color !== undefined ? { color: input.color } : {}),
+      },
+    }, inheritedPaint ? { bar: { ...inheritedPaint, paint: inheritedPaint } } : null, { isCardScope: !inheritedPaint });
     return {
-      color: input.color ?? null,
+      color: hasPaint ? normalized.paint.color : color,
+      paint: normalized.paint,
+      ...(normalized[BAR_PAINT_DIAGNOSTICS]
+        ? { [BAR_PAINT_DIAGNOSTICS]: normalized[BAR_PAINT_DIAGNOSTICS] } : {}),
     };
   }
   return {

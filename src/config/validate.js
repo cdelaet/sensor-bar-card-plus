@@ -286,6 +286,17 @@ function validateConfigScope(diagnostics, config, path, entity = null, inherited
         : issue.property === 'opacity' ? 'Invalid paint opacity; using 100.'
           : 'Invalid grouped paint value; using the legacy, inherited or default value.', paintPath, entity);
   }
+  for (const side of ['above', 'below']) {
+    const direction = config?.baseline?.[side];
+    for (const issue of direction?.[BAR_PAINT_DIAGNOSTICS] ?? []) {
+      const paintPath = `${path}.baseline.${side}.paint${issue.property === null ? '' : `.${issue.property}`}`;
+      addWarning(diagnostics, `paint.${issue.kind === 'invalid' ? 'invalid_value' : 'legacy_conflict'}`,
+        issue.kind === 'legacy_conflict'
+          ? `Grouped paint overrides ${issue.legacyPath}.`
+          : issue.property === 'opacity' ? 'Invalid paint opacity; using 100.'
+            : 'Invalid grouped paint value; using the legacy, inherited or default value.', paintPath, entity);
+    }
+  }
   if (config?.scale?.direction_invalid) {
     addWarning(diagnostics, 'scale.invalid_direction',
       'Scale direction must be `normal` or `reverse`; using the inherited or default direction.',
@@ -316,6 +327,12 @@ function validateConfigScope(diagnostics, config, path, entity = null, inherited
   validateSegments(diagnostics, config?.bar?.segments, scaleBounds, segments.path, entity, !segments.inherited);
   const gradientStops = paletteValidationSource(config, inheritedConfig, path, 'gradient_stops');
   if (!gradientStops.inherited) validateGradientStops(diagnostics, config?.bar?.gradient_stops, gradientStops.path, entity);
+  for (const side of ['above', 'below']) {
+    const paint = config?.baseline?.[side]?.paint;
+    if (!paint || typeof paint !== 'object') continue;
+    validateSegments(diagnostics, paint.segments, scaleBounds, `${path}.baseline.${side}.paint`, entity, true);
+    validateGradientStops(diagnostics, paint.gradient_stops, `${path}.baseline.${side}.paint`, entity);
+  }
 }
 
 export function validateNormalizedConfig(config) {

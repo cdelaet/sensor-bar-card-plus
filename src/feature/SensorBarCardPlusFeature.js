@@ -11,6 +11,7 @@ import { HistoricalHostRuntime } from '../history/host-runtime.js';
 import { historicalMarkerConsumers, historicalMarkerResults } from '../history/marker-consumers.js';
 import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
 import { authoredPaintProperties, resolveScopedPaintPreset } from '../view-model/paint-preset-resolver.js';
+import { resolveBaselinePaints } from '../view-model/baseline-paint-resolver.js';
 import { formatNumericDisplay } from '../utils/format.js';
 import { setStyleIfChanged } from '../utils/dom.js';
 import { getFeatureLabelGeometry, layoutFeatureMarkerLabels } from './marker-label-layout.js';
@@ -100,7 +101,9 @@ export class SensorBarCardPlusFeature extends HTMLElement {
   }
 
   _syncPaintPresetRegistry() {
-    const usesPreset = this._config?.bar?.paint?.preset !== undefined;
+    const usesPreset = this._config?.bar?.paint?.preset !== undefined
+      || this._config?.baseline?.above?.paint?.preset !== undefined
+      || this._config?.baseline?.below?.paint?.preset !== undefined;
     if (!this.isConnected || !this._hass?.connection || !usesPreset) {
       if (this._paintPresetHandle) {
         this._paintPresetSubscriptionGeneration += 1;
@@ -158,22 +161,38 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     this._resolvedAppearance = normalizedAppearance;
     this._paintPresetDiagnostics = [];
     this._diagnostics = this._baseDiagnostics;
+    const baselinePaints = normalizedAppearance
+      ? resolveBaselinePaints(normalizedAppearance.baseline, this._normalized.baseline, this._paintPresetRegistry)
+      : { paints: {}, diagnostics: [] };
     if (normalizedAppearance && (Object.prototype.hasOwnProperty.call(authoredPaintProperties(this._normalized.bar.paint), 'preset')
-      || Object.prototype.hasOwnProperty.call(authoredPaintProperties(normalizedAppearance.bar.paint), 'preset'))) {
+      || Object.prototype.hasOwnProperty.call(authoredPaintProperties(normalizedAppearance.bar.paint), 'preset')
+      || Object.keys(baselinePaints.paints).length
+      || baselinePaints.diagnostics.length)) {
       const resolved = resolveScopedPaintPreset({
         inheritedPaint: this._normalized.bar.paint,
         paint: normalizedAppearance.bar.paint,
         registry: this._paintPresetRegistry,
       });
+      const baseline = { ...normalizedAppearance.baseline };
+      for (const side of ['above', 'below']) {
+        if (Object.prototype.hasOwnProperty.call(baselinePaints.paints, side)) {
+          baseline[side] = { ...normalizedAppearance.baseline?.[side], paint: baselinePaints.paints[side] };
+        }
+      }
       this._resolvedAppearance = {
         ...normalizedAppearance,
         bar: { ...normalizedAppearance.bar, paint: resolved.paint },
+        ...(Object.keys(baselinePaints.paints).length ? { baseline } : {}),
       };
       this._paintPresetDiagnostics = resolved.diagnostics.map(diagnostic => ({
         ...diagnostic,
         path: `bar.${diagnostic.path}`,
         entity,
-      }));
+      })).concat(baselinePaints.diagnostics.map(diagnostic => ({
+        ...diagnostic,
+        path: `baseline.${diagnostic.path}`,
+        entity,
+      })));
       this._diagnostics = {
         ...this._baseDiagnostics,
         warnings: [...(this._baseDiagnostics.warnings ?? []), ...this._paintPresetDiagnostics.map(diagnostic => ({
