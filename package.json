@@ -36,6 +36,7 @@
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "esbuild": "^0.28.1",
+    "jsdom": "^31.0.1",
     "playwright": "^1.60.0",
     "vitest": "^4.1.7"
   },

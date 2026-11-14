@@ -1,8 +1,8 @@
 import { it, expect } from 'vitest';
-import { createEditor } from '../support/load-card-class.cjs';
+import { createDomEditorFixture, dispatchDomEvent } from '../support/dom-editor-fixture.mjs';
 const root={type:'card'};
-for(const source of ['src','dist'])it(`canonical standalone structure and disclosure lifecycle (${source})`,()=>{
- const editor=createEditor({source});editor.setConfig({entities:['sensor.a'],target:{at:'75%'},baseline:{at:'35%'},markers:[{at:25}],bar:{fill_style:'solid'}});
+for(const source of ['src','dist'])it(`canonical standalone structure and disclosure lifecycle (${source})`,async()=>{
+ const {editor}=await createDomEditorFixture({source});editor.setConfig({entities:['sensor.a'],target:{at:'75%'},baseline:{at:'35%'},markers:[{at:25}],bar:{fill_style:'solid'}});
  const html=editor.shadowRoot.innerHTML;
  expect([...html.matchAll(/<h3>([^<]+)<\/h3>/g)].map(m=>m[1])).toEqual(['Basics','Entities','Layout','Scale','Bar','Markers','Formatting','Actions']);
  expect(html.indexOf('id="bar-fill-style"')).toBeGreaterThan(html.indexOf('<h3>Bar</h3>'));
@@ -12,7 +12,14 @@ for(const source of ['src','dist'])it(`canonical standalone structure and disclo
  expect(html.indexOf('id="card-group-gradient-stops"')).toBeGreaterThan(html.indexOf('id="card-group-segments"'));
  const cardGroups=[...html.matchAll(/id="card-group-([^"]+)"\s+class="override-group-toggle"/g)].map(m=>m[1]);
  expect(cardGroups).toEqual(['segments','gradient-stops','baseline','needle','marker-target','marker-peak','marker-floor','generic-markers']);
- expect(editor._expandedCardGroups.size).toBe(0);editor._toggleCardGroupExpanded('marker-target');editor._render();expect(editor._isCardGroupExpanded('marker-target')).toBe(true);
+ const toggle=editor.shadowRoot.querySelector('#card-group-marker-target');
+ const wrapper=toggle.closest('.override-group'),body=wrapper.querySelector('.override-group-body');
+ const events=[];editor.addEventListener('config-changed',event=>events.push(event));
+ expect(editor._expandedCardGroups.size).toBe(0);dispatchDomEvent(toggle,'click');expect(editor._isCardGroupExpanded('marker-target')).toBe(true);
+ expect(editor.shadowRoot.querySelector('#card-group-marker-target')).toBe(toggle);
+ expect(toggle.getAttribute('aria-expanded')).toBe('true');expect(wrapper.dataset.expanded).toBe('true');expect(body.style.display).toBe('grid');
+ expect(toggle.querySelector('.override-group-title').textContent).toBe('▾ Target');expect(events).toHaveLength(0);
+ editor._render();expect(editor._isCardGroupExpanded('marker-target')).toBe(true);
  editor.setConfig(editor._draftConfig);expect(editor._isCardGroupExpanded('marker-target')).toBe(true);
  editor.setConfig({entities:['sensor.b']});expect(editor._isCardGroupExpanded('marker-target')).toBe(true);
  expect(editor._referenceMarkersSection._getGenericMarkersSummary(root)).toBe('No reference markers');

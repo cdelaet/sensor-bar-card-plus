@@ -151,7 +151,7 @@ function createShadowRoot() {
   return shadowRoot;
 }
 
-function loadCardClass(options = {}) {
+function getCardClassBundles(options = {}) {
   const sourcePath = path.resolve(__dirname, '../../src/sensor-bar-card-plus.js');
   const distPath = path.resolve(__dirname, '../../dist/sensor-bar-card-plus.js');
   const filePath = options.source === 'dist' ? distPath : sourcePath;
@@ -179,7 +179,11 @@ function loadCardClass(options = {}) {
     };
     bundledSourceCache.set(cacheKey, bundles);
   }
+  return { bundles, filePath };
+}
 
+function loadCardClass(options = {}) {
+  const { bundles, filePath } = getCardClassBundles(options);
   const registry = new Map();
   const sandbox = {
     console,
@@ -276,6 +280,7 @@ function createEditor(options = {}) {
 }
 
 module.exports = {
+  getCardClassBundles,
   loadCardClass,
   loadElementClass,
   createCard,

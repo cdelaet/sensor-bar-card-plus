@@ -20,6 +20,7 @@ async function mountEditor(page) {
 
 test('editor drafts, focus and disclosures survive echo and a structural render', async ({ page }) => {
   const editor = await mountEditor(page);
+  await editor.locator('#card-paint-editor > summary').click();
   await editor.locator('#card-group-gradient-stops').click();
   await editor.locator('#gradient-draft-pos').fill('45');
   const title = editor.locator('#title');
