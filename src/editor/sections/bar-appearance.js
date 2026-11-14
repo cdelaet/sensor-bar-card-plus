@@ -235,7 +235,7 @@ export function getBarPaintEditorState(context, scope, paletteValues, registry =
   const owned = context.read(scope, ['bar', 'color_mode']) !== undefined || ownsBarPaintProperty(context, scope, 'preset')
     || properties.some(key => ownsBarPaintProperty(context, scope, key))
     || ['color_mode', 'color', 'segments', 'severity', 'gradient_stops'].some(key => Object.prototype.hasOwnProperty.call(local, key));
-  return { bindings, paint, inherited: scope?.type === 'entity' && !owned, presetReference,
+  return { bindings, paint, resetDisabled: !hasLocalBarPaintConfiguration(context, scope), inherited: scope?.type === 'entity' && !owned, presetReference,
     presetOptions, overrides, diagnostics: resolved.diagnostics, registryStatus: registry?.status ?? 'loading', previewScale,
     scale: { minValue: min, maxValue: max, scaleDirection: scale.direction } };
 }
@@ -250,7 +250,7 @@ export function syncBarPaintEditor(root, context, scope, paletteValues, options)
 export function clearBarPaintPropertyOverride(context, scope, property) {
   if (!['fill_style', 'color', 'solid_fill', 'segments', 'gradient_stops', 'opacity', 'preset'].includes(property)) return false;
   return createBarPaintBindings(context, scope, { grouped: property === 'preset' || usesGroupedBarPaint(context, scope) })
-    .clear(property, { preserveRawConfig: true, rerender: true });
+    .clear(property, { preserveRawConfig: true });
 }
 
 function setBarPaintPreset(context, scope, value, options = {}) {

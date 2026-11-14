@@ -44,12 +44,24 @@ export const editorStyles = `
         .paint-editor-grid { display: grid; gap: 12px; align-items: end;
           grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); min-width: 0; }
         .paint-editor .field-grid { grid-template-columns: minmax(0, 1fr); }
+        .paint-editor .list-row.segment-row {
+          grid-template-columns: minmax(48px, 0.65fr) minmax(48px, 0.65fr) minmax(104px, 1fr) 40px;
+        }
+        .paint-editor .list-row.gradient-stop-row {
+          grid-template-columns: minmax(64px, 0.65fr) minmax(104px, 1fr) 40px;
+        }
+        .paint-editor .list-row > .field-grid { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+        .paint-editor .list-row input, .paint-editor .segment-draft { min-width: 0; }
+        .paint-editor .list { grid-template-columns: minmax(0, 1fr); }
         @container (max-width: 360px) {
           .paint-preset-row { grid-template-columns: minmax(0, 1fr); }
           .paint-property-heading { align-items: flex-start; }
+          .paint-editor .segment-undefined-row { flex-wrap: wrap; }
+          .paint-editor .segment-undefined-label { flex: 1 1 80px; }
           .paint-editor .list-row.segment-row, .paint-editor .list-row.gradient-stop-row {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
+          .paint-editor .list-row.segment-row > :nth-child(3) { grid-column: 1 / -1; }
           .paint-editor .list-row.segment-row > button, .paint-editor .list-row.gradient-stop-row > button {
             grid-column: 1 / -1; width: 100%;
           }
@@ -60,6 +72,8 @@ export const editorStyles = `
           }
         }
 	        :host {
+	          /* Changing form content must not become the browser's scroll anchor. */
+	          overflow-anchor: none;
 	          display: block;
 	        }
 	        .editor {

@@ -1,4 +1,4 @@
-import { escapeAttribute, getColorPickerValue, renderColorInput, renderScalePercentageInput } from './editor-controls.js';
+import { escapeAttribute, getColorPickerValue, isHexColorValue, renderColorInput, renderScalePercentageInput } from './editor-controls.js';
 import { renderPaintSwatch, syncPaintSwatch } from './paint-swatch.js';
 
 const styleNames = { solid: 'Solid', gradient: 'Gradient', bands: 'Bands', soft_bands: 'Soft bands', band_gradient: 'Band gradient' };
@@ -105,6 +105,8 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
   const editor = root?.querySelector(`#${id}`);
   if (!editor) return;
   const { paint, inherited, scale } = state;
+  const reset = editor.querySelector?.('[data-action="reset-paint"]');
+  if (reset) reset.disabled = state.resetDisabled ?? true;
   const previewScale = state.previewScale ?? scale;
   const description = editor.querySelector?.('.paint-editor-description');
   const reference = state.presetReference == null ? '' : String(state.presetReference);
@@ -125,6 +127,15 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
     }
     presetControl.closest?.('.paint-preset-row')?.toggleAttribute('hidden', !(state.presetOptions?.length || state.presetReference != null));
     if (root.activeElement !== presetControl) presetControl.value = activeReference;
+  }
+  // Effective colors can acquire a CSS value without replacing the mounted picker.
+  const picker = editor.querySelector?.('input[type="color"][data-paint-property="color"]');
+  if (picker?.ownerDocument && paint.color && !isHexColorValue(paint.color)
+    && !picker.parentElement.querySelector('input[type="text"]')) {
+    const template = picker.ownerDocument.createElement('template');
+    template.innerHTML = renderColorInput({ id: picker.id, field: picker.dataset.field, kind: picker.dataset.kind,
+      index: picker.dataset.index, value: paint.color, extraDataset: { 'paint-property': 'color' } });
+    picker.after(template.content.querySelector('input[type="text"]'));
   }
   for (const property of ['fill_style', 'color', 'solid_fill', 'opacity']) {
     for (const control of editor.querySelectorAll?.(`[data-paint-property="${property}"]`) ?? []) {

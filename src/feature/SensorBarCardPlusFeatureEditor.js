@@ -13,7 +13,7 @@ import {
   renderFormattingSection, handleFormattingField, getFormattingValue,
 } from '../editor/sections/formatting.js';
 import {
-  renderBarAppearanceSection, handleBarAppearanceField, getEffectiveFillStyleValue,
+  renderBarAppearanceSection, handleBarAppearanceField,
   getBarAnimatedValue, syncBarPaintEditor, clearBarPaintPropertyOverride,
   hasLocalBarPaintConfiguration, resetBarPaintConfiguration,
 } from '../editor/sections/bar-appearance.js';
@@ -268,6 +268,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const target = event.target;
     // Replacing focused native controls can dispatch change from the old DOM.
     if (this._configReplaced || target?.isConnected === false) return;
+    if (event.type === 'input' && target?.type === 'checkbox' && target.dataset.paintProperty) return;
     // Picker input/change events are internal; HA's value-changed is authoritative.
     if (['HA-ENTITY-PICKER', 'HA-ENTITY-ATTRIBUTE-PICKER'].includes(target?.tagName) && event.type !== 'value-changed') return;
     if (this._numericDrafts.handle(event, this._isRendering)) return;
@@ -415,7 +416,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
   }
 
   _render() {
-    const fillStyle = getEffectiveFillStyleValue(this._createSectionContext(), root);
     const segmentRows = this._segmentsSection._getScopedSegmentsValue(root);
     const gradientRows = this._gradientStopsSection._getScopedGradientStopsValue(root);
     const markers = this._referenceMarkersSection._getGenericMarkers(root);
@@ -425,7 +425,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       !!(this._context.entity_id || this._explicitEntity), this._showEntityPicker,
       !!getFeatureScaleSource(this._config, 'min').entity, !!getFeatureScaleSource(this._config, 'max').entity,
       !!getFeatureBaselineSource(this._config).entity, !!getFeatureTargetSource(this._config).entity,
-      fillStyle,
       !!customElements.get('ha-entity-picker'), !!customElements.get('ha-entity-attribute-picker'),
     ]);
     // Keep active controls mounted through their native input/change sequence.

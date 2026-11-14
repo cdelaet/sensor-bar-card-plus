@@ -303,7 +303,7 @@ export class GradientStopsSection extends PaletteSection {
     const applied = this.context.mutate(scope, (target) => {
       const nextTarget = clearBarPaintProperties(target, ['gradient_stops']);
       return nextTarget;
-    }, { rerender: true, ...(usesGroupedBarPaint(this.context, scope) ? { preserveRawConfig: true } : {}) });
+    }, { ...(usesGroupedBarPaint(this.context, scope) ? { preserveRawConfig: true } : {}) });
     if (applied === false && previousUiRowsJson !== serializeConfig([])) {
       this.ui.render();
     }

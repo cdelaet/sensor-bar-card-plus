@@ -100,7 +100,7 @@ export class SegmentsSection extends PaletteSection {
     return this.context.mutate(scope, (target) => {
       const nextTarget = clearBarPaintProperties(target, ['segments']);
       return nextTarget;
-    }, { rerender: true, ...(usesGroupedBarPaint(this.context, scope) ? { preserveRawConfig: true } : {}) });
+    }, { ...(usesGroupedBarPaint(this.context, scope) ? { preserveRawConfig: true } : {}) });
   }
 
   _getSegmentsValue() {
@@ -866,17 +866,15 @@ export class SegmentsSection extends PaletteSection {
   }
 
   _getSegmentsSummary(scope) {
-    if (scope?.type === 'entity' && !this._hasSegmentsOverride(scope)) {
-      return 'Inherited';
-    }
     const segments = this._getScopedSegmentsValue(scope);
-    if (!Array.isArray(segments) || segments.length === 0) {
-      return 'Inherited';
-    }
-    if (scope?.type !== 'entity' && !this._hasSegmentsOverride(scope) && this._isSegmentFillStyle(this.fillStyle(scope))) {
-      return 'Default bands';
-    }
-    return `${segments.length} segments`;
+    if (!Array.isArray(segments) || segments.length === 0) return 'Inherited';
+    if (this._hasSegmentsOverride(scope)) return `${segments.length} segments`;
+    const inherited = scope?.type === 'entity' && !ownsBarPaintProperty(this.context, scope, 'preset');
+    const stored = this._getStoredScopedSegments(scope)
+      ?? (inherited ? this._getStoredScopedSegments({ type: 'card' }) : null);
+    const description = stored === null && this._isSegmentFillStyle(this.fillStyle(scope))
+      ? 'Default bands' : `${segments.length} segments`;
+    return `${inherited ? 'Inherited · ' : stored !== null ? 'Preset · ' : ''}${description}`;
   }
 
   _setScopedSegments(scope, rows, options = {}, operation) {
@@ -972,7 +970,6 @@ export class SegmentsSection extends PaletteSection {
     const fillStyle = this.fillStyle(scope);
     const validationMessages = this._getSegmentRowValidationMessages({ type: 'card' });
     const draftValidation = this._getSegmentDraftValidationState({ type: 'card' });
-    const defaultSegmentsVisible = !this._hasSegmentsOverride(scope) && this._isSegmentFillStyle(fillStyle);
     const group = renderGroup({
       group: 'segments',
       title: 'Segments',
@@ -984,10 +981,6 @@ export class SegmentsSection extends PaletteSection {
               <div class="field-row">
                 <label>Segments</label>
                 <div class="list">
-                  ${defaultSegmentsVisible
-                    ? '<div class="section-note">Default bands</div>'
-                    : ''
-                  }
                   ${this._renderSegmentListRows({ type: 'card' }, (segment, index) => {
                     const validationMessage = validationMessages[index] ?? '';
                     return `

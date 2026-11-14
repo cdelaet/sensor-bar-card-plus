@@ -8486,7 +8486,7 @@ describe('Sensor Bar Card Plus editor', () => {
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     const summaryMarkup = () => editor.shadowRoot.innerHTML.match(/id="entity-0-group-segments-summary"[^>]*>([^<]*)<\/span>/)?.[1];
-    expect(summaryMarkup()).toBe('Inherited');
+    expect(summaryMarkup()).toBe('Inherited · 6 segments');
     expect(editor.shadowRoot.querySelector('#entity-0-segments-inherit').checked).toBe(true);
 
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));

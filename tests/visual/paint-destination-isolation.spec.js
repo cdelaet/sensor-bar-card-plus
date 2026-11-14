@@ -252,11 +252,11 @@ for (const source of ['src', 'dist']) {
       const expected = structuredClone(initial);
       paintAt(expected, 'Preset')[palette][0].color = selected;
       await expect.poll(() => page.evaluate(() => window.__destinationEvents.card.at(-1)?.config)).toEqual(expected.card);
-      const native = await page.evaluate(() => window.__nativePaintEvents);
-      expect(native).toEqual(expect.arrayContaining([
+      await expect.poll(() => page.evaluate(() => window.__nativePaintEvents)).toEqual(expect.arrayContaining([
         expect.objectContaining({ type: 'input', trusted: true, value: selected, destination: 'preset-paint-editor' }),
         expect.objectContaining({ type: 'change', trusted: true, value: selected, destination: 'preset-paint-editor' }),
       ]));
+      const native = await page.evaluate(() => window.__nativePaintEvents);
       expect(native.every(event => event.trusted)).toBe(true);
       await hassUpdate(page);
       await assertPalettes(page, expected);
