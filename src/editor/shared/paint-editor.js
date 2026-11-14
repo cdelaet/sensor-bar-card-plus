@@ -35,7 +35,8 @@ function fieldRoutingAttributes({ field, kind, index }) {
  */
 export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {}, inherited = false,
   scale, previewScale = scale, fields = {}, root, paletteContent = '', paletteFields = null, cssText = false,
-  mode = 'inherit', presetReference, presetOptions = [], overrides = {}, diagnostics = [], registryStatus = 'unknown' }) {
+  mode = 'inherit', presetReference, presetOptions = [], overrides = {}, diagnostics = [], registryStatus = 'unknown',
+  showMode = true, bodyId = null }) {
   const controls = Object.fromEntries(['fill_style', 'solid_fill', 'color', 'opacity'].map(key => [key,
     fields[key] ?? { id: `${id}-${key}`, field: key },
   ]));
@@ -86,11 +87,11 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
       <span class="paint-editor-heading">Paint</span>
       <span class="paint-editor-description">${escapeAttribute(description)}</span>
     </summary>
-    <div class="paint-editor-body">
-      <div class="paint-mode-row">
+    <div${bodyId ? ` id="${escapeAttribute(bodyId)}"` : ''} class="paint-editor-body">
+      ${showMode ? `<div class="paint-mode-row">
         <label for="${controls.mode.id}">Paint source</label>
         <select ${fieldAttributes(controls.mode)} data-paint-mode="true" value="${escapeAttribute(selectedMode)}">${options}</select>
-      </div>
+      </div>` : ''}
       <div class="paint-preset-feedback" role="status" aria-live="polite"${feedbackText ? '' : ' hidden'}>${escapeAttribute(feedbackText)}</div>
       <div class="paint-registry-status" role="status"${registryMessage ? '' : ' hidden'}>${escapeAttribute(registryMessage)}</div>
       <div class="paint-editor-grid">

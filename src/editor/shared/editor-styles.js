@@ -23,6 +23,21 @@ export const editorStyles = `
         .preset-master-title { font-weight: 700; color: var(--primary-text-color, #111); }
         .paint-presets-disclosure { display: grid; gap: 10px; }
         .paint-presets-disclosure > summary { cursor: pointer; font-weight: 600; }
+        .paint-preset-manager { display: grid; gap: 10px; min-width: 0; }
+        .paint-preset-create { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+        .paint-preset-list { display: grid; gap: 4px; max-height: 220px; overflow: auto; min-width: 0; }
+        .paint-preset-choice { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; align-items: center;
+          width: 100%; padding: 6px 8px; text-align: left; border: 1px solid transparent; border-radius: 8px;
+          color: var(--primary-text-color, #111); background: transparent; cursor: pointer; }
+        .paint-preset-choice.is-selected { border-color: var(--primary-color, #03a9f4); background: color-mix(in srgb, var(--primary-color, #03a9f4) 8%, transparent); }
+        .paint-preset-swatch { width: 42px; height: 24px; border: 1px solid var(--divider-color, #888); border-radius: 5px; }
+        .paint-preset-choice-copy { display: grid; gap: 2px; min-width: 0; }
+        .paint-preset-choice-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .paint-preset-choice-description { color: var(--secondary-text-color, #666); font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .paint-preset-actions { display: flex; justify-content: flex-end; gap: 8px; }
+        .paint-preset-editor-heading { font-size: 0.88rem; color: var(--secondary-text-color, #666); }
+        .paint-preset-library-message { color: var(--warning-color, #9a6700); font-size: 0.82rem; }
+        .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
         .paint-editor-grid { display: grid; gap: 12px; align-items: end;
           grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); min-width: 0; }
         .paint-editor .field-grid { grid-template-columns: minmax(0, 1fr); }

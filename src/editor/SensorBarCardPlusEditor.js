@@ -31,11 +31,13 @@ import {
   getBarColorValue, getEffectiveBarColorValue, setBarFillStyle, setBarColor,
   getBarSolidFillValue, getEffectiveBarSolidFillValue, setBarSolidFill,
   clearBarAppearanceOverride, hasBarAppearanceOverride, getBarAppearanceSummary,
-  renderBarAppearanceSection, handleBarAppearanceField,
+  renderBarAppearanceSection, handleBarAppearanceField, getBarPaintEditorState,
   syncBarPaintEditor, clearBarPaintPropertyOverride,
 } from './sections/bar-appearance.js';
 
 import { createBarPaintBindings, usesGroupedBarPaint, prepareBarPaintSegments } from './shared/bar-paint-bindings.js';
+import { renderPaintEditor, syncPaintEditor, describePaint } from './shared/paint-editor.js';
+import { compilePaint } from '../view-model/paint-compiler.js';
 import { SegmentsSection } from './sections/segments.js';
 import { GradientStopsSection } from './sections/gradient-stops.js';
 
@@ -119,6 +121,9 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._paintPresetHandle = null;
     this._paintPresetSubscriptionGeneration = 0;
     this._paintPresetRegistry = { status: 'loading', presets: {} };
+    this._selectedPaintPresetName = null;
+    this._paintPresetLibraryMessage = '';
+    this._presetPaintSections = null;
     this._isRendering = false;
     this._renderScheduled = false;
     this._lastRenderedConfigJson = null;
@@ -3539,6 +3544,11 @@ ${this._renderFormattingSection({ type: 'card' })}
         this._segmentsSection.syncRows(scope);
         this._gradientStopsSection.syncRows(scope);
       }
+      if (this._getSelectedPaintPresetName() !== null && this._presetPaintSections) {
+        const presetScope = { type: 'card' };
+        this._presetPaintSections.segments.syncRows(presetScope);
+        this._presetPaintSections.gradientStops.syncRows(presetScope);
+      }
       this._numericDrafts.apply(this.shadowRoot, numericFocus);
       this._lastRenderedConfigJson = this._serializeConfig(this._draftConfig);
       this._applyPendingFocus();
@@ -3552,6 +3562,7 @@ ${this._renderFormattingSection({ type: 'card' })}
     const otherMasterExists = (this._paintPresetRegistry?.masterCount ?? 0) > (isMaster ? 1 : 0);
     const diagnostic = this._paintPresetRegistry?.diagnostic?.code === 'multiple_preset_masters'
       ? this._paintPresetRegistry.diagnostic.message : '';
+    const paintPresetsOpen = this.shadowRoot?.querySelector('#paint-presets')?.open === true;
     if (!isMaster && otherMasterExists && !diagnostic) return '';
     return `<div class="section preset-master-section">
       ${isMaster || !otherMasterExists ? `<div class="toggle">
@@ -3560,11 +3571,239 @@ ${this._renderFormattingSection({ type: 'card' })}
       </div>` : ''}
       ${isMaster ? '<div class="preset-master-title" role="status">This Card is the Preset Master.</div>' : ''}
       ${diagnostic ? `<div class="paint-preset-feedback" role="status" aria-live="polite">${this._escapeAttribute(diagnostic)}</div>` : ''}
-      ${isMaster ? `<details id="paint-presets" class="paint-presets-disclosure">
+      ${isMaster ? `<details id="paint-presets" class="paint-presets-disclosure"${paintPresetsOpen ? ' open' : ''}>
         <summary>Paint Presets</summary>
-        <div class="section-note">Paint presets are stored in this Card’s preset library.</div>
+        ${this._renderPaintPresetLibrary()}
       </details>` : ''}
     </div>`;
+  }
+
+  _getPaintPresetLibrary() {
+    const library = this._draftConfig?.preset_library;
+    return this._isObject(library) ? library : {};
+  }
+
+  _getPaintPresetEntries() {
+    const presets = this._getPaintPresetLibrary().paint;
+    return this._isObject(presets) ? Object.entries(presets) : [];
+  }
+
+  _getSelectedPaintPresetName() {
+    const entries = this._getPaintPresetEntries();
+    if (entries.some(([name]) => name === this._selectedPaintPresetName)) return this._selectedPaintPresetName;
+    return entries[0]?.[0] ?? null;
+  }
+
+  _renderPaintPresetLibrary() {
+    const entries = this._getPaintPresetEntries();
+    const selectedName = this._getSelectedPaintPresetName();
+    const scale = { minValue: 0, maxValue: 100, scaleDirection: 'normal' };
+    const rows = entries.map(([name, rawPaint]) => {
+      const paint = this._isObject(rawPaint) ? rawPaint : {};
+      let preview = 'none';
+      try { preview = compilePaint(paint, scale).gradient ?? 'none'; } catch { /* Keep malformed presets editable. */ }
+      const opacity = Number.isFinite(Number(paint.opacity)) ? Math.max(0, Math.min(100, Number(paint.opacity))) : 100;
+      return `<button type="button" class="paint-preset-choice${name === selectedName ? ' is-selected' : ''}"
+        data-action="select-paint-preset" data-preset-name="${this._escapeAttribute(name)}" role="option" aria-selected="${name === selectedName}">
+        <span class="paint-preset-swatch" aria-hidden="true" style="background-color:var(--card-background-color,#fff);background-image:${this._escapeAttribute(preview)};opacity:${opacity / 100}"></span>
+        <span class="paint-preset-choice-copy"><span class="paint-preset-choice-name">${this._escapeAttribute(name)}</span>
+          <span class="paint-preset-choice-description">${this._escapeAttribute(describePaint(paint))}</span></span>
+      </button>`;
+    }).join('');
+    let paintEditor = '';
+    if (selectedName !== null) {
+      const context = this._createPresetPaintContext();
+      const scope = { type: 'card' };
+      const sections = this._ensurePresetPaintSections();
+      const paletteFields = {
+        segments: sections.segments.render(scope, ({ content }) => content, { section: false }),
+        gradient_stops: sections.gradientStops.render(scope, ({ content }) => content, { section: false }),
+      };
+      const paletteValues = {
+        segments: sections.segments._getScopedSegmentsValue(scope),
+        gradient_stops: sections.gradientStops._getScopedGradientStopsValue(scope),
+      };
+      const state = getBarPaintEditorState(context, scope, paletteValues, { status: 'empty', presets: {} });
+      const fields = Object.fromEntries(['fill_style', 'solid_fill', 'color', 'opacity'].map(property => [property, {
+        id: `preset-paint-${property}`, field: `preset-paint-${property}`,
+      }]));
+      paintEditor = `<div class="paint-preset-editor-heading">Editing <strong>${this._escapeAttribute(selectedName)}</strong></div>${renderPaintEditor({
+        ...state, mode: 'manual', id: 'preset-paint-editor', root: this.shadowRoot, fields,
+        paletteFields, showMode: false, bodyId: 'preset-paint-editor-body',
+      })}`;
+    }
+    return `<div class="paint-preset-manager">
+      <div class="section-note">Renaming or deleting a preset may affect Cards that reference it. References are not changed automatically.</div>
+      <div class="paint-preset-create">
+        <label class="visually-hidden" for="paint-preset-name">New paint preset name</label>
+        <input id="paint-preset-name" type="text" value="" placeholder="New preset name" aria-label="New paint preset name">
+        <button type="button" data-action="add-paint-preset">Add preset</button>
+      </div>
+      <div class="paint-preset-library-message" role="status" aria-live="polite"${this._paintPresetLibraryMessage ? '' : ' hidden'}>${this._escapeAttribute(this._paintPresetLibraryMessage)}</div>
+      ${entries.length ? `<div class="paint-preset-list" role="listbox" aria-label="Paint presets">${rows}</div>`
+        : '<div class="section-note">No paint presets yet.</div>'}
+      ${selectedName !== null ? `<div class="paint-preset-actions">
+        <button type="button" data-action="rename-paint-preset">Rename</button>
+        <button type="button" data-action="delete-paint-preset">Delete</button>
+      </div>${paintEditor}` : ''}
+    </div>`;
+  }
+
+  _createPresetPaintContext() {
+    const editor = this;
+    const readConfig = () => ({ bar: { paint: editor._cloneDeep(
+      editor._getPaintPresetEntries().find(([name]) => name === editor._getSelectedPaintPresetName())?.[1] ?? {},
+    ) } });
+    return {
+      read: (_scope, path = []) => editor._getPathValue(readConfig(), path),
+      mutate: (_scope, mutation, options = {}) => {
+        const selectedName = editor._getSelectedPaintPresetName();
+        if (selectedName === null) return false;
+        const nextVirtual = mutation(readConfig());
+        const definition = editor._getPathValue(nextVirtual, ['bar', 'paint']) ?? {};
+        const library = editor._cloneDeep(editor._getPaintPresetLibrary());
+        library.paint = { ...(editor._isObject(library.paint) ? library.paint : {}), [selectedName]: definition };
+        const nextConfig = editor._setPathValue(editor._draftConfig, ['preset_library'], library);
+        const applied = editor._applyUserConfig(nextConfig, options);
+        if (!options.rerender && applied) editor._syncPresetPaintEditor();
+        return applied;
+      },
+      get hass() { return editor._hass; },
+      get paintPresetRegistry() { return { status: 'empty', presets: {} }; },
+    };
+  }
+
+  _ensurePresetPaintSections() {
+    if (this._presetPaintSections) return this._presetPaintSections;
+    const context = this._createPresetPaintContext();
+    const ui = {
+      root: () => this.shadowRoot?.querySelector('#preset-paint-editor-body') ?? this.shadowRoot,
+      isRendering: () => this._isRendering,
+      render: () => this._render(),
+      focus: selector => this._queuePostRenderFocus(selector),
+    };
+    this._presetPaintSections = {
+      segments: new SegmentsSection(context, ui, {
+        write: (scope, rows, options) => createBarPaintBindings(context, scope).set('segments', rows, options),
+      }),
+      gradientStops: new GradientStopsSection(context, ui, {
+        write: (scope, rows, options) => createBarPaintBindings(context, scope).set('gradient_stops', rows, options),
+      }),
+    };
+    return this._presetPaintSections;
+  }
+
+  _syncPresetPaintEditor() {
+    const name = this._getSelectedPaintPresetName();
+    if (name === null || !this.shadowRoot?.querySelector('#preset-paint-editor')) return;
+    const context = this._createPresetPaintContext();
+    const sections = this._ensurePresetPaintSections();
+    const paletteValues = {
+      segments: sections.segments._getScopedSegmentsValue({ type: 'card' }),
+      gradient_stops: sections.gradientStops._getScopedGradientStopsValue({ type: 'card' }),
+    };
+    const state = getBarPaintEditorState(context, { type: 'card' }, paletteValues, { status: 'empty', presets: {} });
+    syncPaintEditor(this.shadowRoot, 'preset-paint-editor', { ...state, mode: 'manual' }, { numericDrafts: this._numericDrafts });
+    sections.segments.syncRows({ type: 'card' });
+    sections.gradientStops.syncRows({ type: 'card' });
+    const choice = [...this.shadowRoot.querySelectorAll('.paint-preset-choice')]
+      .find(element => element.dataset.presetName === name);
+    if (choice) {
+      const paint = this._getPaintPresetEntries().find(([presetName]) => presetName === name)?.[1] ?? {};
+      const safePaint = this._isObject(paint) ? paint : {};
+      let preview = 'none';
+      try { preview = compilePaint(safePaint, { minValue: 0, maxValue: 100, scaleDirection: 'normal' }).gradient ?? 'none'; } catch { /* Keep malformed presets editable. */ }
+      const opacity = Number.isFinite(Number(safePaint.opacity)) ? Math.max(0, Math.min(100, Number(safePaint.opacity))) : 100;
+      const swatch = choice.querySelector('.paint-preset-swatch');
+      if (swatch) { swatch.style.backgroundImage = preview; swatch.style.opacity = String(opacity / 100); }
+      const description = choice.querySelector('.paint-preset-choice-description');
+      if (description) description.textContent = describePaint(safePaint);
+    }
+  }
+
+  _resetPresetPaintSections() {
+    const sections = this._presetPaintSections;
+    if (!sections) return;
+    const scope = { type: 'card' };
+    sections.segments.clearScopeState(scope);
+    sections.gradientStops.clearScopeState(scope);
+  }
+
+  _setPaintPresetMessage(message) {
+    this._paintPresetLibraryMessage = message;
+    const element = this.shadowRoot?.querySelector('.paint-preset-library-message');
+    if (element) {
+      element.textContent = message;
+      element.hidden = !message;
+    }
+  }
+
+  _applyPaintPresetLibrary(library, options = {}) {
+    const nextConfig = this._setPathValue(this._draftConfig, ['preset_library'], library);
+    return this._applyUserConfig(nextConfig, options);
+  }
+
+  _handlePaintPresetAction(action, target) {
+    const entries = this._getPaintPresetEntries();
+    const selectedName = this._getSelectedPaintPresetName();
+    if (action === 'select-paint-preset') {
+      const nextName = target.dataset.presetName;
+      if (entries.some(([name]) => name === nextName) && nextName !== selectedName) {
+        this._selectedPaintPresetName = nextName;
+        this._paintPresetLibraryMessage = '';
+        this._resetPresetPaintSections();
+        this._render();
+      }
+      return;
+    }
+    if (action === 'add-paint-preset') {
+      const input = this.shadowRoot.querySelector('#paint-preset-name');
+      const name = input?.value?.trim() ?? '';
+      const paint = this._getPaintPresetLibrary().paint;
+      if (!name) return void this._setPaintPresetMessage('Enter a name for the new preset.');
+      if (this._isObject(paint) && Object.hasOwn(paint, name)) return void this._setPaintPresetMessage('A preset with this name already exists.');
+      this._paintPresetLibraryMessage = '';
+      this._selectedPaintPresetName = name;
+      this._resetPresetPaintSections();
+      const library = this._cloneDeep(this._getPaintPresetLibrary());
+      library.paint = { ...(this._isObject(library.paint) ? library.paint : {}), [name]: {} };
+      this._queuePostRenderFocus('#paint-preset-name');
+      this._applyPaintPresetLibrary(library, { rerender: true });
+      return;
+    }
+    if (action === 'rename-paint-preset' && selectedName !== null) {
+      const prompt = this.ownerDocument?.defaultView?.prompt;
+      if (typeof prompt !== 'function') return;
+      const requestedName = prompt.call(this.ownerDocument.defaultView,
+        `Rename “${selectedName}”. Cards that reference this preset may be affected; references will not be changed automatically.`, selectedName);
+      if (requestedName === null) return;
+      const nextName = requestedName.trim();
+      if (!nextName) return void this._setPaintPresetMessage('Enter a non-empty preset name.');
+      const paint = this._getPaintPresetLibrary().paint ?? {};
+      if (nextName !== selectedName && Object.hasOwn(paint, nextName)) return void this._setPaintPresetMessage('A preset with this name already exists.');
+      if (nextName === selectedName) return;
+      const nextPaint = Object.fromEntries(Object.entries(paint).map(([name, definition]) => [name === selectedName ? nextName : name, definition]));
+      const library = this._cloneDeep(this._getPaintPresetLibrary());
+      library.paint = nextPaint;
+      this._selectedPaintPresetName = nextName;
+      this._paintPresetLibraryMessage = '';
+      this._resetPresetPaintSections();
+      this._applyPaintPresetLibrary(library, { rerender: true });
+      return;
+    }
+    if (action === 'delete-paint-preset' && selectedName !== null) {
+      const confirm = this.ownerDocument?.defaultView?.confirm;
+      if (typeof confirm !== 'function' || !confirm.call(this.ownerDocument.defaultView,
+        `Delete “${selectedName}”? Cards that reference this preset may be affected; references will not be changed automatically. Continue?`)) return;
+      const library = this._cloneDeep(this._getPaintPresetLibrary());
+      const nextPaint = { ...(this._isObject(library.paint) ? library.paint : {}) };
+      delete nextPaint[selectedName];
+      library.paint = nextPaint;
+      this._selectedPaintPresetName = Object.keys(nextPaint)[0] ?? null;
+      this._paintPresetLibraryMessage = '';
+      this._resetPresetPaintSections();
+      this._applyPaintPresetLibrary(library, { rerender: true });
+    }
   }
 
   _bindShadowListeners() {
@@ -3819,11 +4058,23 @@ ${this._renderFormattingSection({ type: 'card' })}
   }
 
   _handleClick(event) {
-    if (this._segmentsSection.handle(event, 'click') || this._gradientStopsSection.handle(event, 'click')) return;
+    const presetManager = event.target?.closest?.('.paint-preset-manager');
+    if (presetManager) {
+      if (this._presetPaintSections
+        && (this._presetPaintSections.segments.handle(event, 'click') || this._presetPaintSections.gradientStops.handle(event, 'click'))) return;
+    } else if (this._segmentsSection.handle(event, 'click') || this._gradientStopsSection.handle(event, 'click')) return;
     const target = event.target?.closest?.('[data-action]') ?? event.target;
     const action = target?.dataset?.action;
     if (!action) return;
     if (target?.disabled) return;
+    if (presetManager && ['select-paint-preset', 'add-paint-preset', 'rename-paint-preset', 'delete-paint-preset'].includes(action)) {
+      this._handlePaintPresetAction(action, target);
+      return;
+    }
+    if (presetManager && action === 'clear-paint-property') {
+      clearBarPaintPropertyOverride(this._createPresetPaintContext(), { type: 'card' }, target.dataset.property);
+      return;
+    }
     if (action === 'clear-paint-property') {
       const scope = target.dataset.index === undefined ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
       if (target.dataset.property === 'segments') return this._segmentsSection._clearSegmentsOverride(scope);
@@ -3906,14 +4157,22 @@ ${this._renderFormattingSection({ type: 'card' })}
   _handleChange(event) {
     if (['HA-ENTITY-PICKER', 'HA-ENTITY-ATTRIBUTE-PICKER'].includes(event.target?.tagName)) return;
     if (this._numericDrafts.handle(event, this._isRendering)) return;
-    if (this._segmentsSection.handle(event, 'change') || this._gradientStopsSection.handle(event, 'change')) return;
+    const presetManager = event.target?.closest?.('.paint-preset-manager');
+    if (presetManager) {
+      if (this._presetPaintSections
+        && (this._presetPaintSections.segments.handle(event, 'change') || this._presetPaintSections.gradientStops.handle(event, 'change'))) return;
+    } else if (this._segmentsSection.handle(event, 'change') || this._gradientStopsSection.handle(event, 'change')) return;
     const kind = event.target?.dataset?.kind;
     this._handleFieldEvent(event);
   }
 
   _handleInput(event) {
     if (this._numericDrafts.handle(event, this._isRendering)) return;
-    if (this._segmentsSection.handle(event, 'input') || this._gradientStopsSection.handle(event, 'input')) return;
+    const presetManager = event.target?.closest?.('.paint-preset-manager');
+    if (presetManager) {
+      if (this._presetPaintSections
+        && (this._presetPaintSections.segments.handle(event, 'input') || this._presetPaintSections.gradientStops.handle(event, 'input'))) return;
+    } else if (this._segmentsSection.handle(event, 'input') || this._gradientStopsSection.handle(event, 'input')) return;
     const target = event.target;
     if (!target) return;
     if (target.tagName === 'HA-ENTITY-PICKER' || target.tagName === 'HA-ENTITY-ATTRIBUTE-PICKER') return;
@@ -3930,6 +4189,12 @@ ${this._renderFormattingSection({ type: 'card' })}
   }
 
   _handleKeydown(event) {
+    const presetManager = event.target?.closest?.('.paint-preset-manager');
+    if (presetManager) {
+      if (this._presetPaintSections
+        && (this._presetPaintSections.segments.handle(event, 'keydown') || this._presetPaintSections.gradientStops.handle(event, 'keydown'))) return;
+      return;
+    }
     this._segmentsSection.handle(event, 'keydown') || this._gradientStopsSection.handle(event, 'keydown');
   }
 
@@ -3942,6 +4207,12 @@ ${this._renderFormattingSection({ type: 'card' })}
     const kind = rawKind?.endsWith('-text-fallback') ? rawKind.slice(0, -14) : rawKind;
     const detailValue = event.detail?.value;
     const value = detailValue ?? (target?.type === 'checkbox' ? target.checked : target?.value);
+    if (field?.startsWith('preset-paint-')) {
+      const property = field.slice('preset-paint-'.length);
+      const paintField = ({ fill_style: 'bar-fill-style', solid_fill: 'bar-solid-fill', color: 'bar-color', opacity: 'bar-opacity' })[property];
+      if (paintField) handleBarAppearanceField(this._createPresetPaintContext(), { field: paintField, value });
+      return;
+    }
     if (kind === 'preset-master') {
       const isMaster = Object.hasOwn(this._draftConfig, 'preset_library');
       if (value && !isMaster) {
