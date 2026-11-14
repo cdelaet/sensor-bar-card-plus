@@ -1,4 +1,4 @@
-import { INVALID_PAINT_OPACITY, normalizeBarConfig, normalizeGaugeSegments, normalizeScaleConfig, getPaintExplicitness } from '../../config/normalize.js';
+import { INVALID_PAINT_OPACITY, normalizeBarConfig, normalizeScaleConfig, getPaintExplicitness } from '../../config/normalize.js';
 import {
   isObject, normalizeTextValue, normalizeNumberValue, getPathValue,
   removePathsFromTarget, pruneEmptyObjectsInTarget,
@@ -9,6 +9,7 @@ import { createPaintBindings } from '../shared/paint-bindings.js';
 import { createBarPaintBindings, usesGroupedBarPaint, readBarPaintProperty, ownsBarPaintProperty, clearBarPaintProperties } from '../shared/bar-paint-bindings.js';
 import { renderPaintEditor, syncPaintEditor } from '../shared/paint-editor.js';
 import { getPaintPreviewScale } from '../shared/paint-swatch.js';
+import { resolvePaintEditorPaint } from '../shared/paint-editor-paint.js';
 import { getResolvedScale } from '../../config/resolve.js';
 import { resolveScopedPaintPreset } from '../../view-model/paint-preset-resolver.js';
 
@@ -200,7 +201,7 @@ export function handleBarAppearanceField(context, { field, kind, index, value },
 
 // Ordinary-bar destination adapter. The Paint Editor itself has no bar paths,
 // inheritance rules, aliases or host mutation policy.
-export function getBarPaintEditorState(context, scope, paletteValues, registry = null) {
+export function getBarPaintEditorState(context, scope, paletteValues, registry = context.paintPresetRegistry ?? null) {
   const local = context.read(scope, []) ?? {};
   const inheritedConfig = scope?.type === 'entity' ? context.read({ type: 'card' }, []) : null;
   const parent = inheritedConfig ? { ...inheritedConfig, bar: normalizeBarConfig(inheritedConfig, null) } : null;
@@ -216,9 +217,7 @@ export function getBarPaintEditorState(context, scope, paletteValues, registry =
     : { paint: normalizedPaint, diagnostics: Object.hasOwn(normalizedPaint, INVALID_PAINT_OPACITY) ? [{
       code: 'paint_opacity_invalid', severity: 'warning', path: 'paint.opacity', reference: null, fallback: 'default_opacity',
     }] : [], source: 'canonical' };
-  const paint = { ...resolved.paint };
-  if (paint.segments == null && paletteValues?.segments) paint.segments = normalizeGaugeSegments(paletteValues.segments);
-  if (paint.gradient_stops == null && paletteValues?.gradient_stops) paint.gradient_stops = paletteValues.gradient_stops;
+  const paint = resolvePaintEditorPaint(resolved.paint, paletteValues);
   const scale = normalizeScaleConfig(local, inheritedConfig);
   const { min, max } = getResolvedScale(context.hass, scale);
   const previewScale = getPaintPreviewScale(paint, { minValue: min, maxValue: max, scaleDirection: scale.direction });

@@ -88,8 +88,9 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
       expect(editor._getFillStyleValue()).toBe(style);
       expect(editor._draftConfig.bar).toMatchObject({ fill_style: style, color: 'red', solid_fill: true, segments, gradient_stops, future: true });
       expect(editor._draftConfig.extra).toEqual({ keep: true });
-      expect(editor.shadowRoot.innerHTML.includes('Only used with Gradient fill style')).toBe(style !== 'gradient');
-      expect(editor.shadowRoot.innerHTML.includes('Only used with segment-based fill styles.')).toBe(!['bands', 'soft_bands', 'band_gradient'].includes(style));
+      const paint = editor.shadowRoot.querySelector('#card-paint-editor');
+      expect(paint.querySelector('div[data-palette-inactive="gradient-stops"]').getAttribute('hidden') !== null).toBe(style === 'gradient');
+      expect(paint.querySelector('div[data-palette-inactive="segments"]').getAttribute('hidden') !== null).toBe(['bands', 'soft_bands', 'band_gradient'].includes(style));
       expect(editor.shadowRoot.querySelector('#gradient-draft-pos')).toBeTruthy();
       expect(editor.shadowRoot.querySelector('#segment-draft-from')).toBeTruthy();
     }

@@ -3,6 +3,7 @@ import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumb
 import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, getColorPickerValue } from '../shared/editor-controls.js';
 import { readBarPaintProperty, clearBarPaintProperties, ownsBarPaintProperty, usesGroupedBarPaint } from '../shared/bar-paint-bindings.js';
 import { PaletteRowSession, PaletteSection } from '../shared/palette-section.js';
+import { getDefaultPaintGradientStops } from '../shared/paint-editor-paint.js';
 
 export class GradientStopsSection extends PaletteSection {
   constructor(context, ui, array) {
@@ -35,11 +36,7 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   _getDefaultGradientStops() {
-    return [
-      { pos: 0, color: '#4CAF50' },
-      { pos: 50, color: '#FF9800' },
-      { pos: 100, color: '#F44336' },
-    ];
+    return getDefaultPaintGradientStops();
   }
 
   _normalizeGradientStopPosValue(rawValue) {
@@ -563,6 +560,7 @@ export class GradientStopsSection extends PaletteSection {
       draftSelector: entity ? `#entity-${index}-gradient-draft-pos` : '#gradient-draft-pos',
     });
     // A color edit keeps row identity but still changes the palette preview.
+    this._syncPaletteActivity(scope, 'gradient-stops', this.fillStyle(scope) === 'gradient');
     if (this._getPaletteRoot(scope)?.ownerDocument) this._refreshGradientDraftUi(scope);
     if (changed) this._syncGradientDraftControls(scope);
     return changed;
@@ -595,10 +593,7 @@ export class GradientStopsSection extends PaletteSection {
                           <label for="entity-${index}-gradient-stops-inherit">Inherit card settings</label>
                         </div>
                       </div>
-                      ${this.fillStyle(scope) !== 'gradient'
-                        ? '<div class="section-note">Only used with Gradient fill style</div>'
-                        : ''
-                      }
+                      <div class="section-note" data-palette-inactive="gradient-stops"${this.fillStyle(scope) === 'gradient' ? ' hidden' : ''}>Only used with Gradient fill style</div>
                       ${this._renderGradientPreview(scope, {
                         previewId: `entity-${index}-gradient-preview`,
                         trackId: `entity-${index}-gradient-preview-track`,
@@ -655,10 +650,7 @@ export class GradientStopsSection extends PaletteSection {
 	            summary: gradientStopsSummary,
 	            inactive: gradientStopsInactive,
 	            content: `
-	              ${gradientStopsInactive
-	                ? '<div class="section-note">Only used with Gradient fill style</div>'
-	                : ''
-	              }
+	              <div class="section-note" data-palette-inactive="gradient-stops"${gradientStopsInactive ? '' : ' hidden'}>Only used with Gradient fill style</div>
 	              ${this._renderGradientPreview({ type: 'card' }, {
 	                previewId: 'card-gradient-preview',
 	                trackId: 'card-gradient-preview-track',

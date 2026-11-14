@@ -6,6 +6,7 @@ import { getSegmentsForRendering, resolveSegmentBoundaryPct } from '../../view-m
 import { getEffectiveBarColorValue } from './bar-appearance.js';
 import { readBarPaintProperty, clearBarPaintProperties, ownsBarPaintProperty, usesGroupedBarPaint } from '../shared/bar-paint-bindings.js';
 import { PaletteRowSession, PaletteSection } from '../shared/palette-section.js';
+import { getDefaultPaintSegments } from '../shared/paint-editor-paint.js';
 
 export const MIXED_INTERVAL_PREVIEW_WEIGHT = 10;
 export const MIN_SEGMENT_PREVIEW_WIDTH = 1;
@@ -224,11 +225,7 @@ export class SegmentsSection extends PaletteSection {
   }
 
   _getDefaultSegments() {
-    return [
-      { from: '0%', to: '33%', color: '#4CAF50' },
-      { from: '33%', to: '75%', color: '#FF9800' },
-      { from: '75%', to: '100%', color: '#F44336' },
-    ];
+    return getDefaultPaintSegments();
   }
 
   _getStoredScopedSegments(scope = { type: 'card' }) {
@@ -904,6 +901,7 @@ export class SegmentsSection extends PaletteSection {
       draftSelector: entity ? `#entity-${index}-segment-draft-from` : '#segment-draft-from',
     });
     // A color edit keeps row identity but still changes the palette preview.
+    this._syncPaletteActivity(scope, 'segments', this._isSegmentFillStyle(this.fillStyle(scope)));
     if (this._getPaletteRoot(scope)?.ownerDocument) this._refreshSegmentUi(scope);
     if (changed) this._syncSegmentDraftControls(scope);
     return changed;
@@ -938,10 +936,7 @@ export class SegmentsSection extends PaletteSection {
                           <label for="entity-${index}-segments-inherit">Inherit card settings</label>
                         </div>
                       </div>
-                      ${this._isSegmentFillStyle(this.fillStyle(scope))
-                        ? ''
-                        : '<div class="section-note">Only used with segment-based fill styles.</div>'
-                      }
+                      <div class="section-note" data-palette-inactive="segments"${this._isSegmentFillStyle(this.fillStyle(scope)) ? ' hidden' : ''}>Only used with segment-based fill styles.</div>
                       ${this._renderSegmentPreview(scope)}
                       <div class="field-row">
                         <label>Segments</label>
@@ -984,10 +979,7 @@ export class SegmentsSection extends PaletteSection {
       summary: this._getSegmentsSummary({ type: 'card' }),
       inactive: !this._isSegmentFillStyle(fillStyle),
       content: `
-              ${this._isSegmentFillStyle(fillStyle)
-                ? ''
-                : '<div class="section-note">Only used with segment-based fill styles.</div>'
-              }
+              <div class="section-note" data-palette-inactive="segments"${this._isSegmentFillStyle(fillStyle) ? ' hidden' : ''}>Only used with segment-based fill styles.</div>
                 ${this._renderSegmentPreview({ type: 'card' })}
               <div class="field-row">
                 <label>Segments</label>

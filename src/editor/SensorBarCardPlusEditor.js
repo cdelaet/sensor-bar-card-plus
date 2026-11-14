@@ -38,6 +38,7 @@ import {
 import { createBarPaintBindings, usesGroupedBarPaint, prepareBarPaintSegments } from './shared/bar-paint-bindings.js';
 import { renderPaintEditor, syncPaintEditor, describePaint } from './shared/paint-editor.js';
 import { renderPaintSwatch, syncPaintSwatch } from './shared/paint-swatch.js';
+import { resolvePaintEditorPaint } from './shared/paint-editor-paint.js';
 import { SegmentsSection } from './sections/segments.js';
 import { GradientStopsSection } from './sections/gradient-stops.js';
 
@@ -3626,12 +3627,12 @@ ${this._renderFormattingSection({ type: 'card' })}
     const scale = { minValue: 0, maxValue: 100, scaleDirection: 'normal' };
     const rows = entries.map(([name, rawPaint]) => {
       const paint = this._isObject(rawPaint) ? rawPaint : {};
-      const normalized = normalizeBarConfig({ bar: { paint } }, null, { isCardScope: true }).paint;
+      const normalized = resolvePaintEditorPaint(normalizeBarConfig({ bar: { paint } }, null, { isCardScope: true }).paint);
       return `<button type="button" class="paint-preset-choice${name === selectedName ? ' is-selected' : ''}"
         data-action="select-paint-preset" data-preset-name="${this._escapeAttribute(name)}" role="option" aria-selected="${name === selectedName}">
         ${renderPaintSwatch('paint-preset-swatch', normalized, scale)}
         <span class="paint-preset-choice-copy"><span class="paint-preset-choice-name">${this._escapeAttribute(name)}</span>
-          <span class="paint-preset-choice-description">${this._escapeAttribute(describePaint(paint))}</span></span>
+          <span class="paint-preset-choice-description">${this._escapeAttribute(describePaint(normalized))}</span></span>
       </button>`;
     }).join('');
     let paintEditor = '';
@@ -3736,11 +3737,11 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (choice) {
       const paint = this._getPaintPresetEntries().find(([presetName]) => presetName === name)?.[1] ?? {};
       const safePaint = this._isObject(paint) ? paint : {};
-      const normalized = normalizeBarConfig({ bar: { paint: safePaint } }, null, { isCardScope: true }).paint;
+      const normalized = resolvePaintEditorPaint(normalizeBarConfig({ bar: { paint: safePaint } }, null, { isCardScope: true }).paint);
       const swatch = choice.querySelector('.paint-preset-swatch');
       syncPaintSwatch(swatch, normalized, { minValue: 0, maxValue: 100, scaleDirection: 'normal' });
       const description = choice.querySelector('.paint-preset-choice-description');
-      if (description) description.textContent = describePaint(safePaint);
+      if (description) description.textContent = describePaint(normalized);
     }
   }
 

@@ -52,6 +52,13 @@ export class PaletteSection {
   _getShadowElementById(id, scope) { return this._getPaletteRoot(scope)?.querySelector(`#${id}`); }
   _renderListRows(items, renderItem) { return items.map(renderItem).join(''); }
 
+  _syncPaletteActivity(scope, group, active) {
+    const note = this._getPaletteRoot(scope)?.querySelector(`[data-palette-inactive="${group}"]`);
+    if (!note) return;
+    note.hidden = active;
+    note.closest?.('.override-group')?.classList.toggle('is-inactive', !active);
+  }
+
   _syncRows(scope, { inputSelector, rowSelector, draftSelector, memberSelector, generation, rowCount }) {
     const root = this._getPaletteRoot(scope);
     if (!root?.ownerDocument) return false;

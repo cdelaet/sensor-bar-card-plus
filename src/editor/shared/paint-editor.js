@@ -38,7 +38,7 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
   const referenceName = presetReference == null ? '' : String(presetReference);
   const source = property => overrides[property] ? 'Override' : presetReference != null ? 'Preset' : 'Inherited';
   const propertyHeader = (property, label) => showPropertyMeta
-    ? `<span class="paint-property-meta" data-paint-source="${property}">${source(property)}</span>
+    ? `<span class="paint-property-meta${overrides[property] ? ' is-overridden' : ''}" data-paint-source="${property}">${source(property)}</span>
       <button type="button" class="paint-clear-override" data-action="clear-paint-property" data-property="${property}"${fields.index !== undefined ? ` data-index="${fields.index}"` : ''} aria-label="Clear ${escapeAttribute(label)} override"${overrides[property] ? '' : ' hidden'}>Clear</button>`
     : '';
   const labelRow = (property, label, control) => `<div class="paint-property-row"><div class="paint-property-heading"><label for="${controls[property].id}">${label}</label>${propertyHeader(property, label)}</div>${control}</div>`;
@@ -144,7 +144,10 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
     const source = editor.querySelector?.(`[data-paint-source="${property}"]`);
     const clear = editor.querySelector?.(`[data-action="clear-paint-property"][data-property="${property}"]`);
     const overridden = !!state.overrides?.[property];
-    if (source) source.textContent = overridden ? 'Override' : state.presetReference != null ? 'Preset' : 'Inherited';
+    if (source) {
+      source.textContent = overridden ? 'Override' : state.presetReference != null ? 'Preset' : 'Inherited';
+      source.classList?.toggle('is-overridden', overridden);
+    }
     if (clear) clear.hidden = !overridden;
   }
   const diagnostic = state.diagnostics?.find(item => item.code?.startsWith('paint_preset') || item.code === 'paint_registry_unavailable');

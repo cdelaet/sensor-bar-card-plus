@@ -18,6 +18,7 @@ export const editorStyles = `
         .paint-property-row, .paint-palette-field { display: grid; gap: 6px; min-width: 0; }
         .paint-property-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; min-width: 0; }
         .paint-property-meta { color: var(--secondary-text-color, #666); font-size: 0.75rem; }
+        .paint-property-meta.is-overridden { color: var(--accent-color, var(--primary-color, #03a9f4)); }
         .paint-clear-override { min-height: 28px; padding: 3px 8px; font-size: 0.78rem; }
         .paint-preset-feedback, .paint-registry-status { color: var(--secondary-text-color, #666); font-size: 0.82rem; overflow-wrap: anywhere; }
         .paint-preset-feedback { color: var(--warning-color, #9a6700); }

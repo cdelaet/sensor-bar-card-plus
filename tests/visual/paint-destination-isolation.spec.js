@@ -129,6 +129,52 @@ async function assertPalettes(page, expected) {
 }
 
 for (const source of ['src', 'dist']) {
+  for (const fill_style of ['solid', 'gradient', 'bands', 'soft_bands', 'band_gradient']) {
+    for (const palette of ['omitted', 'authored', 'empty']) for (const solid_fill of [false, true]) {
+      test(`library and editor resolve ${palette} ${fill_style} palettes consistently${solid_fill ? ' with solid sampling' : ''} (${source})`, async ({ page }) => {
+        const configs = structuredClone(initial);
+        const definition = { fill_style, solid_fill, color: '#123456', opacity: 63,
+          ...(palette === 'authored' ? {
+            segments: [{ from: '0%', to: '40%', color: '#1133aa' }, { from: '40%', to: '100%', color: '#22cc66' }],
+            gradient_stops: [{ pos: 0, color: '#1133aa' }, { pos: 100, color: '#22cc66' }],
+          } : palette === 'empty' ? { segments: [], gradient_stops: [] } : {}),
+        };
+        configs.card.preset_library.paint.warm = definition;
+        await mount(page, source, configs);
+        const editor = editorFor(page, 'Preset');
+        const root = await open(page, 'Preset');
+        const library = editor.locator('.paint-preset-choice[data-preset-name="warm"]');
+        const assertPreview = async opacity => {
+          const swatches = await editor.evaluate(element => {
+            const style = selector => {
+              const node = element.shadowRoot.querySelector(selector);
+              return { image: getComputedStyle(node).backgroundImage, opacity: getComputedStyle(node).opacity };
+            };
+            return { library: style('.paint-preset-choice[data-preset-name="warm"] .paint-preset-swatch'),
+              header: style('#preset-paint-editor .paint-editor-swatch') };
+          });
+          expect(swatches.library).toEqual(swatches.header);
+          expect(swatches.library.opacity).toBe(String(opacity / 100));
+          if (palette !== 'empty') expect(swatches.library.image).not.toBe('none');
+          await expect(library.locator('.paint-preset-choice-description')).toHaveText(await root.locator('.paint-editor-description').innerText());
+          if (['bands', 'soft_bands', 'band_gradient'].includes(fill_style)) {
+            await expect(library.locator('.paint-preset-choice-description')).toContainText(`${palette === 'omitted' ? 3 : palette === 'authored' ? 2 : 0} segments`);
+            if (palette === 'omitted' && !solid_fill) for (const color of ['rgb(76, 175, 80)', 'rgb(255, 152, 0)', 'rgb(244, 67, 54)']) expect(swatches.library.image).toContain(color);
+          }
+        };
+        await assertPreview(63);
+        expect(await page.evaluate(() => window.__destinationEvents)).toEqual({ card: [], feature: [] });
+        // An opacity edit takes the nonstructural sync path as well as initial render.
+        await root.locator('#preset-paint-opacity').fill('41');
+        await expect(library.locator('.paint-preset-swatch')).toHaveCSS('opacity', '0.41');
+        await assertPreview(41);
+        configs.card.preset_library.paint.warm = { ...definition, opacity: 41 };
+        expect(await page.evaluate(() => window.__destinationEvents.card.at(-1)?.config)).toEqual(configs.card);
+        expect(await page.evaluate(() => window.__destinationEvents.feature)).toEqual([]);
+      });
+    }
+  }
+
   for (const destination of destinations) for (const palette of ['gradient_stops', 'segments']) {
     test(`${destination} ${palette} track updates during color input without replacing controls (${source})`, async ({ page, browserName }) => {
       const configs = structuredClone(initial);
