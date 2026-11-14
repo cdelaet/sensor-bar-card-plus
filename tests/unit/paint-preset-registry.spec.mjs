@@ -77,6 +77,55 @@ describe('dashboard paint preset registry', () => {
     consumer.unsubscribe();
   });
 
+  it('discovers masters in nested sections, headers, footers, and sidebar sections', async () => {
+    const locations = [
+      { sections: [{ sections: [{ cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: {} }] }] }] },
+      { header: { card: { type: 'custom:sensor-bar-card-plus', preset_library: {} } } },
+      { footer: { card: { type: 'custom:sensor-bar-card-plus', preset_library: {} } } },
+      { sidebar: { sections: [{ sections: [{ cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: {} }] }] }] } },
+    ];
+    for (const [index, location] of locations.entries()) {
+      const connection = createConnection({ views: [location] });
+      const consumer = subscribeDashboardPaintPresets(hassFor(connection), `location-${index}`, vi.fn());
+      await flush();
+      expect(consumer.getSnapshot()).toMatchObject({ status: 'ready', masterCount: 1 });
+      consumer.unsubscribe();
+    }
+  });
+
+  it('detects duplicate masters across separate native Card locations', async () => {
+    const connection = createConnection({ views: [{
+      header: { card: { type: 'custom:sensor-bar-card-plus', preset_library: {} } },
+      sidebar: { sections: [{ cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: {} }] }] },
+    }] });
+    const consumer = subscribeDashboardPaintPresets(hassFor(connection), 'cross-location-duplicate', vi.fn());
+    await flush();
+    expect(consumer.getSnapshot()).toMatchObject({ status: 'conflict', masterCount: 2, diagnostic: { code: 'multiple_preset_masters' } });
+    consumer.unsubscribe();
+  });
+
+  it('publishes master library category additions, edits, and removals', async () => {
+    const changed = vi.fn();
+    const connection = createConnection({ views: [{ cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: { paint: {}, layout: { version: 1 } } }] }] });
+    const consumer = subscribeDashboardPaintPresets(hassFor(connection), 'category-changes', changed);
+    await flush();
+    const firstRevision = consumer.getSnapshot().revision;
+    connection.setResponse({ views: [{ cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: { paint: {}, layout: { version: 2 }, future: { enabled: true } } }] }] });
+    connection.subscriptions[0].callback({ event_type: 'lovelace_updated' });
+    await flush();
+    expect(consumer.getSnapshot().masterLibrary).toEqual({ paint: {}, layout: { version: 2 }, future: { enabled: true } });
+    const secondRevision = consumer.getSnapshot().revision;
+    expect(secondRevision).toBeGreaterThan(firstRevision);
+
+    connection.setResponse({ views: [{ cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: { paint: {} } }] }] });
+    connection.subscriptions[0].callback({ event_type: 'lovelace_updated' });
+    await flush();
+    expect(consumer.getSnapshot().masterLibrary).toEqual({ paint: {} });
+    expect(consumer.getSnapshot().revision).toBeGreaterThan(secondRevision);
+    expect(changed).toHaveBeenCalledTimes(4);
+    consumer.unsubscribe();
+  });
+
   it('uses legacy dashboard presets only when no master exists and reports duplicate masters', async () => {
     const legacy = createConnection({ views: [{ cards: [] }], sbcp_fragments: { paint_presets: { old: { color: 'red' } } } });
     const legacyConsumer = subscribeDashboardPaintPresets(hassFor(legacy), 'legacy', vi.fn());

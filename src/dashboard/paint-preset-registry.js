@@ -13,10 +13,18 @@ function findMasters(config) {
       else visitCard(children);
     }
   };
+  const visitSection = section => {
+    if (!isRecord(section)) return;
+    section.cards?.forEach(visitCard);
+    section.sections?.forEach(visitSection);
+  };
   if (Array.isArray(config?.views)) {
     for (const view of config.views) {
       if (Array.isArray(view?.cards)) view.cards.forEach(visitCard);
-      for (const section of view?.sections ?? []) section?.cards?.forEach(visitCard);
+      view?.sections?.forEach(visitSection);
+      visitCard(view?.header?.card);
+      visitCard(view?.footer?.card);
+      view?.sidebar?.sections?.forEach(visitSection);
     }
   }
   return masters;
@@ -111,6 +119,7 @@ function publish(entry, result) {
     && current.diagnostic?.code === next.diagnostic?.code
     && current.diagnostic?.message === next.diagnostic?.message
     && current.masterCount === next.masterCount
+    && stableValue(current.masterLibrary) === stableValue(next.masterLibrary)
     && stableValue(current.presets) === stableValue(next.presets)) return;
   report(entry, freezeSnapshot({ ...next, revision: current.revision + 1 }));
 }
