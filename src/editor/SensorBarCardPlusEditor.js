@@ -253,9 +253,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._paintPresetHandle = subscribeDashboardPaintPresets(this._hass, path, snapshot => {
         if (generation !== this._paintPresetSubscriptionGeneration || snapshot === this._paintPresetRegistry) return;
         this._paintPresetRegistry = snapshot;
+        this._syncPresetMasterControls();
         this._syncPaintEditors();
       });
       this._paintPresetRegistry = this._paintPresetHandle.getSnapshot();
+      this._syncPresetMasterControls();
       this._syncPaintEditors();
       return;
     }
@@ -264,7 +266,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _syncPaintEditors() {
     if (!this.shadowRoot?.innerHTML) return;
-    this._syncPresetMasterControls();
     const context = this._createSectionContext();
     for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) {
       syncBarPaintEditor(this.shadowRoot, context, scope, this._paintPaletteValues(scope), {
@@ -279,17 +280,50 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _syncPresetMasterControls() {
-    const markup = this._renderPresetMasterControls();
+    if (!this.shadowRoot?.innerHTML) return;
+    const isMaster = Object.hasOwn(this._draftConfig, 'preset_library');
+    const otherMasterExists = (this._paintPresetRegistry?.masterCount ?? 0) > (isMaster ? 1 : 0);
+    const diagnostic = this._paintPresetRegistry?.diagnostic?.code === 'multiple_preset_masters'
+      ? this._paintPresetRegistry.diagnostic.message : '';
     const current = this.shadowRoot?.querySelector('.preset-master-section');
-    if (!markup) {
+    const shouldShowSection = isMaster || !otherMasterExists || !!diagnostic;
+    if (isMaster && current) {
+      this._syncPresetMasterWarning(current, diagnostic);
+      return;
+    }
+    const shouldShowCheckbox = !isMaster && !otherMasterExists;
+    const hasCheckbox = !!current?.querySelector('#preset-master');
+    if (!shouldShowSection) {
       current?.remove();
       return;
     }
-    if (current) {
-      if (current.outerHTML !== markup) current.outerHTML = markup;
+    if (!current || hasCheckbox !== shouldShowCheckbox) {
+      const markup = this._renderPresetMasterControls();
+      if (current) current.outerHTML = markup;
+      else this.shadowRoot?.querySelector('.editor > .section')?.insertAdjacentHTML('beforebegin', markup);
+      this._syncPresetMasterWarning(this.shadowRoot.querySelector('.preset-master-section'), diagnostic);
       return;
     }
-    this.shadowRoot?.querySelector('.editor > .section')?.insertAdjacentHTML('beforebegin', markup);
+    this._syncPresetMasterWarning(current, diagnostic);
+  }
+
+  _syncPresetMasterWarning(section, diagnostic) {
+    if (!section) return;
+    let warning = section?.querySelector('.preset-master-warning');
+    if (!diagnostic) {
+      warning?.remove();
+      return;
+    }
+    if (!warning) {
+      warning = this.ownerDocument.createElement('div');
+      warning.className = 'paint-preset-feedback preset-master-warning';
+      warning.setAttribute('role', 'status');
+      warning.setAttribute('aria-live', 'polite');
+      const designation = section.querySelector('.preset-master-title') ?? section.querySelector('#preset-master');
+      if (designation) designation.parentElement.after(warning);
+      else section.prepend(warning);
+    }
+    if (warning.textContent !== diagnostic) warning.textContent = diagnostic;
   }
 
   _cloneContainer(value) {
@@ -3570,7 +3604,7 @@ ${this._renderFormattingSection({ type: 'card' })}
         <label for="preset-master">Preset Master</label>
       </div>` : ''}
       ${isMaster ? '<div class="preset-master-title" role="status">This Card is the Preset Master.</div>' : ''}
-      ${diagnostic ? `<div class="paint-preset-feedback" role="status" aria-live="polite">${this._escapeAttribute(diagnostic)}</div>` : ''}
+      ${diagnostic ? `<div class="paint-preset-feedback preset-master-warning" role="status" aria-live="polite">${this._escapeAttribute(diagnostic)}</div>` : ''}
       ${isMaster ? `<details id="paint-presets" class="paint-presets-disclosure"${paintPresetsOpen ? ' open' : ''}>
         <summary>Paint Presets</summary>
         ${this._renderPaintPresetLibrary()}

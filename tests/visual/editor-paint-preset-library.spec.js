@@ -65,4 +65,49 @@ for (const source of ['src', 'dist']) {
     await expect(editor.locator('.paint-preset-choice')).toHaveCount(1);
     await expect(editor.locator('.paint-preset-choice')).toHaveAttribute('data-preset-name', 'warm');
   });
+
+  test(`recurring hass updates preserve preset name input identity, focus and text (${source})`, async ({ page }) => {
+    const editor = await mount(page, source);
+    await editor.locator('#paint-presets > summary').click();
+    const name = editor.locator('#paint-preset-name');
+    await name.fill('Copper');
+    await name.evaluate(input => {
+      input.focus();
+      input.setSelectionRange(2, 4);
+      window.__presetNameInput = input;
+    });
+    await editor.evaluate(element => {
+      window.__presetHassTimer = window.setInterval(() => {
+        element.hass = { ...element.hass, states: { 'sensor.power': { state: String(Date.now()), attributes: {} } } };
+      }, 80);
+    });
+    await page.waitForTimeout(500);
+    await editor.evaluate(() => window.clearInterval(window.__presetHassTimer));
+    await editor.evaluate(element => {
+      const master = { type: 'custom:sensor-bar-card-plus', preset_library: structuredClone(element._draftConfig.preset_library) };
+      const duplicate = { type: 'custom:sensor-bar-card-plus', preset_library: {} };
+      const dashboard = { views: [{ cards: [master, duplicate] }] };
+      element.hass = {
+        states: element._hass?.states ?? {},
+        connection: {
+          connected: true,
+          sendMessagePromise: async () => structuredClone(dashboard),
+          subscribeEvents: async callback => { window.__presetRegistryListener = callback; return () => {}; },
+          addEventListener() {}, removeEventListener() {},
+        },
+      };
+    });
+    await expect(editor.locator('.preset-master-warning')).toContainText('2 master Cards');
+    await editor.evaluate(() => window.__presetRegistryListener?.({ event_type: 'lovelace_updated' }));
+    await page.waitForTimeout(100);
+
+    const state = await name.evaluate(input => ({
+      same: input === window.__presetNameInput,
+      focused: input.getRootNode().activeElement === input,
+      value: input.value,
+      selectionStart: input.selectionStart,
+      selectionEnd: input.selectionEnd,
+    }));
+    expect(state).toEqual({ same: true, focused: true, value: 'Copper', selectionStart: 2, selectionEnd: 4 });
+  });
 }
