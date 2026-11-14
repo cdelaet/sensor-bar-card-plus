@@ -4294,6 +4294,20 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (field === 'layout-height') return void this._setLayoutHeight(value);
     if (field === 'layout-label-width') return void this._setScopedLayoutLabelWidth({ type: 'card' }, value);
     if (handleScaleField(this._createSectionContext(), { field, value })) return;
+    if (field === 'bar-paint-preset' || kind === 'entity-bar-paint-preset') {
+      const scope = target.dataset?.index === undefined ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
+      const context = this._createSectionContext();
+      const localPreset = context.read(scope, ['bar', 'paint', 'preset']);
+      const inheritedPreset = scope.type === 'entity' ? context.read({ type: 'card' }, ['bar', 'paint', 'preset']) : undefined;
+      const currentPreset = localPreset !== undefined ? localPreset : inheritedPreset;
+      const confirm = this.ownerDocument?.defaultView?.confirm;
+      const applied = handleBarAppearanceField(context, { field, kind, index: target.dataset?.index, value }, {
+        confirm: name => typeof confirm === 'function' && confirm.call(this.ownerDocument.defaultView,
+          `Applying paint preset “${name}” replaces local paint properties. Continue?`),
+      });
+      if (!applied) target.value = currentPreset == null ? '' : String(currentPreset);
+      return;
+    }
     if (handleBarAppearanceField(this._createSectionContext(), { field, value })) return;
     if (this._needleSection.handleField({ field, kind, index: target.dataset?.index, value })) return;
     if (this._baselineSection.handleField({ field, kind, index: target.dataset?.index, value })) {

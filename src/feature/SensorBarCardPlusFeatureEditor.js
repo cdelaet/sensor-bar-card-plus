@@ -319,6 +319,16 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const context = this._createSectionContext();
     if (handleScaleField(context, { field, kind, value })) return;
     if (handleFormattingField(context, { field, kind, value })) return;
+    if (field === 'bar-paint-preset') {
+      const currentPreset = context.read(root, ['bar', 'paint', 'preset']);
+      const confirm = this.ownerDocument?.defaultView?.confirm;
+      const applied = handleBarAppearanceField(context, { field, value }, {
+        confirm: name => typeof confirm === 'function' && confirm.call(this.ownerDocument.defaultView,
+          `Applying paint preset “${name}” replaces local paint properties. Continue?`),
+      });
+      if (!applied) target.value = currentPreset == null ? '' : String(currentPreset);
+      return;
+    }
     handleBarAppearanceField(context, { field, kind, value }, { animation: true, cssText: true });
   }
 

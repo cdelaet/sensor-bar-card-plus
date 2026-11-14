@@ -122,11 +122,25 @@ export function hasLocalBarPaintConfiguration(context, scope) {
     || BAR_PAINT_PROPERTIES.some(property => ownsBarPaintProperty(context, scope, property));
 }
 
+export function hasLocalBarPaintProperties(context, scope) {
+  const groupedPaint = context.read(scope, ['bar', 'paint']);
+  const groupedProperties = isObject(groupedPaint)
+    ? Object.keys(groupedPaint).some(property => property !== 'preset')
+    : groupedPaint != null;
+  return groupedProperties
+    || BAR_PAINT_PROPERTIES.filter(property => property !== 'preset')
+      .some(property => ownsBarPaintProperty(context, scope, property));
+}
+
+function clearLocalBarPaint(target) {
+  return pruneEmptyObjectsInTarget(
+    removePathsFromTarget(clearBarPaintProperties(target, BAR_PAINT_PROPERTIES), [['bar', 'paint']]), ['bar']);
+}
+
 export function resetBarPaintConfiguration(context, scope) {
   if (!hasLocalBarPaintConfiguration(context, scope)) return false;
   context.clearPaintPaletteState?.(scope);
-  return context.mutate(scope, target => pruneEmptyObjectsInTarget(
-    removePathsFromTarget(clearBarPaintProperties(target, BAR_PAINT_PROPERTIES), [['bar', 'paint']]), ['bar']),
+  return context.mutate(scope, clearLocalBarPaint,
   { preserveRawConfig: true, rerender: true });
 }
 
@@ -164,8 +178,8 @@ export function handleBarAppearanceField(context, { field, kind, index, value },
     return true;
   }
   if (options.animation && field === 'bar-animated') { setBarAnimated(context, { type: 'card' }, value); return true; }
-  const rootSetters = { 'bar-fill-style': setBarFillStyle, 'bar-color': setBarColor, 'bar-solid-fill': setBarSolidFill, 'bar-opacity': setBarOpacity,
-    'bar-paint-preset': setBarPaintPreset };
+  if (field === 'bar-paint-preset') return setBarPaintPreset(context, { type: 'card' }, value, options);
+  const rootSetters = { 'bar-fill-style': setBarFillStyle, 'bar-color': setBarColor, 'bar-solid-fill': setBarSolidFill, 'bar-opacity': setBarOpacity };
   if (Object.prototype.hasOwnProperty.call(rootSetters, field)) {
     rootSetters[field](context, { type: 'card' }, value, options);
     return true;
@@ -175,8 +189,8 @@ export function handleBarAppearanceField(context, { field, kind, index, value },
     if (value) clearBarAppearanceOverride(context, scope);
     return true;
   }
-  const rowSetters = { 'entity-bar-fill-style': setBarFillStyle, 'entity-bar-color': setBarColor, 'entity-bar-solid-fill': setBarSolidFill, 'entity-bar-opacity': setBarOpacity,
-    'entity-bar-paint-preset': setBarPaintPreset };
+  if (kind === 'entity-bar-paint-preset') return setBarPaintPreset(context, scope, value, options);
+  const rowSetters = { 'entity-bar-fill-style': setBarFillStyle, 'entity-bar-color': setBarColor, 'entity-bar-solid-fill': setBarSolidFill, 'entity-bar-opacity': setBarOpacity };
   if (Object.prototype.hasOwnProperty.call(rowSetters, kind)) {
     rowSetters[kind](context, scope, value);
     return true;
@@ -240,10 +254,23 @@ export function clearBarPaintPropertyOverride(context, scope, property) {
     .clear(property, { preserveRawConfig: true, rerender: true });
 }
 
-function setBarPaintPreset(context, scope, value) {
+function setBarPaintPreset(context, scope, value, options = {}) {
   const binding = createBarPaintBindings(context, scope, { grouped: true });
-  return value === '' ? binding.clear('preset', { preserveRawConfig: true, rerender: true })
-    : binding.set('preset', value, { preserveRawConfig: true, rerender: true });
+  if (value === '') return binding.clear('preset', { preserveRawConfig: true, rerender: true });
+
+  const localPreset = binding.read('preset');
+  const inheritedPreset = scope?.type === 'entity' ? context.read({ type: 'card' }, ['bar', 'paint', 'preset']) : undefined;
+  if (value === (localPreset !== undefined ? localPreset : inheritedPreset)) return true;
+  if (hasLocalBarPaintProperties(context, scope) && options.confirm?.(value) !== true) return false;
+
+  context.clearPaintPaletteState?.(scope);
+  const atomicContext = {
+    read: context.read,
+    mutate: (targetScope, mutation, mutationOptions) => context.mutate(
+      targetScope, target => mutation(clearLocalBarPaint(target)), mutationOptions),
+  };
+  return createBarPaintBindings(atomicContext, scope, { grouped: true }).set('preset', value,
+    { preserveRawConfig: true, rerender: true });
 }
 
 export function renderBarAppearanceSection(context, scope, renderChildren = () => '', options = {}) {

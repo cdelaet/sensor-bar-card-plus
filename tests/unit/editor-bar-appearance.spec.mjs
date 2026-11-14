@@ -1,11 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createEditor } from '../support/load-card-class.cjs';
 import { getPathValue } from '../../src/editor/shared/editor-config.js';
 import {
   getFillStyleValue, getEffectiveFillStyleValue, getBarColorValue,
   getEffectiveBarSolidFillValue, getBarAppearanceSummary, hasBarAppearanceOverride,
   handleBarAppearanceField, renderBarAppearanceSection, clearBarAppearanceOverride,
-  getBarPaintEditorState, clearBarPaintPropertyOverride,
+  getBarPaintEditorState,
   hasLocalBarPaintConfiguration, resetBarPaintConfiguration,
 } from '../../src/editor/sections/bar-appearance.js';
 
@@ -169,24 +169,41 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     expect(editor._draftConfig).toEqual(events.at(-1).detail.config);
   });
 
-  it('selects a preset by reference, applies local overrides, and clears them individually', () => {
-    const { editor } = setup(source, { bar: { paint: { opacity: 35, color: '#abcdef', future: true } } });
+  it('replaces local paint when applying a preset and preserves overrides when clearing its reference', () => {
+    const { editor, events } = setup(source, { bar: { paint: { opacity: 35, color: '#abcdef', future: true } } });
     const context = editor._createSectionContext();
-    const registry = { status: 'ready', presets: { night: { fill_style: 'solid', color: '#112233', opacity: 42 } } };
+    const registry = { status: 'ready', presets: {
+      night: { fill_style: 'solid', color: '#112233', opacity: 42 },
+      soft: { fill_style: 'soft_bands', color: '#445566' },
+    } };
     const before = getBarPaintEditorState(context, root, null, registry);
-    expect(before.presetOptions).toEqual([{ value: 'night', label: 'night' }]);
-    expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: 'night' })).toBe(true);
-    expect(editor._draftConfig.bar.paint).toEqual({ opacity: 35, color: '#abcdef', future: true, preset: 'night' });
+    expect(before.presetOptions).toEqual([{ value: 'night', label: 'night' }, { value: 'soft', label: 'soft' }]);
+    const confirm = vi.fn(() => true);
+    expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: 'night' }, { confirm })).toBe(true);
+    expect(confirm).toHaveBeenCalledWith('night');
+    expect(editor._draftConfig.bar.paint).toEqual({ preset: 'night' });
     expect(getBarPaintEditorState(context, root, null, registry).paint).toMatchObject({
-      fill_style: 'solid', color: '#abcdef', opacity: 35,
+      fill_style: 'solid', color: '#112233', opacity: 42,
     });
+    handleBarAppearanceField(context, { field: 'bar-fill-style', value: 'gradient' });
+    const configBeforeSamePreset = structuredClone(editor._draftConfig);
+    const eventCountBeforeSamePreset = events.length;
+    confirm.mockClear();
+    expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: 'night' }, { confirm })).toBe(true);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(events).toHaveLength(eventCountBeforeSamePreset);
+    expect(editor._draftConfig).toEqual(configBeforeSamePreset);
+    confirm.mockReturnValue(false);
+    expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: 'soft' }, { confirm })).toBe(false);
+    expect(editor._draftConfig.bar.paint).toEqual({ preset: 'night', fill_style: 'gradient' });
+    confirm.mockReturnValue(true);
+    expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: 'soft' }, { confirm })).toBe(true);
+    expect(editor._draftConfig.bar.paint).toEqual({ preset: 'soft' });
+
     handleBarAppearanceField(context, { field: 'bar-opacity', value: 0 });
     expect(editor._draftConfig.bar.paint.opacity).toBe(0);
-    clearBarPaintPropertyOverride(context, root, 'opacity');
-    expect(editor._draftConfig.bar.paint).toEqual({ color: '#abcdef', future: true, preset: 'night' });
-    expect(getBarPaintEditorState(context, root, null, registry).paint.opacity).toBe(42);
     expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: '' })).toBe(true);
-    expect(editor._draftConfig.bar.paint).toEqual({ color: '#abcdef', future: true });
+    expect(editor._draftConfig.bar.paint).toEqual({ opacity: 0 });
   });
 
   it('clears only the preset reference and retains local palette state', () => {
