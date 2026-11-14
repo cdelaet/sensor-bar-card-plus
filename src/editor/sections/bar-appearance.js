@@ -8,6 +8,7 @@ import { renderDirectionControl, setDirectionValue } from '../shared/direction-c
 import { createPaintBindings } from '../shared/paint-bindings.js';
 import { createBarPaintBindings, usesGroupedBarPaint, readBarPaintProperty, ownsBarPaintProperty, clearBarPaintProperties } from '../shared/bar-paint-bindings.js';
 import { renderPaintEditor, syncPaintEditor } from '../shared/paint-editor.js';
+import { getPaintPreviewScale } from '../shared/paint-swatch.js';
 import { getResolvedScale } from '../../config/resolve.js';
 import { resolveScopedPaintPreset } from '../../view-model/paint-preset-resolver.js';
 
@@ -26,28 +27,6 @@ export function getFillStyleValue(context, scope) {
   if (fillStyle) return fillStyle;
   const colorMode = context.read(scope, ['bar', 'color_mode']) ?? context.read(scope, ['color_mode']);
   return getFillStyleFromColorMode(colorMode);
-}
-
-function getPaintPreviewScale(paint, scale) {
-  if (!['bands', 'soft_bands', 'band_gradient'].includes(paint.fill_style) || paint.solid_fill) return scale;
-  const segments = Array.isArray(paint.segments) ? paint.segments.filter(segment => !segment?.invalidBoundary) : [];
-  const fixedBoundaries = segments.flatMap(segment => [segment?.from?.fixed, segment?.to?.fixed])
-    .filter(Number.isFinite);
-  if (!fixedBoundaries.length) return scale;
-
-  const fixedStarts = [...new Set(segments.map(segment => segment?.from?.fixed).filter(Number.isFinite))]
-    .sort((left, right) => left - right);
-  const minValue = Math.min(...fixedBoundaries);
-  let maxValue = Math.max(...fixedBoundaries);
-  const lastStart = fixedStarts.at(-1);
-  const lastSegment = segments.filter(segment => segment?.from?.fixed === lastStart).at(-1);
-  if (lastSegment && lastSegment.to == null && Number.isFinite(lastStart)) {
-    const previousStart = fixedStarts.at(-2);
-    const scaleRange = Math.abs(scale.maxValue - scale.minValue);
-    const step = Number.isFinite(previousStart) ? lastStart - previousStart : scaleRange || 1;
-    maxValue = Math.max(maxValue, lastStart + (step || scaleRange || 1));
-  }
-  return { ...scale, minValue, maxValue };
 }
 
 export function getEffectiveFillStyleValue(context, scope) {

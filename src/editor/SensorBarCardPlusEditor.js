@@ -37,7 +37,7 @@ import {
 
 import { createBarPaintBindings, usesGroupedBarPaint, prepareBarPaintSegments } from './shared/bar-paint-bindings.js';
 import { renderPaintEditor, syncPaintEditor, describePaint } from './shared/paint-editor.js';
-import { compilePaint } from '../view-model/paint-compiler.js';
+import { renderPaintSwatch, syncPaintSwatch } from './shared/paint-swatch.js';
 import { SegmentsSection } from './sections/segments.js';
 import { GradientStopsSection } from './sections/gradient-stops.js';
 
@@ -91,10 +91,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    this._segmentsSection = new SegmentsSection(this._createSectionContext(), this._paletteUi(), {
+    this._segmentsSection = new SegmentsSection(this._createSectionContext(), this._paletteUi({ paint: true }), {
       write: (scope, rows, options) => this._setScopedSegments(scope, rows, options),
     });
-    this._gradientStopsSection = new GradientStopsSection(this._createSectionContext(), this._paletteUi(), {
+    this._gradientStopsSection = new GradientStopsSection(this._createSectionContext(), this._paletteUi({ paint: true }), {
       write: (scope, rows, options) => this._setScopedGradientStops(scope, rows, options),
     });
     this._needleSection = new NeedleSection(this._createSectionContext());
@@ -1809,12 +1809,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return { segments: this._segmentsSection._getScopedSegmentsValue(scope), gradient_stops: this._gradientStopsSection._getScopedGradientStopsValue(scope) };
   }
 
-  _paletteUi() {
+  _paletteUi({ paint = false } = {}) {
+    const selector = scope => `#${scope?.type === 'entity' ? `entity-${scope.index}` : 'card'}-paint-editor`;
     return {
-      root: () => this.shadowRoot,
+      root: scope => paint ? this.shadowRoot?.querySelector(selector(scope)) : this.shadowRoot,
       isRendering: () => this._isRendering,
       render: () => this._render(),
-      focus: selector => this._queuePostRenderFocus(selector),
+      focus: (control, scope) => this._queuePostRenderFocus(paint ? `${selector(scope)} ${control}` : control),
     };
   }
 
@@ -3628,24 +3629,16 @@ ${this._renderFormattingSection({ type: 'card' })}
     return entries[0]?.[0] ?? null;
   }
 
-  _getPaintPresetPreview(rawPaint, scale) {
-    try {
-      const paint = normalizeBarConfig({ bar: { paint: this._isObject(rawPaint) ? rawPaint : {} } }, null, { isCardScope: true }).paint;
-      return compilePaint(paint, scale).gradient ?? 'none';
-    } catch { return 'none'; }
-  }
-
   _renderPaintPresetLibrary() {
     const entries = this._getPaintPresetEntries();
     const selectedName = this._getSelectedPaintPresetName();
     const scale = { minValue: 0, maxValue: 100, scaleDirection: 'normal' };
     const rows = entries.map(([name, rawPaint]) => {
       const paint = this._isObject(rawPaint) ? rawPaint : {};
-      const preview = this._getPaintPresetPreview(paint, scale);
-      const opacity = Number.isFinite(Number(paint.opacity)) ? Math.max(0, Math.min(100, Number(paint.opacity))) : 100;
+      const normalized = normalizeBarConfig({ bar: { paint } }, null, { isCardScope: true }).paint;
       return `<button type="button" class="paint-preset-choice${name === selectedName ? ' is-selected' : ''}"
         data-action="select-paint-preset" data-preset-name="${this._escapeAttribute(name)}" role="option" aria-selected="${name === selectedName}">
-        <span class="paint-preset-swatch" aria-hidden="true" style="background-color:var(--card-background-color,#fff);background-image:${this._escapeAttribute(preview)};opacity:${opacity / 100}"></span>
+        ${renderPaintSwatch('paint-preset-swatch', normalized, scale)}
         <span class="paint-preset-choice-copy"><span class="paint-preset-choice-name">${this._escapeAttribute(name)}</span>
           <span class="paint-preset-choice-description">${this._escapeAttribute(describePaint(paint))}</span></span>
       </button>`;
@@ -3718,10 +3711,10 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (this._presetPaintSections) return this._presetPaintSections;
     const context = this._createPresetPaintContext();
     const ui = {
-      root: () => this.shadowRoot?.querySelector('#preset-paint-editor-body') ?? this.shadowRoot,
+      root: () => this.shadowRoot?.querySelector('#preset-paint-editor'),
       isRendering: () => this._isRendering,
       render: () => this._render(),
-      focus: selector => this._queuePostRenderFocus(selector),
+      focus: selector => this._queuePostRenderFocus(`#preset-paint-editor ${selector}`),
     };
     this._presetPaintSections = {
       segments: new SegmentsSection(context, ui, {
@@ -3752,10 +3745,9 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (choice) {
       const paint = this._getPaintPresetEntries().find(([presetName]) => presetName === name)?.[1] ?? {};
       const safePaint = this._isObject(paint) ? paint : {};
-      const preview = this._getPaintPresetPreview(safePaint, { minValue: 0, maxValue: 100, scaleDirection: 'normal' });
-      const opacity = Number.isFinite(Number(safePaint.opacity)) ? Math.max(0, Math.min(100, Number(safePaint.opacity))) : 100;
+      const normalized = normalizeBarConfig({ bar: { paint: safePaint } }, null, { isCardScope: true }).paint;
       const swatch = choice.querySelector('.paint-preset-swatch');
-      if (swatch) { swatch.style.backgroundImage = preview; swatch.style.opacity = String(opacity / 100); }
+      syncPaintSwatch(swatch, normalized, { minValue: 0, maxValue: 100, scaleDirection: 'normal' });
       const description = choice.querySelector('.paint-preset-choice-description');
       if (description) description.textContent = describePaint(safePaint);
     }

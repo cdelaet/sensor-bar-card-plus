@@ -358,13 +358,13 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   _refreshGradientDraftUi(scope = { type: 'card' }) {
-    if (!this.shadowRoot) {
+    const root = this._getPaletteRoot(scope);
+    if (!root) {
       return;
     }
-    const getById = this.shadowRoot.getElementById?.bind(this.shadowRoot)
-      ?? ((id) => this.shadowRoot.querySelector?.(`#${id}`) ?? null);
+    const getById = id => this._getShadowElementById(id, scope);
     const { previewId, trackId, hintId, addSelector, draftInputId } = this._getGradientPreviewDomIds(scope);
-    const addButton = this.shadowRoot.querySelector(addSelector);
+    const addButton = root.querySelector(addSelector);
     if (addButton) {
       addButton.disabled = !this._canAddGradientStop(scope);
     }
@@ -573,7 +573,7 @@ export class GradientStopsSection extends PaletteSection {
     const entity = scope?.type === 'entity';
     const prefix = entity ? `entity-${scope.index}-` : '';
     const draft = this._getGradientStopsDraftState(scope);
-    const position = this._getShadowElementById(`${prefix}gradient-draft-pos`);
+    const position = this._getShadowElementById(`${prefix}gradient-draft-pos`, scope);
     if (position) position.value = draft.pos;
     const kind = entity ? 'entity-gradient-draft-color' : 'gradient-draft-color';
     const container = position?.closest?.('.gradient-stop-draft');

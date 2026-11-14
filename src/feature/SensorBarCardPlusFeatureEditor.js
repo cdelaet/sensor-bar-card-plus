@@ -67,8 +67,12 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     customElements.whenDefined('ha-entity-attribute-picker').then(() => {
       if (this.isConnected && this.shadowRoot.querySelector('input[data-kind$="-attribute"]')) this._requestRender();
     });
-    this._segmentsSection = new SegmentsSection(context, ui, createFeaturePaletteArray(context, 'segments'));
-    this._gradientStopsSection = new GradientStopsSection(context, ui, createFeaturePaletteArray(context, 'gradient_stops'));
+    const paletteUi = { ...ui,
+      root: () => this.shadowRoot?.querySelector('#card-paint-editor'),
+      focus: selector => { this._pendingPaletteFocus = `#card-paint-editor ${selector}`; },
+    };
+    this._segmentsSection = new SegmentsSection(context, paletteUi, createFeaturePaletteArray(context, 'segments'));
+    this._gradientStopsSection = new GradientStopsSection(context, paletteUi, createFeaturePaletteArray(context, 'gradient_stops'));
     for (const type of ['click', 'keydown']) this.shadowRoot.addEventListener(type, event => {
       if (type === 'click') {
         const target = event.target?.closest?.('[data-action]') ?? event.target;
@@ -503,9 +507,10 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     }, { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts, registry: this._paintPresetRegistry });
     const segmentsRebuilt = this._segmentsSection.syncRows(root);
     const gradientStopsRebuilt = this._gradientStopsSection.syncRows(root);
-    const segmentSummary = this.shadowRoot.querySelector('#card-group-segments-summary');
+    const paletteRoot = this._segmentsSection._getPaletteRoot(root);
+    const segmentSummary = paletteRoot?.querySelector('#card-group-segments-summary');
     if (segmentSummary) segmentSummary.textContent = this._segmentsSection._getSegmentsSummary(root);
-    const gradientSummary = this.shadowRoot.querySelector('#card-group-gradient-stops-summary');
+    const gradientSummary = paletteRoot?.querySelector('#card-group-gradient-stops-summary');
     if (gradientSummary) gradientSummary.textContent = this._gradientStopsSection._getGradientStopsSummary(root);
     const color = paintState.paint.color;
     const values = {
@@ -555,7 +560,8 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       }
     }
     for (const [field, value] of Object.entries(values)) {
-      const control = this.shadowRoot.querySelector(`[data-field="${field}"]`);
+      const controlRoot = ['bar-fill-style', 'bar-opacity', 'bar-color', 'bar-color-text-fallback'].includes(field) ? paletteRoot : this.shadowRoot;
+      const control = controlRoot?.querySelector(`[data-field="${field}"]`);
       if (control && /^(peak|floor)-window$/.test(field) && control.options
         && ![...control.options].some(option => option.value === String(value))) control.innerHTML = renderWindowOptions(value);
       if (control && (control !== this.shadowRoot.activeElement || this._configReplaced)) control.value = String(value);
@@ -570,7 +576,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       const segment = section === this._segmentsSection;
       const rows = segment ? section._getScopedSegmentsValue(root) : section._getScopedGradientStopsValue(root);
       for (const field of segment ? ['from', 'to', 'color', 'color-text-fallback'] : ['pos', 'color']) {
-        for (const control of this.shadowRoot.querySelectorAll(`input[data-kind="${segment ? 'segment' : 'gradient'}-${field}"]`)) {
+        for (const control of paletteRoot?.querySelectorAll(`input[data-kind="${segment ? 'segment' : 'gradient'}-${field}"]`) ?? []) {
           const index = Number(control.dataset.index), row = rows[index];
           if (!row) continue;
           const value = segment && !field.startsWith('color') ? section._getSegmentBoundaryText(root, index, field, row?.[field])
@@ -581,7 +587,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       if (segment) section._refreshSegmentUi(root);
       // Refreshing gradient hints in the lightweight unit DOM intentionally uses
       // structural render in standalone; avoid an endless host render loop here.
-      else if (this.shadowRoot.querySelector('#gradient-draft-pos')?.closest) section._refreshGradientDraftUi(root);
+      else if (paletteRoot?.querySelector('#gradient-draft-pos')?.closest) section._refreshGradientDraftUi(root);
     }
     for (const direction of ['above', 'below']) {
       const control = this.shadowRoot.querySelector(`#baseline-${direction}-color-enabled`);
@@ -594,7 +600,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       const control = this.shadowRoot.querySelector(`#${id}`);
       if (control) control.checked = checked;
     }
-    const solid = this.shadowRoot.querySelector('#bar-solid-fill');
+    const solid = paletteRoot?.querySelector('#bar-solid-fill');
     if (solid) solid.checked = !!paintState.paint.solid_fill;
     const animated = this.shadowRoot.querySelector('#bar-animated');
     if (animated) animated.checked = getBarAnimatedValue(context, root);

@@ -728,7 +728,7 @@ export class SegmentsSection extends PaletteSection {
 
   _refreshSegmentPreview(scope = { type: 'card' }) {
     const { trackId } = this._getSegmentPreviewDomIds(scope);
-    const track = this._getShadowElementById(trackId);
+    const track = this._getShadowElementById(trackId, scope);
     if (!track) {
       return;
     }
@@ -753,11 +753,12 @@ export class SegmentsSection extends PaletteSection {
 
   _refreshSegmentUi(scope = { type: 'card' }) {
     this._refreshSegmentPreview(scope);
-    if (!this.shadowRoot) {
+    const root = this._getPaletteRoot(scope);
+    if (!root) {
       return;
     }
     const { hintPrefix, draftHintId, addSelector } = this._getSegmentDomIds(scope);
-    const addButton = this.shadowRoot.querySelector(addSelector);
+    const addButton = root.querySelector(addSelector);
     const draftValidation = this._getSegmentDraftValidationState(scope);
     if (addButton) {
       addButton.disabled = !draftValidation.segment;
@@ -765,14 +766,14 @@ export class SegmentsSection extends PaletteSection {
     const rows = this._getSegmentsUiRows(scope) ?? this._getScopedSegmentsValue(scope);
     const validationMessages = this._getSegmentRowValidationMessages(scope);
     rows.forEach((_, index) => {
-      const hint = this._getShadowElementById(`${hintPrefix}${index}`);
+      const hint = this._getShadowElementById(`${hintPrefix}${index}`, scope);
       const message = validationMessages[index] ?? '';
       if (hint) {
         hint.textContent = message;
         hint.setAttribute?.('style', message ? '' : 'display:none');
       }
     });
-    const draftHint = this._getShadowElementById(draftHintId);
+    const draftHint = this._getShadowElementById(draftHintId, scope);
     if (draftHint) {
       const message = draftValidation.message;
       draftHint.textContent = message;
@@ -914,11 +915,11 @@ export class SegmentsSection extends PaletteSection {
     const prefix = entity ? `entity-${scope.index}-` : '';
     const draft = this._getSegmentDraftState(scope);
     for (const field of ['from', 'to']) {
-      const control = this._getShadowElementById(`${prefix}segment-draft-${field}`);
+      const control = this._getShadowElementById(`${prefix}segment-draft-${field}`, scope);
       if (control) control.value = draft[field];
     }
     const kind = entity ? 'entity-segment-draft-color' : 'segment-draft-color';
-    const container = this._getShadowElementById(`${prefix}segment-draft-from`)?.closest?.('.segment-draft');
+    const container = this._getShadowElementById(`${prefix}segment-draft-from`, scope)?.closest?.('.segment-draft');
     for (const control of container?.querySelectorAll?.(`input[data-kind="${kind}"], input[data-kind="${kind}-text-fallback"]`) ?? []) {
       control.value = control.type === 'color' ? getColorPickerValue(draft.color, '#4a9eff') : draft.color;
     }

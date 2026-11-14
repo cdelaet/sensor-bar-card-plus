@@ -71,6 +71,20 @@ describe('shared Paint Editor', () => {
     expect(root.querySelector()).toBe(editor);
   });
 
+  it.each([0, 40, 100])('renders and synchronizes 50%% sampled paint at opacity %s', opacity => {
+    const paint = { fill_style: 'gradient', solid_fill: true, opacity,
+      gradient_stops: [{ pos: 0, color: '#000000' }, { pos: 100, color: '#ffffff' }] };
+    const { bindings } = bindingFor(paint, []);
+    const html = renderPaintEditor({ id: 'paint', bindings });
+    expect(html).toContain('rgb(128,128,128)');
+    expect(html).toContain(`opacity:${opacity / 100};`);
+    const swatch = { style: {} };
+    const editor = { querySelector: selector => selector.includes('swatch') ? swatch : null };
+    syncPaintEditor({ querySelector: () => editor }, 'paint', { paint });
+    expect(swatch.style.backgroundImage).toContain('rgb(128,128,128)');
+    expect(swatch.style.opacity).toBe(String(opacity / 100));
+  });
+
   it('preserves a pending numeric opacity draft during unrelated Paint synchronization', () => {
     const opacity = { id: 'bar-opacity', value: '' };
     const editor = { querySelector: selector => selector.includes('opacity') ? opacity : null };

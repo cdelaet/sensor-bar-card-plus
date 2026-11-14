@@ -1264,23 +1264,32 @@ test('Card row Paint inherits without promotion, promotes on edit and clears onl
   await expect(paint).toHaveAttribute('open');
 });
 
-for (const host of ['Card', 'Feature']) test(`${host} swatch follows dynamic Scale bounds without rebuilding controls`, async ({ page }) => {
+for (const host of ['Card', 'Feature']) for (const solid_fill of [false, true]) test(`${host} ${solid_fill ? 'sampled swatch follows dynamic Scale' : 'swatch keeps the full authored palette through dynamic Scale'} without rebuilding controls`, async ({ page }) => {
   const editor = await mount(page, host, 'src');
-  await editor.evaluate(async el => {
+  await editor.evaluate(async (el, solid_fill) => {
     const config = structuredClone(el._draftConfig ?? el._config);
     config.scale = { max: { entity: 'sensor.maximum' } };
-    config.bar.segments = [{ from: 0, to: 50, color: '#123456' }, { from: 50, to: 100, color: '#abcdef' }];
+    config.bar.solid_fill = solid_fill;
+    config.bar.segments = [{ from: 0, to: 75, color: '#123456' }, { from: 75, to: 200, color: '#abcdef' }];
     el.setConfig(config);
     el.hass = { states: { 'sensor.maximum': { state: '100', attributes: {} } } };
     await el.updateComplete;
-  });
+  }, solid_fill);
   const swatch = editor.locator('#card-paint-editor .paint-editor-swatch');
   const initial = await swatch.evaluate(node => { window.__swatchNode = node; return node.style.backgroundImage; });
   await editor.evaluate(async el => {
     el.hass = { states: { 'sensor.maximum': { state: '200', attributes: {} } } };
     await el.updateComplete;
   });
-  expect(await swatch.evaluate(node => node.style.backgroundImage)).not.toBe(initial);
+  const updated = await swatch.evaluate(node => node.style.backgroundImage);
+  if (solid_fill) {
+    expect(initial).toContain('rgb(18, 52, 86)');
+    expect(updated).toContain('rgb(171, 205, 239)');
+    expect(updated).not.toBe(initial);
+  } else {
+    expect(updated).toBe(initial);
+    expect(updated).toContain('37.5%');
+  }
   expect(await swatch.evaluate(node => node === window.__swatchNode)).toBe(true);
   expect(await page.evaluate(() => window.__paintEvents)).toEqual([]);
 });

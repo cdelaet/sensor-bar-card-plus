@@ -19,6 +19,8 @@ for (const [style, group] of [['bands', 'segments'], ['gradient', 'gradient-stop
     const editor = await mount(page, style);
     await editor.locator('#card-paint-editor > summary').click();
     await editor.locator(`#card-group-${group}`).click();
+    await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
+    await page.mouse.move(0, 0);
     await expect(editor.locator(`.card-subgroup[data-group="${group}"]`)).toHaveScreenshot(`palette-${group}-root.png`);
     const draft = editor.locator(style === 'bands' ? '#segment-draft-from' : '#gradient-draft-pos');
     await draft.fill(style === 'bands' ? '50%' : '80');

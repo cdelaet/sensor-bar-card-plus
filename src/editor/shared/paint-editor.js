@@ -1,9 +1,7 @@
 import { escapeAttribute, getColorPickerValue, renderColorInput, renderScalePercentageInput } from './editor-controls.js';
-import { compilePaint } from '../../view-model/paint-compiler.js';
-import { setStyleIfChanged } from '../../utils/dom.js';
+import { renderPaintSwatch, syncPaintSwatch } from './paint-swatch.js';
 
 const styleNames = { solid: 'Solid', gradient: 'Gradient', bands: 'Bands', soft_bands: 'Soft bands', band_gradient: 'Band gradient' };
-const swatchBackdrop = 'var(--card-background-color, #fff)';
 
 export function describePaint(paint, inherited = false) {
   const style = paint.fill_style ?? 'bands';
@@ -13,12 +11,6 @@ export function describePaint(paint, inherited = false) {
   else parts.push(paint.segments ? `${paint.segments.length} ${paint.segments.length === 1 ? 'segment' : 'segments'}` : 'Default bands');
   if (paint.solid_fill) parts.push('Sampled color');
   return `${inherited ? 'Inherited · ' : ''}${parts.join(' · ')}`;
-}
-
-function swatchPaint(paint, scale) {
-  // Invalid/incomplete authored palettes must not prevent opening the editor.
-  try { return compilePaint(paint, { ...scale, samplePercent: 50 }).gradient ?? 'none'; }
-  catch { return 'none'; }
 }
 
 function fieldAttributes({ id, field, kind, index }) {
@@ -85,7 +77,7 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
       ? 'No dashboard paint presets available.' : '';
   return `<details id="${id}" class="paint-editor"${open ? ' open' : ''}>
     <summary class="paint-editor-summary">
-      <span class="paint-editor-swatch" aria-hidden="true" style="background-color:${swatchBackdrop};background-image:${escapeAttribute(swatchPaint(paint, previewScale))};"></span>
+      ${renderPaintSwatch('paint-editor-swatch', paint, previewScale)}
       <span class="paint-editor-heading">Paint</span>
       <span class="paint-editor-description">${escapeAttribute(description)}</span>
     </summary>
@@ -126,8 +118,7 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
       : describePaint(paint, inherited);
   if (description && description.textContent !== text) description.textContent = text;
   const swatch = editor.querySelector?.('.paint-editor-swatch');
-  setStyleIfChanged(swatch, 'backgroundColor', swatchBackdrop);
-  setStyleIfChanged(swatch, 'backgroundImage', swatchPaint(paint, previewScale));
+  syncPaintSwatch(swatch, paint, previewScale);
   const modeControl = editor.querySelector?.('[data-paint-mode="true"]');
   if (modeControl?.options) {
     const optionHtml = `<option value="inherit">Inherited paint</option><option value="manual">Manual paint</option>${state.presetOptions?.length

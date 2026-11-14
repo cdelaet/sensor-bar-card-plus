@@ -47,13 +47,13 @@ export class PaletteSection {
     this.array = array;
     this._reconcilingRows = false;
   }
-  get shadowRoot() { return this.ui.root(); }
+  _getPaletteRoot(scope) { return this.ui.root(scope); }
   fillStyle(scope) { return getEffectiveFillStyleValue(this.context, scope); }
-  _getShadowElementById(id) { return this.shadowRoot?.getElementById?.(id) ?? this.shadowRoot?.querySelector(`#${id}`); }
+  _getShadowElementById(id, scope) { return this._getPaletteRoot(scope)?.querySelector(`#${id}`); }
   _renderListRows(items, renderItem) { return items.map(renderItem).join(''); }
 
   _syncRows(scope, { inputSelector, rowSelector, draftSelector, memberSelector, generation, rowCount }) {
-    const root = this.shadowRoot;
+    const root = this._getPaletteRoot(scope);
     if (!root?.ownerDocument) return false;
     const liveInputs = [...root.querySelectorAll(inputSelector)];
     const liveRows = liveInputs.map(input => input.closest(rowSelector)).filter(Boolean);
@@ -100,7 +100,7 @@ export class PaletteSection {
     if (liveDraft?.dataset.paletteGeneration === String(generation)) {
       for (const control of liveDraft.querySelectorAll('input, button')) control.dataset.paletteGeneration = String(generation);
     }
-    if (!generationChanged && liveMembers.length === members.length
+    if (!generationChanged && liveInputs.length === desired.length && liveMembers.length === members.length
       && liveMembers.every(item => item.dataset.paletteGeneration === String(generation))) return false;
 
     this._reconcilingRows = true;
@@ -127,6 +127,7 @@ export class PaletteSection {
     const prefix = segment ? 'segment' : 'gradient';
     const isEntity = (mode === 'click' ? action : kind)?.includes('entity-');
     const scope = isEntity ? { type: 'entity', index: Number(target.dataset.index) } : { type: 'card' };
+    if (target?.closest && target.closest('.paint-editor') !== this._getPaletteRoot(scope)) return false;
     const local = kind?.replace(/^entity-/, '');
     const index = Number(isEntity ? target.dataset[segment ? 'segmentIndex' : 'stopIndex'] : target?.dataset?.index);
     const rows = () => segment ? this._getScopedSegmentsValue(scope) : this._getScopedGradientStopsValue(scope);
@@ -146,9 +147,9 @@ export class PaletteSection {
         if (segment && action.endsWith('-from-undefined')) {
           if (!this._isCurrentSegmentGap(scope, target)) return true;
           this._prepareSegmentDraftFromUndefined(scope, target.dataset.from, target.dataset.to, Number(target.dataset.insertIndex));
-          this.ui.focus(`#${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-from`);
+          this.ui.focus(`#${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-from`, scope);
         } else {
-          this.ui.focus(`#${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-${segment ? 'from' : 'pos'}`);
+          this.ui.focus(`#${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-${segment ? 'from' : 'pos'}`, scope);
           commit();
         }
       } else {
