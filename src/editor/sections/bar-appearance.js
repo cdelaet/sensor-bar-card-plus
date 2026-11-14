@@ -149,7 +149,7 @@ export function handleBarAppearanceField(context, { field, kind, index, value },
   }
   if (options.animation && field === 'bar-animated') { setBarAnimated(context, { type: 'card' }, value); return true; }
   const rootSetters = { 'bar-fill-style': setBarFillStyle, 'bar-color': setBarColor, 'bar-solid-fill': setBarSolidFill, 'bar-opacity': setBarOpacity,
-    'bar-paint-mode': (ctx, targetScope, nextValue) => setBarPaintMode(ctx, targetScope, nextValue) };
+    'bar-paint-preset': setBarPaintPreset };
   if (Object.prototype.hasOwnProperty.call(rootSetters, field)) {
     rootSetters[field](context, { type: 'card' }, value, options);
     return true;
@@ -160,7 +160,7 @@ export function handleBarAppearanceField(context, { field, kind, index, value },
     return true;
   }
   const rowSetters = { 'entity-bar-fill-style': setBarFillStyle, 'entity-bar-color': setBarColor, 'entity-bar-solid-fill': setBarSolidFill, 'entity-bar-opacity': setBarOpacity,
-    'entity-bar-paint-mode': (ctx, targetScope, nextValue) => setBarPaintMode(ctx, targetScope, nextValue) };
+    'entity-bar-paint-preset': setBarPaintPreset };
   if (Object.prototype.hasOwnProperty.call(rowSetters, kind)) {
     rowSetters[kind](context, scope, value);
     return true;
@@ -198,17 +198,15 @@ export function getBarPaintEditorState(context, scope, paletteValues, registry =
   const ownPreset = bindings.read('preset');
   const inheritedPreset = inheritedConfig?.bar?.paint?.preset;
   const presetReference = ownPreset !== undefined ? ownPreset : inheritedPreset;
-  const mode = ownPreset !== undefined ? `preset:${String(ownPreset ?? '')}`
-    : properties.some(property => overrides[property]) ? 'manual' : 'inherit';
   const presetOptions = Object.keys(registry?.presets ?? {}).filter(name => name.trim())
-    .map(name => ({ value: `preset:${name}`, label: name }));
-  if (ownPreset !== undefined && !presetOptions.some(option => option.value === `preset:${String(ownPreset)}`)) {
-    presetOptions.push({ value: `preset:${String(ownPreset ?? '')}`, label: `${String(ownPreset || '(empty name)')} (unavailable)` });
+    .map(name => ({ value: name, label: name }));
+  if (presetReference !== undefined && !presetOptions.some(option => option.value === String(presetReference))) {
+    presetOptions.push({ value: String(presetReference ?? ''), label: `${String(presetReference || '(empty name)')} (unavailable)` });
   }
   const owned = context.read(scope, ['bar', 'color_mode']) !== undefined || ownsBarPaintProperty(context, scope, 'preset')
     || properties.some(key => ownsBarPaintProperty(context, scope, key))
     || ['color_mode', 'color', 'segments', 'severity', 'gradient_stops'].some(key => Object.prototype.hasOwnProperty.call(local, key));
-  return { bindings, paint, inherited: scope?.type === 'entity' && !owned, mode, presetReference,
+  return { bindings, paint, inherited: scope?.type === 'entity' && !owned, presetReference,
     presetOptions, overrides, diagnostics: resolved.diagnostics, registryStatus: registry?.status ?? 'loading', previewScale,
     scale: { minValue: min, maxValue: max, scaleDirection: scale.direction } };
 }
@@ -226,19 +224,10 @@ export function clearBarPaintPropertyOverride(context, scope, property) {
     .clear(property, { preserveRawConfig: true, rerender: true });
 }
 
-function setBarPaintMode(context, scope, value) {
+function setBarPaintPreset(context, scope, value) {
   const binding = createBarPaintBindings(context, scope, { grouped: true });
-  if (value === 'inherit') {
-    context.clearPaintPaletteState?.(scope);
-    return context.mutate(scope, target => pruneEmptyObjectsInTarget(
-      clearBarPaintProperties(target, ['preset', 'color', 'fill_style', 'solid_fill', 'segments', 'gradient_stops', 'opacity']), ['bar']),
-    { preserveRawConfig: true, rerender: true });
-  }
-  if (value === 'manual') return binding.clear('preset', { preserveRawConfig: true, rerender: true });
-  if (typeof value === 'string' && value.startsWith('preset:')) {
-    return binding.set('preset', value.slice('preset:'.length), { preserveRawConfig: true, rerender: true });
-  }
-  return false;
+  return value === '' ? binding.clear('preset', { preserveRawConfig: true, rerender: true })
+    : binding.set('preset', value, { preserveRawConfig: true, rerender: true });
 }
 
 export function renderBarAppearanceSection(context, scope, renderChildren = () => '', options = {}) {
@@ -251,7 +240,7 @@ export function renderBarAppearanceSection(context, scope, renderChildren = () =
   const paintEditor = renderPaintEditor({
     ...getBarPaintEditorState(context, scope, options.paletteValues, options.paintPresetRegistry),
     id: entity ? `entity-${index}-paint-editor` : 'card-paint-editor', root: options.root,
-    fields: { mode: field('paint-mode'), fill_style: field('fill-style'), color: field('color'), solid_fill: field('solid-fill'), opacity: field('opacity'), index },
+    fields: { preset: field('paint-preset'), fill_style: field('fill-style'), color: field('color'), solid_fill: field('solid-fill'), opacity: field('opacity'), index },
     cssText: options.cssText,
     ...(palette && typeof palette === 'object' ? { paletteFields: palette } : { paletteContent: palette }),
     paintChildren: palette,

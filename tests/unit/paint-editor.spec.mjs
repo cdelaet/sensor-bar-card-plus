@@ -29,12 +29,15 @@ describe('shared Paint Editor', () => {
     const paint = { ...palettes, fill_style };
     const { bindings } = bindingFor(paint, []);
     const html = renderPaintEditor({ id: 'paint', bindings, paint });
-    expect(html.match(/<option /g)).toHaveLength(7);
+    expect(html.match(/<option /g)).toHaveLength(6);
     for (const option of ['solid', 'gradient', 'bands', 'soft_bands', 'band_gradient']) {
       expect(html).toContain(`data-paint-property="fill_style"`);
       expect(html).toContain(`<option value="${option}"`);
     }
     expect(html).toContain(`<option value="${fill_style}" selected>`);
+    expect(html).toContain('Paint preset');
+    expect(html).toContain('<option value="">None</option>');
+    expect(html).toMatch(/class="paint-preset-row" hidden/);
     expect(html).toContain(`background-image:${compilePaint(paint).gradient}`);
     expect(html).toContain(describePaint(paint));
     expect(html).toMatch(/Opacity/);
@@ -49,6 +52,18 @@ describe('shared Paint Editor', () => {
     expect(html).toContain('class="paint-editor" open');
     expect(html).toContain('id="destination-color"');
     expect(html).toContain('data-kind="destination-color" data-index="2"');
+  });
+
+  it('shows named presets and keeps unresolved references visible', () => {
+    const { bindings } = bindingFor({}, []);
+    const available = renderPaintEditor({ id: 'paint', bindings, presetOptions: [{ value: 'night', label: 'night' }] });
+    expect(available).toContain('class="paint-preset-row"');
+    expect(available).toContain('<option value="night">night</option>');
+    expect(available).not.toContain('Inherited paint');
+    expect(available).not.toContain('Manual paint');
+
+    const missing = renderPaintEditor({ id: 'paint', bindings, presetReference: 'missing' });
+    expect(missing).toContain('<option value="missing" selected>missing (unavailable)</option>');
   });
 
   it('describes inherited paint and explicit sampling, and escapes authored colors', () => {

@@ -169,44 +169,44 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
   });
 
   it('selects a preset by reference, applies local overrides, and clears them individually', () => {
-    const { editor } = setup(source, { bar: { paint: { opacity: 35, future: true } } });
+    const { editor } = setup(source, { bar: { paint: { opacity: 35, color: '#abcdef', future: true } } });
     const context = editor._createSectionContext();
     const registry = { status: 'ready', presets: { night: { fill_style: 'solid', color: '#112233', opacity: 42 } } };
     const before = getBarPaintEditorState(context, root, null, registry);
-    expect(before.presetOptions).toEqual([{ value: 'preset:night', label: 'night' }]);
-    expect(handleBarAppearanceField(context, { field: 'bar-paint-mode', value: 'preset:night' })).toBe(true);
-    expect(editor._draftConfig.bar.paint).toEqual({ opacity: 35, future: true, preset: 'night' });
+    expect(before.presetOptions).toEqual([{ value: 'night', label: 'night' }]);
+    expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: 'night' })).toBe(true);
+    expect(editor._draftConfig.bar.paint).toEqual({ opacity: 35, color: '#abcdef', future: true, preset: 'night' });
     expect(getBarPaintEditorState(context, root, null, registry).paint).toMatchObject({
-      fill_style: 'solid', color: '#112233', opacity: 35,
+      fill_style: 'solid', color: '#abcdef', opacity: 35,
     });
     handleBarAppearanceField(context, { field: 'bar-opacity', value: 0 });
     expect(editor._draftConfig.bar.paint.opacity).toBe(0);
     clearBarPaintPropertyOverride(context, root, 'opacity');
-    expect(editor._draftConfig.bar.paint).toEqual({ future: true, preset: 'night' });
+    expect(editor._draftConfig.bar.paint).toEqual({ color: '#abcdef', future: true, preset: 'night' });
     expect(getBarPaintEditorState(context, root, null, registry).paint.opacity).toBe(42);
-    expect(handleBarAppearanceField(context, { field: 'bar-paint-mode', value: 'manual' })).toBe(true);
-    expect(editor._draftConfig.bar.paint).toEqual({ future: true });
+    expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: '' })).toBe(true);
+    expect(editor._draftConfig.bar.paint).toEqual({ color: '#abcdef', future: true });
   });
 
-  it('clears scoped palette session state atomically with the inherited paint mutation', () => {
+  it('clears only the preset reference and retains local palette state', () => {
     const { editor, events } = setup(source, { bar: { paint: {
-      fill_style: 'bands', segments: [{ from: '15%', to: '100%', color: '#123456' }],
+      preset: 'night', fill_style: 'bands', segments: [{ from: '15%', to: '100%', color: '#123456' }],
     } } });
     const context = editor._createSectionContext();
-    let clearedScope = null;
-    context.clearPaintPaletteState = scope => { clearedScope = scope; };
+    let cleared = false;
+    context.clearPaintPaletteState = () => { cleared = true; };
 
-    expect(handleBarAppearanceField(context, { field: 'bar-paint-mode', value: 'inherit' })).toBe(true);
-    expect(clearedScope).toEqual(root);
-    expect(editor._draftConfig.bar?.paint).toBeUndefined();
+    expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: '' })).toBe(true);
+    expect(cleared).toBe(false);
+    expect(editor._draftConfig.bar.paint).toEqual({ fill_style: 'bands', segments: [{ from: '15%', to: '100%', color: '#123456' }] });
     expect(events).toHaveLength(1);
   });
 
   it('reports missing presets and retains the reference while using inherited paint', () => {
     const { editor } = setup(source, { bar: { paint: { preset: 'missing', opacity: 0 }, color: 'red' } });
     const state = getBarPaintEditorState(editor._createSectionContext(), root, null, { status: 'ready', presets: {} });
-    expect(state.mode).toBe('preset:missing');
     expect(state.presetReference).toBe('missing');
+    expect(state.presetOptions).toContainEqual({ value: 'missing', label: 'missing (unavailable)' });
     expect(state.diagnostics).toContainEqual(expect.objectContaining({ code: 'paint_preset_missing', reference: 'missing' }));
     expect(state.paint).toMatchObject({ color: 'red', opacity: 0 });
   });

@@ -427,22 +427,21 @@ test('standalone: editing inherited Severity into entity grouped Segments keeps 
  expect((await d.saved(page)).severity).toEqual(severity);
 });
 
-for(const host of hosts)test(`${host}: Paint source selection and property clearing preserve unrelated configuration`,async({page})=>{
- const config=d.seed(host);config.bar.paint={opacity:35,future:{keep:true}};config.bar.direction='reverse';
- if(host==='standalone')config.entities[0].bar.paint={opacity:25,local:{keep:true}};
+for(const host of hosts)test(`${host}: Paint preset selection and clearing preserve local properties`,async({page})=>{
+ const config=d.seed(host);config.bar.paint={preset:'night',opacity:35,future:{keep:true}};config.bar.direction='reverse';
+ if(host==='standalone')config.entities[0].bar.paint={preset:'night',opacity:25,local:{keep:true}};
  const editor=await d.mount(page,host,config);await d.openSection(editor,{section:'Bar Appearance'});
  const clear=editor.locator('#card-paint-editor button[data-action="clear-paint-property"][data-property="opacity"]');
  await d.commit(page,editor,()=>clear.click());
- expect((await d.saved(page)).bar.paint).toEqual({future:{keep:true}});
+ expect((await d.saved(page)).bar.paint).toEqual({preset:'night',future:{keep:true}});
  expect((await d.saved(page)).bar.direction).toBe('reverse');
- const mode=editor.locator('#bar-paint-mode');
- await d.commit(page,editor,()=>mode.selectOption('inherit'));
+ const preset=editor.locator('#bar-paint-preset');
+ await d.commit(page,editor,()=>preset.selectOption(''));
  expect((await d.saved(page)).bar.paint).toEqual({future:{keep:true}});
- expect((await d.saved(page)).bar.fill_style).toBeUndefined();
  if(host==='standalone'){
   await d.openSection(editor,{section:'Bar Appearance',scope:'entity'});
-  await d.commit(page,editor,()=>editor.locator('#entity-0-bar-paint-mode').selectOption('inherit'));
-  expect((await d.saved(page)).entities[0].bar.paint).toEqual({local:{keep:true}});
+  await d.commit(page,editor,()=>editor.locator('#entity-0-bar-paint-preset').selectOption(''));
+  expect((await d.saved(page)).entities[0].bar.paint).toEqual({opacity:25,local:{keep:true}});
   expect((await d.saved(page)).bar.direction).toBe('reverse');
  }
 });

@@ -3653,7 +3653,7 @@ ${this._renderFormattingSection({ type: 'card' })}
       }]));
       paintEditor = `<div class="paint-preset-editor-heading">Editing <strong>${this._escapeAttribute(selectedName)}</strong></div>${renderPaintEditor({
         ...state, mode: 'manual', id: 'preset-paint-editor', root: this.shadowRoot, fields,
-        paletteFields, showMode: false, showPropertyMeta: false, registryStatus: 'ready', diagnostics: [],
+        paletteFields, showPropertyMeta: false, registryStatus: 'ready', diagnostics: [],
         bodyId: 'preset-paint-editor-body',
       })}`;
     }
@@ -4284,11 +4284,6 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (field === 'layout-height') return void this._setLayoutHeight(value);
     if (field === 'layout-label-width') return void this._setScopedLayoutLabelWidth({ type: 'card' }, value);
     if (handleScaleField(this._createSectionContext(), { field, value })) return;
-    if (field === 'bar-paint-mode' || kind === 'entity-bar-paint-mode') {
-      const scope = target.dataset?.index === undefined ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
-      this._segmentsSection.clearScopeState(scope);
-      this._gradientStopsSection.clearScopeState(scope);
-    }
     if (handleBarAppearanceField(this._createSectionContext(), { field, value })) return;
     if (this._needleSection.handleField({ field, kind, index: target.dataset?.index, value })) return;
     if (this._baselineSection.handleField({ field, kind, index: target.dataset?.index, value })) {

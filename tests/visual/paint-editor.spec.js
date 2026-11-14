@@ -513,8 +513,8 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
     const position = editor.locator('input[data-kind="gradient-pos"]').nth(1);
     await position.evaluate(node => { node.focus(); node.value = '45'; node.dispatchEvent(new Event('input', { bubbles: true })); });
     const oldControl = await position.elementHandle();
-    const mode = editor.locator('#bar-paint-mode');
-    await mode.evaluate(node => { node.value = 'manual'; node.dispatchEvent(new Event('change', { bubbles: true })); });
+    const preset = editor.locator('#bar-paint-preset');
+    await preset.selectOption('');
     const eventCount = await page.evaluate(() => window.__paintEvents.length);
     expect(await saved(editor)).not.toHaveProperty('bar.paint.gradient_stops');
     await editor.evaluate((el, node) => el._handleChange
@@ -856,23 +856,19 @@ for (const source of ['src', 'dist']) {
 }
 
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
-  test(`${host} clears palette drafts and cached rows when paint returns to inherited (${source})`, async ({ page }) => {
+  test(`${host} clears a preset reference without discarding local paint (${source})`, async ({ page }) => {
     const config = { bar: { paint: { fill_style: 'bands', color: '#123456', segments: [
       { from: '0%', to: '100%', color: '#abcdef' },
     ] } } };
     if (host === 'Feature') config.type = 'custom:sensor-bar-card-plus-feature';
-    const editor = await mountWithPaintPresets(page, host, source, {}, config);
+    const editor = await mountWithPaintPresets(page, host, source, { night: { fill_style: 'solid', color: '#abcdef' } }, config);
     await editor.locator('#card-paint-editor summary').click();
-    await editor.locator('#card-group-segments').click();
-    const start = editor.locator('input[data-kind="segment-from"]').first();
-    await start.fill('15%');
-    await start.press('Tab');
-    await expect.poll(async () => (await saved(editor)).bar.paint.segments?.[0]?.from).toBe('15%');
-    await editor.locator('[data-paint-mode="true"]').selectOption('inherit');
-    const configAfterClear = await saved(editor);
-    expect(configAfterClear.bar?.paint?.segments).toBeUndefined();
-    await expect(editor.locator('#card-group-segments-summary')).toHaveText('Default bands');
-    await expect(editor.locator('input[data-kind="segment-from"]')).toHaveCount(3);
+    const preset = editor.locator('#bar-paint-preset');
+    await preset.selectOption('night');
+    await preset.selectOption('');
+    expect((await saved(editor)).bar.paint).toEqual(config.bar.paint);
+    await expect(editor.locator('#bar-color')).toHaveValue('#123456');
+    await expect(editor.locator('#card-group-segments-summary')).toContainText('1 segment');
     expect(await page.evaluate(() => window.__paintEvents.length)).toBeGreaterThan(0);
   });
 }
@@ -1064,9 +1060,9 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
     }, { bar: { paint: { opacity: 35, future: true } } });
     const paint = editor.locator('#card-paint-editor');
     await paint.locator('summary').click();
-    const mode = paint.locator('[data-paint-mode="true"]');
-    await expect(mode.locator('option')).toContainText(['Inherited paint', 'Manual paint', 'night', 'soft']);
-    await mode.selectOption('preset:night');
+    const preset = paint.locator('[data-paint-preset="true"]');
+    await expect(preset.locator('option')).toContainText(['None', 'night', 'soft']);
+    await preset.selectOption('night');
     expect((await saved(editor)).bar.paint).toEqual({ opacity: 35, future: true, preset: 'night' });
     await expect(paint.locator('.paint-editor-description')).toContainText('Preset · night · Bands · 1 segment');
     await expect(paint.locator('[data-paint-source="opacity"]')).toHaveText('Override');
@@ -1079,7 +1075,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
     await opacity.fill('37.0');
     const eventCount = await page.evaluate(() => window.__paintEvents.length);
     await page.evaluate(() => window.__updatePaintRegistry({ night: { fill_style: 'solid', color: '#00aa88' }, soft: { fill_style: 'soft_bands', color: '#abcdef' }, added: { fill_style: 'gradient' } }));
-    await expect(mode.locator('option[value="preset:added"]')).toHaveCount(1);
+    await expect(preset.locator('option[value="added"]')).toHaveCount(1);
     await expect(opacity).toHaveValue('37.0');
     expect(await page.evaluate(() => window.__paintEvents.length)).toBe(eventCount);
     await opacity.fill('0'); await opacity.press('Tab');
@@ -1119,6 +1115,25 @@ for (const source of ['src', 'dist']) test(`Card entity inherits preset paint wh
   await child.locator('button[data-action="clear-paint-property"][data-property="opacity"]').click();
   await expect(opacity).toHaveValue('70');
   expect((await saved(editor)).entities[0].bar).toBeUndefined();
+});
+
+for (const source of ['src', 'dist']) test(`Card entity selects and clears a preset while keeping local paint (${source})`, async ({ page }) => {
+  const config = { bar: { paint: { color: '#123456' } }, entities: [
+    { entity: 'sensor.power', bar: { paint: { opacity: 35 } } },
+  ] };
+  const editor = await mountWithPaintPresets(page, 'Card', source, {
+    night: { fill_style: 'solid', color: '#abcdef' },
+  }, config);
+  await editor.locator('button[data-action="toggle-entity-overrides"][data-index="0"]').click();
+  const paint = editor.locator('#entity-0-paint-editor');
+  await paint.locator('summary').click();
+  const preset = editor.locator('#entity-0-bar-paint-preset');
+  await preset.selectOption('night');
+  expect((await saved(editor)).entities[0].bar.paint.preset).toBe('night');
+  await preset.selectOption('');
+  expect((await saved(editor)).entities[0].bar.paint).toEqual({ opacity: 35 });
+  await expect(editor.locator('#entity-0-bar-opacity')).toHaveValue('35');
+  await expect(editor.locator('#entity-0-bar-color')).toHaveValue('#123456');
 });
 
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {

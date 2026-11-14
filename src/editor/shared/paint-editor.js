@@ -27,15 +27,14 @@ function fieldRoutingAttributes({ field, kind, index }) {
  */
 export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {}, inherited = false,
   scale, previewScale = scale, fields = {}, root, paletteContent = '', paletteFields = null, cssText = false,
-  mode = 'inherit', presetReference, presetOptions = [], overrides = {}, diagnostics = [], registryStatus = 'unknown',
-  showMode = true, showPropertyMeta = true, bodyId = null }) {
+  presetReference, presetOptions = [], overrides = {}, diagnostics = [], registryStatus = 'unknown',
+  showPropertyMeta = true, bodyId = null }) {
   const controls = Object.fromEntries(['fill_style', 'solid_fill', 'color', 'opacity'].map(key => [key,
     fields[key] ?? { id: `${id}-${key}`, field: key },
   ]));
-  controls.mode = fields.mode ?? { id: `${id}-mode`, field: 'paint-mode' };
+  controls.preset = fields.preset ?? { id: `${id}-preset`, field: 'paint-preset' };
   const open = root?.querySelector(`#${id}`)?.open === true;
   const fillStyle = paint.fill_style ?? 'bands';
-  const selectedMode = mode;
   const referenceName = presetReference == null ? '' : String(presetReference);
   const source = property => overrides[property] ? 'Override' : presetReference != null ? 'Preset' : 'Inherited';
   const propertyHeader = (property, label) => showPropertyMeta
@@ -43,13 +42,11 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
       <button type="button" class="paint-clear-override" data-action="clear-paint-property" data-property="${property}"${fields.index !== undefined ? ` data-index="${fields.index}"` : ''} aria-label="Clear ${escapeAttribute(label)} override"${overrides[property] ? '' : ' hidden'}>Clear</button>`
     : '';
   const labelRow = (property, label, control) => `<div class="paint-property-row"><div class="paint-property-heading"><label for="${controls[property].id}">${label}</label>${propertyHeader(property, label)}</div>${control}</div>`;
-  const options = [
-    `<option value="inherit"${selectedMode === 'inherit' ? ' selected' : ''}>Inherited paint</option>`,
-    `<option value="manual"${selectedMode === 'manual' ? ' selected' : ''}>Manual paint</option>`,
-    ...(presetOptions.length ? [`<optgroup label="Dashboard presets">${presetOptions.map(option => `<option value="${escapeAttribute(option.value)}"${selectedMode === option.value ? ' selected' : ''}>${escapeAttribute(option.label)}</option>`).join('')}</optgroup>`] : []),
-    ...(selectedMode.startsWith('preset:') && !presetOptions.some(option => option.value === selectedMode)
-      ? [`<option value="${escapeAttribute(selectedMode)}" selected>${escapeAttribute(`${referenceName || '(empty name)'} (unavailable)`)}</option>`] : []),
-  ].join('');
+  const options = ['<option value="">None</option>',
+    ...presetOptions.map(option => `<option value="${escapeAttribute(option.value)}"${presetReference === option.value ? ' selected' : ''}>${escapeAttribute(option.label)}</option>`),
+    ...(presetReference != null && !presetOptions.some(option => option.value === presetReference)
+      ? [`<option value="${escapeAttribute(referenceName)}" selected>${escapeAttribute(`${referenceName || '(empty name)'} (unavailable)`)}</option>`] : [])].join('');
+  const showPreset = presetOptions.length > 0 || presetReference != null;
   const feedback = diagnostics.find(item => item.code?.startsWith('paint_preset') || item.code === 'paint_registry_unavailable');
   const feedbackText = feedback?.code === 'paint_preset_missing'
     ? `Preset “${feedback.reference}” was not found. Using inherited paint.`
@@ -60,10 +57,9 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
         : feedback?.code === 'paint_registry_unavailable'
           ? `Preset “${feedback.reference}” cannot be checked. Using inherited paint.`
           : '';
-  const description = selectedMode.startsWith('preset:')
-    ? `Preset · ${referenceName || '(empty name)'} · ${describePaint(paint)}`
-    : presetReference != null && inherited ? `Inherited · Preset · ${referenceName} · ${describePaint(paint)}`
-      : describePaint(paint, inherited);
+  const description = presetReference != null
+    ? `${inherited ? 'Inherited · ' : ''}Preset · ${referenceName || '(empty name)'} · ${describePaint(paint)}`
+    : describePaint(paint, inherited);
   const paintChildren = paletteFields && typeof paletteFields === 'object'
     ? ['segments', 'gradient_stops'].map(property => {
       const content = paletteFields[property];
@@ -82,10 +78,10 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
       <span class="paint-editor-description">${escapeAttribute(description)}</span>
     </summary>
     <div${bodyId ? ` id="${escapeAttribute(bodyId)}"` : ''} class="paint-editor-body">
-      ${showMode ? `<div class="paint-mode-row">
-        <label for="${controls.mode.id}">Paint source</label>
-        <select ${fieldAttributes(controls.mode)} data-paint-mode="true" value="${escapeAttribute(selectedMode)}">${options}</select>
-      </div>` : ''}
+      <div class="paint-preset-row"${showPreset ? '' : ' hidden'}>
+        <label for="${controls.preset.id}">Paint preset</label>
+        <select ${fieldAttributes(controls.preset)} data-paint-preset="true">${options}</select>
+      </div>
       <div class="paint-preset-feedback" role="status" aria-live="polite"${feedbackText ? '' : ' hidden'}>${escapeAttribute(feedbackText)}</div>
       <div class="paint-registry-status" role="status"${registryMessage ? '' : ' hidden'}>${escapeAttribute(registryMessage)}</div>
       <div class="paint-editor-grid">
@@ -111,26 +107,23 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
   const previewScale = state.previewScale ?? scale;
   const description = editor.querySelector?.('.paint-editor-description');
   const reference = state.presetReference == null ? '' : String(state.presetReference);
-  const mode = state.mode ?? 'inherit';
-  const text = mode.startsWith('preset:')
-    ? `Preset · ${reference || '(empty name)'} · ${describePaint(paint)}`
-    : state.presetReference != null && inherited ? `Inherited · Preset · ${reference} · ${describePaint(paint)}`
-      : describePaint(paint, inherited);
+  const text = state.presetReference != null
+    ? `${inherited ? 'Inherited · ' : ''}Preset · ${reference || '(empty name)'} · ${describePaint(paint)}`
+    : describePaint(paint, inherited);
   if (description && description.textContent !== text) description.textContent = text;
   const swatch = editor.querySelector?.('.paint-editor-swatch');
   syncPaintSwatch(swatch, paint, previewScale);
-  const modeControl = editor.querySelector?.('[data-paint-mode="true"]');
-  if (modeControl?.options) {
-    const optionHtml = `<option value="inherit">Inherited paint</option><option value="manual">Manual paint</option>${state.presetOptions?.length
-      ? `<optgroup label="Dashboard presets">${state.presetOptions.map(option => `<option value="${escapeAttribute(option.value)}">${escapeAttribute(option.label)}</option>`).join('')}</optgroup>` : ''}${mode.startsWith('preset:') && !(state.presetOptions ?? []).some(option => option.value === mode)
-      ? `<option value="${escapeAttribute(mode)}">${escapeAttribute(`${reference || '(empty name)'} (unavailable)`)}</option>` : ''}`;
-    if (modeControl.dataset.options !== optionHtml) {
-      const selected = modeControl.value;
-      modeControl.innerHTML = optionHtml;
-      modeControl.dataset.options = optionHtml;
-      if ([...modeControl.options].some(option => option.value === selected)) modeControl.value = selected;
+  const presetControl = editor.querySelector?.('[data-paint-preset="true"]');
+  if (presetControl?.options) {
+    const activeReference = state.presetReference == null ? '' : String(state.presetReference);
+    const optionHtml = `<option value="">None</option>${(state.presetOptions ?? []).map(option => `<option value="${escapeAttribute(option.value)}">${escapeAttribute(option.label)}</option>`).join('')}${activeReference && !(state.presetOptions ?? []).some(option => option.value === activeReference)
+      ? `<option value="${escapeAttribute(activeReference)}">${escapeAttribute(`${activeReference} (unavailable)`)}</option>` : ''}`;
+    if (presetControl.dataset.options !== optionHtml) {
+      presetControl.innerHTML = optionHtml;
+      presetControl.dataset.options = optionHtml;
     }
-    if (root.activeElement !== modeControl) modeControl.value = mode;
+    presetControl.closest?.('.paint-preset-row')?.toggleAttribute('hidden', !(state.presetOptions?.length || state.presetReference != null));
+    if (root.activeElement !== presetControl) presetControl.value = activeReference;
   }
   for (const property of ['fill_style', 'color', 'solid_fill', 'opacity']) {
     for (const control of editor.querySelectorAll?.(`[data-paint-property="${property}"]`) ?? []) {

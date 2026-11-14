@@ -311,10 +311,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const context = this._createSectionContext();
     if (handleScaleField(context, { field, kind, value })) return;
     if (handleFormattingField(context, { field, kind, value })) return;
-    if (field === 'bar-paint-mode' || kind === 'entity-bar-paint-mode') {
-      this._segmentsSection.clearScopeState(root);
-      this._gradientStopsSection.clearScopeState(root);
-    }
     handleBarAppearanceField(context, { field, kind, value }, { animation: true, cssText: true });
   }
 

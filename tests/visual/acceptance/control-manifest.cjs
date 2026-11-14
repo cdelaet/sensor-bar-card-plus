@@ -44,7 +44,7 @@ for (const marker of ['target', 'peak', 'floor']) {
 field('bar-fill-style', 'Bar Appearance', 'select', 'bar.fill_style', ['gradient', 'soft_bands', 'band_gradient', 'solid']);
 field('bar-solid-fill', 'Bar Appearance', 'checkbox', 'bar.solid_fill', null);
 field('bar-opacity', 'Bar Appearance', 'number', 'bar.paint.opacity', '37');
-field('bar-paint-mode', 'Bar Appearance', 'select', null, ['inherit'], { journey: 'paint-source' });
+field('bar-paint-preset', 'Bar Appearance', 'select', 'bar.paint.preset', [''], { journey: 'paint-preset' });
 field('bar-direction', 'Bar Appearance', 'select', 'bar.direction', ['normal', 'reverse'], { journey: 'direction' });
 field('bar-animated', 'Bar Appearance', 'checkbox', 'bar.animated', null, { hosts: ['feature'] });
 color('field', 'bar-color', 'Bar Appearance', 'bar.color');
