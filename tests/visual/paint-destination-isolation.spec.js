@@ -96,17 +96,26 @@ async function hassUpdate(page) {
 // Chromium's native chooser has saturation, eyedropper and hue before RGB.
 // Keyboard input here produces trusted events; assigning .value/dispatchEvent
 // would miss both the native picker lifecycle and the original regression.
-async function nativeRed(page, input, red, whileOpen = async () => {}) {
+async function nativeRed(page, input, red, whileOpen = async () => {}, afterInput = async () => {}) {
   const next = `#${red.toString(16).padStart(2, '0')}${(await input.inputValue()).slice(3)}`;
-  await input.click();
+  await input.focus();
+  await input.press('Space');
+  await expect.poll(() => input.evaluate(node => node.matches(':open'))).toBe(true);
+  // The chooser paints outside the page DOM; let its opening frame complete
+  // before sending keys to the popup rather than the underlying editor.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await whileOpen();
   for (let i = 0; i < 3; i += 1) await page.keyboard.press('Tab');
   await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.type(String(red));
-  await page.keyboard.press('Tab');
-  await page.keyboard.press('Enter');
-  await page.keyboard.press('Escape');
-  await input.press('Tab');
+  try {
+    await afterInput(next);
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Enter');
+  } finally {
+    await page.keyboard.press('Escape');
+    await input.press('Tab');
+  }
   return next;
 }
 
@@ -120,6 +129,70 @@ async function assertPalettes(page, expected) {
 }
 
 for (const source of ['src', 'dist']) {
+  for (const destination of destinations) for (const palette of ['gradient_stops', 'segments']) {
+    test(`${destination} ${palette} track updates during color input without replacing controls (${source})`, async ({ page, browserName }) => {
+      const configs = structuredClone(initial);
+      for (const dest of destinations) paintAt(configs, dest).fill_style = palette === 'segments' ? 'bands' : 'gradient';
+      await mount(page, source, configs);
+      const root = await open(page, destination, palette);
+      const prefix = palette === 'segments' ? 'segment' : 'gradient';
+      const color = root.locator(`input[data-kind="${kind(destination, `${prefix}-color`)}"]`).first();
+      await root.evaluate(root => {
+        window.__livePaletteRoot = root;
+        window.__livePaletteInputs = [...root.querySelectorAll('input')];
+        window.__livePaletteGenerations = window.__livePaletteInputs.map(input => input.dataset.paletteGeneration);
+      });
+      const previews = async () => Promise.all(destinations.map(dest => rootFor(page, dest).locator('.gradient-preview-track').evaluateAll(nodes => nodes.map(node => node.getAttribute('style') + node.innerHTML))));
+      const before = await previews();
+      const expected = structuredClone(configs);
+      const assertLivePreview = async selected => {
+        const host = destination === 'Feature' ? 'feature' : 'card';
+        paintAt(expected, destination)[palette][0].color = selected;
+        await expect.poll(() => page.evaluate(host => window.__destinationEvents[host].at(-1)?.config, host)).toEqual(expected[host]);
+        const channels = selected.slice(1).match(/../g).map(hex => parseInt(hex, 16));
+        const cssColor = `rgb(${channels.join(', ')})`;
+        // Assert the palette track itself while the color input still owns focus.
+        // Header/library swatches are intentionally not used as preview evidence.
+        if (palette === 'segments') {
+          await expect(root.locator('.segment-preview-interval[data-preview-kind="segment"]').first()).toHaveCSS('background-color', cssColor);
+        } else {
+          await expect.poll(() => root.locator('.gradient-preview-track:not(.segment-preview-track)').evaluate(node => getComputedStyle(node).backgroundImage)).toContain(cssColor);
+        }
+        await expect(color).toBeFocused();
+        expect(await root.evaluate(root => root === window.__livePaletteRoot
+          && window.__livePaletteInputs.every((input, index) => input === root.querySelectorAll('input')[index]
+            && input.dataset.paletteGeneration === window.__livePaletteGenerations[index]))).toBe(true);
+        const after = await previews();
+        for (const [index, dest] of destinations.entries()) if (dest !== destination) expect(after[index]).toEqual(before[index]);
+      };
+      if (browserName === 'chromium') {
+        await nativeRed(page, color, 160, async () => {}, assertLivePreview);
+        expect(await page.evaluate(() => window.__nativePaintEvents.every(event => event.trusted))).toBe(true);
+      } else {
+        // WebKit's headless platform chooser is unavailable; exercise delegated
+        // color input while focused, without a blur/coordinate edit to repair it.
+        const selected = `#a0${(await color.inputValue()).slice(3)}`;
+        await color.fill(selected);
+        await assertLivePreview(selected);
+      }
+      await hassUpdate(page);
+      await assertPalettes(page, expected);
+    });
+
+    test(`${destination} ${palette} coordinate commits refresh the palette track (${source})`, async ({ page }) => {
+      await mount(page, source);
+      const root = await open(page, destination, palette);
+      const segment = palette === 'segments';
+      const track = root.locator(segment ? '.segment-preview-track' : '.gradient-preview-track:not(.segment-preview-track)');
+      const before = await track.evaluate(node => node.getAttribute('style') + node.innerHTML);
+      const input = root.locator(`input[data-kind="${kind(destination, segment ? 'segment-to' : 'gradient-pos')}"]`).first();
+      await input.fill(segment ? '40%' : '10');
+      await input.press('Tab');
+      await expect.poll(() => track.evaluate(node => node.getAttribute('style') + node.innerHTML)).not.toBe(before);
+      expect(await page.evaluate(() => window.__destinationEvents.card.length + window.__destinationEvents.feature.length)).toBeGreaterThan(0);
+    });
+  }
+
   for (const palette of ['gradient_stops', 'segments']) for (const updates of [false, true]) {
     test(`fresh Preset native ${palette} color emits to its parent${updates ? ' through hass updates' : ''} (${source})`, async ({ page, browserName }) => {
       test.skip(browserName !== 'chromium', 'Headless WebKit does not expose its platform color chooser; Chromium exercises trusted native color events.');

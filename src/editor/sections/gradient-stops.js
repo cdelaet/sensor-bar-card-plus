@@ -562,10 +562,9 @@ export class GradientStopsSection extends PaletteSection {
       rowCount: rows.length,
       draftSelector: entity ? `#entity-${index}-gradient-draft-pos` : '#gradient-draft-pos',
     });
-    if (changed) {
-      this._refreshGradientDraftUi(scope);
-      this._syncGradientDraftControls(scope);
-    }
+    // A color edit keeps row identity but still changes the palette preview.
+    if (this._getPaletteRoot(scope)?.ownerDocument) this._refreshGradientDraftUi(scope);
+    if (changed) this._syncGradientDraftControls(scope);
     return changed;
   }
 

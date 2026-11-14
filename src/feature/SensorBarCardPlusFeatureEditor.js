@@ -584,10 +584,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
           if (rebuilt) control.value = segment && control.type === 'color' ? getColorPickerValue(value, '#4a9eff') : value ?? '';
         }
       }
-      if (segment) section._refreshSegmentUi(root);
-      // Refreshing gradient hints in the lightweight unit DOM intentionally uses
-      // structural render in standalone; avoid an endless host render loop here.
-      else if (paletteRoot?.querySelector('#gradient-draft-pos')?.closest) section._refreshGradientDraftUi(root);
     }
     for (const direction of ['above', 'below']) {
       const control = this.shadowRoot.querySelector(`#baseline-${direction}-color-enabled`);

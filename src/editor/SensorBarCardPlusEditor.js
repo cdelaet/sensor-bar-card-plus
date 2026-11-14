@@ -601,7 +601,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._gradientStopsSection.syncRows({ type: 'card' });
     this._setElementText('card-group-segments-summary', this._getSegmentsSummary({ type: 'card' }));
     this._setElementText('card-group-gradient-stops-summary', this._getGradientStopsSummary({ type: 'card' }));
-    this._refreshSegmentUi({ type: 'card' });
     syncBarPaintEditor(this.shadowRoot, this._createSectionContext(), { type: 'card' }, this._paintPaletteValues({ type: 'card' }), { numericDrafts: this._numericDrafts, registry: this._paintPresetRegistry });
   }
 
@@ -639,8 +638,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementText(`entity-${index}-group-gradient-stops-summary`, this._getGradientStopsSummary(scope));
       this._setElementText(`entity-${index}-group-layout-summary`, this._getLayoutSummary(scope));
       this._setElementText(`entity-${index}-group-formatting-summary`, this._getFormattingSummary(scope));
-
-      this._refreshSegmentUi(scope);
     }
   }
 
@@ -2235,9 +2232,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (applied === false && options?.rerender && this._serializeConfig(sanitizedStops) !== previousUiRowsJson) {
       this._render();
     }
-    if (applied !== false && !options?.rerender) {
-      this._refreshGradientDraftUi(scope);
-    }
     return applied;
   }
 
@@ -2263,9 +2257,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       nextTarget = this._pruneEmptyObjectsInTarget(nextTarget, ['bar']);
       return nextTarget;
     }, options);
-    if (applied !== false) {
-      this._refreshSegmentUi(scope);
-    }
     return applied;
   }
 

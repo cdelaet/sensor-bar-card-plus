@@ -903,10 +903,9 @@ export class SegmentsSection extends PaletteSection {
       rowCount: rows.length,
       draftSelector: entity ? `#entity-${index}-segment-draft-from` : '#segment-draft-from',
     });
-    if (changed) {
-      this._refreshSegmentUi(scope);
-      this._syncSegmentDraftControls(scope);
-    }
+    // A color edit keeps row identity but still changes the palette preview.
+    if (this._getPaletteRoot(scope)?.ownerDocument) this._refreshSegmentUi(scope);
+    if (changed) this._syncSegmentDraftControls(scope);
     return changed;
   }
 
