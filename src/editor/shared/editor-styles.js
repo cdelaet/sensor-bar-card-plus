@@ -19,6 +19,10 @@ export const editorStyles = `
         .paint-clear-override { min-height: 28px; padding: 3px 8px; font-size: 0.78rem; }
         .paint-preset-feedback, .paint-registry-status { color: var(--secondary-text-color, #666); font-size: 0.82rem; overflow-wrap: anywhere; }
         .paint-preset-feedback { color: var(--warning-color, #9a6700); }
+        .preset-master-section { gap: 10px; }
+        .preset-master-title { font-weight: 700; color: var(--primary-text-color, #111); }
+        .paint-presets-disclosure { display: grid; gap: 10px; }
+        .paint-presets-disclosure > summary { cursor: pointer; font-weight: 600; }
         .paint-editor-grid { display: grid; gap: 12px; align-items: end;
           grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); min-width: 0; }
         .paint-editor .field-grid { grid-template-columns: minmax(0, 1fr); }

@@ -259,6 +259,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _syncPaintEditors() {
     if (!this.shadowRoot?.innerHTML) return;
+    this._syncPresetMasterControls();
     const context = this._createSectionContext();
     for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) {
       syncBarPaintEditor(this.shadowRoot, context, scope, this._paintPaletteValues(scope), {
@@ -270,6 +271,20 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementText(`${prefix}segments-summary`, this._segmentsSection._getSegmentsSummary(scope));
       this._setElementText(`${prefix}gradient-stops-summary`, this._gradientStopsSection._getGradientStopsSummary(scope));
     }
+  }
+
+  _syncPresetMasterControls() {
+    const markup = this._renderPresetMasterControls();
+    const current = this.shadowRoot?.querySelector('.preset-master-section');
+    if (!markup) {
+      current?.remove();
+      return;
+    }
+    if (current) {
+      if (current.outerHTML !== markup) current.outerHTML = markup;
+      return;
+    }
+    this.shadowRoot?.querySelector('.editor > .section')?.insertAdjacentHTML('beforebegin', markup);
   }
 
   _cloneContainer(value) {
@@ -3227,6 +3242,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this.shadowRoot.innerHTML = `
 	      <style>${editorStyles}</style>
 	      <div class="editor">
+${this._renderPresetMasterControls()}
 	        <div class="section">
 	          <div class="section-head">
 	            <h3>Basics</h3>
@@ -3529,6 +3545,26 @@ ${this._renderFormattingSection({ type: 'card' })}
     } finally {
       this._isRendering = false;
     }
+  }
+
+  _renderPresetMasterControls() {
+    const isMaster = Object.hasOwn(this._draftConfig, 'preset_library');
+    const otherMasterExists = (this._paintPresetRegistry?.masterCount ?? 0) > (isMaster ? 1 : 0);
+    const diagnostic = this._paintPresetRegistry?.diagnostic?.code === 'multiple_preset_masters'
+      ? this._paintPresetRegistry.diagnostic.message : '';
+    if (!isMaster && otherMasterExists && !diagnostic) return '';
+    return `<div class="section preset-master-section">
+      ${isMaster || !otherMasterExists ? `<div class="toggle">
+        <input id="preset-master" type="checkbox" data-kind="preset-master"${isMaster ? ' checked' : ''}>
+        <label for="preset-master">Preset Master</label>
+      </div>` : ''}
+      ${isMaster ? '<div class="preset-master-title" role="status">This Card is the Preset Master.</div>' : ''}
+      ${diagnostic ? `<div class="paint-preset-feedback" role="status" aria-live="polite">${this._escapeAttribute(diagnostic)}</div>` : ''}
+      ${isMaster ? `<details id="paint-presets" class="paint-presets-disclosure">
+        <summary>Paint Presets</summary>
+        <div class="section-note">Paint presets are stored in this Card’s preset library.</div>
+      </details>` : ''}
+    </div>`;
   }
 
   _bindShadowListeners() {
@@ -3906,6 +3942,29 @@ ${this._renderFormattingSection({ type: 'card' })}
     const kind = rawKind?.endsWith('-text-fallback') ? rawKind.slice(0, -14) : rawKind;
     const detailValue = event.detail?.value;
     const value = detailValue ?? (target?.type === 'checkbox' ? target.checked : target?.value);
+    if (kind === 'preset-master') {
+      const isMaster = Object.hasOwn(this._draftConfig, 'preset_library');
+      if (value && !isMaster) {
+        return void this._applyUserConfig(this._setPathValue(this._draftConfig, ['preset_library'], {}), { rerender: true });
+      }
+      if (!value && isMaster) {
+        const library = this._draftConfig.preset_library;
+        const hasContents = this._isObject(library)
+          ? Object.values(library).some(category => Array.isArray(category)
+            ? category.length > 0 : this._isObject(category) ? Object.keys(category).length > 0 : category != null)
+          : library != null;
+        if (hasContents) {
+          const confirm = this.ownerDocument?.defaultView?.confirm;
+          if (typeof confirm !== 'function' || !confirm.call(this.ownerDocument.defaultView,
+            'Removing Preset Master will remove its preset library. Continue?')) {
+            target.checked = true;
+            return;
+          }
+        }
+        return void this._applyUserConfig(this._deletePathValue(this._draftConfig, ['preset_library']), { rerender: true });
+      }
+      return;
+    }
     if (kind === 'card-action') {
       const actionValue = event.detail && Object.prototype.hasOwnProperty.call(event.detail, 'value') ? detailValue : target?.value;
       const normalizedAction = actionValue === null || actionValue === '' ? undefined : actionValue;
