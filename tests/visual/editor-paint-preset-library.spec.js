@@ -1,11 +1,11 @@
 const { test, expect } = require('@playwright/test');
 
-async function mount(page, source, width = 320) {
+async function mount(page, source, width = 320, configOverride = null) {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
-  await page.evaluate(async width => {
+  await page.evaluate(async ({ width, configOverride }) => {
     await customElements.whenDefined('sensor-bar-card-plus');
     const editor = await customElements.get('sensor-bar-card-plus').getConfigElement();
-    const saved = {
+    const saved = configOverride ?? {
       title: 'Power',
       preset_library: {
         paint: { warm: { fill_style: 'gradient', color: '#cc4400', opacity: 72,
@@ -23,7 +23,7 @@ async function mount(page, source, width = 320) {
     document.querySelector('#mount').style.width = `${width}px`;
     document.querySelector('#mount').append(editor);
     await editor.updateComplete;
-  }, width);
+  }, { width, configOverride });
   return page.locator('sensor-bar-card-plus-editor');
 }
 
@@ -109,5 +109,77 @@ for (const source of ['src', 'dist']) {
       selectionEnd: input.selectionEnd,
     }));
     expect(state).toEqual({ same: true, focused: true, value: 'Copper', selectionStart: 2, selectionEnd: 4 });
+  });
+
+  test(`preset palette rows and five style previews stay consistent (${source})`, async ({ page }) => {
+    const editor = await mount(page, source, 320, {
+      preset_library: {
+        paint: { bands: {
+          fill_style: 'bands',
+          segments: [{ from: '0%', to: '50%', color: '#dd1100' }],
+          gradient_stops: [{ pos: 0, color: '#1133aa' }, { pos: 100, color: '#22cc66' }],
+        } },
+        custom: { keep: true },
+      },
+    });
+    await editor.locator('#paint-presets > summary').click();
+    await editor.locator('#preset-paint-editor > summary').click();
+    await expect(editor.locator('#preset-paint-editor .paint-mode-row')).toHaveCount(0);
+    await expect(editor.locator('#preset-paint-editor .paint-property-meta')).toHaveCount(0);
+    await expect(editor.locator('#preset-paint-editor .paint-clear-override')).toHaveCount(0);
+    await expect(editor.locator('#preset-paint-editor .paint-registry-status')).toBeHidden();
+
+    for (const style of ['solid', 'gradient', 'bands', 'soft_bands', 'band_gradient']) {
+      await editor.locator('#preset-paint-fill_style').selectOption(style);
+      const previews = await editor.evaluate(element => ({
+        item: getComputedStyle(element.shadowRoot.querySelector('.paint-preset-swatch')).backgroundImage,
+        editor: getComputedStyle(element.shadowRoot.querySelector('#preset-paint-editor .paint-editor-swatch')).backgroundImage,
+      }));
+      expect(previews.item).toBe(previews.editor);
+      if (['bands', 'band_gradient'].includes(style)) expect(previews.item).not.toBe('none');
+    }
+
+    if (!await editor.locator('#preset-paint-editor').evaluate(details => details.open)) await editor.locator('#preset-paint-editor > summary').click();
+    const solidFill = editor.locator('#preset-paint-editor-body #preset-paint-solid_fill');
+    await solidFill.evaluate(input => { input.checked = true; input.dispatchEvent(new Event('change', { bubbles: true })); });
+    await expect.poll(() => editor.evaluate(element => element._draftConfig.preset_library.paint.bands.solid_fill)).toBe(true);
+    const changeColor = async (selector, value) => editor.locator(`#preset-paint-editor-body ${selector}`).evaluate((input, next) => {
+      input.value = next;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+    await changeColor('[data-paint-property="color"]', '#556677');
+    await expect.poll(() => editor.evaluate(element => element._draftConfig.preset_library.paint.bands.color)).toBe('#556677');
+    await changeColor('[data-paint-property="opacity"]', '63');
+    await expect.poll(() => editor.evaluate(element => element._draftConfig.preset_library.paint.bands.opacity)).toBe(63);
+
+    await changeColor('[data-kind="segment-color"]', '#aa22bb');
+    await expect.poll(() => editor.evaluate(element => element._draftConfig.preset_library.paint.bands.segments[0].color)).toBe('#aa22bb');
+
+    for (const [selector, value] of [['#segment-draft-from', '50%'], ['#segment-draft-to', '100%'], ['[data-kind="segment-draft-color"]', '#008877']]) {
+      await changeColor(selector, value);
+    }
+    await editor.locator('#preset-paint-editor-body [data-action="add-segment"]').click();
+    await expect.poll(() => editor.evaluate(element => element._draftConfig.preset_library.paint.bands.segments.length)).toBe(2);
+    await expect(editor.locator('#preset-paint-editor-body .segment-editor-row')).toHaveCount(2);
+    if (!await editor.locator('#preset-paint-editor').evaluate(details => details.open)) await editor.locator('#preset-paint-editor > summary').click();
+    await expect(editor.locator('#preset-paint-editor-body [data-action="remove-segment"]').first()).toBeVisible();
+    await editor.locator('#preset-paint-editor-body [data-action="remove-segment"]').first().evaluate(button => button.click());
+    await expect.poll(() => editor.evaluate(element => element._draftConfig.preset_library.paint.bands.segments.length)).toBe(1);
+    await expect.poll(() => editor.evaluate(element => element._draftConfig.preset_library.paint.bands.segments[0].color)).toBe('#008877');
+
+    if (!await editor.locator('#preset-paint-editor').evaluate(details => details.open)) await editor.locator('#preset-paint-editor > summary').click();
+    await changeColor('[data-kind="gradient-color"][data-index="0"]', '#eeaa00');
+    await expect.poll(() => editor.evaluate(element => element._draftConfig.preset_library.paint.bands.gradient_stops[0].color)).toBe('#eeaa00');
+    await changeColor('#gradient-draft-pos', '50');
+    await changeColor('[data-kind="gradient-draft-color"]', '#4455ee');
+    await editor.locator('#preset-paint-editor-body [data-action="add-gradient-stop"]').click();
+    await expect.poll(() => editor.evaluate(element => element._draftConfig.preset_library.paint.bands.gradient_stops.length)).toBe(3);
+    await expect(editor.locator('#preset-paint-editor-body .authored-gradient-stop-row')).toHaveCount(3);
+    if (!await editor.locator('#preset-paint-editor').evaluate(details => details.open)) await editor.locator('#preset-paint-editor > summary').click();
+    await expect(editor.locator('#preset-paint-editor-body [data-action="remove-gradient-stop"]').first()).toBeVisible();
+    await editor.locator('#preset-paint-editor-body [data-action="remove-gradient-stop"]').first().evaluate(button => button.click());
+    await expect.poll(() => editor.evaluate(element => element._draftConfig.preset_library.paint.bands.gradient_stops.length)).toBe(2);
+    expect(await editor.evaluate(element => element._draftConfig.preset_library.custom.keep)).toBe(true);
   });
 }

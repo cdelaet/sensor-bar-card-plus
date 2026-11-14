@@ -3628,14 +3628,20 @@ ${this._renderFormattingSection({ type: 'card' })}
     return entries[0]?.[0] ?? null;
   }
 
+  _getPaintPresetPreview(rawPaint, scale) {
+    try {
+      const paint = normalizeBarConfig({ bar: { paint: this._isObject(rawPaint) ? rawPaint : {} } }, null, { isCardScope: true }).paint;
+      return compilePaint(paint, scale).gradient ?? 'none';
+    } catch { return 'none'; }
+  }
+
   _renderPaintPresetLibrary() {
     const entries = this._getPaintPresetEntries();
     const selectedName = this._getSelectedPaintPresetName();
     const scale = { minValue: 0, maxValue: 100, scaleDirection: 'normal' };
     const rows = entries.map(([name, rawPaint]) => {
       const paint = this._isObject(rawPaint) ? rawPaint : {};
-      let preview = 'none';
-      try { preview = compilePaint(paint, scale).gradient ?? 'none'; } catch { /* Keep malformed presets editable. */ }
+      const preview = this._getPaintPresetPreview(paint, scale);
       const opacity = Number.isFinite(Number(paint.opacity)) ? Math.max(0, Math.min(100, Number(paint.opacity))) : 100;
       return `<button type="button" class="paint-preset-choice${name === selectedName ? ' is-selected' : ''}"
         data-action="select-paint-preset" data-preset-name="${this._escapeAttribute(name)}" role="option" aria-selected="${name === selectedName}">
@@ -3663,7 +3669,8 @@ ${this._renderFormattingSection({ type: 'card' })}
       }]));
       paintEditor = `<div class="paint-preset-editor-heading">Editing <strong>${this._escapeAttribute(selectedName)}</strong></div>${renderPaintEditor({
         ...state, mode: 'manual', id: 'preset-paint-editor', root: this.shadowRoot, fields,
-        paletteFields, showMode: false, bodyId: 'preset-paint-editor-body',
+        paletteFields, showMode: false, showPropertyMeta: false, registryStatus: 'ready', diagnostics: [],
+        bodyId: 'preset-paint-editor-body',
       })}`;
     }
     return `<div class="paint-preset-manager">
@@ -3737,7 +3744,7 @@ ${this._renderFormattingSection({ type: 'card' })}
       gradient_stops: sections.gradientStops._getScopedGradientStopsValue({ type: 'card' }),
     };
     const state = getBarPaintEditorState(context, { type: 'card' }, paletteValues, { status: 'empty', presets: {} });
-    syncPaintEditor(this.shadowRoot, 'preset-paint-editor', { ...state, mode: 'manual' }, { numericDrafts: this._numericDrafts });
+    syncPaintEditor(this.shadowRoot, 'preset-paint-editor', { ...state, mode: 'manual', registryStatus: 'ready', diagnostics: [] }, { numericDrafts: this._numericDrafts });
     sections.segments.syncRows({ type: 'card' });
     sections.gradientStops.syncRows({ type: 'card' });
     const choice = [...this.shadowRoot.querySelectorAll('.paint-preset-choice')]
@@ -3745,8 +3752,7 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (choice) {
       const paint = this._getPaintPresetEntries().find(([presetName]) => presetName === name)?.[1] ?? {};
       const safePaint = this._isObject(paint) ? paint : {};
-      let preview = 'none';
-      try { preview = compilePaint(safePaint, { minValue: 0, maxValue: 100, scaleDirection: 'normal' }).gradient ?? 'none'; } catch { /* Keep malformed presets editable. */ }
+      const preview = this._getPaintPresetPreview(safePaint, { minValue: 0, maxValue: 100, scaleDirection: 'normal' });
       const opacity = Number.isFinite(Number(safePaint.opacity)) ? Math.max(0, Math.min(100, Number(safePaint.opacity))) : 100;
       const swatch = choice.querySelector('.paint-preset-swatch');
       if (swatch) { swatch.style.backgroundImage = preview; swatch.style.opacity = String(opacity / 100); }

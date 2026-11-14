@@ -36,7 +36,7 @@ function fieldRoutingAttributes({ field, kind, index }) {
 export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {}, inherited = false,
   scale, previewScale = scale, fields = {}, root, paletteContent = '', paletteFields = null, cssText = false,
   mode = 'inherit', presetReference, presetOptions = [], overrides = {}, diagnostics = [], registryStatus = 'unknown',
-  showMode = true, bodyId = null }) {
+  showMode = true, showPropertyMeta = true, bodyId = null }) {
   const controls = Object.fromEntries(['fill_style', 'solid_fill', 'color', 'opacity'].map(key => [key,
     fields[key] ?? { id: `${id}-${key}`, field: key },
   ]));
@@ -46,8 +46,10 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
   const selectedMode = mode;
   const referenceName = presetReference == null ? '' : String(presetReference);
   const source = property => overrides[property] ? 'Override' : presetReference != null ? 'Preset' : 'Inherited';
-  const propertyHeader = (property, label) => `<span class="paint-property-meta" data-paint-source="${property}">${source(property)}</span>
-    <button type="button" class="paint-clear-override" data-action="clear-paint-property" data-property="${property}"${fields.index !== undefined ? ` data-index="${fields.index}"` : ''} aria-label="Clear ${escapeAttribute(label)} override"${overrides[property] ? '' : ' hidden'}>Clear</button>`;
+  const propertyHeader = (property, label) => showPropertyMeta
+    ? `<span class="paint-property-meta" data-paint-source="${property}">${source(property)}</span>
+      <button type="button" class="paint-clear-override" data-action="clear-paint-property" data-property="${property}"${fields.index !== undefined ? ` data-index="${fields.index}"` : ''} aria-label="Clear ${escapeAttribute(label)} override"${overrides[property] ? '' : ' hidden'}>Clear</button>`
+    : '';
   const labelRow = (property, label, control) => `<div class="paint-property-row"><div class="paint-property-heading"><label for="${controls[property].id}">${label}</label>${propertyHeader(property, label)}</div>${control}</div>`;
   const options = [
     `<option value="inherit"${selectedMode === 'inherit' ? ' selected' : ''}>Inherited paint</option>`,
