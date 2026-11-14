@@ -12,6 +12,8 @@ import { getPaintPreviewScale } from '../shared/paint-swatch.js';
 import { getResolvedScale } from '../../config/resolve.js';
 import { resolveScopedPaintPreset } from '../../view-model/paint-preset-resolver.js';
 
+const BAR_PAINT_PROPERTIES = ['preset', 'fill_style', 'color', 'solid_fill', 'segments', 'gradient_stops', 'opacity'];
+
 export function getFillStyleFromColorMode(colorMode) {
   switch (colorMode) {
     case 'single': return 'solid';
@@ -112,6 +114,20 @@ export function clearBarAppearanceOverride(context, scope) {
     ]);
     return pruneEmptyObjectsInTarget(nextTarget, ['bar']);
   }, { rerender: true, ...(usesGroupedBarPaint(context, scope) ? { preserveRawConfig: true } : {}) });
+}
+
+export function hasLocalBarPaintConfiguration(context, scope) {
+  const groupedPaint = context.read(scope, ['bar', 'paint']);
+  return groupedPaint !== undefined
+    || BAR_PAINT_PROPERTIES.some(property => ownsBarPaintProperty(context, scope, property));
+}
+
+export function resetBarPaintConfiguration(context, scope) {
+  if (!hasLocalBarPaintConfiguration(context, scope)) return false;
+  context.clearPaintPaletteState?.(scope);
+  return context.mutate(scope, target => pruneEmptyObjectsInTarget(
+    removePathsFromTarget(clearBarPaintProperties(target, BAR_PAINT_PROPERTIES), [['bar', 'paint']]), ['bar']),
+  { preserveRawConfig: true, rerender: true });
 }
 
 export function hasBarAppearanceOverride(context, scope) {
@@ -240,6 +256,8 @@ export function renderBarAppearanceSection(context, scope, renderChildren = () =
   const paintEditor = renderPaintEditor({
     ...getBarPaintEditorState(context, scope, options.paletteValues, options.paintPresetRegistry),
     id: entity ? `entity-${index}-paint-editor` : 'card-paint-editor', root: options.root,
+    resetLabel: entity ? 'Reset to Card paint' : 'Reset to default paint',
+    resetDisabled: !hasLocalBarPaintConfiguration(context, scope),
     fields: { preset: field('paint-preset'), fill_style: field('fill-style'), color: field('color'), solid_fill: field('solid-fill'), opacity: field('opacity'), index },
     cssText: options.cssText,
     ...(palette && typeof palette === 'object' ? { paletteFields: palette } : { paletteContent: palette }),

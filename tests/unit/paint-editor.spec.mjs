@@ -66,6 +66,18 @@ describe('shared Paint Editor', () => {
     expect(missing).toContain('<option value="missing" selected>missing (unavailable)</option>');
   });
 
+  it('renders reset only for consumers and reflects whether local paint can be reset', () => {
+    const { bindings } = bindingFor({ color: '#123456' }, []);
+    const consumer = renderPaintEditor({ id: 'paint', bindings, resetLabel: 'Reset to default paint', resetDisabled: false });
+    expect(consumer).toContain('data-action="reset-paint"');
+    expect(consumer).toContain('>Reset to default paint</button>');
+    expect(consumer).not.toContain('data-action="reset-paint" disabled');
+
+    const disabled = renderPaintEditor({ id: 'paint', bindings, resetLabel: 'Reset to Card paint' });
+    expect(disabled).toContain('data-action="reset-paint" disabled');
+    expect(renderPaintEditor({ id: 'preset-paint', bindings })).not.toContain('data-action="reset-paint"');
+  });
+
   it('describes inherited paint and explicit sampling, and escapes authored colors', () => {
     expect(describePaint({ fill_style: 'gradient', solid_fill: true, gradient_stops: palettes.gradient_stops }, true))
       .toBe('Inherited · Gradient · 2 stops · Sampled color');

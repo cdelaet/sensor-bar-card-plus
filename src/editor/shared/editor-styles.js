@@ -14,6 +14,7 @@ export const editorStyles = `
         .paint-editor-body { display: grid; gap: 12px; padding: 0 10px 10px; min-width: 0; }
         .paint-preset-row { display: grid; grid-template-columns: minmax(92px, 0.7fr) minmax(0, 1.3fr); gap: 8px; align-items: center; min-width: 0; }
         .paint-preset-row[hidden] { display: none; }
+        .paint-editor-actions { display: flex; justify-content: flex-end; }
         .paint-property-row, .paint-palette-field { display: grid; gap: 6px; min-width: 0; }
         .paint-property-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; min-width: 0; }
         .paint-property-meta { color: var(--secondary-text-color, #666); font-size: 0.75rem; }

@@ -32,7 +32,7 @@ import {
   getBarSolidFillValue, getEffectiveBarSolidFillValue, setBarSolidFill,
   clearBarAppearanceOverride, hasBarAppearanceOverride, getBarAppearanceSummary,
   renderBarAppearanceSection, handleBarAppearanceField, getBarPaintEditorState,
-  syncBarPaintEditor, clearBarPaintPropertyOverride,
+  syncBarPaintEditor, clearBarPaintPropertyOverride, hasLocalBarPaintConfiguration, resetBarPaintConfiguration,
 } from './sections/bar-appearance.js';
 
 import { createBarPaintBindings, usesGroupedBarPaint, prepareBarPaintSegments } from './shared/bar-paint-bindings.js';
@@ -4090,6 +4090,16 @@ ${this._renderFormattingSection({ type: 'card' })}
     const action = target?.dataset?.action;
     if (!action) return;
     if (target?.disabled) return;
+    if (action === 'reset-paint') {
+      const scope = target.dataset.index === undefined ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
+      const context = this._createSectionContext();
+      if (!hasLocalBarPaintConfiguration(context, scope)) return;
+      const confirm = this.ownerDocument?.defaultView?.confirm;
+      if (typeof confirm !== 'function' || !confirm.call(this.ownerDocument.defaultView,
+        `${scope.type === 'entity' ? 'Reset this Entity to Card paint' : 'Reset paint to its default'}?`)) return;
+      resetBarPaintConfiguration(context, scope);
+      return;
+    }
     if (presetManager && ['select-paint-preset', 'add-paint-preset', 'rename-paint-preset', 'delete-paint-preset'].includes(action)) {
       this._handlePaintPresetAction(action, target);
       return;

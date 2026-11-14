@@ -6,6 +6,7 @@ import {
   getEffectiveBarSolidFillValue, getBarAppearanceSummary, hasBarAppearanceOverride,
   handleBarAppearanceField, renderBarAppearanceSection, clearBarAppearanceOverride,
   getBarPaintEditorState, clearBarPaintPropertyOverride,
+  hasLocalBarPaintConfiguration, resetBarPaintConfiguration,
 } from '../../src/editor/sections/bar-appearance.js';
 
 const root = { type: 'card' };
@@ -218,6 +219,38 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     });
     expect(state.diagnostics).toContainEqual(expect.objectContaining({ code: 'paint_preset_invalid', reference: 'bad' }));
     expect(state.paint.opacity).toBe(0);
+  });
+
+  it.each([
+    { bar: { paint: { preset: 'night', opacity: 0, fill_style: 'solid', future: true }, direction: 'reverse', needle: { show: true } } },
+    { bar: { paint: {}, direction: 'reverse', needle: { show: true } } },
+    { color_mode: 'single', color: '#123456', segments: [{ from: '0%', to: '100%', color: '#abcdef' }], extra: { keep: true } },
+  ])('resets grouped or legacy paint without touching unrelated config: %j', config => {
+    let current = structuredClone(config);
+    let clearedScope;
+    const context = {
+      read: (_scope, path) => getPathValue(current, path),
+      mutate: (_scope, mutation) => { current = mutation(current); return true; },
+      clearPaintPaletteState: scope => { clearedScope = scope; },
+    };
+
+    expect(hasLocalBarPaintConfiguration(context, root)).toBe(true);
+    expect(resetBarPaintConfiguration(context, root)).toBe(true);
+    expect(clearedScope).toBe(root);
+    expect(current).toEqual(config.bar
+      ? { bar: { direction: 'reverse', needle: { show: true } } }
+      : { extra: { keep: true } });
+    expect(hasLocalBarPaintConfiguration(context, root)).toBe(false);
+    expect(resetBarPaintConfiguration(context, root)).toBe(false);
+  });
+
+  it('renders destination reset labels and disables reset without local paint', () => {
+    const { editor } = setup(source, { entities: ['sensor.power'], bar: { direction: 'reverse' } });
+    const context = editor._createSectionContext();
+    const cardHtml = renderBarAppearanceSection(context, root);
+    const entityHtml = renderBarAppearanceSection(context, row);
+    expect(cardHtml).toContain('data-action="reset-paint" disabled>Reset to default paint</button>');
+    expect(entityHtml).toContain('data-action="reset-paint" data-index="0" disabled>Reset to Card paint</button>');
   });
 });
 

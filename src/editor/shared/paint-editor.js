@@ -28,7 +28,7 @@ function fieldRoutingAttributes({ field, kind, index }) {
 export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {}, inherited = false,
   scale, previewScale = scale, fields = {}, root, paletteContent = '', paletteFields = null, cssText = false,
   presetReference, presetOptions = [], overrides = {}, diagnostics = [], registryStatus = 'unknown',
-  showPropertyMeta = true, bodyId = null }) {
+  showPropertyMeta = true, bodyId = null, resetLabel, resetDisabled = true }) {
   const controls = Object.fromEntries(['fill_style', 'solid_fill', 'color', 'opacity'].map(key => [key,
     fields[key] ?? { id: `${id}-${key}`, field: key },
   ]));
@@ -82,6 +82,7 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
         <label for="${controls.preset.id}">Paint preset</label>
         <select ${fieldAttributes(controls.preset)} data-paint-preset="true">${options}</select>
       </div>
+      ${resetLabel ? `<div class="paint-editor-actions"><button type="button" data-action="reset-paint"${fields.index !== undefined ? ` data-index="${fields.index}"` : ''}${resetDisabled ? ' disabled' : ''}>${escapeAttribute(resetLabel)}</button></div>` : ''}
       <div class="paint-preset-feedback" role="status" aria-live="polite"${feedbackText ? '' : ' hidden'}>${escapeAttribute(feedbackText)}</div>
       <div class="paint-registry-status" role="status"${registryMessage ? '' : ' hidden'}>${escapeAttribute(registryMessage)}</div>
       <div class="paint-editor-grid">

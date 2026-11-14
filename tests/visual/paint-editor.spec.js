@@ -1136,6 +1136,89 @@ for (const source of ['src', 'dist']) test(`Card entity selects and clears a pre
   await expect(editor.locator('#entity-0-bar-color')).toHaveValue('#123456');
 });
 
+for (const source of ['src', 'dist']) test(`Card reset confirms and clears only card paint (${source})`, async ({ page }) => {
+  const config = {
+    extra: { keep: true }, color_mode: 'gradient', color: '#101010',
+    severity: [{ from: 0, to: 100, color: '#202020' }],
+    bar: { direction: 'reverse', animated: false, color_mode: 'single', fill_style: 'solid', color: '#303030',
+      solid_fill: true, segments: [{ from: '0%', to: '100%', color: '#404040' }],
+      gradient_stops: [{ pos: 0, color: '#505050' }, { pos: 100, color: '#606060' }],
+      paint: { preset: 'missing', opacity: 0, color: '#707070', future: true }, needle: { show: true } },
+    entities: [{ entity: 'sensor.power', bar: { paint: { preset: 'row', color: '#808080', opacity: 55 } } }],
+  };
+  const editor = await mountWithPaintPresets(page, 'Card', source, {}, config);
+  const paint = editor.locator('#card-paint-editor');
+  await paint.locator('summary').click();
+  const reset = paint.locator('[data-action="reset-paint"]');
+  await expect(reset).toHaveText('Reset to default paint');
+  await expect(reset).toBeEnabled();
+
+  page.once('dialog', async dialog => {
+    expect(dialog.type()).toBe('confirm');
+    await dialog.dismiss();
+  });
+  await reset.click();
+  expect(await saved(editor)).toEqual(config);
+  expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
+
+  page.once('dialog', async dialog => { await dialog.accept(); });
+  await reset.click();
+  expect(await saved(editor)).toEqual({
+    extra: { keep: true },
+    bar: { direction: 'reverse', animated: false, needle: { show: true } },
+    entities: config.entities,
+  });
+  await expect(editor.locator('#bar-fill-style')).toHaveValue('bands');
+  await expect(editor.locator('#bar-color')).toHaveValue('#4a9eff');
+  await expect(editor.locator('#bar-opacity')).toHaveValue('100');
+  await expect(reset).toBeDisabled();
+});
+
+for (const source of ['src', 'dist']) test(`Entity reset returns to Card paint and preserves unrelated configuration (${source})`, async ({ page }) => {
+  const config = { extra: { keep: true }, bar: { paint: { preset: 'card', opacity: 40, color: '#123456' } }, entities: [
+    { entity: 'sensor.power', future: true, bar: { paint: { preset: 'row', opacity: 0, segments: [
+      { from: '10%', to: '90%', color: '#abcdef' },
+    ] }, color: '#fedcba', direction: 'normal', futureBar: true } },
+  ] };
+  const editor = await mountWithPaintPresets(page, 'Card', source, {
+    card: { fill_style: 'solid', color: '#123456' }, row: { fill_style: 'gradient' },
+  }, config);
+  await editor.locator('button[data-action="toggle-entity-overrides"][data-index="0"]').click();
+  const paint = editor.locator('#entity-0-paint-editor');
+  await paint.locator('summary').click();
+  const reset = paint.locator('[data-action="reset-paint"]');
+  await expect(reset).toHaveText('Reset to Card paint');
+  await expect(reset).toBeEnabled();
+  page.once('dialog', async dialog => { await dialog.accept(); });
+  await reset.click();
+  expect(await saved(editor)).toEqual({
+    extra: { keep: true }, bar: config.bar,
+    entities: [{ entity: 'sensor.power', future: true, bar: { direction: 'normal', futureBar: true } }],
+  });
+  await expect(editor.locator('#entity-0-bar-color')).toHaveValue('#123456');
+  await expect(reset).toBeDisabled();
+});
+
+for (const source of ['src', 'dist']) test(`Tile Feature reset clears legacy and grouped paint after confirmation (${source})`, async ({ page }) => {
+  const config = { type: 'custom:sensor-bar-card-plus-feature', extra: { keep: true }, color: '#101010',
+    severity: [{ from: 0, to: 100, color: '#202020' }],
+    bar: { direction: 'reverse', animated: false, fill_style: 'gradient', color: '#303030',
+      paint: { preset: 'missing', opacity: 35, gradient_stops: [{ pos: 0, color: '#404040' }] }, needle: { show: true } } };
+  const editor = await mountWithPaintPresets(page, 'Feature', source, {}, config);
+  const paint = editor.locator('#card-paint-editor');
+  await paint.locator('summary').click();
+  const reset = paint.locator('[data-action="reset-paint"]');
+  await expect(reset).toHaveText('Reset to default paint');
+  page.once('dialog', async dialog => { await dialog.accept(); });
+  await reset.click();
+  expect(await saved(editor)).toEqual({
+    type: config.type, extra: { keep: true },
+    bar: { direction: 'reverse', animated: false, needle: { show: true } },
+  });
+  await expect(editor.locator('#bar-fill-style')).toHaveValue('bands');
+  await expect(reset).toBeDisabled();
+});
+
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
   test(`${host} reports an unavailable dashboard preset and preserves its reference (${source})`, async ({ page }) => {
     const editor = await mountWithPaintPresets(page, host, source, { known: { fill_style: 'solid', color: 'red' } }, {

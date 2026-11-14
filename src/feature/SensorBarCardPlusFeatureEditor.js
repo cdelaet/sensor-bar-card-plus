@@ -15,6 +15,7 @@ import {
 import {
   renderBarAppearanceSection, handleBarAppearanceField, getEffectiveFillStyleValue,
   getBarAnimatedValue, syncBarPaintEditor, clearBarPaintPropertyOverride,
+  hasLocalBarPaintConfiguration, resetBarPaintConfiguration,
 } from '../editor/sections/bar-appearance.js';
 import { getFeatureScaleSource, patchFeatureScaleSource, getFeatureBaselineSource, patchFeatureBaselineSource, getFeatureTargetSource, patchFeatureTargetSource } from './feature-editor-config.js';
 
@@ -76,6 +77,13 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     for (const type of ['click', 'keydown']) this.shadowRoot.addEventListener(type, event => {
       if (type === 'click') {
         const target = event.target?.closest?.('[data-action]') ?? event.target;
+        if (target?.dataset?.action === 'reset-paint') {
+          if (target.disabled || !hasLocalBarPaintConfiguration(this._createSectionContext(), root)) return;
+          const confirm = this.ownerDocument?.defaultView?.confirm;
+          if (typeof confirm !== 'function' || !confirm.call(this.ownerDocument.defaultView, 'Reset paint to its default?')) return;
+          resetBarPaintConfiguration(this._createSectionContext(), root);
+          return;
+        }
         if (target?.dataset?.action === 'clear-paint-property') {
           if (target.dataset.property === 'segments') { this._segmentsSection._clearSegmentsOverride(root); return; }
           if (target.dataset.property === 'gradient_stops') { this._gradientStopsSection._clearGradientStopsOverride(root); return; }
