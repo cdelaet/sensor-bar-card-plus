@@ -18,7 +18,7 @@ function renderBaselinePaintEditor(context, scope, direction, options = {}) {
   fields.index = scope?.index;
   return `<div class="baseline-paint-destination" data-baseline-direction="${direction}"><div class="field-row"><span class="override-group-title">${direction === 'above' ? 'Above' : 'Below'} Baseline Paint</span></div>
     ${renderPaintEditor({ ...state, id: `${prefix}${destination}-editor`, root: options.root, fields,
-      activation: field('enabled'), resetLabel: entity ? 'Reset to Card paint' : 'Reset to default paint',
+      activation: field('enabled'), resetLabel: entity ? 'Reset to Card paint settings' : 'Reset to default paint settings',
       cssText: options.cssText, paletteFields: state.enabled ? options.paintChildren?.(scope, direction) : null })}</div>`;
 }
 

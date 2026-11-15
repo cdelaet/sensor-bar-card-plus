@@ -654,6 +654,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   _refreshCardDerivedUi() {
     this._setElementText('card-group-marker-target-summary', this._getCardTargetMarkerSummary());
     this._setElementText('card-group-needle-summary', this._getNeedleSummary({ type: 'card' }));
+    this._setElementChecked('bar-needle-mode', this._needleSection._getScopedNeedleConfig({ type: 'card' }).mode === 'enabled');
     this._setElementText('card-group-marker-peak-summary', this._getMarkerResetSummary('peak'));
     this._setElementText('card-group-marker-floor-summary', this._getMarkerResetSummary('floor'));
     this._setElementText('card-group-baseline-summary', this._getCardBaselineSummary());
@@ -671,6 +672,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementChecked(`entity-${index}-scale-inherit`, !hasScaleOverride(this._createSectionContext(), scope));
       this._setElementChecked(`entity-${index}-baseline-inherit`, !this._hasBaselineOverride(scope));
       this._setElementChecked(`entity-${index}-needle-inherit`, !this._hasNeedleOverride(scope));
+      this._setElementChecked(`entity-${index}-needle-mode`, this._needleSection._getEffectiveScopedNeedleConfig(scope).mode === 'enabled');
       this._setElementChecked(`entity-${index}-peak-inherit`, !this._hasPeakOverride(scope));
       this._setElementChecked(`entity-${index}-floor-inherit`, !this._hasExtremumOverride(scope, 'floor'));
       this._setElementChecked(`entity-${index}-markers-inherit`, !this._hasMarkersOverride(scope));

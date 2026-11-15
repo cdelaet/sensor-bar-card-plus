@@ -39,12 +39,12 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   expect((await saved(editor)).baseline.at).toEqual({ ...original.baseline.at, value: 30 });
   await editor.getByLabel('Baseline entity', { exact: true }).fill('sensor.changed');
   await expect(editor.getByLabel('Baseline entity', { exact: true })).toBeFocused();
-  await editor.locator('#bar-needle-mode').selectOption('disabled');
+  await editor.locator('#bar-needle-mode').uncheck();
   const baseline = (await saved(editor)).baseline;
   expect((await saved(editor)).bar.needle).toBe(false);
   await editor.locator('#bar-needle-color').evaluate(el => { el.value = '#334455'; el.dispatchEvent(new Event('input', { bubbles: true })); });
   expect((await saved(editor)).bar.needle).toEqual({ show: false, color: '#334455' });
-  await editor.locator('#bar-needle-mode').selectOption('enabled');
+  await editor.locator('#bar-needle-mode').check();
   expect((await saved(editor)).baseline).toEqual(baseline);
   expect((await saved(editor)).bar.needle).toEqual({ show: true, color: '#334455' });
   await editor.locator('#baseline-above-paint-editor > summary').click();
@@ -79,7 +79,7 @@ for (const source of ['src', 'dist']) test(`Feature percentage Baseline and HA p
   await expect(editor.locator('#baseline-source-mode')).toHaveCount(0);
   await expect(editor.locator('#baseline-percent')).toHaveCount(0);
   await editor.locator('#baseline-show').check();
-  await editor.locator('#bar-needle-mode').selectOption('enabled');
+  await editor.locator('#bar-needle-mode').check();
   await editor.locator('[data-field="bar-needle-color-text-fallback"]').fill('red');
   await expect(editor.locator('[data-field="bar-needle-color-text-fallback"]')).toBeFocused();
   expect((await saved(editor)).baseline.at).toBe('50%');

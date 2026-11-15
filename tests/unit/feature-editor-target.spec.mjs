@@ -32,7 +32,7 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
     if (target === undefined) expect(editor.shadowRoot.querySelector('#target-show').checked).toBe(true);
     editor.context = { entity_id: 'sensor.changed' }; editor.hass = { states: {} }; await editor.updateComplete;
     expect(editor._config).toEqual(config);
-    await edit(editor, '#formatting-unit', 'W'); await edit(editor, '#bar-needle-mode', 'enabled', 'change');
+    await edit(editor, '#formatting-unit', 'W'); await edit(editor, '#bar-needle-mode', true, 'change');
     expect(editor._config.target).toEqual(target); expect(editor._config).not.toHaveProperty('entity');
   });
   for (const [field, value, path] of [

@@ -1,6 +1,6 @@
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue,
   pruneEmptyObjectsInTarget } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput } from '../shared/editor-controls.js';
+import { normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput } from '../shared/editor-controls.js';
 
 export class NeedleSection {
   constructor(context, options = {}) { this.options = options;
@@ -157,7 +157,10 @@ export class NeedleSection {
       if (value) this._removeScopedNeedle(scope);
       return true;
     }
-    if (['bar-needle-mode', 'needle-mode'].includes(control)) { this._setScopedNeedleMode(scope, value); return true; }
+    if (['bar-needle-mode', 'needle-mode'].includes(control)) {
+      this._setScopedNeedleMode(scope, typeof value === 'boolean' ? (value ? 'enabled' : 'disabled') : value);
+      return true;
+    }
     if (['bar-needle-color', 'needle-color'].includes(control)) { this._setScopedNeedleColor(scope, value); return true; }
     return false;
   }
@@ -174,12 +177,11 @@ export class NeedleSection {
                           <label for="entity-${index}-needle-inherit">Inherit card settings</label>
                         </div>
                       </div>
-	                      <div class="field-row">
-	                        <label for="entity-${index}-needle-mode">Needle mode</label>
-	                        <select id="entity-${index}-needle-mode" data-kind="entity-needle-mode" data-index="${index}" value="${escapeAttribute(entityNeedle.mode)}">
-                          <option value="enabled"${entityNeedle.mode === 'enabled' ? ' selected' : ''}>enabled</option>
-                          <option value="disabled"${entityNeedle.mode === 'disabled' ? ' selected' : ''}>disabled</option>
-                        </select>
+                      <div class="field-row">
+                        <div class="toggle">
+                          <input id="entity-${index}-needle-mode" type="checkbox" data-kind="entity-needle-mode" data-index="${index}"${entityNeedle.mode === 'enabled' ? ' checked' : ''}>
+                          <label for="entity-${index}-needle-mode">Enable Needle</label>
+                        </div>
                       </div>
 	                      <div class="field-row">
 	                        <label for="entity-${index}-needle-color">Needle color</label>
@@ -197,11 +199,10 @@ export class NeedleSection {
     const cardNeedle = this._getScopedNeedleConfig(scope);
     return `          <div class="inline-row editor-grid">
             <div class="field-row">
-              <label for="bar-needle-mode">Needle enabled</label>
-              <select id="bar-needle-mode" data-field="bar-needle-mode" value="${escapeAttribute(cardNeedle.mode)}">
-                <option value="disabled"${cardNeedle.mode === 'disabled' ? ' selected' : ''}>disabled</option>
-                <option value="enabled"${cardNeedle.mode === 'enabled' ? ' selected' : ''}>enabled</option>
-              </select>
+              <div class="toggle">
+                <input id="bar-needle-mode" type="checkbox" data-field="bar-needle-mode"${cardNeedle.mode === 'enabled' ? ' checked' : ''}>
+                <label for="bar-needle-mode">Enable Needle</label>
+              </div>
             </div>
             <div class="field-row">
               <label for="bar-needle-color">Needle color</label>

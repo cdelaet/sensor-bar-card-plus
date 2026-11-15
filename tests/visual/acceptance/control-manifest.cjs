@@ -58,7 +58,7 @@ field('bar-paint-preset', 'Bar Appearance', 'select', 'bar.paint.preset', [''], 
 field('bar-direction', 'Bar Appearance', 'select', 'bar.direction', ['normal', 'reverse'], { journey: 'direction' });
 field('bar-animated', 'Bar Appearance', 'checkbox', 'bar.animated', null, { hosts: ['feature'] });
 color('field', 'bar-color', 'Bar Appearance', 'bar.color');
-field('bar-needle-mode', 'Needle', 'select', 'bar.needle.show', ['disabled', 'enabled']);
+field('bar-needle-mode', 'Needle', 'checkbox', 'bar.needle.show', null);
 color('field', 'bar-needle-color', 'Needle', 'bar.needle.color');
 field('baseline-show', 'Baseline', 'checkbox', 'baseline.enabled', null);
 field('baseline-value', 'Baseline', 'value', null, '75%', { journey: 'sources' });

@@ -267,8 +267,8 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     const context = editor._createSectionContext();
     const cardHtml = renderBarAppearanceSection(context, root);
     const entityHtml = renderBarAppearanceSection(context, row);
-    expect(cardHtml).toContain('data-action="reset-paint" disabled>Reset to default paint</button>');
-    expect(entityHtml).toContain('data-action="reset-paint" data-index="0" disabled>Reset to Card paint</button>');
+    expect(cardHtml).toContain('data-action="reset-paint" disabled>Reset to default paint settings</button>');
+    expect(entityHtml).toContain('data-action="reset-paint" data-index="0" disabled>Reset to Card paint settings</button>');
   });
 });
 

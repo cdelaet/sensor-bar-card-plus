@@ -1197,7 +1197,8 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    expect(editor.shadowRoot.querySelector('#entity-0-needle-mode').value).toBe('enabled');
+    expect(editor.shadowRoot.querySelector('#entity-0-needle-mode').type).toBe('checkbox');
+    expect(editor.shadowRoot.querySelector('#entity-0-needle-mode').checked).toBe(true);
   });
 
   it('fake ha-entity-picker value-changed updates entities[index].entity', () => {
@@ -4471,7 +4472,7 @@ describe('Sensor Bar Card Plus editor', () => {
       bar: { fill_style: 'soft_bands' },
     });
 
-    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), 'enabled');
+    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), true);
 
     expect(events.at(-1).detail.config.bar).toEqual({
       fill_style: 'soft_bands',
@@ -5796,7 +5797,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), 'disabled');
+    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), false);
 
     const finalConfig = events.at(-1).detail.config;
     expect(finalConfig.bar).toEqual({
@@ -5816,7 +5817,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), 'enabled');
+    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), true);
 
     const finalConfig = events.at(-1).detail.config;
     expect(finalConfig.bar).toEqual({
@@ -5964,7 +5965,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), 'enabled');
+    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), true);
 
     const finalConfig = events.at(-1).detail.config;
     expect(finalConfig.bar).toEqual({
@@ -5991,7 +5992,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), 'enabled');
+    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), true);
 
     expect(events.at(-1).detail.config.bar).toEqual({
       fill_style: 'soft_bands',
@@ -6045,7 +6046,7 @@ describe('Sensor Bar Card Plus editor', () => {
 
     editor.setConfig({ entities: [{ entity: 'sensor.one', name: 'One' }] });
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchChange(editor.shadowRoot.querySelectorAll('select[data-kind="entity-needle-mode"]')[0], 'enabled');
+    dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-needle-mode"]')[0], true);
 
     expect(events.at(-1).detail.config.entities).toEqual([
       {
@@ -6074,7 +6075,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchChange(editor.shadowRoot.querySelectorAll('select[data-kind="entity-needle-mode"]')[0], 'disabled');
+    dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-needle-mode"]')[0], false);
 
     expect(events.at(-1).detail.config.entities).toEqual([
       {
@@ -6176,7 +6177,7 @@ describe('Sensor Bar Card Plus editor', () => {
 
 
     expect(editor.shadowRoot.querySelector('#entity-0-needle-inherit').checked).toBe(true);
-    expect(editor.shadowRoot.querySelectorAll('select[data-kind="entity-needle-mode"]')[0].value).toBe('enabled');
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-needle-mode"]')[0].checked).toBe(true);
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-needle-color"]')[0].value.toLowerCase()).toBe('#ff9800');
   });
 
@@ -6237,7 +6238,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchChange(editor.shadowRoot.querySelectorAll('select[data-kind="entity-needle-mode"]')[0], 'enabled');
+    dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-needle-mode"]')[0], true);
 
     expect(events.at(-1).detail.config.baseline).toEqual({
       at: {
@@ -6275,7 +6276,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    expect(editor.shadowRoot.querySelector('#bar-needle-mode').value).toBe('enabled');
+    expect(editor.shadowRoot.querySelector('#bar-needle-mode').checked).toBe(true);
   });
 
   it('editing unrelated fields still canonicalizes legacy boolean card-level needle to object form', () => {
@@ -6312,7 +6313,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    expect(editor.shadowRoot.querySelectorAll('select[data-kind="entity-needle-mode"]')[0].value).toBe('disabled');
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-needle-mode"]')[0].checked).toBe(false);
   });
 
   it('editing legacy boolean card-level needle emits object form', () => {
@@ -6814,7 +6815,7 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-min'), '5');
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-target-value'), '25');
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-baseline-value'), '1');
-    dispatchChange(editor.shadowRoot.querySelector('#entity-0-needle-mode'), 'disabled');
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-needle-mode'), false);
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-peak-color'), '#ff9800');
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-bar-color'), '#00cc66');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-color"]')[0], '#00ff00');

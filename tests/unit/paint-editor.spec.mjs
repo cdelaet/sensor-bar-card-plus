@@ -68,12 +68,12 @@ describe('shared Paint Editor', () => {
 
   it('renders reset only for consumers and reflects whether local paint can be reset', () => {
     const { bindings } = bindingFor({ color: '#123456' }, []);
-    const consumer = renderPaintEditor({ id: 'paint', bindings, resetLabel: 'Reset to default paint', resetDisabled: false });
+    const consumer = renderPaintEditor({ id: 'paint', bindings, resetLabel: 'Reset to default paint settings', resetDisabled: false });
     expect(consumer).toContain('data-action="reset-paint"');
-    expect(consumer).toContain('>Reset to default paint</button>');
+    expect(consumer).toContain('>Reset to default paint settings</button>');
     expect(consumer).not.toContain('data-action="reset-paint" disabled');
 
-    const disabled = renderPaintEditor({ id: 'paint', bindings, resetLabel: 'Reset to Card paint' });
+    const disabled = renderPaintEditor({ id: 'paint', bindings, resetLabel: 'Reset to Card paint settings' });
     expect(disabled).toContain('data-action="reset-paint" disabled');
     expect(renderPaintEditor({ id: 'preset-paint', bindings })).not.toContain('data-action="reset-paint"');
   });

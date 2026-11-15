@@ -52,7 +52,7 @@ for (const source of ['src', 'dist']) describe(`Feature extrema (${source})`, ()
       expect(editor._config).toEqual(config); expect(events).toHaveLength(0);
       editor.context = { entity_id: 'sensor.new' }; editor.hass = { states: {} }; editor.setConfig(config); await editor.updateComplete;
       expect(events).toHaveLength(0);
-      for (const [field, value] of [['formatting-unit', 'W'], ['bar-needle-mode', 'disabled'], ['baseline-show', true], ['target-show', false], ['bar-color', '#123456'], ['bar-fill-style', 'bands']]) await edit(editor, field, value);
+      for (const [field, value] of [['formatting-unit', 'W'], ['bar-needle-mode', false], ['baseline-show', true], ['target-show', false], ['bar-color', '#123456'], ['bar-fill-style', 'bands']]) await edit(editor, field, value);
       expect(editor._config[key]).toEqual(marker); expect(editor._config).not.toHaveProperty('entity');
     });
     for (const [suffix, value, path, stored] of [

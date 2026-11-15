@@ -196,7 +196,7 @@ export function renderBarAppearanceSection(context, scope, renderChildren = () =
   const paintEditor = renderPaintEditor({
     ...getBarPaintEditorState(context, scope, options.paletteValues, options.paintPresetRegistry),
     id: entity ? `entity-${index}-paint-editor` : 'card-paint-editor', root: options.root,
-    resetLabel: entity ? 'Reset to Card paint' : 'Reset to default paint',
+    resetLabel: entity ? 'Reset to Card paint settings' : 'Reset to default paint settings',
     resetDisabled: !hasLocalBarPaintConfiguration(context, scope),
     fields: { preset: field('paint-preset'), fill_style: field('fill-style'), color: field('color'), solid_fill: field('solid-fill'), opacity: field('opacity'), index },
     cssText: options.cssText,

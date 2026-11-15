@@ -61,7 +61,7 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   await editor.locator('#target-show').uncheck();
   const before = await saved(editor);
   for (const key of ['baseline', 'bar', 'peak', 'floor', 'markers', 'future']) expect(before[key]).toEqual(original[key]);
-  await editor.locator('#bar-needle-mode').selectOption('disabled'); await editor.locator('#baseline-show').check();
+  await editor.locator('#bar-needle-mode').uncheck(); await editor.locator('#baseline-show').check();
   await editor.locator('#bar-fill-style').selectOption('bands'); await editor.locator('#bar-color').evaluate(el => { el.value = '#445566'; el.dispatchEvent(new Event('input', { bubbles: true })); });
   expect((await saved(editor)).target).toEqual(before.target);
   const echoCount = await page.evaluate(() => window.__targetEvents.length);

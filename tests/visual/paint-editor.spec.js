@@ -1211,7 +1211,7 @@ for (const source of ['src', 'dist']) test(`Card reset confirms and clears only 
   const paint = editor.locator('#card-paint-editor');
   await paint.locator('summary').click();
   const reset = paint.locator('[data-action="reset-paint"]');
-  await expect(reset).toHaveText('Reset to default paint');
+  await expect(reset).toHaveText('Reset to default paint settings');
   await expect(reset).toBeEnabled();
 
   page.once('dialog', async dialog => {
@@ -1248,7 +1248,7 @@ for (const source of ['src', 'dist']) test(`Entity reset returns to Card paint a
   const paint = editor.locator('#entity-0-paint-editor');
   await paint.locator('summary').click();
   const reset = paint.locator('[data-action="reset-paint"]');
-  await expect(reset).toHaveText('Reset to Card paint');
+  await expect(reset).toHaveText('Reset to Card paint settings');
   await expect(reset).toBeEnabled();
   page.once('dialog', async dialog => { await dialog.accept(); });
   await reset.click();
@@ -1269,7 +1269,7 @@ for (const source of ['src', 'dist']) test(`Tile Feature reset clears legacy and
   const paint = editor.locator('#card-paint-editor');
   await paint.locator('summary').click();
   const reset = paint.locator('[data-action="reset-paint"]');
-  await expect(reset).toHaveText('Reset to default paint');
+  await expect(reset).toHaveText('Reset to default paint settings');
   page.once('dialog', async dialog => { await dialog.accept(); });
   await reset.click();
   expect(await saved(editor)).toEqual({

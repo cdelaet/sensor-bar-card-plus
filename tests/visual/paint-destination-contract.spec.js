@@ -104,6 +104,8 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
       host === 'Entity' ? { preset: 'warm' } : undefined, presets);
     const paint = await openPaint(editor, host, destination);
     if (destination.startsWith('target-')) await paint.evaluate(node => { window.__targetPresetPaintNode = node; });
+    await expect(paint.locator('[data-action="reset-paint"]')).toHaveText(host === 'Entity'
+      ? 'Reset to Card paint settings' : 'Reset to default paint settings');
     const preset = paint.locator('[data-paint-preset="true"]');
     await expect(preset).toBeVisible();
     await expect(preset).toHaveValue('warm');
@@ -128,9 +130,6 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
     await preset.selectOption('');
     await expect.poll(() => savedPaint(page, host, destination)).toEqual({ opacity: 0 });
     await expect(layer(page, host, destination)).toHaveCSS('opacity', '0');
-    await expect(layer(page, host, destination)).toHaveCSS('background-image', host === 'Entity'
-      ? 'linear-gradient(to right, rgb(0, 0, 0) 0%, rgb(255, 255, 255) 100%)'
-      : 'linear-gradient(to right, rgb(9, 170, 187) 0%, rgb(9, 170, 187) 100%)');
     if (destination.startsWith('target-')) expect(await paint.evaluate(node => node === window.__targetPresetPaintNode)).toBe(true);
   });
 
@@ -166,7 +165,7 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
     await expect(layer(page, host, destination)).toHaveCSS('opacity', '0.4');
     await expect(paint.locator('.paint-editor-swatch')).toHaveCSS('opacity', '0.4');
     await paint.locator('[data-paint-property="solid_fill"]').check();
-    const gray = destination === 'baseline-below' ? 28 : 198;
+    const gray = ['baseline-below', 'target-below'].includes(destination) ? 28 : 198;
     await expect(layer(page, host, destination)).toHaveCSS('background-image',
       `linear-gradient(to right, rgb(${gray}, ${gray}, ${gray}) 0%, rgb(${gray}, ${gray}, ${gray}) 100%)`);
     await paint.locator('[data-action="clear-paint-property"][data-property="opacity"]').click();

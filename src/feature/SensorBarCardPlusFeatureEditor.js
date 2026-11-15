@@ -560,7 +560,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       'bar-direction': getDirectionSelection(context, root, ['bar', 'direction']),
       'bar-color': getColorPickerValue(color, '#4a9eff'),
       'bar-color-text-fallback': color,
-      'bar-needle-mode': this._needleSection._getScopedNeedleConfig(root).mode,
+      'bar-needle-mode': this._needleSection._getScopedNeedleConfig(root).mode === 'enabled',
       'bar-needle-color': getColorPickerValue(this._needleSection._getScopedNeedleConfig(root).color, '#ffffff'),
       'bar-needle-color-text-fallback': this._needleSection._getScopedNeedleConfig(root).color,
       'baseline-value': formatScaleValueInput(getFeatureBaselineSource(this._config)),
@@ -589,7 +589,10 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       const control = controlRoot?.querySelector(`[data-field="${field}"]`);
       if (control && /^(peak|floor)-window$/.test(field) && control.options
         && ![...control.options].some(option => option.value === String(value))) control.innerHTML = renderWindowOptions(value);
-      if (control && (control !== this.shadowRoot.activeElement || this._configReplaced)) control.value = String(value);
+      if (control && (control !== this.shadowRoot.activeElement || this._configReplaced)) {
+        if (control.type === 'checkbox') control.checked = !!value;
+        else control.value = String(value);
+      }
       if (field === 'bar-color-text-fallback') control?.setAttribute('aria-label', 'Bar color (CSS value)');
     }
     for (const [id, checked] of [['baseline-show', this._baselineSection._getBaselineShow(root)]]) {

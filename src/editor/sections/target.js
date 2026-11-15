@@ -455,7 +455,7 @@ export class TargetSection {
       const fields = Object.fromEntries(['preset', 'fill_style', 'color', 'solid_fill', 'opacity'].map(property => [property, binding(property)]));
       if (entity) fields.index = scope.index;
       return { state, markup: renderPaintEditor({ ...state, id: `${prefix}target-${direction}-paint-editor`, root: options.root,
-        fields, activation: binding('enabled'), resetLabel: entity ? 'Reset to Card paint' : 'Reset to default paint',
+        fields, activation: binding('enabled'), resetLabel: entity ? 'Reset to Card paint settings' : 'Reset to default paint settings',
         cssText: this.options.cssText, paletteFields: state.enabled ? options.paintChildren?.(scope, direction) : null }) };
     };
     const above = renderPaint('above', TARGET_ABOVE_PAINT);
