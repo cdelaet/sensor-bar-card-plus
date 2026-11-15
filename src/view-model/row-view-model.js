@@ -143,6 +143,8 @@ export function buildRowViewModel(options) {
   // released legacy-only overlays retain their existing marker-disable behavior.
   const targetPaintPercent = entityConfig?.target_above?.paint && !entityConfig.target_above.legacy
     ? sharedTargetValue !== null ? toScalePct(sharedTargetValue, safeMin, safeMax) : null : targetPercent;
+  const targetBelowPaintPercent = entityConfig?.target_below?.paint
+    ? sharedTargetValue !== null ? toScalePct(sharedTargetValue, safeMin, safeMax) : null : targetPercent;
   const targetPositionPercent = projectScalePercent(targetPercent, scaleDirection);
   const targetVisible = targetValue !== null;
   const targetDecimal = entityConfig?.target_marker?.label_decimal ?? decimal;
@@ -278,6 +280,7 @@ export function buildRowViewModel(options) {
     target: targetValue,
     targetPercent,
     targetPaintPercent,
+    targetBelowPaintPercent,
     targetPositionPercent,
     targetDisplay: targetPresentation?.text ?? null,
     targetPresentation,

@@ -12,7 +12,7 @@ import { historicalMarkerConsumers, historicalMarkerResults } from '../history/m
 import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
 import { authoredPaintProperties, resolveScopedPaintPreset } from '../view-model/paint-preset-resolver.js';
 import { resolveBaselinePaints } from '../view-model/baseline-paint-resolver.js';
-import { resolveTargetAbovePaint } from '../view-model/target-above-paint-resolver.js';
+import { resolveTargetAbovePaint, resolveTargetBelowPaint } from '../view-model/target-above-paint-resolver.js';
 import { formatNumericDisplay } from '../utils/format.js';
 import { setStyleIfChanged } from '../utils/dom.js';
 import { getFeatureLabelGeometry, layoutFeatureMarkerLabels } from './marker-label-layout.js';
@@ -167,10 +167,12 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       ? resolveBaselinePaints(normalizedAppearance.baseline, this._normalized.baseline, this._paintPresetRegistry)
       : { paints: {}, diagnostics: [] };
     const targetAbove = resolveTargetAbovePaint(normalizedAppearance?.target_above, this._normalized?.target_above, this._paintPresetRegistry);
+    const targetBelow = resolveTargetBelowPaint(normalizedAppearance?.target_below, this._normalized?.target_below, this._paintPresetRegistry);
     if (normalizedAppearance && (Object.prototype.hasOwnProperty.call(authoredPaintProperties(this._normalized.bar.paint), 'preset')
       || Object.prototype.hasOwnProperty.call(authoredPaintProperties(normalizedAppearance.bar.paint), 'preset')
       || Object.keys(baselinePaints.paints).length
       || targetAbove.paint !== undefined
+      || targetBelow.paint !== undefined
       || baselinePaints.diagnostics.length)) {
       const resolved = resolveScopedPaintPreset({
         inheritedPaint: this._normalized.bar.paint,
@@ -188,6 +190,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         bar: { ...normalizedAppearance.bar, paint: resolved.paint },
         ...(Object.keys(baselinePaints.paints).length ? { baseline } : {}),
         target_above: targetAbove,
+        target_below: targetBelow,
       };
       this._paintPresetDiagnostics = resolved.diagnostics.map(diagnostic => ({
         ...diagnostic,
@@ -199,6 +202,8 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         entity,
       }))).concat(targetAbove.diagnostics.map(diagnostic => ({
         ...diagnostic, path: `target.when_above.${diagnostic.path}`, entity,
+      }))).concat(targetBelow.diagnostics.map(diagnostic => ({
+        ...diagnostic, path: `target.when_below.${diagnostic.path}`, entity,
       })));
       this._diagnostics = {
         ...this._baseDiagnostics,

@@ -1,4 +1,4 @@
-import { normalizeBarConfig, normalizeBaselineDirectionConfig, normalizeTargetAboveConfig, getPaintExplicitness, BAR_PAINT_ALIASES } from '../config/normalize.js';
+import { normalizeBarConfig, normalizeBaselineDirectionConfig, normalizeTargetAboveConfig, normalizeTargetBelowConfig, getPaintExplicitness, BAR_PAINT_ALIASES } from '../config/normalize.js';
 import { resolveScopedPaintPreset } from './paint-preset-resolver.js';
 
 export const BAR_PAINT = {
@@ -29,6 +29,13 @@ export const TARGET_ABOVE_PAINT = {
   aliases: { color: [['target', 'when_exceeded', 'fill_color'], ['above_target_color']] },
   shorthands: [{ path: ['target'], property: 'at', entityPath: ['target_entity'] }],
   normalize(config, parent) { return normalizeTargetAboveConfig(config, parent).paint; },
+};
+
+export const TARGET_BELOW_PAINT = {
+  id: 'target-below', path: ['target', 'when_below', 'paint'],
+  aliases: {},
+  shorthands: [{ path: ['target'], property: 'at', entityPath: ['target_entity'] }],
+  normalize(config, parent) { return normalizeTargetBelowConfig(config, parent).paint; },
 };
 
 /** Resolve a normalized destination using the same scope/preset ordering in

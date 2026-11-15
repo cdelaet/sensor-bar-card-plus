@@ -33,6 +33,12 @@ for (const marker of ['target', 'peak', 'floor']) {
     field('target-above-paint-opacity', section, 'number', 'target.when_above.paint.opacity', '37');
     field('target-above-paint-preset', section, 'select', 'target.when_above.paint.preset', [''], { journey: 'paint-preset' });
     color('field', 'target-above-paint-color', section, 'target.when_above.paint.color');
+    field('target-below-paint-enabled', section, 'checkbox', 'target.when_below.paint', null);
+    field('target-below-paint-fill_style', section, 'select', 'target.when_below.paint.fill_style', ['gradient', 'bands', 'solid']);
+    field('target-below-paint-solid_fill', section, 'checkbox', 'target.when_below.paint.solid_fill', null);
+    field('target-below-paint-opacity', section, 'number', 'target.when_below.paint.opacity', '37');
+    field('target-below-paint-preset', section, 'select', 'target.when_below.paint.preset', [''], { journey: 'paint-preset' });
+    color('field', 'target-below-paint-color', section, 'target.when_below.paint.color');
   } else {
     field(`${marker}-show`, section, 'checkbox', `${marker}.enabled`, null);
     field(`${marker}-window`, section, 'select', `${marker}.window`, ['15m', '48h', 'today']);

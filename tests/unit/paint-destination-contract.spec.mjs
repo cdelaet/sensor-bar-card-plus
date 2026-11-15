@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { normalizeCardConfig } from '../../src/config/normalize.js';
 import { buildRowViewModel } from '../../src/view-model/row-view-model.js';
 import { buildBarRenderModel } from '../../src/view-model/bar-render-model.js';
-import { BAR_PAINT, BASELINE_PAINTS, TARGET_ABOVE_PAINT, resolveConfiguredDestination } from '../../src/view-model/paint-destinations.js';
+import { BAR_PAINT, BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT, resolveConfiguredDestination } from '../../src/view-model/paint-destinations.js';
 import { getDestinationEditorState, setDestinationEnabled, resetDestinationPaint, selectDestinationPreset,
   setDestinationProperty, clearDestinationProperty } from '../../src/editor/shared/paint-destination.js';
 import { getPathValue, setPathValue } from '../../src/editor/shared/editor-config.js';
@@ -82,14 +82,14 @@ describe('shared Paint destination contract regressions', () => {
       }
     });
 
-    for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT]) it(`${host}/${source}/${destination.id} clears one palette without invalidating the other`, () => {
+    for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT]) it(`${host}/${source}/${destination.id} clears one palette without invalidating the other`, () => {
       const C = loadCardClass({ source })[host];
       const editor = new C();
       const paint = { fill_style: 'gradient', segments: [{ from: '0%', to: '100%', color: '#123456' }],
         gradient_stops: [{ pos: 0, color: '#000000' }, { pos: 100, color: '#ffffff' }] };
       editor.setConfig(setPathValue({ type: 'custom:sensor-bar-card-plus-feature', entity, baseline: { at: 50 } }, destination.path, paint));
       const sections = destination === BAR_PAINT ? { segments: editor._segmentsSection, gradientStops: editor._gradientStopsSection }
-        : destination === TARGET_ABOVE_PAINT ? editor._targetPaintSections : editor._baselinePaintSections[destination.id.slice(9)];
+        : destination === TARGET_ABOVE_PAINT ? editor._targetPaintSections : destination === TARGET_BELOW_PAINT ? editor._targetBelowPaintSections : editor._baselinePaintSections[destination.id.slice(9)];
       const scope = { type: 'card' };
       const segmentSession = sections.segments._getPaletteSession(scope);
       const gradientSession = sections.gradientStops._getPaletteSession(scope);
@@ -131,7 +131,7 @@ function fixture(host, destination, paint, parentPaint) {
     state: () => getDestinationEditorState(context, scope, destination) };
 }
 
-for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT]) for (const host of ['Card', 'Entity', 'Feature']) {
+for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT]) for (const host of ['Card', 'Entity', 'Feature']) {
   describe(`${host} / ${destination.id} shared destination contract`, () => {
     it('opens without emitting, resolves presets before local properties, and agrees with runtime', () => {
       const f = fixture(host, destination, { preset: 'warm', opacity: 0 });
@@ -249,7 +249,7 @@ for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT]) f
         expect(disabledParent.state().enabled).toBe(false);
       });
 
-      if (host === 'Entity') it('does not label disabled inherited legacy properties as effective inheritance', () => {
+      if (host === 'Entity' && destination.aliases?.color?.length) it('does not label disabled inherited legacy properties as effective inheritance', () => {
         const f = fixture(host, destination, {}, null);
         f.context.mutate({ type: 'card' }, target => setPathValue(target, destination.aliases.color[0], '#ff0000'));
         expect(f.state().paint.color).toBe(themeColor);
@@ -259,7 +259,7 @@ for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT]) f
   });
 }
 
-for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT]) for (const host of ['Card', 'Entity', 'Feature']) {
+for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT]) for (const host of ['Card', 'Entity', 'Feature']) {
   it(`classifies every ${host}/${destination.id} property by provenance, not default equality`, () => {
     const complete = { fill_style: 'gradient', color: '#123456', solid_fill: false, opacity: 100,
       segments: [{ from: '0%', to: '100%', color: '#123456' }],
@@ -286,7 +286,7 @@ for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT]) f
   });
 }
 
-for (const host of ['editor', 'featureEditor']) for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT]) {
+for (const host of ['editor', 'featureEditor']) for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT]) {
   it(`${host}/${destination.id} palette descriptions use resolved sources, including authored default stops`, () => {
     const C = loadCardClass({ source: 'src' })[host];
     const editor = new C();
@@ -294,7 +294,7 @@ for (const host of ['editor', 'featureEditor']) for (const destination of [BAR_P
     const apply = (paint, presets) => editor.setConfig(setPathValue({ type: 'custom:sensor-bar-card-plus-feature', entity,
       baseline: { at: 50 }, ...(presets ? { preset_library: { paint: presets } } : {}) }, destination.path, paint));
     const sections = destination === BAR_PAINT ? { segments: editor._segmentsSection, gradientStops: editor._gradientStopsSection }
-      : destination === TARGET_ABOVE_PAINT ? editor._targetPaintSections : editor._baselinePaintSections[destination.id.slice(9)];
+      : destination === TARGET_ABOVE_PAINT ? editor._targetPaintSections : destination === TARGET_BELOW_PAINT ? editor._targetBelowPaintSections : editor._baselinePaintSections[destination.id.slice(9)];
     apply({ fill_style: 'gradient' });
     expect(sections.segments._getSegmentsSummary(scope)).toBe('Default bands');
     expect(sections.gradientStops._getGradientStopsSummary(scope)).toBe('Default gradient');

@@ -35,7 +35,7 @@ describe('Above Target Stage 1 normalization and compatibility', () => {
     expect(enabled.appearance.target_above.paint.color).toBe('var(--accent-color, #4a9eff)');
     expect(enabled.card.entities[0].target_above.paint[PAINT_PROPERTY_SOURCES]).toBeDefined();
     expect(enabled.row.markers.filter(marker => marker.type === 'target')).toHaveLength(1);
-    expect(enabled.bar.fill.paintLayers.map(layer => layer.id)).toEqual(['base', 'baseline-above', 'baseline-below', 'above-target']);
+    expect(enabled.bar.fill.paintLayers.map(layer => layer.id)).toEqual(['base', 'baseline-above', 'baseline-below', 'above-target', 'below-target']);
   });
 
   for (const legacy of [
@@ -133,6 +133,10 @@ describe('Above Target Stage 1 geometry', () => {
     expect(canonical.layer.visible).toBe(true);
     expect(canonical.row.markers.find(marker => marker.type === 'target').visible).toBe(false);
     expect(model({ target: { enabled: false, at: 60, when_exceeded: { fill_color: 'red' } } }).layer.visible).toBe(false);
+    const mixed = model({ target: { enabled: false, at: 60, when_exceeded: { fill_color: 'red' },
+      when_below: { paint: { color: 'blue' } } } }, 20);
+    expect(mixed.layer.visible).toBe(false);
+    expect(mixed.bar.fill.paintLayers.find(layer => layer.id === 'below-target').visible).toBe(true);
   });
 
   it('uses only the shared source and its own fallbacks, clearing unavailable paint and recovering', () => {

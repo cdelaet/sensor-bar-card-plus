@@ -6,7 +6,7 @@ import { renderResolvableSourceControls } from '../shared/resolvable-source-cont
 import { renderPaintEditor, syncPaintEditor, describePaint } from '../shared/paint-editor.js';
 import { renderCardGroup } from '../shared/editor-disclosures.js';
 import { getDestinationEditorState } from '../shared/paint-destination.js';
-import { TARGET_ABOVE_PAINT } from '../../view-model/paint-destinations.js';
+import { TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT } from '../../view-model/paint-destinations.js';
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from '../shared/editor-marker-controls.js';
 
 export class TargetSection {
@@ -408,15 +408,18 @@ export class TargetSection {
       meta.textContent = this._propertySource(scope, property);
       meta.classList.toggle('is-overridden', meta.textContent === 'Override');
     }
-    const state = getDestinationEditorState(this.context, scope, TARGET_ABOVE_PAINT, options.paletteValues, options.registry);
-    syncPaintEditor(root, `${prefix}target-above-paint-editor`, state, {
-      ...options, paletteFields: options.paintChildren ? () => options.paintChildren(scope) : undefined,
-    });
+    for (const [direction, destination] of [['above', TARGET_ABOVE_PAINT], ['below', TARGET_BELOW_PAINT]]) {
+      const state = getDestinationEditorState(this.context, scope, destination,
+        options.paletteValues?.[direction], options.registry);
+      syncPaintEditor(root, `${prefix}target-${direction}-paint-editor`, state, {
+        ...options, paletteFields: options.paintChildren ? () => options.paintChildren(scope, direction) : undefined,
+      });
+      const paintSummary = section.querySelector(`#card-group-${prefix}target-${direction}-summary`);
+      if (paintSummary) paintSummary.textContent = state.enabled ? describePaint(state.paint, state.inherited) : 'Paint disabled';
+    }
     for (const button of section.querySelectorAll('[data-action="toggle-target-group"]')) this._syncDisclosure(button);
     const summary = section.querySelector(`#card-group-${prefix}target-shared-summary`);
     if (summary) summary.textContent = scope.type === 'entity' ? this._getTargetOverrideSummary(scope) : this._getCardTargetMarkerSummary();
-    const paintSummary = section.querySelector(`#card-group-${prefix}target-above-summary`);
-    if (paintSummary) paintSummary.textContent = state.enabled ? describePaint(state.paint, state.inherited) : 'Paint disabled';
   }
 
   render(scope = { type: 'card' }, options = {}) {
@@ -445,17 +448,22 @@ export class TargetSection {
       ${this._renderGroup(scope, 'appearance', 'Marker appearance', appearance)}
       ${this._renderGroup(scope, 'labels', 'Marker labels', this._renderBuiltinMarkerLabelControls(scope, 'target', 'Target'))}
     </div>`;
-    const state = getDestinationEditorState(this.context, scope, TARGET_ABOVE_PAINT, options.paletteValues, options.registry);
-    const binding = property => ({ id: `${prefix}target-above-paint-${property}`,
-      ...(entity ? { kind: `entity-target-above-paint-${property}`, index: scope.index } : { field: `target-above-paint-${property}` }) });
-    const fields = Object.fromEntries(['preset', 'fill_style', 'color', 'solid_fill', 'opacity'].map(property => [property, binding(property)]));
-    if (entity) fields.index = scope.index;
-    const paint = renderPaintEditor({ ...state, id: `${prefix}target-above-paint-editor`, root: options.root, fields, activation: binding('enabled'),
-      resetLabel: entity ? 'Reset to Card paint' : 'Reset to default paint', cssText: this.options.cssText,
-      paletteFields: state.enabled ? options.paintChildren?.(scope) : null });
+    const renderPaint = (direction, destination) => {
+      const state = getDestinationEditorState(this.context, scope, destination, options.paletteValues?.[direction], options.registry);
+      const binding = property => ({ id: `${prefix}target-${direction}-paint-${property}`,
+        ...(entity ? { kind: `entity-target-${direction}-paint-${property}`, index: scope.index } : { field: `target-${direction}-paint-${property}` }) });
+      const fields = Object.fromEntries(['preset', 'fill_style', 'color', 'solid_fill', 'opacity'].map(property => [property, binding(property)]));
+      if (entity) fields.index = scope.index;
+      return { state, markup: renderPaintEditor({ ...state, id: `${prefix}target-${direction}-paint-editor`, root: options.root,
+        fields, activation: binding('enabled'), resetLabel: entity ? 'Reset to Card paint' : 'Reset to default paint',
+        cssText: this.options.cssText, paletteFields: state.enabled ? options.paintChildren?.(scope, direction) : null }) };
+    };
+    const above = renderPaint('above', TARGET_ABOVE_PAINT);
+    const below = renderPaint('below', TARGET_BELOW_PAINT);
     return `<div id="${prefix}target-controls">
       ${this._renderGroup(scope, 'shared', 'Shared Target', shared, entity ? this._getTargetOverrideSummary(scope) : this._getCardTargetMarkerSummary())}
-      ${this._renderGroup(scope, 'above', 'Above Target', paint, state.enabled ? describePaint(state.paint, state.inherited) : 'Paint disabled')}
+      ${this._renderGroup(scope, 'above', 'Above Target', above.markup, above.state.enabled ? describePaint(above.state.paint, above.state.inherited) : 'Paint disabled')}
+      ${this._renderGroup(scope, 'below', 'Below Target', below.markup, below.state.enabled ? describePaint(below.state.paint, below.state.inherited) : 'Paint disabled')}
     </div>`;
   }
 }

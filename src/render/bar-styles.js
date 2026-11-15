@@ -22,7 +22,8 @@ export const barTrackStyles = `
           pointer-events: none;
           z-index: 1;
         }
-        .bar-paint-layer[data-layer="above-target"] {
+        .bar-paint-layer[data-layer="above-target"],
+        .bar-paint-layer[data-layer="below-target"] {
           z-index: 2;
         }
         .bar-fill-reveal.no-anim {

@@ -35,6 +35,7 @@ async function mount(page, source, host, config = {}, value = 80, width = 240) {
 }
 const saved = page => page.evaluate(() => window.__targetConfig);
 const targetLayer = runtime => runtime.locator('.bar-paint-layer[data-layer="above-target"]');
+const belowTargetLayer = runtime => runtime.locator('.bar-paint-layer[data-layer="below-target"]');
 
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Entity', 'Feature']) {
   test(`${host}/${source}: sustained typing, disclosure and focus survive echoes and replacements`, async ({ page }) => {
@@ -43,7 +44,8 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Entity', 'Fea
     await openTarget(editor, host, ['shared']);
     await expect(editor.locator(`#${prefix}target-shape`)).not.toBeVisible();
     await expect(editor.locator(`#${prefix}target-label-text`)).not.toBeVisible();
-    await expect(editor.locator('[id*="target-below"], [id*="independent-threshold"], [id*="target-above-fill"]')).toHaveCount(0);
+    await expect(editor.locator(`#card-group-${prefix}target-below`)).toHaveAttribute('aria-expanded', 'false');
+    await expect(editor.locator('[id*="independent-threshold"], [id*="target-above-fill"]')).toHaveCount(0);
     await openTarget(editor, host);
     const input = editor.locator(`#${prefix}target-value`);
     await input.evaluate(node => { window.__thresholdNode = node; });
@@ -122,7 +124,8 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Entity', 'Fea
     await expect(targetLayer(runtime)).toHaveCSS('display', 'block');
     expect(await runtime.locator('.target-marker').evaluate(node => node === window.__singleTargetMarker)).toBe(true);
     await expect(runtime.locator('.target-marker')).toHaveCount(1);
-    await expect(runtime.locator('[data-layer="target-below"]')).toHaveCount(0);
+    await expect(runtime.locator('[data-layer="below-target"]')).toHaveCount(1);
+    await expect(belowTargetLayer(runtime)).toHaveCSS('display', 'none');
     await expect(targetLayer(runtime)).toHaveCSS('opacity', '0.4');
     await expect(runtime.locator('.target-marker')).toHaveCSS('opacity', '1');
   });
@@ -169,5 +172,35 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Entity', 'Fea
       await expect(paint).toHaveJSProperty('open', true);
       await expect(editor.locator(`#card-group-${host === 'Entity' ? 'entity-0-' : ''}target-above`)).toHaveAttribute('aria-expanded', 'true');
     }
+  });
+
+  test(`${host}/${source}: Below Paint uses its own collapsible destination and shared threshold`, async ({ page }) => {
+    const target = { at: 60, when_above: { paint: { color: 'blue' } },
+      when_below: { paint: { color: 'red', opacity: 45 } } };
+    const { editor, runtime } = await mount(page, source, host, { target }, 20);
+    await expect(belowTargetLayer(runtime)).toHaveCSS('display', 'block');
+    await expect(belowTargetLayer(runtime)).toHaveCSS('opacity', '0.45');
+    await expect(runtime.locator('.target-marker')).toHaveCount(1);
+    await expect(targetLayer(runtime)).toHaveCSS('display', 'none');
+    await page.evaluate(() => {
+      window.__targetHass = { ...window.__targetHass, states: { ...window.__targetHass.states,
+        'sensor.power': { ...window.__targetHass.states['sensor.power'], state: '70' } } };
+      const card = document.querySelector('sensor-bar-card-plus, sensor-bar-card-plus-feature'); card.hass = window.__targetHass;
+    });
+    await expect(belowTargetLayer(runtime)).toHaveCSS('display', 'none');
+
+    await openTarget(editor, host, ['below']);
+    const prefix = host === 'Entity' ? 'entity-0-' : '';
+    const group = editor.locator(`#card-group-${prefix}target-below`);
+    await expect(group).toHaveAttribute('aria-expanded', 'true');
+    const paint = editor.locator(`#${prefix}target-below-paint-editor`);
+    await expect(paint).toHaveCount(1);
+    await paint.locator(':scope > summary').click();
+    const color = paint.locator(`#${prefix}target-below-paint-color`);
+    await color.fill('#008000');
+    const config = await saved(page), scope = host === 'Entity' ? config.entities[0] : config;
+    expect(scope.target.when_below.paint.color).toBe('#008000');
+    expect(scope.target.when_below.paint.opacity).toBe(host === 'Entity' ? undefined : 45);
+    expect((host === 'Entity' ? config.target : scope.target).when_above.paint.color).toBe('blue');
   });
 }

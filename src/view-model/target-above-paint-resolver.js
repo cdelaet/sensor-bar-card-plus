@@ -5,3 +5,7 @@ export function resolveTargetAbovePaint(target, inherited, registry) {
   return { legacy: target?.legacy === true,
     ...resolveDestinationPaint(target?.paint, inherited?.paint, registry) };
 }
+
+export function resolveTargetBelowPaint(target, inherited, registry) {
+  return resolveDestinationPaint(target?.paint, inherited?.paint, registry);
+}

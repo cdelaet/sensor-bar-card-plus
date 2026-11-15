@@ -86,9 +86,10 @@ async function openSection(editor, entry) {
   if(await group.count())await openDisclosure(group);
  }
  if(entry.section==='Target') {
-  await openTarget(editor,entry.scope==='entity'?'Entity':'Card',entry.name?.includes('target-above-paint')?['above']:['shared','appearance','labels']);
-  if(entry.name?.includes('target-above-paint')) {
-   const paint=editor.locator(`#${entry.scope==='entity'?'entity-0-':''}target-above-paint-editor`);
+  const targetPaintDirection=entry.name?.match(/target-(above|below)-paint/)?.[1];
+  await openTarget(editor,entry.scope==='entity'?'Entity':'Card',targetPaintDirection?[targetPaintDirection]:['shared','appearance','labels']);
+  if(targetPaintDirection) {
+   const paint=editor.locator(`#${entry.scope==='entity'?'entity-0-':''}target-${targetPaintDirection}-paint-editor`);
    if(!await paint.evaluate(node=>node.open))await paint.locator(':scope > summary').click();
   }
  }

@@ -158,6 +158,13 @@ export function getAboveTargetLayerGeometry(targetPct = null, scaleDirection = '
   };
 }
 
+export function getBelowTargetLayerGeometry(targetPct = null, scaleDirection = 'normal') {
+  if (!Number.isFinite(targetPct)) return null;
+  const interval = projectScaleInterval(0, targetPct, scaleDirection);
+  if (!interval || interval.start >= interval.end) return null;
+  return { start: interval.start, end: interval.end, hidden: false };
+}
+
 function getBaselinePaintGradients(ecfg, baselinePct, scaleDirection) {
   const clampedBaseline = Number.isFinite(baselinePct)
     ? Math.min(100, Math.max(0, baselinePct))
@@ -234,7 +241,7 @@ export function getStaticLayerRevealStyle(geometry) {
   return 'display:none;clip-path:inset(0 100% 0 0 round 0);';
 }
 
-export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, scaleDirection = 'normal', samplePercent = 0, needleActive = false) {
+export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, scaleDirection = 'normal', samplePercent = 0, needleActive = false, targetBelowPct = targetPct) {
   const basePaintStyle = getFullScaleBackgroundStyle([
     paintCompiler.compilePaint(ordinaryPaint(ecfg), { color, minValue, maxValue, scaleDirection, samplePercent }).gradient,
   ]);
@@ -283,7 +290,22 @@ export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, b
       : getStaticLayerRevealStyle({ start: 0, end: 0, hidden: true }),
   };
 
-  return [baseLayer, ...baselineLayers, aboveTargetLayer];
+  const belowTarget = ecfg?.target_below;
+  const belowPaint = belowTarget?.paint;
+  const belowGeometry = getBelowTargetLayerGeometry(targetBelowPct, scaleDirection);
+  const belowActive = !!belowGeometry && !!belowPaint && (needleActive || samplePercent < targetBelowPct);
+  const belowCompiled = belowActive ? paintCompiler.compilePaint(belowPaint, { minValue, maxValue, scaleDirection, samplePercent }) : null;
+  const belowTargetLayer = {
+    id: 'below-target',
+    zIndex: 2,
+    visible: belowActive,
+    paintStyle: belowCompiled ? getFullScaleBackgroundStyle([belowCompiled.gradient])
+      + (belowPaint.opacity === 100 ? '' : `opacity:${(belowPaint.opacity ?? 100) / 100};`) : 'display:none;',
+    revealStyle: belowActive ? getStaticLayerRevealStyle(belowGeometry)
+      : getStaticLayerRevealStyle({ start: 0, end: 0, hidden: true }),
+  };
+
+  return [baseLayer, ...baselineLayers, aboveTargetLayer, belowTargetLayer];
 }
 
 export function getFillRenderState(
@@ -291,6 +313,7 @@ export function getFillRenderState(
   minValue = 0, maxValue = 100, needleActive = false,
   scaleDirection = ecfg?.scale?.direction ?? 'normal',
   barDirection = ecfg?.bar?.direction ?? 'normal',
+  targetBelowPct = targetScalePercent,
 ) {
   const valuePosition = projectScalePercent(scalePercent, scaleDirection);
   const baselinePosition = projectScalePercent(baselineScalePercent, scaleDirection);
@@ -336,7 +359,7 @@ export function getFillRenderState(
   }
   const paintLayers = getFillPaintLayers(
     geometry, h, ecfg, color, targetScalePercent, baselineScalePercent,
-    minValue, maxValue, scaleDirection, scalePercent, needleActive,
+    minValue, maxValue, scaleDirection, scalePercent, needleActive, targetBelowPct,
   );
   return {
     geometry,
@@ -490,7 +513,7 @@ export function buildBarRenderModel(row, appearance, { height, color = getColor(
         : row.percent,
       height, appearance, color, row.targetPaintPercent ?? row.targetPercent, baselinePercent,
       row.min, row.max, row.needle.show,
-      appearance.scale?.direction ?? 'normal', appearance.bar?.direction ?? 'normal',
+      appearance.scale?.direction ?? 'normal', appearance.bar?.direction ?? 'normal', row.targetBelowPaintPercent ?? row.targetPercent,
     ),
     baseline: {
       configured: baselineConfigured,

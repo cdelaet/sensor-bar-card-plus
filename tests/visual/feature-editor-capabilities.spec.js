@@ -64,7 +64,9 @@ for(const source of ['src','dist'])test(`Feature CSS colors ${source}: all direc
  const editor=await mount(page,source);await editor.locator('.generic-marker-toggle').click();
  for(const side of ['above','below'])await editor.locator(`#baseline-${side}-paint-editor > summary`).click();
  await editor.locator('#card-group-target-above').click();await editor.locator('#target-above-paint-editor > summary').click();
- const ids=['bar-color','bar-needle-color','baseline-above-paint-color','baseline-below-paint-color','target-color','target-above-paint-color','peak-color','floor-color','card-card-generic-marker-1-color'];
+ await editor.locator('#card-group-target-below').click();await editor.locator('#target-below-paint-editor > summary').click();
+ await editor.locator('#target-below-paint-enabled').check();
+ const ids=['bar-color','bar-needle-color','baseline-above-paint-color','baseline-below-paint-color','target-color','target-above-paint-color','target-below-paint-color','peak-color','floor-color','card-card-generic-marker-1-color'];
  for(const id of ids){
   const control=editor.locator(`#${id}-text-fallback`);expect(await control.getAttribute('aria-label')).toContain('CSS value');
   for(const color of ['#123456','#abc','red','rgb(1, 2, 3)','var(--warning-color)','  hsl(30, 100%, 50%)  ']){await control.fill(color);await expect(control).toBeFocused();await expect(control).toHaveAttribute('aria-invalid','false');}

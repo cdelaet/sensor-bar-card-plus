@@ -53,7 +53,7 @@ import { historicalMarkerConsumers, historicalMarkerResults } from '../history/m
 import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
 import { authoredPaintProperties, resolvePaintPreset, resolveScopedPaintPreset } from '../view-model/paint-preset-resolver.js';
 import { resolveBaselinePaints } from '../view-model/baseline-paint-resolver.js';
-import { resolveTargetAbovePaint } from '../view-model/target-above-paint-resolver.js';
+import { resolveTargetAbovePaint, resolveTargetBelowPaint } from '../view-model/target-above-paint-resolver.js';
 import * as barRenderModel from '../view-model/bar-render-model.js';
 import * as barRenderer from '../render/bar-renderer.js';
 import { attachRowActionHandlers, resolveRowAction } from '../actions/row-actions.js';
@@ -204,6 +204,7 @@ export class SensorBarCard extends HTMLElement {
     this._paintPresetEntityPaints = new WeakMap();
     this._paintPresetEntityBaselinePaints = new WeakMap();
     this._paintPresetEntityTargetAbove = new WeakMap();
+    this._paintPresetEntityTargetBelow = new WeakMap();
     this._paintPresetDiagnostics = [];
     this._lastDiagnosticsSignature = null;
     this._hass = null;
@@ -547,6 +548,8 @@ export class SensorBarCard extends HTMLElement {
     const resolvedBaselinePaints = this._paintPresetEntityBaselinePaints.get(entityCfg);
     const targetAbove = this._paintPresetEntityTargetAbove.get(entityCfg)
       ?? resolveTargetAbovePaint(ecfg.target_above, this._config.target_above, this._paintPresetRegistry);
+    const targetBelow = this._paintPresetEntityTargetBelow.get(entityCfg)
+      ?? resolveTargetBelowPaint(ecfg.target_below, this._config.target_below, this._paintPresetRegistry);
     const baseline = resolvedBaselinePaints ? { ...ecfg.baseline } : ecfg.baseline;
     if (resolvedBaselinePaints) for (const side of ['above', 'below']) {
       if (Object.prototype.hasOwnProperty.call(resolvedBaselinePaints, side)) {
@@ -560,6 +563,7 @@ export class SensorBarCard extends HTMLElement {
       } : {}),
       ...(resolvedBaselinePaints ? { baseline } : {}),
       target_above: targetAbove,
+      target_below: targetBelow,
       icon: ecfg.icon === false ? false : (ecfg.icon ?? stateObj?.attributes?.icon ?? this._getDefaultEntityIcon(stateObj, ecfg.entity)),
       name: ecfg.name ?? null,
     };
@@ -569,6 +573,7 @@ export class SensorBarCard extends HTMLElement {
     this._paintPresetEntityPaints = new WeakMap();
     this._paintPresetEntityBaselinePaints = new WeakMap();
     this._paintPresetEntityTargetAbove = new WeakMap();
+    this._paintPresetEntityTargetBelow = new WeakMap();
     this._paintPresetDiagnostics = [];
     this._diagnostics = this._baseDiagnostics ?? { warnings: [], errors: [] };
     if (!this._config) return;
@@ -576,18 +581,24 @@ export class SensorBarCard extends HTMLElement {
     const entities = this._config.entities ?? [];
     const rootBaseline = resolveBaselinePaints(this._config.baseline, null, this._paintPresetRegistry);
     const rootTarget = resolveTargetAbovePaint(this._config.target_above, null, this._paintPresetRegistry);
+    const rootTargetBelow = resolveTargetBelowPaint(this._config.target_below, null, this._paintPresetRegistry);
     const diagnostics = rootBaseline.diagnostics.map(diagnostic => ({
       ...diagnostic, path: `baseline.${diagnostic.path}`, entity: null,
     }));
     diagnostics.push(...rootTarget.diagnostics.map(diagnostic => ({
       ...diagnostic, path: `target.when_above.${diagnostic.path}`, entity: null,
     })));
+    diagnostics.push(...rootTargetBelow.diagnostics.map(diagnostic => ({
+      ...diagnostic, path: `target.when_below.${diagnostic.path}`, entity: null,
+    })));
     if (!Object.prototype.hasOwnProperty.call(inheritedProperties, 'preset')
       && !entities.some(entity => Object.prototype.hasOwnProperty.call(authoredPaintProperties(entity.bar?.paint), 'preset'))
       && !Object.keys(rootBaseline.paints).length
       && !diagnostics.length
       && this._config.target_above?.paint?.preset === undefined
+      && this._config.target_below?.paint?.preset === undefined
       && !entities.some(entity => entity.target_above?.paint?.preset !== undefined)
+      && !entities.some(entity => entity.target_below?.paint?.preset !== undefined)
       && !entities.some(entity => ['above', 'below'].some(side => entity.baseline?.[side]?.paint?.preset !== undefined))) return;
     const cardHasPreset = Object.prototype.hasOwnProperty.call(inheritedProperties, 'preset');
     const root = cardHasPreset
@@ -603,6 +614,11 @@ export class SensorBarCard extends HTMLElement {
       this._paintPresetEntityTargetAbove.set(entity, targetAbove);
       diagnostics.push(...targetAbove.diagnostics.map(diagnostic => ({
         ...diagnostic, path: `entities.${entity.entity}.target.when_above.${diagnostic.path}`, entity: entity.entity,
+      })));
+      const targetBelow = resolveTargetBelowPaint(entity.target_below, this._config.target_below, this._paintPresetRegistry);
+      this._paintPresetEntityTargetBelow.set(entity, targetBelow);
+      diagnostics.push(...targetBelow.diagnostics.map(diagnostic => ({
+        ...diagnostic, path: `entities.${entity.entity}.target.when_below.${diagnostic.path}`, entity: entity.entity,
       })));
       const baseline = resolveBaselinePaints(entity.baseline, this._config.baseline, this._paintPresetRegistry);
       if (Object.keys(baseline.paints).length) this._paintPresetEntityBaselinePaints.set(entity, baseline.paints);
@@ -3227,6 +3243,7 @@ ${barMarkerStyles}
       percent: pct, min: safeMin, max: safeMax,
       targetPercent: targetPct, baselinePercent: baselinePct,
       targetPaintPercent: rowViewModel?.targetPaintPercent,
+      targetBelowPaintPercent: rowViewModel?.targetBelowPaintPercent,
       needle: needleState, markers: markerModels,
     }, ecfg, { height: 'var(--sbcp-row-height)', color });
     const targetValueLabel = targetMarkerModel?.labelVisible ? `

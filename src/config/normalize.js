@@ -335,6 +335,16 @@ export function normalizeTargetAboveConfig(config, parent = null) {
   };
 }
 
+export function normalizeTargetBelowConfig(config, parent = null) {
+  if (config?._normalized) return config.target_below;
+  const inherited = parent?._normalized ? parent.target_below
+    : parent ? normalizeTargetBelowConfig(parent) : undefined;
+  const paint = config?.target?.when_below?.paint;
+  const normalized = normalizeBaselineDirectionConfig(paint === undefined ? undefined : { paint }, inherited ? { paint: inherited.paint } : null);
+  return { paint: normalized.paint,
+    ...(normalized[BAR_PAINT_DIAGNOSTICS] ? { [BAR_PAINT_DIAGNOSTICS]: normalized[BAR_PAINT_DIAGNOSTICS] } : {}) };
+}
+
 export function normalizeBaselineConfig(entityConfig, cardConfig) {
   const cardBaseline = cardConfig?.baseline;
   const rawBaseline = entityConfig?.baseline;
@@ -1271,6 +1281,7 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
   normalizedEntity.formatting = normalizeFormattingConfig(entityConfig, cardConfig);
   normalizedEntity.target_marker = normalizeTargetMarkerConfig(entityConfig, cardConfig);
   normalizedEntity.target_above = normalizeTargetAboveConfig(entityConfig, cardConfig);
+  normalizedEntity.target_below = normalizeTargetBelowConfig(entityConfig, cardConfig);
   normalizedEntity.peak_marker = normalizePeakMarkerConfig(entityConfig, cardConfig);
   normalizedEntity.floor_marker = normalizeFloorMarkerConfig(entityConfig, cardConfig);
   normalizeLegacyMarkerFields(normalizedEntity);
@@ -1376,6 +1387,7 @@ export function normalizeCardConfig(rawConfig) {
   normalizedCard.formatting = normalizeFormattingConfig(baseConfig, null);
   normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);
   normalizedCard.target_above = normalizeTargetAboveConfig(baseConfig);
+  normalizedCard.target_below = normalizeTargetBelowConfig(baseConfig);
   normalizedCard.peak_marker = normalizePeakMarkerConfig(baseConfig, null);
   normalizedCard.floor_marker = normalizeFloorMarkerConfig(baseConfig, null);
   normalizeLegacyMarkerFields(normalizedCard);
