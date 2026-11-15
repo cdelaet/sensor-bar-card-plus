@@ -165,6 +165,13 @@ export function getBelowTargetLayerGeometry(targetPct = null, scaleDirection = '
   return { start: interval.start, end: interval.end, hidden: false };
 }
 
+function getNeedleTargetLayerGeometry(targetPct, valuePct, scaleDirection) {
+  if (!Number.isFinite(targetPct) || !Number.isFinite(valuePct) || targetPct === valuePct) return null;
+  const interval = projectScaleInterval(targetPct, valuePct, scaleDirection);
+  if (!interval || interval.start >= interval.end) return null;
+  return { start: interval.start, end: interval.end, hidden: false };
+}
+
 function getBaselinePaintGradients(ecfg, baselinePct, scaleDirection) {
   const clampedBaseline = Number.isFinite(baselinePct)
     ? Math.min(100, Math.max(0, baselinePct))
@@ -268,14 +275,18 @@ export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, b
     };
   });
 
-  const aboveTargetGeometry = getAboveTargetLayerGeometry(targetPct, scaleDirection);
+  const aboveTargetViolation = Number.isFinite(samplePercent) && samplePercent > targetPct;
+  const aboveTargetGeometry = needleActive
+    ? (aboveTargetViolation ? getNeedleTargetLayerGeometry(targetPct, samplePercent, scaleDirection) : null)
+    : getAboveTargetLayerGeometry(targetPct, scaleDirection);
   const target = ecfg?.target_above;
   const paint = target?.paint;
   // The normalized destination is authoritative, including null. The mirror
   // fallback serves old internal callers only, never a disabled destination.
   const legacyColor = target === undefined ? ecfg?.bar?.above_target_color : null;
   const active = !!aboveTargetGeometry && (paint
-    ? target.legacy || needleActive || samplePercent > targetPct : !!legacyColor);
+    ? (needleActive ? aboveTargetViolation : target.legacy || aboveTargetViolation)
+    : !!legacyColor && (!needleActive || aboveTargetViolation));
   const compiled = active && paint ? paintCompiler.compilePaint(paint, { minValue, maxValue, scaleDirection, samplePercent }) : null;
   const targetStyle = compiled ? getFullScaleBackgroundStyle([compiled.gradient])
     + (paint.opacity === 100 ? '' : `opacity:${(paint.opacity ?? 100) / 100};`)
@@ -292,8 +303,11 @@ export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, b
 
   const belowTarget = ecfg?.target_below;
   const belowPaint = belowTarget?.paint;
-  const belowGeometry = getBelowTargetLayerGeometry(targetBelowPct, scaleDirection);
-  const belowActive = !!belowGeometry && !!belowPaint && (needleActive || samplePercent < targetBelowPct);
+  const belowTargetViolation = Number.isFinite(samplePercent) && samplePercent < targetBelowPct;
+  const belowGeometry = needleActive
+    ? (belowTargetViolation ? getNeedleTargetLayerGeometry(targetBelowPct, samplePercent, scaleDirection) : null)
+    : getBelowTargetLayerGeometry(targetBelowPct, scaleDirection);
+  const belowActive = !!belowGeometry && !!belowPaint && belowTargetViolation;
   const belowCompiled = belowActive ? paintCompiler.compilePaint(belowPaint, { minValue, maxValue, scaleDirection, samplePercent }) : null;
   const belowTargetLayer = {
     id: 'below-target',

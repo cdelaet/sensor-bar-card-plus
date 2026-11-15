@@ -111,14 +111,45 @@ describe('Above Target Stage 1 geometry', () => {
     });
   }
 
-  it('gates canonical Fill at equality/below even across Baseline, but keeps Needle regions permanent', () => {
+  it('activates Needle Paint only above the threshold and clips it to the current value', () => {
     const target = { at: 60, when_above: { paint } };
     for (const value of [40, 60]) expect(model({ target, baseline: { at: 90 } }, value).layer.visible).toBe(false);
     const low = model({ target, bar: { needle: true } }, 20);
+    const equal = model({ target, bar: { needle: true } }, 60);
     const high = model({ target, bar: { needle: true } }, 80);
-    expect(low.layer.visible).toBe(true); expect(high.layer.visible).toBe(true);
-    expect(low.layer.revealStyle).toBe(high.layer.revealStyle);
+    expect(low.layer.visible).toBe(false); expect(equal.layer.visible).toBe(false);
+    expect(high.layer.visible).toBe(true);
+    expect(high.layer.revealStyle).toContain('inset(0 20% 0 60%');
     expect(low.row.needle.pct).not.toBe(high.row.needle.pct);
+  });
+
+  it.each([
+    ['normal', 80, 'inset(0 20% 0 60%'],
+    ['reverse', 80, 'inset(0 60% 0 20%'],
+  ])('clips Needle violations to threshold/value on %s Scale and preserves legacy inputs', (scaleDirection, value, clip) => {
+    const canonical = model({ scale: { direction: scaleDirection }, bar: { needle: true },
+      target: { at: 60, when_above: { paint } } }, value);
+    expect(canonical.layer.visible).toBe(true);
+    expect(canonical.layer.revealStyle).toContain(clip);
+
+    const legacy = model({ scale: { direction: scaleDirection }, bar: { needle: true },
+      target: { at: 60, when_exceeded: { fill_color: 'red' } } }, value);
+    expect(legacy.layer.visible).toBe(true);
+    expect(legacy.layer.revealStyle).toContain(clip);
+    expect(legacy.layer.paintStyle).toContain('red');
+    const legacyColor = model({ scale: { direction: scaleDirection }, bar: { needle: true },
+      target: { at: 60 }, above_target_color: 'purple' }, value);
+    expect(legacyColor.layer.visible).toBe(true);
+    expect(legacyColor.layer.revealStyle).toContain(clip);
+    expect(legacyColor.layer.paintStyle).toContain('purple');
+    expect(model({ bar: { needle: true }, target: { at: 60, when_exceeded: { fill_color: 'red' } } }, 60).layer.visible).toBe(false);
+    expect(model({ bar: { needle: true }, target: { at: 60 }, above_target_color: 'purple' }, 60).layer.visible).toBe(false);
+  });
+
+  it('retains legacy Baseline-crossing compatibility only for Fill mode', () => {
+    const target = { at: 60, when_exceeded: { fill_color: 'red' } };
+    expect(model({ baseline: { at: 90 }, target }, 40).layer.visible).toBe(true);
+    expect(model({ target, bar: { needle: true } }, 40).layer.visible).toBe(false);
   });
 
   it('samples solid fill from Target Paint at the semantic value, independent of Scale direction', () => {

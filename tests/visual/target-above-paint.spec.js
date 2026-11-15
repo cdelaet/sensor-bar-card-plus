@@ -228,3 +228,53 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Entity', 'Fea
     expect((await saved(page)).target.when_above?.paint?.preset).toBeUndefined();
   });
 }
+
+for (const source of ['src', 'dist']) for (const scaleDirection of ['normal', 'reverse']) {
+  test(`Needle Target Paint renders only the violating threshold-to-value interval (${source}, ${scaleDirection} Scale)`, async ({ page }) => {
+    const { runtime } = await mount(page, source, 'Card', {
+      bar: { needle: true }, scale: { direction: scaleDirection },
+      target: { at: 60, when_above: { paint: { color: '#d02070' } }, when_below: { paint: { color: '#2080d0' } } },
+    }, 50);
+    const above = runtime.locator('.bar-paint-layer[data-layer="above-target"]');
+    const below = runtime.locator('.bar-paint-layer[data-layer="below-target"]');
+    const update = value => page.evaluate(value => {
+      const card = document.querySelector('sensor-bar-card-plus');
+      window.__targetHass = { ...window.__targetHass, states: { ...window.__targetHass.states,
+        'sensor.power': { ...window.__targetHass.states['sensor.power'], state: String(value) } } };
+      card.hass = window.__targetHass;
+    }, value);
+    const clips = scaleDirection === 'normal'
+      ? { below: /inset\(0px 40% 0px 50%/, above: /inset\(0px 30% 0px 60%/ }
+      : { below: /inset\(0px 50% 0px 40%/, above: /inset\(0px 60% 0px 30%/ };
+
+    await expect(above).toHaveCSS('display', 'none');
+    await expect(below).toHaveCSS('display', 'block');
+    await expect(below).toHaveCSS('clip-path', clips.below);
+    await expect(below).toHaveCSS('background-image', /rgb\(32, 128, 208\)/);
+    await update(60);
+    await expect(above).toHaveCSS('display', 'none');
+    await expect(below).toHaveCSS('display', 'none');
+    await update(70);
+    await expect(above).toHaveCSS('display', 'block');
+    await expect(above).toHaveCSS('clip-path', clips.above);
+    await expect(above).toHaveCSS('background-image', /rgb\(208, 32, 112\)/);
+    await expect(below).toHaveCSS('display', 'none');
+  });
+
+  test(`legacy upper Target Paint follows strict Needle violation gating (${source}, ${scaleDirection} Scale)`, async ({ page }) => {
+    const { runtime } = await mount(page, source, 'Card', {
+      bar: { needle: true }, target: { at: 60, when_exceeded: { fill_color: '#d02070' } },
+    }, 40);
+    const layer = runtime.locator('.bar-paint-layer[data-layer="above-target"]');
+    await expect(layer).toHaveCSS('display', 'none');
+    await page.evaluate(() => {
+      const card = document.querySelector('sensor-bar-card-plus');
+      window.__targetHass = { ...window.__targetHass, states: { ...window.__targetHass.states,
+        'sensor.power': { ...window.__targetHass.states['sensor.power'], state: '80' } } };
+      card.hass = window.__targetHass;
+    });
+    await expect(layer).toHaveCSS('display', 'block');
+    await expect(layer).toHaveCSS('clip-path', /inset\(0px 20% 0px 60%/);
+    await expect(layer).toHaveCSS('background-image', /rgb\(208, 32, 112\)/);
+  });
+}

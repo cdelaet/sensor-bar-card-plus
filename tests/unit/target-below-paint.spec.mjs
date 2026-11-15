@@ -61,23 +61,39 @@ describe('Below Target Stage 2 destination and runtime', () => {
     expect(model(config, 70).layer.visible).toBe(false);
   });
 
-  it('keeps the numerical lower interval permanent in Needle mode, even when the marker is hidden', () => {
+  it('activates Needle Paint only below the threshold and clips it to the current value', () => {
     const config = { bar: { needle: true }, target: { enabled: false, at: 40,
       when_below: { paint: { fill_style: 'gradient', gradient_stops: [{ pos: 0, color: 'black' }, { pos: 100, color: 'white' }] } } } };
-    const low = model(config, 10), high = model(config, 90);
+    const low = model(config, 10), equal = model(config, 40), high = model(config, 90);
     expect(low.layer.visible).toBe(true);
-    expect(high.layer.visible).toBe(true);
-    expect(low.layer.revealStyle).toBe(high.layer.revealStyle);
-    expect(low.layer.revealStyle).toContain('inset(0 60% 0 0%');
+    expect(equal.layer.visible).toBe(false);
+    expect(high.layer.visible).toBe(false);
+    expect(low.layer.revealStyle).toContain('inset(0 60% 0 10%');
     expect(low.row.markers.find(marker => marker.type === 'target').visible).toBe(false);
   });
 
-  it('projects lower Scale intervals in reversed direction and keeps the shared threshold', () => {
-    const config = { scale: { direction: 'reverse' }, target: { at: 40, when_below: { paint: { color: 'red' } } } };
-    const result = model(config, 20);
+  it.each([
+    ['normal', 'inset(0 60% 0 10%'],
+    ['reverse', 'inset(0 10% 0 60%'],
+  ])('clips below-threshold Needle Paint on a %s Scale and clips at Scale boundaries', (scaleDirection, clip) => {
+    const result = model({ scale: { direction: scaleDirection }, bar: { needle: true },
+      target: { at: 40, when_below: { paint: { color: 'red' } } } }, 10);
     expect(result.layer.visible).toBe(true);
-    expect(result.layer.revealStyle).toContain('inset(0 0% 0 60%');
+    expect(result.layer.revealStyle).toContain(clip);
     expect(result.row.markers.filter(marker => marker.type === 'target')).toHaveLength(1);
+
+    const clipped = model({ scale: { direction: scaleDirection }, bar: { needle: true },
+      target: { at: 10, when_below: { paint: { color: 'red' } } } }, -20);
+    expect(clipped.layer.visible).toBe(true);
+    expect(clipped.layer.revealStyle).toContain(scaleDirection === 'normal'
+      ? 'inset(0 90% 0 0%' : 'inset(0 0% 0 90%');
+  });
+
+  it('preserves value-gated Fill clipping and equality behavior', () => {
+    const config = { target: { at: 40, when_below: { paint: { color: 'red' } } } };
+    expect(model(config, 20).layer.visible).toBe(true);
+    expect(model(config, 40).layer.visible).toBe(false);
+    expect(model(config, 80).layer.visible).toBe(false);
   });
 
   it('retains property recovery diagnostics on the Below destination', () => {
