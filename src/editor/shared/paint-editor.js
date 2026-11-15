@@ -44,7 +44,7 @@ function renderPaletteFields(paletteFields, options) {
  */
 export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {}, inherited = false,
   scale, previewScale = scale, fields = {}, root, paletteContent = '', paletteFields = null, cssText = false,
-  presetReference, presetOptions = [], overrides = {}, diagnostics = [], registryStatus = 'unknown',
+  presetReference, presetInherited = false, presetOptions = [], overrides = {}, diagnostics = [], registryStatus = 'unknown',
   showPropertyMeta = true, bodyId = null, resetLabel, resetDisabled = true,
   sources = {}, activation = null, enabled = true, destination = 'bar' }) {
   const controls = Object.fromEntries(['fill_style', 'solid_fill', 'color', 'opacity'].map(key => [key,
@@ -54,12 +54,13 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
   const open = root?.querySelector(`#${id}`)?.open === true;
   const fillStyle = paint.fill_style ?? 'bands';
   const referenceName = presetReference == null ? '' : String(presetReference);
+  const selection = presetInherited ? undefined : presetReference;
   const propertyHeader = (property, label) => renderPropertyMeta(property, label, { sources, overrides, fields, showPropertyMeta });
   const labelRow = (property, label, control) => `<div class="paint-property-row"><div class="paint-property-heading"><label for="${controls[property].id}">${label}</label>${propertyHeader(property, label)}</div>${control}</div>`;
-  const options = ['<option value="">None</option>',
-    ...presetOptions.map(option => `<option value="${escapeAttribute(option.value)}"${presetReference === option.value ? ' selected' : ''}>${escapeAttribute(option.label)}</option>`),
+  const options = [`<option value=""${presetInherited ? ' selected' : ''}>None</option>`,
+    ...presetOptions.map(option => `<option value="${escapeAttribute(option.value)}"${selection === option.value ? ' selected' : ''}>${escapeAttribute(option.label)}</option>`),
     ...(presetReference != null && !presetOptions.some(option => option.value === presetReference)
-      ? [`<option value="${escapeAttribute(referenceName)}" selected>${escapeAttribute(`${referenceName || '(empty name)'} (unavailable)`)}</option>`] : [])].join('');
+      ? [`<option value="${escapeAttribute(referenceName)}"${presetInherited ? '' : ' selected'}>${escapeAttribute(`${referenceName || '(empty name)'} (unavailable)`)}</option>`] : [])].join('');
   const showPreset = presetOptions.length > 0 || presetReference != null;
   const feedback = diagnostics.find(item => item.code?.startsWith('paint_preset') || item.code === 'paint_registry_unavailable');
   const feedbackText = feedback?.code === 'paint_preset_missing'
@@ -72,7 +73,7 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
           ? `Preset “${feedback.reference}” cannot be checked. Using inherited paint.`
           : '';
   const description = presetReference != null
-    ? `${inherited ? 'Inherited · ' : ''}Preset · ${referenceName || '(empty name)'} · ${describePaint(paint)}`
+    ? `${inherited || presetInherited ? 'Inherited · ' : ''}Preset · ${referenceName || '(empty name)'} · ${describePaint(paint)}`
     : describePaint(paint, inherited);
   const paintChildren = paletteFields && typeof paletteFields === 'object'
     ? renderPaletteFields(paletteFields, { sources, overrides, fields, showPropertyMeta }) : paletteContent;
@@ -138,7 +139,7 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
   const description = editor.querySelector?.('.paint-editor-description');
   const reference = state.presetReference == null ? '' : String(state.presetReference);
   const text = state.presetReference != null
-    ? `${inherited ? 'Inherited · ' : ''}Preset · ${reference || '(empty name)'} · ${describePaint(paint)}`
+    ? `${inherited || state.presetInherited ? 'Inherited · ' : ''}Preset · ${reference || '(empty name)'} · ${describePaint(paint)}`
     : describePaint(paint, inherited);
   if (description && description.textContent !== text) description.textContent = text;
   const swatch = editor.querySelector?.('.paint-editor-swatch');
@@ -153,7 +154,7 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
       presetControl.dataset.options = optionHtml;
     }
     presetControl.closest?.('.paint-preset-row')?.toggleAttribute('hidden', !(state.presetOptions?.length || state.presetReference != null));
-    if (root.activeElement !== presetControl) presetControl.value = activeReference;
+    if (root.activeElement !== presetControl) presetControl.value = state.presetInherited ? '' : activeReference;
   }
   // Effective colors can acquire a CSS value without replacing the mounted picker.
   const picker = editor.querySelector?.('input[type="color"][data-paint-property="color"]');

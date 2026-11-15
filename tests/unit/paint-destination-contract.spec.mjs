@@ -3,7 +3,7 @@ import { normalizeCardConfig } from '../../src/config/normalize.js';
 import { buildRowViewModel } from '../../src/view-model/row-view-model.js';
 import { buildBarRenderModel } from '../../src/view-model/bar-render-model.js';
 import { BAR_PAINT, BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT, resolveConfiguredDestination, scopeUsesPaintPreset } from '../../src/view-model/paint-destinations.js';
-import { getDestinationEditorState, setDestinationEnabled, resetDestinationPaint, selectDestinationPreset,
+import { getDestinationEditorState, handlePaintPresetControl, setDestinationEnabled, resetDestinationPaint, selectDestinationPreset,
   setDestinationProperty, clearDestinationProperty } from '../../src/editor/shared/paint-destination.js';
 import { getPathValue, setPathValue } from '../../src/editor/shared/editor-config.js';
 import { compilePaint } from '../../src/view-model/paint-compiler.js';
@@ -200,6 +200,25 @@ for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TA
       expect(f.events).toHaveLength(0);
       setDestinationProperty(f.context, f.scope, destination, 'opacity', 0);
       expect(f.paint()).toEqual({ preset: 'warm', color: '#abcdef', opacity: 0 });
+    });
+
+    if (host === 'Entity') it('keeps None as the local choice without disabling inherited Paint', () => {
+      const f = fixture(host, destination, undefined, { preset: 'warm' });
+      const before = structuredClone(f.config());
+      const control = { value: '', dataset: { kind: 'entity-paint-preset', index: '0' },
+        closest: () => ({ dataset: { paintDestination: destination.id } }) };
+      handlePaintPresetControl(f.context, control, '');
+      expect(control.value).toBe('');
+      expect(f.config()).toEqual(before);
+      expect(f.events).toHaveLength(0);
+      expect(f.state().paint).toMatchObject({ fill_style: 'gradient', opacity: 35 });
+      expect(f.state().sources.gradient_stops).toBe('Inherited');
+      selectDestinationPreset(f.context, f.scope, destination, 'cool');
+      setDestinationProperty(f.context, f.scope, destination, 'opacity', 65);
+      handlePaintPresetControl(f.context, control, '');
+      expect(f.paint()).toEqual({ opacity: 65 });
+      expect(control.value).toBe('');
+      expect(f.state().paint).toMatchObject({ fill_style: 'gradient', opacity: 65 });
     });
 
     if (host === 'Entity') it('resolves the parent preset before local overrides and identifies genuine inheritance', () => {

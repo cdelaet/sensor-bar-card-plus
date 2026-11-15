@@ -131,7 +131,8 @@ export function getDestinationEditorState(context, scope, destination = BAR_PAIN
     code: 'paint_opacity_invalid', severity: 'warning', path: 'paint.opacity', reference: null, fallback: 'default_opacity',
   });
   return { bindings, paint, enabled, destination: destination.id, inherited: !!parent && !configured, resetDisabled: !configured,
-    presetReference, presetOptions, overrides: authored, sources, diagnostics,
+    presetReference, presetInherited: ownPreset === undefined && inheritedPreset !== undefined,
+    presetOptions, overrides: authored, sources, diagnostics,
     registryStatus: registry?.status ?? 'loading', scale, previewScale: getPaintPreviewScale(paint, scale) };
 }
 
@@ -171,8 +172,7 @@ export function setDestinationProperty(context, scope, destination, property, ra
 
 export function selectDestinationPreset(context, scope, destination, value, { confirm } = {}) {
   const state = getDestinationEditorState(context, scope, destination);
-  if (value === '') return createDestinationBindings(context, scope, destination, { grouped: true })
-    .clear('preset', { preserveRawConfig: true, rerender: true });
+  if (value === '') return clearDestinationProperty(context, scope, destination, 'preset');
   if (value === state.presetReference) return true;
   const rawPaint = context.read(scope, destination.path);
   const hasProperties = isObject(rawPaint) ? Object.keys(rawPaint).some(key => key !== 'preset') : rawPaint != null;
@@ -194,12 +194,14 @@ export function handlePaintPresetControl(context, target, value) {
   if (!field?.endsWith('paint-preset')) return false;
   const destination = controlDestination(target);
   const scope = target.dataset.index === undefined ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
-  const current = getDestinationEditorState(context, scope, destination).presetReference;
   const window = target.ownerDocument?.defaultView;
-  const applied = selectDestinationPreset(context, scope, destination, value, {
+  selectDestinationPreset(context, scope, destination, value, {
     confirm: name => window?.confirm?.(`Applying paint preset “${name}” replaces local paint properties. Continue?`) === true,
   });
-  if (applied === false) target.value = current == null ? '' : String(current);
+  // None means no local reference. The effective Paint may still use a Card
+  // preset, including when clearing an already inherited selection is a no-op.
+  const state = getDestinationEditorState(context, scope, destination);
+  target.value = state.presetInherited ? '' : String(state.presetReference ?? '');
   return true;
 }
 
