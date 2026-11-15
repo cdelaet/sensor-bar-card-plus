@@ -318,6 +318,12 @@ function validateConfigScope(diagnostics, config, path, entity = null, inherited
   validateEntitySource(diagnostics, config?.target_marker?.source, `${path}.target.at`, entity);
   const scaleBounds = validateScaleBounds(diagnostics, config?.scale, path, entity);
   validateTargetRange(diagnostics, config, scaleBounds, path, entity);
+  const upperTarget = getStaticFixedValue(config?.target_directions?.above?.source);
+  const lowerTarget = getStaticFixedValue(config?.target_directions?.below?.source);
+  if (Number.isFinite(upperTarget) && Number.isFinite(lowerTarget) && lowerTarget > upperTarget) {
+    addWarning(diagnostics, 'target.invalid_ordering',
+      'Below Target threshold must not exceed Above Target threshold; Target paint is suppressed.', `${path}.target`, entity);
+  }
   validateBaselineRange(diagnostics, config, scaleBounds, path, entity);
   validateBaselineSuppressesNeedle(diagnostics, config, path, entity);
   validateExtremumReset(diagnostics, config, path, entity);
@@ -332,6 +338,12 @@ function validateConfigScope(diagnostics, config, path, entity = null, inherited
     if (!paint || typeof paint !== 'object') continue;
     validateSegments(diagnostics, paint.segments, scaleBounds, `${path}.baseline.${side}.paint`, entity, true);
     validateGradientStops(diagnostics, paint.gradient_stops, `${path}.baseline.${side}.paint`, entity);
+  }
+  for (const side of ['above', 'below']) {
+    const paint = config?.target?.[`when_${side}`]?.paint;
+    if (!paint || typeof paint !== 'object') continue;
+    validateSegments(diagnostics, paint.segments, scaleBounds, `${path}.target.when_${side}.paint`, entity, true);
+    validateGradientStops(diagnostics, paint.gradient_stops, `${path}.target.when_${side}.paint`, entity);
   }
 }
 

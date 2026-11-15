@@ -1097,6 +1097,94 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
   return normalizedTarget;
 }
 
+function hasOwnPath(object, path) {
+  let current = object;
+  for (const key of path.slice(0, -1)) current = current?.[key];
+  return current !== null && current !== undefined
+    && Object.prototype.hasOwnProperty.call(current, path[path.length - 1]);
+}
+
+/** Resolve the two approved directional target sources. Each authored source
+ * replaces the inherited source; source parts are never merged across scopes. */
+export function normalizeTargetDirections(entityConfig, cardConfig, sharedMarker = null) {
+  const ownTarget = entityConfig?.target && typeof entityConfig.target === 'object' && !Array.isArray(entityConfig.target)
+    ? entityConfig.target : {};
+  const cardTarget = cardConfig?.target && typeof cardConfig.target === 'object' && !Array.isArray(cardConfig.target)
+    ? cardConfig.target : {};
+  const directions = {};
+  for (const side of ['above', 'below']) {
+    const ownDirectionalAt = ['target', `when_${side}`, 'at'];
+    const ownSharedAt = ['target', 'at'];
+    const cardDirectionalAt = ['target', `when_${side}`, 'at'];
+    const cardSharedAt = ['target', 'at'];
+    const source = hasOwnPath(entityConfig, ownDirectionalAt) ? getPath(entityConfig, ownDirectionalAt)
+      : hasOwnPath(entityConfig, ownSharedAt) ? getPath(entityConfig, ownSharedAt)
+        : hasOwnPath(cardConfig, cardDirectionalAt) ? getPath(cardConfig, cardDirectionalAt)
+          : hasOwnPath(cardConfig, cardSharedAt) ? getPath(cardConfig, cardSharedAt)
+            : sharedMarker?.source;
+    const inheritedSource = source && typeof source === 'object' && Object.prototype.hasOwnProperty.call(source, 'fixed')
+      ? source : normalizeStructuredResolvableValue(source, null, null, { allowPercent: true });
+    const paint = normalizeTargetDirectionPaint(entityConfig, cardConfig, side);
+    const targetDirection = ownTarget[`when_${side}`];
+    const authoredPaint = targetDirection?.paint !== undefined;
+    const localLegacyColor = side === 'above'
+      ? ownTarget?.when_exceeded?.fill_color ?? entityConfig?.above_target_color
+      : undefined;
+    const inheritedLegacyPaint = cardConfig?.target_directions?.[side]?.legacy_paint === true;
+    const rawMarker = ownTarget[`when_${side}`]?.marker;
+    const cardMarker = cardTarget[`when_${side}`]?.marker;
+    const inheritedMarker = cardMarker && typeof cardMarker === 'object' && !Array.isArray(cardMarker)
+      ? { ...sharedMarker, ...cardMarker } : sharedMarker ?? {};
+    const marker = rawMarker && typeof rawMarker === 'object' && !Array.isArray(rawMarker) ? { ...inheritedMarker, ...rawMarker } : inheritedMarker;
+    directions[side] = {
+      source: { ...(inheritedSource ?? normalizeResolvableValue(null, null)) },
+      ...(paint !== undefined ? { paint } : {}),
+      ...(side === 'above' ? {
+        legacy_paint: authoredPaint ? false : localLegacyColor !== undefined && localLegacyColor !== null
+          ? true : inheritedLegacyPaint,
+      } : {}),
+      marker: {
+        enabled: marker?.enabled ?? sharedMarker?.enabled ?? true,
+        color: marker?.color ?? sharedMarker?.color ?? '#888',
+        shape: normalizeTargetMarkerShape(marker?.shape ?? sharedMarker?.shape),
+        direction: normalizeMarkerDirection(marker?.direction ?? sharedMarker?.direction),
+        show_label: marker?.label?.show ?? sharedMarker?.show_label ?? false,
+        label_text: marker?.label?.text ?? sharedMarker?.label_text ?? null,
+        label_show_value: marker?.label?.show_value ?? sharedMarker?.label_show_value ?? true,
+        label_show_unit: marker?.label?.show_unit ?? sharedMarker?.label_show_unit ?? true,
+        label_precision: marker?.label?.precision ?? marker?.label?.decimal ?? sharedMarker?.label_precision ?? null,
+      },
+    };
+  }
+  return directions;
+}
+
+export function normalizeTargetDirectionPaint(entityConfig, cardConfig, side) {
+  const target = entityConfig?.target && typeof entityConfig.target === 'object' && !Array.isArray(entityConfig.target)
+    ? entityConfig.target : {};
+  const direction = target[`when_${side}`];
+  const rawPaint = direction?.paint;
+  if (rawPaint === null) return null;
+  const rawLegacyColor = side === 'above'
+    ? target?.when_exceeded?.fill_color ?? entityConfig?.above_target_color
+    : undefined;
+  const legacyColor = rawLegacyColor === null ? undefined : rawLegacyColor;
+  const inheritedPaint = cardConfig?.target_directions?.[side]?.paint
+    ?? (cardConfig ? normalizeTargetDirectionPaint(cardConfig, null, side) : undefined);
+  if (rawPaint === undefined && legacyColor === undefined) return inheritedPaint;
+  const input = {
+    ...(direction ?? {}),
+    ...(rawPaint === undefined && legacyColor !== undefined ? { paint: {}, color: legacyColor }
+      : legacyColor !== undefined ? { color: legacyColor } : {}),
+  };
+  const inherited = inheritedPaint !== undefined ? { paint: inheritedPaint } : null;
+  return normalizeBaselineDirectionConfig(input, inherited).paint;
+}
+
+function getPath(object, path) {
+  return path.reduce((value, key) => value?.[key], object);
+}
+
 function getRawExtremumConfig(config, key) {
   const value = config?.[key];
   return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
@@ -1245,6 +1333,7 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
   normalizedEntity.baseline = normalizeBaselineConfig(entityConfig, cardConfig);
   normalizedEntity.formatting = normalizeFormattingConfig(entityConfig, cardConfig);
   normalizedEntity.target_marker = normalizeTargetMarkerConfig(entityConfig, cardConfig);
+  normalizedEntity.target_directions = normalizeTargetDirections(entityConfig, cardConfig, normalizedEntity.target_marker);
   normalizedEntity.peak_marker = normalizePeakMarkerConfig(entityConfig, cardConfig);
   normalizedEntity.floor_marker = normalizeFloorMarkerConfig(entityConfig, cardConfig);
   normalizeLegacyMarkerFields(normalizedEntity);
@@ -1349,6 +1438,7 @@ export function normalizeCardConfig(rawConfig) {
   normalizedCard.baseline = normalizeBaselineConfig(baseConfig, null);
   normalizedCard.formatting = normalizeFormattingConfig(baseConfig, null);
   normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);
+  normalizedCard.target_directions = normalizeTargetDirections(baseConfig, null, normalizedCard.target_marker);
   normalizedCard.peak_marker = normalizePeakMarkerConfig(baseConfig, null);
   normalizedCard.floor_marker = normalizeFloorMarkerConfig(baseConfig, null);
   normalizeLegacyMarkerFields(normalizedCard);

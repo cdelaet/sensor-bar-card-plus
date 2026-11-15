@@ -5503,6 +5503,7 @@ describe('Sensor Bar Card Plus logic', () => {
       target: 60,
       entities: [{ entity: 'sensor.row', name: 'Sensor' }],
     }).entities[0];
+    card._hass.states['sensor.row'] = { state: '75', attributes: { unit_of_measurement: 'W' } };
     const withoutOverlay = card.normalizeCardConfig({
       color_mode: 'gradient',
       gradient_stops: [
@@ -5514,15 +5515,16 @@ describe('Sensor Bar Card Plus logic', () => {
 
     const htmlWith = card._buildRow(withOverlay, '75', 'W', 75, '#dc2626', null, null, 50, '60 W', '#888', '#111827', 0, 120);
     const htmlWithout = card._buildRow(withoutOverlay, '75', 'W', 75, '#dc2626', null, null, null, null, '#888', '#111827', 0, 120);
+    card._hass.states['sensor.row'] = { state: '20', attributes: { unit_of_measurement: 'W' } };
     const htmlNoOverlap = card._buildRow(withOverlay, '20', 'W', 20, '#2563eb', null, null, 50, '60 W', '#888', '#111827', 0, 120);
 
     expect(htmlWith).toContain('class="bar-fill-reveal"');
-    expect(htmlWith).toContain('class="bar-paint-layer" data-layer="above-target"');
-    expect(htmlWith).toContain('background:#ef4444');
+    expect(htmlWith).toContain('class="bar-paint-layer" data-layer="target-above"');
+    expect(htmlWith).toContain('#ef4444');
     expect(htmlWith).toContain('clip-path:inset(0 0% 0 50% round 0);');
-    expect(htmlWithout).toContain('class="bar-paint-layer" data-layer="above-target"');
+    expect(htmlWithout).toContain('class="bar-paint-layer" data-layer="target-above"');
     expect(htmlWithout).toContain('display:none;');
-    expect(htmlNoOverlap).toContain('class="bar-paint-layer" data-layer="above-target"');
+    expect(htmlNoOverlap).toContain('class="bar-paint-layer" data-layer="target-above"');
     expect(htmlNoOverlap).toContain('clip-path:inset(0 0% 0 50% round 0);');
     expect(htmlNoOverlap).toContain('class="bar-fill-reveal" style="display:block;height:var(--sbcp-row-height);clip-path:inset(0 80% 0 0% round 6px 6px 6px 6px);"');
   });
@@ -5546,14 +5548,14 @@ describe('Sensor Bar Card Plus logic', () => {
       target: 60,
       entities: [{ entity: 'sensor.row', name: 'Sensor' }],
     }).entities[0];
-    const fillReveal = createPaintLayerContainer([{ id: 'base' }, { id: 'above-target' }]);
+    const fillReveal = createPaintLayerContainer([{ id: 'base' }, { id: 'target-above' }]);
     const aboveTargetLayer = fillReveal.children[1];
     const row = {
       dataset: {},
       querySelector: (selector) => (
         selector === '.bar-fill-reveal' ? fillReveal
           : selector === '.bar-paint-layer[data-layer="base"]' ? { style: { cssText: '' }, className: '' }
-          : selector === '.bar-paint-layer[data-layer="above-target"]' ? aboveTargetLayer
+          : selector === '.bar-paint-layer[data-layer="target-above"]' ? aboveTargetLayer
           : selector === '.needle-marker' ? null
           : selector === '.value-right' ? null
           : selector === '.top-right-value' ? null
@@ -5577,7 +5579,8 @@ describe('Sensor Bar Card Plus logic', () => {
 
     expect(fillReveal.style.cssText).toContain('clip-path:inset(0 37.5% 0 0% round 6px 6px 6px 6px)');
     expect(fillReveal.className).toBe('bar-fill-reveal');
-    expect(aboveTargetLayer.style.cssText).toContain('background:#ef4444');
+    expect(aboveTargetLayer.style.cssText).toContain('background-image:');
+    expect(aboveTargetLayer.style.cssText).toContain('#ef4444');
     expect(aboveTargetLayer.style.cssText).toContain('z-index:2;');
     expect(aboveTargetLayer.style.cssText).toContain('clip-path:inset(0 0% 0 50% round 0);');
   });

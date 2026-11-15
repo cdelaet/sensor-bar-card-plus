@@ -1,4 +1,5 @@
-import { normalizeBarConfig, normalizeBaselineDirectionConfig, getPaintExplicitness, BAR_PAINT_ALIASES } from '../config/normalize.js';
+import { normalizeBarConfig, normalizeBaselineDirectionConfig, normalizeTargetDirectionPaint,
+  getPaintExplicitness, BAR_PAINT_ALIASES } from '../config/normalize.js';
 import { resolveScopedPaintPreset } from './paint-preset-resolver.js';
 
 export const BAR_PAINT = {
@@ -22,6 +23,16 @@ export const BASELINE_PAINTS = ['above', 'below'].map(side => ({
     return direction.color
       ? normalizeBaselineDirectionConfig({ paint: {}, color: direction.color }).paint : undefined;
   },
+}));
+
+export const TARGET_PAINTS = ['above', 'below'].map(side => ({
+  id: `target-${side}`,
+  path: ['target', `when_${side}`, 'paint'],
+  aliases: side === 'above' ? {
+    color: [['target', 'when_exceeded', 'fill_color'], ['above_target_color']],
+  } : {},
+  shorthands: [{ path: ['target'], property: 'at' }, { path: ['target', `when_${side}`], property: 'at' }],
+  normalize(config, parent) { return normalizeTargetDirectionPaint(config, parent, side); },
 }));
 
 /** Resolve a normalized destination using the same scope/preset ordering in

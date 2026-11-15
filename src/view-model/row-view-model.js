@@ -9,6 +9,7 @@ import {
 } from '../utils/format.js';
 import {
   buildMarkerModels,
+  createMarkerModel,
   getMarkerLabelLaneOccupancy,
   getMarkerLaneOccupancy,
 } from './marker-view-model.js';
@@ -154,6 +155,22 @@ export function buildRowViewModel(options) {
     })
     : null;
 
+  const directionalTargets = ['above', 'below'].map(side => {
+    const target = entityConfig?.target_directions?.[side];
+    const value = getNormalizedResolvableNumericValue(hass, target?.source, safeMin, safeMax);
+    const percent = Number.isFinite(value) ? toScalePct(value, safeMin, safeMax) : null;
+    const marker = target?.marker ?? {};
+    const presentation = Number.isFinite(value) ? createNumericPresentation(value, targetUnit, marker.label_precision ?? decimal) : null;
+    const label = Number.isFinite(value) ? createMarkerLabelPresentation(value, targetUnit, marker.label_precision ?? decimal, {
+      text: marker.label_text, showValue: marker.label_show_value, showUnit: marker.label_show_unit,
+    }) : null;
+    return { side, value, percent, marker, presentation, label };
+  });
+  const aboveTarget = directionalTargets.find(target => target.side === 'above');
+  const belowTarget = directionalTargets.find(target => target.side === 'below');
+  const targetOrderingInvalid = Number.isFinite(aboveTarget?.value) && Number.isFinite(belowTarget?.value)
+    && belowTarget.value > aboveTarget.value;
+
   const baselineValue = entityConfig?.baseline?.enabled === false
     ? null
     : getNormalizedResolvableNumericValue(hass, entityConfig?.baseline?.at, safeMin, safeMax);
@@ -252,6 +269,31 @@ export function buildRowViewModel(options) {
     floorReason: floorState.reason,
     genericMarkers,
   });
+  const targetMarkerIndex = markers.findIndex(marker => marker.type === 'target');
+  const targetMarkerValues = [];
+  for (const target of directionalTargets) {
+    if (!Number.isFinite(target.value)) continue;
+    if (targetMarkerValues.some(existing => existing.value === target.value)) continue;
+    const coincident = directionalTargets.filter(candidate => candidate.value === target.value);
+    const preferred = coincident.find(candidate => candidate.side === 'above' && candidate.marker.enabled !== false)
+      ?? coincident.find(candidate => candidate.marker.enabled !== false)
+      ?? coincident.find(candidate => candidate.side === 'above') ?? target;
+    targetMarkerValues.push(preferred);
+  }
+  const directionalMarkerModels = targetMarkerValues.map(target => {
+    const config = target.marker;
+    return createMarkerModel({
+      id: targetMarkerValues.length === 1 ? 'target' : `target-${target.side}`,
+      type: 'target', value: target.value, position: projectScalePercent(target.percent, scaleDirection),
+      lane: 'below', visible: config.enabled !== false, color: config.color,
+      label: target.label, labelVisible: config.enabled !== false && config.show_label === true && !!target.label?.text,
+      shape: config.shape, direction: config.direction,
+    });
+  });
+  if (directionalMarkerModels.length) {
+    if (targetMarkerIndex >= 0) markers.splice(targetMarkerIndex, 1);
+    markers.unshift(...directionalMarkerModels);
+  }
 
   return {
     entityId,
@@ -274,6 +316,11 @@ export function buildRowViewModel(options) {
     fillStyle: entityConfig?.bar?.paint?.fill_style ?? entityConfig?.bar?.fill_style ?? null,
     target: targetValue,
     targetPercent,
+    targetAbovePercent: aboveTarget?.percent ?? null,
+    targetBelowPercent: belowTarget?.percent ?? null,
+    targetAboveValue: aboveTarget?.value ?? null,
+    targetBelowValue: belowTarget?.value ?? null,
+    targetOrderingInvalid,
     targetPositionPercent,
     targetDisplay: targetPresentation?.text ?? null,
     targetPresentation,

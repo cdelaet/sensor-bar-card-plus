@@ -40,7 +40,6 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
     ['target-show', true, ['enabled']], ['target-label-text', 'New goal', ['label', 'text']],
     ['target-label-show', false, ['label', 'show']], ['target-label-show-value', true, ['label', 'show_value']],
     ['target-label-show-unit', true, ['label', 'show_unit']], ['target-label-precision', '2', ['label', 'precision']],
-    ['target-above-fill-color', '#123456', ['when_exceeded', 'fill_color']],
   ]) it(`patches only ${field}, preserving all nested metadata and other controls`, async () => {
     const config = raw(), { editor, events } = await setup(source, config);
     await edit(editor, `#${field}`, value, typeof value === 'boolean' || field.endsWith('shape') || field.endsWith('direction') ? 'change' : 'input');
@@ -52,7 +51,6 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
     if (field === 'target-color') delete expected.target_color;
     if (field === 'target-label-show') delete expected.show_target_label;
     if (field === 'target-label-precision') delete expected.target.label.decimal;
-    if (field === 'target-above-fill-color') delete expected.above_target_color;
     expect(editor._config).toEqual(expected); expect(events).toHaveLength(1);
     expect(Object.hasOwn(editor._config.target.label.future, 'unset')).toBe(true);
     expect(editor._config.target.label.entity).toBe('sensor.unsupported');
@@ -115,18 +113,15 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
     expect(editor._config.target).toEqual({ at: { fixed: 75, entity: 'sensor.changed' }, label: { text: 'Goal' } });
     expect(editor._config.target_entity).toBe('sensor.changed');
   });
-  it('preserves disabled exceeded-fill drafts through echo and resets on foreign replacement', async () => {
-    const config = raw(), { editor, events } = await setup(source, config);
-    await edit(editor, '#target-above-fill-enabled', false, 'change');
-    expect(editor._config.target.when_exceeded).toEqual(meta()); expect(editor._config.bar).toEqual(config.bar);
-    const count = events.length;
-    await edit(editor, '#target-above-fill-color', '#123456'); expect(events).toHaveLength(count);
-    expect(editor._targetSection._getTargetAboveFillDraft(root)).toBe('#123456');
-    editor.context = { entity_id: 'sensor.changed' }; editor.setConfig(editor._config); await editor.updateComplete;
-    await edit(editor, '#target-above-fill-enabled', true, 'change'); expect(editor._config.target.when_exceeded.fill_color).toBe('#123456');
-    editor.setConfig({ type, target: { at: 10 } }); await editor.updateComplete;
-    expect(editor._targetSection._getTargetAboveFillDraft(root)).toBe('');
-    await edit(editor, '#target-above-fill-enabled', true, 'change'); expect(editor._config.target.when_exceeded.fill_color).toBe('#000000');
+  it('keeps released upper fill YAML readable and edits it through canonical Paint controls', async () => {
+    const config = raw(), { editor } = await setup(source, config);
+    expect(editor._config.target.when_exceeded.fill_color).toBe('red');
+    expect(editor.shadowRoot.querySelector('#target-above-fill-color')).toBeNull();
+    expect(editor.shadowRoot.querySelector('#target-above-paint-color')).toBeTruthy();
+    await edit(editor, '#target-above-paint-color', '#123456');
+    expect(editor._config.target.when_above.paint.color).toBe('#123456');
+    expect(editor._config.target.when_exceeded).toEqual(meta());
+    expect(editor._config).not.toHaveProperty('above_target_color');
   });
   it('uses authoritative HA picker events and ignores internal input/change', async () => {
     const { editor, events } = await setup(source, raw(), true);
@@ -140,7 +135,8 @@ for (const source of ['src', 'dist']) describe(`Feature Target (${source})`, () 
     const { editor, classes } = await setup(source);
     const standalone = new classes.editor(); standalone.setConfig(raw());
     expect(editor._targetSection.constructor).toBe(standalone._targetSection.constructor);
-    expect(editor.shadowRoot.innerHTML).toContain(editor._targetSection.render(root));
+    expect(editor.shadowRoot.querySelector('#target-above-paint-editor')).toBeTruthy();
+    expect(editor.shadowRoot.querySelector('#target-below-paint-editor')).toBeTruthy();
     expect(editor.shadowRoot.innerHTML).not.toContain('target-label-entity');
   });
   it('opens an absent Target without defaults, enables/disables it and retains label defaults only when edited', async () => {

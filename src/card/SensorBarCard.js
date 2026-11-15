@@ -53,6 +53,7 @@ import { historicalMarkerConsumers, historicalMarkerResults } from '../history/m
 import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
 import { authoredPaintProperties, resolvePaintPreset, resolveScopedPaintPreset } from '../view-model/paint-preset-resolver.js';
 import { resolveBaselinePaints } from '../view-model/baseline-paint-resolver.js';
+import { resolveTargetPaints } from '../view-model/target-paint-resolver.js';
 import * as barRenderModel from '../view-model/bar-render-model.js';
 import * as barRenderer from '../render/bar-renderer.js';
 import { attachRowActionHandlers, resolveRowAction } from '../actions/row-actions.js';
@@ -202,8 +203,12 @@ export class SensorBarCard extends HTMLElement {
     this._paintPresetRegistry = { status: 'loading', presets: {} };
     this._paintPresetEntityPaints = new WeakMap();
     this._paintPresetEntityBaselinePaints = new WeakMap();
+    this._paintPresetEntityTargetPaints = new WeakMap();
+    this._paintPresetRootTargetPaints = {};
+    this._paintPresetRootTargetLegacyUpper = false;
     this._paintPresetDiagnostics = [];
     this._lastDiagnosticsSignature = null;
+    this._targetOrderingDiagnostics = new Map();
     this._hass = null;
     this._historicalRuntime = new HistoricalHostRuntime();
     this._historicalUpdate = () => {
@@ -543,6 +548,10 @@ export class SensorBarCard extends HTMLElement {
     const ecfg = entityCfg?._normalized ? entityCfg : this.normalizeEntityConfig(entityCfg, this._config);
     const stateObj = this._hass?.states?.[ecfg.entity] ?? null;
     const resolvedBaselinePaints = this._paintPresetEntityBaselinePaints.get(entityCfg);
+    const cachedTargetPaints = this._paintPresetEntityTargetPaints.get(entityCfg);
+    const targetResolution = cachedTargetPaints === undefined
+      ? resolveTargetPaints(ecfg, this._config, this._paintPresetRegistry) : null;
+    const resolvedTargetPaints = cachedTargetPaints ?? targetResolution?.paints;
     const baseline = resolvedBaselinePaints ? { ...ecfg.baseline } : ecfg.baseline;
     if (resolvedBaselinePaints) for (const side of ['above', 'below']) {
       if (Object.prototype.hasOwnProperty.call(resolvedBaselinePaints, side)) {
@@ -555,6 +564,9 @@ export class SensorBarCard extends HTMLElement {
         bar: { ...ecfg.bar, paint: this._paintPresetEntityPaints.get(entityCfg) },
       } : {}),
       ...(resolvedBaselinePaints ? { baseline } : {}),
+      ...(resolvedTargetPaints ? { target_paints: resolvedTargetPaints } : { target_paints: this._paintPresetRootTargetPaints }),
+      target_paints_legacy_above: this._paintPresetEntityTargetLegacy?.get(entityCfg)
+        ?? targetResolution?.legacyUpper ?? this._paintPresetRootTargetLegacyUpper,
       icon: ecfg.icon === false ? false : (ecfg.icon ?? stateObj?.attributes?.icon ?? this._getDefaultEntityIcon(stateObj, ecfg.entity)),
       name: ecfg.name ?? null,
     };
@@ -563,20 +575,21 @@ export class SensorBarCard extends HTMLElement {
   _refreshPaintPresetResolutions() {
     this._paintPresetEntityPaints = new WeakMap();
     this._paintPresetEntityBaselinePaints = new WeakMap();
+    this._paintPresetEntityTargetPaints = new WeakMap();
+    this._paintPresetEntityTargetLegacy = new WeakMap();
+    const rootTarget = resolveTargetPaints(this._config, null, this._paintPresetRegistry);
+    this._paintPresetRootTargetPaints = rootTarget.paints;
+    this._paintPresetRootTargetLegacyUpper = rootTarget.legacyUpper;
     this._paintPresetDiagnostics = [];
     this._diagnostics = this._baseDiagnostics ?? { warnings: [], errors: [] };
     if (!this._config) return;
     const inheritedProperties = authoredPaintProperties(this._config.bar.paint);
     const entities = this._config.entities ?? [];
     const rootBaseline = resolveBaselinePaints(this._config.baseline, null, this._paintPresetRegistry);
-    const diagnostics = rootBaseline.diagnostics.map(diagnostic => ({
-      ...diagnostic, path: `baseline.${diagnostic.path}`, entity: null,
-    }));
-    if (!Object.prototype.hasOwnProperty.call(inheritedProperties, 'preset')
-      && !entities.some(entity => Object.prototype.hasOwnProperty.call(authoredPaintProperties(entity.bar?.paint), 'preset'))
-      && !Object.keys(rootBaseline.paints).length
-      && !diagnostics.length
-      && !entities.some(entity => ['above', 'below'].some(side => entity.baseline?.[side]?.paint?.preset !== undefined))) return;
+    const diagnostics = [
+      ...rootBaseline.diagnostics.map(diagnostic => ({ ...diagnostic, path: `baseline.${diagnostic.path}`, entity: null })),
+      ...rootTarget.diagnostics.map(diagnostic => ({ ...diagnostic, path: `target.${diagnostic.path}`, entity: null })),
+    ];
     const cardHasPreset = Object.prototype.hasOwnProperty.call(inheritedProperties, 'preset');
     const root = cardHasPreset
       ? resolveScopedPaintPreset({
@@ -588,10 +601,18 @@ export class SensorBarCard extends HTMLElement {
     diagnostics.push(...root.diagnostics.map(diagnostic => ({ ...diagnostic, path: `bar.${diagnostic.path}` })));
     for (const entity of entities) {
       const baseline = resolveBaselinePaints(entity.baseline, this._config.baseline, this._paintPresetRegistry);
+      const target = resolveTargetPaints(entity, this._config, this._paintPresetRegistry);
       if (Object.keys(baseline.paints).length) this._paintPresetEntityBaselinePaints.set(entity, baseline.paints);
+      if (Object.keys(target.paints).length) this._paintPresetEntityTargetPaints.set(entity, target.paints);
+      this._paintPresetEntityTargetLegacy.set(entity, target.legacyUpper || rootTarget.legacyUpper);
       diagnostics.push(...baseline.diagnostics.map(diagnostic => ({
         ...diagnostic,
         path: `entities.${entity.entity}.baseline.${diagnostic.path}`,
+        entity: entity.entity,
+      })));
+      diagnostics.push(...target.diagnostics.map(diagnostic => ({
+        ...diagnostic,
+        path: `entities.${entity.entity}.target.${diagnostic.path}`,
         entity: entity.entity,
       })));
       const entityPaint = authoredPaintProperties(entity.bar?.paint);
@@ -616,7 +637,7 @@ export class SensorBarCard extends HTMLElement {
       warnings: [...(base.warnings ?? []), ...diagnostics.map(diagnostic => ({
         ...diagnostic,
         message: `${diagnostic.code}: ${diagnostic.reference ?? 'paint'}`,
-      }))],
+      })), ...this._targetOrderingDiagnostics.values()],
     };
   }
 
@@ -624,8 +645,11 @@ export class SensorBarCard extends HTMLElement {
     const usesPreset = this._actionConfig?.bar?.paint?.preset !== undefined
       || this._actionConfig?.baseline?.above?.paint?.preset !== undefined
       || this._actionConfig?.baseline?.below?.paint?.preset !== undefined
+      || this._actionConfig?.target?.when_above?.paint?.preset !== undefined
+      || this._actionConfig?.target?.when_below?.paint?.preset !== undefined
       || (this._actionConfig?.entities ?? []).some(entity => entity?.bar?.paint?.preset !== undefined
-        || entity?.baseline?.above?.paint?.preset !== undefined || entity?.baseline?.below?.paint?.preset !== undefined);
+        || entity?.baseline?.above?.paint?.preset !== undefined || entity?.baseline?.below?.paint?.preset !== undefined
+        || entity?.target?.when_above?.paint?.preset !== undefined || entity?.target?.when_below?.paint?.preset !== undefined);
     if (!this.isConnected || !this._hass?.connection || !usesPreset) {
       if (this._paintPresetHandle) {
         this._paintPresetSubscriptionGeneration += 1;
@@ -769,7 +793,15 @@ export class SensorBarCard extends HTMLElement {
   }
   
   _positionTargetLabel(row) {
-    this._positionMarkerValueLabel(row, '.target-value-label', '.target-marker');
+    const labels = row.querySelectorAll?.('.target-value-label[data-target-id]') ?? [];
+    if (!labels.length) {
+      if (row.querySelector?.('.bar-track')) this._positionMarkerValueLabel(row, '.target-value-label', '.target-marker');
+      return;
+    }
+    labels.forEach(label => {
+      const id = label.dataset.targetId;
+      this._positionMarkerValueLabel(row, `.target-value-label[data-target-id="${id}"]`, `.target-marker[data-target-id="${id}"]`);
+    });
   }
 
   _getMarkerLabel(markerEl) {
@@ -779,6 +811,10 @@ export class SensorBarCard extends HTMLElement {
       const markerId = markerEl.dataset.markerId;
       return [...row.querySelectorAll('.generic-value-label[data-marker-id]')]
         .find((label) => label.dataset.markerId === markerId) ?? null;
+    }
+    if (markerEl.matches('.target-marker[data-target-id]')) {
+      return [...row.querySelectorAll('.target-value-label[data-target-id]')]
+        .find(label => label.dataset.targetId === markerEl.dataset.targetId) ?? null;
     }
     const labelSelector = markerEl.matches('.target-marker') ? '.target-value-label'
       : markerEl.matches('.peak-marker') ? '.peak-value-label'
@@ -3108,9 +3144,8 @@ ${barMarkerStyles}
         if (marker.type === 'target') {
           return {
             ...marker,
-            position: marker.position,
-            visible: targetPct !== null && targetPct !== undefined,
-            color: targetColor || marker.color,
+            visible: marker.visible && Number.isFinite(marker.position),
+            color: marker.color ?? targetColor,
             label: marker.label ?? (targetDisplay === null ? null : { text: targetDisplay }),
           };
         }
@@ -3172,6 +3207,20 @@ ${barMarkerStyles}
       historicalExtrema: historicalMarkerResults(this._historicalRuntime, ecfg),
       previousScale: this._rowScales.get(entityCfg),
     });
+    const entityId = entityCfg?.entity;
+    const orderingDiagnostic = rowViewModel.targetOrderingInvalid ? {
+      code: 'target.invalid_ordering',
+      message: 'Below Target threshold must not exceed Above Target threshold; Target paint is suppressed.',
+      path: `entities.${entityId}.target`, entity: entityId,
+    } : null;
+    const previous = this._targetOrderingDiagnostics.get(entityId);
+    if (orderingDiagnostic) this._targetOrderingDiagnostics.set(entityId, orderingDiagnostic);
+    else this._targetOrderingDiagnostics.delete(entityId);
+    if (!!previous !== !!orderingDiagnostic) {
+      const base = this._baseDiagnostics ?? { warnings: [], errors: [] };
+      this._diagnostics = { ...base, warnings: [...(base.warnings ?? []), ...(this._paintPresetDiagnostics ?? []), ...this._targetOrderingDiagnostics.values()] };
+      this._logDiagnostics();
+    }
     this._rowScales.set(entityCfg, { min: rowViewModel.min, max: rowViewModel.max });
     return rowViewModel;
   }
@@ -3196,7 +3245,6 @@ ${barMarkerStyles}
     const escapedEntityId = escapeHtml(rowViewModel?.entityId ?? entityCfg.entity);
     const escapedName = escapeHtml(name);
     const markerModels = this._getRowMarkerModels(rowViewModel, ecfg, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor);
-    const targetMarkerModel = this._getMarkerModel(markerModels, 'target');
     const peakMarkerModel = this._getMarkerModel(markerModels, 'peak');
     const floorMarkerModel = this._getMarkerModel(markerModels, 'floor');
     const genericMarkerModels = markerModels.filter((marker) => marker.type === 'generic');
@@ -3207,12 +3255,15 @@ ${barMarkerStyles}
     const barModel = barRenderModel.buildBarRenderModel({
       percent: pct, min: safeMin, max: safeMax,
       targetPercent: targetPct, baselinePercent: baselinePct,
+      targetAbovePercent: rowViewModel?.targetAbovePercent,
+      targetBelowPercent: rowViewModel?.targetBelowPercent,
+      targetOrderingInvalid: rowViewModel?.targetOrderingInvalid,
       needle: needleState, markers: markerModels,
     }, ecfg, { height: 'var(--sbcp-row-height)', color });
-    const targetValueLabel = targetMarkerModel?.labelVisible ? `
-      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;visibility:hidden;${this._getMarkerLabelColorStyle(targetMarkerModel)}">
-        ${targetMarkerModel.label?.text ? escapeHtml(targetMarkerModel.label.text) : ''}
-      </div>` : '';
+    const targetValueLabels = markerModels.filter(marker => marker.type === 'target' && marker.labelVisible).map(marker => `
+      <div class="target-value-label"${marker.id === 'target' ? '' : ` data-target-id="${escapeHtml(marker.id)}"`} style="left:${Number.isFinite(marker.position) ? marker.position : 0}%;visibility:hidden;${this._getMarkerLabelColorStyle(marker)}">
+        ${marker.label?.text ? escapeHtml(marker.label.text) : ''}
+      </div>`).join('');
     const peakValueLabel = peakMarkerModel?.labelVisible ? `
       <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;visibility:hidden;${this._getMarkerLabelColorStyle(peakMarkerModel)}">
         ${peakMarkerModel.visible && peakMarkerModel.label?.text ? escapeHtml(peakMarkerModel.label.text) : ''}
@@ -3278,7 +3329,7 @@ ${barMarkerStyles}
             <div class="bar-wrap">
               ${barRenderer.renderBar(barModel, { insideContent: innerLabel })}
               ${peakValueLabel}
-              ${targetValueLabel}
+              ${targetValueLabels}
               ${floorValueLabel}
               ${genericValueLabels}
             </div>
@@ -3376,7 +3427,6 @@ ${barMarkerStyles}
       aboveLabel.innerHTML = `<span class="above-bar-label-name label-left-text">${escapeHtml(rowViewModel.name)}</span>${this._formatAboveValueMarkup(display, displayUnit, false)}`;
     }
 
-    const targetLabelEl = row.querySelector('.target-value-label');
     const peakLabelEl = row.querySelector('.peak-value-label');
     const floorLabelEl = row.querySelector('.floor-value-label');
     const markerModels = rowViewModel.markers ?? [];
@@ -3402,14 +3452,21 @@ ${barMarkerStyles}
         this._setStyleIfChanged(labelEl, 'visibility', 'hidden');
       }
     });
-    const targetMarkerModel = this._getMarkerModel(markerModels, 'target');
-    this._patchMarkerLabelAppearance(targetLabelEl, targetMarkerModel);
-    if (targetLabelEl) {
-      if (targetMarkerModel?.labelVisible && targetMarkerModel.visible && targetMarkerModel.label?.text) {
-        this._setTextIfChanged(targetLabelEl, targetMarkerModel.label?.text ?? null);
-      } else {
-        this._setStyleIfChanged(targetLabelEl, 'visibility', 'hidden');
-      }
+    (row.querySelectorAll?.('.target-value-label[data-target-id]') ?? []).forEach(labelEl => {
+      const marker = this._getMarkerModel(markerModels, labelEl.dataset.targetId);
+      this._patchMarkerLabelAppearance(labelEl, marker);
+      if (marker?.labelVisible && marker.visible && marker.label?.text) {
+        this._setTextIfChanged(labelEl, marker.label.text);
+        this._setStyleIfChanged(labelEl, 'left', `${Number.isFinite(marker.position) ? marker.position : 0}%`);
+      } else this._setStyleIfChanged(labelEl, 'visibility', 'hidden');
+    });
+    const legacyTargetLabel = row.querySelector('.target-value-label:not([data-target-id])') ?? row.querySelector('.target-value-label');
+    if (legacyTargetLabel) {
+      const marker = this._getMarkerModel(markerModels, 'target');
+      this._patchMarkerLabelAppearance(legacyTargetLabel, marker);
+      if (marker?.labelVisible && marker.visible && marker.label?.text) {
+        this._setTextIfChanged(legacyTargetLabel, marker.label.text);
+      } else this._setStyleIfChanged(legacyTargetLabel, 'visibility', 'hidden');
     }
     const patchValueLabel = (labelEl, markerType) => {
       if (!labelEl) return;

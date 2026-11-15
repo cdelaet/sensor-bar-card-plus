@@ -21,7 +21,7 @@ import { getFeatureScaleSource, patchFeatureScaleSource, getFeatureBaselineSourc
 import { SegmentsSection } from '../editor/sections/segments.js';
 import { GradientStopsSection } from '../editor/sections/gradient-stops.js';
 import { createFeaturePaletteArray } from './feature-editor-palettes.js';
-import { BAR_PAINT, BASELINE_PAINTS } from '../view-model/paint-destinations.js';
+import { BAR_PAINT, BASELINE_PAINTS, TARGET_PAINTS } from '../view-model/paint-destinations.js';
 import { handlePaintAction, handlePaintPresetControl, handlePaintPropertyControl, paintSourceSignature } from '../editor/shared/paint-destination.js';
 
 import { NeedleSection } from '../editor/sections/needle.js';
@@ -88,6 +88,17 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         gradientStops: new GradientStopsSection(context, ui, createFeaturePaletteArray(context, 'gradient_stops', destination)),
       };
     }
+    this._targetPaintSections = {};
+    for (const direction of ['above', 'below']) {
+      const destination = TARGET_PAINTS.find(item => item.id === `target-${direction}`);
+      const rootSelector = `#target-${direction}-paint-editor`;
+      const targetUi = { ...paletteUi, root: () => this.shadowRoot?.querySelector(rootSelector),
+        focus: selector => { this._pendingPaletteFocus = `${rootSelector} ${selector}`; } };
+      this._targetPaintSections[direction] = {
+        segments: new SegmentsSection(context, targetUi, createFeaturePaletteArray(context, 'segments', destination)),
+        gradientStops: new GradientStopsSection(context, targetUi, createFeaturePaletteArray(context, 'gradient_stops', destination)),
+      };
+    }
     for (const type of ['click', 'keydown']) this.shadowRoot.addEventListener(type, event => {
       if (type === 'click') {
         const target = event.target?.closest?.('[data-action]') ?? event.target;
@@ -107,7 +118,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         }
       }
       this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event)
-        || this._handleBaselinePaletteEvent(event);
+        || this._handleBaselinePaletteEvent(event) || this._handleTargetPaletteEvent(event);
     });
     const handleField = event => {
       if (event._sbcpEntityPickerHandled || event.target?.tagName === 'HA-ENTITY-PICKER') return;
@@ -141,9 +152,10 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       return;
     }
     if (serializeConfig(config) !== serializeConfig(this._config)) {
-      for (const destination of [BAR_PAINT, ...BASELINE_PAINTS]) {
+      for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, ...TARGET_PAINTS]) {
         const sections = destination === BAR_PAINT ? { segments: this._segmentsSection, gradientStops: this._gradientStopsSection }
-          : this._baselinePaintSections[destination.id.replace('baseline-', '')];
+          : destination.id.startsWith('baseline-') ? this._baselinePaintSections[destination.id.replace('baseline-', '')]
+            : this._targetPaintSections[destination.id.replace('target-', '')];
         const changed = paintSourceSignature(config, destination) !== paintSourceSignature(this._config, destination);
         for (const section of [sections.segments, sections.gradientStops]) {
           if (changed) section.clearScopeState(root); else section.prepareExternalSync(root);
@@ -235,7 +247,8 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       configurable: true,
       value: (scope, destination = BAR_PAINT, property) => {
         const sections = destination === BAR_PAINT ? { segments: this._segmentsSection, gradientStops: this._gradientStopsSection }
-          : this._baselinePaintSections[destination.id.replace('baseline-', '')];
+          : destination.id.startsWith('baseline-') ? this._baselinePaintSections[destination.id.replace('baseline-', '')]
+            : this._targetPaintSections[destination.id.replace('target-', '')];
         if (!property || property === 'segments') sections?.segments.clearScopeState(scope);
         if (!property || property === 'gradient_stops') sections?.gradientStops.clearScopeState(scope);
       },
@@ -309,7 +322,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     }
     if (this._referenceMarkersSection.handleField({ target, kind, value })) return;
     if (this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event)
-      || this._handleBaselinePaletteEvent(event)) {
+      || this._handleBaselinePaletteEvent(event) || this._handleTargetPaletteEvent(event)) {
       if (event.type !== 'input') this._requestRender();
       return;
     }
@@ -372,6 +385,8 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     for (const direction of ['above', 'below']) {
       summaries[`baseline-${direction}-segments`] = this._baselinePaintSections[direction].segments._getSegmentsSummary(root);
       summaries[`baseline-${direction}-gradient-stops`] = this._baselinePaintSections[direction].gradientStops._getGradientStopsSummary(root);
+      summaries[`target-${direction}-segments`] = this._targetPaintSections[direction].segments._getSegmentsSummary(root);
+      summaries[`target-${direction}-gradient-stops`] = this._targetPaintSections[direction].gradientStops._getGradientStopsSummary(root);
     }
     for (const [group, summary] of Object.entries(summaries)) {
       const button = this.shadowRoot.querySelector(`#card-group-${group}`);
@@ -461,7 +476,12 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         ${renderScaleSection(context, root)}
         ${renderMarkersSection({
           renderGroup: options => this._renderCardGroup(options),
-          target: { summary: this._targetSection._getCardTargetMarkerSummary(), content: this._targetSection.render(root) },
+          target: { summary: this._targetSection._getCardTargetMarkerSummary(), content: this._targetSection.render(root, {
+            root: this.shadowRoot, registry: this._paintPresetRegistry,
+            paletteValues: (paintScope, direction) => ({ segments: this._targetPaintSections[direction].segments._getScopedSegmentsValue(paintScope),
+              gradient_stops: this._targetPaintSections[direction].gradientStops._getScopedGradientStopsValue(paintScope) }),
+            paintChildren: (paintScope, direction) => this._renderTargetPaintPalette(paintScope, direction),
+          }) },
           peak: { summary: this._extremaSection._getMarkerResetSummary('peak'), content: this._extremaSection.render(root, 'peak') },
           floor: { summary: this._extremaSection._getMarkerResetSummary('floor'), content: this._extremaSection.render(root, 'floor') },
           references: { summary: this._referenceMarkersSection._getGenericMarkersSummary(root), content: this._referenceMarkersSection.render(root) },
@@ -523,6 +543,18 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._baselineSection.syncPaintEditors(this.shadowRoot, root, baselinePaletteValues, this._paintPresetRegistry,
       { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts,
         paintChildren: (paintScope, direction) => this._renderBaselinePaintPalette(paintScope, direction) });
+    const targetPaletteValues = Object.fromEntries(['above', 'below'].map(direction => [direction, {
+      segments: this._targetPaintSections[direction].segments._getScopedSegmentsValue(root),
+      gradient_stops: this._targetPaintSections[direction].gradientStops._getScopedGradientStopsValue(root),
+    }]));
+    this._targetSection.syncPaintEditors(this.shadowRoot, root, targetPaletteValues, this._paintPresetRegistry, {
+      numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts,
+      paintChildren: (paintScope, direction) => this._renderTargetPaintPalette(paintScope, direction),
+    });
+    for (const direction of ['above', 'below']) {
+      this._targetPaintSections[direction].segments.syncRows(root);
+      this._targetPaintSections[direction].gradientStops.syncRows(root);
+    }
     for (const direction of ['above', 'below']) {
       this._baselinePaintSections[direction].segments.syncRows(root);
       this._baselinePaintSections[direction].gradientStops.syncRows(root);
@@ -684,6 +716,20 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     };
   }
 
+  _renderTargetPaintPalette(scope, direction) {
+    const sections = this._targetPaintSections[direction];
+    const renderGroup = options => this._renderCardGroup({ ...options, group: `target-${direction}-${options.group}` });
+    return { segments: sections.segments.render(scope, renderGroup, { section: false }),
+      gradient_stops: sections.gradientStops.render(scope, renderGroup, { section: false }) };
+  }
+
+  _handleTargetPaletteEvent(event, mode = event.type) {
+    for (const direction of ['above', 'below']) {
+      const sections = this._targetPaintSections[direction];
+      if (sections.segments.handle(event, mode) || sections.gradientStops.handle(event, mode)) return true;
+    }
+    return false;
+  }
   _handleBaselinePaletteEvent(event, mode = event.type) {
     for (const direction of ['above', 'below']) {
       const sections = this._baselinePaintSections[direction];

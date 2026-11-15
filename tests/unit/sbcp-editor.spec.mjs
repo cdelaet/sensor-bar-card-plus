@@ -665,7 +665,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(markup).toContain('Max entity');
     expect(markup).toContain('>Value</label>');
     expect(markup).toContain('Target entity');
-    expect(markup).toContain('Above-target color');
+    expect(markup).toContain('Above Target Paint');
     expect(markup).toContain('>Value</label>');
     expect(markup).toContain('Baseline entity');
     expect(markup).toContain('Above Baseline Paint');
@@ -2067,7 +2067,7 @@ describe('Sensor Bar Card Plus editor', () => {
     const targetLabelToggle = editor.shadowRoot.querySelector('#target-label-show');
     targetLabelToggle.checked = false;
     targetLabelToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    dispatchInput(editor.shadowRoot.querySelector('#target-above-fill-color'), '#222222');
+    dispatchInput(editor.shadowRoot.querySelector('#target-above-paint-color'), '#222222');
     dispatchInput(editor.shadowRoot.querySelector('#layout-height'), '40');
     dispatchChange(editor.shadowRoot.querySelector('#layout-label-position'), 'inside');
     dispatchInput(editor.shadowRoot.querySelector('#layout-label-width'), '140');
@@ -2962,72 +2962,6 @@ describe('Sensor Bar Card Plus editor', () => {
     });
   });
 
-  it('above-target fill color writes target.when_exceeded.fill_color', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({ entity: 'sensor.one' });
-    const toggle = editor.shadowRoot.querySelector('#target-above-fill-enabled');
-    toggle.checked = true;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    const colorInput = editor.shadowRoot.querySelector('#target-above-fill-color');
-    expect(colorInput.type).toBe('color');
-    dispatchInput(colorInput, '#ff0000');
-
-    expect(events.at(-1).detail.config.target).toEqual({
-      when_exceeded: {
-        fill_color: '#ff0000',
-      },
-    });
-  });
-
-  it('card-level above-target color enabled toggle writes and removes target.when_exceeded.fill_color', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({ entity: 'sensor.one' });
-
-    const toggle = editor.shadowRoot.querySelector('#target-above-fill-enabled');
-    toggle.checked = true;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.target).toEqual({
-      when_exceeded: {
-        fill_color: '#000000',
-      },
-    });
-
-    toggle.checked = false;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.target).toBeUndefined();
-  });
-
-  it('card-level above-target disable and re-enable restores the previous local color while the editor stays open', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({
-      entity: 'sensor.one',
-      target: {
-        when_exceeded: {
-          fill_color: '#ff0000',
-        },
-      },
-    });
-
-    const toggle = editor.shadowRoot.querySelector('#target-above-fill-enabled');
-    toggle.checked = false;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.target).toBeUndefined();
-
-    toggle.checked = true;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.target).toEqual({
-      when_exceeded: {
-        fill_color: '#ff0000',
-      },
-    });
-  });
-
   it('opening and unrelated edits preserve omitted Target visibility', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
@@ -3068,25 +3002,15 @@ describe('Sensor Bar Card Plus editor', () => {
     });
   });
 
-  it('clearing above-target fill color removes target.when_exceeded.fill_color', () => {
+  it('legacy upper Target fill YAML remains readable through the canonical Paint editor', () => {
     const editor = createEditor();
-    const events = trackConfigEvents(editor);
+    const legacyTarget = { at: 50, when_exceeded: { fill_color: '#ff0000' }, color: '#ff9800' };
 
-    editor.setConfig({
-      entity: 'sensor.one',
-      target: {
-        when_exceeded: {
-          fill_color: '#ff0000',
-        },
-        color: '#ff9800',
-      },
-    });
+    editor.setConfig({ entity: 'sensor.one', target: legacyTarget });
 
-    dispatchInput(editor.shadowRoot.querySelector('#target-above-fill-color'), '');
-
-    expect(events.at(-1).detail.config.target).toEqual({
-      color: '#ff9800',
-    });
+    expect(editor.shadowRoot.querySelector('#target-above-paint-editor')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#target-above-fill-color')).toBeNull();
+    expect(editor._config.target).toEqual(legacyTarget);
   });
 
   it('per-entity target inherit removes only managed entity-level target keys', () => {
@@ -3520,124 +3444,6 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(events.at(-1).detail.config.entities[0].target.label).toEqual({ show: false, show_value: true });
   });
 
-  it('per-entity target above-target fill color writes entities[index].target.when_exceeded.fill_color', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({
-      entities: [{ entity: 'sensor.one', name: 'One' }],
-    });
-
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    const toggle = editor.shadowRoot.querySelector('#entity-0-target-above-fill-enabled');
-    toggle.checked = true;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-target-above-fill-color"]')[0], '#ff0000');
-
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', target: { when_exceeded: { fill_color: '#ff0000' } } },
-    ]);
-  });
-
-  it('per-entity above-target color enabled toggle writes and removes only that target fill key', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({
-      entities: [{
-        entity: 'sensor.one',
-        name: 'One',
-        target: {
-          color: '#ff9800',
-        },
-      }],
-    });
-
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    const toggle = editor.shadowRoot.querySelector('#entity-0-target-above-fill-enabled');
-    toggle.checked = true;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', target: { color: '#ff9800', when_exceeded: { fill_color: '#000000' } } },
-    ]);
-
-    toggle.checked = false;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', target: { color: '#ff9800' } },
-    ]);
-  });
-
-  it('per-entity above-target disable and re-enable restores the previous local color while the editor stays open', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({
-      target: {
-        when_exceeded: {
-          fill_color: '#00ff00',
-        },
-      },
-      entities: [{
-        entity: 'sensor.one',
-        name: 'One',
-        target: {
-          when_exceeded: {
-            fill_color: '#ff0000',
-          },
-          color: '#ff9800',
-        },
-      }],
-    });
-
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    const toggle = editor.shadowRoot.querySelector('#entity-0-target-above-fill-enabled');
-    toggle.checked = false;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', target: { color: '#ff9800' } },
-    ]);
-
-    toggle.checked = true;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', target: { color: '#ff9800', when_exceeded: { fill_color: '#ff0000' } } },
-    ]);
-  });
-
-  it('editing above-target color while disabled restores the edited color on re-enable', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({
-      entities: [{
-        entity: 'sensor.one',
-        name: 'One',
-        target: {
-          when_exceeded: {
-            fill_color: '#ff0000',
-          },
-        },
-      }],
-    });
-
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    const toggle = editor.shadowRoot.querySelector('#entity-0-target-above-fill-enabled');
-    toggle.checked = false;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    dispatchInput(editor.shadowRoot.querySelector('#entity-0-target-above-fill'), '#00cc66');
-
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One' },
-    ]);
-
-    toggle.checked = true;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', target: { when_exceeded: { fill_color: '#00cc66' } } },
-    ]);
-  });
-
   it('per-entity target preserves unrelated entity keys', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
@@ -3658,23 +3464,20 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('loading flat target config renders correctly', () => {
+  it('loading flat Target configuration preserves legacy Paint without a duplicate control', () => {
     const editor = createEditor();
-
     editor.setConfig({
-      entity: 'sensor.one',
-      target: 2500,
-      target_entity: 'sensor.dynamic_target',
-      target_color: '#ff9800',
-      show_target_label: true,
-      above_target_color: '#ff0000',
+      entity: 'sensor.one', target: 2500, target_entity: 'sensor.dynamic_target',
+      target_color: '#ff9800', show_target_label: true, above_target_color: '#ff0000',
     });
 
     expect(editor.shadowRoot.querySelector('#target-value').value).toBe('2500');
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="target-entity-source"]')[0].value).toBe('sensor.dynamic_target');
     expect(editor.shadowRoot.querySelector('#target-color').value).toBe('#ff9800');
     expect(editor.shadowRoot.querySelector('#target-label-show').checked).toBe(true);
-    expect(editor.shadowRoot.querySelector('#target-above-fill-color').value).toBe('#ff0000');
+    expect(editor.shadowRoot.querySelector('#target-above-paint-editor')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#target-above-fill-color')).toBeNull();
+    expect(editor._config.above_target_color).toBe('#ff0000');
   });
 
   it('editing a flat-loaded target fallback converts only that edited field to structured config', () => {
