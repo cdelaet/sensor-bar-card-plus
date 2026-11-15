@@ -33,7 +33,7 @@ describe('independent Baseline paint layers', () => {
     expect(inherited.below.paint).toMatchObject({ fill_style: 'solid', color: '#0000ff', opacity: 35 });
     expect(local.above.paint).toMatchObject({ fill_style: 'gradient', color: '#ff0000', opacity: 0 });
     expect(local.below.paint).toBeNull();
-    expect(config.baseline.above.paint.color).toBe('#4a9eff');
+    expect(config.baseline.above.paint.color).toBe('var(--accent-color, #4a9eff)');
   });
 
   it('compiles full-scale Baseline gradients with independent clipping and opacity', () => {

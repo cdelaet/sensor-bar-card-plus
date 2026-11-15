@@ -1,5 +1,7 @@
-import { getEffectiveFillStyleValue } from '../sections/bar-appearance.js';
-import { serializeConfig } from './editor-config.js';
+import { BAR_PAINT } from '../../view-model/paint-destinations.js';
+import { getDestinationEditorState, ownsDestinationProperty, clearDestinationProperty } from './paint-destination.js';
+import { readBarPaintProperty } from './bar-paint-bindings.js';
+import { serializeConfig, cloneDeep } from './editor-config.js';
 
 let paletteGeneration = 0;
 
@@ -45,11 +47,30 @@ export class PaletteSection {
     this.context = context;
     this.ui = ui;
     this.array = array;
+    this.destination = array.destination ?? BAR_PAINT;
     this._reconcilingRows = false;
   }
   _getPaletteRoot(scope) { return this.ui.root(scope); }
-  fillStyle(scope) { return getEffectiveFillStyleValue(this.context, scope); }
-  _getShadowElementById(id, scope) { return this._getPaletteRoot(scope)?.querySelector(`#${id}`); }
+  paintState(scope) { return getDestinationEditorState(this.context, scope, this.destination); }
+  fillStyle(scope) { return this.paintState(scope).paint.fill_style; }
+  readPaintProperty(scope, property) {
+    if (this.destination === BAR_PAINT) return readBarPaintProperty(this.context, scope, property);
+    const local = this.context.read(scope, this.destination.path);
+    const parent = scope?.type === 'entity' ? this.context.read({ type: 'card' }, this.destination.path) : null;
+    if (local?.preset === undefined && parent?.preset === undefined) {
+      const raw = local?.[property] ?? parent?.[property];
+      if (raw !== undefined) return cloneDeep(raw);
+    }
+    return this.paintState(scope).paint[property];
+  }
+  ownsPaintProperty(scope, property) { return ownsDestinationProperty(this.context, scope, this.destination, property); }
+  clearPaintProperty(scope, property) { return clearDestinationProperty(this.context, scope, this.destination, property); }
+  paletteId(id) { return this.destination === BAR_PAINT ? id : `${this.destination.id}-${id}`; }
+  scopeMarkup(html) {
+    return this.destination === BAR_PAINT ? html : html.replace(/\b(id|for)="([^"]+)"/g,
+      (match, attribute, id) => id.startsWith('card-group-') ? match : `${attribute}="${this.paletteId(id)}"`);
+  }
+  _getShadowElementById(id, scope) { return this._getPaletteRoot(scope)?.querySelector(`#${this.paletteId(id)}`); }
   _renderListRows(items, renderItem) { return items.map(renderItem).join(''); }
 
   _syncPaletteActivity(scope, group, active) {
@@ -60,6 +81,7 @@ export class PaletteSection {
   }
 
   _syncRows(scope, { inputSelector, rowSelector, draftSelector, memberSelector, generation, rowCount }) {
+    draftSelector = `#${this.paletteId(draftSelector.slice(1))}`;
     const root = this._getPaletteRoot(scope);
     if (!root?.ownerDocument) return false;
     const liveInputs = [...root.querySelectorAll(inputSelector)];
@@ -154,9 +176,9 @@ export class PaletteSection {
         if (segment && action.endsWith('-from-undefined')) {
           if (!this._isCurrentSegmentGap(scope, target)) return true;
           this._prepareSegmentDraftFromUndefined(scope, target.dataset.from, target.dataset.to, Number(target.dataset.insertIndex));
-          this.ui.focus(`#${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-from`, scope);
+          this.ui.focus(`#${this.paletteId(`${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-from`)}`, scope);
         } else {
-          this.ui.focus(`#${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-${segment ? 'from' : 'pos'}`, scope);
+          this.ui.focus(`#${this.paletteId(`${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-${segment ? 'from' : 'pos'}`)}`, scope);
           commit();
         }
       } else {

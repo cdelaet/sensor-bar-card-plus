@@ -349,8 +349,8 @@ export function getBasePaintGradient(color, paint, minValue = 0, maxValue = 100,
  */
 export function compilePaint(paint, {
   minValue = 0, maxValue = 100, scaleDirection = 'normal', samplePercent = 0,
+  color = getColor(samplePercent, paint, minValue, maxValue),
 } = {}) {
-  const color = getColor(samplePercent, paint, minValue, maxValue);
   return {
     color,
     gradient: getBasePaintGradient(color, paint, minValue, maxValue, scaleDirection),

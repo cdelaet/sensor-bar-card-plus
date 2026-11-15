@@ -171,7 +171,7 @@ function getBaselinePaintGradients(ecfg, baselinePct, scaleDirection) {
   };
 }
 
-function getBaselinePaintLayer(side, ecfg, baselinePct, minValue, maxValue, scaleDirection) {
+function getBaselinePaintLayer(side, ecfg, baselinePct, minValue, maxValue, scaleDirection, samplePercent) {
   const direction = ecfg?.baseline?.[side];
   if (!direction || direction.paint === null) return null;
   const interval = side === 'below'
@@ -179,9 +179,9 @@ function getBaselinePaintLayer(side, ecfg, baselinePct, minValue, maxValue, scal
     : projectScaleInterval(baselinePct, 100, scaleDirection);
   if (!interval) return null;
   if (direction.paint && typeof direction.paint === 'object') {
-    const gradient = paintCompiler.getBasePaintGradient(
-      direction.paint.color, direction.paint, minValue, maxValue, scaleDirection,
-    );
+    const { gradient } = paintCompiler.compilePaint(direction.paint, {
+      minValue, maxValue, scaleDirection, samplePercent,
+    });
     if (!gradient) return null;
     const opacity = direction.paint.opacity ?? 100;
     return {
@@ -234,9 +234,9 @@ export function getStaticLayerRevealStyle(geometry) {
   return 'display:none;clip-path:inset(0 100% 0 0 round 0);';
 }
 
-export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, scaleDirection = 'normal') {
+export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, scaleDirection = 'normal', samplePercent = 0) {
   const basePaintStyle = getFullScaleBackgroundStyle([
-    getBasePaintGradient(color, ecfg, minValue, maxValue, scaleDirection),
+    paintCompiler.compilePaint(ordinaryPaint(ecfg), { color, minValue, maxValue, scaleDirection, samplePercent }).gradient,
   ]);
   const opacity = ecfg?.bar?.paint?.opacity ?? 100;
   const baseLayer = {
@@ -247,17 +247,19 @@ export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, b
     revealStyle: 'display:block;',
   };
 
-  const baseline = getBaselinePaintGradients(ecfg, baselinePct, scaleDirection);
   // At equal z-indices, later nodes paint on top: Baseline-above covers
   // ordinary fill, and Baseline-below covers both, matching background order.
   // Keep inactive nodes too, allowing source recovery without rebuilding the bar.
-  const baselineLayers = ['above', 'below'].map(side => ({
-    id: `baseline-${side}`,
-    zIndex: 1,
-    visible: !!getBaselinePaintLayer(side, ecfg, baselinePct, minValue, maxValue, scaleDirection),
-    paintStyle: getBaselinePaintLayer(side, ecfg, baselinePct, minValue, maxValue, scaleDirection)?.paintStyle ?? 'display:none;',
-    revealStyle: getBaselinePaintLayer(side, ecfg, baselinePct, minValue, maxValue, scaleDirection)?.revealStyle ?? 'display:none;',
-  }));
+  const baselineLayers = ['above', 'below'].map(side => {
+    const layer = getBaselinePaintLayer(side, ecfg, baselinePct, minValue, maxValue, scaleDirection, samplePercent);
+    return {
+      id: `baseline-${side}`,
+      zIndex: 1,
+      visible: !!layer,
+      paintStyle: layer?.paintStyle ?? 'display:none;',
+      revealStyle: layer?.revealStyle ?? 'display:none;',
+    };
+  });
 
   const aboveTargetGeometry = getAboveTargetLayerGeometry(targetPct, scaleDirection);
   const aboveTargetLayer = {
@@ -325,7 +327,7 @@ export function getFillRenderState(
   }
   const paintLayers = getFillPaintLayers(
     geometry, h, ecfg, color, targetScalePercent, baselineScalePercent,
-    minValue, maxValue, scaleDirection,
+    minValue, maxValue, scaleDirection, scalePercent,
   );
   return {
     geometry,

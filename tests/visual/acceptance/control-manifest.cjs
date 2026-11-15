@@ -55,8 +55,12 @@ field('baseline-value', 'Baseline', 'value', null, '75%', { journey: 'sources' }
 kind('baseline-entity-source', 'Baseline', 'entity', 'baseline.at.entity', 'sensor.changed');
 kind('baseline-attribute', 'Baseline', 'text', null, 'temperature', { hosts: ['feature'], conditional: true, journey: 'sources' });
 for (const side of ['above', 'below']) {
-  field(`baseline-${side}-color-enabled`, 'Baseline', 'checkbox', `baseline.${side}.color`, null);
-  color('field', `baseline-${side}-color`, 'Baseline', `baseline.${side}.color`);
+  field(`baseline-${side}-paint-enabled`, 'Baseline', 'checkbox', `baseline.${side}.paint`, null);
+  field(`baseline-${side}-paint-fill_style`, 'Baseline', 'select', `baseline.${side}.paint.fill_style`, ['gradient', 'bands', 'solid']);
+  field(`baseline-${side}-paint-solid_fill`, 'Baseline', 'checkbox', `baseline.${side}.paint.solid_fill`, null);
+  field(`baseline-${side}-paint-opacity`, 'Baseline', 'number', `baseline.${side}.paint.opacity`, '37');
+  field(`baseline-${side}-paint-preset`, 'Baseline', 'select', `baseline.${side}.paint.preset`, [''], { journey: 'paint-preset' });
+  color('field', `baseline-${side}-paint-color`, 'Baseline', `baseline.${side}.paint.color`);
 }
 for (const [suffix, type, value, path] of [
   ['fixed','text','75%',null], ['entity','entity','sensor.changed',null], ['attribute','text','temperature',null], ['lane','select',['above','below'],'lane'],
@@ -120,7 +124,7 @@ for (const [section,names,hosts,journey] of [
  ['Baseline',['remove-baseline'],['standalone','feature'],'sources'],
  ['Segments',['add-segment','remove-segment','add-entity-segment','remove-entity-segment'],['standalone','feature'],'palettes'],
  ['Gradient Stops',['add-gradient-stop','remove-gradient-stop','add-entity-gradient-stop','remove-entity-gradient-stop'],['standalone','feature'],'palettes'],
- ['Bar Appearance',['clear-paint-property'],['standalone','feature'],'paint-source'],
+ ['Bar Appearance',['clear-paint-property','reset-paint'],['standalone','feature'],'paint-source'],
 ]) for (const name of names) add('action',name,section,'button',null,null,{hosts:name.includes('-entity-')?['standalone']:hosts,journey,structural:true,echo:journey!=='disclosures'});
 const inventory = controls.filter(c=>c.hosts.length);
 const selector = entry => `[data-${entry.route}="${entry.name}"]${entry.scope==='entity'?'[data-index="0"]':''}`;

@@ -1,10 +1,10 @@
 import {
   BAR_PAINT_DIAGNOSTICS, INVALID_PAINT_OPACITY, PAINT_PROPERTY_SOURCES, normalizeBarConfig, normalizePaintOpacity,
 } from '../config/normalize.js';
+import { DEFAULT_PAINT_COLOR } from '../config/paint-defaults.js';
 
 const PRESET_PROPERTIES = new Set(['fill_style', 'color', 'solid_fill', 'segments', 'gradient_stops', 'opacity']);
 const PRESET_PATH = 'paint.preset';
-const THEME_ACCENT_FALLBACK = 'var(--accent-color, #4a9eff)';
 
 function isRecord(value) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -82,7 +82,7 @@ function inheritedOpacity(inheritedPaint) {
 function defaultPaint(themeAccent) {
   const color = typeof themeAccent === 'string' && themeAccent.trim()
     ? themeAccent
-    : THEME_ACCENT_FALLBACK;
+    : DEFAULT_PAINT_COLOR;
   return normalizeDefinition({ fill_style: 'bands', color, solid_fill: false }).paint;
 }
 

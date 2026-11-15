@@ -32,7 +32,7 @@ import {
   getBarSolidFillValue, getEffectiveBarSolidFillValue, setBarSolidFill,
   clearBarAppearanceOverride, hasBarAppearanceOverride, getBarAppearanceSummary,
   renderBarAppearanceSection, handleBarAppearanceField, getBarPaintEditorState,
-  syncBarPaintEditor, clearBarPaintPropertyOverride, hasLocalBarPaintConfiguration, resetBarPaintConfiguration,
+  syncBarPaintEditor, clearBarPaintPropertyOverride,
 } from './sections/bar-appearance.js';
 
 import { createBarPaintBindings, usesGroupedBarPaint, prepareBarPaintSegments } from './shared/bar-paint-bindings.js';
@@ -41,7 +41,8 @@ import { renderPaintSwatch, syncPaintSwatch } from './shared/paint-swatch.js';
 import { resolvePaintEditorPaint } from './shared/paint-editor-paint.js';
 import { SegmentsSection } from './sections/segments.js';
 import { GradientStopsSection } from './sections/gradient-stops.js';
-import { createBaselinePaintContext } from './shared/baseline-paint-bindings.js';
+import { BASELINE_PAINTS, BAR_PAINT } from '../view-model/paint-destinations.js';
+import { createDestinationBindings, handlePaintAction, handlePaintPresetControl, handlePaintPropertyControl, paintSourceSignature } from './shared/paint-destination.js';
 
 function paletteComparableConfig(config) {
   let comparable = cloneDeep(config ?? {});
@@ -49,6 +50,7 @@ function paletteComparableConfig(config) {
     ['bar', 'segments'], ['bar', 'gradient_stops'], ['bar', 'paint', 'segments'],
     ['bar', 'paint', 'gradient_stops'], ['bar', 'paint', 'preset'],
     ['segments'], ['severity'], ['gradient_stops'],
+    ...BASELINE_PAINTS.flatMap(destination => ['segments', 'gradient_stops', 'preset'].map(property => [...destination.path, property])),
   ];
   for (const path of palettePaths) comparable = deletePathValue(comparable, path);
   if (Array.isArray(comparable.entities)) {
@@ -61,14 +63,10 @@ function paletteComparableConfig(config) {
   return comparable;
 }
 
-function paletteSourceSignature(config) {
-  const source = value => [
-    getPathValue(value, ['bar', 'fill_style']), getPathValue(value, ['bar', 'color_mode']),
-    getPathValue(value, ['color_mode']), getPathValue(value, ['bar', 'paint', 'preset']),
-  ];
+function paletteSourceSignature(config, destination = BAR_PAINT) {
   return serializeConfig({
-    root: source(config),
-    entities: Array.isArray(config?.entities) ? config.entities.map(source) : [],
+    root: paintSourceSignature(config, destination),
+    entities: Array.isArray(config?.entities) ? config.entities.map(entity => paintSourceSignature(entity, destination)) : [],
   });
 }
 
@@ -81,8 +79,6 @@ import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveM
 import { readResolvableSourceParts, updateResolvableSourceParts, writeResolvableSourceParts } from './shared/resolvable-source.js';
 
 export class SensorBarCardPlusEditor extends HTMLElement {
-  get _baselineColorDrafts() { return this._baselineSection._baselineColorDrafts; }
-
   get _targetAboveFillDrafts() { return this._targetSection._targetAboveFillDrafts; }
 
   get _genericMarkerUiIds() { return this._referenceMarkersSection._genericMarkerUiIds; }
@@ -101,7 +97,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     });
     this._baselinePaintSections = {};
     for (const direction of ['above', 'below']) {
-      const paintContext = createBaselinePaintContext(this._createSectionContext(), direction);
+      const paintContext = this._createSectionContext();
+      const destination = BASELINE_PAINTS.find(item => item.id === `baseline-${direction}`);
       const rootSelector = scope => `#${scope?.type === 'entity' ? `entity-${scope.index}-` : ''}baseline-${direction}-paint-editor`;
       const ui = { ...this._paletteUi({ paint: true }),
         root: scope => this.shadowRoot?.querySelector(rootSelector(scope)),
@@ -109,11 +106,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       };
       this._baselinePaintSections[direction] = {
         segments: new SegmentsSection(paintContext, ui, {
-          write: (scope, rows, options) => createBarPaintBindings(paintContext, scope).set('segments', rows, options),
+          destination, write: (scope, rows, options) => createDestinationBindings(paintContext, scope, destination).set('segments', rows, options),
           autoEnds: true, cssText: true,
         }),
         gradientStops: new GradientStopsSection(paintContext, ui, {
-          write: (scope, rows, options) => createBarPaintBindings(paintContext, scope).set('gradient_stops', rows, options),
+          destination, write: (scope, rows, options) => createDestinationBindings(paintContext, scope, destination).set('gradient_stops', rows, options),
         }),
       };
     }
@@ -154,7 +151,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._expandedOverrideGroups = new Set();
     this._expandedCardGroups = new Set();
     this._targetSection.reset();
-    this._baselineSection.reset();
     this._pendingFocusSelector = null;
     this._boundHandleClick = (event) => this._handleClick(event);
     this._boundHandleChange = (event) => this._handleChange(event);
@@ -205,6 +201,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         === this._serializeConfig(paletteComparableConfig(this._config));
     this._segmentsSection.prepareExternalSync();
     this._gradientStopsSection.prepareExternalSync();
+    for (const destination of BASELINE_PAINTS) {
+      const sections = this._baselinePaintSections[destination.id.replace('baseline-', '')];
+      const changed = paletteSourceSignature(nextConfig, destination) !== paletteSourceSignature(this._config, destination);
+      for (const section of [sections.segments, sections.gradientStops]) {
+        if (changed) section.reset(); else section.prepareExternalSync();
+      }
+    }
     if (paletteOnlyReplacement) {
       this._lastEmittedConfigJson = null;
       this._config = nextConfig;
@@ -224,7 +227,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._gradientStopsSection.reset();
     }
     this._targetSection.reset();
-    this._baselineSection.reset();
     this._referenceMarkersSection.reset();
     this._numericDrafts.reset();
 
@@ -611,6 +613,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._refreshCardDerivedUi();
     this._refreshEntityDerivedUi();
     this._syncActionSelectors();
+    this._syncPaintEditors();
   }
 
   _refreshCardDerivedUi() {
@@ -623,13 +626,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._setElementText('card-group-segments-summary', this._getSegmentsSummary({ type: 'card' }));
     this._setElementText('card-group-gradient-stops-summary', this._getGradientStopsSummary({ type: 'card' }));
     this._setElementChecked('target-above-fill-enabled', this._isTargetAboveFillEnabled({ type: 'card' }));
-    this._setElementChecked('baseline-above-color-enabled', this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'above'));
-    this._setElementChecked('baseline-below-color-enabled', this._isBaselineDirectionalColorEnabled({ type: 'card' }, 'below'));
-    this._segmentsSection.syncRows({ type: 'card' });
-    this._gradientStopsSection.syncRows({ type: 'card' });
     this._setElementText('card-group-segments-summary', this._getSegmentsSummary({ type: 'card' }));
     this._setElementText('card-group-gradient-stops-summary', this._getGradientStopsSummary({ type: 'card' }));
-    syncBarPaintEditor(this.shadowRoot, this._createSectionContext(), { type: 'card' }, this._paintPaletteValues({ type: 'card' }), { numericDrafts: this._numericDrafts, registry: this._paintPresetRegistry });
   }
 
   _refreshEntityDerivedUi() {
@@ -649,8 +647,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementChecked(`entity-${index}-layout-inherit`, !this._hasLayoutOverride(scope));
       this._setElementChecked(`entity-${index}-formatting-inherit`, !this._hasFormattingOverride(scope));
       this._setElementChecked(`entity-${index}-target-above-fill-enabled`, this._isTargetAboveFillEnabled(scope));
-      this._setElementChecked(`entity-${index}-baseline-above-color-enabled`, this._isBaselineDirectionalColorEnabled(scope, 'above'));
-      this._setElementChecked(`entity-${index}-baseline-below-color-enabled`, this._isBaselineDirectionalColorEnabled(scope, 'below'));
 
       this._setElementText(`entity-${index}-group-scale-summary`, this._getScaleOverrideSummary(scope));
       this._setElementText(`entity-${index}-group-target-summary`, this._getTargetOverrideSummary(scope));
@@ -659,9 +655,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementText(`entity-${index}-group-peak-summary`, this._getPeakSummary(scope));
       this._setElementText(`entity-${index}-group-floor-summary`, this._getFloorSummary(scope));
       this._setElementText(`entity-${index}-group-markers-summary`, this._getGenericMarkersSummary(scope));
-      this._segmentsSection.syncRows(scope);
-      this._gradientStopsSection.syncRows(scope);
-      syncBarPaintEditor(this.shadowRoot, this._createSectionContext(), scope, this._paintPaletteValues(scope), { numericDrafts: this._numericDrafts, registry: this._paintPresetRegistry });
       this._setElementText(`entity-${index}-group-segments-summary`, this._getSegmentsSummary(scope));
       this._setElementText(`entity-${index}-group-gradient-stops-summary`, this._getGradientStopsSummary(scope));
       this._setElementText(`entity-${index}-group-layout-summary`, this._getLayoutSummary(scope));
@@ -1912,9 +1905,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     };
     Object.defineProperty(context, 'clearPaintPaletteState', {
       configurable: true,
-      value: scope => {
-        this._segmentsSection.clearScopeState(scope);
-        this._gradientStopsSection.clearScopeState(scope);
+      value: (scope, destination = BAR_PAINT, property) => {
+        const sections = destination === BAR_PAINT ? { segments: this._segmentsSection, gradientStops: this._gradientStopsSection }
+          : this._baselinePaintSections[destination.id.replace('baseline-', '')];
+        if (!property || property === 'segments') sections?.segments.clearScopeState(scope);
+        if (!property || property === 'gradient_stops') sections?.gradientStops.clearScopeState(scope);
       },
       writable: true,
     });
@@ -2838,18 +2833,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return this._targetSection._getTargetAboveFillDraft(...args);
   }
 
-  _getBaselineColorDraftKey(...args) {
-    return this._baselineSection._getBaselineColorDraftKey(...args);
-  }
-
-  _setBaselineColorDraft(...args) {
-    return this._baselineSection._setBaselineColorDraft(...args);
-  }
-
-  _getBaselineColorDraft(...args) {
-    return this._baselineSection._getBaselineColorDraft(...args);
-  }
-
   _getEffectiveTargetAboveFillColorValue(...args) {
     return this._targetSection._getEffectiveTargetAboveFillColorValue(...args);
   }
@@ -2864,14 +2847,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _setTargetAboveFillEnabled(...args) {
     return this._targetSection._setTargetAboveFillEnabled(...args);
-  }
-
-  _isBaselineDirectionalColorEnabled(...args) {
-    return this._baselineSection._isBaselineDirectionalColorEnabled(...args);
-  }
-
-  _setBaselineDirectionalColorEnabled(...args) {
-    return this._baselineSection._setBaselineDirectionalColorEnabled(...args);
   }
 
   _hasTargetOverride(...args) {
@@ -2913,18 +2888,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _removeScopedNeedle(...args) {
     return this._needleSection._removeScopedNeedle(...args);
-  }
-
-  _setBaselineDirectionalColor(...args) {
-    return this._baselineSection._setBaselineDirectionalColor(...args);
-  }
-
-  _getBaselineDirectionalColorValue(...args) {
-    return this._baselineSection._getBaselineDirectionalColorValue(...args);
-  }
-
-  _getEffectiveBaselineDirectionalColorValue(...args) {
-    return this._baselineSection._getEffectiveBaselineDirectionalColorValue(...args);
   }
 
   _clearBaselineOverride(...args) {
@@ -4148,27 +4111,6 @@ ${this._renderFormattingSection({ type: 'card' })}
     const action = target?.dataset?.action;
     if (!action) return;
     if (target?.disabled) return;
-    if (['above', 'below'].includes(target.closest?.('.baseline-paint-destination')?.dataset?.baselineDirection)
-      || target.closest?.('.paint-editor')?.id?.startsWith('baseline-')
-      || target.closest?.('.paint-editor')?.id?.includes('-baseline-')) {
-      if (action === 'reset-paint') {
-        const confirm = this.ownerDocument?.defaultView?.confirm;
-        if (typeof confirm !== 'function' || !confirm.call(this.ownerDocument.defaultView,
-          `${target.dataset.index === undefined ? 'Reset paint to its default' : 'Reset this Entity to Card paint'}?`)) return;
-      }
-      this._baselineSection.handleClick(target);
-      return;
-    }
-    if (action === 'reset-paint') {
-      const scope = target.dataset.index === undefined ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
-      const context = this._createSectionContext();
-      if (!hasLocalBarPaintConfiguration(context, scope)) return;
-      const confirm = this.ownerDocument?.defaultView?.confirm;
-      if (typeof confirm !== 'function' || !confirm.call(this.ownerDocument.defaultView,
-        `${scope.type === 'entity' ? 'Reset this Entity to Card paint' : 'Reset paint to its default'}?`)) return;
-      resetBarPaintConfiguration(context, scope);
-      return;
-    }
     if (presetManager && ['select-paint-preset', 'add-paint-preset', 'rename-paint-preset', 'delete-paint-preset'].includes(action)) {
       this._handlePaintPresetAction(action, target);
       return;
@@ -4177,13 +4119,8 @@ ${this._renderFormattingSection({ type: 'card' })}
       clearBarPaintPropertyOverride(this._createPresetPaintContext(), { type: 'card' }, target.dataset.property);
       return;
     }
-    if (action === 'clear-paint-property') {
-      const scope = target.dataset.index === undefined ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
-      if (target.dataset.property === 'segments') return this._segmentsSection._clearSegmentsOverride(scope);
-      if (target.dataset.property === 'gradient_stops') return this._gradientStopsSection._clearGradientStopsOverride(scope);
-      clearBarPaintPropertyOverride(this._createSectionContext(), scope, target.dataset.property);
-      return;
-    }
+    if (handlePaintAction(this._createSectionContext(), target)) return;
+
     if (['move-entity-up', 'move-entity-down', 'duplicate-entity', 'remove-entity'].includes(action)) this._entityIconCustomPending.clear();
     // Entity indices are positional; do not transfer an owned input draft when
     // an explicit list operation changes the row at that index.
@@ -4367,39 +4304,8 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (field === 'layout-height') return void this._setLayoutHeight(value);
     if (field === 'layout-label-width') return void this._setScopedLayoutLabelWidth({ type: 'card' }, value);
     if (handleScaleField(this._createSectionContext(), { field, value })) return;
-    if (field === 'bar-paint-preset' || kind === 'entity-bar-paint-preset') {
-      const scope = target.dataset?.index === undefined ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
-      const context = this._createSectionContext();
-      const localPreset = context.read(scope, ['bar', 'paint', 'preset']);
-      const inheritedPreset = scope.type === 'entity' ? context.read({ type: 'card' }, ['bar', 'paint', 'preset']) : undefined;
-      const currentPreset = localPreset !== undefined ? localPreset : inheritedPreset;
-      const confirm = this.ownerDocument?.defaultView?.confirm;
-      const applied = handleBarAppearanceField(context, { field, kind, index: target.dataset?.index, value }, {
-        confirm: name => typeof confirm === 'function' && confirm.call(this.ownerDocument.defaultView,
-          `Applying paint preset “${name}” replaces local paint properties. Continue?`),
-      });
-      if (!applied) target.value = currentPreset == null ? '' : String(currentPreset);
-      return;
-    }
-    const baselinePresetControl = (field ?? kind?.replace(/^entity-/, ''))?.match(/^baseline-(above|below)-paint-preset$/);
-    if (baselinePresetControl) {
-      const [, direction] = baselinePresetControl;
-      const scope = target.dataset?.index === undefined ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
-      const context = this._createSectionContext();
-      const local = context.read(scope, ['baseline', direction, 'paint']) ?? {};
-      const current = local.preset ?? (scope.type === 'entity' ? context.read({ type: 'card' }, ['baseline', direction, 'paint', 'preset']) : undefined);
-      const hasProperties = Object.keys(local).some(property => property !== 'preset')
-        || context.read(scope, ['baseline', direction, 'color']) !== undefined;
-      const confirm = this.ownerDocument?.defaultView?.confirm;
-      if (value !== '' && value !== current && hasProperties
-        && (typeof confirm !== 'function' || !confirm.call(this.ownerDocument.defaultView,
-          `Applying paint preset “${value}” replaces local paint properties. Continue?`))) {
-        target.value = current == null ? '' : String(current);
-        return;
-      }
-      this._baselineSection._setBaselinePaintProperty(scope, direction, 'preset', value === '' ? undefined : value);
-      return;
-    }
+    if (handlePaintPresetControl(this._createSectionContext(), target, value)) return;
+    if (handlePaintPropertyControl(this._createSectionContext(), target, value, { cssText: false })) return;
     if (handleBarAppearanceField(this._createSectionContext(), { field, value })) return;
     if (this._needleSection.handleField({ field, kind, index: target.dataset?.index, value })) return;
     if (this._baselineSection.handleField({ field, kind, index: target.dataset?.index, value })) {

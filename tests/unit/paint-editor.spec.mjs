@@ -17,7 +17,7 @@ describe('shared Paint Editor', () => {
     const config = { entries: [{ appearance: { color: '#123456', extra: true } }] };
     const { bindings, context } = bindingFor(config, ['entries', 0, 'appearance']);
     const html = renderPaintEditor({ id: 'custom-paint', bindings, paletteContent: '<div>Palette controls</div>' });
-    expect(html).toContain('<details id="custom-paint" class="paint-editor">');
+    expect(html).toContain('<details id="custom-paint" class="paint-editor" data-paint-destination="bar">');
     expect(html).toContain('id="custom-paint-color"');
     expect(html).toContain('Palette controls');
     expect(html).not.toContain('bar-');
@@ -49,7 +49,7 @@ describe('shared Paint Editor', () => {
     const root = { querySelector: () => ({ open: true }) };
     const html = renderPaintEditor({ id: 'paint', bindings, root,
       fields: { color: { id: 'destination-color', kind: 'destination-color', index: 2 } } });
-    expect(html).toContain('class="paint-editor" open');
+    expect(html).toContain('data-paint-destination="bar" open');
     expect(html).toContain('id="destination-color"');
     expect(html).toContain('data-kind="destination-color" data-index="2"');
   });

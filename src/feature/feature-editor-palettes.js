@@ -1,8 +1,11 @@
-import { barPaintSource, createBarPaintBindings, readBarPaintProperty, usesGroupedBarPaint } from '../editor/shared/bar-paint-bindings.js';
+import { barPaintSource, readBarPaintProperty, usesGroupedBarPaint } from '../editor/shared/bar-paint-bindings.js';
 import { cloneDeep, getPathValue, setPathValue, isObject } from '../editor/shared/editor-config.js';
+import { BAR_PAINT } from '../view-model/paint-destinations.js';
+import { createDestinationBindings, getDestinationEditorState } from '../editor/shared/paint-destination.js';
 
 // Resolve the authoritative raw palette without normalizing or deleting aliases.
-function palettePath(context, config, kind) {
+function palettePath(context, config, kind, destination) {
+  if (destination !== BAR_PAINT) return [...destination.path, kind];
   const source = barPaintSource(context, { type: 'card' }, kind);
   if (source) return source;
   if (Object.prototype.hasOwnProperty.call(config.bar ?? {}, 'paint')) return null;
@@ -15,24 +18,27 @@ function displayBoundary(value) {
   return value.fixed ?? value.value;
 }
 
-export function createFeaturePaletteArray(context, kind) {
+export function createFeaturePaletteArray(context, kind, destination = BAR_PAINT) {
   let section;
   const rawRows = () => {
     const config = context.read({ type: 'card' }, []);
-    const path = palettePath(context, config, kind);
+    const path = palettePath(context, config, kind, destination);
     const stored = path ? getPathValue(config, path) : undefined;
     if (stored !== undefined) return Array.isArray(stored) ? stored : [];
-    const resolved = readBarPaintProperty(context, { type: 'card' }, kind);
+    const resolved = destination === BAR_PAINT ? readBarPaintProperty(context, { type: 'card' }, kind)
+      : getDestinationEditorState(context, { type: 'card' }, destination).paint[kind];
     if (Array.isArray(resolved)) return resolved;
     return kind === 'segments' ? section._getFallbackSegments({ type: 'card' }) : section._getDefaultGradientStops();
   };
   return {
+    destination,
     patchOnly: true,
     autoEnds: kind === 'segments',
     cssText: kind === 'segments',
     segmentSpace: () => {
       const config = context.read({ type: 'card' }, []);
-      const path = palettePath(context, config, kind);
+      const path = palettePath(context, config, kind, destination);
+      if (destination !== BAR_PAINT) return null;
       return path?.[0] === 'severity' ? 'percent' : path?.[0] === 'bar' ? config.bar?.segment_space ?? null : null;
     },
     rows(_scope, controller) {
@@ -45,8 +51,8 @@ export function createFeaturePaletteArray(context, kind) {
     write(scope, _displayRows, _options, operation) {
       if (!operation) throw new Error('Feature palette writes require an explicit item operation');
       const config = context.read(scope, []);
-      const grouped = usesGroupedBarPaint(context, scope);
-      const path = palettePath(context, config, kind);
+      const grouped = destination !== BAR_PAINT || usesGroupedBarPaint(context, scope);
+      const path = palettePath(context, config, kind, destination);
       const rows = [...rawRows()];
       if (operation.type === 'edit') {
         if (operation.index < 0 || operation.index >= rows.length) return false;
@@ -56,7 +62,7 @@ export function createFeaturePaletteArray(context, kind) {
       } else if (operation.type === 'add') rows.push(cloneDeep(operation.item));
       else if (operation.type === 'remove') rows.splice(operation.index, 1);
       else throw new Error('Unsupported palette operation');
-      const applied = grouped ? createBarPaintBindings(context, scope).set(kind, rows)
+      const applied = grouped ? createDestinationBindings(context, scope, destination).set(kind, rows)
         : context.mutate(scope, target => setPathValue(target, path ?? ['bar', kind], rows));
       if (applied !== false && operation.type !== 'edit') {
         if (kind === 'segments') section._clearSegmentScopeTextState(scope);

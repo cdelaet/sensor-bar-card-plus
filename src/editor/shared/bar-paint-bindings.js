@@ -1,17 +1,9 @@
 import { normalizeBarConfig, PAINT_PROPERTY_SOURCES } from '../../config/normalize.js';
-import { resolveScopedPaintPreset } from '../../view-model/paint-preset-resolver.js';
+import { BAR_PAINT, resolveConfiguredDestination } from '../../view-model/paint-destinations.js';
 import { createPaintBindings } from './paint-bindings.js';
 import { cloneDeep, getPathValue, isObject, removePathsFromTarget, pruneEmptyObjectsInTarget } from './editor-config.js';
 
-const aliases = {
-  color: [['bar', 'color'], ['color']],
-  fill_style: [['bar', 'fill_style'], ['bar', 'color_mode'], ['color_mode']],
-  solid_fill: [['bar', 'solid_fill']],
-  segments: [['bar', 'segments'], ['segments'], ['severity']],
-  gradient_stops: [['bar', 'gradient_stops'], ['gradient_stops']],
-  opacity: [],
-  preset: [],
-};
+const aliases = { ...BAR_PAINT.aliases, opacity: [], preset: [] };
 const owns = (object, key) => object != null && Object.prototype.hasOwnProperty.call(object, key);
 const legacyPaint = config => Object.values(aliases).flat().some(path => getPathValue(config, path) !== undefined);
 const legacySolidToggleWrites = new WeakSet();
@@ -53,16 +45,8 @@ export function readBarPaintProperty(context, scope, property) {
   if (['segments', 'gradient_stops'].includes(property) && context.paintPresetRegistry) {
     const local = context.read(scope, []) ?? {};
     const inheritedConfig = scope?.type === 'entity' ? context.read({ type: 'card' }, []) : null;
-    const normalized = normalizeBarConfig(local, inheritedConfig, {
-      isCardScope: scope?.type !== 'entity',
-    }).paint;
-    const inherited = inheritedConfig
-      ? normalizeBarConfig(inheritedConfig, null, { isCardScope: true }).paint
-      : normalized;
-    if (normalized.preset !== undefined || inherited.preset !== undefined) {
-      const resolved = scope?.type === 'entity'
-        ? resolveScopedPaintPreset({ inheritedPaint: inherited, paint: normalized, registry: context.paintPresetRegistry })
-        : resolveScopedPaintPreset({ inheritedPaint: normalized, paint: {}, registry: context.paintPresetRegistry });
+    const resolved = resolveConfiguredDestination(local, inheritedConfig, BAR_PAINT, context.paintPresetRegistry);
+    if (resolved.normalized.preset !== undefined || resolved.inheritedPaint?.preset !== undefined) {
       return cloneDeep(resolved.paint[property]);
     }
   }

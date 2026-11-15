@@ -1,7 +1,6 @@
 import { parsePercentLiteral } from '../../config/normalize.js';
 import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumberValue } from '../shared/editor-config.js';
 import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, getColorPickerValue } from '../shared/editor-controls.js';
-import { readBarPaintProperty, clearBarPaintProperties, ownsBarPaintProperty, usesGroupedBarPaint } from '../shared/bar-paint-bindings.js';
 import { PaletteRowSession, PaletteSection } from '../shared/palette-section.js';
 import { getDefaultPaintGradientStops } from '../shared/paint-editor-paint.js';
 
@@ -176,7 +175,7 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   _getStoredScopedGradientStops(scope = { type: 'card' }) {
-    return readBarPaintProperty(this.context, scope, 'gradient_stops') ?? null;
+    return this.readPaintProperty(scope, 'gradient_stops') ?? null;
   }
 
   _getFallbackGradientStops(scope = { type: 'card' }) {
@@ -300,10 +299,7 @@ export class GradientStopsSection extends PaletteSection {
   _clearGradientStopsOverride(scope) {
     const previousUiRowsJson = serializeConfig(this._getGradientStopsUiRows(scope) ?? []);
     this.clearScopeState(scope);
-    const applied = this.context.mutate(scope, (target) => {
-      const nextTarget = clearBarPaintProperties(target, ['gradient_stops']);
-      return nextTarget;
-    }, { ...(usesGroupedBarPaint(this.context, scope) ? { preserveRawConfig: true } : {}) });
+    const applied = this.clearPaintProperty(scope, 'gradient_stops');
     if (applied === false && previousUiRowsJson !== serializeConfig([])) {
       this.ui.render();
     }
@@ -451,7 +447,7 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   _hasGradientStopsOverride(scope) {
-    if (ownsBarPaintProperty(this.context, scope, 'gradient_stops')) {
+    if (this.ownsPaintProperty(scope, 'gradient_stops')) {
       return true;
     }
     const localRows = this._getGradientStopsUiRows(scope);
@@ -580,6 +576,10 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   render(scope = { type: 'card' }, renderGroup = ({ content }) => content, { section = true } = {}) {
+    return this.scopeMarkup(this._renderPalette(scope, renderGroup, { section }));
+  }
+
+  _renderPalette(scope, renderGroup, { section }) {
     if (scope?.type === 'entity') {
       const index = scope.index;
       const entityGradientStops = this._getScopedGradientStopsValue(scope);

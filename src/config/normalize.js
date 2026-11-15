@@ -1,4 +1,5 @@
 import { isValidReset } from '../utils/extrema.js';
+import { getOverlayPaintDefaults } from './paint-defaults.js';
 import { canonicalizeHistoricalWindow, parseHistoricalWindow, isEligibleHistoricalWindow } from '../history/time-window.js';
 
 export const UNSUPPORTED_EXTREMA_ALIASES = Symbol.for('sensor-bar-card-plus.unsupported-extrema-aliases');
@@ -273,6 +274,7 @@ export function normalizeBaselineDirectionConfig(input, inheritedDirection = nul
   if (input === null) {
     return { color: null };
   }
+  if (typeof input === 'string') input = { color: input };
   if (typeof input === 'object' && !Array.isArray(input)) {
     const color = hasOwnConfigValue(input, 'color') ? input.color : inherited.color ?? null;
     if (Object.prototype.hasOwnProperty.call(input, 'paint') && input.paint === null) {
@@ -281,14 +283,17 @@ export function normalizeBaselineDirectionConfig(input, inheritedDirection = nul
     const hasPaint = Object.prototype.hasOwnProperty.call(input, 'paint')
       && input.paint !== undefined;
     const inheritedPaint = inherited.paint;
+    if (!hasPaint && inheritedPaint === null && !hasOwnConfigValue(input, 'color')) return { color, paint: null };
     if (!hasPaint && !inheritedPaint) return { color };
 
+    const defaults = getOverlayPaintDefaults();
+    const fallback = inheritedPaint ?? (inherited.paint !== null && inherited.color ? { ...defaults, color: inherited.color } : defaults);
     const normalized = normalizeBarConfig({
       bar: {
         ...(hasPaint ? { paint: input.paint } : {}),
         ...(input.color !== undefined ? { color: input.color } : {}),
       },
-    }, inheritedPaint ? { bar: { ...inheritedPaint, paint: inheritedPaint } } : null, { isCardScope: !inheritedPaint });
+    }, { bar: { ...fallback, paint: fallback } }, { isCardScope: false });
     return {
       color: hasPaint ? normalized.paint.color : color,
       paint: normalized.paint,
@@ -574,13 +579,14 @@ function hasExplicitColor(config) {
   return values.some((value) => value !== undefined && value !== null);
 }
 
-const barPaintAliases = {
+export const BAR_PAINT_ALIASES = {
   color: [['bar', 'color'], ['color']],
   fill_style: [['bar', 'fill_style'], ['bar', 'color_mode'], ['color_mode']],
   solid_fill: [['bar', 'solid_fill']],
   segments: [['bar', 'segments'], ['segments'], ['severity']],
   gradient_stops: [['bar', 'gradient_stops'], ['gradient_stops']],
 };
+const barPaintAliases = BAR_PAINT_ALIASES;
 
 function paintAliasValue(config, path) {
   return path.reduce((value, key) => value?.[key], config);

@@ -1,19 +1,15 @@
-import { INVALID_PAINT_OPACITY, normalizeBarConfig, normalizeScaleConfig, getPaintExplicitness } from '../../config/normalize.js';
+import { normalizeBarConfig } from '../../config/normalize.js';
 import {
-  isObject, normalizeTextValue, normalizeNumberValue, getPathValue,
+  isObject, getPathValue,
   removePathsFromTarget, pruneEmptyObjectsInTarget,
 } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeColorComparisonValue, normalizeEditorColorValue } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeColorComparisonValue } from '../shared/editor-controls.js';
 import { renderDirectionControl, setDirectionValue } from '../shared/direction-control.js';
 import { createPaintBindings } from '../shared/paint-bindings.js';
-import { createBarPaintBindings, usesGroupedBarPaint, readBarPaintProperty, ownsBarPaintProperty, clearBarPaintProperties } from '../shared/bar-paint-bindings.js';
+import { usesGroupedBarPaint, readBarPaintProperty, ownsBarPaintProperty, clearBarPaintProperties } from '../shared/bar-paint-bindings.js';
 import { renderPaintEditor, syncPaintEditor } from '../shared/paint-editor.js';
-import { getPaintPreviewScale } from '../shared/paint-swatch.js';
-import { resolvePaintEditorPaint } from '../shared/paint-editor-paint.js';
-import { getResolvedScale } from '../../config/resolve.js';
-import { resolveScopedPaintPreset } from '../../view-model/paint-preset-resolver.js';
-
-const BAR_PAINT_PROPERTIES = ['preset', 'fill_style', 'color', 'solid_fill', 'segments', 'gradient_stops', 'opacity'];
+import { BAR_PAINT } from '../../view-model/paint-destinations.js';
+import { getDestinationEditorState, resetDestinationPaint, selectDestinationPreset, clearDestinationProperty, setDestinationProperty, hasDestinationConfiguration } from '../shared/paint-destination.js';
 
 export function getFillStyleFromColorMode(colorMode) {
   switch (colorMode) {
@@ -47,10 +43,6 @@ export function getEffectiveBarColorValue(context, scope) {
 // Field-specific canonical edits keep the existing alias removal and pruning.
 // Cleanup, emission and scheduling are entirely the host's mutation policy.
 function setAppearanceValue(context, scope, key, value, deprecatedKeys = []) {
-  if (key !== 'animated') {
-    const binding = createBarPaintBindings(context, scope);
-    return value === undefined ? binding.clear(key) : binding.set(key, value);
-  }
   const options = { deprecatedKeys, prunePaths: [['bar']] };
   const cleanup = target => pruneEmptyObjectsInTarget(removePathsFromTarget(target, deprecatedKeys), ['bar']);
   // Promotion belongs to this bar adapter. Present the promoted destination to
@@ -66,14 +58,11 @@ function setAppearanceValue(context, scope, key, value, deprecatedKeys = []) {
 }
 
 export function setBarFillStyle(context, scope, rawValue) {
-  const value = normalizeTextValue(rawValue).trim();
-  return setAppearanceValue(context, scope, 'fill_style', value || undefined, [['color_mode']]);
+  return setDestinationProperty(context, scope, BAR_PAINT, 'fill_style', rawValue);
 }
 
 export function setBarColor(context, scope, rawValue, options = {}) {
-  const value = normalizeEditorColorValue(rawValue, options.cssText);
-  const remove = !value;
-  return setAppearanceValue(context, scope, 'color', remove ? undefined : value, [['color']]);
+  return setDestinationProperty(context, scope, BAR_PAINT, 'color', rawValue, options);
 }
 
 export function getBarSolidFillValue(context, scope) {
@@ -85,14 +74,11 @@ export function getEffectiveBarSolidFillValue(context, scope) {
 }
 
 export function setBarSolidFill(context, scope, value) {
-  return setAppearanceValue(context, scope, 'solid_fill', !!value);
+  return setDestinationProperty(context, scope, BAR_PAINT, 'solid_fill', value);
 }
 
 export function setBarOpacity(context, scope, rawValue) {
-  const value = rawValue === '' || rawValue === null || rawValue === undefined
-    ? undefined : normalizeNumberValue(rawValue);
-  if (value !== undefined && (value === null || value < 0 || value > 100)) return false;
-  return setAppearanceValue(context, scope, 'opacity', value);
+  return setDestinationProperty(context, scope, BAR_PAINT, 'opacity', rawValue);
 }
 
 export function getBarAnimatedValue(context, scope) {
@@ -118,31 +104,11 @@ export function clearBarAppearanceOverride(context, scope) {
 }
 
 export function hasLocalBarPaintConfiguration(context, scope) {
-  const groupedPaint = context.read(scope, ['bar', 'paint']);
-  return groupedPaint !== undefined
-    || BAR_PAINT_PROPERTIES.some(property => ownsBarPaintProperty(context, scope, property));
-}
-
-export function hasLocalBarPaintProperties(context, scope) {
-  const groupedPaint = context.read(scope, ['bar', 'paint']);
-  const groupedProperties = isObject(groupedPaint)
-    ? Object.keys(groupedPaint).some(property => property !== 'preset')
-    : groupedPaint != null;
-  return groupedProperties
-    || BAR_PAINT_PROPERTIES.filter(property => property !== 'preset')
-      .some(property => ownsBarPaintProperty(context, scope, property));
-}
-
-function clearLocalBarPaint(target) {
-  return pruneEmptyObjectsInTarget(
-    removePathsFromTarget(clearBarPaintProperties(target, BAR_PAINT_PROPERTIES), [['bar', 'paint']]), ['bar']);
+  return hasDestinationConfiguration(context, scope, BAR_PAINT);
 }
 
 export function resetBarPaintConfiguration(context, scope) {
-  if (!hasLocalBarPaintConfiguration(context, scope)) return false;
-  context.clearPaintPaletteState?.(scope);
-  return context.mutate(scope, clearLocalBarPaint,
-  { preserveRawConfig: true, rerender: true });
+  return resetDestinationPaint(context, scope, BAR_PAINT);
 }
 
 export function hasBarAppearanceOverride(context, scope) {
@@ -201,43 +167,8 @@ export function handleBarAppearanceField(context, { field, kind, index, value },
 
 // Ordinary-bar destination adapter. The Paint Editor itself has no bar paths,
 // inheritance rules, aliases or host mutation policy.
-export function getBarPaintEditorState(context, scope, paletteValues, registry = context.paintPresetRegistry ?? null) {
-  const local = context.read(scope, []) ?? {};
-  const inheritedConfig = scope?.type === 'entity' ? context.read({ type: 'card' }, []) : null;
-  const parent = inheritedConfig ? { ...inheritedConfig, bar: normalizeBarConfig(inheritedConfig, null) } : null;
-  const normalizedPaint = normalizeBarConfig(local, parent, {
-    isCardScope: scope?.type !== 'entity', inheritedExplicitness: getPaintExplicitness(inheritedConfig),
-  }).paint;
-  const parentPaint = inheritedConfig ? normalizeBarConfig(inheritedConfig, null, { isCardScope: true }).paint : normalizedPaint;
-  const presetApplies = normalizedPaint.preset !== undefined || parentPaint.preset !== undefined;
-  const resolved = presetApplies
-    ? scope?.type === 'entity'
-      ? resolveScopedPaintPreset({ inheritedPaint: parentPaint, paint: normalizedPaint, registry })
-      : resolveScopedPaintPreset({ inheritedPaint: normalizedPaint, paint: {}, registry })
-    : { paint: normalizedPaint, diagnostics: Object.hasOwn(normalizedPaint, INVALID_PAINT_OPACITY) ? [{
-      code: 'paint_opacity_invalid', severity: 'warning', path: 'paint.opacity', reference: null, fallback: 'default_opacity',
-    }] : [], source: 'canonical' };
-  const paint = resolvePaintEditorPaint(resolved.paint, paletteValues);
-  const scale = normalizeScaleConfig(local, inheritedConfig);
-  const { min, max } = getResolvedScale(context.hass, scale);
-  const previewScale = getPaintPreviewScale(paint, { minValue: min, maxValue: max, scaleDirection: scale.direction });
-  const bindings = createBarPaintBindings(context, scope);
-  const properties = ['fill_style', 'color', 'solid_fill', 'segments', 'gradient_stops', 'opacity'];
-  const overrides = Object.fromEntries(properties.map(property => [property, ownsBarPaintProperty(context, scope, property)]));
-  const ownPreset = bindings.read('preset');
-  const inheritedPreset = inheritedConfig?.bar?.paint?.preset;
-  const presetReference = ownPreset !== undefined ? ownPreset : inheritedPreset;
-  const presetOptions = Object.keys(registry?.presets ?? {}).filter(name => name.trim())
-    .map(name => ({ value: name, label: name }));
-  if (presetReference !== undefined && !presetOptions.some(option => option.value === String(presetReference))) {
-    presetOptions.push({ value: String(presetReference ?? ''), label: `${String(presetReference || '(empty name)')} (unavailable)` });
-  }
-  const owned = context.read(scope, ['bar', 'color_mode']) !== undefined || ownsBarPaintProperty(context, scope, 'preset')
-    || properties.some(key => ownsBarPaintProperty(context, scope, key))
-    || ['color_mode', 'color', 'segments', 'severity', 'gradient_stops'].some(key => Object.prototype.hasOwnProperty.call(local, key));
-  return { bindings, paint, resetDisabled: !hasLocalBarPaintConfiguration(context, scope), inherited: scope?.type === 'entity' && !owned, presetReference,
-    presetOptions, overrides, diagnostics: resolved.diagnostics, registryStatus: registry?.status ?? 'loading', previewScale,
-    scale: { minValue: min, maxValue: max, scaleDirection: scale.direction } };
+export function getBarPaintEditorState(context, scope, paletteValues, registry = context.paintPresetRegistry) {
+  return getDestinationEditorState(context, scope, BAR_PAINT, paletteValues, registry);
 }
 
 export function syncBarPaintEditor(root, context, scope, paletteValues, options) {
@@ -248,28 +179,11 @@ export function syncBarPaintEditor(root, context, scope, paletteValues, options)
 }
 
 export function clearBarPaintPropertyOverride(context, scope, property) {
-  if (!['fill_style', 'color', 'solid_fill', 'segments', 'gradient_stops', 'opacity', 'preset'].includes(property)) return false;
-  return createBarPaintBindings(context, scope, { grouped: property === 'preset' || usesGroupedBarPaint(context, scope) })
-    .clear(property, { preserveRawConfig: true });
+  return clearDestinationProperty(context, scope, BAR_PAINT, property);
 }
 
 function setBarPaintPreset(context, scope, value, options = {}) {
-  const binding = createBarPaintBindings(context, scope, { grouped: true });
-  if (value === '') return binding.clear('preset', { preserveRawConfig: true, rerender: true });
-
-  const localPreset = binding.read('preset');
-  const inheritedPreset = scope?.type === 'entity' ? context.read({ type: 'card' }, ['bar', 'paint', 'preset']) : undefined;
-  if (value === (localPreset !== undefined ? localPreset : inheritedPreset)) return true;
-  if (hasLocalBarPaintProperties(context, scope) && options.confirm?.(value) !== true) return false;
-
-  context.clearPaintPaletteState?.(scope);
-  const atomicContext = {
-    read: context.read,
-    mutate: (targetScope, mutation, mutationOptions) => context.mutate(
-      targetScope, target => mutation(clearLocalBarPaint(target)), mutationOptions),
-  };
-  return createBarPaintBindings(atomicContext, scope, { grouped: true }).set('preset', value,
-    { preserveRawConfig: true, rerender: true });
+  return selectDestinationPreset(context, scope, BAR_PAINT, value, options);
 }
 
 export function renderBarAppearanceSection(context, scope, renderChildren = () => '', options = {}) {

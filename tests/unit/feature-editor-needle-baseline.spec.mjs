@@ -102,17 +102,17 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
   });
   for (const direction of ['above', 'below']) it(`patches/toggles ${direction} color without losing nested metadata or Needle`, async () => {
     const config = raw(), { editor } = await setup(source, config);
-    await edit(editor, `#baseline-${direction}-color`, '#123456');
+    await edit(editor, `#baseline-${direction}-paint-color`, '#123456');
     const editedDirection = structuredClone(config.baseline[direction]);
     delete editedDirection.color;
     editedDirection.paint = { color: '#123456' };
     expect(editor._config.baseline[direction]).toEqual(editedDirection);
-    await edit(editor, `#baseline-${direction}-color-enabled`, false, 'change');
+    await edit(editor, `#baseline-${direction}-paint-enabled`, false, 'change');
     const expected = structuredClone(config); delete expected.baseline[direction].color; expected.baseline[direction].paint = null;
     expect(editor._config).toEqual(expected);
     editor.context = { entity_id: 'sensor.changed' }; await editor.updateComplete;
-    await edit(editor, `#baseline-${direction}-color-enabled`, true, 'change');
-    expected.baseline[direction].paint = { color: '#123456' }; expect(editor._config).toEqual(expected);
+    await edit(editor, `#baseline-${direction}-paint-enabled`, true, 'change');
+    expected.baseline[direction].paint = {}; expect(editor._config).toEqual(expected);
   });
   for (const [part, value] of [['fixed', '12'], ['entity', 'sensor.changed'], ['fixed', ''], ['entity', '']]) it(`patches only source ${part}=${value}`, async () => {
     const config = raw(), { editor, events } = await setup(source, config);
@@ -139,7 +139,7 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
   for (const at of [25, 'sensor.b', '50%', { percent: 50, ...metadata() }]) it(`preserves source representation ${JSON.stringify(at)} through unrelated Baseline/Needle edits`, async () => {
     const config = raw(); config.baseline.at = at;
     const { editor } = await setup(source, config);
-    await edit(editor, '#baseline-above-color', '#123456');
+    await edit(editor, '#baseline-above-paint-color', '#123456');
     await edit(editor, '#bar-needle-mode', 'enabled', 'change');
     expect(editor._config.baseline.at).toEqual(at);
     if (at === '50%') expect(editor.shadowRoot.querySelector('#baseline-value').value).toBe('50%');
@@ -160,7 +160,7 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
     const { editor } = await setup(source, config);
     await edit(editor, '#baseline-value', '30'); expect(editor._config.baseline).toBe(30);
     await edit(editor, '#baseline-show', false, 'change'); expect(editor._config.baseline).toEqual({ at: 30, enabled: false });
-    await edit(editor, '#baseline-above-color', '#123456'); expect(editor._config.baseline).toEqual({ at: 30, enabled: false, above: { paint: { color: '#123456' } } });
+    await edit(editor, '#baseline-above-paint-color', '#123456'); expect(editor._config.baseline).toEqual({ at: 30, enabled: false, above: { paint: { color: '#123456' } } });
     expect(editor._config.bar.needle).toEqual(config.bar.needle);
   });
   it('switches the direct Value between fixed and percent with Entity/Attribute retained', async () => {
@@ -209,8 +209,8 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
     for (const key of ['_needleSection', '_baselineSection']) {
       expect(editor[key].constructor).toBe(standalone[key].constructor);
     }
-    expect(editor.shadowRoot.innerHTML).toContain('id="baseline-above-paint-mode"');
-    expect(editor.shadowRoot.innerHTML).toContain('id="baseline-below-paint-mode"');
+    expect(editor.shadowRoot.innerHTML).toContain('id="baseline-above-paint-enabled"');
+    expect(editor.shadowRoot.innerHTML).toContain('id="baseline-below-paint-enabled"');
     expect(editor.shadowRoot.innerHTML).not.toContain('disabled="disabled"');
   });
   it('leaves visibility precedence to runtime and restores Needle when Baseline fails to resolve', async () => {

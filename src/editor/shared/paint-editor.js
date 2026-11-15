@@ -28,7 +28,8 @@ function fieldRoutingAttributes({ field, kind, index }) {
 export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {}, inherited = false,
   scale, previewScale = scale, fields = {}, root, paletteContent = '', paletteFields = null, cssText = false,
   presetReference, presetOptions = [], overrides = {}, diagnostics = [], registryStatus = 'unknown',
-  showPropertyMeta = true, bodyId = null, resetLabel, resetDisabled = true }) {
+  showPropertyMeta = true, bodyId = null, resetLabel, resetDisabled = true,
+  sources = {}, activation = null, enabled = true, destination = 'bar' }) {
   const controls = Object.fromEntries(['fill_style', 'solid_fill', 'color', 'opacity'].map(key => [key,
     fields[key] ?? { id: `${id}-${key}`, field: key },
   ]));
@@ -36,10 +37,10 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
   const open = root?.querySelector(`#${id}`)?.open === true;
   const fillStyle = paint.fill_style ?? 'bands';
   const referenceName = presetReference == null ? '' : String(presetReference);
-  const source = property => overrides[property] ? 'Override' : presetReference != null ? 'Preset' : 'Inherited';
+  const source = property => sources[property] ?? (overrides[property] ? 'Local' : 'Default');
   const propertyHeader = (property, label) => showPropertyMeta
-    ? `<span class="paint-property-meta${overrides[property] ? ' is-overridden' : ''}" data-paint-source="${property}">${source(property)}</span>
-      <button type="button" class="paint-clear-override" data-action="clear-paint-property" data-property="${property}"${fields.index !== undefined ? ` data-index="${fields.index}"` : ''} aria-label="Clear ${escapeAttribute(label)} override"${overrides[property] ? '' : ' hidden'}>Clear</button>`
+    ? `<span class="paint-property-meta${source(property) === 'Override' ? ' is-overridden' : ''}" data-paint-source="${property}">${source(property)}</span>
+      <button type="button" class="paint-clear-override" data-action="clear-paint-property" data-property="${property}"${fields.index !== undefined ? ` data-index="${fields.index}"` : ''} aria-label="Clear ${escapeAttribute(label)} ${source(property) === 'Override' ? 'override' : 'value'}"${overrides[property] ? '' : ' hidden'}>Clear</button>`
     : '';
   const labelRow = (property, label, control) => `<div class="paint-property-row"><div class="paint-property-heading"><label for="${controls[property].id}">${label}</label>${propertyHeader(property, label)}</div>${control}</div>`;
   const options = ['<option value="">None</option>',
@@ -71,18 +72,22 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
     ? 'Loading dashboard presets…'
     : registryStatus === 'empty' && !presetOptions.length && !feedbackText
       ? 'No dashboard paint presets available.' : '';
-  return `<details id="${id}" class="paint-editor"${open ? ' open' : ''}>
+  const resetAction = resetLabel ? `<div class="paint-editor-actions"><button type="button" data-action="reset-paint"${fields.index !== undefined ? ` data-index="${fields.index}"` : ''}${resetDisabled ? ' disabled' : ''}>${escapeAttribute(resetLabel)}</button></div>` : '';
+  return `<details id="${id}" class="paint-editor" data-paint-destination="${destination}"${open ? ' open' : ''}>
     <summary class="paint-editor-summary">
       ${renderPaintSwatch('paint-editor-swatch', paint, previewScale)}
       <span class="paint-editor-heading">Paint</span>
       <span class="paint-editor-description">${escapeAttribute(description)}</span>
     </summary>
     <div${bodyId ? ` id="${escapeAttribute(bodyId)}"` : ''} class="paint-editor-body">
+      ${activation ? `<div class="toggle"><input ${fieldAttributes(activation)} type="checkbox" data-paint-enabled="true"${enabled ? ' checked' : ''}><label for="${activation.id}">Enable Paint</label></div>` : ''}
+      ${activation ? resetAction : ''}
+      ${activation ? `<div class="paint-editor-properties"${enabled ? '' : ' hidden'}>` : ''}
       <div class="paint-preset-row"${showPreset ? '' : ' hidden'}>
         <label for="${controls.preset.id}">Paint preset</label>
         <select ${fieldAttributes(controls.preset)} data-paint-preset="true">${options}</select>
       </div>
-      ${resetLabel ? `<div class="paint-editor-actions"><button type="button" data-action="reset-paint"${fields.index !== undefined ? ` data-index="${fields.index}"` : ''}${resetDisabled ? ' disabled' : ''}>${escapeAttribute(resetLabel)}</button></div>` : ''}
+      ${activation ? '' : resetAction}
       <div class="paint-preset-feedback" role="status" aria-live="polite"${feedbackText ? '' : ' hidden'}>${escapeAttribute(feedbackText)}</div>
       <div class="paint-registry-status" role="status"${registryMessage ? '' : ' hidden'}>${escapeAttribute(registryMessage)}</div>
       <div class="paint-editor-grid">
@@ -97,6 +102,7 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
         ${labelRow('opacity', 'Opacity', renderScalePercentageInput(controls.opacity.id, `${fieldRoutingAttributes(controls.opacity)} data-paint-property="opacity"`, paint.opacity ?? 100))}
       </div>
       ${paintChildren}
+      ${activation ? '</div>' : ''}
     </div>
   </details>`;
 }
@@ -107,6 +113,10 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
   const { paint, inherited, scale } = state;
   const reset = editor.querySelector?.('[data-action="reset-paint"]');
   if (reset) reset.disabled = state.resetDisabled ?? true;
+  const activation = editor.querySelector?.('[data-paint-enabled="true"]');
+  if (activation) activation.checked = state.enabled;
+  const properties = editor.querySelector?.('.paint-editor-properties');
+  if (properties) properties.hidden = state.enabled === false;
   const previewScale = state.previewScale ?? scale;
   const description = editor.querySelector?.('.paint-editor-description');
   const reference = state.presetReference == null ? '' : String(state.presetReference);
@@ -156,10 +166,14 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
     const clear = editor.querySelector?.(`[data-action="clear-paint-property"][data-property="${property}"]`);
     const overridden = !!state.overrides?.[property];
     if (source) {
-      source.textContent = overridden ? 'Override' : state.presetReference != null ? 'Preset' : 'Inherited';
-      source.classList?.toggle('is-overridden', overridden);
+      source.textContent = state.sources?.[property] ?? (overridden ? 'Local' : 'Default');
+      source.classList?.toggle('is-overridden', source.textContent === 'Override');
     }
-    if (clear) clear.hidden = !overridden;
+    if (clear) {
+      clear.hidden = !overridden;
+      const label = clear.getAttribute?.('aria-label');
+      if (label) clear.setAttribute?.('aria-label', label.replace(/(?:override|value)$/, source?.textContent === 'Override' ? 'override' : 'value'));
+    }
   }
   const diagnostic = state.diagnostics?.find(item => item.code?.startsWith('paint_preset') || item.code === 'paint_registry_unavailable');
   const message = diagnostic?.code === 'paint_preset_missing'

@@ -18,7 +18,7 @@ async function mount(page,source,width=240){
 }
 const saved=editor=>editor.evaluate(el=>structuredClone(el._config));
 const section=(editor,page,name)=>editor.locator('.section').filter({has:page.getByRole('heading',{name,exact:true})});
-async function end(editor,index,value){const control=editor.locator(`input[data-kind="segment-to"][data-index="${index}"]`);await control.fill(value);await control.press('Tab');return control;}
+async function end(editor,index,value){const control=editor.locator(`#card-paint-editor input[data-kind="segment-to"][data-index="${index}"]`);await control.fill(value);await control.press('Tab');return control;}
 for(const source of ['src','dist'])for(const width of [360,240])test(`Feature capabilities ${source} ${width}px: combined edit/echo, Auto ends and native CSS drafts`,async({page})=>{
  const editor=await mount(page,source,width),original=await saved(editor),segments=editor.locator('.card-subgroup[data-group="segments"]');
  expect(await page.evaluate(()=>window.__capabilityEvents)).toHaveLength(0);
@@ -62,13 +62,14 @@ for(const source of ['src','dist'])for(const key of ['target','baseline'])test(`
 });
 for(const source of ['src','dist'])test(`Feature CSS colors ${source}: all direct controls, raw text, keyboard, replacement and Gradient Stop boundary`,async({page})=>{
  const editor=await mount(page,source);await editor.locator('.generic-marker-toggle').click();
- const ids=['bar-color','bar-needle-color','baseline-above-color','baseline-below-color','target-color','target-above-fill-color','peak-color','floor-color','card-card-generic-marker-1-color'];
+ for(const side of ['above','below'])await editor.locator(`#baseline-${side}-paint-editor > summary`).click();
+ const ids=['bar-color','bar-needle-color','baseline-above-paint-color','baseline-below-paint-color','target-color','target-above-fill-color','peak-color','floor-color','card-card-generic-marker-1-color'];
  for(const id of ids){
   const control=editor.locator(`#${id}-text-fallback`);expect(await control.getAttribute('aria-label')).toContain('CSS value');
   for(const color of ['#123456','#abc','red','rgb(1, 2, 3)','var(--warning-color)','  hsl(30, 100%, 50%)  ']){await control.fill(color);await expect(control).toBeFocused();await expect(control).toHaveAttribute('aria-invalid','false');}
   const before=await saved(editor),count=await page.evaluate(()=>window.__capabilityEvents.length);await control.fill('rgb(');await control.press('Tab');await expect(control).toHaveValue('rgb(');expect(await saved(editor)).toEqual(before);expect(await page.evaluate(()=>window.__capabilityEvents.length)).toBe(count);
   await control.fill('orange');await control.press('Tab');await expect(control).toHaveValue('orange');
-  const toggle=id.startsWith('baseline-')?`${id}-enabled`:id==='target-above-fill-color'?'target-above-fill-enabled':null;
+  const toggle=id==='target-above-fill-color'?'target-above-fill-enabled':null;
   if(toggle){await control.fill('  orange  ');const before=await saved(editor);await editor.locator(`#${toggle}`).uncheck();await editor.locator(`#${toggle}`).check();expect(await saved(editor)).toEqual(before);await expect(control).toHaveValue('  orange  ');}
  }
  const before=await saved(editor);expect(before.markers[0]).toEqual({...await page.evaluate(()=>window.__capabilityOriginal.markers[0]),color:'orange'});
@@ -79,10 +80,10 @@ for(const source of ['src','dist'])test(`Feature CSS colors ${source}: all direc
 for(const source of ['src','dist'])test(`Feature automatic Segment draft ${source}: CSS validation, add/remove, ordering and echo`,async({page})=>{
  const editor=await mount(page,source),original=await saved(editor);
  await editor.locator('#segment-draft-from').fill('90');await editor.locator('#segment-draft-to').fill('');await editor.locator('#segment-draft-color-text-fallback').fill('var(');
- const add=editor.locator('[data-action="add-segment"]');await expect(add).toBeDisabled();expect(await page.evaluate(()=>window.__capabilityEvents.length)).toBe(0);
+ const add=editor.locator('#card-paint-editor [data-action="add-segment"]');await expect(add).toBeDisabled();expect(await page.evaluate(()=>window.__capabilityEvents.length)).toBe(0);
  await editor.evaluate(async el=>{el.setConfig(el._config);el.hass={states:{}};await el.updateComplete;});await expect(editor.locator('#segment-draft-color-text-fallback')).toHaveValue('var(');
  await editor.locator('#segment-draft-color-text-fallback').fill('var(--warning-color)');await expect(add).toBeEnabled();await add.click();
  expect((await saved(editor)).bar.segments).toEqual([...original.bar.segments,{from:90,color:'var(--warning-color)'}]);
- await editor.locator('[data-action="remove-segment"][data-index="3"]').click();expect(await saved(editor)).toEqual(original);
+ await editor.locator('#card-paint-editor [data-action="remove-segment"][data-index="3"]').click();expect(await saved(editor)).toEqual(original);
  await end(editor,0,'70');expect(await saved(editor)).toEqual(original);await expect(editor.locator('#segment-row-hint-0')).toHaveText('Segments overlap.');
 });

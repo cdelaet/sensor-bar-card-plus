@@ -12,6 +12,8 @@ export const editorStyles = `
         .paint-editor-description { grid-column: 3; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           color: var(--secondary-text-color, #666); font-size: 0.82rem; }
         .paint-editor-body { display: grid; gap: 12px; padding: 0 10px 10px; min-width: 0; }
+        .paint-editor-properties { display: grid; gap: 12px; min-width: 0; }
+        .paint-editor-properties[hidden] { display: none; }
         .paint-preset-row { display: grid; grid-template-columns: minmax(92px, 0.7fr) minmax(0, 1.3fr); gap: 8px; align-items: center; min-width: 0; }
         .paint-preset-row[hidden] { display: none; }
         .paint-editor-actions { display: flex; justify-content: flex-end; }

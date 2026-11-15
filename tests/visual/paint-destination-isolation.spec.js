@@ -176,7 +176,8 @@ for (const source of ['src', 'dist']) {
 
   }
 
-  test(`Baseline Above and Below palettes remain isolated across Card, Entity and Feature (${source})`, async ({ page }) => {
+  test(`Baseline Above and Below palettes remain isolated across Card, Entity and Feature (${source})`, async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'Native color chooser keyboard controls are Chromium-specific.');
     const configs = structuredClone(initial);
     configs.card.bar.paint = paint(['#111111', '#222222'], 'bands');
     configs.card.baseline = {
@@ -207,15 +208,15 @@ for (const source of ['src', 'dist']) {
       if (!await root.evaluate(node => node.open)) await root.locator(':scope > summary').press('Enter');
       await expect(root).toHaveJSProperty('open', true);
       const palette = root.locator('button[data-group*="baseline-"][data-group$="-segments"]');
-      if (await palette.count() && await palette.getAttribute('aria-expanded') === 'false') await palette.click();
+      if (await palette.count()) {
+        if (await palette.getAttribute('aria-expanded') === 'false') await palette.click();
+        await expect(palette).toHaveAttribute('aria-expanded', 'true');
+      }
       const input = root.locator(`input[data-kind="${id.includes('entity-0-') ? 'entity-segment-color' : 'segment-color'}"]`).first();
+      await expect(input).toBeVisible();
       await expect(input).toHaveValue(expectedBefore);
       await root.evaluate(node => { window.__baselinePaintRoot = node; window.__baselinePaintInputs = [...node.querySelectorAll('input')]; });
-      await input.evaluate((node, value) => {
-        node.value = value;
-        node.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-        node.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-      }, selected);
+      await nativeRed(page, input, parseInt(selected.slice(1, 3), 16));
       await expect(input).toHaveValue(selected);
       expect(await root.evaluate(node => node === window.__baselinePaintRoot
         && window.__baselinePaintInputs.every((control, index) => control === node.querySelectorAll('input')[index]))).toBe(true);

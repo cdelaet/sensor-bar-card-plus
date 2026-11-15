@@ -27,7 +27,7 @@ async function mount(page, source, destination, mode, style) {
     const tag = destination === 'Feature' ? 'sensor-bar-card-plus-feature' : 'sensor-bar-card-plus';
     const editor = await customElements.get(tag).getConfigElement();
     let dashboard = { views: [{ cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: {
-      paint: { night: { fill_style: style,
+      paint: { night: { fill_style: style, opacity: 60,
         segments: [{ from: '0%', to: '100%', color: '#123456' }],
         gradient_stops: [{ pos: 0, color: '#1133aa' }, { pos: 100, color: '#22cc66' }],
       } },
@@ -117,7 +117,7 @@ for (const source of ['src', 'dist']) for (const destination of ['Card', 'Entity
   test(`${destination} Override labels use only theme accent color and clear with ownership (${source})`, async ({ page }) => {
     const { root } = await mount(page, source, destination, destination === 'Entity' ? 'inherited-preset' : 'preset', 'gradient');
     const label = root.locator('[data-paint-source="opacity"]');
-    await expect(label).toHaveText('Preset');
+    await expect(label).toHaveText(destination === 'Entity' ? 'Inherited' : 'Preset');
     const weight = await label.evaluate(node => getComputedStyle(node).fontWeight);
     await root.locator('[data-paint-property="opacity"]').fill('37');
     await expect(label).toHaveText('Override');
@@ -128,7 +128,7 @@ for (const source of ['src', 'dist']) for (const destination of ['Card', 'Entity
       else await expect(meta).toHaveCSS('color', 'rgb(85, 102, 119)');
     }
     await root.locator('[data-action="clear-paint-property"][data-property="opacity"]').click();
-    await expect(label).toHaveText('Preset');
+    await expect(label).toHaveText(destination === 'Entity' ? 'Inherited' : 'Preset');
     await expect(label).toHaveCSS('color', 'rgb(85, 102, 119)');
     await expect(label).toHaveCSS('font-weight', weight);
   });

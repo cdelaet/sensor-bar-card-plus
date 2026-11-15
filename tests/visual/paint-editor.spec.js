@@ -1067,7 +1067,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
     await preset.selectOption('night');
     expect((await saved(editor)).bar.paint).toEqual({ preset: 'night' });
     await expect(paint.locator('.paint-editor-description')).toContainText('Preset · night · Bands · 1 segment');
-    await expect(paint.locator('[data-paint-source="opacity"]')).toHaveText('Preset');
+    await expect(paint.locator('[data-paint-source="opacity"]')).toHaveText('Default');
     await editor.locator('#card-group-segments').click();
     await expect(editor.locator('input[data-kind="segment-from"]').first()).toHaveValue('10%');
     await editor.locator('#card-group-gradient-stops').click();

@@ -3,8 +3,6 @@ import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, norma
 import { getFiniteNumber, normalizeGaugeSegments, normalizeScaleConfig } from '../../config/normalize.js';
 import { getResolvedScale } from '../../config/resolve.js';
 import { getSegmentsForRendering, resolveSegmentBoundaryPct } from '../../view-model/bar-render-model.js';
-import { getEffectiveBarColorValue } from './bar-appearance.js';
-import { readBarPaintProperty, clearBarPaintProperties, ownsBarPaintProperty, usesGroupedBarPaint } from '../shared/bar-paint-bindings.js';
 import { PaletteRowSession, PaletteSection } from '../shared/palette-section.js';
 import { getDefaultPaintSegments } from '../shared/paint-editor-paint.js';
 
@@ -97,10 +95,7 @@ export class SegmentsSection extends PaletteSection {
 
   _clearSegmentsOverride(scope) {
     this.clearScopeState(scope);
-    return this.context.mutate(scope, (target) => {
-      const nextTarget = clearBarPaintProperties(target, ['segments']);
-      return nextTarget;
-    }, { ...(usesGroupedBarPaint(this.context, scope) ? { preserveRawConfig: true } : {}) });
+    return this.clearPaintProperty(scope, 'segments');
   }
 
   _getSegmentsValue() {
@@ -229,7 +224,7 @@ export class SegmentsSection extends PaletteSection {
   }
 
   _getStoredScopedSegments(scope = { type: 'card' }) {
-    return readBarPaintProperty(this.context, scope, 'segments') ?? null;
+    return this.readPaintProperty(scope, 'segments') ?? null;
   }
 
   _parseSegmentBoundaryInput(rawValue) {
@@ -266,7 +261,7 @@ export class SegmentsSection extends PaletteSection {
   }
 
   _getSegmentDraftColorDefault(scope = { type: 'card' }) {
-    return getEffectiveBarColorValue(this.context, scope);
+    return this.paintState(scope).paint.color;
   }
 
   _getNewSegmentDefaults(scope = { type: 'card' }) {
@@ -862,14 +857,14 @@ export class SegmentsSection extends PaletteSection {
   }
 
   _hasSegmentsOverride(scope) {
-    return ownsBarPaintProperty(this.context, scope, 'segments');
+    return this.ownsPaintProperty(scope, 'segments');
   }
 
   _getSegmentsSummary(scope) {
     const segments = this._getScopedSegmentsValue(scope);
     if (!Array.isArray(segments) || segments.length === 0) return 'Inherited';
     if (this._hasSegmentsOverride(scope)) return `${segments.length} segments`;
-    const inherited = scope?.type === 'entity' && !ownsBarPaintProperty(this.context, scope, 'preset');
+    const inherited = scope?.type === 'entity' && !this.ownsPaintProperty(scope, 'preset');
     const stored = this._getStoredScopedSegments(scope)
       ?? (inherited ? this._getStoredScopedSegments({ type: 'card' }) : null);
     const description = stored === null && this._isSegmentFillStyle(this.fillStyle(scope))
@@ -921,6 +916,10 @@ export class SegmentsSection extends PaletteSection {
   }
 
   render(scope = { type: 'card' }, renderGroup = ({ content }) => content, { section = true } = {}) {
+    return this.scopeMarkup(this._renderPalette(scope, renderGroup, { section }));
+  }
+
+  _renderPalette(scope, renderGroup, { section }) {
     if (scope?.type === 'entity') {
       const index = scope.index;
       const entitySegments = this._getScopedSegmentsValue(scope) ?? [];

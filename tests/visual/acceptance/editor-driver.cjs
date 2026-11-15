@@ -84,6 +84,12 @@ async function openSection(editor, entry) {
   const group=editor.locator(`#card-group-${groups[entry.section]}`);
   if(await group.count())await openDisclosure(group);
  }
+ const baselinePaint = entry.name?.match(/baseline-(above|below)-paint-/);
+ if(baselinePaint) {
+  const paint = editor.locator(`#${entry.scope==='entity'?'entity-0-':''}baseline-${baselinePaint[1]}-paint-editor`);
+  if(!await paint.evaluate(node=>node.open))await paint.locator(':scope > summary').click();
+  await expect(paint).toHaveJSProperty('open',true);
+ }
  if(entry.section==='References') {
   // data-scope-type lives on fields/buttons rather than the row in old templates.
   const row=entry.scope==='entity'?editor.locator('.override-group:not(.card-subgroup)[data-group="markers"] .generic-marker-item').first():editor.locator('.card-subgroup[data-group="generic-markers"] .generic-marker-item').first();
@@ -228,14 +234,21 @@ async function fieldJourney(page,host,entry,options={}) {
    const config=await saved(page);
    const actual=read(config,entry.path)??(entry.scope==='entity'&&entry.name.includes('-label-')?read(config,entry.path.replace('entities.0.','')):undefined);
    const fallback=/show-(?:value|unit|marker)$/.test(entry.name)||entry.name==='bar-animated';
-   expect(typeof actual==='string'?!!actual:actual??fallback,entry.id).toBe(checked);
+   const effective = entry.name.endsWith('-paint-enabled') ? actual != null : typeof actual==='string'?!!actual:actual??fallback;
+   expect(effective,entry.id).toBe(checked);
   }
  } else if(entry.type==='select') {
   for(value of entry.value) {
    await commit(page,editor,()=>input.selectOption(value));await expect(input).toHaveValue(value);
    const [actual,expected]=expectedValue(entry,value,await saved(page));expect(actual,entry.id).toEqual(expected);
   }
- } else if(entry.type==='color') await commit(page,editor,()=>colorPicker(input,value));
+ } else if(entry.type==='color') {
+  if(entry.name.includes('baseline-')) {
+   const css = control(editor,{...entry,name:`${entry.name}-text-fallback`});
+   await expect(css).toBeVisible();
+   await commit(page,editor,()=>css.fill(value));
+  } else await commit(page,editor,()=>colorPicker(input,value));
+ }
  else {
   if(entry.type==='css' && host==='feature') {
    const events=await count(page);await input.fill('rgb(');await expect(input).toHaveAttribute('aria-invalid','true');await echo(page,editor);
