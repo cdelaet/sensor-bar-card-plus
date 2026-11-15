@@ -258,3 +258,51 @@ for (const destination of [BAR_PAINT, ...BASELINE_PAINTS]) for (const host of ['
     }
   });
 }
+
+for (const destination of [BAR_PAINT, ...BASELINE_PAINTS]) for (const host of ['Card', 'Entity', 'Feature']) {
+  it(`classifies every ${host}/${destination.id} property by provenance, not default equality`, () => {
+    const complete = { fill_style: 'gradient', color: '#123456', solid_fill: false, opacity: 100,
+      segments: [{ from: '0%', to: '100%', color: '#123456' }],
+      gradient_stops: [{ pos: 0, color: '#4CAF50' }, { pos: 50, color: '#FF9800' }, { pos: 100, color: '#F44336' }] };
+    const f = fixture(host, destination, {});
+    f.context.paintPresetRegistry = { status: 'ready', presets: { complete } };
+    const state = () => getDestinationEditorState(f.context, f.scope, destination);
+    const properties = Object.keys(complete);
+    expect(properties.map(key => state().sources[key])).toEqual(properties.map(() => 'Default'));
+    for (const property of properties) setDestinationProperty(f.context, f.scope, destination, property, complete[property]);
+    expect(properties.map(key => state().sources[key])).toEqual(properties.map(() => 'Local'));
+    selectDestinationPreset(f.context, f.scope, destination, 'complete', { confirm: () => true });
+    expect(properties.map(key => state().sources[key])).toEqual(properties.map(() => 'Preset'));
+    for (const property of properties) setDestinationProperty(f.context, f.scope, destination, property, complete[property]);
+    expect(properties.map(key => state().sources[key])).toEqual(properties.map(() => 'Override'));
+    for (const property of properties) clearDestinationProperty(f.context, f.scope, destination, property);
+    expect(properties.map(key => state().sources[key])).toEqual(properties.map(() => 'Preset'));
+    if (host === 'Entity') {
+      const inherited = fixture(host, destination, {}, complete);
+      expect(properties.map(key => inherited.state().sources[key])).toEqual(properties.map(() => 'Inherited'));
+      for (const property of properties) setDestinationProperty(inherited.context, inherited.scope, destination, property, complete[property]);
+      expect(properties.map(key => inherited.state().sources[key])).toEqual(properties.map(() => 'Override'));
+    }
+  });
+}
+
+for (const host of ['editor', 'featureEditor']) for (const destination of [BAR_PAINT, ...BASELINE_PAINTS]) {
+  it(`${host}/${destination.id} palette descriptions use resolved sources, including authored default stops`, () => {
+    const C = loadCardClass({ source: 'src' })[host];
+    const editor = new C();
+    const scope = { type: 'card' };
+    const apply = (paint, presets) => editor.setConfig(setPathValue({ type: 'custom:sensor-bar-card-plus-feature', entity,
+      baseline: { at: 50 }, ...(presets ? { preset_library: { paint: presets } } : {}) }, destination.path, paint));
+    const sections = destination === BAR_PAINT ? { segments: editor._segmentsSection, gradientStops: editor._gradientStopsSection }
+      : editor._baselinePaintSections[destination.id.slice(9)];
+    apply({ fill_style: 'gradient' });
+    expect(sections.segments._getSegmentsSummary(scope)).toBe('Default bands');
+    expect(sections.gradientStops._getGradientStopsSummary(scope)).toBe('Default gradient');
+    const stops = sections.gradientStops._getScopedGradientStopsValue(scope);
+    apply({ fill_style: 'gradient', gradient_stops: stops });
+    expect(sections.gradientStops._getGradientStopsSummary(scope)).toBe(`${stops.length} stops`);
+    apply({ preset: 'defaults' }, { defaults: { fill_style: 'gradient', gradient_stops: stops } });
+    editor._paintPresetRegistry = { status: 'ready', presets: sections.gradientStops.context.read(scope, ['preset_library', 'paint']) };
+    expect(sections.gradientStops._getGradientStopsSummary(scope)).toBe(`Preset · ${stops.length} stops`);
+  });
+}

@@ -296,16 +296,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       const baselinePalettes = Object.fromEntries(['above', 'below'].map(direction => [direction,
         this._baselinePaintPaletteValues(scope, direction)]));
       this._baselineSection.syncPaintEditors(this.shadowRoot, scope, baselinePalettes, this._paintPresetRegistry,
-        { numericDrafts: this._numericDrafts });
+        { numericDrafts: this._numericDrafts,
+          paintChildren: (paintScope, direction) => this._renderBaselinePaintPalette(paintScope, direction) });
       for (const direction of ['above', 'below']) {
         this._baselinePaintSections[direction].segments.syncRows(scope);
         this._baselinePaintSections[direction].gradientStops.syncRows(scope);
       }
       this._segmentsSection.syncRows(scope);
       this._gradientStopsSection.syncRows(scope);
-      const prefix = scope.type === 'entity' ? `entity-${scope.index}-group-` : 'card-group-';
-      this._setElementText(`${prefix}segments-summary`, this._segmentsSection._getSegmentsSummary(scope));
-      this._setElementText(`${prefix}gradient-stops-summary`, this._gradientStopsSection._getGradientStopsSummary(scope));
     }
   }
 

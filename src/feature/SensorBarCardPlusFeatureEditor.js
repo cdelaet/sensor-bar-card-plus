@@ -264,7 +264,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const target = event.target;
     // Replacing focused native controls can dispatch change from the old DOM.
     if (this._configReplaced || target?.isConnected === false) return;
-    if (event.type === 'input' && target?.type === 'checkbox' && target.dataset.paintProperty) return;
+    if (event.type === 'input' && target?.type === 'checkbox' && (target.dataset.paintProperty || target.dataset.paintEnabled)) return;
     // Picker input/change events are internal; HA's value-changed is authoritative.
     if (['HA-ENTITY-PICKER', 'HA-ENTITY-ATTRIBUTE-PICKER'].includes(target?.tagName) && event.type !== 'value-changed') return;
     if (this._numericDrafts.handle(event, this._isRendering)) return;
@@ -419,7 +419,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       !!getFeatureScaleSource(this._config, 'min').entity, !!getFeatureScaleSource(this._config, 'max').entity,
       !!getFeatureBaselineSource(this._config).entity, !!getFeatureTargetSource(this._config).entity,
       !!customElements.get('ha-entity-picker'), !!customElements.get('ha-entity-attribute-picker'),
-      ...BASELINE_PAINTS.map(destination => destination.normalize(this._config, null) != null),
     ]);
     // Keep active controls mounted through their native input/change sequence.
     const activeField = this.shadowRoot.activeElement?.dataset?.field;
@@ -522,7 +521,8 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       gradient_stops: this._baselinePaintSections[direction].gradientStops._getScopedGradientStopsValue(root),
     }]));
     this._baselineSection.syncPaintEditors(this.shadowRoot, root, baselinePaletteValues, this._paintPresetRegistry,
-      { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts });
+      { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts,
+        paintChildren: (paintScope, direction) => this._renderBaselinePaintPalette(paintScope, direction) });
     for (const direction of ['above', 'below']) {
       this._baselinePaintSections[direction].segments.syncRows(root);
       this._baselinePaintSections[direction].gradientStops.syncRows(root);
@@ -530,10 +530,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const segmentsRebuilt = this._segmentsSection.syncRows(root);
     const gradientStopsRebuilt = this._gradientStopsSection.syncRows(root);
     const paletteRoot = this._segmentsSection._getPaletteRoot(root);
-    const segmentSummary = paletteRoot?.querySelector('#card-group-segments-summary');
-    if (segmentSummary) segmentSummary.textContent = this._segmentsSection._getSegmentsSummary(root);
-    const gradientSummary = paletteRoot?.querySelector('#card-group-gradient-stops-summary');
-    if (gradientSummary) gradientSummary.textContent = this._gradientStopsSection._getGradientStopsSummary(root);
     const color = paintState.paint.color;
     const values = {
       'scale-min': getFeatureScaleSource(this._config, 'min').fixed,

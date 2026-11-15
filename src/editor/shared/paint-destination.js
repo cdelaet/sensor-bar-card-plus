@@ -134,7 +134,7 @@ export function getDestinationEditorState(context, scope, destination = BAR_PAIN
 export function setDestinationEnabled(context, scope, destination, enabled) {
   context.clearPaintPaletteState?.(scope, destination);
   return context.mutate(scope, target => setPathValue(clearDestinationConfiguration(target, destination), destination.path, enabled ? {} : null),
-    { preserveRawConfig: true, rerender: true });
+    { preserveRawConfig: true });
 }
 
 export function resetDestinationPaint(context, scope, destination = BAR_PAINT) {

@@ -164,7 +164,8 @@ export class BaselineSection {
     for (const direction of ['above', 'below']) {
       const id = `${scope?.type === 'entity' ? `entity-${scope.index}-` : ''}baseline-${direction}-paint-editor`;
       syncPaintEditor(root, id, getDestinationEditorState(this.context, scope, destinationFor(direction),
-        paletteValues[direction], registry), options);
+        paletteValues[direction], registry), { ...options,
+        paletteFields: options.paintChildren ? () => options.paintChildren(scope, direction) : undefined });
     }
   }
 

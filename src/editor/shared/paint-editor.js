@@ -21,6 +21,23 @@ function fieldRoutingAttributes({ field, kind, index }) {
   return `${field ? `data-field="${escapeAttribute(field)}"` : ''}${kind ? `${field ? ' ' : ''}data-kind="${escapeAttribute(kind)}"` : ''}${index !== undefined ? ` data-index="${index}"` : ''}`;
 }
 
+function renderPropertyMeta(property, label, { sources = {}, overrides = {}, fields = {}, showPropertyMeta = true }) {
+  const source = sources[property] ?? (overrides[property] ? 'Local' : 'Default');
+  return showPropertyMeta
+    ? `<span class="paint-property-meta${source === 'Override' ? ' is-overridden' : ''}" data-paint-source="${property}">${source}</span>
+      <button type="button" class="paint-clear-override" data-action="clear-paint-property" data-property="${property}"${fields.index !== undefined ? ` data-index="${fields.index}"` : ''} aria-label="Clear ${escapeAttribute(label)} ${source === 'Override' ? 'override' : 'value'}"${overrides[property] ? '' : ' hidden'}>Clear</button>`
+    : '';
+}
+
+function renderPaletteFields(paletteFields, options) {
+  return ['segments', 'gradient_stops'].map(property => {
+    const content = paletteFields[property];
+    if (!content) return '';
+    const label = property === 'segments' ? 'Segments' : 'Gradient stops';
+    return `<div class="paint-palette-field"><div class="paint-property-heading"><span>${label}</span>${renderPropertyMeta(property, label, options)}</div>${content}</div>`;
+  }).join('');
+}
+
 /** Destination-neutral paint controls. Bindings own raw properties; the host
  * supplies effective display paint, field routing and existing palette editors.
  * Native disclosure state survives host renders by reading the mounted node.
@@ -37,11 +54,7 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
   const open = root?.querySelector(`#${id}`)?.open === true;
   const fillStyle = paint.fill_style ?? 'bands';
   const referenceName = presetReference == null ? '' : String(presetReference);
-  const source = property => sources[property] ?? (overrides[property] ? 'Local' : 'Default');
-  const propertyHeader = (property, label) => showPropertyMeta
-    ? `<span class="paint-property-meta${source(property) === 'Override' ? ' is-overridden' : ''}" data-paint-source="${property}">${source(property)}</span>
-      <button type="button" class="paint-clear-override" data-action="clear-paint-property" data-property="${property}"${fields.index !== undefined ? ` data-index="${fields.index}"` : ''} aria-label="Clear ${escapeAttribute(label)} ${source(property) === 'Override' ? 'override' : 'value'}"${overrides[property] ? '' : ' hidden'}>Clear</button>`
-    : '';
+  const propertyHeader = (property, label) => renderPropertyMeta(property, label, { sources, overrides, fields, showPropertyMeta });
   const labelRow = (property, label, control) => `<div class="paint-property-row"><div class="paint-property-heading"><label for="${controls[property].id}">${label}</label>${propertyHeader(property, label)}</div>${control}</div>`;
   const options = ['<option value="">None</option>',
     ...presetOptions.map(option => `<option value="${escapeAttribute(option.value)}"${presetReference === option.value ? ' selected' : ''}>${escapeAttribute(option.label)}</option>`),
@@ -62,12 +75,7 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
     ? `${inherited ? 'Inherited · ' : ''}Preset · ${referenceName || '(empty name)'} · ${describePaint(paint)}`
     : describePaint(paint, inherited);
   const paintChildren = paletteFields && typeof paletteFields === 'object'
-    ? ['segments', 'gradient_stops'].map(property => {
-      const content = paletteFields[property];
-      if (!content) return '';
-      const label = property === 'segments' ? 'Segments' : 'Gradient stops';
-      return `<div class="paint-palette-field"><div class="paint-property-heading"><span>${label}</span>${propertyHeader(property, label)}</div>${content}</div>`;
-    }).join('') : paletteContent;
+    ? renderPaletteFields(paletteFields, { sources, overrides, fields, showPropertyMeta }) : paletteContent;
   const registryMessage = registryStatus === 'loading' && !presetOptions.length
     ? 'Loading dashboard presets…'
     : registryStatus === 'empty' && !presetOptions.length && !feedbackText
@@ -107,7 +115,7 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
   </details>`;
 }
 
-export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts } = {}) {
+export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts, paletteFields } = {}) {
   const editor = root?.querySelector(`#${id}`);
   if (!editor) return;
   const { paint, inherited, scale } = state;
@@ -116,7 +124,16 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
   const activation = editor.querySelector?.('[data-paint-enabled="true"]');
   if (activation) activation.checked = state.enabled;
   const properties = editor.querySelector?.('.paint-editor-properties');
-  if (properties) properties.hidden = state.enabled === false;
+  if (properties) {
+    properties.hidden = state.enabled === false;
+    // Mount lazily on first activation; subsequent edits keep the same controls,
+    // disclosures and native focus/scroll anchoring as ordinary Paint edits.
+    if (state.enabled && !properties.querySelector('.paint-palette-field') && paletteFields) {
+      const template = properties.ownerDocument.createElement('template');
+      template.innerHTML = renderPaletteFields(paletteFields(), { ...state, fields: { index: activation?.dataset.index } });
+      properties.append(template.content);
+    }
+  }
   const previewScale = state.previewScale ?? scale;
   const description = editor.querySelector?.('.paint-editor-description');
   const reference = state.presetReference == null ? '' : String(state.presetReference);

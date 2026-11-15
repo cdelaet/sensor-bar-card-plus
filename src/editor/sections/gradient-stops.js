@@ -459,20 +459,13 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   _getGradientStopsSummary(scope) {
-    if (scope?.type === 'entity' && !this._hasGradientStopsOverride(scope)) {
-      return 'Inherited';
-    }
     const gradientStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
     if (this.fillStyle(scope) !== 'gradient') {
       return 'Inactive fill style';
     }
-    if (!gradientStops.length) {
-      return scope?.type === 'entity' ? 'Inherited' : 'Default gradient';
-    }
-    if (this._isDefaultGradientStops(gradientStops)) {
-      return 'Default gradient';
-    }
-    return `${gradientStops.length} stops`;
+    const source = this.paintState(scope).sources.gradient_stops;
+    if (source === 'Default') return 'Default gradient';
+    return `${source === 'Inherited' || source === 'Preset' ? `${source} · ` : ''}${gradientStops.length} stops`;
   }
 
   _buildGradientPreviewEffectiveStops(scope = { type: 'card' }) {
@@ -556,7 +549,7 @@ export class GradientStopsSection extends PaletteSection {
       draftSelector: entity ? `#entity-${index}-gradient-draft-pos` : '#gradient-draft-pos',
     });
     // A color edit keeps row identity but still changes the palette preview.
-    this._syncPaletteActivity(scope, 'gradient-stops', this.fillStyle(scope) === 'gradient');
+    this._syncPaletteActivity(scope, 'gradient-stops', this.fillStyle(scope) === 'gradient', this._getGradientStopsSummary(scope));
     if (this._getPaletteRoot(scope)?.ownerDocument) this._refreshGradientDraftUi(scope);
     if (changed) this._syncGradientDraftControls(scope);
     return changed;

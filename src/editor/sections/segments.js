@@ -862,14 +862,9 @@ export class SegmentsSection extends PaletteSection {
 
   _getSegmentsSummary(scope) {
     const segments = this._getScopedSegmentsValue(scope);
-    if (!Array.isArray(segments) || segments.length === 0) return 'Inherited';
-    if (this._hasSegmentsOverride(scope)) return `${segments.length} segments`;
-    const inherited = scope?.type === 'entity' && !this.ownsPaintProperty(scope, 'preset');
-    const stored = this._getStoredScopedSegments(scope)
-      ?? (inherited ? this._getStoredScopedSegments({ type: 'card' }) : null);
-    const description = stored === null && this._isSegmentFillStyle(this.fillStyle(scope))
-      ? 'Default bands' : `${segments.length} segments`;
-    return `${inherited ? 'Inherited · ' : stored !== null ? 'Preset · ' : ''}${description}`;
+    const source = this.paintState(scope).sources.segments;
+    if (source === 'Default') return 'Default bands';
+    return `${source === 'Inherited' || source === 'Preset' ? `${source} · ` : ''}${segments?.length ?? 0} segments`;
   }
 
   _setScopedSegments(scope, rows, options = {}, operation) {
@@ -894,7 +889,7 @@ export class SegmentsSection extends PaletteSection {
       draftSelector: entity ? `#entity-${index}-segment-draft-from` : '#segment-draft-from',
     });
     // A color edit keeps row identity but still changes the palette preview.
-    this._syncPaletteActivity(scope, 'segments', this._isSegmentFillStyle(this.fillStyle(scope)));
+    this._syncPaletteActivity(scope, 'segments', this._isSegmentFillStyle(this.fillStyle(scope)), this._getSegmentsSummary(scope));
     if (this._getPaletteRoot(scope)?.ownerDocument) this._refreshSegmentUi(scope);
     if (changed) this._syncSegmentDraftControls(scope);
     return changed;

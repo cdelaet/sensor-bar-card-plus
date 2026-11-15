@@ -203,3 +203,112 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
     await expect(layer(page, host, destination)).toHaveCSS('display', 'block');
   });
 }
+
+// Focused follow-up: status must come from effective provenance, including after
+// native edits, rather than palette shape or equality with the default palette.
+for (const source of ['src', 'dist']) for (const host of hosts) for (const destination of destinations) {
+  test(`Paint status stays consistent for ${host} ${destination} (${source})`, async ({ page }) => {
+    const shared = { fill_style: 'gradient', color: '#123456', opacity: 35, solid_fill: false,
+      segments: [{ from: '0%', to: '30%', color: '#4CAF50' }, { from: '30%', to: '70%', color: '#FF9800' }, { from: '70%', to: '100%', color: '#F44336' }],
+      gradient_stops: [{ pos: 0, color: '#4CAF50' }, { pos: 50, color: '#FF9800' }, { pos: 100, color: '#F44336' }] };
+    let editor = await mount(page, source, host, destination, {}, undefined, { shared });
+    await editor.evaluate(node => { node.style.setProperty('--secondary-text-color', '#556677'); node.style.setProperty('--accent-color', '#09aabb'); });
+    let paint = await openPaint(editor, host, destination);
+    const assertSource = async (property, text) => {
+      const meta = paint.locator(`[data-paint-source="${property}"]`);
+      await expect(meta).toHaveText(text);
+      await expect(meta).toHaveCSS('color', text === 'Override' ? 'rgb(9, 170, 187)' : 'rgb(85, 102, 119)');
+      await expect(paint.locator(`[data-action="clear-paint-property"][data-property="${property}"]`))
+        [text === 'Local' || text === 'Override' ? 'toBeVisible' : 'toBeHidden']();
+    };
+    const properties = ['fill_style', 'color', 'solid_fill', 'opacity', 'segments', 'gradient_stops'];
+    for (const property of properties) await assertSource(property, 'Default');
+    const summary = palette => paint.locator(`button[data-group$="${palette}"]`).locator('.override-group-summary');
+    if (host !== 'Entity') await expect(summary('segments')).toHaveText('Default bands');
+    await paint.locator('[data-paint-property="fill_style"]').selectOption('gradient');
+    await expect(paint.locator('[data-palette-inactive="gradient-stops"]')).toBeHidden();
+    if (host === 'Entity' && destination !== 'bar') {
+      await expect(editor.locator('#entity-0-group-baseline').locator('..')).not.toHaveClass(/is-inactive/);
+    }
+    if (host !== 'Entity') {
+      await expect(summary('gradient-stops')).toHaveText('Default gradient');
+      await expect(paint.locator('button[data-group$="gradient-stops"]').locator('..')).not.toHaveClass(/is-inactive/);
+      const disclosure = paint.locator('button[data-group$="gradient-stops"]');
+      await disclosure.click();
+      await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+      await expect(disclosure.locator('..').locator(':scope > .override-group-body')).toBeVisible();
+    }
+    await paint.locator('[data-paint-property="opacity"]').fill('75');
+    await assertSource('opacity', 'Local');
+    await paint.locator('[data-action="clear-paint-property"][data-property="opacity"]').click();
+    await assertSource('opacity', 'Default');
+    page.once('dialog', dialog => dialog.accept());
+    await paint.locator('[data-paint-preset="true"]').selectOption('shared');
+    for (const property of properties) await assertSource(property, 'Preset');
+    if (host !== 'Entity') {
+      await expect(summary('segments')).toHaveText('Preset · 3 segments');
+      await expect(summary('gradient-stops')).toHaveText('Preset · 3 stops');
+    }
+    await paint.locator('[data-paint-property="opacity"]').fill('75');
+    await assertSource('opacity', 'Override');
+    await expect(layer(page, host, destination)).toHaveCSS('opacity', '0.75');
+    await paint.locator('[data-action="clear-paint-property"][data-property="opacity"]').click();
+    await assertSource('opacity', 'Preset');
+    if (host === 'Entity') {
+      editor = await mount(page, source, host, destination, {}, { preset: 'shared' }, { shared });
+      await editor.evaluate(node => { node.style.setProperty('--secondary-text-color', '#556677'); node.style.setProperty('--accent-color', '#09aabb'); });
+      paint = await openPaint(editor, host, destination);
+      for (const property of properties) await assertSource(property, 'Inherited');
+      await paint.locator('[data-paint-property="opacity"]').fill('75');
+      await assertSource('opacity', 'Override');
+      await paint.locator('[data-action="clear-paint-property"][data-property="opacity"]').click();
+      await assertSource('opacity', 'Inherited');
+    }
+  });
+}
+
+for (const source of ['src', 'dist']) for (const destination of destinations.slice(1)) {
+  test(`Paint activation retains Feature controls and scroll for ${destination} (${source})`, async ({ page }) => {
+    const editor = await mount(page, source, 'Feature', destination, null);
+    const paint = await openPaint(editor, 'Feature', destination);
+    const checkbox = paint.getByLabel('Enable Paint', { exact: true });
+    await editor.evaluate(node => {
+      const container = node.parentElement;
+      container.style.height = '500px';
+      container.style.overflow = 'auto';
+      const before = document.createElement('div'); before.style.height = '850px';
+      const after = document.createElement('div'); after.style.height = '1600px';
+      container.prepend(before); container.append(after);
+      window.__scrollContainer = container;
+      window.__mountedPaint = node.shadowRoot.querySelector('.paint-editor');
+    });
+    await checkbox.scrollIntoViewIfNeeded();
+    await checkbox.evaluate(node => { window.__paintCheckbox = node; });
+    const before = await page.evaluate(() => ({ scroll: window.__scrollContainer.scrollTop,
+      top: window.__paintCheckbox.getBoundingClientRect().top }));
+    for (const enabled of [true, false, true]) {
+      const events = await page.evaluate(() => window.__paintEvents.length);
+      await checkbox.setChecked(enabled);
+      await expect.poll(() => savedPaint(page, 'Feature', destination)).toEqual(enabled ? {} : null);
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      expect(await checkbox.evaluate(node => node === window.__paintCheckbox)).toBe(true);
+      expect(await editor.evaluate(node => node.shadowRoot.querySelector('.paint-editor') === window.__mountedPaint)).toBe(true);
+      if (enabled) await paint.evaluate(node => {
+        const groups = [...node.querySelectorAll('.override-group-toggle')];
+        if (!window.__mountedPaletteGroups) window.__mountedPaletteGroups = groups;
+        else if (!groups.every((group, index) => group === window.__mountedPaletteGroups[index])) throw Error('Paint disclosures were replaced');
+      });
+      expect(await page.evaluate(() => window.__paintEvents.length)).toBe(events + 1);
+      const after = await page.evaluate(() => ({ scroll: window.__scrollContainer.scrollTop,
+        top: window.__paintCheckbox.getBoundingClientRect().top }));
+      expect(Math.abs(after.scroll - before.scroll)).toBeLessThanOrEqual(1);
+      expect(Math.abs(after.top - before.top)).toBeLessThanOrEqual(1);
+      await expect(paint.locator('[data-paint-property="fill_style"]'))[enabled ? 'toBeVisible' : 'toBeHidden']();
+    }
+    const disclosure = paint.locator('button[data-group$="gradient-stops"]');
+    await disclosure.click();
+    await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+    await expect(disclosure.locator('..').locator(':scope > .override-group-body')).toBeVisible();
+    await expect(paint.locator('[data-kind="gradient-pos"]').first()).toBeVisible();
+  });
+}

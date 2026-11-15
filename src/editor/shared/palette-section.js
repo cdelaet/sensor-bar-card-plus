@@ -73,11 +73,18 @@ export class PaletteSection {
   _getShadowElementById(id, scope) { return this._getPaletteRoot(scope)?.querySelector(`#${this.paletteId(id)}`); }
   _renderListRows(items, renderItem) { return items.map(renderItem).join(''); }
 
-  _syncPaletteActivity(scope, group, active) {
+  _syncPaletteActivity(scope, group, active, summary) {
     const note = this._getPaletteRoot(scope)?.querySelector(`[data-palette-inactive="${group}"]`);
     if (!note) return;
     note.hidden = active;
-    note.closest?.('.override-group')?.classList.toggle('is-inactive', !active);
+    const disclosure = note.closest?.('.override-group');
+    // Entity Baseline palettes are inline in the Baseline group; only a palette
+    // disclosure owns palette activity and its status description.
+    const disclosureGroup = disclosure?.dataset?.group;
+    if (disclosureGroup !== group && !disclosureGroup?.endsWith(`-${group}`)) return;
+    disclosure.classList.toggle('is-inactive', !active);
+    const description = disclosure.querySelector('.override-group-summary');
+    if (description && summary !== undefined) description.textContent = summary;
   }
 
   _syncRows(scope, { inputSelector, rowSelector, draftSelector, memberSelector, generation, rowCount }) {
