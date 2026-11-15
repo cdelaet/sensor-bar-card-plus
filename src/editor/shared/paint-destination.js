@@ -1,7 +1,7 @@
 import { PAINT_PROPERTIES } from '../../config/paint-defaults.js';
 import { normalizeScaleConfig, INVALID_PAINT_OPACITY, PAINT_PROPERTY_SOURCES } from '../../config/normalize.js';
 import { getResolvedScale } from '../../config/resolve.js';
-import { BAR_PAINT, BASELINE_PAINTS, resolveConfiguredDestination, resolveDestinationPaint } from '../../view-model/paint-destinations.js';
+import { BAR_PAINT, BASELINE_PAINTS, TARGET_ABOVE_PAINT, resolveConfiguredDestination, resolveDestinationPaint } from '../../view-model/paint-destinations.js';
 import { createPaintBindings } from './paint-bindings.js';
 import { createBarPaintBindings, ownsBarPaintProperty, clearBarPaintProperties } from './bar-paint-bindings.js';
 import { cloneDeep, getPathValue, setPathValue, deletePathValue, isObject, removePathsFromTarget, pruneEmptyObjectsInTarget, serializeConfig, normalizeNumberValue } from './editor-config.js';
@@ -21,9 +21,13 @@ export function paintSourceSignature(config, destination) {
 // a source or sibling while creating a nested Paint object.
 function promote(target, destination) {
   let next = target;
-  for (const { path, property } of destination.shorthands ?? []) {
+  for (const { path, property, entityPath } of destination.shorthands ?? []) {
     const value = getPathValue(next, path);
-    if (value != null && !isObject(value)) next = setPathValue(next, path, { [property]: value });
+    const entity = entityPath && getPathValue(next, entityPath);
+    // Released Target scalar/entity companions form one source when promoted.
+    if (!isObject(value) && (value != null || entity)) next = setPathValue(next, path, {
+      [property]: entity ? { ...(value != null ? { fixed: value } : {}), entity } : value,
+    });
   }
   return next;
 }
@@ -180,8 +184,8 @@ export function selectDestinationPreset(context, scope, destination, value, { co
 
 function controlDestination(target) {
   const id = target?.closest?.('.paint-editor')?.dataset?.paintDestination;
-  return [BAR_PAINT, ...BASELINE_PAINTS].find(destination => destination.id === id)
-    ?? BASELINE_PAINTS.find(destination => (target?.dataset?.field ?? target?.dataset?.kind)?.includes(`${destination.id}-paint-`))
+  return [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT].find(destination => destination.id === id)
+    ?? [...BASELINE_PAINTS, TARGET_ABOVE_PAINT].find(destination => (target?.dataset?.field ?? target?.dataset?.kind)?.includes(`${destination.id}-paint-`))
     ?? BAR_PAINT;
 }
 

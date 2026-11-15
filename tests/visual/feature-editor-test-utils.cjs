@@ -1,3 +1,5 @@
+const { openTarget } = require('./target-test-utils.cjs');
+
 async function expandFeatureGroups(editor, groups = ['marker-target', 'marker-peak', 'marker-floor', 'generic-markers', 'baseline', 'segments', 'gradient-stops']) {
   if (groups.some(group => ['segments', 'gradient-stops'].includes(group))) {
     const paint = editor.locator('#card-paint-editor');
@@ -6,6 +8,7 @@ async function expandFeatureGroups(editor, groups = ['marker-target', 'marker-pe
   for (const group of groups) {
     const button = editor.locator(`#card-group-${group}`);
     if (await button.getAttribute('aria-expanded') === 'false') await button.click();
+    if (group === 'marker-target') await openTarget(editor, 'Feature');
   }
   // Disclosure clicks scroll long editors; keep native input hover arrows out of captures.
   await editor.page().mouse.move(0, 0);

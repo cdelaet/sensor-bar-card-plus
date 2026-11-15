@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { openTarget } = require('./target-test-utils.cjs');
 test('standalone Target root/entity controls, labels and focus retain their appearance', async ({ page }) => {
   await page.goto('/tests/visual/fixtures/harness.html');
   await page.evaluate(async () => {
@@ -9,7 +10,7 @@ test('standalone Target root/entity controls, labels and focus retain their appe
     document.querySelector('#mount').style.width = '360px'; document.querySelector('#mount').append(editor);
   });
   const editor = page.locator('sensor-bar-card-plus-editor');
-  await editor.locator('#card-group-marker-target').click();
+  await openTarget(editor);
   await expect(editor.locator('.card-subgroup[data-group="marker-target"]')).toHaveScreenshot('target-root.png');
   const rootValue = editor.locator('#target-value');
   await expect(rootValue).toHaveAttribute('type', 'text'); await expect(rootValue).toHaveValue('70');
@@ -18,7 +19,7 @@ test('standalone Target root/entity controls, labels and focus retain their appe
   await rootValue.fill('70');
   expect((await editor.evaluate(el => el._draftConfig)).target.at).toEqual({ entity: { id: 'sensor.t', attribute: 'limit' }, fixed: 70 });
   await editor.locator('#target-label-text').fill('Target energy'); await expect(editor.locator('#target-label-text')).toBeFocused();
-  await editor.locator('button[data-action="toggle-entity-overrides"]').click(); await editor.locator('#entity-0-group-target').click();
+  await editor.locator('button[data-action="toggle-entity-overrides"]').click(); await openTarget(editor, 'Entity');
   await expect(editor.locator('.override-group:not(.card-subgroup)[data-group="target"]')).toHaveScreenshot('target-entity.png');
   const inherit = editor.locator('#entity-0-target-inherit'), show = editor.locator('#entity-0-target-show');
   await expect(inherit).toBeChecked(); await expect(show).toBeChecked(); await expect(show).not.toBeDisabled();

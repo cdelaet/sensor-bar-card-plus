@@ -41,7 +41,7 @@ import { renderPaintSwatch, syncPaintSwatch } from './shared/paint-swatch.js';
 import { resolvePaintEditorPaint } from './shared/paint-editor-paint.js';
 import { SegmentsSection } from './sections/segments.js';
 import { GradientStopsSection } from './sections/gradient-stops.js';
-import { BASELINE_PAINTS, BAR_PAINT } from '../view-model/paint-destinations.js';
+import { BASELINE_PAINTS, TARGET_ABOVE_PAINT, BAR_PAINT } from '../view-model/paint-destinations.js';
 import { createDestinationBindings, handlePaintAction, handlePaintPresetControl, handlePaintPropertyControl, paintSourceSignature } from './shared/paint-destination.js';
 
 function paletteComparableConfig(config) {
@@ -50,7 +50,7 @@ function paletteComparableConfig(config) {
     ['bar', 'segments'], ['bar', 'gradient_stops'], ['bar', 'paint', 'segments'],
     ['bar', 'paint', 'gradient_stops'], ['bar', 'paint', 'preset'],
     ['segments'], ['severity'], ['gradient_stops'],
-    ...BASELINE_PAINTS.flatMap(destination => ['segments', 'gradient_stops', 'preset'].map(property => [...destination.path, property])),
+    ...[...BASELINE_PAINTS, TARGET_ABOVE_PAINT].flatMap(destination => ['segments', 'gradient_stops', 'preset'].map(property => [...destination.path, property])),
   ];
   for (const path of palettePaths) comparable = deletePathValue(comparable, path);
   if (Array.isArray(comparable.entities)) {
@@ -60,6 +60,14 @@ function paletteComparableConfig(config) {
       return paletteFreeEntity;
     });
   }
+  return comparable;
+}
+
+function withoutTarget(config) {
+  const strip = value => Object.fromEntries(Object.entries(value ?? {}).filter(([key]) =>
+    !['target', 'target_entity', 'target_color', 'show_target_label', 'above_target_color'].includes(key)));
+  const comparable = strip(config);
+  if (Array.isArray(comparable.entities)) comparable.entities = comparable.entities.map(entry => typeof entry === 'string' ? entry : strip(entry));
   return comparable;
 }
 
@@ -79,7 +87,6 @@ import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveM
 import { readResolvableSourceParts, updateResolvableSourceParts, writeResolvableSourceParts } from './shared/resolvable-source.js';
 
 export class SensorBarCardPlusEditor extends HTMLElement {
-  get _targetAboveFillDrafts() { return this._targetSection._targetAboveFillDrafts; }
 
   get _genericMarkerUiIds() { return this._referenceMarkersSection._genericMarkerUiIds; }
   get _expandedGenericMarkerUiIds() { return this._referenceMarkersSection._expandedGenericMarkerUiIds; }
@@ -114,6 +121,17 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         }),
       };
     }
+    const targetContext = this._createSectionContext();
+    const targetRoot = scope => `#${scope?.type === 'entity' ? `entity-${scope.index}-` : ''}target-above-paint-editor`;
+    const targetUi = { ...this._paletteUi({ paint: true }), root: scope => this.shadowRoot?.querySelector(targetRoot(scope)),
+      render: () => { this._syncTargetEditors(); this._applyPendingFocus(); },
+      focus: (selector, scope) => this._queuePostRenderFocus(`${targetRoot(scope)} ${selector}`) };
+    this._targetPaintSections = {
+      segments: new SegmentsSection(targetContext, targetUi, { destination: TARGET_ABOVE_PAINT,
+        write: (scope, rows, options) => createDestinationBindings(targetContext, scope, TARGET_ABOVE_PAINT).set('segments', rows, options), autoEnds: true, cssText: true }),
+      gradientStops: new GradientStopsSection(targetContext, targetUi, { destination: TARGET_ABOVE_PAINT,
+        write: (scope, rows, options) => createDestinationBindings(targetContext, scope, TARGET_ABOVE_PAINT).set('gradient_stops', rows, options) }),
+    };
     this._needleSection = new NeedleSection(this._createSectionContext());
     this._baselineSection = new BaselineSection(this._createSectionContext());
     this._targetSection = new TargetSection(this._createSectionContext());
@@ -150,7 +168,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._entityIconCustomPending = new Set();
     this._expandedOverrideGroups = new Set();
     this._expandedCardGroups = new Set();
-    this._targetSection.reset();
     this._pendingFocusSelector = null;
     this._boundHandleClick = (event) => this._handleClick(event);
     this._boundHandleChange = (event) => this._handleChange(event);
@@ -201,18 +218,26 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         === this._serializeConfig(paletteComparableConfig(this._config));
     this._segmentsSection.prepareExternalSync();
     this._gradientStopsSection.prepareExternalSync();
-    for (const destination of BASELINE_PAINTS) {
-      const sections = this._baselinePaintSections[destination.id.replace('baseline-', '')];
+    for (const destination of [...BASELINE_PAINTS, TARGET_ABOVE_PAINT]) {
+      const sections = destination === TARGET_ABOVE_PAINT ? this._targetPaintSections : this._baselinePaintSections[destination.id.replace('baseline-', '')];
       const changed = paletteSourceSignature(nextConfig, destination) !== paletteSourceSignature(this._config, destination);
       for (const section of [sections.segments, sections.gradientStops]) {
         if (changed) section.reset(); else section.prepareExternalSync();
       }
     }
-    if (paletteOnlyReplacement) {
+    const targetOnlyReplacement = this.shadowRoot?.innerHTML && this._serializeConfig(withoutTarget(nextConfig))
+      === this._serializeConfig(withoutTarget(this._config));
+    if (paletteOnlyReplacement || targetOnlyReplacement) {
       this._lastEmittedConfigJson = null;
       this._config = nextConfig;
       this._draftConfig = this._cloneDeep(nextConfig);
+      if (targetOnlyReplacement) for (const id of this._numericDrafts.values.keys()) {
+        if (/^(?:entity-\d+-)?target-/.test(id)) this._numericDrafts.values.delete(id);
+      }
+      this._targetConfigReplaced = !!targetOnlyReplacement;
       this._syncPaintEditors();
+      this._syncEntityPickers();
+      this._targetConfigReplaced = false;
       this._lastRenderedConfigJson = nextConfigJson;
       return;
     }
@@ -226,7 +251,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._segmentsSection.reset();
       this._gradientStopsSection.reset();
     }
-    this._targetSection.reset();
     this._referenceMarkersSection.reset();
     this._numericDrafts.reset();
 
@@ -302,6 +326,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         this._baselinePaintSections[direction].segments.syncRows(scope);
         this._baselinePaintSections[direction].gradientStops.syncRows(scope);
       }
+      this._syncTargetControls(scope);
       this._segmentsSection.syncRows(scope);
       this._gradientStopsSection.syncRows(scope);
     }
@@ -566,6 +591,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _applyUserConfig(nextConfig, options = {}) {
     const { rerender = false } = options;
+    const targetOnly = rerender && this.shadowRoot?.innerHTML
+      && this._serializeConfig(withoutTarget(nextConfig)) === this._serializeConfig(withoutTarget(this._draftConfig));
     const nextConfigJson = this._serializeConfig(nextConfig);
     const currentDraftJson = this._serializeConfig(this._draftConfig);
     if (nextConfigJson === currentDraftJson) {
@@ -575,9 +602,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._updateConfig(nextConfig);
     this._emitConfigChanged(options);
     this._refreshDerivedEditorUi();
-    if (rerender) {
+    if (rerender && !targetOnly) {
       this._scheduleRender();
     }
+    if (targetOnly) this._applyPendingFocus();
     return true;
   }
 
@@ -623,7 +651,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._setElementText('card-group-generic-markers-summary', this._getGenericMarkersSummary({ type: 'card' }));
     this._setElementText('card-group-segments-summary', this._getSegmentsSummary({ type: 'card' }));
     this._setElementText('card-group-gradient-stops-summary', this._getGradientStopsSummary({ type: 'card' }));
-    this._setElementChecked('target-above-fill-enabled', this._isTargetAboveFillEnabled({ type: 'card' }));
     this._setElementText('card-group-segments-summary', this._getSegmentsSummary({ type: 'card' }));
     this._setElementText('card-group-gradient-stops-summary', this._getGradientStopsSummary({ type: 'card' }));
   }
@@ -633,7 +660,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     for (let index = 0; index < count; index += 1) {
       const scope = { type: 'entity', index };
       this._setElementChecked(`entity-${index}-scale-inherit`, !hasScaleOverride(this._createSectionContext(), scope));
-      this._setElementChecked(`entity-${index}-target-inherit`, !this._hasTargetOverride(scope));
       this._setElementChecked(`entity-${index}-baseline-inherit`, !this._hasBaselineOverride(scope));
       this._setElementChecked(`entity-${index}-needle-inherit`, !this._hasNeedleOverride(scope));
       this._setElementChecked(`entity-${index}-peak-inherit`, !this._hasPeakOverride(scope));
@@ -644,7 +670,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementChecked(`entity-${index}-gradient-stops-inherit`, !this._hasGradientStopsOverride(scope));
       this._setElementChecked(`entity-${index}-layout-inherit`, !this._hasLayoutOverride(scope));
       this._setElementChecked(`entity-${index}-formatting-inherit`, !this._hasFormattingOverride(scope));
-      this._setElementChecked(`entity-${index}-target-above-fill-enabled`, this._isTargetAboveFillEnabled(scope));
 
       this._setElementText(`entity-${index}-group-scale-summary`, this._getScaleOverrideSummary(scope));
       this._setElementText(`entity-${index}-group-target-summary`, this._getTargetOverrideSummary(scope));
@@ -1825,6 +1850,34 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return { segments: this._segmentsSection._getScopedSegmentsValue(scope), gradient_stops: this._gradientStopsSection._getScopedGradientStopsValue(scope) };
   }
 
+  _targetRenderOptions(scope) {
+    return { root: this.shadowRoot, registry: this._paintPresetRegistry,
+      paletteValues: { segments: this._targetPaintSections.segments._getScopedSegmentsValue(scope),
+        gradient_stops: this._targetPaintSections.gradientStops._getScopedGradientStopsValue(scope) },
+      paintChildren: paintScope => this._renderTargetPaintPalette(paintScope) };
+  }
+
+  _syncTargetControls(scope) {
+    this._targetSection.syncControls(this.shadowRoot, scope, { ...this._targetRenderOptions(scope),
+      numericDrafts: this._numericDrafts, replaced: this._targetConfigReplaced });
+    this._targetPaintSections.segments.syncRows(scope);
+    this._targetPaintSections.gradientStops.syncRows(scope);
+  }
+
+  _syncTargetEditors() {
+    for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) this._syncTargetControls(scope);
+  }
+
+  _renderTargetPaintPalette(scope) {
+    const renderGroup = options => this._renderCardGroup({ ...options, group: `target-above-${options.group}` });
+    return { segments: this._targetPaintSections.segments.render(scope, renderGroup, { section: false }),
+      gradient_stops: this._targetPaintSections.gradientStops.render(scope, renderGroup, { section: false }) };
+  }
+
+  _handleTargetPaletteEvent(event, mode) {
+    return this._targetPaintSections.segments.handle(event, mode) || this._targetPaintSections.gradientStops.handle(event, mode);
+  }
+
   _renderBaselinePaintPalette(scope, direction) {
     const sections = this._baselinePaintSections[direction];
     const renderGroup = options => this._renderCardGroup({ ...options, group: `baseline-${direction}-${options.group}` });
@@ -1905,7 +1958,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       configurable: true,
       value: (scope, destination = BAR_PAINT, property) => {
         const sections = destination === BAR_PAINT ? { segments: this._segmentsSection, gradientStops: this._gradientStopsSection }
-          : this._baselinePaintSections[destination.id.replace('baseline-', '')];
+          : destination === TARGET_ABOVE_PAINT ? this._targetPaintSections : this._baselinePaintSections[destination.id.replace('baseline-', '')];
         if (!property || property === 'segments') sections?.segments.clearScopeState(scope);
         if (!property || property === 'gradient_stops') sections?.gradientStops.clearScopeState(scope);
       },
@@ -2815,38 +2868,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return this._targetSection._setTargetLabelDecimal(...args);
   }
 
-  _getTargetAboveFillColorValue(...args) {
-    return this._targetSection._getTargetAboveFillColorValue(...args);
-  }
-
-  _getTargetAboveFillDraftKey(...args) {
-    return this._targetSection._getTargetAboveFillDraftKey(...args);
-  }
-
-  _setTargetAboveFillDraft(...args) {
-    return this._targetSection._setTargetAboveFillDraft(...args);
-  }
-
-  _getTargetAboveFillDraft(...args) {
-    return this._targetSection._getTargetAboveFillDraft(...args);
-  }
-
-  _getEffectiveTargetAboveFillColorValue(...args) {
-    return this._targetSection._getEffectiveTargetAboveFillColorValue(...args);
-  }
-
-  _setTargetAboveFillColor(...args) {
-    return this._targetSection._setTargetAboveFillColor(...args);
-  }
-
-  _isTargetAboveFillEnabled(...args) {
-    return this._targetSection._isTargetAboveFillEnabled(...args);
-  }
-
-  _setTargetAboveFillEnabled(...args) {
-    return this._targetSection._setTargetAboveFillEnabled(...args);
-  }
-
   _hasTargetOverride(...args) {
     return this._targetSection._hasTargetOverride(...args);
   }
@@ -3481,7 +3502,7 @@ ${this._renderPresetMasterControls()}
 	                          group: 'target',
 	                          title: 'Target',
 	                          summary: this._getTargetOverrideSummary(scope),
-	                          content: this._targetSection.render(scope),
+	                          content: this._targetSection.render(scope, this._targetRenderOptions(scope)),
 	                        });
                         const actionsGroup = this._renderOverrideGroup({
                           index,
@@ -3559,7 +3580,7 @@ ${renderBarAppearanceSection(this._createSectionContext(), { type: 'card' }, () 
 
 ${renderMarkersSection({
   renderGroup: options => this._renderCardGroup(options),
-  target: { summary: this._getCardTargetMarkerSummary(), content: this._targetSection.render({ type: 'card' }) },
+  target: { summary: this._getCardTargetMarkerSummary(), content: this._targetSection.render({ type: 'card' }, this._targetRenderOptions({ type: 'card' })) },
   peak: { summary: this._getMarkerResetSummary('peak'), content: this._extremaSection.render({ type: 'card' }, 'peak') },
   floor: { summary: this._getMarkerResetSummary('floor'), content: this._extremaSection.render({ type: 'card' }, 'floor') },
   references: { summary: this._getGenericMarkersSummary({ type: 'card' }), content: this._renderGenericMarkersEditor({ type: 'card' }) },
@@ -3594,6 +3615,7 @@ ${this._renderFormattingSection({ type: 'card' })}
         this._presetPaintSections.gradientStops.syncRows(presetScope);
       }
       this._numericDrafts.apply(this.shadowRoot, numericFocus);
+      this._syncTargetEditors();
       this._lastRenderedConfigJson = this._serializeConfig(this._draftConfig);
       this._applyPendingFocus();
     } finally {
@@ -3904,11 +3926,6 @@ ${this._renderFormattingSection({ type: 'card' })}
         return;
       }
 
-      if (kind === 'target-entity-source') {
-        picker.value = this._getTargetResolvableValue({ type: 'card' }).entity;
-        picker.label = 'Target entity';
-        return;
-      }
 
       if (kind === 'entity-override-min-entity-source') {
         picker.value = this._getEffectiveResolvableScopedValue({ type: 'entity', index }, 'min').entity;
@@ -3928,11 +3945,6 @@ ${this._renderFormattingSection({ type: 'card' })}
         return;
       }
 
-      if (kind === 'entity-target-entity-source') {
-        picker.value = this._getEffectiveTargetResolvableValue({ type: 'entity', index }).entity;
-        picker.label = `Entity ${index + 1} target entity`;
-        return;
-      }
 
       if (kind === 'generic-marker-entity') {
         const scope = this._getGenericMarkerScope(picker);
@@ -3954,10 +3966,10 @@ ${this._renderFormattingSection({ type: 'card' })}
       'ha-entity-picker[data-kind="scale-max-entity-source"]',
       'ha-entity-picker[data-kind="baseline-entity-source"]',
       'ha-entity-picker[data-kind="target-entity-source"]',
+      'ha-entity-picker[data-kind="entity-target-entity-source"]',
       'ha-entity-picker[data-kind="entity-override-min-entity-source"]',
       'ha-entity-picker[data-kind="entity-override-max-entity-source"]',
       'ha-entity-picker[data-kind="entity-baseline-entity-source"]',
-      'ha-entity-picker[data-kind="entity-target-entity-source"]',
       'ha-entity-picker[data-kind="generic-marker-entity"]',
       'ha-entity-picker[data-kind="generic-marker-label-entity"]',
     ].forEach((selector) => {
@@ -3970,11 +3982,11 @@ ${this._renderFormattingSection({ type: 'card' })}
           'ha-entity-picker[data-kind="scale-min-entity-source"]',
           'ha-entity-picker[data-kind="scale-max-entity-source"]',
           'ha-entity-picker[data-kind="baseline-entity-source"]',
-          'ha-entity-picker[data-kind="target-entity-source"]',
+      'ha-entity-picker[data-kind="target-entity-source"]',
+      'ha-entity-picker[data-kind="entity-target-entity-source"]',
           'ha-entity-picker[data-kind="entity-override-min-entity-source"]',
           'ha-entity-picker[data-kind="entity-override-max-entity-source"]',
           'ha-entity-picker[data-kind="entity-baseline-entity-source"]',
-          'ha-entity-picker[data-kind="entity-target-entity-source"]',
           'ha-entity-picker[data-kind="generic-marker-entity"]',
           'ha-entity-picker[data-kind="generic-marker-label-entity"]',
         ].forEach((selector) => {
@@ -4007,10 +4019,6 @@ ${this._renderFormattingSection({ type: 'card' })}
       if (kind === 'baseline-attribute' || kind === 'entity-baseline-attribute') {
         const source = kind.startsWith('entity-') ? scopedSource(index, 'baseline') : cardSource('baseline');
         return { entity: source.entity, attribute: source.attribute, label: 'Baseline attribute' };
-      }
-      if (kind === 'target-attribute' || kind === 'entity-target-attribute') {
-        const source = kind.startsWith('entity-') ? scopedSource(index, 'target') : cardSource('target');
-        return { entity: source.entity, attribute: source.attribute, label: 'Target attribute' };
       }
       if (kind === 'generic-marker-attribute' || kind === 'generic-marker-label-attribute') {
         const scope = control.dataset.scopeType === 'entity' ? { type: 'entity', index } : { type: 'card' };
@@ -4104,7 +4112,7 @@ ${this._renderFormattingSection({ type: 'card' })}
       if (this._presetPaintSections
         && (this._presetPaintSections.segments.handle(event, 'click') || this._presetPaintSections.gradientStops.handle(event, 'click'))) return;
     } else if (this._segmentsSection.handle(event, 'click') || this._gradientStopsSection.handle(event, 'click')
-      || this._handleBaselinePaletteEvent(event, 'click')) return;
+      || this._handleBaselinePaletteEvent(event, 'click') || this._handleTargetPaletteEvent(event, 'click')) return;
     const target = event.target?.closest?.('[data-action]') ?? event.target;
     const action = target?.dataset?.action;
     if (!action) return;
@@ -4186,7 +4194,7 @@ ${this._renderFormattingSection({ type: 'card' })}
       return;
     }
 
-    if (this._baselineSection.handleClick(target)) return;
+    if (this._targetSection.handleClick(target) || this._baselineSection.handleClick(target)) return;
 
     this._referenceMarkersSection.handleClick(target);
   }
@@ -4199,7 +4207,7 @@ ${this._renderFormattingSection({ type: 'card' })}
       if (this._presetPaintSections
         && (this._presetPaintSections.segments.handle(event, 'change') || this._presetPaintSections.gradientStops.handle(event, 'change'))) return;
     } else if (this._segmentsSection.handle(event, 'change') || this._gradientStopsSection.handle(event, 'change')
-      || this._handleBaselinePaletteEvent(event, 'change')) return;
+      || this._handleBaselinePaletteEvent(event, 'change') || this._handleTargetPaletteEvent(event, 'change')) return;
     const kind = event.target?.dataset?.kind;
     this._handleFieldEvent(event);
   }
@@ -4211,7 +4219,7 @@ ${this._renderFormattingSection({ type: 'card' })}
       if (this._presetPaintSections
         && (this._presetPaintSections.segments.handle(event, 'input') || this._presetPaintSections.gradientStops.handle(event, 'input'))) return;
     } else if (this._segmentsSection.handle(event, 'input') || this._gradientStopsSection.handle(event, 'input')
-      || this._handleBaselinePaletteEvent(event, 'input')) return;
+      || this._handleBaselinePaletteEvent(event, 'input') || this._handleTargetPaletteEvent(event, 'input')) return;
     const target = event.target;
     if (!target) return;
     if (target.tagName === 'HA-ENTITY-PICKER' || target.tagName === 'HA-ENTITY-ATTRIBUTE-PICKER') return;
@@ -4235,12 +4243,12 @@ ${this._renderFormattingSection({ type: 'card' })}
       return;
     }
     this._segmentsSection.handle(event, 'keydown') || this._gradientStopsSection.handle(event, 'keydown')
-      || this._handleBaselinePaletteEvent(event, 'keydown');
+      || this._handleBaselinePaletteEvent(event, 'keydown') || this._handleTargetPaletteEvent(event, 'keydown');
   }
 
   _handleFieldEvent(event) {
     if (this._segmentsSection.handle(event, 'field') || this._gradientStopsSection.handle(event, 'field')
-      || this._handleBaselinePaletteEvent(event, 'field')) return;
+      || this._handleBaselinePaletteEvent(event, 'field') || this._handleTargetPaletteEvent(event, 'field')) return;
     const target = event.target;
     const rawField = target?.dataset?.field;
     const rawKind = target?.dataset?.kind;
@@ -4310,10 +4318,7 @@ ${this._renderFormattingSection({ type: 'card' })}
       if (kind?.endsWith('-entity-source')) this._syncEntityAttributeSource(target);
       return;
     }
-    if (this._targetSection.handleField({ field, kind, index: target.dataset?.index, value })) {
-      if (kind?.endsWith('-entity-source')) this._syncEntityAttributeSource(target);
-      return;
-    }
+    if (this._targetSection.handleField({ field, kind, index: target.dataset?.index, value })) return;
     if (this._extremaSection.handleField({ field, kind, index: target.dataset?.index, value })) return;
     if (kind === 'entity-picker' || kind === 'entity-input') {
       const index = Number(target.dataset.index);

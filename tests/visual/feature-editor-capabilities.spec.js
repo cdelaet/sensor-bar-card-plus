@@ -63,14 +63,13 @@ for(const source of ['src','dist'])for(const key of ['target','baseline'])test(`
 for(const source of ['src','dist'])test(`Feature CSS colors ${source}: all direct controls, raw text, keyboard, replacement and Gradient Stop boundary`,async({page})=>{
  const editor=await mount(page,source);await editor.locator('.generic-marker-toggle').click();
  for(const side of ['above','below'])await editor.locator(`#baseline-${side}-paint-editor > summary`).click();
- const ids=['bar-color','bar-needle-color','baseline-above-paint-color','baseline-below-paint-color','target-color','target-above-fill-color','peak-color','floor-color','card-card-generic-marker-1-color'];
+ await editor.locator('#card-group-target-above').click();await editor.locator('#target-above-paint-editor > summary').click();
+ const ids=['bar-color','bar-needle-color','baseline-above-paint-color','baseline-below-paint-color','target-color','target-above-paint-color','peak-color','floor-color','card-card-generic-marker-1-color'];
  for(const id of ids){
   const control=editor.locator(`#${id}-text-fallback`);expect(await control.getAttribute('aria-label')).toContain('CSS value');
   for(const color of ['#123456','#abc','red','rgb(1, 2, 3)','var(--warning-color)','  hsl(30, 100%, 50%)  ']){await control.fill(color);await expect(control).toBeFocused();await expect(control).toHaveAttribute('aria-invalid','false');}
   const before=await saved(editor),count=await page.evaluate(()=>window.__capabilityEvents.length);await control.fill('rgb(');await control.press('Tab');await expect(control).toHaveValue('rgb(');expect(await saved(editor)).toEqual(before);expect(await page.evaluate(()=>window.__capabilityEvents.length)).toBe(count);
   await control.fill('orange');await control.press('Tab');await expect(control).toHaveValue('orange');
-  const toggle=id==='target-above-fill-color'?'target-above-fill-enabled':null;
-  if(toggle){await control.fill('  orange  ');const before=await saved(editor);await editor.locator(`#${toggle}`).uncheck();await editor.locator(`#${toggle}`).check();expect(await saved(editor)).toEqual(before);await expect(control).toHaveValue('  orange  ');}
  }
  const before=await saved(editor);expect(before.markers[0]).toEqual({...await page.evaluate(()=>window.__capabilityOriginal.markers[0]),color:'orange'});
  await editor.locator('#bar-color-text-fallback').fill('var(');await editor.evaluate(async el=>{el.setConfig({...el._config,bar:{...el._config.bar,color:'blue'}});await el.updateComplete;});await expect(editor.locator('#bar-color-text-fallback')).toHaveValue('blue');await expect(editor.locator('#bar-color-text-fallback')).toHaveAttribute('aria-invalid','false');

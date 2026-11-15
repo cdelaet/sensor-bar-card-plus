@@ -324,10 +324,10 @@ for(const host of hosts)test(`${host}: Needle mode respects the host Baseline cl
  const config=d.seed(host),editor=await d.mount(page,host,config);await d.openSection(editor,{section:'Needle'});await d.commit(page,editor,()=>editor.locator('#bar-needle-mode').selectOption('disabled'));await d.commit(page,editor,()=>editor.locator('#bar-needle-mode').selectOption('enabled'));
  if(host==='feature')expect((await d.saved(page)).baseline).toEqual(config.baseline);else expect((await d.saved(page)).baseline).toBeUndefined();
 });
-test('standalone: Target inheritance preserves its established selective reset semantics',async({page})=>{
+test('standalone: Shared Target inheritance preserves Paint and selective marker reset semantics',async({page})=>{
  const config=d.seed('standalone');config.entities[0].target.label.precision=3;const editor=await d.mount(page,'standalone',config);await d.openSection(editor,{section:'Target',scope:'entity'});
  await d.commit(page,editor,()=>editor.locator('[data-kind="entity-target-inherit"]').first().click());
- expect((await d.saved(page)).entities[0].target).toEqual({label:{text:'Label',precision:3},future:'marker metadata'});
+ expect((await d.saved(page)).entities[0].target).toEqual({label:{text:'Label',precision:3},when_exceeded:{fill_color:'red'},future:'marker metadata'});
  await expect(editor.locator('#entity-0-target-inherit')).not.toBeChecked();
  await d.reopen(page,editor);await d.openSection(editor,{section:'Target',scope:'entity'});await expect(editor.locator('#entity-0-target-label-text')).toHaveValue('Label');
 });

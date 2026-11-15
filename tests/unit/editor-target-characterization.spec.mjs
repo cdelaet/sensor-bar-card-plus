@@ -37,13 +37,13 @@ for (const source of ['src', 'dist']) describe(`standalone Target characterizati
     editor._setTargetShape(root, 'diamond'); expect(editor._draftConfig.target.shape).toBeUndefined();
     editor._setMarkerDirection(root, 'target', 'inward'); expect(editor._draftConfig.target.direction).toBeUndefined();
   });
-  it('stores exceeded-fill drafts locally when disabled and restores them through echo', () => {
-    const editor = createEditor({ source }); editor.setConfig({ target: { at: 10 } });
-    expect(editor._setTargetAboveFillColor(root, 'red')).toBe(false); expect(editor._draftConfig.target.when_exceeded).toBeUndefined();
-    editor._setTargetAboveFillEnabled(root, true); expect(editor._draftConfig.target.when_exceeded.fill_color).toBe('red');
-    editor._setTargetAboveFillEnabled(root, false); editor.setConfig(editor._draftConfig);
-    expect(editor._getTargetAboveFillDraft(root)).toBe('red');
-    editor._setTargetAboveFillEnabled(root, true); expect(editor._draftConfig.target.when_exceeded.fill_color).toBe('red');
+  it('reads legacy exceeded fill through shared Paint without rewriting config on open', () => {
+    const editor = createEditor({ source });
+    const config = { target: { at: 10, when_exceeded: { fill_color: 'red', future: true } } };
+    editor.setConfig(config);
+    expect(editor._draftConfig).toEqual(config);
+    expect(editor.shadowRoot.querySelector('#target-above-paint-color')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#target-above-fill-enabled')).toBeNull();
     expect(editor._getCardTargetMarkerSummary()).toBe('10 · Diamond');
   });
 

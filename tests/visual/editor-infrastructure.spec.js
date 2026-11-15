@@ -35,7 +35,7 @@ test('editor drafts, focus and disclosures survive echo and a structural render'
   await expect(editor.locator('input[data-kind="gradient-pos"]').nth(1)).toHaveValue('45');
 });
 
-test('standalone shared controls retain their pre-extraction appearance', async ({ page }) => {
+test('standalone Scale and collapsed Target controls retain their layout', async ({ page }) => {
   const editor = await mountEditor(page);
   await editor.locator('#card-group-marker-target').click();
   await editor.evaluate(element => element.shadowRoot.activeElement?.blur());

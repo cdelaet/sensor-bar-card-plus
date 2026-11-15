@@ -20,10 +20,10 @@ for (const scaleDirection of ['normal', 'reverse']) {
           bar: { fill_style, color: '#123456', direction: 'reverse', animated: false,
             gradient_stops: [{ pos: 0, color: '#123456' }, { pos: 100, color: '#abcdef' }],
             segments: [{ from: 0, to: 40, color: '#123456' }, { from: 60, to: 100, color: '#abcdef' }],
-            above_target_color: 'rgba(0,255,0,0.4)' },
+          },
           baseline: { at: { entity: 'sensor.baseline' },
             below: { color: 'rgba(0,0,255,0.5)' }, above: { color: 'rgba(255,0,0,0.5)' } },
-          target: { at: 60 },
+          target: { at: 60, when_exceeded: { fill_color: 'rgba(0,255,0,0.4)' } },
         }] }).entities[0];
         const row = buildRowViewModel({ entityConfig: appearance,
           entityState: { state: String(value), attributes: {} },
@@ -91,9 +91,9 @@ for (const scaleDirection of ['normal', 'reverse']) {
       const config = {
         scale: { min: 0, max: 100, direction: scaleDirection },
         bar: { fill_style: 'solid', color: '#123456', direction: 'reverse', animated: false,
-          needle: true, above_target_color: '#00ff00' },
+          needle: true },
         baseline: { at: { entity: 'sensor.baseline' }, above: { color: '#ff0000' }, below: { color: '#0000ff' } },
-        target: { at: { entity: 'sensor.target' } },
+        target: { at: { entity: 'sensor.target' }, when_exceeded: { fill_color: '#00ff00' } },
       };
       const states = { 'sensor.power': window.__sbcpCreateState(85), 'sensor.baseline': window.__sbcpCreateState(25),
         'sensor.target': window.__sbcpCreateState(60) };

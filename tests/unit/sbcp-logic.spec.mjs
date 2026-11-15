@@ -5518,7 +5518,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
     expect(htmlWith).toContain('class="bar-fill-reveal"');
     expect(htmlWith).toContain('class="bar-paint-layer" data-layer="above-target"');
-    expect(htmlWith).toContain('background:#ef4444');
+    expect(htmlWith).toContain('background-image:linear-gradient(to right,#ef4444 0%,#ef4444 100%)');
     expect(htmlWith).toContain('clip-path:inset(0 0% 0 50% round 0);');
     expect(htmlWithout).toContain('class="bar-paint-layer" data-layer="above-target"');
     expect(htmlWithout).toContain('display:none;');
@@ -5577,7 +5577,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
     expect(fillReveal.style.cssText).toContain('clip-path:inset(0 37.5% 0 0% round 6px 6px 6px 6px)');
     expect(fillReveal.className).toBe('bar-fill-reveal');
-    expect(aboveTargetLayer.style.cssText).toContain('background:#ef4444');
+    expect(aboveTargetLayer.style.cssText).toContain('background-image:linear-gradient(to right,#ef4444 0%,#ef4444 100%)');
     expect(aboveTargetLayer.style.cssText).toContain('z-index:2;');
     expect(aboveTargetLayer.style.cssText).toContain('clip-path:inset(0 0% 0 50% round 0);');
   });
@@ -5596,7 +5596,7 @@ describe('Sensor Bar Card Plus logic', () => {
     const layer = card._getFillPaintLayers(geometry, 38, ecfg, '#dc2626', targetPct, null, 0, 120)
       .find(item => item.id === 'above-target');
 
-    expect(layer.paintStyle).toContain('background:#ef4444');
+    expect(layer.paintStyle).toContain('background-image:linear-gradient(to right,#ef4444 0%,#ef4444 100%)');
     expect(layer.revealStyle).toContain('clip-path:inset(0 0% 0 50% round 0);');
   });
 

@@ -136,10 +136,13 @@ export function buildRowViewModel(options) {
     ? createTextPresentation(rawState)
     : createNumericPresentation(numericValue, displayUnit, decimal);
 
-  const targetValue = entityConfig?.target_marker?.enabled === false
-    ? null
-    : getNormalizedResolvableNumericValue(hass, entityConfig?.target_marker?.source, safeMin, safeMax);
+  const sharedTargetValue = getNormalizedResolvableNumericValue(hass, entityConfig?.target_marker?.source, safeMin, safeMax);
+  const targetValue = entityConfig?.target_marker?.enabled === false ? null : sharedTargetValue;
   const targetPercent = targetValue !== null ? toScalePct(targetValue, safeMin, safeMax) : null;
+  // Canonical Paint uses the shared threshold independently of marker visibility;
+  // released legacy-only overlays retain their existing marker-disable behavior.
+  const targetPaintPercent = entityConfig?.target_above?.paint && !entityConfig.target_above.legacy
+    ? sharedTargetValue !== null ? toScalePct(sharedTargetValue, safeMin, safeMax) : null : targetPercent;
   const targetPositionPercent = projectScalePercent(targetPercent, scaleDirection);
   const targetVisible = targetValue !== null;
   const targetDecimal = entityConfig?.target_marker?.label_decimal ?? decimal;
@@ -274,6 +277,7 @@ export function buildRowViewModel(options) {
     fillStyle: entityConfig?.bar?.paint?.fill_style ?? entityConfig?.bar?.fill_style ?? null,
     target: targetValue,
     targetPercent,
+    targetPaintPercent,
     targetPositionPercent,
     targetDisplay: targetPresentation?.text ?? null,
     targetPresentation,

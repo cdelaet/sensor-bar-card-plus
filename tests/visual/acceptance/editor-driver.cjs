@@ -1,4 +1,5 @@
 const { expect } = require('@playwright/test');
+const { openTarget } = require('../target-test-utils.cjs');
 const { groups, selector } = require('./control-manifest.cjs');
 const marker = () => ({ at: { fixed: 50 }, color: 'red', label: { show: true, text: 'Label', precision: 1 }, future: 'marker metadata' });
 function seed(host) {
@@ -83,6 +84,13 @@ async function openSection(editor, entry) {
  } else if(groups[entry.section]) {
   const group=editor.locator(`#card-group-${groups[entry.section]}`);
   if(await group.count())await openDisclosure(group);
+ }
+ if(entry.section==='Target') {
+  await openTarget(editor,entry.scope==='entity'?'Entity':'Card',entry.name?.includes('target-above-paint')?['above']:['shared','appearance','labels']);
+  if(entry.name?.includes('target-above-paint')) {
+   const paint=editor.locator(`#${entry.scope==='entity'?'entity-0-':''}target-above-paint-editor`);
+   if(!await paint.evaluate(node=>node.open))await paint.locator(':scope > summary').click();
+  }
  }
  const baselinePaint = entry.name?.match(/baseline-(above|below)-paint-/);
  if(baselinePaint) {

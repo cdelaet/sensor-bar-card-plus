@@ -12,6 +12,7 @@ import { historicalMarkerConsumers, historicalMarkerResults } from '../history/m
 import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
 import { authoredPaintProperties, resolveScopedPaintPreset } from '../view-model/paint-preset-resolver.js';
 import { resolveBaselinePaints } from '../view-model/baseline-paint-resolver.js';
+import { resolveTargetAbovePaint } from '../view-model/target-above-paint-resolver.js';
 import { formatNumericDisplay } from '../utils/format.js';
 import { setStyleIfChanged } from '../utils/dom.js';
 import { getFeatureLabelGeometry, layoutFeatureMarkerLabels } from './marker-label-layout.js';
@@ -103,7 +104,8 @@ export class SensorBarCardPlusFeature extends HTMLElement {
   _syncPaintPresetRegistry() {
     const usesPreset = this._config?.bar?.paint?.preset !== undefined
       || this._config?.baseline?.above?.paint?.preset !== undefined
-      || this._config?.baseline?.below?.paint?.preset !== undefined;
+      || this._config?.baseline?.below?.paint?.preset !== undefined
+      || this._config?.target?.when_above?.paint?.preset !== undefined;
     if (!this.isConnected || !this._hass?.connection || !usesPreset) {
       if (this._paintPresetHandle) {
         this._paintPresetSubscriptionGeneration += 1;
@@ -164,9 +166,11 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     const baselinePaints = normalizedAppearance
       ? resolveBaselinePaints(normalizedAppearance.baseline, this._normalized.baseline, this._paintPresetRegistry)
       : { paints: {}, diagnostics: [] };
+    const targetAbove = resolveTargetAbovePaint(normalizedAppearance?.target_above, this._normalized?.target_above, this._paintPresetRegistry);
     if (normalizedAppearance && (Object.prototype.hasOwnProperty.call(authoredPaintProperties(this._normalized.bar.paint), 'preset')
       || Object.prototype.hasOwnProperty.call(authoredPaintProperties(normalizedAppearance.bar.paint), 'preset')
       || Object.keys(baselinePaints.paints).length
+      || targetAbove.paint !== undefined
       || baselinePaints.diagnostics.length)) {
       const resolved = resolveScopedPaintPreset({
         inheritedPaint: this._normalized.bar.paint,
@@ -183,6 +187,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         ...normalizedAppearance,
         bar: { ...normalizedAppearance.bar, paint: resolved.paint },
         ...(Object.keys(baselinePaints.paints).length ? { baseline } : {}),
+        target_above: targetAbove,
       };
       this._paintPresetDiagnostics = resolved.diagnostics.map(diagnostic => ({
         ...diagnostic,
@@ -192,6 +197,8 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         ...diagnostic,
         path: `baseline.${diagnostic.path}`,
         entity,
+      }))).concat(targetAbove.diagnostics.map(diagnostic => ({
+        ...diagnostic, path: `target.when_above.${diagnostic.path}`, entity,
       })));
       this._diagnostics = {
         ...this._baseDiagnostics,

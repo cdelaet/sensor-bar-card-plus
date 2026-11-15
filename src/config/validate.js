@@ -278,6 +278,13 @@ function paletteValidationSource(config, inheritedConfig, path, property) {
 }
 
 function validateConfigScope(diagnostics, config, path, entity = null, inheritedConfig = null) {
+  for (const issue of config?.target_above?.[BAR_PAINT_DIAGNOSTICS] ?? []) {
+    addWarning(diagnostics, `paint.${issue.kind === 'invalid' ? 'invalid_value' : 'legacy_conflict'}`,
+      issue.kind === 'legacy_conflict' ? `Grouped paint overrides ${issue.legacyPath}.`
+        : issue.property === 'opacity' ? 'Invalid paint opacity; using 100.'
+          : 'Invalid grouped paint value; using the legacy, inherited or default value.',
+      `${path}.target.when_above.paint${issue.property === null ? '' : `.${issue.property}`}`, entity);
+  }
   for (const issue of config?.bar?.[BAR_PAINT_DIAGNOSTICS] ?? []) {
     const paintPath = `${path}.bar.paint${issue.property === null ? '' : `.${issue.property}`}`;
     addWarning(diagnostics, `paint.${issue.kind === 'invalid' ? 'invalid_value' : 'legacy_conflict'}`,
@@ -317,6 +324,11 @@ function validateConfigScope(diagnostics, config, path, entity = null, inherited
   validateEntitySource(diagnostics, config?.baseline?.at, `${path}.baseline.at`, entity);
   validateEntitySource(diagnostics, config?.target_marker?.source, `${path}.target.at`, entity);
   const scaleBounds = validateScaleBounds(diagnostics, config?.scale, path, entity);
+  const targetPaint = config?.target_above?.paint;
+  if (targetPaint) {
+    validateSegments(diagnostics, targetPaint.segments, scaleBounds, `${path}.target.when_above.paint`, entity, true);
+    validateGradientStops(diagnostics, targetPaint.gradient_stops, `${path}.target.when_above.paint`, entity);
+  }
   validateTargetRange(diagnostics, config, scaleBounds, path, entity);
   validateBaselineRange(diagnostics, config, scaleBounds, path, entity);
   validateBaselineSuppressesNeedle(diagnostics, config, path, entity);

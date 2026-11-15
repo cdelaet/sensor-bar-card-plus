@@ -1,14 +1,14 @@
 import { escapeAttribute } from './editor-controls.js';
 
 // Canonical root disclosure markup; each host owns its local expanded Set.
-export function renderCardGroup({ group, title, summary, content, inactive = false }, expanded) {
+export function renderCardGroup({ group, title, summary, content, inactive = false, action = 'toggle-card-group' }, expanded) {
     return `
       <div class="override-group card-subgroup${inactive ? ' is-inactive' : ''}" data-group="${group}" data-expanded="${expanded ? 'true' : 'false'}">
         <button
           type="button"
           id="card-group-${group}"
           class="override-group-toggle"
-          data-action="toggle-card-group"
+          data-action="${escapeAttribute(action)}"
           data-group="${group}"
           aria-expanded="${expanded ? 'true' : 'false'}"
         >

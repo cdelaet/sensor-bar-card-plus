@@ -234,7 +234,7 @@ export function getStaticLayerRevealStyle(geometry) {
   return 'display:none;clip-path:inset(0 100% 0 0 round 0);';
 }
 
-export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, scaleDirection = 'normal', samplePercent = 0) {
+export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, scaleDirection = 'normal', samplePercent = 0, needleActive = false) {
   const basePaintStyle = getFullScaleBackgroundStyle([
     paintCompiler.compilePaint(ordinaryPaint(ecfg), { color, minValue, maxValue, scaleDirection, samplePercent }).gradient,
   ]);
@@ -262,14 +262,23 @@ export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, b
   });
 
   const aboveTargetGeometry = getAboveTargetLayerGeometry(targetPct, scaleDirection);
+  const target = ecfg?.target_above;
+  const paint = target?.paint;
+  // The normalized destination is authoritative, including null. The mirror
+  // fallback serves old internal callers only, never a disabled destination.
+  const legacyColor = target === undefined ? ecfg?.bar?.above_target_color : null;
+  const active = !!aboveTargetGeometry && (paint
+    ? target.legacy || needleActive || samplePercent > targetPct : !!legacyColor);
+  const compiled = active && paint ? paintCompiler.compilePaint(paint, { minValue, maxValue, scaleDirection, samplePercent }) : null;
+  const targetStyle = compiled ? getFullScaleBackgroundStyle([compiled.gradient])
+    + (paint.opacity === 100 ? '' : `opacity:${(paint.opacity ?? 100) / 100};`)
+    : legacyColor ? `display:block;inset:0;background:${legacyColor};` : 'display:none;';
   const aboveTargetLayer = {
     id: 'above-target',
     zIndex: 2,
-    visible: !!(ecfg?.bar?.above_target_color && aboveTargetGeometry),
-    paintStyle: ecfg?.bar?.above_target_color
-      ? `display:block;inset:0;background:${ecfg.bar.above_target_color};`
-      : 'display:none;',
-    revealStyle: aboveTargetGeometry
+    visible: active,
+    paintStyle: targetStyle,
+    revealStyle: active
       ? getStaticLayerRevealStyle(aboveTargetGeometry)
       : getStaticLayerRevealStyle({ start: 0, end: 0, hidden: true }),
   };
@@ -327,7 +336,7 @@ export function getFillRenderState(
   }
   const paintLayers = getFillPaintLayers(
     geometry, h, ecfg, color, targetScalePercent, baselineScalePercent,
-    minValue, maxValue, scaleDirection, scalePercent,
+    minValue, maxValue, scaleDirection, scalePercent, needleActive,
   );
   return {
     geometry,
@@ -479,7 +488,7 @@ export function buildBarRenderModel(row, appearance, { height, color = getColor(
       row.numericValue === null
         ? (Number.isFinite(baselinePercent) ? 0 : null)
         : row.percent,
-      height, appearance, color, row.targetPercent, baselinePercent,
+      height, appearance, color, row.targetPaintPercent ?? row.targetPercent, baselinePercent,
       row.min, row.max, row.needle.show,
       appearance.scale?.direction ?? 'normal', appearance.bar?.direction ?? 'normal',
     ),

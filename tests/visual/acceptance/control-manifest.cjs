@@ -27,8 +27,12 @@ for (const marker of ['target', 'peak', 'floor']) {
     kind('target-entity-source', section, 'entity', 'target.at.entity', 'sensor.changed');
     kind('target-attribute', section, 'text', null, 'temperature', { hosts: ['feature'], conditional: true, journey: 'sources' });
     field('target-shape', section, 'select', 'target.shape', ['triangle', 'diamond']);
-    field('target-above-fill-enabled', section, 'checkbox', 'target.when_exceeded.fill_color', null);
-    color('field', 'target-above-fill-color', section, 'target.when_exceeded.fill_color');
+    field('target-above-paint-enabled', section, 'checkbox', 'target.when_above.paint', null);
+    field('target-above-paint-fill_style', section, 'select', 'target.when_above.paint.fill_style', ['gradient', 'bands', 'solid']);
+    field('target-above-paint-solid_fill', section, 'checkbox', 'target.when_above.paint.solid_fill', null);
+    field('target-above-paint-opacity', section, 'number', 'target.when_above.paint.opacity', '37');
+    field('target-above-paint-preset', section, 'select', 'target.when_above.paint.preset', [''], { journey: 'paint-preset' });
+    color('field', 'target-above-paint-color', section, 'target.when_above.paint.color');
   } else {
     field(`${marker}-show`, section, 'checkbox', `${marker}.enabled`, null);
     field(`${marker}-window`, section, 'select', `${marker}.window`, ['15m', '48h', 'today']);
@@ -124,6 +128,7 @@ for (const [section,names,hosts,journey] of [
  ['Baseline',['remove-baseline'],['standalone','feature'],'sources'],
  ['Segments',['add-segment','remove-segment','add-entity-segment','remove-entity-segment'],['standalone','feature'],'palettes'],
  ['Gradient Stops',['add-gradient-stop','remove-gradient-stop','add-entity-gradient-stop','remove-entity-gradient-stop'],['standalone','feature'],'palettes'],
+ ['Target',['toggle-target-group'],['standalone','feature'],'disclosures'],
  ['Bar Appearance',['clear-paint-property','reset-paint'],['standalone','feature'],'paint-source'],
 ]) for (const name of names) add('action',name,section,'button',null,null,{hosts:name.includes('-entity-')?['standalone']:hosts,journey,structural:true,echo:journey!=='disclosures'});
 const inventory = controls.filter(c=>c.hosts.length);

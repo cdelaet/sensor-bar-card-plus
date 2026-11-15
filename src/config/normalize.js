@@ -310,6 +310,31 @@ export function normalizeOptionalEnabled(value) {
   return value === true ? true : value === false ? false : null;
 }
 
+/** Above Paint is independent of the shared Target source and marker. Preserve
+ * disable state and the selected scope's legacy rendering policy together. */
+export function normalizeTargetAboveConfig(config, parent = null) {
+  const inherited = parent?._normalized ? parent.target_above
+    : parent ? normalizeTargetAboveConfig(parent) : { legacy: false };
+  const paint = config?.target?.when_above?.paint;
+  const structuredColor = config?.target?.when_exceeded?.fill_color;
+  const legacyColor = structuredColor ?? config?.above_target_color ?? undefined;
+  if (paint === undefined && legacyColor === undefined) return { ...inherited };
+  // Released falsy colors suppress an inherited legacy overlay as well.
+  if (paint === undefined && !legacyColor) return { paint: null, legacy: true };
+  const normalized = normalizeBaselineDirectionConfig({
+    ...(paint !== undefined ? { paint } : { paint: {} }),
+    ...(legacyColor !== undefined ? { color: legacyColor } : {}),
+  }, inherited);
+  const issues = normalized[BAR_PAINT_DIAGNOSTICS];
+  return {
+    paint: normalized.paint,
+    legacy: paint === undefined,
+    ...(issues ? { [BAR_PAINT_DIAGNOSTICS]: issues.map(issue => ({ ...issue,
+      ...(issue.legacyPath ? { legacyPath: structuredColor != null ? 'target.when_exceeded.fill_color' : 'above_target_color' } : {}),
+    })) } : {}),
+  };
+}
+
 export function normalizeBaselineConfig(entityConfig, cardConfig) {
   const cardBaseline = cardConfig?.baseline;
   const rawBaseline = entityConfig?.baseline;
@@ -1245,6 +1270,7 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
   normalizedEntity.baseline = normalizeBaselineConfig(entityConfig, cardConfig);
   normalizedEntity.formatting = normalizeFormattingConfig(entityConfig, cardConfig);
   normalizedEntity.target_marker = normalizeTargetMarkerConfig(entityConfig, cardConfig);
+  normalizedEntity.target_above = normalizeTargetAboveConfig(entityConfig, cardConfig);
   normalizedEntity.peak_marker = normalizePeakMarkerConfig(entityConfig, cardConfig);
   normalizedEntity.floor_marker = normalizeFloorMarkerConfig(entityConfig, cardConfig);
   normalizeLegacyMarkerFields(normalizedEntity);
@@ -1349,6 +1375,7 @@ export function normalizeCardConfig(rawConfig) {
   normalizedCard.baseline = normalizeBaselineConfig(baseConfig, null);
   normalizedCard.formatting = normalizeFormattingConfig(baseConfig, null);
   normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);
+  normalizedCard.target_above = normalizeTargetAboveConfig(baseConfig);
   normalizedCard.peak_marker = normalizePeakMarkerConfig(baseConfig, null);
   normalizedCard.floor_marker = normalizeFloorMarkerConfig(baseConfig, null);
   normalizeLegacyMarkerFields(normalizedCard);

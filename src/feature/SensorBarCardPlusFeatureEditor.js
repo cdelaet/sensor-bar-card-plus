@@ -21,7 +21,7 @@ import { getFeatureScaleSource, patchFeatureScaleSource, getFeatureBaselineSourc
 import { SegmentsSection } from '../editor/sections/segments.js';
 import { GradientStopsSection } from '../editor/sections/gradient-stops.js';
 import { createFeaturePaletteArray } from './feature-editor-palettes.js';
-import { BAR_PAINT, BASELINE_PAINTS } from '../view-model/paint-destinations.js';
+import { BAR_PAINT, BASELINE_PAINTS, TARGET_ABOVE_PAINT } from '../view-model/paint-destinations.js';
 import { handlePaintAction, handlePaintPresetControl, handlePaintPropertyControl, paintSourceSignature } from '../editor/shared/paint-destination.js';
 
 import { NeedleSection } from '../editor/sections/needle.js';
@@ -88,6 +88,12 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         gradientStops: new GradientStopsSection(context, ui, createFeaturePaletteArray(context, 'gradient_stops', destination)),
       };
     }
+    const targetUi = { ...paletteUi, root: () => this.shadowRoot?.querySelector('#target-above-paint-editor'),
+      focus: selector => { this._pendingPaletteFocus = `#target-above-paint-editor ${selector}`; } };
+    this._targetPaintSections = {
+      segments: new SegmentsSection(context, targetUi, createFeaturePaletteArray(context, 'segments', TARGET_ABOVE_PAINT)),
+      gradientStops: new GradientStopsSection(context, targetUi, createFeaturePaletteArray(context, 'gradient_stops', TARGET_ABOVE_PAINT)),
+    };
     for (const type of ['click', 'keydown']) this.shadowRoot.addEventListener(type, event => {
       if (type === 'click') {
         const target = event.target?.closest?.('[data-action]') ?? event.target;
@@ -107,7 +113,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         }
       }
       this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event)
-        || this._handleBaselinePaletteEvent(event);
+        || this._handleBaselinePaletteEvent(event) || this._handleTargetPaletteEvent(event);
     });
     const handleField = event => {
       if (event._sbcpEntityPickerHandled || event.target?.tagName === 'HA-ENTITY-PICKER') return;
@@ -141,9 +147,9 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       return;
     }
     if (serializeConfig(config) !== serializeConfig(this._config)) {
-      for (const destination of [BAR_PAINT, ...BASELINE_PAINTS]) {
+      for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT]) {
         const sections = destination === BAR_PAINT ? { segments: this._segmentsSection, gradientStops: this._gradientStopsSection }
-          : this._baselinePaintSections[destination.id.replace('baseline-', '')];
+          : destination === TARGET_ABOVE_PAINT ? this._targetPaintSections : this._baselinePaintSections[destination.id.replace('baseline-', '')];
         const changed = paintSourceSignature(config, destination) !== paintSourceSignature(this._config, destination);
         for (const section of [sections.segments, sections.gradientStops]) {
           if (changed) section.clearScopeState(root); else section.prepareExternalSync(root);
@@ -153,7 +159,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       this._config = cloneDeep(config);
       this._cssColorDrafts.clear();
       this._numericDrafts.reset();
-      this._targetSection.reset();
       this._referenceMarkersSection.reset();
       this._chooseEntity = false;
       this._configReplaced = true;
@@ -235,7 +240,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       configurable: true,
       value: (scope, destination = BAR_PAINT, property) => {
         const sections = destination === BAR_PAINT ? { segments: this._segmentsSection, gradientStops: this._gradientStopsSection }
-          : this._baselinePaintSections[destination.id.replace('baseline-', '')];
+          : destination === TARGET_ABOVE_PAINT ? this._targetPaintSections : this._baselinePaintSections[destination.id.replace('baseline-', '')];
         if (!property || property === 'segments') sections?.segments.clearScopeState(scope);
         if (!property || property === 'gradient_stops') sections?.gradientStops.clearScopeState(scope);
       },
@@ -309,7 +314,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     }
     if (this._referenceMarkersSection.handleField({ target, kind, value })) return;
     if (this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event)
-      || this._handleBaselinePaletteEvent(event)) {
+      || this._handleBaselinePaletteEvent(event) || this._handleTargetPaletteEvent(event)) {
       if (event.type !== 'input') this._requestRender();
       return;
     }
@@ -361,6 +366,8 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
 
   _syncDisclosures() {
     const summaries = {
+      'target-above-segments': this._targetPaintSections.segments._getSegmentsSummary(root),
+      'target-above-gradient-stops': this._targetPaintSections.gradientStops._getGradientStopsSummary(root),
       'marker-target': this._targetSection._getCardTargetMarkerSummary(),
       'marker-peak': this._extremaSection._getMarkerResetSummary('peak'),
       'marker-floor': this._extremaSection._getMarkerResetSummary('floor'),
@@ -417,7 +424,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const signature = JSON.stringify([
       !!(this._context.entity_id || this._explicitEntity), this._showEntityPicker,
       !!getFeatureScaleSource(this._config, 'min').entity, !!getFeatureScaleSource(this._config, 'max').entity,
-      !!getFeatureBaselineSource(this._config).entity, !!getFeatureTargetSource(this._config).entity,
+      !!getFeatureBaselineSource(this._config).entity,
       !!customElements.get('ha-entity-picker'), !!customElements.get('ha-entity-attribute-picker'),
     ]);
     // Keep active controls mounted through their native input/change sequence.
@@ -461,7 +468,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         ${renderScaleSection(context, root)}
         ${renderMarkersSection({
           renderGroup: options => this._renderCardGroup(options),
-          target: { summary: this._targetSection._getCardTargetMarkerSummary(), content: this._targetSection.render(root) },
+          target: { summary: this._targetSection._getCardTargetMarkerSummary(), content: this._targetSection.render(root, this._targetRenderOptions(root)) },
           peak: { summary: this._extremaSection._getMarkerResetSummary('peak'), content: this._extremaSection.render(root, 'peak') },
           floor: { summary: this._extremaSection._getMarkerResetSummary('floor'), content: this._extremaSection.render(root, 'floor') },
           references: { summary: this._referenceMarkersSection._getGenericMarkersSummary(root), content: this._referenceMarkersSection.render(root) },
@@ -527,6 +534,10 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       this._baselinePaintSections[direction].segments.syncRows(root);
       this._baselinePaintSections[direction].gradientStops.syncRows(root);
     }
+    this._targetSection.syncControls(this.shadowRoot, root, { ...this._targetRenderOptions(root),
+      numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts, replaced: this._configReplaced });
+    this._targetPaintSections.segments.syncRows(root);
+    this._targetPaintSections.gradientStops.syncRows(root);
     const segmentsRebuilt = this._segmentsSection.syncRows(root);
     const gradientStopsRebuilt = this._gradientStopsSection.syncRows(root);
     const paletteRoot = this._segmentsSection._getPaletteRoot(root);
@@ -544,15 +555,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       'bar-needle-color': getColorPickerValue(this._needleSection._getScopedNeedleConfig(root).color, '#ffffff'),
       'bar-needle-color-text-fallback': this._needleSection._getScopedNeedleConfig(root).color,
       'baseline-value': formatScaleValueInput(getFeatureBaselineSource(this._config)),
-      'target-value': formatScaleValueInput(getFeatureTargetSource(this._config)),
-      'target-shape': this._targetSection._getEffectiveTargetShapeValue(root),
-      'target-direction': this._targetSection._getEffectiveMarkerDirection(root, 'target'),
-      'target-color': getColorPickerValue(this._targetSection._getTargetColorValue(root), '#888'),
-      'target-color-text-fallback': this._targetSection._getTargetColorValue(root),
-      'target-above-fill-color': getColorPickerValue(this._targetSection._getTargetAboveFillColorValue(root), '#000000'),
-      'target-above-fill-color-text-fallback': this._targetSection._getTargetAboveFillColorValue(root),
-      'target-label-text': this._targetSection._getBuiltinMarkerLabelOptions(root, 'target').text,
-      'target-label-precision': this._targetSection._getBuiltinMarkerLabelOptions(root, 'target').precision,
       'formatting-unit': getFormattingValue(context, root, 'unit'),
       'formatting-decimal': getFormattingValue(context, root, 'decimal'),
     };
@@ -581,8 +583,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       if (control && (control !== this.shadowRoot.activeElement || this._configReplaced)) control.value = String(value);
       if (field === 'bar-color-text-fallback') control?.setAttribute('aria-label', 'Bar color (CSS value)');
     }
-    for (const [id, checked] of [['target-show', this._targetSection._getTargetShow(root)],
-      ['baseline-show', this._baselineSection._getBaselineShow(root)]]) {
+    for (const [id, checked] of [['baseline-show', this._baselineSection._getBaselineShow(root)]]) {
       const control = this.shadowRoot.querySelector(`#${id}`);
       if (control) control.checked = checked;
     }
@@ -600,12 +601,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       }
     }
     this._referenceMarkersSection.syncControls(this._hass, this._configReplaced);
-    const targetLabel = this._targetSection._getBuiltinMarkerLabelOptions(root, 'target');
-    for (const [id, checked] of [['target-label-show', targetLabel.show], ['target-label-show-value', targetLabel.showValue],
-      ['target-label-show-unit', targetLabel.showUnit], ['target-above-fill-enabled', this._targetSection._isTargetAboveFillEnabled(root)]]) {
-      const control = this.shadowRoot.querySelector(`#${id}`);
-      if (control) control.checked = checked;
-    }
     const solid = paletteRoot?.querySelector('#bar-solid-fill');
     if (solid) solid.checked = !!paintState.paint.solid_fill;
     const animated = this.shadowRoot.querySelector('#bar-animated');
@@ -618,7 +613,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       ['feature-entity-source', this._explicitEntity, 'Entity override', 'feature-entity'],
       ['scale-min-entity-source', getFeatureScaleSource(this._config, 'min').entity, 'Min entity', 'feature-scale-min-entity'],
       ['baseline-entity-source', getFeatureBaselineSource(this._config).entity, 'Baseline entity', 'feature-baseline-entity'],
-      ['target-entity-source', getFeatureTargetSource(this._config).entity, 'Target entity', 'feature-target-entity'],
       ['scale-max-entity-source', getFeatureScaleSource(this._config, 'max').entity, 'Max entity', 'feature-scale-max-entity'],
     ]) {
       for (const tag of ['input', 'ha-entity-picker']) {
@@ -642,7 +636,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       if (kind === 'scale-min-attribute') return { entity: getFeatureScaleSource(this._config, 'min').entity, attribute: getFeatureScaleSource(this._config, 'min').attribute, label: 'Min attribute' };
       if (kind === 'scale-max-attribute') return { entity: getFeatureScaleSource(this._config, 'max').entity, attribute: getFeatureScaleSource(this._config, 'max').attribute, label: 'Max attribute' };
       if (kind === 'baseline-attribute') return { entity: getFeatureBaselineSource(this._config).entity, attribute: getFeatureBaselineSource(this._config).attribute, label: 'Baseline attribute' };
-      if (kind === 'target-attribute') return { entity: getFeatureTargetSource(this._config).entity, attribute: getFeatureTargetSource(this._config).attribute, label: 'Target attribute' };
       return null;
     };
     for (const control of this.shadowRoot.querySelectorAll('[data-kind$="-attribute"]')) {
@@ -673,6 +666,23 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       const inputLabel = this.shadowRoot.querySelector(`#${control.id.replace(/-text-fallback$/, '')}`)?.labels?.[0]?.textContent;
       if (inputLabel) control.setAttribute('aria-label', `${inputLabel} (CSS value)`);
     }
+  }
+
+  _targetRenderOptions(scope) {
+    return { root: this.shadowRoot, registry: this._paintPresetRegistry, entityInputId: 'feature-target-entity',
+      paletteValues: { segments: this._targetPaintSections.segments._getScopedSegmentsValue(scope),
+        gradient_stops: this._targetPaintSections.gradientStops._getScopedGradientStopsValue(scope) },
+      paintChildren: paintScope => this._renderTargetPaintPalette(paintScope) };
+  }
+
+  _renderTargetPaintPalette(scope) {
+    const renderGroup = options => this._renderCardGroup({ ...options, group: `target-above-${options.group}` });
+    return { segments: this._targetPaintSections.segments.render(scope, renderGroup, { section: false }),
+      gradient_stops: this._targetPaintSections.gradientStops.render(scope, renderGroup, { section: false }) };
+  }
+
+  _handleTargetPaletteEvent(event, mode = event.type) {
+    return this._targetPaintSections.segments.handle(event, mode) || this._targetPaintSections.gradientStops.handle(event, mode);
   }
 
   _renderBaselinePaintPalette(scope, direction) {

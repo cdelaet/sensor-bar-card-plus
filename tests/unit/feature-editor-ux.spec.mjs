@@ -10,7 +10,7 @@ for(const source of ['src','dist'])it(`canonical standalone structure and disclo
  expect(html.indexOf('id="card-group-needle"')).toBeGreaterThan(html.indexOf('id="card-group-baseline"'));
  expect(html.indexOf('id="card-group-segments"')).toBeGreaterThan(html.indexOf('id="card-paint-editor"'));
  expect(html.indexOf('id="card-group-gradient-stops"')).toBeGreaterThan(html.indexOf('id="card-group-segments"'));
- const cardGroups=[...html.matchAll(/id="card-group-([^"]+)"\s+class="override-group-toggle"/g)].map(m=>m[1]);
+ const cardGroups=[...html.matchAll(/id="card-group-([^"]+)"\s+class="override-group-toggle"/g)].map(m=>m[1]).filter(group=>!group.startsWith('entity-')&&!group.startsWith('target-'));
  expect(cardGroups).toEqual(['segments','gradient-stops','baseline','needle','marker-target','marker-peak','marker-floor','generic-markers']);
  const toggle=editor.shadowRoot.querySelector('#card-group-marker-target');
  const wrapper=toggle.closest('.override-group'),body=wrapper.querySelector('.override-group-body');
@@ -30,7 +30,7 @@ for(const source of ['src','dist'])it(`Feature keeps its structure and shared se
  const standalone=new classes.editor();standalone.setConfig({...config,entities:['sensor.a']});
  const editor=new classes.featureEditor(),events=[];editor.dispatchEvent=e=>{events.push(e.detail.config);editor.setConfig(e.detail.config);return true;};editor.setConfig(config);editor.context={entity_id:'sensor.parent'};await editor.updateComplete;
  const headings=html=>[...html.matchAll(/<h3>([^<]+)<\/h3>/g)].map(m=>m[1]);expect(headings(editor.shadowRoot.innerHTML)).toEqual(['Entities','Scale','Markers','Bar Appearance','Formatting']);
- const groups=html=>[...html.matchAll(/id="card-group-([^"]+)"\s+class="override-group-toggle"/g)].map(m=>m[1]);
+ const groups=html=>[...html.matchAll(/id="card-group-([^"]+)"\s+class="override-group-toggle"/g)].map(m=>m[1]).filter(group=>!group.startsWith('entity-')&&!group.startsWith('target-'));
  expect(groups(editor.shadowRoot.innerHTML)).toEqual(['marker-target','marker-peak','marker-floor','generic-markers','segments','gradient-stops','baseline']);
  expect(groups(standalone.shadowRoot.innerHTML).filter(group=>group!=='needle').sort()).toEqual(groups(editor.shadowRoot.innerHTML).sort());
  for(const [group,title,summary] of [
