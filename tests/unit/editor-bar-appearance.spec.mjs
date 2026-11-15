@@ -270,6 +270,53 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     expect(cardHtml).toContain('data-action="reset-paint" disabled>Reset to default paint settings</button>');
     expect(entityHtml).toContain('data-action="reset-paint" data-index="0" disabled>Reset to Card paint settings</button>');
   });
+
+  it('renders Animated beneath Bar Direction for Card and Entity and preserves independent overrides', () => {
+    const defaults = setup(source, { entities: [{ entity: 'sensor.power' }] });
+    expect(defaults.editor.shadowRoot.querySelector('#bar-animated').checked).toBe(true);
+    expect(defaults.editor.shadowRoot.querySelector('#entity-0-bar-animated').checked).toBe(true);
+    expect(defaults.events).toHaveLength(0);
+
+    const { editor, events } = setup(source, { bar: { animated: false }, entities: [{ entity: 'sensor.power' }] });
+    const cardControl = editor.shadowRoot.querySelector('#bar-animated');
+    const entityControl = editor.shadowRoot.querySelector('#entity-0-bar-animated');
+    expect(cardControl).toBeTruthy();
+    expect(entityControl).toBeTruthy();
+    expect(cardControl.checked).toBe(false);
+    expect(entityControl.checked).toBe(false);
+    const cardHtml = renderBarAppearanceSection(editor._createSectionContext(), root, () => '', { animation: true });
+    const entityHtml = renderBarAppearanceSection(editor._createSectionContext(), row, () => '', { animation: true });
+    expect(cardHtml.indexOf('Bar Direction')).toBeLessThan(cardHtml.indexOf('for="bar-animated"'));
+    expect(cardHtml.indexOf('for="bar-animated"')).toBeLessThan(cardHtml.indexOf('paint-editor'));
+    expect(entityHtml.indexOf('Bar Direction')).toBeLessThan(entityHtml.indexOf('for="entity-0-bar-animated"'));
+    expect(entityHtml.indexOf('for="entity-0-bar-animated"')).toBeLessThan(entityHtml.indexOf('paint-editor'));
+
+    cardControl.checked = true;
+    editor._handleFieldEvent({ target: cardControl });
+    expect(editor._draftConfig.bar).toBeUndefined();
+    expect(editor.shadowRoot.querySelector('#bar-animated')).toBe(cardControl);
+    expect(cardControl.checked).toBe(true);
+    expect(editor.shadowRoot.querySelector('#entity-0-bar-animated').checked).toBe(true);
+
+    const entity = editor.shadowRoot.querySelector('#entity-0-bar-animated');
+    entity.checked = false;
+    editor._handleFieldEvent({ target: entity });
+    expect(editor._draftConfig.entities[0].bar.animated).toBe(false);
+    expect(editor.shadowRoot.querySelector('#entity-0-bar-animated')).toBe(entity);
+    expect(entity.checked).toBe(false);
+    expect(events).toHaveLength(2);
+  });
+
+  it('counts legacy and canonical animation values as Entity Bar overrides and clears both on inheritance reset', () => {
+    for (const animatedConfig of [{ animated: false }, { bar: { animated: false } }]) {
+      const { editor } = setup(source, { entities: [{ entity: 'sensor.power', ...animatedConfig }] });
+      expect(hasBarAppearanceOverride(editor._createSectionContext(), row)).toBe(true);
+      clearBarAppearanceOverride(editor._createSectionContext(), row);
+      expect(editor._draftConfig.entities[0].animated).toBeUndefined();
+      expect(editor._draftConfig.entities[0].bar?.animated).toBeUndefined();
+      expect(hasBarAppearanceOverride(editor._createSectionContext(), row)).toBe(false);
+    }
+  });
 });
 
 describe('Bar Appearance with a root-only host context', () => {

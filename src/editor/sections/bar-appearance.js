@@ -97,7 +97,7 @@ export function clearBarAppearanceOverride(context, scope) {
     const nextTarget = removePathsFromTarget(usesGroupedBarPaint(context, scope)
       ? clearBarPaintProperties(target, ['preset', 'color', 'fill_style', 'solid_fill', 'opacity'])
       : clearBarPaintProperties(target, ['preset', 'opacity']), [
-      ['bar', 'fill_style'], ['bar', 'color'], ['bar', 'solid_fill'], ['bar', 'direction'], ['color_mode'], ['color'],
+      ['bar', 'fill_style'], ['bar', 'color'], ['bar', 'solid_fill'], ['bar', 'direction'], ['bar', 'animated'], ['animated'], ['color_mode'], ['color'],
     ]);
     return pruneEmptyObjectsInTarget(nextTarget, ['bar']);
   }, { rerender: true, ...(usesGroupedBarPaint(context, scope) ? { preserveRawConfig: true } : {}) });
@@ -120,8 +120,9 @@ export function hasBarAppearanceOverride(context, scope) {
     || Object.prototype.hasOwnProperty.call(bar, 'color')
     || Object.prototype.hasOwnProperty.call(bar, 'solid_fill')
     || Object.prototype.hasOwnProperty.call(bar, 'direction')
+    || Object.prototype.hasOwnProperty.call(bar, 'animated')
   )) return true;
-  return context.read(scope, ['color_mode']) !== undefined || context.read(scope, ['color']) !== undefined;
+  return context.read(scope, ['animated']) !== undefined || context.read(scope, ['color_mode']) !== undefined || context.read(scope, ['color']) !== undefined;
 }
 
 export function getBarAppearanceSummary(context, scope) {
@@ -145,6 +146,7 @@ export function handleBarAppearanceField(context, { field, kind, index, value },
     return true;
   }
   if (options.animation && field === 'bar-animated') { setBarAnimated(context, { type: 'card' }, value); return true; }
+  if (options.animation && kind === 'entity-bar-animated') { setBarAnimated(context, { type: 'entity', index: Number(index) }, value); return true; }
   if (field === 'bar-paint-preset') return setBarPaintPreset(context, { type: 'card' }, value, options);
   const rootSetters = { 'bar-fill-style': setBarFillStyle, 'bar-color': setBarColor, 'bar-solid-fill': setBarSolidFill, 'bar-opacity': setBarOpacity };
   if (Object.prototype.hasOwnProperty.call(rootSetters, field)) {
@@ -206,22 +208,21 @@ export function renderBarAppearanceSection(context, scope, renderChildren = () =
   const direction = renderDirectionControl(context, scope, {
     path: ['bar', 'direction'], ...field('direction'), label: 'Bar Direction',
   });
+  const animation = options.animation ? `<div class="field-row"><div class="toggle">
+    <input id="${entity ? `entity-${index}-bar-animated` : 'bar-animated'}" type="checkbox" ${entity ? `data-kind="entity-bar-animated" data-index="${index}"` : 'data-field="bar-animated"'}${getBarAnimatedValue(context, scope) ? ' checked' : ''}>
+    <label for="${entity ? `entity-${index}-bar-animated` : 'bar-animated'}">Animated</label>
+  </div></div>` : '';
   if (entity) return `
     <div class="field-row"><div class="toggle">
       <input id="entity-${index}-bar-inherit" type="checkbox" data-kind="entity-bar-inherit" data-index="${index}"${!hasBarAppearanceOverride(context, scope) ? ' checked' : ''}>
       <label for="entity-${index}-bar-inherit">Inherit card settings</label>
     </div></div>
-    ${direction}${paintEditor}`;
+    ${direction}${animation}${paintEditor}`;
   return `<div class="section">
     <div class="section-head"><h3>${escapeAttribute(options.heading ?? 'Bar Appearance')}</h3>
       <div class="section-note">Configure bar direction, paint, Baseline and Needle.</div>
     </div>
-    <div class="inline-row editor-grid">${direction}
-      ${options.animation ? `<div class="field-row"><div class="toggle">
-        <input id="bar-animated" type="checkbox" data-field="bar-animated"${getBarAnimatedValue(context, scope) ? ' checked' : ''}>
-        <label for="bar-animated">Animated</label>
-      </div></div>` : ''}
-    </div>
+    ${direction}${animation}
     ${paintEditor}${renderChildren()}
   </div>`;
 }

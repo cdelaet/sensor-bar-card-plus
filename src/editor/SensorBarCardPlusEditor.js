@@ -30,7 +30,7 @@ import {
   getFillStyleFromColorMode, getFillStyleValue, getEffectiveFillStyleValue,
   getBarColorValue, getEffectiveBarColorValue, setBarFillStyle, setBarColor,
   getBarSolidFillValue, getEffectiveBarSolidFillValue, setBarSolidFill,
-  clearBarAppearanceOverride, hasBarAppearanceOverride, getBarAppearanceSummary,
+  clearBarAppearanceOverride, hasBarAppearanceOverride, getBarAppearanceSummary, getBarAnimatedValue,
   renderBarAppearanceSection, handleBarAppearanceField, getBarPaintEditorState,
   syncBarPaintEditor, clearBarPaintPropertyOverride,
 } from './sections/bar-appearance.js';
@@ -652,6 +652,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _refreshCardDerivedUi() {
+    this._setElementChecked('bar-animated', getBarAnimatedValue(this._createSectionContext(), { type: 'card' }));
     this._setElementText('card-group-marker-target-summary', this._getCardTargetMarkerSummary());
     this._setElementText('card-group-needle-summary', this._getNeedleSummary({ type: 'card' }));
     this._setElementChecked('bar-needle-mode', this._needleSection._getScopedNeedleConfig({ type: 'card' }).mode === 'enabled');
@@ -677,6 +678,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementChecked(`entity-${index}-floor-inherit`, !this._hasExtremumOverride(scope, 'floor'));
       this._setElementChecked(`entity-${index}-markers-inherit`, !this._hasMarkersOverride(scope));
       this._setElementChecked(`entity-${index}-bar-inherit`, !this._hasEntityBarAppearanceOverride(scope));
+      this._setElementChecked(`entity-${index}-bar-animated`, getBarAnimatedValue(this._createSectionContext(), scope));
       this._setElementChecked(`entity-${index}-segments-inherit`, !this._hasSegmentsOverride(scope));
       this._setElementChecked(`entity-${index}-gradient-stops-inherit`, !this._hasGradientStopsOverride(scope));
       this._setElementChecked(`entity-${index}-layout-inherit`, !this._hasLayoutOverride(scope));
@@ -3495,7 +3497,7 @@ ${this._renderPresetMasterControls()}
 	                          content: this._gradientStopsSection.render(scope),
 	                        });
 	                        const barGroup = `<div id="entity-${index}-bar-appearance" class="entity-fields" role="group" aria-label="Bar Appearance">
-                          ${renderBarAppearanceSection(this._createSectionContext(), scope, () => '', { root: this.shadowRoot,
+                          ${renderBarAppearanceSection(this._createSectionContext(), scope, () => '', { root: this.shadowRoot, animation: true,
                             paletteValues: this._paintPaletteValues(scope), paintPresetRegistry: this._paintPresetRegistry,
                             paintChildren: () => ({ segments: segmentsGroup, gradient_stops: gradientStopsGroup }),
                           })}
@@ -3590,7 +3592,7 @@ ${this._renderScaleSection({ type: 'card' })}
 
 ${renderBarAppearanceSection(this._createSectionContext(), { type: 'card' }, () => `${this._baselineSection.render({ type: 'card' }, options => this._renderCardGroup(options), { root: this.shadowRoot,
   registry: this._paintPresetRegistry, paletteValues: (paintScope, direction) => this._baselinePaintPaletteValues(paintScope, direction),
-  paintChildren: (paintScope, direction) => this._renderBaselinePaintPalette(paintScope, direction) })}${this._renderCardGroup({ group: 'needle', title: 'Needle', summary: this._getNeedleSummary({ type: 'card' }), content: this._needleSection.render({ type: 'card' }) })}`, { heading: 'Bar', root: this.shadowRoot, paintPresetRegistry: this._paintPresetRegistry, paletteValues: this._paintPaletteValues({ type: 'card' }), paintChildren: () => ({ segments: this._segmentsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false }), gradient_stops: this._gradientStopsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false }) }) })}
+  paintChildren: (paintScope, direction) => this._renderBaselinePaintPalette(paintScope, direction) })}${this._renderCardGroup({ group: 'needle', title: 'Needle', summary: this._getNeedleSummary({ type: 'card' }), content: this._needleSection.render({ type: 'card' }) })}`, { heading: 'Bar', root: this.shadowRoot, animation: true, paintPresetRegistry: this._paintPresetRegistry, paletteValues: this._paintPaletteValues({ type: 'card' }), paintChildren: () => ({ segments: this._segmentsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false }), gradient_stops: this._gradientStopsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false }) }) })}
 
 ${renderMarkersSection({
   renderGroup: options => this._renderCardGroup(options),
@@ -4326,7 +4328,7 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (handleScaleField(this._createSectionContext(), { field, value })) return;
     if (handlePaintPresetControl(this._createSectionContext(), target, value)) return;
     if (handlePaintPropertyControl(this._createSectionContext(), target, value, { cssText: false })) return;
-    if (handleBarAppearanceField(this._createSectionContext(), { field, value })) return;
+    if (handleBarAppearanceField(this._createSectionContext(), { field, value }, { animation: true })) return;
     if (this._needleSection.handleField({ field, kind, index: target.dataset?.index, value })) return;
     if (this._baselineSection.handleField({ field, kind, index: target.dataset?.index, value })) {
       if (kind?.endsWith('-entity-source')) this._syncEntityAttributeSource(target);
@@ -4428,9 +4430,9 @@ ${this._renderFormattingSection({ type: 'card' })}
 
     if (handleFormattingField(this._createSectionContext(), { kind, index: target?.dataset?.index, value })) return;
 
-    if (kind === 'entity-bar-inherit' && handleBarAppearanceField(this._createSectionContext(), { kind, index: target.dataset.index, value })) return;
+    if (kind === 'entity-bar-inherit' && handleBarAppearanceField(this._createSectionContext(), { kind, index: target.dataset.index, value }, { animation: true })) return;
 
-    if (handleBarAppearanceField(this._createSectionContext(), { kind, index: target.dataset.index, value })) return;
+    if (handleBarAppearanceField(this._createSectionContext(), { kind, index: target.dataset.index, value }, { animation: true })) return;
 
   }
 }
