@@ -40,9 +40,8 @@ export function renderMarker(marker) {
 
   if (marker.type === 'target' || marker.type === 'floor') {
     const markerClass = `${marker.type}-marker`;
-    const targetId = marker.type === 'target' && marker.id && marker.id !== 'target' ? ` data-target-id="${escapeHtml(marker.id)}"` : '';
     return `
-    <div class="${markerClass}"${targetId} data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}"${historyAttributes} style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+    <div class="${markerClass}" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}"${historyAttributes} style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
       <div class="${marker.type}-inset"></div>
       <div class="${marker.type}-outset"></div>
       <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
@@ -203,11 +202,7 @@ export function patchBar(root, model, { revealDuration = 600 } = {}) {
   }
   const markers = model.markers;
   const getMarker = (id) => markers.find(marker => marker.id === id || marker.type === id) ?? null;
-  (root.querySelectorAll?.('.target-marker[data-target-id]') ?? []).forEach(markerEl => {
-    patchMarker(markerEl, getMarker(markerEl.dataset.targetId));
-  });
-  const legacyTarget = root.querySelector('.target-marker:not([data-target-id])') ?? root.querySelector('.target-marker');
-  if (legacyTarget) patchMarker(legacyTarget, getMarker('target'));
+  patchMarker(root.querySelector('.target-marker'), getMarker('target'));
   patchMarker(root.querySelector('.peak-marker'), getMarker('peak'));
   patchMarker(root.querySelector('.floor-marker'), getMarker('floor'));
   (root.querySelectorAll?.('.generic-marker[data-marker-id]') ?? []).forEach(markerEl => {
@@ -225,7 +220,7 @@ export function renderBar(model, { insideContent = '' } = {}) {
     : '';
   const getMarker = (type) => model.markers.find(marker => marker.id === type || marker.type === type) ?? null;
   const peakMarker = renderMarker(getMarker('peak'));
-  const targetMarkers = model.markers.filter(marker => marker.type === 'target').map(renderMarker).join('');
+  const targetMarker = renderMarker(getMarker('target'));
   const floorMarker = renderMarker(getMarker('floor'));
   const genericMarkers = model.markers.filter(marker => marker.type === 'generic').map(renderMarker).join('');
   const needleMarker = renderNeedle(needleState);
@@ -238,7 +233,7 @@ ${paintLayers}
                 ${baselineIndicator}
                 ${insideContent}
                 ${peakMarker}
-                ${targetMarkers}
+                ${targetMarker}
                 ${floorMarker}
                 ${genericMarkers}
                 ${needleMarker}

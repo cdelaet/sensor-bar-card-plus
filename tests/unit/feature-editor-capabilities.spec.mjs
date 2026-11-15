@@ -20,7 +20,7 @@ async function edit(editor,id,value,eventType='input') {
  editor._handleField({type:eventType,target:control});await editor.updateComplete;return control;
 }
 async function segment(editor,field,index,value,eventType='change') {
- const palette=editor._segmentsSection._getPaletteRoot(root),control=palette.querySelectorAll(`input[data-kind="segment-${field}"]`)[index];expect(control).toBeTruthy();control.value=value;
+ const control=editor.shadowRoot.querySelectorAll(`input[data-kind="segment-${field}"]`)[index];expect(control).toBeTruthy();control.value=value;
  editor._handleField({type:eventType,target:control});await editor.updateComplete;return control;
 }
 function expectedAt(config,path,value) {const next=structuredClone(config);let node=next;for(const part of path.slice(0,-1))node=node[part]??={};if(value===undefined)delete node[path.at(-1)];else node[path.at(-1)]=value;return next;}
@@ -110,12 +110,14 @@ for(const source of ['src','dist']) describe(`Feature capability closure (${sour
   editor.setConfig({type,bar:{fill_style:'bands',segments:[{from:80,color:'red'},{from:0,color:'blue'}]}});await editor.updateComplete;
   expect(editor._segmentsSection._getSegmentRowValidationMessage(root,0)).toBe('From must be below To.');expect(editor._config.bar.segments.map(r=>r.from)).toEqual([80,0]);
  });
- const colors=[['bar-color-text-fallback',['bar','color']],['bar-needle-color-text-fallback',['bar','needle','color']],['baseline-above-paint-color-text-fallback',['baseline','above','paint','color']],['baseline-below-paint-color-text-fallback',['baseline','below','paint','color']],['target-color-text-fallback',['target','color']],['peak-color-text-fallback',['peak','color']],['floor-color-text-fallback',['floor','color']],['card-card-generic-marker-1-color-text-fallback',['markers',0,'color']]];
+ const colors=[['bar-color-text-fallback',['bar','color']],['bar-needle-color-text-fallback',['bar','needle','color']],['baseline-above-paint-color-text-fallback',['baseline','above','paint','color']],['baseline-below-paint-color-text-fallback',['baseline','below','paint','color']],['target-color-text-fallback',['target','color']],['target-above-fill-color-text-fallback',['target','when_exceeded','fill_color']],['peak-color-text-fallback',['peak','color']],['floor-color-text-fallback',['floor','color']],['card-card-generic-marker-1-color-text-fallback',['markers',0,'color']]];
  for(const [id,path] of colors)it(`${id} accepts direct CSS text verbatim, patches one path and retains invalid drafts`,async()=>{
   const config=raw(),{editor,events,calls}=await setup(source,config);
   for(const color of ['#123456','#abc','red','rgb(1, 2, 3)','var(--warning-color)','  rgba(1, 2, 3, .5)  ']){
    await edit(editor,`#${id}`,color);const expected=expectedAt(config,path,color);if(id.startsWith('baseline-'))delete expected.baseline[path[1]].color;expect(editor._config).toEqual(expected);
   }
+  const toggle=id==='target-above-fill-color-text-fallback'?'target-above-fill-enabled':null;
+  if(toggle){const before=structuredClone(editor._config);await edit(editor,`#${toggle}`,false,'change');await edit(editor,`#${toggle}`,true,'change');expect(editor._config).toEqual(before);}
   const saved=structuredClone(editor._config),count=events.length;await edit(editor,`#${id}`,'var(');editor.context={entity_id:'sensor.changed'};editor.setConfig(editor._config);await editor.updateComplete;
   expect(editor._config).toEqual(saved);expect(events).toHaveLength(count);expect(editor.shadowRoot.querySelector(`#${id}`).value).toBe('var(');expect(calls).toContainEqual(['color','var(']);
  });

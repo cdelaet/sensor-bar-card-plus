@@ -239,67 +239,6 @@ for (const source of ['src', 'dist']) {
     expect(featureConfig.bar.paint.segments[0].color).toBe('#333333');
   });
 
-  test(`Target Above and Below palettes stay isolated across Card, Entity and Feature (${source})`, async ({ page, browserName }) => {
-    test.skip(browserName !== 'chromium', 'Native color chooser keyboard controls are Chromium-specific.');
-    const configs = structuredClone(initial);
-    configs.card.target = {
-      at: 50,
-      when_above: { paint: { ...paint(['#aa0000'], 'bands'), segments: [{ from: '0%', to: '100%', color: '#aa0000' }] } },
-      when_below: { paint: { ...paint(['#0000bb'], 'bands'), segments: [{ from: '0%', to: '100%', color: '#0000bb' }] } },
-    };
-    configs.card.entities[0].target = {
-      when_above: { paint: { ...paint(['#aa55aa'], 'bands'), segments: [{ from: '0%', to: '100%', color: '#aa55aa' }] } },
-    };
-    configs.feature.target = {
-      at: 50,
-      when_above: { paint: { ...paint(['#cc5500'], 'bands'), segments: [{ from: '0%', to: '100%', color: '#cc5500' }] } },
-      when_below: { paint: { ...paint(['#0055cc'], 'bands'), segments: [{ from: '0%', to: '100%', color: '#0055cc' }] } },
-    };
-    await mount(page, source, configs);
-    const card = editorFor(page, 'Card');
-    const feature = editorFor(page, 'Feature');
-    const editTarget = async (editor, id, expectedBefore, selected, entity = false) => {
-      if (entity) {
-        const overrides = editor.locator('button[data-action="toggle-entity-overrides"][data-index="0"]');
-        if (await overrides.getAttribute('aria-expanded') === 'false') await overrides.click();
-      }
-      const targetGroup = entity ? editor.locator('#entity-0-group-target')
-        : editor.locator('#card-group-marker-target');
-      if (await targetGroup.getAttribute('aria-expanded') === 'false') await targetGroup.click();
-      const root = editor.locator(`#${id}`);
-      if (!await root.evaluate(node => node.open)) await root.locator(':scope > summary').press('Enter');
-      await expect(root).toHaveJSProperty('open', true);
-      const palette = root.locator('button[data-group$="-segments"]');
-      if (await palette.count() && await palette.getAttribute('aria-expanded') === 'false') await palette.click();
-      const input = root.locator(`input[data-kind="${entity ? 'entity-' : ''}segment-color"]`).first();
-      await expect(input).toBeVisible();
-      await expect(input).toHaveValue(expectedBefore);
-      await root.evaluate(node => { window.__targetPaintRoot = node; window.__targetPaintInputs = [...node.querySelectorAll('input')]; });
-      await nativeRed(page, input, parseInt(selected.slice(1, 3), 16));
-      await expect(input).toHaveValue(selected);
-      expect(await root.evaluate(node => node === window.__targetPaintRoot
-        && window.__targetPaintInputs.every((control, index) => control === node.querySelectorAll('input')[index]))).toBe(true);
-    };
-    await editTarget(card, 'target-above-paint-editor', '#aa0000', '#000000');
-    await expect.poll(() => page.evaluate(() => window.__destinationEvents.card.at(-1)?.config.target.when_above.paint.segments[0].color)).toBe('#000000');
-    let observed = await page.evaluate(() => window.__destinationEvents.card.at(-1).config);
-    expect(observed.target.when_below.paint.segments[0].color).toBe('#0000bb');
-    expect(observed.entities[0].target.when_above.paint.segments[0].color).toBe('#aa55aa');
-    expect(observed.bar.paint.segments[0].color).toBe('#990011');
-
-    await editTarget(card, 'entity-0-target-above-paint-editor', '#aa55aa', '#0055aa', true);
-    await expect.poll(() => page.evaluate(() => window.__destinationEvents.card.at(-1)?.config.entities[0].target.when_above.paint.segments[0].color)).toBe('#0055aa');
-    observed = await page.evaluate(() => window.__destinationEvents.card.at(-1).config);
-    expect(observed.target.when_above.paint.segments[0].color).toBe('#000000');
-    expect(observed.target.when_below.paint.segments[0].color).toBe('#0000bb');
-
-    await editTarget(feature, 'target-below-paint-editor', '#0055cc', '#ff55cc');
-    await expect.poll(() => page.evaluate(() => window.__destinationEvents.feature.at(-1)?.config.target.when_below.paint.segments[0].color)).toBe('#ff55cc');
-    const featureConfig = await page.evaluate(() => window.__destinationEvents.feature.at(-1).config);
-    expect(featureConfig.target.when_above.paint.segments[0].color).toBe('#cc5500');
-    expect(featureConfig.bar.paint.segments[0].color).toBe('#bb4400');
-  });
-
   for (const destination of destinations) for (const palette of ['gradient_stops', 'segments']) {
     test(`${destination} ${palette} track updates during color input without replacing controls (${source})`, async ({ page, browserName }) => {
       const configs = structuredClone(initial);

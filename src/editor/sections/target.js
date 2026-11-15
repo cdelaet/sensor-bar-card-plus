@@ -1,43 +1,13 @@
-import { normalizeTargetMarkerShape, normalizeStructuredResolvableValue } from '../../config/normalize.js';
+import { normalizeTargetMarkerShape } from '../../config/normalize.js';
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue, removePathsFromTarget,
   pruneEmptyObjectsInTarget, normalizeTextValue, normalizeDecimalValue, getEffectiveDisplayValue } from '../shared/editor-config.js';
 import { escapeAttribute, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
 import { renderResolvableSourceControls } from '../shared/resolvable-source-controls.js';
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from '../shared/editor-marker-controls.js';
-import { renderPaintEditor, syncPaintEditor } from '../shared/paint-editor.js';
-import { getDestinationEditorState } from '../shared/paint-destination.js';
-import { TARGET_PAINTS } from '../../view-model/paint-destinations.js';
-import { readResolvableSourceParts, updateResolvableSourceParts, writeResolvableSourceParts } from '../shared/resolvable-source.js';
-
-const destinationFor = side => TARGET_PAINTS.find(item => item.id === `target-${side}`);
-
-function renderTargetPaintEditor(context, scope, side, options = {}) {
-  const state = getDestinationEditorState(context, scope, destinationFor(side), options.paletteValues?.(scope, side), options.registry);
-  const entity = scope?.type === 'entity';
-  const prefix = entity ? `entity-${scope.index}-` : '';
-  const destination = `target-${side}-paint`;
-  const field = property => ({ id: `${prefix}${destination}-${property}`,
-    ...(entity ? { kind: `entity-${destination}-${property}` } : { field: `${destination}-${property}` }), index: scope?.index });
-  const fields = Object.fromEntries(['preset', 'fill_style', 'color', 'solid_fill', 'opacity'].map(property => [property, field(property)]));
-  fields.index = scope?.index;
-  return `<div class="target-paint-destination" data-target-direction="${side}"><div class="field-row"><span class="override-group-title">${side === 'above' ? 'Above' : 'Below'} Target Paint</span></div>
-    ${renderPaintEditor({ ...state, id: `${prefix}${destination}-editor`, root: options.root, fields,
-      activation: field('enabled'), resetLabel: entity ? 'Reset to Card paint' : 'Reset to default paint',
-      cssText: options.cssText, paletteFields: state.enabled ? options.paintChildren?.(scope, side) : null })}</div>`;
-}
 
 export class TargetSection {
   constructor(context, options = {}) { this.options = options; this.context = context; this.reset(); }
   reset() { this._targetAboveFillDrafts = new Map(); }
-
-  syncPaintEditors(root, scope, paletteValues = {}, registry = this.context.paintPresetRegistry, options = {}) {
-    for (const side of ['above', 'below']) {
-      const id = `${scope?.type === 'entity' ? `entity-${scope.index}-` : ''}target-${side}-paint-editor`;
-      syncPaintEditor(root, id, getDestinationEditorState(this.context, scope, destinationFor(side), paletteValues[side], registry), {
-        ...options, paletteFields: options.paintChildren ? () => options.paintChildren(scope, side) : undefined,
-      });
-    }
-  }
 
   _getCardTargetMarkerSummary() {
     const mode = this._getTargetMode({ type: 'card' });
@@ -55,59 +25,12 @@ export class TargetSection {
   }
 
   _handleValueField(control, value, scope) {
-    if (control === 'target-value') { this._setTargetResolvablePart(scope, 'value', value); return true; }
-    const match = String(control ?? '').match(/^target-(above|below)-(value|entity-source|attribute)$/);
-    if (!match) return false;
-    this._setDirectionalTargetSourcePart(scope, match[1], match[2] === 'entity-source' ? 'entity' : match[2] === 'attribute' ? 'attribute' : 'value', value);
+    if (control !== 'target-value') return false;
+    this._setTargetResolvablePart(scope, 'value', value);
     return true;
   }
 
   _getTargetResolvableValue(scope) { return this.context.source(scope, 'target'); }
-
-  _getDirectionalTargetSource(scope, side) {
-    const path = ['target', `when_${side}`, 'at'];
-    const card = { type: 'card' };
-    const candidates = scope?.type === 'entity'
-      ? [this.context.read(scope, path), this.context.read(scope, ['target', 'at']),
-        this.context.read(card, path), this.context.read(card, ['target', 'at'])]
-      : [this.context.read(scope, path), this.context.read(scope, ['target', 'at'])];
-    const source = candidates.find(value => value !== undefined);
-    if (source !== undefined) return normalizeStructuredResolvableValue(source, null, null, { allowPercent: true });
-    return this.context.source(scope, 'target', scope?.type === 'entity');
-  }
-
-  _setDirectionalTargetSourcePart(scope, side, part, rawValue) {
-    const path = ['target', `when_${side}`, 'at'];
-    const raw = this.context.read(scope, path);
-    const current = raw === undefined ? this._getDirectionalTargetSource(scope, side) : raw;
-    const result = updateResolvableSourceParts(readResolvableSourceParts(current), part, rawValue);
-    if (!result.valid) return false;
-    const value = writeResolvableSourceParts(result.parts);
-    return this.context.mutate(scope, target => {
-      let next = cloneDeep(target);
-      const rawTarget = getPathValue(next, ['target']);
-      if (rawTarget !== undefined && rawTarget !== null && !isObject(rawTarget)) next = setPathValue(next, ['target'], { at: rawTarget });
-      if (Object.keys(value).length) next = setPathValue(next, path, value);
-      else next = deletePathValue(next, path);
-      return pruneEmptyObjectsInTarget(next, ['target', `when_${side}`]);
-    }, { rerender: true });
-  }
-
-  _getDirectionalMarker(scope, side) {
-    const path = ['target', `when_${side}`, 'marker'];
-    const local = this.context.read(scope, path);
-    const parent = scope?.type === 'entity' ? this.context.read({ type: 'card' }, path) : undefined;
-    return { ...(parent ?? {}), ...(local ?? {}) };
-  }
-
-  _setDirectionalMarkerField(scope, side, field, value) {
-    const path = ['target', `when_${side}`, 'marker', ...field];
-    return this.context.mutate(scope, target => {
-      let next = value === undefined || value === '' ? deletePathValue(cloneDeep(target), path)
-        : setPathValue(cloneDeep(target), path, value);
-      return pruneEmptyObjectsInTarget(next, ['target', `when_${side}`, 'marker']);
-    }, { rerender: true });
-  }
 
   _getEffectiveTargetResolvableValue(scope) { return this.context.source(scope, 'target', true); }
 
@@ -412,47 +335,6 @@ export class TargetSection {
   _setMarkerDirection(scope, key, value) { return setMarkerDirection(this.context, scope, key, value); }
   _getBuiltinMarkerLabelOptions(scope, key) { return getBuiltinMarkerLabelOptions(this.context, scope, key, this._getEffectiveTargetLabelShowValue(scope)); }
   _renderBuiltinMarkerLabelControls(scope, key, title) { return renderBuiltinMarkerLabelControls(scope, key, title, this._getBuiltinMarkerLabelOptions(scope, key)); }
-
-  _renderDirectionalTargetControls(scope, side) {
-    const entity = scope?.type === 'entity';
-    const index = scope?.index;
-    const prefix = entity ? `entity-${index}-` : '';
-    const stem = `target-${side}`;
-    const source = this._getDirectionalTargetSource(scope, side);
-    const rawMarker = this._getDirectionalMarker(scope, side);
-    const sharedLabels = this._getBuiltinMarkerLabelOptions(scope, 'target');
-    const marker = {
-      enabled: rawMarker.enabled ?? true,
-      color: rawMarker.color ?? (this._getEffectiveTargetColorValue(scope) || '#888'),
-      shape: rawMarker.shape ?? this._getEffectiveTargetShapeValue(scope),
-      direction: rawMarker.direction ?? this._getEffectiveMarkerDirection(scope, 'target'),
-      labelShow: rawMarker.label?.show ?? this._getEffectiveTargetLabelShowValue(scope),
-      labelText: rawMarker.label?.text ?? sharedLabels.text ?? '',
-      labelShowValue: rawMarker.label?.show_value ?? sharedLabels.showValue ?? true,
-      labelShowUnit: rawMarker.label?.show_unit ?? sharedLabels.showUnit ?? true,
-      labelPrecision: rawMarker.label?.precision ?? rawMarker.label?.decimal ?? sharedLabels.precision ?? '',
-    };
-    return `<div class="target-direction-controls" data-target-direction="${side}">
-      <div class="field-row"><strong>${side === 'above' ? 'Above' : 'Below'} threshold</strong></div>
-      ${renderResolvableSourceControls({ source,
-        value: { id: `${prefix}${stem}-value`, ...(entity ? { kind: `entity-${stem}-value`, index } : { kind: `${stem}-value`, index: 'card' }) },
-        entity: entity ? { kind: `entity-${stem}-entity-source`, index } : { kind: `${stem}-entity-source`, index: 'card' },
-        attribute: entity ? { kind: `entity-${stem}-attribute`, index } : { kind: `${stem}-attribute`, index: 'card' },
-        hass: this.context.hass, labels: { entity: `${side === 'above' ? 'Above' : 'Below'} target entity`, attribute: 'Target attribute' },
-        placeholders: { entity: 'inherit selected target source' },
-      })}
-      <div class="field-row"><strong>${side === 'above' ? 'Above' : 'Below'} marker</strong></div>
-      <div class="field-row"><div class="toggle"><input id="${prefix}${stem}-marker-enabled" type="checkbox" ${entity ? `data-kind="entity-${stem}-marker-enabled" data-index="${index}"` : `data-field="${stem}-marker-enabled"`}${marker.enabled ? ' checked' : ''}><label for="${prefix}${stem}-marker-enabled">Show marker</label></div></div>
-      <div class="field-row"><label for="${prefix}${stem}-marker-color">Marker color</label>${renderColorInput({ cssText: this.options.cssText, label: 'Marker color', id: `${prefix}${stem}-marker-color`, ...(entity ? { kind: `entity-${stem}-marker-color`, index } : { field: `${stem}-marker-color` }), value: marker.color, fallbackHex: '#888' })}</div>
-      <div class="field-row"><label for="${prefix}${stem}-marker-shape">Marker shape</label><select id="${prefix}${stem}-marker-shape" ${entity ? `data-kind="entity-${stem}-marker-shape" data-index="${index}"` : `data-field="${stem}-marker-shape"`}><option value="diamond"${marker.shape === 'diamond' ? ' selected' : ''}>diamond</option><option value="triangle"${marker.shape === 'triangle' ? ' selected' : ''}>triangle</option></select></div>
-      <div class="field-row"><label for="${prefix}${stem}-marker-direction">Direction</label><select id="${prefix}${stem}-marker-direction" ${entity ? `data-kind="entity-${stem}-marker-direction" data-index="${index}"` : `data-field="${stem}-marker-direction"`}><option value="inward"${marker.direction === 'inward' ? ' selected' : ''}>Inward</option><option value="outward"${marker.direction === 'outward' ? ' selected' : ''}>Outward</option></select></div>
-      <div class="field-row"><div class="toggle"><input id="${prefix}${stem}-marker-label-show" type="checkbox" ${entity ? `data-kind="entity-${stem}-marker-label-show" data-index="${index}"` : `data-field="${stem}-marker-label-show"`}${marker.labelShow ? ' checked' : ''}><label for="${prefix}${stem}-marker-label-show">Show marker label</label></div></div>
-      <div class="field-row"><label for="${prefix}${stem}-marker-label-text">Marker label</label><input id="${prefix}${stem}-marker-label-text" type="text" ${entity ? `data-kind="entity-${stem}-marker-label-text" data-index="${index}"` : `data-field="${stem}-marker-label-text"`} value="${escapeAttribute(marker.labelText)}"></div>
-      <div class="field-row"><div class="toggle"><input id="${prefix}${stem}-marker-label-show-value" type="checkbox" ${entity ? `data-kind="entity-${stem}-marker-label-show-value" data-index="${index}"` : `data-field="${stem}-marker-label-show-value"`}${marker.labelShowValue ? ' checked' : ''}><label for="${prefix}${stem}-marker-label-show-value">Show value</label></div></div>
-      <div class="field-row"><div class="toggle"><input id="${prefix}${stem}-marker-label-show-unit" type="checkbox" ${entity ? `data-kind="entity-${stem}-marker-label-show-unit" data-index="${index}"` : `data-field="${stem}-marker-label-show-unit"`}${marker.labelShowUnit ? ' checked' : ''}><label for="${prefix}${stem}-marker-label-show-unit">Show unit</label></div></div>
-      <div class="field-row"><label for="${prefix}${stem}-marker-label-precision">Label precision</label><input id="${prefix}${stem}-marker-label-precision" type="number" min="0" step="1" ${entity ? `data-kind="entity-${stem}-marker-label-precision" data-index="${index}"` : `data-field="${stem}-marker-label-precision"`} value="${escapeAttribute(marker.labelPrecision)}"></div>
-    </div>`;
-  }
   _setBuiltinMarkerLabelField(scope, key, field, value) { return setBuiltinMarkerLabelField(this.context, scope, key, field, value); }
 
   handleField({ field, kind, index, value }) {
@@ -479,17 +361,6 @@ export class TargetSection {
     }
     if (control === 'target-above-fill-enabled') { this._setTargetAboveFillEnabled(scope, value); return true; }
     if (control === 'target-above-fill-color') { this._setTargetAboveFillColor(scope, value); return true; }
-    const directionalMarker = String(control ?? '').match(/^target-(above|below)-marker-(enabled|color|shape|direction|label-show|label-text|label-show-value|label-show-unit|label-precision)$/);
-    if (directionalMarker) {
-      const [, side, property] = directionalMarker;
-      const path = property.startsWith('label-') ? ['label', ({ 'label-show': 'show', 'label-text': 'text', 'label-show-value': 'show_value', 'label-show-unit': 'show_unit', 'label-precision': 'precision' })[property]] : [property];
-      const nextValue = property === 'enabled' || property === 'label-show' || property === 'label-show-value' || property === 'label-show-unit' ? !!value
-        : property === 'color' ? normalizeEditorColorValue(value, this.options.cssText)
-          : property === 'label-precision' ? (value === '' ? undefined : normalizeDecimalValue(value)) : value;
-      if (property === 'label-precision' && nextValue === null) return true;
-      this._setDirectionalMarkerField(scope, side, path, nextValue);
-      return true;
-    }
     return false;
   }
 
@@ -497,8 +368,7 @@ export class TargetSection {
     return false;
   }
 
-  render(scope = { type: 'card' }, renderOptions = {}) {
-    const paintOptions = { ...this.options, ...renderOptions };
+  render(scope = { type: 'card' }) {
     if (scope?.type === 'entity') {
       const index = scope.index;
       const targetInherited = !this._hasTargetOverride(scope);
@@ -506,7 +376,6 @@ export class TargetSection {
       const targetShow = this._getTargetShow(scope);
       const targetShape = this._getEffectiveTargetShapeValue(scope);
       const targetDirection = this._getEffectiveMarkerDirection(scope, 'target');
-      const directionalControls = ['above', 'below'].map(side => this._renderDirectionalTargetControls(scope, side)).join('');
       return `
 	                      <div class="field-row">
 	                        <div class="toggle">
@@ -553,8 +422,23 @@ export class TargetSection {
                         })}
                       </div>
                       ${this._renderBuiltinMarkerLabelControls(scope, 'target', 'Target')}
-                      ${directionalControls}
-                      ${['above', 'below'].map(side => renderTargetPaintEditor(this.context, scope, side, paintOptions)).join('')}
+	                      <div class="field-row">
+	                        <div class="toggle">
+	                          <input id="entity-${index}-target-above-fill-enabled" type="checkbox" data-kind="entity-target-above-fill-enabled" data-index="${index}"${this._isTargetAboveFillEnabled(scope) ? ' checked' : ''}>
+	                          <label for="entity-${index}-target-above-fill-enabled">Above-target color enabled</label>
+	                        </div>
+	                      </div>
+	                      <div class="field-row">
+	                        <label for="entity-${index}-target-above-fill">Above-target color</label>
+	                        ${renderColorInput({ cssText: this.options.cssText, label: 'Target color',
+                          id: `entity-${index}-target-above-fill`,
+                          kind: 'entity-target-above-fill-color',
+                          index,
+                          value: this._getEffectiveTargetAboveFillColorValue(scope),
+                          fallbackHex: '#000000',
+	                          placeholder: 'inherit card default',
+	                        })}
+	                      </div>
 	                          `;
     }
     const target = this._getTargetResolvableValue(scope);
@@ -562,8 +446,7 @@ export class TargetSection {
     const targetShape = this._getEffectiveTargetShapeValue(scope);
     const targetDirection = this._getEffectiveMarkerDirection(scope, 'target');
     const targetColor = this._getTargetColorValue(scope);
-    const directionalControls = ['above', 'below'].map(side => this._renderDirectionalTargetControls(scope, side)).join('');
-    const targetPaintEditors = ['above', 'below'].map(side => renderTargetPaintEditor(this.context, scope, side, paintOptions)).join('');
+    const targetAboveFillColor = this._getTargetAboveFillColorValue(scope);
     return `
             <div class="field-grid">
             <div class="field-row">
@@ -603,8 +486,21 @@ export class TargetSection {
               })}
             </div>
             ${this._renderBuiltinMarkerLabelControls({ type: 'card' }, 'target', 'Target')}
-            ${directionalControls}
-            ${targetPaintEditors}
+            <div class="field-row">
+              <div class="toggle">
+                <input id="target-above-fill-enabled" type="checkbox" data-field="target-above-fill-enabled"${this._isTargetAboveFillEnabled({ type: 'card' }) ? ' checked' : ''}>
+                <label for="target-above-fill-enabled">Above-target color enabled</label>
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="target-above-fill-color">Above-target color</label>
+              ${renderColorInput({ cssText: this.options.cssText, label: 'Target color',
+                id: 'target-above-fill-color',
+                field: 'target-above-fill-color',
+                value: targetAboveFillColor,
+                fallbackHex: '#000000',
+              })}
+            </div>
             </div>`;
   }
 }

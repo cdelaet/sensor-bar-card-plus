@@ -47,10 +47,10 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   expect(edited.target.label).toEqual({ ...original.target.label, text: 'Goal energy', show: false, show_value: false, show_unit: false, precision: 2 });
   expect(edited.target.at).toEqual({ value: 75, entity: 'sensor.changed', future: true });
   expect(edited.target.future).toBe(true);
-  expect(await editor.locator('#target-above-paint-editor').count()).toBe(1);
-  await expect(editor.locator('#target-above-fill-enabled')).toHaveCount(0);
-  await expect(editor.locator('#target-above-fill-color')).toHaveCount(0);
-  expect((await saved(editor)).target.when_exceeded).toEqual(original.target.when_exceeded);
+  await editor.locator('#target-above-fill-enabled').uncheck(); expect((await saved(editor)).target.when_exceeded).toEqual({ future: true });
+  await editor.locator('#target-above-fill-color').evaluate(el => { el.value = '#334455'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+  expect((await saved(editor)).target.when_exceeded).toEqual({ future: true });
+  await editor.locator('#target-above-fill-enabled').check(); expect((await saved(editor)).target.when_exceeded).toEqual({ fill_color: '#334455', future: true });
   await editor.locator('#target-show').uncheck();
   const before = await saved(editor);
   for (const key of ['baseline', 'bar', 'peak', 'floor', 'markers', 'future']) expect(before[key]).toEqual(original[key]);

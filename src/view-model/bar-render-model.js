@@ -234,37 +234,7 @@ export function getStaticLayerRevealStyle(geometry) {
   return 'display:none;clip-path:inset(0 100% 0 0 round 0);';
 }
 
-function intersectInterval(left, right) {
-  if (!left || !right) return null;
-  const start = Math.max(left.start, right.start);
-  const end = Math.min(left.end, right.end);
-  return end > start ? { start, end, hidden: false } : null;
-}
-
-function getTargetPaintLayer(side, geometry, ecfg, targetPercent, samplePercent, minValue, maxValue, scaleDirection, needleActive, orderingInvalid) {
-  const paint = ecfg?.target_paints?.[side];
-  if (!paint || !Number.isFinite(targetPercent) || orderingInvalid) return null;
-  const legacyUpper = side === 'above' && ecfg?.target_paints_legacy_above === true;
-  if (!needleActive && !legacyUpper
-    && (side === 'above' ? !(samplePercent > targetPercent) : !(samplePercent < targetPercent))) return null;
-  const interval = side === 'above'
-    ? projectScaleInterval(targetPercent, 100, scaleDirection)
-    : projectScaleInterval(0, targetPercent, scaleDirection);
-  const visible = needleActive || legacyUpper ? interval : intersectInterval(interval, geometry);
-  if (!visible) return null;
-  const compiled = paintCompiler.compilePaint(paint, { minValue, maxValue, scaleDirection, samplePercent });
-  const opacity = paint.opacity ?? 100;
-  const paintStyle = getFullScaleBackgroundStyle([compiled.gradient]);
-  return {
-    id: `target-${side}`,
-    zIndex: 2,
-    visible: true,
-    paintStyle: opacity === 100 ? paintStyle : `${paintStyle}opacity:${opacity / 100};`,
-    revealStyle: getStaticLayerRevealStyle(visible),
-  };
-}
-
-export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, scaleDirection = 'normal', samplePercent = 0, targetThresholds = {}, needleActive = false) {
+export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, scaleDirection = 'normal', samplePercent = 0) {
   const basePaintStyle = getFullScaleBackgroundStyle([
     paintCompiler.compilePaint(ordinaryPaint(ecfg), { color, minValue, maxValue, scaleDirection, samplePercent }).gradient,
   ]);
@@ -292,12 +262,11 @@ export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, b
   });
 
   const aboveTargetGeometry = getAboveTargetLayerGeometry(targetPct, scaleDirection);
-  const hasAboveTargetDestination = Object.prototype.hasOwnProperty.call(ecfg?.target_paints ?? {}, 'above');
   const aboveTargetLayer = {
     id: 'above-target',
     zIndex: 2,
-    visible: !!(ecfg?.bar?.above_target_color && aboveTargetGeometry && !hasAboveTargetDestination),
-    paintStyle: ecfg?.bar?.above_target_color && !hasAboveTargetDestination
+    visible: !!(ecfg?.bar?.above_target_color && aboveTargetGeometry),
+    paintStyle: ecfg?.bar?.above_target_color
       ? `display:block;inset:0;background:${ecfg.bar.above_target_color};`
       : 'display:none;',
     revealStyle: aboveTargetGeometry
@@ -305,15 +274,7 @@ export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, b
       : getStaticLayerRevealStyle({ start: 0, end: 0, hidden: true }),
   };
 
-  const targetOrderingInvalid = targetThresholds.orderingInvalid === true;
-  const targetAboveLayer = getTargetPaintLayer('above', geometry, ecfg, targetThresholds.above, samplePercent,
-    minValue, maxValue, scaleDirection, needleActive, targetOrderingInvalid);
-  const targetBelowLayer = getTargetPaintLayer('below', geometry, ecfg, targetThresholds.below, samplePercent,
-    minValue, maxValue, scaleDirection, needleActive, targetOrderingInvalid);
-
-  return [baseLayer, ...baselineLayers, aboveTargetLayer,
-    targetBelowLayer ?? { id: 'target-below', zIndex: 2, visible: false, paintStyle: 'display:none;', revealStyle: 'display:none;' },
-    targetAboveLayer ?? { id: 'target-above', zIndex: 2, visible: false, paintStyle: 'display:none;', revealStyle: 'display:none;' }];
+  return [baseLayer, ...baselineLayers, aboveTargetLayer];
 }
 
 export function getFillRenderState(
@@ -321,7 +282,6 @@ export function getFillRenderState(
   minValue = 0, maxValue = 100, needleActive = false,
   scaleDirection = ecfg?.scale?.direction ?? 'normal',
   barDirection = ecfg?.bar?.direction ?? 'normal',
-  targetThresholds = {},
 ) {
   const valuePosition = projectScalePercent(scalePercent, scaleDirection);
   const baselinePosition = projectScalePercent(baselineScalePercent, scaleDirection);
@@ -367,7 +327,7 @@ export function getFillRenderState(
   }
   const paintLayers = getFillPaintLayers(
     geometry, h, ecfg, color, targetScalePercent, baselineScalePercent,
-    minValue, maxValue, scaleDirection, scalePercent, targetThresholds, needleActive,
+    minValue, maxValue, scaleDirection, scalePercent,
   );
   return {
     geometry,
@@ -522,7 +482,6 @@ export function buildBarRenderModel(row, appearance, { height, color = getColor(
       height, appearance, color, row.targetPercent, baselinePercent,
       row.min, row.max, row.needle.show,
       appearance.scale?.direction ?? 'normal', appearance.bar?.direction ?? 'normal',
-      { above: row.targetAbovePercent, below: row.targetBelowPercent, orderingInvalid: row.targetOrderingInvalid },
     ),
     baseline: {
       configured: baselineConfigured,

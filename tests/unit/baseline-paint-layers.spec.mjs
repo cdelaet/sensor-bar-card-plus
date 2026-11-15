@@ -69,7 +69,7 @@ describe('independent Baseline paint layers', () => {
 
   it('keeps ordinary fill free of Baseline colors and retains inactive layer identities', () => {
     const layers = getFillPaintLayers(null, 30, paint, '#123456');
-    expect(layers.map(layer => layer.id)).toEqual(['base', 'baseline-above', 'baseline-below', 'above-target', 'target-below', 'target-above']);
+    expect(layers.map(layer => layer.id)).toEqual(['base', 'baseline-above', 'baseline-below', 'above-target']);
     expect(layers[0].paintStyle).toBe(background('linear-gradient(to right,#123456 0%,#123456 100%)'));
     expect(layers.filter(layer => layer.visible).map(layer => layer.id)).toEqual(['base']);
     for (const layer of layers.filter(layer => layer.id.startsWith('baseline-'))) {
@@ -93,7 +93,7 @@ describe('independent Baseline paint layers', () => {
     expect(below).toMatchObject({ id: 'baseline-below', visible: true, zIndex: 1,
       paintStyle: background(overlay(belowStart, belowEnd, '#0000ff')) });
     // DOM order resolves equal z-indices; Target stays above all three paints.
-    expect(state.paintLayers.map(layer => layer.id)).toEqual(['base', 'baseline-above', 'baseline-below', 'above-target', 'target-below', 'target-above']);
+    expect(state.paintLayers.map(layer => layer.id)).toEqual(['base', 'baseline-above', 'baseline-below', 'above-target']);
     expect(target).toMatchObject({ id: 'above-target', visible: true, zIndex: 2 });
     expect(target.revealStyle).toContain(scaleDirection === 'reverse' ? 'inset(0 60% 0 0%' : 'inset(0 0% 0 60%');
     expect(getFullScalePaintStyle(paint, '#123456', 60, 25, 0, 100, scaleDirection)).toBe(background([
