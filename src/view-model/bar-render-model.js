@@ -545,9 +545,9 @@ export function buildBarRenderModel(row, appearance, { height, color = getColor(
       row.numericValue === null
         ? (Number.isFinite(baselinePercent) ? 0 : null)
         : row.percent,
-      height, appearance, color, row.targetPaintPercent ?? row.targetPercent, baselinePercent,
+      height, appearance, color, (Object.hasOwn(row, 'targetPaintPercent') ? row.targetPaintPercent : row.targetPercent), baselinePercent,
       row.min, row.max, row.needle.show,
-      appearance.scale?.direction ?? 'normal', appearance.bar?.direction ?? 'normal', row.targetBelowPaintPercent ?? row.targetPercent,
+      appearance.scale?.direction ?? 'normal', appearance.bar?.direction ?? 'normal', (Object.hasOwn(row, 'targetBelowPaintPercent') ? row.targetBelowPaintPercent : row.targetPercent),
     ),
     baseline: {
       configured: baselineConfigured,

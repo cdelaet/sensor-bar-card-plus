@@ -1,3 +1,4 @@
+import { getTargetDirections } from './directional-targets.js';
 import { getFiniteNumber, UNSUPPORTED_EXTREMA_ALIASES, BAR_PAINT_DIAGNOSTICS, PAINT_PROPERTY_SOURCES } from './normalize.js';
 
 function createDiagnostic(code, message, path, entity = null) {
@@ -55,11 +56,16 @@ function validateScaleBounds(diagnostics, scale, path, entity = null) {
 }
 
 function validateTargetRange(diagnostics, config, scaleBounds, path, entity = null) {
-  const target = getStaticFixedValue(config?.target_marker?.source);
-  if (!Number.isFinite(target)) return;
   const { min, max } = scaleBounds;
-  if (Number.isFinite(min) && Number.isFinite(max) && (target < min || target > max)) {
-    addWarning(diagnostics, 'target.outside_scale', 'Fixed target value is outside the fixed scale range.', path, entity);
+  const seen = new Set();
+  for (const target of Object.values(getTargetDirections(config))) {
+    if (seen.has(target.sourcePath)) continue;
+    seen.add(target.sourcePath);
+    const value = getStaticFixedValue(target.source);
+    if (Number.isFinite(value) && Number.isFinite(min) && Number.isFinite(max) && (value < min || value > max)) {
+      addWarning(diagnostics, 'target.outside_scale', 'Fixed target value is outside the fixed scale range.',
+        target.sourcePath === 'target.at' ? path : `${path}.${target.sourcePath}`, entity);
+    }
   }
 }
 
@@ -125,8 +131,8 @@ function validateMarkerDirections(diagnostics, config, path, entity = null) {
 }
 
 function validateBuiltinMarkerLabels(diagnostics, config, path, entity = null) {
-  for (const [key, publicKey] of [['target_marker', 'target'], ['peak_marker', 'peak'], ['floor_marker', 'floor']]) {
-    const marker = config?.[key];
+  for (const [marker, publicKey] of [[config?.target_marker, 'target'], [config?.peak_marker, 'peak'], [config?.floor_marker, 'floor'],
+    ...Object.entries(getTargetDirections(config)).map(([side, target]) => [target.marker, `target.when_${side}.marker`])]) {
     const labelPath = `${path}.${publicKey}.label`;
     if (marker?.label_invalid_show) addWarning(diagnostics, 'markers.invalid_label_show', 'Marker label show must be a boolean; using the existing fallback.', `${labelPath}.show`, entity);
     if (marker?.label_invalid_text) addWarning(diagnostics, 'markers.invalid_label_text', 'Marker label text must be a string; ignoring it.', `${labelPath}.text`, entity);
@@ -324,18 +330,27 @@ function validateConfigScope(diagnostics, config, path, entity = null, inherited
   validateAttribute(diagnostics, config?.scale?.min, `${path}.scale.min.attribute`, entity);
   validateAttribute(diagnostics, config?.scale?.max, `${path}.scale.max.attribute`, entity);
   validateAttribute(diagnostics, config?.baseline?.at, `${path}.baseline.at.attribute`, entity);
-  validateAttribute(diagnostics, config?.target_marker?.source, `${path}.target.at.attribute`, entity);
   validateEntitySource(diagnostics, config?.scale?.min, `${path}.scale.min`, entity);
   validateEntitySource(diagnostics, config?.scale?.max, `${path}.scale.max`, entity);
   validateEntitySource(diagnostics, config?.baseline?.at, `${path}.baseline.at`, entity);
-  validateEntitySource(diagnostics, config?.target_marker?.source, `${path}.target.at`, entity);
   const scaleBounds = validateScaleBounds(diagnostics, config?.scale, path, entity);
+  const targetSourcePaths = new Set();
+  for (const [side, target] of Object.entries(getTargetDirections(config))) {
+    const sourcePath = `${path}.${target.sourcePath}`;
+    if (!targetSourcePaths.has(sourcePath)) {
+      targetSourcePaths.add(sourcePath);
+      validateAttribute(diagnostics, target.source, `${sourcePath}.attribute`, entity);
+      validateEntitySource(diagnostics, target.source, sourcePath, entity);
+    }
+    if (target.marker?.direction_invalid) addWarning(diagnostics, 'target_marker.invalid_direction',
+      'Invalid marker direction; using inward.', `${path}.target.when_${side}.marker.direction`, entity);
+  }
   const targetPaint = config?.target_above?.paint;
   if (targetPaint) {
     validateSegments(diagnostics, targetPaint.segments, scaleBounds, `${path}.target.when_above.paint`, entity, true);
     validateGradientStops(diagnostics, targetPaint.gradient_stops, `${path}.target.when_above.paint`, entity);
   }
-  const belowTargetPaint = config?.target_below;
+  const belowTargetPaint = config?.target_below?.paint;
   if (belowTargetPaint) {
     validateSegments(diagnostics, belowTargetPaint.segments, scaleBounds, `${path}.target.when_below.paint`, entity, true);
     validateGradientStops(diagnostics, belowTargetPaint.gradient_stops, `${path}.target.when_below.paint`, entity);

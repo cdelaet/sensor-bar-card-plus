@@ -1,4 +1,5 @@
-import { normalizeTargetMarkerShape } from '../../config/normalize.js';
+import { readResolvableSourceParts, updateResolvableSourceParts, writeResolvableSourceParts } from '../shared/resolvable-source.js';
+import { getAuthoredSharedTargetSource, normalizeDirectionalTargets, normalizeTargetMarkerShape } from '../../config/normalize.js';
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue, removePathsFromTarget,
   pruneEmptyObjectsInTarget, normalizeDecimalValue, getEffectiveDisplayValue } from '../shared/editor-config.js';
 import { escapeAttribute, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderBuiltinMarkerLabelControls, formatScaleValueInput, getColorPickerValue, isHexColorValue, renderEntityAttributeInput, getEntityAttributeSuggestions } from '../shared/editor-controls.js';
@@ -35,7 +36,11 @@ export class TargetSection {
 
   _getTargetResolvableValue(scope) { return this.context.source(scope, 'target'); }
 
-  _getEffectiveTargetResolvableValue(scope) { return this.context.source(scope, 'target', true); }
+  _getEffectiveTargetResolvableValue(scope) {
+    return getAuthoredSharedTargetSource(this.context.read(scope, []))
+      ?? (scope.type === 'entity' ? getAuthoredSharedTargetSource(this.context.read({ type: 'card' }, [])) : null)
+      ?? {};
+  }
 
   _getTargetMode(scope) {
     const enabled = this.context.read(scope, ['target', 'enabled']);
@@ -111,8 +116,9 @@ export class TargetSection {
         nextTarget = deletePathValue(nextTarget, ['target', 'color']);
         nextTarget = deletePathValue(nextTarget, ['target', 'shape']);
         nextTarget = deletePathValue(nextTarget, ['target', 'direction']);
-        nextTarget = deletePathValue(nextTarget, ['target', 'label', 'show']);
-        nextTarget = deletePathValue(nextTarget, ['target', 'label', 'decimal']);
+        for (const field of ['show', 'decimal', 'precision', 'text', 'show_value', 'show_unit']) {
+          nextTarget = deletePathValue(nextTarget, ['target', 'label', field]);
+        }
       } else {
         nextTarget = deletePathValue(nextTarget, ['target']);
       }
@@ -251,7 +257,11 @@ export class TargetSection {
 
   _write(scope, path, value, options = {}) {
     return this.context.mutate(scope, target => {
-      let next = value === undefined ? deletePathValue(target, path) : setPathValue(target, path, value);
+      let next = target;
+      if (value !== undefined && path[0] === 'target' && path.length > 1 && target.target != null && !isObject(target.target)) {
+        next = setPathValue(next, ['target'], { at: target.target_entity ? { fixed: target.target, entity: target.target_entity } : target.target });
+      }
+      next = value === undefined ? deletePathValue(next, path) : setPathValue(next, path, value);
       next = removePathsFromTarget(next, options.deprecatedKeys ?? []);
       for (const prunePath of options.prunePaths ?? []) next = pruneEmptyObjectsInTarget(next, prunePath);
       return next;
@@ -266,9 +276,170 @@ export class TargetSection {
   _renderBuiltinMarkerLabelControls(scope, key, title) { return renderBuiltinMarkerLabelControls(scope, key, title, this._getBuiltinMarkerLabelOptions(scope, key)); }
   _setBuiltinMarkerLabelField(scope, key, field, value) { return setBuiltinMarkerLabelField(this.context, scope, key, field, value); }
 
+  _directionalTargets(scope) {
+    return normalizeDirectionalTargets(this.context.read(scope, []), scope.type === 'entity' ? this.context.read({ type: 'card' }, []) : null);
+  }
+
+  _directionalPropertyPath(property) {
+    return property === 'source' ? ['at'] : ['marker', ...(property.startsWith('label-')
+      ? ['label', property.slice(6).replaceAll('-', '_')] : [property === 'show' ? 'enabled' : property])];
+  }
+
+  _ownsDirectionalProperty(scope, side, property) {
+    return this.context.read(scope, ['target', `when_${side}`, ...this._directionalPropertyPath(property)]) !== undefined
+      || property === 'label-precision' && this.context.read(scope, ['target', `when_${side}`, 'marker', 'label', 'decimal']) !== undefined;
+  }
+
+  _directionalPropertySource(scope, side, property) {
+    const local = this._ownsDirectionalProperty(scope, side, property);
+    const sharedProperty = property === 'show' ? 'enabled' : property;
+    const shared = this._propertySource(scope, sharedProperty);
+    const parent = scope.type === 'entity' && this._ownsDirectionalProperty({ type: 'card' }, side, property);
+    const inherited = parent || shared !== 'Default';
+    return local ? inherited ? 'Override' : 'Local' : inherited ? 'Inherited' : 'Default';
+  }
+
+  _setDirectionalField(scope, side, field, value) {
+    if (['value', 'entity-source', 'attribute'].includes(field)) {
+      const at = this.context.read(scope, ['target', `when_${side}`, 'at']);
+      const selected = this._directionalTargets(scope)[side];
+      const selectedScope = selected.sourceScope === 'inherited' ? { type: 'card' } : scope;
+      const raw = at !== undefined ? at : this.context.read(selectedScope, selected.sourcePath.split('.'));
+      const parts = readResolvableSourceParts(raw === undefined ? selected.source : raw);
+      const update = updateResolvableSourceParts(parts, field === 'entity-source' ? 'entity' : field, value);
+      if (!update.valid) return false;
+      return this._write(scope, ['target', `when_${side}`, 'at'], writeResolvableSourceParts(update.parts));
+    }
+    const path = this._directionalPropertyPath(field);
+    if (field === 'shape') value = normalizeTargetMarkerShape(value);
+    else if (field === 'direction') value = value === 'outward' ? 'outward' : 'inward';
+    else if (field === 'color') value = normalizeEditorColorValue(value, this.options.cssText) || undefined;
+    else if (field === 'label-precision') {
+      const precision = normalizeDecimalValue(value);
+      if (value !== '' && precision === null) return false;
+      value = precision ?? undefined;
+    } else if (field === 'label-text') value = String(value ?? '');
+    else value = value === true;
+    return this._write(scope, ['target', `when_${side}`, ...path], value,
+      { deprecatedKeys: field === 'label-precision' ? [['target', `when_${side}`, 'marker', 'label', 'decimal']] : [],
+        prunePaths: [['target', `when_${side}`, 'marker', 'label'], ['target', `when_${side}`, 'marker'], ['target', `when_${side}`], ['target']] });
+  }
+
+  _renderDirectionalControls(scope, side) {
+    const prefix = scope.type === 'entity' ? `entity-${scope.index}-` : '';
+    const id = `${prefix}target-${side}`;
+    const field = name => scope.type === 'entity' ? `data-kind="entity-target-${side}-${name}" data-index="${scope.index}"` : `data-field="target-${side}-${name}"`;
+    const { source, marker } = this._directionalTargets(scope)[side];
+    const appearance = `<div class="field-row"><label for="${id}-shape">Shape</label><select id="${id}-shape" ${field('shape')}>${['diamond', 'triangle'].map(shape => `<option value="${shape}">${shape}</option>`).join('')}</select></div>
+      <div class="field-row"><label for="${id}-direction">Direction</label><select id="${id}-direction" ${field('direction')}><option value="inward">Inward</option><option value="outward">Outward</option></select></div>
+      <div class="field-row"><label for="${id}-color">Color</label>${renderColorInput({ cssText: this.options.cssText, id: `${id}-color`, value: marker.color, fallbackHex: '#888',
+        ...(scope.type === 'entity' ? { kind: `entity-target-${side}-color`, index: scope.index } : { field: `target-${side}-color` }) })}</div>`;
+    const labels = `<div class="field-row"><div class="toggle"><input id="${id}-label-show" type="checkbox" ${field('label-show')}><label for="${id}-label-show">Show label</label></div></div>
+      <div class="field-row"><label for="${id}-label-text">Label text</label><input id="${id}-label-text" type="text" ${field('label-text')}></div>
+      ${[['show-value', 'Show value'], ['show-unit', 'Show unit']].map(([name, title]) => `<div class="field-row"><div class="toggle"><input id="${id}-label-${name}" type="checkbox" ${field(`label-${name}`)}><label for="${id}-label-${name}">${title}</label></div></div>`).join('')}
+      <div class="field-row"><label for="${id}-label-precision">Precision</label><input id="${id}-label-precision" type="number" min="0" step="1" ${field('label-precision')}></div>`;
+    const threshold = renderResolvableSourceControls({ source,
+      value: { id: `${id}-value`, ...(scope.type === 'entity' ? { kind: `entity-target-${side}-value`, index: scope.index } : { field: `target-${side}-value` }) },
+      entity: { kind: `${scope.type === 'entity' ? 'entity-' : ''}target-${side}-entity-source`, index: scope.type === 'entity' ? scope.index : 'card' },
+      attribute: { kind: `${scope.type === 'entity' ? 'entity-' : ''}target-${side}-attribute`, index: scope.type === 'entity' ? scope.index : 'card' }, hass: this.context.hass,
+    });
+    return `<div class="target-directional-controls" data-target-side="${side}">
+      ${this._renderGroup(scope, `${side}-threshold`, 'Threshold', threshold)}
+      ${this._renderGroup(scope, `${side}-marker`, 'Marker', `<div class="field-row"><div class="toggle"><input id="${id}-show" type="checkbox" ${field('show')}><label for="${id}-show">Show marker</label></div></div>
+        ${this._renderGroup(scope, `${side}-appearance`, 'Appearance', appearance)}
+        ${this._renderGroup(scope, `${side}-labels`, 'Labels', labels)}`)}
+    </div>`;
+  }
+
+  _syncDirectionalControls(root, section, scope, side, options) {
+    const prefix = scope.type === 'entity' ? `entity-${scope.index}-` : '';
+    const id = `${prefix}target-${side}`;
+    const group = section.querySelector(`[data-target-side="${side}"]`);
+    if (!group) return;
+    const { source, marker } = this._directionalTargets(scope)[side];
+    const syncValue = (control, value) => {
+      if (control && (control !== root.activeElement || options.replaced)
+        && !options.numericDrafts?.values?.has(control.id) && !options.cssColorDrafts?.has(control.id)
+        && String(control.value ?? '') !== String(value ?? '')) control.value = String(value ?? '');
+    };
+    const values = { value: formatScaleValueInput(source), shape: marker.shape, direction: marker.direction,
+      color: getColorPickerValue(marker.color, '#888'), 'color-text-fallback': marker.color,
+      'label-text': marker.label_text, 'label-precision': marker.label_precision ?? marker.label_decimal };
+    const picker = group.querySelector(`#${id}-color`);
+    let colorText = picker?.parentElement.querySelector('input[type="text"]');
+    if (picker && !isHexColorValue(marker.color) && !colorText) {
+      const template = section.ownerDocument.createElement('template');
+      template.innerHTML = renderColorInput({ id: picker.id, field: picker.dataset.field, kind: picker.dataset.kind,
+        index: picker.dataset.index, value: marker.color });
+      colorText = template.content.querySelector('input[type="text"]');
+      picker.after(colorText);
+    }
+    if (colorText) colorText.id = `${id}-color-text-fallback`;
+    for (const [field, value] of Object.entries(values)) syncValue(group.querySelector(`#${id}-${field}`), value);
+    for (const [field, checked] of [['show', marker.enabled !== false], ['label-show', marker.show_label === true],
+      ['label-show-value', marker.label_show_value !== false], ['label-show-unit', marker.label_show_unit !== false]]) {
+      group.querySelector(`#${id}-${field}`).checked = checked;
+    }
+    const entityKind = `${scope.type === 'entity' ? 'entity-' : ''}target-${side}-entity-source`;
+    const entityControl = group.querySelector(`[data-kind="${entityKind}"]`);
+    entityControl.id = `${id}-entity`;
+    entityControl.setAttribute('aria-label', `${side === 'above' ? 'Above' : 'Below'} Target entity`);
+    syncValue(entityControl, source.entity);
+    if (entityControl.tagName === 'HA-ENTITY-PICKER') {
+      entityControl.hass = this.context.hass; entityControl.label = `${side === 'above' ? 'Above' : 'Below'} Target entity`; entityControl.allowCustomEntity = true;
+    }
+    let attributeRow = group.querySelector('.resolvable-source-attribute');
+    const attributeKind = entityKind.replace('-entity-source', '-attribute');
+    if (!attributeRow && source.entity) {
+      const template = section.ownerDocument.createElement('template');
+      template.innerHTML = `<div class="field-row resolvable-source-attribute"><label>Attribute</label>${renderEntityAttributeInput(attributeKind,
+        scope.type === 'entity' ? scope.index : 'card', source.attribute, source.entity, this.context.hass)}</div>`;
+      entityControl.closest('.field-row').after(template.content);
+      attributeRow = group.querySelector('.resolvable-source-attribute');
+    }
+    if (attributeRow) {
+      attributeRow.hidden = !source.entity;
+      attributeRow.style.display = source.entity ? '' : 'none';
+      const control = attributeRow.querySelector(`[data-kind="${attributeKind}"]`);
+      control.id = `${id}-attribute`;
+      control.setAttribute('aria-label', `${side === 'above' ? 'Above' : 'Below'} Target attribute`);
+      syncValue(control, source.attribute);
+      if (control.tagName === 'HA-ENTITY-ATTRIBUTE-PICKER') {
+        control.hass = this.context.hass; control.entityId = source.entity; control.label = 'Attribute'; control.allowCustomValue = true;
+        control.hideAttributes = Object.entries(this.context.hass?.states?.[source.entity]?.attributes ?? {})
+          .filter(([, value]) => !['string', 'number', 'boolean'].includes(typeof value)).map(([key]) => key);
+      } else if (control.list) control.list.innerHTML = getEntityAttributeSuggestions(this.context.hass, source.entity)
+        .map(key => `<option value="${escapeAttribute(key)}"></option>`).join('');
+    }
+    for (const control of group.querySelectorAll('[data-field], [data-kind]')) {
+      const field = (control.dataset.field ?? control.dataset.kind).replace(/^entity-/, '').replace(/-text-fallback$/, '').replace(`target-${side}-`, '');
+      const property = ['value', 'entity-source', 'attribute'].includes(field) ? 'source' : field;
+      const row = control.closest('.field-row');
+      const label = row?.querySelector('label');
+      if (!label || control.id.endsWith('-text-fallback')) continue;
+      let meta = row.querySelector('[data-target-source]');
+      if (!meta) { meta = section.ownerDocument.createElement('span'); meta.className = 'paint-property-meta'; meta.dataset.targetSource = property; label.after(meta); }
+      meta.textContent = this._directionalPropertySource(scope, side, property);
+      meta.classList.toggle('is-overridden', meta.textContent === 'Override');
+      if (property === 'source' && field !== 'value') continue;
+      let clear = row.querySelector('[data-action="clear-target-property"]');
+      if (!clear) {
+        clear = section.ownerDocument.createElement('button'); clear.type = 'button'; clear.className = 'paint-clear-override';
+        clear.textContent = 'Clear'; clear.dataset.action = 'clear-target-property'; clear.dataset.direction = side;
+        clear.dataset.property = property; clear.dataset.index = scope.type === 'entity' ? scope.index : 'card'; row.append(clear);
+      }
+      clear.hidden = !this._ownsDirectionalProperty(scope, side, property);
+    }
+    const thresholdSummary = section.querySelector(`#card-group-${id}-threshold-summary`);
+    thresholdSummary.textContent = `${this._directionalPropertySource(scope, side, 'source')} · ${source.entity || formatScaleValueInput(source) || 'No threshold'}`;
+    section.querySelector(`#card-group-${id}-marker-summary`).textContent = marker.enabled === false ? 'Disabled' : `${this._directionalPropertySource(scope, side, 'show')} · ${marker.shape}`;
+  }
+
   handleField({ field, kind, index, value }) {
     const scope = kind?.startsWith('entity-') ? { type: 'entity', index: Number(index) } : { type: 'card' };
     const control = field ?? kind?.replace(/^entity-/, '');
+    const directional = control?.match(/^target-(above|below)-(value|entity-source|attribute|show|shape|direction|color|label-(?:show|text|show-value|show-unit|precision))$/);
+    if (directional) { this._setDirectionalField(scope, directional[1], directional[2], value); return true; }
     if (this._handleValueField(control, value, scope)) return true;
     if (control === 'target-inherit') {
       if (value) this._clearTargetOverride(scope);
@@ -292,6 +463,15 @@ export class TargetSection {
   }
 
   handleClick(target) {
+    if (target?.dataset?.action === 'clear-target-property') {
+      const scope = target.dataset.index === 'card' ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
+      const base = ['target', `when_${target.dataset.direction}`];
+      this._remove(scope, [...base, ...this._directionalPropertyPath(target.dataset.property)], {
+        deprecatedKeys: target.dataset.property === 'label-precision' ? [[...base, 'marker', 'label', 'decimal']] : [],
+        prunePaths: [[...base, 'marker', 'label'], [...base, 'marker'], base, ['target']],
+      });
+      return true;
+    }
     if (target?.dataset?.action !== 'toggle-target-group') return false;
     const group = target.dataset.group;
     if (this._expandedGroups.has(group)) this._expandedGroups.delete(group);
@@ -417,6 +597,7 @@ export class TargetSection {
       const paintSummary = section.querySelector(`#card-group-${prefix}target-${direction}-summary`);
       if (paintSummary) paintSummary.textContent = state.enabled ? describePaint(state.paint, state.inherited) : 'Paint disabled';
     }
+    for (const side of ['above', 'below']) this._syncDirectionalControls(root, section, scope, side, options);
     for (const button of section.querySelectorAll('[data-action="toggle-target-group"]')) this._syncDisclosure(button);
     const summary = section.querySelector(`#card-group-${prefix}target-shared-summary`);
     if (summary) summary.textContent = scope.type === 'entity' ? this._getTargetOverrideSummary(scope) : this._getCardTargetMarkerSummary();
@@ -462,8 +643,8 @@ export class TargetSection {
     const below = renderPaint('below', TARGET_BELOW_PAINT);
     return `<div id="${prefix}target-controls">
       ${this._renderGroup(scope, 'shared', 'Shared Target', shared, entity ? this._getTargetOverrideSummary(scope) : this._getCardTargetMarkerSummary())}
-      ${this._renderGroup(scope, 'above', 'Above Target', above.markup, above.state.enabled ? describePaint(above.state.paint, above.state.inherited) : 'Paint disabled')}
-      ${this._renderGroup(scope, 'below', 'Below Target', below.markup, below.state.enabled ? describePaint(below.state.paint, below.state.inherited) : 'Paint disabled')}
+      ${this._renderGroup(scope, 'above', 'Above Target', this._renderDirectionalControls(scope, 'above') + above.markup, above.state.enabled ? describePaint(above.state.paint, above.state.inherited) : 'Paint disabled')}
+      ${this._renderGroup(scope, 'below', 'Below Target', this._renderDirectionalControls(scope, 'below') + below.markup, below.state.enabled ? describePaint(below.state.paint, below.state.inherited) : 'Paint disabled')}
     </div>`;
   }
 }

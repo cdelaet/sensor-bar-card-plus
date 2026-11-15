@@ -237,6 +237,10 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         else status = 'Not numeric';
       }
     }
+    this._diagnostics = { ...this._diagnostics, warnings: [
+      ...(this._diagnostics?.warnings ?? []).filter(issue => issue.code !== 'target.invalid_ordering'),
+      ...(row?.targetDiagnostics ?? []),
+    ] };
     this._row = row;
     this._status = status;
     this._textValue = textValue;
@@ -354,7 +358,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     model.animated = model.animated && Boolean(this._previousRow);
     this._surface.dataset.barAnimated = model.animated ? 'true' : 'false';
     const renderKey = JSON.stringify(model);
-    const structureKey = JSON.stringify([model.baseline.configured, model.markers.map(marker => [marker.type, marker.id])]);
+    const structureKey = JSON.stringify([model.baseline.configured, model.markers.filter(marker => marker.type !== 'target').map(marker => [marker.type, marker.id])]);
     if (structureKey !== this._structureKey) {
       this._bar.innerHTML = renderBar(model);
       this._structureKey = structureKey;

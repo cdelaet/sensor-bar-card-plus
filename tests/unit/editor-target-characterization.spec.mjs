@@ -29,11 +29,11 @@ for (const source of ['src', 'dist']) describe(`standalone Target characterizati
     expect(editor._draftConfig.target.label).toEqual({ text: 'Goal energy', precision: 2, show_value: false });
     expect(editor._setBuiltinMarkerLabelField(root, 'target', 'precision', '-1')).toBe(false);
   });
-  it('retains local inheritance, presentation and the precise override clear fields', () => {
+  it('clears shared inheritance overrides while retaining unrelated metadata and presentation defaults', () => {
     const editor = createEditor({ source }); editor.setConfig({ target: { at: 10, shape: 'triangle', direction: 'outward', label: { text: 'Root' } }, entities: [{ entity: 'sensor.a', target: { enabled: false, at: 20, shape: 'triangle', label: { show: true, text: 'Local', precision: 1, decimal: 2 }, future: true } }] });
     expect(editor._getEffectiveTargetShapeValue(row)).toBe('triangle'); expect(editor._getEffectiveMarkerDirection(row, 'target')).toBe('outward');
     editor._clearTargetOverride(row);
-    expect(editor._draftConfig.entities[0].target).toEqual({ label: { text: 'Local', precision: 1 }, future: true });
+    expect(editor._draftConfig.entities[0].target).toEqual({ future: true });
     editor._setTargetShape(root, 'diamond'); expect(editor._draftConfig.target.shape).toBeUndefined();
     editor._setMarkerDirection(root, 'target', 'inward'); expect(editor._draftConfig.target.direction).toBeUndefined();
   });

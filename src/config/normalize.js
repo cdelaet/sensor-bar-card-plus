@@ -1,3 +1,4 @@
+import { getConfiguredTargetMarkers } from './directional-targets.js';
 import { isValidReset } from '../utils/extrema.js';
 import { getOverlayPaintDefaults } from './paint-defaults.js';
 import { canonicalizeHistoricalWindow, parseHistoricalWindow, isEligibleHistoricalWindow } from '../history/time-window.js';
@@ -139,19 +140,11 @@ export function normalizeStructuredResolvableValue(input, inheritedResolvable = 
   return normalizeResolvableValue(input, null);
 }
 
-function hasConfiguredMarkerSource(source) {
-  return !!source && (
-    getFiniteNumber(source.fixed ?? source.value) !== null
-    || Number.isFinite(source.percent)
-    || !!source.entity
-  );
-}
-
 function applyGenericMarkerCapacity(markers, config) {
   const occupied = {
     above: config?.peak_marker?.show === true ? 1 : 0,
     below: (config?.floor_marker?.show === true ? 1 : 0)
-      + (config?.target_marker?.enabled !== false && hasConfiguredMarkerSource(config?.target_marker?.source) ? 1 : 0),
+      + getConfiguredTargetMarkers(config).length,
   };
 
   return markers.map((marker) => {
@@ -1063,6 +1056,17 @@ function isInvalidMarkerDirection(value) {
   );
 }
 
+export function getAuthoredSharedTargetSource(config) {
+  const raw = config?.target;
+  if (raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'at')) {
+    return normalizeStructuredResolvableValue(raw.at, null, null, { allowPercent: true });
+  }
+  if (raw !== undefined && raw !== null && typeof raw !== 'object' || config?.target_entity !== undefined) {
+    return normalizeResolvableValue(typeof raw === 'object' ? null : raw, config?.target_entity);
+  }
+  return undefined;
+}
+
 export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
   const cardTarget = cardConfig?.target_marker;
   const rawTarget = entityConfig?.target;
@@ -1088,7 +1092,7 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
     const labelOptions = normalizeMarkerLabelConfig(rawTarget.label, inheritedTarget);
     const normalizedTarget = {
       enabled: normalizeOptionalEnabled(rawTarget.enabled) ?? inheritedTarget.enabled ?? null,
-      source: normalizeStructuredResolvableValue(rawTarget.at, inheritedTarget.source, null, { allowPercent: true }),
+      source: normalizeStructuredResolvableValue(rawTarget.at, rawTarget.at === undefined ? inheritedTarget.source : null, null, { allowPercent: true }),
       color: rawTarget.color ?? entityConfig.target_color ?? inheritedTarget.color,
       show_label: rawTarget.label?.show ?? entityConfig.show_target_label ?? inheritedTarget.show_label,
       shape: Object.prototype.hasOwnProperty.call(rawTarget, 'shape')
@@ -1130,6 +1134,33 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
     normalizedTarget.label_decimal = labelDecimal;
   }
   return normalizedTarget;
+}
+
+/** Select whole sources before resolution. Marker properties inherit independently
+ * through Card shared/directional, Entity shared/directional defaults. */
+export function normalizeDirectionalTargets(config, parent = null) {
+  const inherited = parent?._normalized ? parent.target_directions
+    : parent ? normalizeDirectionalTargets(parent) : null;
+  const sharedSource = getAuthoredSharedTargetSource(config);
+  const raw = config?.target;
+  const hasShared = sharedSource !== undefined;
+  const result = {};
+  for (const side of ['above', 'below']) {
+    const direction = raw?.[`when_${side}`];
+    const hasDirectional = direction && Object.prototype.hasOwnProperty.call(direction, 'at');
+    const source = hasDirectional
+      ? normalizeStructuredResolvableValue(direction.at, null, null, { allowPercent: true })
+      : hasShared ? sharedSource : inherited?.[side]?.source ?? normalizeResolvableValue(null, null);
+    let marker = inherited?.[side]?.marker ?? normalizeTargetMarkerConfig({}, null);
+    marker = normalizeTargetMarkerConfig(config, { target_marker: marker });
+    marker = normalizeTargetMarkerConfig({ target: direction?.marker ?? {} }, { target_marker: marker });
+    delete marker.source;
+    const sourcePath = hasDirectional ? `target.when_${side}.at`
+      : hasShared ? 'target.at' : inherited?.[side]?.sourcePath ?? 'target.at';
+    result[side] = { source, marker, sourcePath,
+      sourceScope: hasDirectional || hasShared ? 'local' : inherited ? 'inherited' : 'default' };
+  }
+  return result;
 }
 
 function getRawExtremumConfig(config, key) {
@@ -1280,6 +1311,7 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
   normalizedEntity.baseline = normalizeBaselineConfig(entityConfig, cardConfig);
   normalizedEntity.formatting = normalizeFormattingConfig(entityConfig, cardConfig);
   normalizedEntity.target_marker = normalizeTargetMarkerConfig(entityConfig, cardConfig);
+  normalizedEntity.target_directions = normalizeDirectionalTargets(entityConfig, cardConfig);
   normalizedEntity.target_above = normalizeTargetAboveConfig(entityConfig, cardConfig);
   normalizedEntity.target_below = normalizeTargetBelowConfig(entityConfig, cardConfig);
   normalizedEntity.peak_marker = normalizePeakMarkerConfig(entityConfig, cardConfig);
@@ -1386,6 +1418,7 @@ export function normalizeCardConfig(rawConfig) {
   normalizedCard.baseline = normalizeBaselineConfig(baseConfig, null);
   normalizedCard.formatting = normalizeFormattingConfig(baseConfig, null);
   normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);
+  normalizedCard.target_directions = normalizeDirectionalTargets(rawConfig, null);
   normalizedCard.target_above = normalizeTargetAboveConfig(baseConfig);
   normalizedCard.target_below = normalizeTargetBelowConfig(baseConfig);
   normalizedCard.peak_marker = normalizePeakMarkerConfig(baseConfig, null);

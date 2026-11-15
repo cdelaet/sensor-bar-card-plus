@@ -1,3 +1,4 @@
+import { getTargetSourceEntities } from '../config/directional-targets.js';
 import { createConfigEditor } from '../editor-loader.js';
 import { barTrackStyles, barMarkerStyles, getBarAnimationStyles } from '../render/bar-styles.js';
 import { attachTooltips } from '../render/tooltip-controller.js';
@@ -288,6 +289,7 @@ export class SensorBarCard extends HTMLElement {
     this._rowScales = new WeakMap();
     this._reconcileRowHistory(previousConfig?.entities ?? []);
     this._historicalRuntime.setConsumers(historicalMarkerConsumers(this._config.entities), this._historicalUpdate);
+    this._targetDiagnostics = new Map();
     this._baseDiagnostics = validateNormalizedConfig(this._config);
     this._diagnostics = this._baseDiagnostics;
     this._refreshPaintPresetResolutions();
@@ -736,7 +738,7 @@ export class SensorBarCard extends HTMLElement {
         ecfg.scale?.min?.entity,
         ecfg.scale?.max?.entity,
         ecfg.baseline?.at?.entity,
-        ecfg.target_marker?.source?.entity,
+        ...getTargetSourceEntities(ecfg),
         ...(ecfg.generic_markers ?? [])
           .filter((marker) => marker.accepted)
           .flatMap((marker) => [marker.source?.entity, marker.label?.entity])
@@ -800,7 +802,10 @@ export class SensorBarCard extends HTMLElement {
   }
   
   _positionTargetLabel(row) {
-    this._positionMarkerValueLabel(row, '.target-value-label', '.target-marker');
+    for (const label of row.querySelectorAll('.target-value-label[data-marker-id]')) {
+      const id = label.dataset.markerId;
+      this._positionMarkerValueLabel(row, `.target-value-label[data-marker-id="${id}"]`, `.target-marker[data-marker-id="${id}"]`);
+    }
   }
 
   _getMarkerLabel(markerEl) {
@@ -811,7 +816,7 @@ export class SensorBarCard extends HTMLElement {
       return [...row.querySelectorAll('.generic-value-label[data-marker-id]')]
         .find((label) => label.dataset.markerId === markerId) ?? null;
     }
-    const labelSelector = markerEl.matches('.target-marker') ? '.target-value-label'
+    const labelSelector = markerEl.matches('.target-marker') ? `.target-value-label[data-marker-id="${markerEl.dataset.markerId}"]`
       : markerEl.matches('.peak-marker') ? '.peak-value-label'
         : markerEl.matches('.floor-marker') ? '.floor-value-label' : null;
     return labelSelector ? row.querySelector(labelSelector) : null;
@@ -3136,15 +3141,7 @@ ${barMarkerStyles}
   _getRowMarkerModels(rowViewModel, ecfg, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor) {
     if (rowViewModel?.markers) {
       return rowViewModel.markers.map((marker) => {
-        if (marker.type === 'target') {
-          return {
-            ...marker,
-            position: marker.position,
-            visible: targetPct !== null && targetPct !== undefined,
-            color: targetColor || marker.color,
-            label: marker.label ?? (targetDisplay === null ? null : { text: targetDisplay }),
-          };
-        }
+        if (marker.type === 'target') return marker;
         if (marker.type === 'floor') {
           return marker;
         }
@@ -3187,6 +3184,27 @@ ${barMarkerStyles}
     return barRenderer.patchMarker(markerEl, marker);
   }
 
+  _renderTargetLabel(marker) {
+    return `<div class="target-value-label" data-marker-id="${escapeHtml(marker.id)}" style="left:${marker.position ?? 0}%;visibility:hidden;${this._getMarkerLabelColorStyle(marker)}">${marker.visible && marker.label?.text ? escapeHtml(marker.label.text) : ''}</div>`;
+  }
+
+  _reconcileTargetLabels(row, markers) {
+    const targets = markers.filter(marker => marker.type === 'target' && marker.labelVisible);
+    const nodes = new Map([...row.querySelectorAll('.target-value-label')].map(node => [node.dataset.markerId ?? 'target', node]));
+    for (const [id, node] of nodes) if (!targets.some(marker => marker.id === id)) node.remove();
+    for (const marker of targets) {
+      let node = nodes.get(marker.id);
+      if (!node) {
+        row.querySelector('.bar-wrap')?.insertAdjacentHTML('beforeend', this._renderTargetLabel(marker));
+        node = row.querySelector(`.target-value-label[data-marker-id="${marker.id}"]`);
+      }
+      this._patchMarkerLabelAppearance(node, marker);
+      this._setTextIfChanged(node, marker.visible ? marker.label?.text ?? '' : '');
+      this._setStyleIfChanged(node, 'left', `${marker.position ?? 0}%`);
+      if (!marker.visible) this._setStyleIfChanged(node, 'visibility', 'hidden');
+    }
+  }
+
   _patchMarkerLabelAppearance(labelEl, marker) {
     if (!labelEl || !marker) return;
     const markerColor = this._getEffectiveMarkerColor(marker);
@@ -3204,6 +3222,15 @@ ${barMarkerStyles}
       previousScale: this._rowScales.get(entityCfg),
     });
     this._rowScales.set(entityCfg, { min: rowViewModel.min, max: rowViewModel.max });
+    this._targetDiagnostics ??= new Map();
+    this._targetDiagnostics.set(entityCfg, rowViewModel.targetDiagnostics.map(issue => ({
+      ...issue, path: `entities[${this._config.entities.indexOf(entityCfg)}].target`,
+    })));
+    this._diagnostics = { ...this._diagnostics, warnings: [
+      ...(this._diagnostics?.warnings ?? []).filter(issue => issue.code !== 'target.invalid_ordering'),
+      ...[...this._targetDiagnostics.values()].flat(),
+    ] };
+    this._logDiagnostics();
     return rowViewModel;
   }
 
@@ -3227,7 +3254,6 @@ ${barMarkerStyles}
     const escapedEntityId = escapeHtml(rowViewModel?.entityId ?? entityCfg.entity);
     const escapedName = escapeHtml(name);
     const markerModels = this._getRowMarkerModels(rowViewModel, ecfg, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor);
-    const targetMarkerModel = this._getMarkerModel(markerModels, 'target');
     const peakMarkerModel = this._getMarkerModel(markerModels, 'peak');
     const floorMarkerModel = this._getMarkerModel(markerModels, 'floor');
     const genericMarkerModels = markerModels.filter((marker) => marker.type === 'generic');
@@ -3242,10 +3268,8 @@ ${barMarkerStyles}
       targetBelowPaintPercent: rowViewModel?.targetBelowPaintPercent,
       needle: needleState, markers: markerModels,
     }, ecfg, { height: 'var(--sbcp-row-height)', color });
-    const targetValueLabel = targetMarkerModel?.labelVisible ? `
-      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;visibility:hidden;${this._getMarkerLabelColorStyle(targetMarkerModel)}">
-        ${targetMarkerModel.label?.text ? escapeHtml(targetMarkerModel.label.text) : ''}
-      </div>` : '';
+    const targetValueLabel = markerModels.filter(marker => marker.type === 'target' && marker.labelVisible)
+      .map(marker => this._renderTargetLabel(marker)).join('');
     const peakValueLabel = peakMarkerModel?.labelVisible ? `
       <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;visibility:hidden;${this._getMarkerLabelColorStyle(peakMarkerModel)}">
         ${peakMarkerModel.visible && peakMarkerModel.label?.text ? escapeHtml(peakMarkerModel.label.text) : ''}
@@ -3359,10 +3383,10 @@ ${barMarkerStyles}
     // Hover belongs to the card's external labels, never to the shared renderer.
     const hoveredMarker = this._markerHover?.marker;
     if (hoveredMarker && row.contains(hoveredMarker)) {
-      const marker = barModel.markers.find(candidate => candidate.type === 'generic'
+      const marker = barModel.markers.find(candidate => ['generic', 'target'].includes(candidate.type)
         ? hoveredMarker.dataset.markerId === candidate.id
         : hoveredMarker.matches(`.${candidate.type}-marker`));
-      if (marker && !marker.visible) this._clearMarkerHover(hoveredMarker);
+      if (!marker || !marker.visible) this._clearMarkerHover(hoveredMarker);
     }
     barRenderer.patchBar(row, barModel, { revealDuration });
     this._setDatasetIfChanged(row, 'baseHeight', rowViewModel.attributes.baseHeight);
@@ -3409,7 +3433,6 @@ ${barMarkerStyles}
       aboveLabel.innerHTML = `<span class="above-bar-label-name label-left-text">${escapeHtml(rowViewModel.name)}</span>${this._formatAboveValueMarkup(display, displayUnit, false)}`;
     }
 
-    const targetLabelEl = row.querySelector('.target-value-label');
     const peakLabelEl = row.querySelector('.peak-value-label');
     const floorLabelEl = row.querySelector('.floor-value-label');
     const markerModels = rowViewModel.markers ?? [];
@@ -3435,15 +3458,7 @@ ${barMarkerStyles}
         this._setStyleIfChanged(labelEl, 'visibility', 'hidden');
       }
     });
-    const targetMarkerModel = this._getMarkerModel(markerModels, 'target');
-    this._patchMarkerLabelAppearance(targetLabelEl, targetMarkerModel);
-    if (targetLabelEl) {
-      if (targetMarkerModel?.labelVisible && targetMarkerModel.visible && targetMarkerModel.label?.text) {
-        this._setTextIfChanged(targetLabelEl, targetMarkerModel.label?.text ?? null);
-      } else {
-        this._setStyleIfChanged(targetLabelEl, 'visibility', 'hidden');
-      }
-    }
+    this._reconcileTargetLabels(row, markerModels);
     const patchValueLabel = (labelEl, markerType) => {
       if (!labelEl) return;
       const marker = this._getMarkerModel(markerModels, markerType);

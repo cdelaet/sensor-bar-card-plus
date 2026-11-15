@@ -9,9 +9,12 @@ import {
 } from '../utils/format.js';
 import {
   buildMarkerModels,
+  createMarkerModel,
+  hasMarkerLabelContent,
   getMarkerLabelLaneOccupancy,
   getMarkerLaneOccupancy,
 } from './marker-view-model.js';
+import { resolveDirectionalTargets } from './directional-targets.js';
 import { getNeedleBorderColor } from './bar-render-model.js';
 
 function getDefaultEntityIcon(stateObj, entityId = '') {
@@ -136,28 +139,36 @@ export function buildRowViewModel(options) {
     ? createTextPresentation(rawState)
     : createNumericPresentation(numericValue, displayUnit, decimal);
 
-  const sharedTargetValue = getNormalizedResolvableNumericValue(hass, entityConfig?.target_marker?.source, safeMin, safeMax);
-  const targetValue = entityConfig?.target_marker?.enabled === false ? null : sharedTargetValue;
+  const targets = resolveDirectionalTargets(entityConfig, hass, safeMin, safeMax);
+  const targetMarkers = targets.markerSides.map(side => {
+    const { marker, value } = targets[side];
+    const enabled = marker?.enabled !== false;
+    const label = Number.isFinite(value) ? createMarkerLabelPresentation(value, targetUnit,
+      marker?.label_precision ?? marker?.label_decimal ?? decimal, {
+        text: marker?.label_text, showValue: marker?.label_show_value, showUnit: marker?.label_show_unit,
+      }) : null;
+    return createMarkerModel({ id: side === 'above' ? 'target' : 'target-below', type: 'target',
+      value, position: Number.isFinite(value) ? projectScalePercent(toScalePct(value, safeMin, safeMax), scaleDirection) : null,
+      lane: 'below', visible: enabled && Number.isFinite(value), color: marker?.color,
+      shape: marker?.shape ?? 'diamond', direction: marker?.direction,
+      label, labelVisible: enabled && marker?.show_label === true && hasMarkerLabelContent({
+        text: marker.label_text, showValue: marker.label_show_value, showUnit: marker.label_show_unit,
+      }),
+    });
+  });
+  const firstTarget = targetMarkers[0];
+  const targetValue = firstTarget?.visible ? firstTarget.value : null;
   const targetPercent = targetValue !== null ? toScalePct(targetValue, safeMin, safeMax) : null;
-  // Canonical Paint uses the shared threshold independently of marker visibility;
-  // released legacy-only overlays retain their existing marker-disable behavior.
-  const targetPaintPercent = entityConfig?.target_above?.paint && !entityConfig.target_above.legacy
-    ? sharedTargetValue !== null ? toScalePct(sharedTargetValue, safeMin, safeMax) : null : targetPercent;
-  const targetBelowPaintPercent = entityConfig?.target_below?.paint
-    ? sharedTargetValue !== null ? toScalePct(sharedTargetValue, safeMin, safeMax) : null : targetPercent;
-  const targetPositionPercent = projectScalePercent(targetPercent, scaleDirection);
-  const targetVisible = targetValue !== null;
-  const targetDecimal = entityConfig?.target_marker?.label_decimal ?? decimal;
+  const targetPaintPercent = !targets.invalidOrdering && (entityConfig?.target_above?.legacy !== true
+    || targets.above.marker?.enabled !== false) && Number.isFinite(targets.above.value)
+    ? toScalePct(targets.above.value, safeMin, safeMax) : null;
+  const targetBelowPaintPercent = !targets.invalidOrdering && Number.isFinite(targets.below.value)
+    ? toScalePct(targets.below.value, safeMin, safeMax) : null;
+  const targetPositionPercent = firstTarget?.position ?? null;
+  const targetVisible = firstTarget?.visible ?? false;
   const targetPresentation = targetValue !== null
-    ? createNumericPresentation(targetValue, targetUnit, targetDecimal)
-    : null;
-  const targetLabelPresentation = targetValue !== null
-    ? createMarkerLabelPresentation(targetValue, targetUnit, entityConfig?.target_marker?.label_precision ?? targetDecimal, {
-      text: entityConfig?.target_marker?.label_text,
-      showValue: entityConfig?.target_marker?.label_show_value,
-      showUnit: entityConfig?.target_marker?.label_show_unit,
-    })
-    : null;
+    ? createNumericPresentation(targetValue, targetUnit, targets[targets.markerSides[0]].marker?.label_decimal ?? decimal) : null;
+  const targetLabelPresentation = firstTarget?.label;
 
   const baselineValue = entityConfig?.baseline?.enabled === false
     ? null
@@ -234,7 +245,7 @@ export function buildRowViewModel(options) {
         labelVisible: marker.label.show,
       };
     });
-  const markers = buildMarkerModels({
+  const markers = [...targetMarkers, ...buildMarkerModels({
     entityConfig,
     targetValue,
     targetPosition: targetPositionPercent,
@@ -256,7 +267,7 @@ export function buildRowViewModel(options) {
     floorStatus: floorState.status,
     floorReason: floorState.reason,
     genericMarkers,
-  });
+  }).filter(marker => marker.type !== 'target')];
 
   return {
     entityId,
@@ -281,6 +292,8 @@ export function buildRowViewModel(options) {
     targetPercent,
     targetPaintPercent,
     targetBelowPaintPercent,
+    targetOrderingInvalid: targets.invalidOrdering,
+    targetDiagnostics: targets.diagnostics,
     targetPositionPercent,
     targetDisplay: targetPresentation?.text ?? null,
     targetPresentation,
