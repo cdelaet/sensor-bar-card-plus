@@ -1,8 +1,11 @@
 const { test, expect } = require('@playwright/test');
 
 const hosts = ['Card', 'Entity', 'Feature'];
-const destinations = ['bar', 'baseline-above', 'baseline-below', 'target-above'];
-const pathFor = destination => destination === 'bar' ? ['bar', 'paint'] : destination === 'target-above' ? ['target', 'when_above', 'paint'] : ['baseline', destination.slice(9), 'paint'];
+const destinations = ['bar', 'baseline-above', 'baseline-below', 'target-above', 'target-below'];
+const pathFor = destination => destination === 'bar' ? ['bar', 'paint']
+  : destination === 'target-above' ? ['target', 'when_above', 'paint']
+    : destination === 'target-below' ? ['target', 'when_below', 'paint']
+      : ['baseline', destination.slice(9), 'paint'];
 const set = (config, path, value) => {
   let target = config;
   for (const key of path.slice(0, -1)) target = target[key] ??= {};
@@ -23,7 +26,7 @@ async function mount(page, source, host, destination, paint, parentPaint, preset
     await customElements.whenDefined(tag);
     const editor = await customElements.get(tag).getConfigElement();
     const runtime = document.createElement(tag);
-    const states = { 'sensor.power': { entity_id: 'sensor.power', state: destination === 'baseline-below' ? '20' : '80', attributes: {} } };
+    const states = { 'sensor.power': { entity_id: 'sensor.power', state: ['baseline-below', 'target-below'].includes(destination) ? '20' : '80', attributes: {} } };
     const hass = { states, ...(presets ? { connection: {
       connected: true,
       sendMessagePromise: async () => ({ views: [{ cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: { paint: presets } }] }] }),
@@ -59,15 +62,17 @@ async function openPaint(editor, host, destination) {
     if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
   }
   if (destination !== 'bar') {
-    const group = editor.locator(destination === 'target-above' ? (entity ? '#entity-0-group-target' : '#card-group-marker-target') : (entity ? '#entity-0-group-baseline' : '#card-group-baseline'));
+    const target = destination.startsWith('target-');
+    const group = editor.locator(target ? (entity ? '#entity-0-group-target' : '#card-group-marker-target') : (entity ? '#entity-0-group-baseline' : '#card-group-baseline'));
     if (await group.getAttribute('aria-expanded') === 'false') await group.click();
     await expect(group).toHaveAttribute('aria-expanded', 'true');
     await expect(group.locator('..').locator(':scope > .override-group-body')).toBeVisible();
   }
-  if (destination === 'target-above') {
-    const above = editor.locator(`#card-group-${entity ? 'entity-0-' : ''}target-above`);
-    if (await above.getAttribute('aria-expanded') === 'false') await above.click();
-    await expect(above).toHaveAttribute('aria-expanded', 'true');
+  if (destination.startsWith('target-')) {
+    const direction = destination.slice('target-'.length);
+    const targetSection = editor.locator(`#card-group-${entity ? 'entity-0-' : ''}target-${direction}`);
+    if (await targetSection.getAttribute('aria-expanded') === 'false') await targetSection.click();
+    await expect(targetSection).toHaveAttribute('aria-expanded', 'true');
   }
   const id = destination === 'bar' ? (entity ? 'entity-0-paint-editor' : 'card-paint-editor')
     : `${entity ? 'entity-0-' : ''}${destination}-paint-editor`;
@@ -84,7 +89,7 @@ const savedPaint = (page, host, destination) => page.evaluate(({ host, path }) =
 
 function layer(page, host, destination) {
   const runtime = page.locator(host === 'Feature' ? 'sensor-bar-card-plus-feature' : 'sensor-bar-card-plus');
-  return runtime.locator(`.bar-paint-layer[data-layer="${destination === 'bar' ? 'base' : destination === 'target-above' ? 'above-target' : destination}"]`);
+  return runtime.locator(`.bar-paint-layer[data-layer="${destination === 'bar' ? 'base' : destination === 'target-above' ? 'above-target' : destination === 'target-below' ? 'below-target' : destination}"]`);
 }
 
 for (const source of ['src', 'dist']) for (const host of hosts) for (const destination of destinations) {
@@ -98,7 +103,7 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
       host === 'Entity' ? { opacity: 60 } : { preset: 'warm', opacity: 60 },
       host === 'Entity' ? { preset: 'warm' } : undefined, presets);
     const paint = await openPaint(editor, host, destination);
-    if (destination === 'target-above') await paint.evaluate(node => { window.__targetPresetPaintNode = node; });
+    if (destination.startsWith('target-')) await paint.evaluate(node => { window.__targetPresetPaintNode = node; });
     const preset = paint.locator('[data-paint-preset="true"]');
     await expect(preset).toBeVisible();
     await expect(preset).toHaveValue('warm');
@@ -123,7 +128,10 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
     await preset.selectOption('');
     await expect.poll(() => savedPaint(page, host, destination)).toEqual({ opacity: 0 });
     await expect(layer(page, host, destination)).toHaveCSS('opacity', '0');
-    if (destination === 'target-above') expect(await paint.evaluate(node => node === window.__targetPresetPaintNode)).toBe(true);
+    await expect(layer(page, host, destination)).toHaveCSS('background-image', host === 'Entity'
+      ? 'linear-gradient(to right, rgb(0, 0, 0) 0%, rgb(255, 255, 255) 100%)'
+      : 'linear-gradient(to right, rgb(9, 170, 187) 0%, rgb(9, 170, 187) 100%)');
+    if (destination.startsWith('target-')) expect(await paint.evaluate(node => node === window.__targetPresetPaintNode)).toBe(true);
   });
 
   test(`${host} ${destination} visible palettes, edits, sampling and reset (${source})`, async ({ page }) => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { normalizeCardConfig } from '../../src/config/normalize.js';
 import { buildRowViewModel } from '../../src/view-model/row-view-model.js';
 import { buildBarRenderModel } from '../../src/view-model/bar-render-model.js';
-import { BAR_PAINT, BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT, resolveConfiguredDestination } from '../../src/view-model/paint-destinations.js';
+import { BAR_PAINT, BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT, resolveConfiguredDestination, scopeUsesPaintPreset } from '../../src/view-model/paint-destinations.js';
 import { getDestinationEditorState, setDestinationEnabled, resetDestinationPaint, selectDestinationPreset,
   setDestinationProperty, clearDestinationProperty } from '../../src/editor/shared/paint-destination.js';
 import { getPathValue, setPathValue } from '../../src/editor/shared/editor-config.js';
@@ -21,6 +21,21 @@ function modelFor(config, value = 80) {
 }
 
 describe('shared Paint destination contract regressions', () => {
+  it('requests the shared preset registry for references at every destination and scope', () => {
+    const destinations = [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT];
+    const set = (scope, path, value) => {
+      let current = scope;
+      for (const key of path.slice(0, -1)) current = current[key] ??= {};
+      current[path.at(-1)] = value;
+    };
+    for (const destination of destinations) {
+      const card = {};
+      set(card, destination.path, { preset: 'warm' });
+      expect(scopeUsesPaintPreset(card), destination.id).toBe(true);
+      expect(scopeUsesPaintPreset({}), `${destination.id} absent`).toBe(false);
+    }
+  });
+
   for (const side of sides) {
     it(`explicitly enables ${side} with Solid theme defaults and visible paint`, () => {
       const config = { baseline: { at: 50, [side]: { paint: {} } } };

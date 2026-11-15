@@ -13,6 +13,7 @@ import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../da
 import { authoredPaintProperties, resolveScopedPaintPreset } from '../view-model/paint-preset-resolver.js';
 import { resolveBaselinePaints } from '../view-model/baseline-paint-resolver.js';
 import { resolveTargetAbovePaint, resolveTargetBelowPaint } from '../view-model/target-above-paint-resolver.js';
+import { scopeUsesPaintPreset } from '../view-model/paint-destinations.js';
 import { formatNumericDisplay } from '../utils/format.js';
 import { setStyleIfChanged } from '../utils/dom.js';
 import { getFeatureLabelGeometry, layoutFeatureMarkerLabels } from './marker-label-layout.js';
@@ -102,10 +103,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
   }
 
   _syncPaintPresetRegistry() {
-    const usesPreset = this._config?.bar?.paint?.preset !== undefined
-      || this._config?.baseline?.above?.paint?.preset !== undefined
-      || this._config?.baseline?.below?.paint?.preset !== undefined
-      || this._config?.target?.when_above?.paint?.preset !== undefined;
+    const usesPreset = scopeUsesPaintPreset(this._config);
     if (!this.isConnected || !this._hass?.connection || !usesPreset) {
       if (this._paintPresetHandle) {
         this._paintPresetSubscriptionGeneration += 1;

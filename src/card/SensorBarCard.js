@@ -54,6 +54,7 @@ import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../da
 import { authoredPaintProperties, resolvePaintPreset, resolveScopedPaintPreset } from '../view-model/paint-preset-resolver.js';
 import { resolveBaselinePaints } from '../view-model/baseline-paint-resolver.js';
 import { resolveTargetAbovePaint, resolveTargetBelowPaint } from '../view-model/target-above-paint-resolver.js';
+import { scopeUsesPaintPreset } from '../view-model/paint-destinations.js';
 import * as barRenderModel from '../view-model/bar-render-model.js';
 import * as barRenderer from '../render/bar-renderer.js';
 import { attachRowActionHandlers, resolveRowAction } from '../actions/row-actions.js';
@@ -654,13 +655,8 @@ export class SensorBarCard extends HTMLElement {
   }
 
   _syncPaintPresetRegistry() {
-    const usesPreset = this._actionConfig?.bar?.paint?.preset !== undefined
-      || this._actionConfig?.baseline?.above?.paint?.preset !== undefined
-      || this._actionConfig?.baseline?.below?.paint?.preset !== undefined
-      || this._actionConfig?.target?.when_above?.paint?.preset !== undefined
-      || (this._actionConfig?.entities ?? []).some(entity => entity?.bar?.paint?.preset !== undefined
-        || entity?.baseline?.above?.paint?.preset !== undefined || entity?.baseline?.below?.paint?.preset !== undefined
-        || entity?.target?.when_above?.paint?.preset !== undefined);
+    const usesPreset = scopeUsesPaintPreset(this._actionConfig)
+      || (this._actionConfig?.entities ?? []).some(scopeUsesPaintPreset);
     if (!this.isConnected || !this._hass?.connection || !usesPreset) {
       if (this._paintPresetHandle) {
         this._paintPresetSubscriptionGeneration += 1;

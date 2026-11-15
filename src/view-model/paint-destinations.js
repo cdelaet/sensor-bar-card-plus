@@ -38,6 +38,20 @@ export const TARGET_BELOW_PAINT = {
   normalize(config, parent) { return normalizeTargetBelowConfig(config, parent).paint; },
 };
 
+// Runtime hosts use this shared descriptor list to decide whether the
+// dashboard Paint registry is needed. Keeping the gate on the same contracts
+// prevents a newly integrated destination from resolving only after another
+// destination happens to trigger a subscription.
+export const PAINT_DESTINATIONS = [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT];
+
+function valueAtPath(value, path) {
+  return path.reduce((current, key) => current?.[key], value);
+}
+
+export function scopeUsesPaintPreset(config) {
+  return PAINT_DESTINATIONS.some(destination => valueAtPath(config, destination.path)?.preset !== undefined);
+}
+
 /** Resolve a normalized destination using the same scope/preset ordering in
  * editors and runtime hosts. Activation belongs to normalization, never Bar. */
 export function resolveDestinationPaint(paint, inheritedPaint, registry) {

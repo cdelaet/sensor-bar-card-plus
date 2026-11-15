@@ -1,9 +1,9 @@
 const { test, expect } = require('@playwright/test');
 const { openTarget } = require('./target-test-utils.cjs');
 
-async function mount(page, source, host, config = {}, value = 80, width = 240) {
+async function mount(page, source, host, config = {}, value = 80, width = 240, presets = null) {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
-  await page.evaluate(async ({ host, config, value, width }) => {
+  await page.evaluate(async ({ host, config, value, width, presets }) => {
     const tag = host === 'Feature' ? 'sensor-bar-card-plus-feature' : 'sensor-bar-card-plus';
     await customElements.whenDefined(tag);
     const editor = await customElements.get(tag).getConfigElement(), runtime = document.createElement(tag);
@@ -14,7 +14,12 @@ async function mount(page, source, host, config = {}, value = 80, width = 240) {
       ...(host === 'Feature' ? {} : { entities: [{ entity: 'sensor.power' }] }), ...config };
     window.__targetEvents = [];
     window.__targetConfig = structuredClone(initial);
-    window.__targetHass = { states: { 'sensor.power': { state: String(value), attributes: {} }, 'sensor.goal': { state: '60', attributes: { limit: 60 } } } };
+    window.__targetHass = { states: { 'sensor.power': { state: String(value), attributes: {} }, 'sensor.goal': { state: '60', attributes: { limit: 60 } } },
+      ...(presets ? { connection: {
+        connected: true,
+        sendMessagePromise: async () => ({ views: [{ cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: { paint: presets } }] }] }),
+        subscribeEvents: async () => () => {}, addEventListener() {}, removeEventListener() {},
+      } } : {}) };
     window.__replaceTarget = config => {
       window.__targetConfig = structuredClone(config);
       editor.setConfig(config); runtime.setConfig(config); runtime.hass = window.__targetHass;
@@ -29,7 +34,7 @@ async function mount(page, source, host, config = {}, value = 80, width = 240) {
     if (host === 'Feature') editor.context = runtime.context = { entity_id: 'sensor.power' };
     editor.hass = window.__targetHass;
     await editor.updateComplete; await runtime.updateComplete;
-  }, { host, config, value, width });
+  }, { host, config, value, width, presets });
   return { editor: page.locator(host === 'Feature' ? 'sensor-bar-card-plus-feature-editor' : 'sensor-bar-card-plus-editor'),
     runtime: page.locator(host === 'Feature' ? 'sensor-bar-card-plus-feature' : 'sensor-bar-card-plus') };
 }
@@ -202,5 +207,24 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Entity', 'Fea
     expect(scope.target.when_below.paint.color).toBe('#008000');
     expect(scope.target.when_below.paint.opacity).toBe(host === 'Entity' ? undefined : 45);
     expect((host === 'Entity' ? config.target : scope.target).when_above.paint.color).toBe('blue');
+  });
+
+  test(`${host}/${source}: Below-only preset selection renders without an Above preset (${source})`, async ({ page }) => {
+    const { editor, runtime } = await mount(page, source, host, {
+      target: { at: 60, when_below: { paint: {} } },
+    }, 20, 240, { warm: { fill_style: 'solid', color: '#d02070' } });
+    await openTarget(editor, host, ['below']);
+    const prefix = host === 'Entity' ? 'entity-0-' : '';
+    const paint = editor.locator(`#${prefix}target-below-paint-editor`);
+    await paint.locator(':scope > summary').click();
+    const preset = paint.locator('[data-paint-preset="true"]');
+    await expect(preset.locator('option[value="warm"]')).toHaveCount(1);
+    page.once('dialog', dialog => dialog.accept());
+    await preset.selectOption('warm');
+    const layer = runtime.locator('.bar-paint-layer[data-layer="below-target"]');
+    await expect(layer).toHaveCSS('display', 'block');
+    await expect(layer).toHaveCSS('background-image',
+      'linear-gradient(to right, rgb(208, 32, 112) 0%, rgb(208, 32, 112) 100%)');
+    expect((await saved(page)).target.when_above?.paint?.preset).toBeUndefined();
   });
 }
