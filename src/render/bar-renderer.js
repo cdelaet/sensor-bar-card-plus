@@ -172,7 +172,7 @@ export function patchBar(root, model, { revealDuration = 600 } = {}) {
   const baselineIndicator = root.querySelector('.baseline-indicator');
   if (fillReveal) {
     setStyleTextIfChanged(fillReveal, `${model.fill.revealStyle};--sbcp-reveal-duration:${revealDuration}ms`);
-    setClassNameIfChanged(fillReveal, `bar-fill-reveal${model.animated ? '' : ' no-anim'}`);
+    setClassNameIfChanged(fillReveal, `bar-fill-reveal${model.fill.needleMode ? ' needle-mode' : ''}${model.animated ? '' : ' no-anim'}`);
     reconcilePaintLayers(fillReveal, model.fill.paintLayers);
   }
   if (baselineIndicator) {
@@ -227,7 +227,7 @@ export function renderBar(model, { insideContent = '' } = {}) {
   const paintLayers = fillState.paintLayers.map(layer => `
                   <div class="bar-paint-layer" data-layer="${layer.id}" style="z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}"></div>`).join('');
   return `<div class="bar-track">
-                <div class="bar-fill-reveal${model.animated ? '' : ' no-anim'}" style="${fillState.revealStyle}">
+                <div class="bar-fill-reveal${fillState.needleMode ? ' needle-mode' : ''}${model.animated ? '' : ' no-anim'}" style="${fillState.revealStyle}">
 ${paintLayers}
                 </div>
                 ${baselineIndicator}

@@ -247,26 +247,31 @@ for (const source of ['src', 'dist']) for (const scaleDirection of ['normal', 'r
       ? { below: /inset\(0px 40% 0px 50%/, above: /inset\(0px 30% 0px 60%/ }
       : { below: /inset\(0px 50% 0px 40%/, above: /inset\(0px 60% 0px 30%/ };
 
-    await expect(above).toHaveCSS('display', 'none');
+    await expect(above).toHaveCSS('clip-path', scaleDirection === 'normal'
+      ? /inset\(0px 50% 0px 60%/ : /inset\(0px 60% 0px 50%/);
     await expect(below).toHaveCSS('display', 'block');
     await expect(below).toHaveCSS('clip-path', clips.below);
     await expect(below).toHaveCSS('background-image', /rgb\(32, 128, 208\)/);
     await update(60);
-    await expect(above).toHaveCSS('display', 'none');
-    await expect(below).toHaveCSS('display', 'none');
+    await expect(above).toHaveCSS('clip-path', scaleDirection === 'normal'
+      ? /inset\(0px 40% 0px 60%/ : /inset\(0px 60% 0px 40%/);
+    await expect(below).toHaveCSS('clip-path', scaleDirection === 'normal'
+      ? /inset\(0px 40% 0px 60%/ : /inset\(0px 60% 0px 40%/);
     await update(70);
     await expect(above).toHaveCSS('display', 'block');
     await expect(above).toHaveCSS('clip-path', clips.above);
     await expect(above).toHaveCSS('background-image', /rgb\(208, 32, 112\)/);
-    await expect(below).toHaveCSS('display', 'none');
+    await expect(below).toHaveCSS('clip-path', scaleDirection === 'normal'
+      ? /inset\(0px 40% 0px 70%/ : /inset\(0px 70% 0px 40%/);
   });
 
   test(`legacy upper Target Paint follows strict Needle violation gating (${source}, ${scaleDirection} Scale)`, async ({ page }) => {
     const { runtime } = await mount(page, source, 'Card', {
-      bar: { needle: true }, target: { at: 60, when_exceeded: { fill_color: '#d02070' } },
+      bar: { needle: true }, scale: { direction: scaleDirection },
+      target: { at: 60, when_exceeded: { fill_color: '#d02070' } },
     }, 40);
     const layer = runtime.locator('.bar-paint-layer[data-layer="above-target"]');
-    await expect(layer).toHaveCSS('display', 'none');
+    await expect(layer).toHaveCSS('clip-path', /inset\(0px 60%(?: 0px 60%)?\)/);
     await page.evaluate(() => {
       const card = document.querySelector('sensor-bar-card-plus');
       window.__targetHass = { ...window.__targetHass, states: { ...window.__targetHass.states,
@@ -274,7 +279,66 @@ for (const source of ['src', 'dist']) for (const scaleDirection of ['normal', 'r
       card.hass = window.__targetHass;
     });
     await expect(layer).toHaveCSS('display', 'block');
-    await expect(layer).toHaveCSS('clip-path', /inset\(0px 20% 0px 60%/);
+    await expect(layer).toHaveCSS('clip-path', scaleDirection === 'normal'
+      ? /inset\(0px 20% 0px 60%/ : /inset\(0px 60% 0px 20%/);
     await expect(layer).toHaveCSS('background-image', /rgb\(208, 32, 112\)/);
+  });
+}
+
+for (const source of ['src', 'dist']) {
+  test(`Needle Target Paint shares needle timing and easing and follows its moving edge (${source})`, async ({ page }) => {
+    const { runtime } = await mount(page, source, 'Card', {
+      bar: { needle: true, animated: true },
+      target: { at: 60, when_above: { paint: { color: '#d02070' } }, when_below: { paint: { color: '#2080d0' } } },
+    }, 50);
+    const timing = await runtime.evaluate(node => {
+      const root = node.shadowRoot, needle = getComputedStyle(root.querySelector('.needle-marker'));
+      const above = getComputedStyle(root.querySelector('[data-layer="above-target"]'));
+      const below = getComputedStyle(root.querySelector('[data-layer="below-target"]'));
+      return [needle.transitionDuration, needle.transitionTimingFunction,
+        above.transitionProperty, above.transitionDuration, above.transitionTimingFunction,
+        below.transitionProperty, below.transitionDuration, below.transitionTimingFunction];
+    });
+    expect(timing).toEqual([
+      '0.6s', 'cubic-bezier(0.4, 0, 0.2, 1)', 'clip-path', '0.6s', 'cubic-bezier(0.4, 0, 0.2, 1)',
+      'clip-path', '0.6s', 'cubic-bezier(0.4, 0, 0.2, 1)',
+    ]);
+
+    await page.evaluate(() => {
+      const card = document.querySelector('sensor-bar-card-plus');
+      window.__targetHass = { ...window.__targetHass, states: { ...window.__targetHass.states,
+        'sensor.power': { ...window.__targetHass.states['sensor.power'], state: '80' } } };
+      card.hass = window.__targetHass;
+    });
+    await page.waitForTimeout(300);
+    const movingEdges = await runtime.evaluate(node => {
+      const root = node.shadowRoot, width = root.querySelector('.bar-track').getBoundingClientRect().width;
+      const needle = Number.parseFloat(getComputedStyle(root.querySelector('.needle-marker')).left) / width * 100;
+      const read = (selector, movingStart = false) => {
+        const clip = getComputedStyle(root.querySelector(selector)).clipPath;
+        const insets = clip.match(/inset\([^ ]+ ([^ ]+) [^ ]+ ([^ )]+)/);
+        return movingStart ? Number.parseFloat(insets[2]) : 100 - Number.parseFloat(insets[1]);
+      };
+      return { needle, above: read('[data-layer="above-target"]'), below: read('[data-layer="below-target"]', true) };
+    });
+    expect(movingEdges.needle).toBeGreaterThan(60);
+    expect(movingEdges.needle).toBeLessThan(80);
+    expect(Math.abs(movingEdges.needle - movingEdges.above)).toBeLessThan(1);
+    expect(Math.abs(movingEdges.needle - movingEdges.below)).toBeLessThan(1);
+  });
+
+  test(`Needle Target Paint and Fill Paint do not transition when their existing animation setting is disabled (${source})`, async ({ page }) => {
+    const { runtime } = await mount(page, source, 'Card', {
+      bar: { needle: true, animated: false },
+      target: { at: 60, when_above: { paint: { color: '#d02070' } } },
+    }, 80);
+    await expect(runtime.locator('[data-layer="above-target"]')).toHaveCSS('transition-duration', '0s');
+  });
+
+  test(`Fill Target Paint retains its existing non-animated clipping (${source})`, async ({ page }) => {
+    const { runtime } = await mount(page, source, 'Card', {
+      bar: { animated: true }, target: { at: 60, when_above: { paint: { color: '#d02070' } } },
+    }, 80);
+    await expect(runtime.locator('[data-layer="above-target"]')).toHaveCSS('transition-duration', '0s');
   });
 }

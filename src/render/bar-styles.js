@@ -1,5 +1,7 @@
 // Separate chunks let the standalone card preserve its existing CSS rule order.
 // Adapters supply --sbcp-row-height in their own DOM; layout and labels stay outside.
+const markerTransition = '0.6s cubic-bezier(0.4,0,0.2,1)';
+
 export const barTrackStyles = `
         .bar-track {
           position: relative;
@@ -26,6 +28,10 @@ export const barTrackStyles = `
         .bar-paint-layer[data-layer="below-target"] {
           z-index: 2;
         }
+        .bar-fill-reveal.needle-mode .bar-paint-layer[data-layer="above-target"],
+        .bar-fill-reveal.needle-mode .bar-paint-layer[data-layer="below-target"] {
+          transition: clip-path ${markerTransition};
+        }
         .bar-fill-reveal.no-anim {
           transition: none;
         }
@@ -38,7 +44,7 @@ export const barTrackStyles = `
           background-color: var(--primary-text-color, currentColor);
           opacity: 0.6;
           pointer-events: none;
-          transition: left 0.6s cubic-bezier(0.4,0,0.2,1);
+          transition: left ${markerTransition};
           z-index: 3;
         }
 `;
@@ -327,6 +333,8 @@ export const barMarkerStyles = `
 export function getBarAnimationStyles(selector) {
   return `
         ${selector} .bar-fill-reveal,
+        ${selector} .bar-fill-reveal.needle-mode .bar-paint-layer[data-layer="above-target"],
+        ${selector} .bar-fill-reveal.needle-mode .bar-paint-layer[data-layer="below-target"],
         ${selector} .needle-marker,
         ${selector} .target-marker,
         ${selector} .peak-marker,
