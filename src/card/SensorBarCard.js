@@ -52,10 +52,10 @@ import {
 import { HistoricalHostRuntime } from '../history/host-runtime.js';
 import { historicalMarkerConsumers, historicalMarkerResults } from '../history/marker-consumers.js';
 import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
-import { authoredPaintProperties, resolvePaintPreset, resolveScopedPaintPreset } from '../view-model/paint-preset-resolver.js';
+import { authoredPaintProperties, resolveScopedPaintPreset } from '../view-model/paint-preset-resolver.js';
+import { resolveDestinationPaint, scopeUsesPaintPreset } from '../view-model/paint-destinations.js';
 import { resolveBaselinePaints } from '../view-model/baseline-paint-resolver.js';
 import { resolveTargetAbovePaint, resolveTargetBelowPaint } from '../view-model/target-above-paint-resolver.js';
-import { scopeUsesPaintPreset } from '../view-model/paint-destinations.js';
 import * as barRenderModel from '../view-model/bar-render-model.js';
 import * as barRenderer from '../render/bar-renderer.js';
 import { attachRowActionHandlers, resolveRowAction } from '../actions/row-actions.js';
@@ -632,12 +632,7 @@ export class SensorBarCard extends HTMLElement {
       })));
       const entityPaint = authoredPaintProperties(entity.bar?.paint);
       if (!cardHasPreset && !Object.prototype.hasOwnProperty.call(entityPaint, 'preset')) continue;
-      const local = resolvePaintPreset({
-        paint: entityPaint,
-        inheritedPaint: root.paint,
-        registry: this._paintPresetRegistry,
-        canonicalPaint: true,
-      });
+      const local = resolveDestinationPaint(entity.bar?.paint, this._config.bar.paint, this._paintPresetRegistry);
       this._paintPresetEntityPaints.set(entity, local.paint);
       diagnostics.push(...local.diagnostics.map(diagnostic => ({
         ...diagnostic,

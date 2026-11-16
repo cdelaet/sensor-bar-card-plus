@@ -170,6 +170,8 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
     await expect(paint.locator('[data-paint-property="opacity"]')).toHaveValue(host === 'Entity' ? '80' : '100');
     await expect(layer(page, host, destination)).toHaveCSS('opacity', host === 'Entity' ? '0.8' : '1');
     await expect(paint.locator('.paint-editor-description')).not.toContainText('warm');
+    const previewPaint = await paint.locator('.paint-editor-swatch').evaluate(node => getComputedStyle(node).backgroundImage);
+    await expect(layer(page, host, destination)).toHaveCSS('background-image', previewPaint);
   });
 
   test(`${host} ${destination} None retains authored properties and resolves the inherited preset (${source})`, async ({ page }) => {
@@ -519,6 +521,126 @@ for (const source of ['src', 'dist']) for (const destination of destinations.sli
     await expect(paint.locator('[data-kind="gradient-pos"]').first()).toBeVisible();
   });
 }
+
+for (const source of ['src', 'dist']) test(`Entity Bar None uses the same default Paint in the editor and runtime (${source})`, async ({ page }) => {
+  const presets = {
+    'Hot-to-Cold': { fill_style: 'gradient', opacity: 40,
+      gradient_stops: [{ pos: 0, color: '#112233' }, { pos: 100, color: '#445566' }] },
+  };
+  const editor = await mount(page, source, 'Entity', 'bar', { opacity: 65 }, { preset: 'Hot-to-Cold' }, presets);
+  const paint = await openPaint(editor, 'Entity', 'bar');
+  const preset = paint.locator('[data-paint-preset="true"]');
+  const inherit = editor.locator('#entity-0-bar-inherit');
+  await expect(inherit).not.toBeChecked();
+  await editor.evaluate(node => {
+    const container = node.parentElement; container.style.height = '500px'; container.style.overflow = 'auto';
+    const before = document.createElement('div'); before.style.height = '850px';
+    const after = document.createElement('div'); after.style.height = '1600px';
+    container.prepend(before); container.append(after); window.__entityNoneScroll = container;
+  });
+  await preset.scrollIntoViewIfNeeded();
+  await preset.focus();
+  await paint.evaluate(node => { window.__entityNoneMounted = [node,
+    node.querySelector('[data-paint-preset="true"]'), node.querySelector('[data-paint-property="fill_style"]'),
+    node.querySelector('[data-paint-property="opacity"]'), node.querySelector('.paint-editor-swatch')]; });
+  const beforeNone = await page.evaluate(() => ({ scroll: window.__entityNoneScroll.scrollTop,
+    top: window.__entityNoneMounted[1].getBoundingClientRect().top, events: window.__paintEvents.length }));
+  await preset.selectOption('');
+  await expect.poll(() => savedPaint(page, 'Entity', 'bar')).toEqual({ opacity: 65, preset: null });
+  await expect(preset).toBeFocused();
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const afterNone = await page.evaluate(() => ({
+    options: [...document.querySelector('sensor-bar-card-plus-editor').shadowRoot
+      .querySelector('#entity-0-paint-editor [data-paint-preset="true"]').options].map(option => option.textContent),
+    editorPaint: getComputedStyle(document.querySelector('sensor-bar-card-plus-editor').shadowRoot
+      .querySelector('#entity-0-paint-editor .paint-editor-swatch')).backgroundImage,
+    editorOpacity: getComputedStyle(document.querySelector('sensor-bar-card-plus-editor').shadowRoot
+      .querySelector('#entity-0-paint-editor .paint-editor-swatch')).opacity,
+    runtimePaint: getComputedStyle(document.querySelector('sensor-bar-card-plus')
+      .shadowRoot.querySelector('.bar-paint-layer[data-layer="base"]')).backgroundImage,
+    runtimeOpacity: getComputedStyle(document.querySelector('sensor-bar-card-plus')
+      .shadowRoot.querySelector('.bar-paint-layer[data-layer="base"]')).opacity,
+    inherit: document.querySelector('sensor-bar-card-plus-editor').shadowRoot
+      .querySelector('#entity-0-bar-inherit').checked,
+    summary: document.querySelector('sensor-bar-card-plus-editor').shadowRoot
+      .querySelector('#entity-0-group-bar-summary').textContent,
+    fillStyle: document.querySelector('sensor-bar-card-plus-editor').shadowRoot
+      .querySelector('#entity-0-paint-editor [data-paint-property="fill_style"]').value,
+    selectedPreset: document.querySelector('sensor-bar-card-plus-editor').shadowRoot
+      .querySelector('#entity-0-paint-editor [data-paint-preset="true"]').value,
+    opacitySource: document.querySelector('sensor-bar-card-plus-editor').shadowRoot
+      .querySelector('#entity-0-paint-editor [data-paint-source="opacity"]').textContent,
+    events: window.__paintEvents.length,
+    scroll: window.__entityNoneScroll.scrollTop,
+    top: window.__entityNoneMounted[1].getBoundingClientRect().top,
+    mounted: window.__entityNoneMounted.every(node => node?.isConnected)
+      && window.__entityNoneMounted[0] === document.querySelector('sensor-bar-card-plus-editor').shadowRoot.querySelector('#entity-0-paint-editor'),
+  }));
+  const fillStyle = paint.locator('[data-paint-property="fill_style"]');
+  await fillStyle.selectOption('bands');
+  await expect.poll(() => savedPaint(page, 'Entity', 'bar')).toEqual({ opacity: 65, preset: null, fill_style: 'bands' });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const afterBands = await page.evaluate(() => ({
+    editorPaint: getComputedStyle(document.querySelector('sensor-bar-card-plus-editor').shadowRoot
+      .querySelector('#entity-0-paint-editor .paint-editor-swatch')).backgroundImage,
+    editorOpacity: getComputedStyle(document.querySelector('sensor-bar-card-plus-editor').shadowRoot
+      .querySelector('#entity-0-paint-editor .paint-editor-swatch')).opacity,
+    runtimePaint: getComputedStyle(document.querySelector('sensor-bar-card-plus')
+      .shadowRoot.querySelector('.bar-paint-layer[data-layer="base"]')).backgroundImage,
+    runtimeOpacity: getComputedStyle(document.querySelector('sensor-bar-card-plus')
+      .shadowRoot.querySelector('.bar-paint-layer[data-layer="base"]')).opacity,
+    events: window.__paintEvents.length,
+    mounted: window.__entityNoneMounted.every(node => node?.isConnected)
+      && window.__entityNoneMounted[0] === document.querySelector('sensor-bar-card-plus-editor').shadowRoot.querySelector('#entity-0-paint-editor'),
+  }));
+  const hasDefaultPalette = value => ['rgb(76, 175, 80)', 'rgb(255, 152, 0)', 'rgb(244, 67, 54)']
+    .every(color => value.includes(color));
+  expect({
+    unavailableEmptyName: afterNone.options.some(option => option.includes('(empty name) (unavailable)')),
+    editorShowsDefaultPalette: hasDefaultPalette(afterNone.editorPaint),
+    runtimeShowsDefaultPaletteAfterNone: hasDefaultPalette(afterNone.runtimePaint),
+    runtimeMatchesEditorAfterNone: afterNone.runtimePaint === afterNone.editorPaint,
+    runtimeOpacityAfterNone: afterNone.runtimeOpacity,
+    editorOpacityAfterNone: afterNone.editorOpacity,
+    inheritedCheckbox: afterNone.inherit,
+    barSummary: afterNone.summary,
+    fillStyleAfterNone: afterNone.fillStyle,
+    selectedPresetAfterNone: afterNone.selectedPreset,
+    opacitySourceAfterNone: afterNone.opacitySource,
+    noneConfigEcho: afterNone.events - beforeNone.events,
+    noneScrollStable: Math.abs(afterNone.scroll - beforeNone.scroll) <= 1 && Math.abs(afterNone.top - beforeNone.top) <= 1,
+    mountedAfterNone: afterNone.mounted,
+    editorShowsDefaultPaletteAfterBands: hasDefaultPalette(afterBands.editorPaint),
+    runtimeShowsDefaultPaletteAfterBands: hasDefaultPalette(afterBands.runtimePaint),
+    runtimeMatchesEditorAfterBands: afterBands.runtimePaint === afterBands.editorPaint,
+    runtimeOpacityAfterBands: afterBands.runtimeOpacity,
+    editorOpacityAfterBands: afterBands.editorOpacity,
+    bandsConfigEcho: afterBands.events - afterNone.events,
+    mountedAfterBands: afterBands.mounted,
+  }).toEqual({
+    unavailableEmptyName: false,
+    editorShowsDefaultPalette: true,
+    runtimeShowsDefaultPaletteAfterNone: true,
+    runtimeMatchesEditorAfterNone: true,
+    runtimeOpacityAfterNone: '0.65',
+    editorOpacityAfterNone: '0.65',
+    inheritedCheckbox: false,
+    barSummary: 'Custom row settings',
+    fillStyleAfterNone: 'bands',
+    selectedPresetAfterNone: '',
+    opacitySourceAfterNone: 'Local',
+    noneConfigEcho: 1,
+    noneScrollStable: true,
+    mountedAfterNone: true,
+    editorShowsDefaultPaletteAfterBands: true,
+    runtimeShowsDefaultPaletteAfterBands: true,
+    runtimeMatchesEditorAfterBands: true,
+    runtimeOpacityAfterBands: '0.65',
+    editorOpacityAfterBands: '0.65',
+    bandsConfigEcho: 1,
+    mountedAfterBands: true,
+  });
+});
 
 for (const source of ['src', 'dist']) test(`Target None retains local gradient stops with a legacy Needle Bar (${source})`, async ({ page }) => {
   const { mount: mountTarget, openTarget } = require('./target-test-utils.cjs');

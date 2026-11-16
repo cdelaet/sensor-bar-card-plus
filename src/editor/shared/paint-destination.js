@@ -105,7 +105,8 @@ export function getDestinationEditorState(context, scope, destination = BAR_PAIN
   const inheritedPreset = parent ? getPathValue(parent, [...destination.path, 'preset']) : undefined;
   const presetReference = ownPreset !== undefined ? ownPreset : inheritedPreset;
   const presetOptions = Object.keys(registry?.presets ?? {}).filter(name => name.trim()).map(name => ({ value: name, label: name }));
-  if (presetReference !== undefined && !presetOptions.some(option => option.value === String(presetReference))) {
+  if (presetReference !== undefined && presetReference !== null
+    && !presetOptions.some(option => option.value === String(presetReference))) {
     presetOptions.push({ value: String(presetReference ?? ''), label: `${String(presetReference || '(empty name)')} (unavailable)` });
   }
   const presetFailed = resolved.diagnostics.some(item => item.reference === presetReference && item.code !== 'paint_opacity_invalid');

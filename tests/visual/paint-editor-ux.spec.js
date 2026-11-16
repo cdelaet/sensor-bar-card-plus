@@ -35,7 +35,11 @@ async function mount(page, source, destination, inherited = false, width = 360) 
   const prefix = destination === 'Entity' ? 'entity-0' : 'card';
   const root = editor.locator(`#${prefix}-paint-editor`);
   await expect(root.locator('[data-paint-preset] option[value="night"]')).toHaveCount(1);
-  if (destination === 'Entity') await editor.locator('[data-action="toggle-entity-overrides"]').first().click();
+  if (destination === 'Entity') {
+    await editor.locator('[data-action="toggle-entity-overrides"]').first().click();
+    const bar = editor.locator('#entity-0-group-bar');
+    if (await bar.getAttribute('aria-expanded') === 'false') await bar.click();
+  }
   await root.locator(':scope > summary').click();
   for (const group of ['segments', 'gradient-stops']) await root.locator(`#${prefix}-group-${group}`).click();
   return { editor, root };

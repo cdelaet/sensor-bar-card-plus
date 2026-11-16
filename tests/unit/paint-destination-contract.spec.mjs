@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { normalizeCardConfig } from '../../src/config/normalize.js';
 import { buildRowViewModel } from '../../src/view-model/row-view-model.js';
 import { buildBarRenderModel } from '../../src/view-model/bar-render-model.js';
-import { BAR_PAINT, BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT, resolveConfiguredDestination, scopeUsesPaintPreset } from '../../src/view-model/paint-destinations.js';
+import { BAR_PAINT, BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT, resolveConfiguredDestination, resolveDestinationPaint, scopeUsesPaintPreset } from '../../src/view-model/paint-destinations.js';
+import { resolveBaselinePaints } from '../../src/view-model/baseline-paint-resolver.js';
+import { resolveTargetAbovePaint, resolveTargetBelowPaint } from '../../src/view-model/target-above-paint-resolver.js';
 import { getDestinationEditorState, handlePaintPresetControl, setDestinationEnabled, resetDestinationPaint, selectDestinationPreset,
   setDestinationProperty, clearDestinationProperty } from '../../src/editor/shared/paint-destination.js';
 import { getPathValue, setPathValue } from '../../src/editor/shared/editor-config.js';
@@ -232,6 +234,30 @@ for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TA
       expect(f.paint()).toEqual({ preset: 'cool' });
       expect(control.value).toBe('');
       expect(f.state()).toMatchObject({ presetInherited: false, presetReference: 'cool', paint: { fill_style: 'solid', color: '#123456', opacity: 75 } });
+    });
+
+    if (host === 'Entity') it('treats null as None and preserves the default resolution across scopes', () => {
+      const f = fixture(host, destination, { preset: null, opacity: 65 }, { preset: 'warm' });
+      const state = f.state();
+      expect(state).toMatchObject({ presetReference: null, presetInherited: false, paint: { opacity: 65 } });
+      expect(state.presetOptions).not.toContainEqual({ value: '', label: '(empty name) (unavailable)' });
+      expect(state.sources.opacity).toBe('Local');
+      const normalized = normalizeCardConfig(f.config());
+      const runtime = destination === BAR_PAINT
+        ? resolveDestinationPaint(normalized.entities[0].bar.paint, normalized.bar.paint, registry).paint
+        : destination.id.startsWith('baseline-')
+          ? resolveBaselinePaints(normalized.entities[0].baseline, normalized.baseline, registry).paints[destination.id.slice(9)]
+          : destination === TARGET_ABOVE_PAINT
+            ? resolveTargetAbovePaint(normalized.entities[0].target_above, normalized.target_above, registry).paint
+            : resolveTargetBelowPaint(normalized.entities[0].target_below, normalized.target_below, registry).paint;
+      expect(compilePaint(state.paint, { samplePercent: 50 }).gradient)
+        .toBe(compilePaint(runtime, { samplePercent: 50 }).gradient);
+      if (destination === BAR_PAINT) {
+        expect(state.paint.fill_style).toBe('bands');
+        expect(state.paint.segments.map(segment => segment.color)).toEqual(['#4CAF50', '#FF9800', '#F44336']);
+      } else {
+        expect(state.paint).toMatchObject({ fill_style: 'solid', color: themeColor, opacity: 65 });
+      }
     });
 
     if (host === 'Entity') it('resolves the parent preset before local overrides and identifies genuine inheritance', () => {

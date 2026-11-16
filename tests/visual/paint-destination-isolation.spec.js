@@ -74,6 +74,8 @@ async function open(page, destination, palette = 'gradient_stops') {
   if (destination === 'Entity') {
     const toggle = editor.locator('button[data-action="toggle-entity-overrides"][data-index="0"]');
     if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
+    const bar = editor.locator('#entity-0-group-bar');
+    if (await bar.getAttribute('aria-expanded') === 'false') await bar.click();
   }
   const root = rootFor(page, destination);
   if (!await root.evaluate(node => node.open)) await root.locator(':scope > summary').press('Enter');

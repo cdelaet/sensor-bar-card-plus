@@ -687,6 +687,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementText(`entity-${index}-group-scale-summary`, this._getScaleOverrideSummary(scope));
       this._setElementText(`entity-${index}-group-target-summary`, this._getTargetOverrideSummary(scope));
       this._setElementText(`entity-${index}-group-baseline-summary`, this._getBaselineOverrideSummary(scope));
+      this._setElementText(`entity-${index}-group-bar-summary`, this._getBarAppearanceSummary(scope));
       this._setElementText(`entity-${index}-group-needle-summary`, this._getNeedleSummary(scope));
       this._setElementText(`entity-${index}-group-peak-summary`, this._getPeakSummary(scope));
       this._setElementText(`entity-${index}-group-floor-summary`, this._getFloorSummary(scope));

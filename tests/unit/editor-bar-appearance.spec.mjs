@@ -114,6 +114,19 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     expect(editor.shadowRoot.querySelector('#entity-0-bar-fill-style').value).toBe('gradient');
   });
 
+  it('summarizes local default Bar settings as custom and refreshes the mounted summary', () => {
+    const { editor, events } = setup(source, { entities: [{ entity: 'sensor.power' }] });
+    const inherit = editor.shadowRoot.querySelector('#entity-0-bar-inherit');
+    expect(inherit.checked).toBe(true);
+    expect(editor._getBarAppearanceSummary(row)).toBe('Inherited');
+
+    edit(editor, 'entity-0-bar-opacity', '65');
+
+    expect(inherit.checked).toBe(false);
+    expect(editor._getBarAppearanceSummary(row)).toBe('Custom row settings');
+    expect(events.at(-1).detail.config.entities[0].bar.paint.opacity).toBe(65);
+  });
+
   it('retains CSS color fallback, aliases, mounted input echoes and picker edits', () => {
     const { editor, events } = setup(source, { color: 'red', entities: [{ entity: 'sensor.power' }] });
     expect(editor._getScopedBarColorValue(row)).toBe('#4a9eff');
@@ -204,10 +217,10 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     handleBarAppearanceField(context, { field: 'bar-opacity', value: 0 });
     expect(editor._draftConfig.bar.paint.opacity).toBe(0);
     expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: '' })).toBe(true);
-    expect(editor._draftConfig.bar.paint).toEqual({ opacity: 0 });
+    expect(editor._draftConfig.bar.paint).toEqual({ preset: null, opacity: 0 });
   });
 
-  it('clears only the preset reference and retains local palette state', () => {
+  it('selecting None retains local palette state', () => {
     const { editor, events } = setup(source, { bar: { paint: {
       preset: 'night', fill_style: 'bands', segments: [{ from: '15%', to: '100%', color: '#123456' }],
     } } });
@@ -217,7 +230,7 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
 
     expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: '' })).toBe(true);
     expect(cleared).toBe(false);
-    expect(editor._draftConfig.bar.paint).toEqual({ fill_style: 'bands', segments: [{ from: '15%', to: '100%', color: '#123456' }] });
+    expect(editor._draftConfig.bar.paint).toEqual({ preset: null, fill_style: 'bands', segments: [{ from: '15%', to: '100%', color: '#123456' }] });
     expect(events).toHaveLength(1);
   });
 

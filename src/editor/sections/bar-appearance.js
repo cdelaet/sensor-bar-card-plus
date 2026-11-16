@@ -133,7 +133,8 @@ export function getBarAppearanceSummary(context, scope) {
   if (fillStyle && fillStyle !== 'bands') parts.push(fillStyle.replace(/_/g, ' '));
   if (color && normalizeColorComparisonValue(color) !== normalizeColorComparisonValue('#4a9eff')) parts.push('Custom color');
   if (direction !== undefined) parts.push(`Direction ${direction === 'reverse' ? 'Reverse' : 'Normal'}`);
-  return parts.length ? parts.join(' • ') : 'Inherited';
+  return parts.length ? parts.join(' • ')
+    : scope?.type === 'entity' && hasBarAppearanceOverride(context, scope) ? 'Custom row settings' : 'Inherited';
 }
 
 export function handleBarAppearanceField(context, { field, kind, index, value }, options = {}) {
