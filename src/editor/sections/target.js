@@ -308,7 +308,12 @@ export class TargetSection {
       const parts = readResolvableSourceParts(raw === undefined ? selected.source : raw);
       const update = updateResolvableSourceParts(parts, field === 'entity-source' ? 'entity' : field, value);
       if (!update.valid) return false;
-      return this._write(scope, ['target', `when_${side}`, 'at'], writeResolvableSourceParts(update.parts));
+      const nextSource = writeResolvableSourceParts(update.parts);
+      const path = ['target', `when_${side}`, 'at'];
+      return this._write(scope, path, Object.keys(nextSource).length ? nextSource : undefined, {
+        prunePaths: [path.slice(0, -1), ['target']],
+        forceTargetSyncScope: Object.keys(nextSource).length === 0 ? scope : undefined,
+      });
     }
     const path = this._directionalPropertyPath(field);
     if (field === 'shape') value = normalizeTargetMarkerShape(value);
@@ -426,9 +431,14 @@ export class TargetSection {
       if (!clear) {
         clear = section.ownerDocument.createElement('button'); clear.type = 'button'; clear.className = 'paint-clear-override';
         clear.textContent = 'Clear'; clear.dataset.action = 'clear-target-property'; clear.dataset.direction = side;
-        clear.dataset.property = property; clear.dataset.index = scope.type === 'entity' ? scope.index : 'card'; row.append(clear);
+        clear.dataset.property = property === 'source' && field === 'value' ? 'value' : property;
+        clear.dataset.index = scope.type === 'entity' ? scope.index : 'card'; row.append(clear);
       }
-      clear.hidden = !this._ownsDirectionalProperty(scope, side, property);
+      if (property === 'source' && field === 'value') {
+        const localParts = readResolvableSourceParts(this.context.read(scope, ['target', `when_${side}`, 'at']));
+        clear.hidden = !(localParts.fixed !== undefined && localParts.fixed !== null && localParts.fixed !== ''
+          || Number.isFinite(localParts.percent));
+      } else clear.hidden = !this._ownsDirectionalProperty(scope, side, property);
     }
     const thresholdSummary = section.querySelector(`#card-group-${id}-threshold-summary`);
     thresholdSummary.textContent = `${this._directionalPropertySource(scope, side, 'source')} · ${source.entity || formatScaleValueInput(source) || 'No threshold'}`;
@@ -465,6 +475,10 @@ export class TargetSection {
   handleClick(target) {
     if (target?.dataset?.action === 'clear-target-property') {
       const scope = target.dataset.index === 'card' ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
+      if (target.dataset.property === 'value') {
+        this._setDirectionalField(scope, target.dataset.direction, 'value', '');
+        return true;
+      }
       const base = ['target', `when_${target.dataset.direction}`];
       this._remove(scope, [...base, ...this._directionalPropertyPath(target.dataset.property)], {
         deprecatedKeys: target.dataset.property === 'label-precision' ? [[...base, 'marker', 'label', 'decimal']] : [],

@@ -238,7 +238,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         ? patchFeatureNeedle(config, options.needleEdit)
         : options?.baselineEdit ? patchFeatureBaselineField(config, options.baselineEdit)
           : options?.targetEdit || options?.markerEdit?.key === 'target' ? patchFeatureTargetField(config, options.targetEdit ?? options.markerEdit)
-            : options?.extremumEdit || ['peak', 'floor'].includes(options?.markerEdit?.key) ? patchFeatureExtremumField(config, options.extremumEdit ?? options.markerEdit) : mutation(config)),
+            : options?.extremumEdit || ['peak', 'floor'].includes(options?.markerEdit?.key) ? patchFeatureExtremumField(config, options.extremumEdit ?? options.markerEdit) : mutation(config), options),
       source: (_scope, key) => key?.type === 'reference-marker' ? getFeatureReferenceMarkerSource(key.marker) : key === 'baseline' ? getFeatureBaselineSource(this._config) : key === 'target' ? getFeatureTargetSource(this._config) : getFeatureScaleSource(this._config, key),
       setSource: (_scope, key, part, value) => this._mutate(config => key?.type === 'reference-marker' ? patchFeatureReferenceMarkerSource(config, key.index, part, value) : key?.type === 'reference-marker-label' ? patchFeatureReferenceMarkerLabelSource(config, key.index, part, value) : key === 'baseline' ? patchFeatureBaselineSource(config, part, value) : key === 'target' ? patchFeatureTargetSource(config, part, value) : patchFeatureScaleSource(config, key, part, value)),
     };
@@ -257,13 +257,14 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     return context;
   }
 
-  _mutate(mutation) {
+  _mutate(mutation, options = {}) {
     const next = mutation(this._config);
     if (serializeConfig(next) === serializeConfig(this._config)) return false;
     if (next.bar?.segments?.length !== this._config.bar?.segments?.length || next.segments?.length !== this._config.segments?.length || next.severity?.length !== this._config.severity?.length) {
       for (const key of this._cssColorDrafts.keys()) if (key.startsWith('segment-')) this._cssColorDrafts.delete(key);
     }
     this._config = next;
+    this._forceTargetSync = options.forceTargetSyncScope?.type === 'card';
     this._requestRender();
     this.dispatchEvent(new CustomEvent('config-changed', {
       bubbles: true, composed: true, detail: { config: cloneDeep(next) },
@@ -543,7 +544,9 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       this._baselinePaintSections[direction].gradientStops.syncRows(root);
     }
     this._targetSection.syncControls(this.shadowRoot, root, { ...this._targetRenderOptions(root),
-      numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts, replaced: this._configReplaced });
+      numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts,
+      replaced: this._configReplaced || this._forceTargetSync });
+    this._forceTargetSync = false;
     for (const sections of [this._targetPaintSections, this._targetBelowPaintSections]) {
       sections.segments.syncRows(root); sections.gradientStops.syncRows(root);
     }

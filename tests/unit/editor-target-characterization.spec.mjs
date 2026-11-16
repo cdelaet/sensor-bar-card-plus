@@ -79,6 +79,26 @@ for (const source of ['src', 'dist']) describe(`standalone Target characterizati
     expect(editor._draftConfig.entities[0]).toMatchObject({ future_row: true, target: { at: { entity: { id: 'sensor.next', attribute: 'temperature' }, percent: 25 } } });
   });
 
+  for (const side of ['above', 'below']) it(`clears the ${side} fallback and Entity independently, then restores inherited source`, () => {
+    const editor = createEditor({ source });
+    editor.setConfig({ target: {
+      at: { fixed: 1, entity: 'sensor.shared_target' },
+      when_above: { at: { fixed: 50, entity: 'sensor.sbcp_playground_target' }, marker: { color: 'red' }, paint: { color: 'red' } },
+      when_below: { at: { fixed: 50, entity: 'sensor.sbcp_playground_target' }, marker: { color: 'blue' }, paint: { color: 'blue' } },
+    } });
+    editor._targetSection.handleClick({ dataset: {
+      action: 'clear-target-property', index: 'card', direction: side, property: 'value',
+    } });
+
+    expect(editor._draftConfig.target[`when_${side}`].at).toEqual({ entity: 'sensor.sbcp_playground_target' });
+    editor._targetSection.handleField({ kind: `target-${side}-entity-source`, value: '' });
+
+    expect(editor._draftConfig.target[`when_${side}`].at).toBeUndefined();
+    expect(editor._draftConfig.target.at).toEqual({ fixed: 1, entity: 'sensor.shared_target' });
+    expect(editor._draftConfig.target[`when_${side}`].marker).toEqual(side === 'above' ? { color: 'red' } : { color: 'blue' });
+    expect(editor._draftConfig.target[`when_${side}`].paint).toEqual(side === 'above' ? { color: 'red' } : { color: 'blue' });
+  });
+
   it('inherits a percentage Value/Entity, creates a complete override on edit, and restores inheritance', () => {
     const editor = createEditor({ source });
     editor.setConfig({ target: { at: { entity: { id: 'sensor.goal', attribute: 'reading' }, percent: 25 } }, entities: [{ entity: 'sensor.row' }] });

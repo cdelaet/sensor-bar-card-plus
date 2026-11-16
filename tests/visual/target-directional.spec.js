@@ -16,6 +16,104 @@ const directionalTarget = () => ({
   when_below: { at: { entity: { id: 'sensor.goal', attribute: 'limit' } }, marker: { color: 'blue', shape: 'triangle', label: { show: true, text: 'Low', show_unit: false } }, paint: { color: 'blue' } },
 });
 
+const directionalClearConfig = () => ({
+  at: { fixed: 1, entity: 'sensor.shared_target' },
+  when_above: { at: { fixed: 50, entity: 'sensor.sbcp_playground_target' },
+    marker: { color: '#d02020', shape: 'triangle' }, paint: { color: '#d02020' } },
+  when_below: { at: { fixed: 50, entity: 'sensor.sbcp_playground_target' },
+    marker: { color: '#2070d0', shape: 'diamond' }, paint: { color: '#2070d0' } },
+});
+
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Entity', 'Feature']) {
+  for (const side of ['above', 'below']) for (const order of ['value-first', 'entity-first']) {
+    test(`${host}/${source}: clearing ${side} source parts in ${order} order preserves and restores inheritance`, async ({ page }) => {
+      const target = directionalClearConfig();
+      const config = host === 'Entity' ? {
+        target: { at: target.at },
+        entities: [{ entity: 'sensor.power', target: { when_above: target.when_above, when_below: target.when_below } }],
+      } : { target };
+      const { editor, runtime } = await mount(page, source, host, config, 20, 360);
+      const prefix = host === 'Entity' ? 'entity-0-' : '';
+      await openTarget(editor, host, [side, `${side}-threshold`]);
+      const value = editor.locator(`#${prefix}target-${side}-value`);
+      const entity = editor.locator(`#${prefix}target-${side}-entity`);
+      const clearValue = value.locator('..').getByRole('button', { name: 'Clear', exact: true });
+      const sourceAt = configTarget => (host === 'Entity' ? configTarget.entities[0] : configTarget).target?.[`when_${side}`]?.at;
+      const dispatchEntityClear = () => entity.evaluate(node => {
+        node.focus();
+        node.value = '';
+        node.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+      });
+      const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
+      await expect(value).toHaveValue('50');
+      await expect(entity).toHaveValue('sensor.sbcp_playground_target');
+      if (side === 'above') await expect.poll(() => position(runtime, side)).toBe('50%');
+      if (order === 'value-first') {
+        await clearValue.click();
+        await expect.poll(() => page.evaluate(() => window.__targetEvents.length)).toBe(1);
+        await settle();
+        const afterFirst = await saved(page);
+        const firstState = {
+          at: sourceAt(afterFirst), value: await value.inputValue(), entity: await entity.inputValue(),
+          clearValueHidden: await clearValue.isHidden(),
+        };
+        await dispatchEntityClear();
+        await expect.poll(() => page.evaluate(() => window.__targetEvents.length)).toBe(2);
+        await settle();
+        const afterBoth = await saved(page);
+        expect({
+          firstState,
+          localAtAfterBoth: sourceAt(afterBoth),
+          value: await value.inputValue(),
+          entity: await entity.inputValue(),
+          source: await editor.locator(`.target-directional-controls[data-target-side="${side}"] .resolvable-source-value [data-target-source="source"]`).first().textContent(),
+          markerPosition: await position(runtime, side),
+          siblingAt: (host === 'Entity' ? afterBoth.entities[0] : afterBoth).target[`when_${side === 'above' ? 'below' : 'above'}`].at,
+          marker: (host === 'Entity' ? afterBoth.entities[0] : afterBoth).target[`when_${side}`].marker,
+          paint: (host === 'Entity' ? afterBoth.entities[0] : afterBoth).target[`when_${side}`].paint,
+        }).toEqual({
+          firstState: { at: { entity: 'sensor.sbcp_playground_target' }, value: '', entity: 'sensor.sbcp_playground_target', clearValueHidden: true },
+          localAtAfterBoth: undefined,
+          value: '1', entity: 'sensor.shared_target', source: 'Inherited', markerPosition: '1%',
+          siblingAt: { fixed: 50, entity: 'sensor.sbcp_playground_target' },
+          marker: target[`when_${side}`].marker, paint: target[`when_${side}`].paint,
+        });
+      } else {
+        await dispatchEntityClear();
+        await expect.poll(() => page.evaluate(() => window.__targetEvents.length)).toBe(1);
+        await settle();
+        const afterFirst = await saved(page);
+        const firstState = {
+          at: sourceAt(afterFirst), value: await value.inputValue(), entity: await entity.inputValue(),
+          clearValueHidden: await clearValue.isHidden(),
+        };
+        await clearValue.click();
+        await expect.poll(() => page.evaluate(() => window.__targetEvents.length)).toBe(2);
+        await settle();
+        const afterBoth = await saved(page);
+        expect({
+          firstState,
+          localAtAfterBoth: sourceAt(afterBoth),
+          value: await value.inputValue(),
+          entity: await entity.inputValue(),
+          source: await editor.locator(`.target-directional-controls[data-target-side="${side}"] .resolvable-source-value [data-target-source="source"]`).first().textContent(),
+          markerPosition: await position(runtime, side),
+          siblingAt: (host === 'Entity' ? afterBoth.entities[0] : afterBoth).target[`when_${side === 'above' ? 'below' : 'above'}`].at,
+          marker: (host === 'Entity' ? afterBoth.entities[0] : afterBoth).target[`when_${side}`].marker,
+          paint: (host === 'Entity' ? afterBoth.entities[0] : afterBoth).target[`when_${side}`].paint,
+        }).toEqual({
+          firstState: { at: { fixed: 50 }, value: '50', entity: '', clearValueHidden: false },
+          localAtAfterBoth: undefined,
+          value: '1', entity: 'sensor.shared_target', source: 'Inherited', markerPosition: '1%',
+          siblingAt: { fixed: 50, entity: 'sensor.sbcp_playground_target' },
+          marker: target[`when_${side}`].marker, paint: target[`when_${side}`].paint,
+        });
+      }
+    });
+  }
+}
+
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Entity', 'Feature']) {
   test(`${host}/${source}: persistent Target membership, labels, source-only inversion and recovery`, async ({ page }, testInfo) => {
     const target = directionalTarget();

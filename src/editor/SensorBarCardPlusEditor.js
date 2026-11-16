@@ -319,7 +319,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._paintPresetHandle.update(this._hass, path);
   }
 
-  _syncPaintEditors() {
+  _syncPaintEditors(options = {}) {
     if (!this.shadowRoot?.innerHTML) return;
     const context = this._createSectionContext();
     for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) {
@@ -335,7 +335,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         this._baselinePaintSections[direction].segments.syncRows(scope);
         this._baselinePaintSections[direction].gradientStops.syncRows(scope);
       }
-      this._syncTargetControls(scope);
+      this._syncTargetControls(scope, options);
       this._segmentsSection.syncRows(scope);
       this._gradientStopsSection.syncRows(scope);
     }
@@ -610,7 +610,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
     this._updateConfig(nextConfig);
     this._emitConfigChanged(options);
-    this._refreshDerivedEditorUi();
+    this._refreshDerivedEditorUi(options);
     if (rerender && !targetOnly) {
       this._scheduleRender();
     }
@@ -641,14 +641,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     }
   }
 
-  _refreshDerivedEditorUi() {
+  _refreshDerivedEditorUi(options = {}) {
     if (!this.shadowRoot) {
       return;
     }
     this._refreshCardDerivedUi();
     this._refreshEntityDerivedUi();
     this._syncActionSelectors();
-    this._syncPaintEditors();
+    this._syncPaintEditors(options);
   }
 
   _refreshCardDerivedUi() {
@@ -1872,9 +1872,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       paintChildren: (paintScope, direction) => this._renderTargetPaintPalette(paintScope, direction) };
   }
 
-  _syncTargetControls(scope) {
+  _syncTargetControls(scope, options = {}) {
+    const forceTargetSync = options.forceTargetSyncScope?.type === scope.type
+      && (scope.type !== 'entity' || Number(options.forceTargetSyncScope.index) === scope.index);
     this._targetSection.syncControls(this.shadowRoot, scope, { ...this._targetRenderOptions(scope),
-      numericDrafts: this._numericDrafts, replaced: this._targetConfigReplaced });
+      numericDrafts: this._numericDrafts, replaced: this._targetConfigReplaced || forceTargetSync });
     for (const sections of [this._targetPaintSections, this._targetBelowPaintSections]) {
       sections.segments.syncRows(scope); sections.gradientStops.syncRows(scope);
     }
