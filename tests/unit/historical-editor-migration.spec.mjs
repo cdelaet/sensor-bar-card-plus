@@ -41,7 +41,7 @@ for (const source of ['src', 'dist']) {
         const normalized = normalizeCardConfig(events[0]);
         expect(normalized.peak_marker.window_invalid).toBe(true);
         expect(normalized.floor_marker.window_invalid).toBe(true);
-        expect(validateNormalizedConfig(normalized).warnings.map(item => item.code)).toContain('peak_marker.invalid_window');
+        expect(validateNormalizedConfig(normalized).errors.map(item => item.code)).toContain('peak_marker.invalid_window');
         editor.setConfig({ entity: 'sensor.a', other: { reset: 'never' } });
         await Promise.resolve(); await Promise.resolve();
         expect(events).toHaveLength(1);

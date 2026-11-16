@@ -78,6 +78,40 @@ describe('universal message presentation', () => {
     expect(area.textContent).toContain('sensor.power · Target below Paint · preset');
   });
 
+  it('renders marker history diagnostics by severity and deduplicates repeated conditions', () => {
+    const { area } = makeArea();
+    const peak = { code: 'history.marker.partial', severity: 'warning', path: 'history.peak', entity: 'sensor.power',
+      area: 'Peak marker · Configured window: today', window: 'today', reason: 'History is incomplete',
+      message: 'History is incomplete. Peak marker uses incomplete observations and may miss the true extremum.' };
+    const floor = { code: 'history.marker.unavailable', severity: 'error', path: 'history.floor', entity: 'sensor.power',
+      area: 'Floor marker · Configured window: 24h', window: '24h', reason: 'History is temporarily unavailable',
+      message: 'History is temporarily unavailable. Floor marker is unavailable until Recorder history can be read.' };
+    syncUniversalMessageArea(area, { warnings: [peak, peak], errors: [floor] });
+
+    expect(area.querySelectorAll('.sbcp-message')).toHaveLength(2);
+    expect(area.textContent).toContain('sensor.power · Peak marker · Configured window: today');
+    expect(area.textContent).toContain('sensor.power · Floor marker · Configured window: 24h');
+    expect(area.querySelector('.sbcp-message-count[data-severity="warning"] span:last-child').textContent).toBe('1');
+    expect(area.querySelector('.sbcp-message-count[data-severity="error"] span:last-child').textContent).toBe('1');
+  });
+
+  it('uses the live invalid-window message once while retaining config diagnostics without a row status', () => {
+    const { area } = makeArea();
+    const configDiagnostic = { code: 'peak_marker.invalid_window', severity: 'error', path: 'entities[0].peak_marker.window',
+      entity: 'sensor.power', window: '24h', area: 'Peak marker · Configured window: 24h',
+      message: 'Configured history window “24h” is invalid or unsupported. Peak marker is unavailable until a supported window is configured.' };
+    const statusDiagnostic = { code: 'history.marker.invalid', severity: 'error', path: 'history.peak',
+      entity: 'sensor.power', window: '24h', area: 'Peak marker · Configured window: 24h',
+      message: 'Historical window is invalid or unsupported. Peak marker is unavailable because its configured history window is unsupported.' };
+    syncUniversalMessageArea(area, { warnings: [statusDiagnostic], errors: [configDiagnostic] });
+    expect(area.querySelectorAll('.sbcp-message')).toHaveLength(1);
+    expect(area.querySelector('.sbcp-message-count[data-severity="error"] span:last-child').textContent).toBe('1');
+
+    syncUniversalMessageArea(area, { warnings: [], errors: [configDiagnostic] });
+    expect(area.querySelectorAll('.sbcp-message')).toHaveLength(1);
+    expect(area.textContent).toContain('Peak marker · Configured window: 24h');
+  });
+
   it('provides reusable disclosure behavior with an expanded initial state', () => {
     const document = new JSDOM(`<body>${renderDisclosure({ id: 'legend', title: 'Legend', panel: '<div>Legend content</div>', expanded: true })}</body>`).window.document;
     const disclosure = document.querySelector('.sbcp-disclosure');

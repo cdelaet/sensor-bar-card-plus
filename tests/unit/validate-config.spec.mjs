@@ -8,7 +8,7 @@ function normalize(rawConfig) {
 }
 
 describe('validateNormalizedConfig', () => {
-  it.each(['peak', 'floor'])('validates %s duration policy at both scopes', marker => {
+  it.each(['peak', 'floor'])('reports unsupported %s windows at both scopes', marker => {
     for (const window of ['1440m', '24h', '1500m', '48h']) {
       const config = normalize({ [marker]: { enabled: true, window }, entities: [{ entity: 'sensor.one', [marker]: { window } }] });
       expect(config[`${marker}_marker`].window_invalid).toBeUndefined();
@@ -17,7 +17,7 @@ describe('validateNormalizedConfig', () => {
     const config = normalize({ [marker]: { enabled: true, window: '1441m' }, entities: [{ entity: 'sensor.one', [marker]: { window: '1441m' } }] });
     expect(config[`${marker}_marker`]).toMatchObject({ window: '1441m', window_invalid: true });
     expect(config.entities[0][`${marker}_marker`]).toMatchObject({ window: '1441m', window_invalid: true });
-    expect(validateNormalizedConfig(config).warnings.filter(item => item.code === `${marker}_marker.invalid_window`).length).toBeGreaterThanOrEqual(2);
+    expect(validateNormalizedConfig(config).errors.filter(item => item.code === `${marker}_marker.invalid_window`).length).toBeGreaterThanOrEqual(2);
   });
   it('warns on raw extrema aliases at card and entity scopes without using them', () => {
     const aliases = { peak_marker: { enabled: true, color: 'red', reset: 'daily' },
@@ -239,7 +239,7 @@ describe('validateNormalizedConfig', () => {
     }));
   });
 
-  it('warns and leaves invalid marker resets unavailable', () => {
+  it('reports unsupported marker windows as errors and leaves markers unavailable', () => {
     const normalized = normalize({
       peak: { enabled: true, reset: '60m' },
       floor: { enabled: true, reset: '1h30m' },
@@ -251,13 +251,13 @@ describe('validateNormalizedConfig', () => {
     expect(normalized.peak_marker.window_spec).toBeNull();
     expect(normalized.floor_marker.window_invalid).toBe(true);
     expect(normalized.floor_marker.window_spec).toBeNull();
-    expect(diagnostics.warnings).toEqual(expect.arrayContaining([
+    expect(diagnostics.errors).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: 'peak_marker.invalid_window' }),
       expect.objectContaining({ code: 'floor_marker.invalid_window' }),
     ]));
   });
 
-  it('warns and leaves non-string reset values unavailable', () => {
+  it('reports non-string reset values as errors and leaves markers unavailable', () => {
     for (const reset of [['15m'], {}, 15, null, true]) {
       const normalized = normalize({
         peak: { enabled: true, reset },
@@ -267,7 +267,7 @@ describe('validateNormalizedConfig', () => {
 
       expect(normalized.peak_marker.window_invalid).toBe(true);
       expect(normalized.peak_marker.window_spec).toBeNull();
-      expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
+      expect(diagnostics.errors).toContainEqual(expect.objectContaining({
         code: 'peak_marker.invalid_window',
       }));
     }

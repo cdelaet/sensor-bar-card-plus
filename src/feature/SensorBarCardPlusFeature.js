@@ -4,7 +4,7 @@ import { resolveEntitySource } from '../config/resolve.js';
 import { validateNormalizedConfig } from '../config/validate.js';
 import { buildRowViewModel } from '../view-model/row-view-model.js';
 import { buildBarRenderModel, getRevealTransitionDuration, getEffectiveMarkerColor } from '../view-model/bar-render-model.js';
-import { renderBar, patchBar, renderHistoryStatus, patchHistoryStatus } from '../render/bar-renderer.js';
+import { renderBar, patchBar } from '../render/bar-renderer.js';
 import { attachTooltips } from '../render/tooltip-controller.js';
 import { barTrackStyles, barMarkerStyles, getBarAnimationStyles } from '../render/bar-styles.js';
 import { initializeUniversalMessageArea, renderUniversalMessageArea, syncUniversalMessageArea, universalMessageStyles } from '../render/universal-messages.js';
@@ -247,6 +247,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         fallback: 'preset_resolution_disabled',
       }] : []),
       ...(row?.targetDiagnostics ?? []),
+      ...(row?.historyDiagnostics ?? []),
     ] };
     this._row = row;
     this._status = status;
@@ -320,7 +321,6 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         }
       </style>
       <div id="surface" class="surface" role="group">
-        ${renderHistoryStatus(null)}
         <div id="bar" hidden></div>
         <div id="labels" class="compact-labels" aria-hidden="true"></div>
         <div id="status" class="status" aria-hidden="true"></div>
@@ -337,8 +337,6 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     this._ensureDom();
     if (this.isConnected) this._tooltipController ??= attachTooltips(this.shadowRoot);
     syncUniversalMessageArea(this.shadowRoot.querySelector('.sbcp-messages'), this._diagnostics);
-    const historySummary = status ? null : row?.historyStatusSummary;
-    patchHistoryStatus(this._surface, historySummary);
     const textValue = !status ? this._textValue : null;
     if (typeof this._color === 'string' && this._color) this.style.setProperty('--feature-color', this._color);
     else this.style.removeProperty('--feature-color');
@@ -357,12 +355,12 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       .map(marker => {
         const type = marker.type === 'generic' ? 'Reference marker' : `${marker.type[0].toUpperCase()}${marker.type.slice(1)}`;
         const anchor = `${formatNumericDisplay(marker.value)}${row.displayUnit ? ` ${row.displayUnit}` : ''}`;
-        return `${type} at ${anchor}${marker.labelVisible && marker.label?.text ? `; label ${marker.label.text}` : ''}${marker.historyStatus === 'partial' ? '; partial history' : marker.historyStatus === 'stale' ? '; stale history' : ''}${marker.historyReason && ['partial', 'stale'].includes(marker.historyStatus) ? `: ${marker.historyReason}` : ''}.`;
+        return `${type} at ${anchor}${marker.labelVisible && marker.label?.text ? `; label ${marker.label.text}` : ''}.`;
       }).join(' ');
     this._surface.setAttribute('aria-label', status
       ? `${name}${this._entity && name !== this._entity ? ` (${this._entity})` : ''}: ${status}${row ? ` (${row.state})` : ''}`
       : textValue !== null ? `${name}${this._entity && name !== this._entity ? ` (${this._entity})` : ''}: ${textValue}`
-      : `${name} (${this._entity}): ${row.primaryPresentation.text}. Range ${formatNumericDisplay(row.min)} to ${formatNumericDisplay(row.max)}${row.displayUnit ? ` ${row.displayUnit}` : ''}.${markerDescription ? ` ${markerDescription}` : ''}${historySummary ? ` ${historySummary.text}.` : ''}`);
+      : `${name} (${this._entity}): ${row.primaryPresentation.text}. Range ${formatNumericDisplay(row.min)} to ${formatNumericDisplay(row.max)}${row.displayUnit ? ` ${row.displayUnit}` : ''}.${markerDescription ? ` ${markerDescription}` : ''}`);
     if (status || textValue !== null) return;
 
     const model = buildBarRenderModel(row, this._resolvedAppearance, { height: 'var(--sbcp-row-height)' });

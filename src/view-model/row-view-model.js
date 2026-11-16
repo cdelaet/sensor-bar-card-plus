@@ -1,7 +1,7 @@
 import { getNormalizedResolvableNumericValue, getResolvedScale, resolveEntitySource, resolveEntityState } from '../config/resolve.js';
 import { getFiniteNumber } from '../config/normalize.js';
 import { projectScalePercent } from './scale-projection.js';
-import { historyReason, historyStatusSummary } from '../history/history-status.js';
+import { historyDiagnostics, historyReason } from '../history/history-status.js';
 import {
   createNumericPresentation,
   createMarkerLabelPresentation,
@@ -88,12 +88,13 @@ function getNeedleState(entityConfig, numericValue, minValue, maxValue, baseline
   };
 }
 
-function getExtremumState(minValue, maxValue, result, enabled) {
+function getExtremumState(minValue, maxValue, result, enabled, window) {
   const value = enabled && ['available', 'partial', 'stale'].includes(result?.status)
     ? getFiniteNumber(result?.value) : null;
   return {
     value, percent: Number.isFinite(value) ? toScalePct(value, minValue, maxValue) : null,
     visible: Number.isFinite(value), status: result?.status ?? 'pending', enabled,
+    window,
     reason: enabled ? historyReason(result ?? { status: 'pending' }) : null,
   };
 }
@@ -177,8 +178,10 @@ export function buildRowViewModel(options) {
   const baselinePositionPercent = projectScalePercent(baselinePercent, scaleDirection);
   const baselineVisible = Number.isFinite(baselineValue);
 
-  const peakState = getExtremumState(safeMin, safeMax, historicalExtrema?.peak, entityConfig?.peak_marker?.show === true);
-  const floorState = getExtremumState(safeMin, safeMax, historicalExtrema?.floor, entityConfig?.floor_marker?.show === true);
+  const peakState = getExtremumState(safeMin, safeMax, historicalExtrema?.peak,
+    entityConfig?.peak_marker?.show === true, entityConfig?.peak_marker?.window);
+  const floorState = getExtremumState(safeMin, safeMax, historicalExtrema?.floor,
+    entityConfig?.floor_marker?.show === true, entityConfig?.floor_marker?.window);
   const peakDecimal = entityConfig?.peak_marker?.label_decimal ?? decimal;
   const floorDecimal = entityConfig?.floor_marker?.label_decimal ?? decimal;
   const peakLabelPrecision = entityConfig?.peak_marker?.label_precision ?? peakDecimal;
@@ -317,7 +320,7 @@ export function buildRowViewModel(options) {
     floorLabelPresentation,
     floorVisible: floorState.visible,
     floorStatus: floorState.status,
-    historyStatusSummary: historyStatusSummary(peakState, floorState),
+    historyDiagnostics: historyDiagnostics(entityId, peakState, floorState),
     markers,
     markerLaneOccupancy: getMarkerLaneOccupancy(entityConfig),
     markerLabelLaneOccupancy: getMarkerLabelLaneOccupancy(entityConfig),

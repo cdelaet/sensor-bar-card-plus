@@ -212,6 +212,7 @@ export class SensorBarCard extends HTMLElement {
     this._lastDiagnosticsSignature = null;
     this._hass = null;
     this._historicalRuntime = new HistoricalHostRuntime();
+    this._historyDiagnostics = new Map();
     this._historicalUpdate = () => {
       if (this._historicalUpdateScheduled) return;
       this._historicalUpdateScheduled = true;
@@ -291,6 +292,7 @@ export class SensorBarCard extends HTMLElement {
     this._reconcileRowHistory(previousConfig?.entities ?? []);
     this._historicalRuntime.setConsumers(historicalMarkerConsumers(this._config.entities), this._historicalUpdate);
     this._targetDiagnostics = new Map();
+    this._historyDiagnostics.clear();
     this._baseDiagnostics = validateNormalizedConfig(this._config);
     this._diagnostics = this._baseDiagnostics;
     this._refreshPaintPresetResolutions();
@@ -1831,7 +1833,11 @@ ${barMarkerStyles}
   }
 
   _syncUniversalMessages() {
-    syncUniversalMessageArea(this.shadowRoot.querySelector('.sbcp-messages'), this._diagnostics);
+    const diagnostics = {
+      ...this._diagnostics,
+      warnings: [...(this._diagnostics?.warnings ?? []), ...[...this._historyDiagnostics.values()].flat()],
+    };
+    syncUniversalMessageArea(this.shadowRoot.querySelector('.sbcp-messages'), diagnostics);
   }
 
   _setupResizeObserver() {
@@ -3240,6 +3246,7 @@ ${barMarkerStyles}
     this._targetDiagnostics.set(entityCfg, rowViewModel.targetDiagnostics.map(issue => ({
       ...issue, path: `entities[${this._config.entities.indexOf(entityCfg)}].target`,
     })));
+    this._historyDiagnostics.set(entityCfg, rowViewModel.historyDiagnostics);
     this._diagnostics = { ...this._diagnostics, warnings: [
       ...(this._diagnostics?.warnings ?? []).filter(issue => issue.code !== 'target.invalid_ordering'),
       ...[...this._targetDiagnostics.values()].flat(),
@@ -3337,8 +3344,7 @@ ${barMarkerStyles}
       ? `<div class="icon-wrap"><ha-icon icon="${escapedIcon}"></ha-icon></div>`
       : '';
     return `
-      <div class="row" data-row-index="${rowIndex}" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${(rowViewModel?.attributes?.heightExplicit ?? layout.height_explicit) ? 'true' : 'false'}" data-bar-animated="${(rowViewModel?.attributes?.barAnimated ?? bar.animated) ? 'true' : 'false'}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? 'true' : 'false'}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? 'true' : 'false'}"${rowViewModel?.historyStatusSummary ? ` aria-description="${escapeHtml(rowViewModel.historyStatusSummary.text)}"` : ''}>
-        ${barRenderer.renderHistoryStatus(rowViewModel?.historyStatusSummary)}
+      <div class="row" data-row-index="${rowIndex}" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${(rowViewModel?.attributes?.heightExplicit ?? layout.height_explicit) ? 'true' : 'false'}" data-bar-animated="${(rowViewModel?.attributes?.barAnimated ?? bar.animated) ? 'true' : 'false'}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? 'true' : 'false'}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? 'true' : 'false'}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${heroHeader}
@@ -3450,13 +3456,6 @@ ${barMarkerStyles}
     const peakLabelEl = row.querySelector('.peak-value-label');
     const floorLabelEl = row.querySelector('.floor-value-label');
     const markerModels = rowViewModel.markers ?? [];
-    const historyDescription = [...markerModels
-      .filter(marker => marker.visible && ['peak', 'floor'].includes(marker.type) && ['partial', 'stale'].includes(marker.historyStatus))
-      .map(marker => `${marker.type === 'peak' ? 'Peak' : 'Floor'}: ${marker.historyStatus === 'partial' ? 'partial' : 'stale'} history${marker.historyReason ? `: ${marker.historyReason}` : ''}`),
-      rowViewModel.historyStatusSummary?.text].filter(Boolean).join('. ');
-    barRenderer.patchHistoryStatus(row, rowViewModel.historyStatusSummary);
-    if (historyDescription) row.setAttribute?.('aria-description', historyDescription);
-    else row.removeAttribute?.('aria-description');
     (row.querySelectorAll?.('.generic-marker[data-marker-id]') ?? []).forEach((markerEl) => {
       const markerId = markerEl.dataset.markerId;
       const marker = this._getMarkerModel(markerModels, markerId);
@@ -3497,6 +3496,7 @@ ${barMarkerStyles}
 
   _update(previousHass = null) {
     if (!this._hass || !this._config) return;
+    this._historyDiagnostics.clear();
     const rowsEl = this.shadowRoot.querySelector('.rows');
     if (!rowsEl) return;
 

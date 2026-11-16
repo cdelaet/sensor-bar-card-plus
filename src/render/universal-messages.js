@@ -83,15 +83,24 @@ function normalizeMessages(diagnostics) {
   const messages = [];
   const seen = new Set();
   const cardMessageKeys = new Set();
+  const activeHistoryWindows = [...(diagnostics?.warnings ?? []), ...(diagnostics?.errors ?? [])]
+    .filter(diagnostic => diagnostic?.code === 'history.marker.invalid');
   for (const [defaultSeverity, entries] of [['warning', diagnostics?.warnings], ['error', diagnostics?.errors]]) {
     for (const diagnostic of entries ?? []) {
+      const invalidMarker = diagnostic?.code === 'peak_marker.invalid_window' ? 'peak'
+        : diagnostic?.code === 'floor_marker.invalid_window' ? 'floor' : null;
+      // Prefer the live Recorder status when it carries the same invalid
+      // configured window. Keep config diagnostics when no row status exists.
+      if (invalidMarker && activeHistoryWindows.some(active => active.path === `history.${invalidMarker}`
+        && active.window === diagnostic.window
+        && (diagnostic.entity == null || diagnostic.entity === active.entity))) continue;
       const severity = SEVERITIES.includes(diagnostic?.severity) ? diagnostic.severity : defaultSeverity;
-      const area = configurationArea(diagnostic?.path);
+      const area = diagnostic?.area ?? configurationArea(diagnostic?.path);
       const explanation = diagnosticExplanation(diagnostic ?? {});
       const sharedKey = JSON.stringify([severity, diagnostic?.code, area, explanation]);
       if (diagnostic?.entity && cardMessageKeys.has(sharedKey)) continue;
       const key = JSON.stringify([severity, diagnostic?.code, diagnostic?.path, diagnostic?.entity,
-        diagnostic?.reference, diagnostic?.reason, explanation]);
+        diagnostic?.reference, diagnostic?.reason, diagnostic?.window, area, explanation]);
       if (seen.has(key)) continue;
       seen.add(key);
       if (!diagnostic?.entity) cardMessageKeys.add(sharedKey);

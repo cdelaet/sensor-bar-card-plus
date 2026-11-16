@@ -105,13 +105,21 @@ function validateBaselineSuppressesNeedle(diagnostics, config, path, entity = nu
 function validateExtremumReset(diagnostics, config, path, entity = null) {
   for (const marker of ['peak_marker', 'floor_marker']) {
     if (config?.[marker]?.window_invalid) {
-      addWarning(
-        diagnostics,
-        `${marker}.invalid_window`,
-        'Invalid historical marker window; marker is unavailable.',
-        `${path}.${marker}.window`,
-        entity
-      );
+      const name = marker === 'peak_marker' ? 'Peak' : 'Floor';
+      const configuredWindow = config[marker].window;
+      let window = configuredWindow === null || configuredWindow === undefined ? 'unspecified' : configuredWindow;
+      if (typeof window !== 'string') {
+        try { window = JSON.stringify(window); } catch { window = String(window); }
+      }
+      diagnostics.errors.push({
+        code: `${marker}.invalid_window`,
+        severity: 'error',
+        path: `${path}.${marker}.window`,
+        entity,
+        area: `${name} marker · Configured window: ${window}`,
+        window,
+        message: `Configured history window “${window}” is invalid or unsupported. ${name} marker is unavailable until a supported window is configured.`,
+      });
     }
   }
 }

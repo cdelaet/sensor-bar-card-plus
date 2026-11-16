@@ -314,7 +314,7 @@ test('config and inherited entity replacements reconcile scale, glyph structure 
       clip: element.shadowRoot.querySelector('.bar-fill-reveal').style.clipPath,
       needle: element.shadowRoot.querySelector('.needle-marker'),
       peak: getComputedStyle(element.shadowRoot.querySelector('.peak-marker')).display,
-      historyBadge: element.shadowRoot.querySelector('.history-status-badge').hidden,
+      historyBadge: Boolean(element.shadowRoot.querySelector('.history-status-badge')),
     };
   });
   expect(result.replaced).toBe(true);
@@ -323,7 +323,7 @@ test('config and inherited entity replacements reconcile scale, glyph structure 
   expect(result.clip).toContain('50% 0px 25%');
   expect(result.needle).toBeNull();
   expect(result.peak).toBe('none');
-  expect(result.historyBadge).toBe(true);
+  expect(result.historyBadge).toBe(false);
 });
 
 for (const reducedMotion of ['no-preference', 'reduce']) {

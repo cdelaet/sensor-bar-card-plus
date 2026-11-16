@@ -13,11 +13,6 @@ export function renderMarker(marker) {
   const defaultShape = marker.type === 'target' ? 'diamond' : marker.type === 'generic' ? 'circle' : 'triangle';
   const shape = normalizeMarkerShape(marker.shape, defaultShape);
   const lane = marker.lane ?? (marker.type === 'peak' ? 'above' : 'below');
-  const historyStatus = ['partial', 'stale'].includes(marker.historyStatus) ? marker.historyStatus : '';
-  const baseLabel = historyStatus === 'partial' ? 'Partial history' : historyStatus === 'stale' ? 'Stale history' : '';
-  const historyLabel = escapeHtml(baseLabel && marker.historyReason ? `${baseLabel}: ${marker.historyReason}` : baseLabel);
-  const historyAttributes = historyStatus ? ` data-history-status="${historyStatus}" data-history-edge="${position > 90 ? 'end' : 'start'}"` : '';
-  const historyIndicator = `<span class="history-indicator"${historyStatus ? ` data-sbcp-tooltip="${historyLabel}" role="img" aria-label="${marker.type === 'peak' ? 'Peak' : 'Floor'}: ${historyLabel}"${marker.visible ? ' tabindex="0"' : ''}` : ' aria-hidden="true"'}>${historyStatus === 'partial' ? '!' : historyStatus === 'stale' ? '~' : ''}</span>`;
   const shapePaths = `<g class="marker-shape-paths">
     <path data-shape="circle" d="M8 1A7 7 0 1 0 8 15A7 7 0 1 0 8 1Z"></path>
     <path data-shape="diamond" d="M8 1L15 8L8 15L1 8Z"></path>
@@ -41,20 +36,18 @@ export function renderMarker(marker) {
   if (marker.type === 'target' || marker.type === 'floor') {
     const markerClass = `${marker.type}-marker`;
     return `
-    <div class="${markerClass}" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}"${historyAttributes} style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+    <div class="${markerClass}" data-marker-id="${escapeHtml(marker.id)}" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
       <div class="${marker.type}-inset"></div>
       <div class="${marker.type}-outset"></div>
       <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
-      ${marker.type === 'floor' ? historyIndicator : ''}
     </div>`;
   }
 
   return `
-    <div class="peak-marker" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}"${historyAttributes} style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
+    <div class="peak-marker" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" style="left:${position}%;--marker-color:${color};--marker-contrast-color:${contrastColor};display:${display};">
       <div class="peak-outset"></div>
       <div class="peak-inset"></div>
       <svg class="marker-shape-svg" data-shape="${shape}" data-lane="${lane}" data-direction="${marker.direction ?? 'inward'}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shapePaths}</svg>
-      ${historyIndicator}
     </div>`;
 }
 
@@ -66,32 +59,6 @@ export function patchMarker(markerEl, marker) {
   setDatasetIfChanged(markerEl, 'shape', shape);
   setDatasetIfChanged(markerEl, 'lane', marker.lane ?? (marker.type === 'peak' ? 'above' : 'below'));
   setDatasetIfChanged(markerEl, 'direction', marker.direction ?? 'inward');
-  if (marker.type === 'peak' || marker.type === 'floor') {
-    const status = ['partial', 'stale'].includes(marker.historyStatus) ? marker.historyStatus : '';
-    const base = status === 'partial' ? 'Partial history' : status === 'stale' ? 'Stale history' : '';
-    const label = base && marker.historyReason ? `${base}: ${marker.historyReason}` : base;
-    setDatasetIfChanged(markerEl, 'historyStatus', status);
-    setDatasetIfChanged(markerEl, 'historyEdge', marker.position > 90 ? 'end' : 'start');
-    markerEl.removeAttribute?.('title');
-    const indicator = markerEl.querySelector?.('.history-indicator');
-    if (indicator) {
-      indicator.textContent = status === 'partial' ? '!' : status === 'stale' ? '~' : '';
-      indicator.removeAttribute('title');
-      if (status) {
-        indicator.setAttribute('data-sbcp-tooltip', label);
-        indicator.setAttribute('role', 'img');
-        indicator.setAttribute('aria-label', `${marker.type === 'peak' ? 'Peak' : 'Floor'}: ${label}`);
-        indicator.setAttribute('tabindex', marker.visible ? '0' : '-1');
-        indicator.removeAttribute('aria-hidden');
-      } else {
-        indicator.removeAttribute('data-sbcp-tooltip');
-        indicator.removeAttribute('role');
-        indicator.removeAttribute('aria-label');
-        indicator.removeAttribute('tabindex');
-        indicator.setAttribute('aria-hidden', 'true');
-      }
-    }
-  }
   if (marker.type === 'generic') {
     setDatasetIfChanged(markerEl, 'showMarker', marker.showMarker === false ? 'false' : 'true');
   }
@@ -109,29 +76,6 @@ export function patchMarker(markerEl, marker) {
   const markerColor = getEffectiveMarkerColor(marker);
   setStyleIfChanged(markerEl, '--marker-color', markerColor);
   setStyleIfChanged(markerEl, '--marker-contrast-color', getMarkerContrastColor(markerColor));
-}
-
-export function renderHistoryStatus(summary) {
-  return `<span class="history-status-badge"${summary ? ` data-sbcp-tooltip="${escapeHtml(summary.text)}" role="img" aria-label="${escapeHtml(summary.text)}" tabindex="0"` : ' hidden aria-hidden="true"'}>${summary?.pending ? '…' : '!'}</span>`;
-}
-
-export function patchHistoryStatus(root, summary) {
-  const badge = root?.querySelector?.('.history-status-badge');
-  if (!badge) return;
-  badge.hidden = !summary;
-  badge.textContent = summary?.pending ? '…' : '!';
-  badge.removeAttribute('title');
-  if (summary) {
-    badge.setAttribute('data-sbcp-tooltip', summary.text);
-    badge.setAttribute('aria-label', summary.text);
-    badge.removeAttribute('aria-hidden');
-    badge.setAttribute('tabindex', '0');
-  } else {
-    badge.removeAttribute('data-sbcp-tooltip');
-    badge.removeAttribute('aria-label');
-    badge.setAttribute('aria-hidden', 'true');
-    badge.removeAttribute('tabindex');
-  }
 }
 
 function reconcilePaintLayers(container, layers) {

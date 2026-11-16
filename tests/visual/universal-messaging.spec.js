@@ -139,6 +139,108 @@ test('ordinary sensor unavailability does not create a message by itself', async
 });
 
 for (const source of ['src', 'dist']) {
+test(`history status messages retain severity, deduplicate, recover, and match between Card and Feature (${source})`, async ({ page }) => {
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
+  await page.evaluate(async () => {
+    const config = {
+      scale: { min: 0, max: 100 },
+      peak: { enabled: true, window: 'today' },
+      floor: { enabled: true, window: '24h' },
+    };
+    const states = { 'sensor.history': window.__sbcpCreateState(40) };
+    const card = await window.__sbcpRenderCard({ config: { ...config, entities: ['sensor.history'] }, states });
+    const feature = await window.__sbcpRenderFeature({ config, states, context: { entity_id: 'sensor.history' } });
+    const results = {
+      peak: { value: 80, status: 'partial', provenance: { coverage: { reason: 'missing intervals' } } },
+      floor: { value: 20, status: 'stale' },
+    };
+    const updateHistory = async () => {
+      for (const host of [card, feature]) {
+        host._historicalRuntime.getResult = id => results[JSON.parse(id)[2]];
+      }
+      card._update();
+      feature._requestUpdate();
+      await feature.updateComplete;
+    };
+    window.__updateHistory = async next => { Object.assign(results, next); await updateHistory(); };
+    await updateHistory();
+    window.__historyHosts = { card, feature };
+  });
+
+  const card = page.locator('sensor-bar-card-plus');
+  const feature = page.locator('sensor-bar-card-plus-feature');
+  for (const host of [card, feature]) {
+    const area = host.locator('.sbcp-messages');
+    await expect(area).toBeVisible();
+    await expect(area.locator('.sbcp-message')).toHaveCount(2);
+    await expect(area.locator('.sbcp-message-count[data-severity="warning"] span:last-child')).toHaveText('2');
+    await expect(area.locator('.sbcp-message-count[data-severity="info"] span:last-child')).toHaveText('0');
+    await expect(area.locator('.sbcp-message-count[data-severity="error"] span:last-child')).toHaveText('0');
+    await expect(area).toContainText('sensor.history · Peak marker · Configured window: today');
+    await expect(area).toContainText('Required history intervals are missing');
+    await expect(area).toContainText('may miss the true extremum');
+    await expect(area).toContainText('sensor.history · Floor marker · Configured window: 24h');
+    await expect(area).toContainText('cached value from the last successful refresh');
+    await expect(host.locator('.history-status-badge, .history-indicator')).toHaveCount(0);
+    await expect(host.locator('.peak-marker')).not.toHaveAttribute('data-history-status', /.+/);
+    await expect(host.locator('.floor-marker')).not.toHaveAttribute('data-sbcp-tooltip', /.+/);
+  }
+  const initial = await card.locator('.sbcp-message').allTextContents();
+  expect(await feature.locator('.sbcp-message').allTextContents()).toEqual(initial);
+  await page.evaluate(async () => window.__updateHistory({}));
+  for (const host of [card, feature]) await expect(host.locator('.sbcp-message')).toHaveCount(2);
+
+  for (const host of [card, feature]) {
+    await host.locator('.sbcp-disclosure-toggle').click();
+    await expect(host.locator('.sbcp-disclosure-toggle')).toHaveAttribute('aria-expanded', 'true');
+  }
+  await page.evaluate(async () => window.__updateHistory({
+    peak: { value: null, status: 'pending' },
+    floor: { value: null, status: 'unavailable' },
+  }));
+  for (const host of [card, feature]) {
+    const area = host.locator('.sbcp-messages');
+    await expect(area.locator('.sbcp-message')).toHaveCount(2);
+    await expect(area.locator('.sbcp-message-count[data-severity="info"] span:last-child')).toHaveText('1');
+    await expect(area.locator('.sbcp-message-count[data-severity="error"] span:last-child')).toHaveText('1');
+    await expect(host.locator('.sbcp-disclosure-toggle')).toHaveAttribute('aria-expanded', 'true');
+    await expect(area.locator('.sbcp-disclosure-panel')).toBeVisible();
+  }
+
+  await page.evaluate(async () => {
+    const { card: cardHost, feature: featureHost } = window.__historyHosts;
+    const states = { 'sensor.history': window.__sbcpCreateState(45) };
+    cardHost.hass = { ...cardHost.hass, states };
+    featureHost.hass = { ...featureHost.hass, states };
+    cardHost._update();
+    featureHost._requestUpdate();
+    await featureHost.updateComplete;
+  });
+  await expect(card.locator('.sbcp-disclosure-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await expect(feature.locator('.sbcp-disclosure-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+  await page.evaluate(async () => window.__updateHistory({
+    peak: { value: 80, status: 'available' },
+    floor: { value: 20, status: 'available' },
+  }));
+  for (const host of [card, feature]) {
+    await expect(host.locator('.sbcp-messages')).toBeHidden();
+    await expect(host.locator('.history-status-badge, .history-indicator')).toHaveCount(0);
+  }
+  await page.evaluate(async () => window.__updateHistory({
+    peak: { value: 80, status: 'partial', provenance: { coverage: { reason: 'missing intervals' } } },
+    floor: { value: 20, status: 'stale' },
+  }));
+  for (const host of [card, feature]) {
+    await expect(host.locator('.sbcp-messages')).toBeVisible();
+    await expect(host.locator('.sbcp-disclosure-toggle')).toHaveAttribute('aria-expanded', 'true');
+    await expect(host.locator('.sbcp-disclosure-panel')).toBeVisible();
+    await expect(host.locator('.sbcp-message')).toHaveCount(2);
+  }
+});
+}
+
+for (const source of ['src', 'dist']) {
 test(`preset messages retain invalid and missing causes and clear after registry recovery (${source})`, async ({ page }) => {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async () => {

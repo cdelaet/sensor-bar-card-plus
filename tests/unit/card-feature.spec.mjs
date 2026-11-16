@@ -335,7 +335,7 @@ describe('independent input reconciliation', () => {
     const element = feature({ entity, scale: { min: 50, max: 10 }, peak: { enabled: true, reset: 'invalid' } });
     await update(element, 42);
     expect(element._diagnostics.warnings.map(warning => warning.code)).toContain('scale.min_gt_max');
-    expect(element._diagnostics.warnings.map(warning => warning.code)).toContain('peak_marker.invalid_window');
+    expect(element._diagnostics.errors.map(error => error.code)).toContain('peak_marker.invalid_window');
   });
 });
 
@@ -377,7 +377,7 @@ describe('textual Feature primary presentation', () => {
 
 describe('historical Feature accessibility', () => {
   for (const source of ['src', 'dist']) {
-    it(`${source}: describes partial and stale markers on the accessible surface`, async () => {
+    it(`${source}: excludes legacy history status from the feature label`, async () => {
       const { feature: Feature } = loadCardClass({ source });
       const element = new Feature();
       element.style = { setProperty() {}, removeProperty() {} };
@@ -389,8 +389,9 @@ describe('historical Feature accessibility', () => {
         { type: 'floor', visible: true, showMarker: true, value: 10, historyStatus: 'stale' },
       ] };
       element._render(row, null);
-      expect(element._surface.getAttribute('aria-label')).toContain('Peak at 80; partial history');
-      expect(element._surface.getAttribute('aria-label')).toContain('Floor at 10; stale history');
+      expect(element._surface.getAttribute('aria-label')).not.toContain('partial history');
+      expect(element._surface.getAttribute('aria-label')).not.toContain('stale history');
+      expect(element.shadowRoot.querySelectorAll('.history-status-badge, .history-indicator')).toHaveLength(0);
       expect(element._surface.getAttribute('tabindex')).toBeNull();
     });
   }

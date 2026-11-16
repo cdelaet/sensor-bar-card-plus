@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { historyReason, historyStatusSummary } from '../../src/history/history-status.js';
+import { historyDiagnostics, historyReason } from '../../src/history/history-status.js';
 
 describe('historical status presentation', () => {
   it.each([
@@ -20,13 +20,30 @@ describe('historical status presentation', () => {
     expect(historyReason({ status: 'available', provenance: { coverage: { kind: 'unknown' } } })).toBeNull();
   });
 
-  it('combines identical reasons and separates different reasons without marker positions', () => {
-    const peak = { enabled: true, status: 'unavailable', visible: false, reason: 'Missing' };
-    const floor = { ...peak };
-    expect(historyStatusSummary(peak, floor).text).toBe('Peak and Floor: Missing');
-    expect(historyStatusSummary(peak, { ...floor, reason: 'Units' }).text).toBe('Peak: Missing; Floor: Units');
-    expect(historyStatusSummary({ ...peak, status: 'pending' }, { enabled: false }).pending).toBe(true);
-    expect(historyStatusSummary({ ...peak, status: 'partial', visible: true }, null)).toBeNull();
-    expect(historyStatusSummary({ ...peak, status: 'stale', visible: false }, null).text).toBe('Peak: Missing');
+  it('produces marker-specific diagnostics with severity, configured windows, and consequences', () => {
+    const diagnostics = historyDiagnostics('sensor.temperature',
+      { enabled: true, status: 'pending', visible: false, reason: 'Historical data is still loading', window: 'today' },
+      { enabled: true, status: 'stale', visible: true, reason: 'Cached history is stale; refresh failed', window: '24h' });
+    expect(diagnostics).toEqual([
+      expect.objectContaining({ code: 'history.marker.pending', severity: 'info', entity: 'sensor.temperature',
+        area: 'Peak marker · Configured window: today', message: expect.stringContaining('Peak marker will be unavailable') }),
+      expect.objectContaining({ code: 'history.marker.stale', severity: 'warning', entity: 'sensor.temperature',
+        area: 'Floor marker · Configured window: 24h', message: expect.stringContaining('Floor marker uses a cached value') }),
+    ]);
+  });
+
+  it('uses error severity for invalid or unavailable history and clears recovered results', () => {
+    expect(historyDiagnostics('sensor.temperature',
+      { enabled: true, status: 'invalid', visible: false, reason: 'Historical window is invalid or unsupported', window: '24h' },
+      { enabled: true, status: 'unavailable', visible: false, reason: 'History is temporarily unavailable', window: 'today' })
+    ).toEqual([
+      expect.objectContaining({ severity: 'error', area: 'Peak marker · Configured window: 24h',
+        message: expect.stringContaining('Peak marker is unavailable') }),
+      expect.objectContaining({ severity: 'error', area: 'Floor marker · Configured window: today',
+        message: expect.stringContaining('Floor marker is unavailable') }),
+    ]);
+    expect(historyDiagnostics('sensor.temperature',
+      { enabled: true, status: 'available', visible: true, window: 'today' },
+      { enabled: false, status: 'pending', visible: false, window: 'today' })).toEqual([]);
   });
 });
