@@ -7,6 +7,7 @@ import { buildBarRenderModel, getRevealTransitionDuration, getEffectiveMarkerCol
 import { renderBar, patchBar, renderHistoryStatus, patchHistoryStatus } from '../render/bar-renderer.js';
 import { attachTooltips } from '../render/tooltip-controller.js';
 import { barTrackStyles, barMarkerStyles, getBarAnimationStyles } from '../render/bar-styles.js';
+import { initializeUniversalMessageArea, renderUniversalMessageArea, syncUniversalMessageArea, universalMessageStyles } from '../render/universal-messages.js';
 import { HistoricalHostRuntime } from '../history/host-runtime.js';
 import { historicalMarkerConsumers, historicalMarkerResults } from '../history/marker-consumers.js';
 import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
@@ -239,6 +240,12 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     }
     this._diagnostics = { ...this._diagnostics, warnings: [
       ...(this._diagnostics?.warnings ?? []).filter(issue => issue.code !== 'target.invalid_ordering'),
+      ...(this._paintPresetRegistry?.diagnostic?.code === 'multiple_preset_masters' ? [{
+        ...this._paintPresetRegistry.diagnostic,
+        path: 'preset_library',
+        severity: 'warning',
+        fallback: 'preset_resolution_disabled',
+      }] : []),
       ...(row?.targetDiagnostics ?? []),
     ] };
     this._row = row;
@@ -260,10 +267,11 @@ export class SensorBarCardPlusFeature extends HTMLElement {
           display: block;
           width: 100%;
           min-width: 0;
-          height: var(--feature-height, 42px);
+          min-height: var(--feature-height, 42px);
+          height: auto;
         }
         .surface {
-          position: relative; height: 100%; min-width: 0;
+          position: relative; height: var(--feature-height, 42px); min-width: 0;
           --label-above: 0px; --label-below: 0px;
           --sbcp-row-height: calc(var(--feature-height, 42px) - var(--label-above) - var(--label-below));
         }
@@ -306,6 +314,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
           font: inherit;
           font-size: 12px;
         }
+        ${universalMessageStyles}
         @media (prefers-reduced-motion: reduce) {
           .surface *, .surface *::before, .surface *::after { transition: none !important; animation: none !important; }
         }
@@ -315,16 +324,19 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         <div id="bar" hidden></div>
         <div id="labels" class="compact-labels" aria-hidden="true"></div>
         <div id="status" class="status" aria-hidden="true"></div>
-      </div>`;
+      </div>
+      ${renderUniversalMessageArea()}`;
     this._surface = this.shadowRoot.querySelector('#surface');
     this._bar = this.shadowRoot.querySelector('#bar');
     this._labels = this.shadowRoot.querySelector('#labels');
     this._statusEl = this.shadowRoot.querySelector('#status');
+    initializeUniversalMessageArea(this.shadowRoot.querySelector('.sbcp-messages'));
   }
 
   _render(row, status) {
     this._ensureDom();
     if (this.isConnected) this._tooltipController ??= attachTooltips(this.shadowRoot);
+    syncUniversalMessageArea(this.shadowRoot.querySelector('.sbcp-messages'), this._diagnostics);
     const historySummary = status ? null : row?.historyStatusSummary;
     patchHistoryStatus(this._surface, historySummary);
     const textValue = !status ? this._textValue : null;

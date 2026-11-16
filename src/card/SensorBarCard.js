@@ -1,6 +1,7 @@
 import { getTargetSourceEntities } from '../config/directional-targets.js';
 import { createConfigEditor } from '../editor-loader.js';
 import { barTrackStyles, barMarkerStyles, getBarAnimationStyles } from '../render/bar-styles.js';
+import { initializeUniversalMessageArea, renderUniversalMessageArea, syncUniversalMessageArea, universalMessageStyles } from '../render/universal-messages.js';
 import { attachTooltips } from '../render/tooltip-controller.js';
 import {
   clampSupportedRowHeight,
@@ -594,6 +595,11 @@ export class SensorBarCard extends HTMLElement {
     diagnostics.push(...rootTargetBelow.diagnostics.map(diagnostic => ({
       ...diagnostic, path: `target.when_below.${diagnostic.path}`, entity: null,
     })));
+    const registryWarning = this._paintPresetRegistry?.diagnostic?.code === 'multiple_preset_masters'
+      ? { ...this._paintPresetRegistry.diagnostic, code: 'multiple_preset_masters', path: 'preset_library',
+        severity: 'warning', fallback: 'preset_resolution_disabled' }
+      : null;
+    const base = this._baseDiagnostics ?? { warnings: [], errors: [] };
     if (!Object.prototype.hasOwnProperty.call(inheritedProperties, 'preset')
       && !entities.some(entity => Object.prototype.hasOwnProperty.call(authoredPaintProperties(entity.bar?.paint), 'preset'))
       && !Object.keys(rootBaseline.paints).length
@@ -602,7 +608,12 @@ export class SensorBarCard extends HTMLElement {
       && this._config.target_below?.paint?.preset === undefined
       && !entities.some(entity => entity.target_above?.paint?.preset !== undefined)
       && !entities.some(entity => entity.target_below?.paint?.preset !== undefined)
-      && !entities.some(entity => ['above', 'below'].some(side => entity.baseline?.[side]?.paint?.preset !== undefined))) return;
+      && !entities.some(entity => ['above', 'below'].some(side => entity.baseline?.[side]?.paint?.preset !== undefined))) {
+      this._diagnostics = registryWarning ? {
+        ...base, warnings: [...(base.warnings ?? []), registryWarning],
+      } : base;
+      return;
+    }
     const cardHasPreset = Object.prototype.hasOwnProperty.call(inheritedProperties, 'preset');
     const root = cardHasPreset
       ? resolveScopedPaintPreset({
@@ -641,20 +652,20 @@ export class SensorBarCard extends HTMLElement {
       })));
     }
     this._paintPresetDiagnostics = diagnostics;
-    const base = this._baseDiagnostics ?? { warnings: [], errors: [] };
     this._diagnostics = {
       ...base,
       warnings: [...(base.warnings ?? []), ...diagnostics.map(diagnostic => ({
         ...diagnostic,
         message: `${diagnostic.code}: ${diagnostic.reference ?? 'paint'}`,
-      }))],
+      })), ...(registryWarning ? [registryWarning] : [])],
     };
   }
 
   _syncPaintPresetRegistry() {
     const usesPreset = scopeUsesPaintPreset(this._actionConfig)
       || (this._actionConfig?.entities ?? []).some(scopeUsesPaintPreset);
-    if (!this.isConnected || !this._hass?.connection || !usesPreset) {
+    const ownsPresetLibrary = Object.hasOwn(this._actionConfig ?? {}, 'preset_library');
+    if (!this.isConnected || !this._hass?.connection || !(usesPreset || ownsPresetLibrary)) {
       if (this._paintPresetHandle) {
         this._paintPresetSubscriptionGeneration += 1;
         this._paintPresetHandle.unsubscribe();
@@ -1780,18 +1791,21 @@ ${barMarkerStyles}
           pointer-events: none;
           white-space: nowrap;
         }
+        ${universalMessageStyles}
       </style>
 
       <ha-card>
         <div class="card">
           <div class="card-title" style="display:none;"></div>
           <div class="rows"></div>
+          ${renderUniversalMessageArea()}
           <div class="measure-layer"></div>
         </div>
       </ha-card>
     `;
     this.shadowRoot.addEventListener('pointerover', this._boundMarkerPointerOver);
     this.shadowRoot.addEventListener('pointerout', this._boundMarkerPointerOut);
+    initializeUniversalMessageArea(this.shadowRoot.querySelector('.sbcp-messages'));
     this._baseDomReady = true;
   }
 
@@ -1812,7 +1826,12 @@ ${barMarkerStyles}
 
     this._setupResizeObserver();
     this._update();
+    this._syncUniversalMessages();
     this._schedulePostLayoutDensityPass();
+  }
+
+  _syncUniversalMessages() {
+    syncUniversalMessageArea(this.shadowRoot.querySelector('.sbcp-messages'), this._diagnostics);
   }
 
   _setupResizeObserver() {
@@ -3531,6 +3550,7 @@ ${barMarkerStyles}
       // Attach the row gesture adapter after rebuilding present rows. Missing
       // entity warning rows are deliberately absent from this selector.
       this._attachRowActionHandlers(builtRows);
+      this._syncUniversalMessages();
       return;
     }
 
@@ -3544,5 +3564,6 @@ ${barMarkerStyles}
       this._patchRow(row, entityCfg, stateObj, previousHass);
     }
     this._runPostLayoutPasses(rows);
+    this._syncUniversalMessages();
   }
 }
