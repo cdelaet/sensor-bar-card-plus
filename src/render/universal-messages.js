@@ -158,10 +158,11 @@ export const universalMessageStyles = `${disclosureStyles}
     font-size: var(--ha-font-size-m, 14px);
     line-height: var(--ha-line-height-normal, 1.4);
   }
+  .sbcp-messages .sbcp-disclosure-toggle { font-size: 12px; }
   .sbcp-messages-title {
     min-width: 0;
     overflow-wrap: anywhere;
-    font-size: var(--ha-font-size-s, 12px);
+    font-size: 12px;
     font-weight: 500;
   }
   .sbcp-message-counts {
@@ -198,8 +199,8 @@ export const universalMessageStyles = `${disclosureStyles}
   .sbcp-message[data-severity="warning"] .sbcp-message-icon { color: var(--warning-color, #e0a000); }
   .sbcp-message[data-severity="error"] .sbcp-message-icon { color: var(--error-color, #db4437); }
   .sbcp-message-content { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
-  .sbcp-message-area { color: var(--secondary-text-color, inherit); font-size: .9em; }
-  .sbcp-message-explanation { min-width: 0; overflow-wrap: anywhere; }
+  .sbcp-message-area { color: var(--secondary-text-color, inherit); font-size: 13px; }
+  .sbcp-message-explanation { min-width: 0; overflow-wrap: anywhere; font-size: 12px; line-height: 1.4; }
   .sbcp-sr-only {
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
     overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
