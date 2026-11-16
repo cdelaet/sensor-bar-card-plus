@@ -4835,59 +4835,7 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('Bar Appearance inherit removes only managed keys', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({
-      entities: [{
-        entity: 'sensor.one',
-        name: 'One',
-        bar: {
-          fill_style: 'gradient',
-          color: '#ff9800',
-          solid_fill: true,
-          needle: true,
-        },
-      }],
-    });
-
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    const inheritToggle = editor.shadowRoot.querySelectorAll('input[data-kind="entity-bar-inherit"]')[0];
-    inheritToggle.checked = true;
-    inheritToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', bar: { needle: { show: true } } },
-    ]);
-  });
-
-  it('Bar Appearance inherit preserves unrelated entity bar.segments', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({
-      entities: [{
-        entity: 'sensor.one',
-        name: 'One',
-        bar: {
-          fill_style: 'gradient',
-          segments: [{ from: 0, to: 10, color: '#ff9800' }],
-        },
-      }],
-    });
-
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    const inheritToggle = editor.shadowRoot.querySelectorAll('input[data-kind="entity-bar-inherit"]')[0];
-    inheritToggle.checked = true;
-    inheritToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', bar: { segments: [{ from: 0, to: 10, color: '#ff9800' }] } },
-    ]);
-  });
-
-  it('Bar Appearance inherit preserves unknown entity-level bar keys and sibling entity config', () => {
+  it('Bar Appearance inherit removes the complete local bar configuration', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4896,21 +4844,43 @@ describe('Sensor Bar Card Plus editor', () => {
         entity: 'sensor.one',
         name: 'One',
         icon: 'mdi:flash',
+        extra: { keep: true },
+        color: '#112233',
+        color_mode: 'gradient',
+        animated: false,
+        segments: [{ from: 0, to: 10, color: '#ff9800' }],
+        severity: [{ from: 10, to: 20, color: '#00ff00' }],
+        gradient_stops: [{ pos: 0, color: '#123456' }],
         bar: {
-          color: '#ff9800',
-          custom_bar_key: 'keep',
+          direction: 'reverse',
+          animated: false,
+          paint: {
+            preset: null,
+            fill_style: 'gradient',
+            color: '#ff9800',
+            solid_fill: true,
+            segments: [{ from: 0, to: 10, color: '#abcdef' }],
+            gradient_stops: [{ pos: 0, color: '#fedcba' }],
+            opacity: 35,
+          },
+          needle: { show: true },
+          custom_bar_key: 'remove with the local bar object',
         },
       }],
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     const inheritToggle = editor.shadowRoot.querySelectorAll('input[data-kind="entity-bar-inherit"]')[0];
+    expect(inheritToggle.checked).toBe(false);
+    expect(editor._getBarAppearanceSummary({ type: 'entity', index: 0 })).not.toBe('Inherited');
     inheritToggle.checked = true;
     inheritToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', icon: 'mdi:flash', bar: { custom_bar_key: 'keep' } },
+      { entity: 'sensor.one', name: 'One', icon: 'mdi:flash', extra: { keep: true } },
     ]);
+    expect(editor.shadowRoot.querySelector('#entity-0-bar-inherit').checked).toBe(true);
+    expect(editor._getBarAppearanceSummary({ type: 'entity', index: 0 })).toBe('Inherited');
   });
 
   it('loading flat color_mode renders the matching fill style', () => {

@@ -11,6 +11,8 @@ import { renderPaintEditor, syncPaintEditor } from '../shared/paint-editor.js';
 import { BAR_PAINT } from '../../view-model/paint-destinations.js';
 import { getDestinationEditorState, resetDestinationPaint, selectDestinationPreset, clearDestinationProperty, setDestinationProperty, hasDestinationConfiguration } from '../shared/paint-destination.js';
 
+const LEGACY_BAR_PAINT_PATHS = Object.values(BAR_PAINT.aliases).flat().filter(path => path.length === 1);
+
 export function getFillStyleFromColorMode(colorMode) {
   switch (colorMode) {
     case 'single': return 'solid';
@@ -93,14 +95,19 @@ export function setBarAnimated(context, scope, value) {
 }
 
 export function clearBarAppearanceOverride(context, scope) {
+  context.clearPaintPaletteState?.(scope, BAR_PAINT);
+  const grouped = usesGroupedBarPaint(context, scope);
   return context.mutate(scope, target => {
+    if (scope?.type === 'entity') {
+      return removePathsFromTarget(target, [['bar'], ...LEGACY_BAR_PAINT_PATHS, ['animated']]);
+    }
     const nextTarget = removePathsFromTarget(usesGroupedBarPaint(context, scope)
       ? clearBarPaintProperties(target, ['preset', 'color', 'fill_style', 'solid_fill', 'opacity'])
       : clearBarPaintProperties(target, ['preset', 'opacity']), [
       ['bar', 'fill_style'], ['bar', 'color'], ['bar', 'solid_fill'], ['bar', 'direction'], ['bar', 'animated'], ['animated'], ['color_mode'], ['color'],
     ]);
     return pruneEmptyObjectsInTarget(nextTarget, ['bar']);
-  }, { rerender: true, ...(usesGroupedBarPaint(context, scope) ? { preserveRawConfig: true } : {}) });
+  }, { rerender: true, ...(scope?.type === 'entity' || grouped ? { preserveRawConfig: true } : {}) });
 }
 
 export function hasLocalBarPaintConfiguration(context, scope) {
@@ -112,17 +119,10 @@ export function resetBarPaintConfiguration(context, scope) {
 }
 
 export function hasBarAppearanceOverride(context, scope) {
-  if (['preset', 'color', 'fill_style', 'solid_fill', 'segments', 'gradient_stops', 'opacity']
-    .some(key => Object.prototype.hasOwnProperty.call(context.read(scope, ['bar', 'paint']) ?? {}, key))) return true;
   const bar = context.read(scope, ['bar']) ?? {};
-  if (isObject(bar) && (
-    Object.prototype.hasOwnProperty.call(bar, 'fill_style')
-    || Object.prototype.hasOwnProperty.call(bar, 'color')
-    || Object.prototype.hasOwnProperty.call(bar, 'solid_fill')
-    || Object.prototype.hasOwnProperty.call(bar, 'direction')
-    || Object.prototype.hasOwnProperty.call(bar, 'animated')
-  )) return true;
-  return context.read(scope, ['animated']) !== undefined || context.read(scope, ['color_mode']) !== undefined || context.read(scope, ['color']) !== undefined;
+  if (isObject(bar) && Object.keys(bar).length > 0) return true;
+  return LEGACY_BAR_PAINT_PATHS.some(path => context.read(scope, path) !== undefined)
+    || context.read(scope, ['animated']) !== undefined;
 }
 
 export function getBarAppearanceSummary(context, scope) {

@@ -69,9 +69,9 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     }
     const { editor } = setup(source, { entities: [{ entity: 'sensor.power', bar: { color_mode: 'single' } }] });
     expect(editor._getScopedFillStyleValue(row)).toBe('solid');
-    expect(editor._hasEntityBarAppearanceOverride(row)).toBe(false);
+    expect(editor._hasEntityBarAppearanceOverride(row)).toBe(true);
     editor._clearEntityBarAppearance(row);
-    expect(editor._draftConfig.entities[0].bar.color_mode).toBe('single');
+    expect(editor._draftConfig.entities[0].bar).toBeUndefined();
   });
 
   it('switches every fill style while retaining config echo, palettes and unrelated config', () => {

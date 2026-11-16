@@ -642,6 +642,83 @@ for (const source of ['src', 'dist']) test(`Entity Bar None uses the same defaul
   });
 });
 
+for (const source of ['src', 'dist']) test(`Entity Bar inheritance clears local Paint and restores the Card preset (${source})`, async ({ page }) => {
+  const presets = {
+    night: { fill_style: 'gradient', opacity: 40,
+      gradient_stops: [{ pos: 0, color: '#112233' }, { pos: 100, color: '#445566' }] },
+  };
+  const localStops = [{ pos: 0, color: '#cc1122' }, { pos: 100, color: '#dd3344' }];
+  const editor = await mount(page, source, 'Entity', 'bar', {
+    segments: [{ from: '0%', to: '100%', color: '#123456' }], gradient_stops: localStops, opacity: 65,
+  }, { preset: 'night' }, presets);
+  const paint = await openPaint(editor, 'Entity', 'bar');
+  const inherit = editor.locator('#entity-0-bar-inherit');
+  const summary = editor.locator('#entity-0-group-bar-summary');
+  const before = await page.evaluate(() => ({
+    config: structuredClone(window.__paintConfig.entities[0]),
+    checked: document.querySelector('sensor-bar-card-plus-editor').shadowRoot.querySelector('#entity-0-bar-inherit').checked,
+    summary: document.querySelector('sensor-bar-card-plus-editor').shadowRoot.querySelector('#entity-0-group-bar-summary').textContent,
+    entityPaint: getComputedStyle(document.querySelector('sensor-bar-card-plus-editor').shadowRoot
+      .querySelector('#entity-0-paint-editor .paint-editor-swatch')).backgroundImage,
+  }));
+  await inherit.click();
+  await expect.poll(() => page.evaluate(() => window.__paintEvents.length)).toBe(1);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const after = await page.evaluate(() => {
+    const editor = document.querySelector('sensor-bar-card-plus-editor');
+    const runtime = document.querySelector('sensor-bar-card-plus');
+    const paint = editor.shadowRoot.querySelector('#entity-0-paint-editor');
+    return {
+      config: structuredClone(window.__paintConfig.entities[0]),
+      checked: editor.shadowRoot.querySelector('#entity-0-bar-inherit').checked,
+      summary: editor.shadowRoot.querySelector('#entity-0-group-bar-summary').textContent,
+      selectedPreset: paint.querySelector('[data-paint-preset="true"]').value,
+      fillStyle: paint.querySelector('[data-paint-property="fill_style"]').value,
+      opacity: paint.querySelector('[data-paint-property="opacity"]').value,
+      gradientStopsSource: paint.querySelector('[data-paint-source="gradient_stops"]').textContent,
+      editorPaint: getComputedStyle(paint.querySelector('.paint-editor-swatch')).backgroundImage,
+      runtimePaint: getComputedStyle(runtime.shadowRoot.querySelector('.bar-paint-layer[data-layer="base"]')).backgroundImage,
+      unrelatedEntityData: [window.__paintConfig.entities[0].name, window.__paintConfig.entities[0].future],
+    };
+  });
+  const includesCardPreset = value => ['rgb(17, 34, 51)', 'rgb(68, 85, 102)'].every(color => value.includes(color));
+  expect({
+    initialLocalBar: before.config.bar,
+    initiallyUnchecked: before.checked === false,
+    initialSummary: before.summary,
+    initialPaintWasLocal: before.entityPaint.includes('rgb(204, 17, 34)'),
+    resultingConfig: after.config,
+    localBarRemoved: !Object.hasOwn(after.config, 'bar'),
+    inheritanceChecked: after.checked,
+    inheritedSummary: after.summary,
+    selectedPreset: after.selectedPreset,
+    fillStyle: after.fillStyle,
+    opacity: after.opacity,
+    gradientStopsSource: after.gradientStopsSource,
+    editorShowsCardPreset: includesCardPreset(after.editorPaint),
+    runtimeShowsCardPreset: includesCardPreset(after.runtimePaint),
+    editorMatchesRuntime: after.editorPaint === after.runtimePaint,
+    unrelatedEntityData: after.unrelatedEntityData,
+  }).toEqual({
+    initialLocalBar: { paint: { segments: [{ from: '0%', to: '100%', color: '#123456' }], gradient_stops: localStops, opacity: 65 } },
+    initiallyUnchecked: true,
+    initialSummary: 'Custom row settings',
+    initialPaintWasLocal: true,
+    resultingConfig: { entity: 'sensor.power', future: true },
+    localBarRemoved: true,
+    inheritanceChecked: true,
+    inheritedSummary: 'Inherited',
+    selectedPreset: '__paint_preset_inherited__',
+    fillStyle: 'gradient',
+    opacity: '40',
+    gradientStopsSource: 'Inherited',
+    editorShowsCardPreset: true,
+    runtimeShowsCardPreset: true,
+    editorMatchesRuntime: true,
+    unrelatedEntityData: [undefined, true],
+  });
+});
+
 for (const source of ['src', 'dist']) test(`Target None retains local gradient stops with a legacy Needle Bar (${source})`, async ({ page }) => {
   const { mount: mountTarget, openTarget } = require('./target-test-utils.cjs');
   const config = { title: 'Animated sensor preview', entities: [{ entity: 'sensor.sbcp_playground_sensor', name: 'Sensor' }],
