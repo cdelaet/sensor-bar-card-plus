@@ -27,6 +27,7 @@ for (const [style, group] of [['bands', 'segments'], ['gradient', 'gradient-stop
     await draft.press('Enter');
     await expect.poll(() => editor.evaluate(element => element.shadowRoot.activeElement?.id ?? '')).toBe('');
     await editor.locator('button[data-action="toggle-entity-overrides"]').click();
+    await editor.locator('#entity-0-group-bar').click();
     await editor.locator('#entity-0-paint-editor > summary').click();
     await editor.locator(`#entity-0-group-${group}`).click();
     await expect(editor.locator(`.override-group:not(.card-subgroup)[data-group="${group}"]`)).toHaveScreenshot(`palette-${group}-override.png`);

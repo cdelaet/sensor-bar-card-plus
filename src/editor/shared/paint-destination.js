@@ -6,6 +6,7 @@ import { createPaintBindings } from './paint-bindings.js';
 import { createBarPaintBindings, ownsBarPaintProperty, clearBarPaintProperties } from './bar-paint-bindings.js';
 import { cloneDeep, getPathValue, setPathValue, deletePathValue, isObject, removePathsFromTarget, pruneEmptyObjectsInTarget, serializeConfig, normalizeNumberValue } from './editor-config.js';
 import { resolvePaintEditorPaint } from './paint-editor-paint.js';
+import { INHERITED_PAINT_PRESET_VALUE } from './paint-editor.js';
 import { getPaintPreviewScale } from './paint-swatch.js';
 import { normalizeEditorColorValue } from './editor-controls.js';
 
@@ -112,11 +113,15 @@ export function getDestinationEditorState(context, scope, destination = BAR_PAIN
   const parentResolved = resolveDestinationPaint(resolved.inheritedPaint, null, registry);
   const parentPresetValid = registry?.status === 'ready'
     && !parentResolved.diagnostics.some(item => item.code !== 'paint_opacity_invalid');
-  const parentPreset = parentPresetValid ? registry?.presets?.[inheritedPreset] : null;
+  const parentPreset = parentPresetValid && ownPreset !== null ? registry?.presets?.[inheritedPreset] : null;
   const authored = Object.fromEntries(PAINT_PROPERTIES.map(property => [property, ownsDestinationProperty(context, scope, destination, property)]));
   const sources = Object.fromEntries(PAINT_PROPERTIES.map(property => {
-    const inherited = resolved.inheritedPaint != null
-      && (owns(resolved.inheritedPaint[PAINT_PROPERTY_SOURCES], property) || owns(parentPreset, property));
+    const inheritedSource = resolved.inheritedPaint != null
+      && owns(resolved.inheritedPaint[PAINT_PROPERTY_SOURCES], property);
+    const inheritedPreset = parentPreset && owns(parentPreset, property);
+    const inherited = ownPreset === undefined || ownPreset === null
+      ? inheritedSource || ownPreset === undefined && inheritedPreset
+      : property === 'opacity' && !owns(preset, 'opacity') && (inheritedSource || inheritedPreset);
     const fromPreset = owns(preset, property) && (!parent || ownPreset !== undefined);
     const invalidOpacity = property === 'opacity' && owns(resolved.normalized, INVALID_PAINT_OPACITY);
     const local = authored[property] && owns(resolved.normalized?.[PAINT_PROPERTY_SOURCES], property);
@@ -131,7 +136,8 @@ export function getDestinationEditorState(context, scope, destination = BAR_PAIN
     code: 'paint_opacity_invalid', severity: 'warning', path: 'paint.opacity', reference: null, fallback: 'default_opacity',
   });
   return { bindings, paint, enabled, destination: destination.id, inherited: !!parent && !configured, resetDisabled: !configured,
-    presetReference, presetInherited: ownPreset === undefined && inheritedPreset !== undefined,
+    presetReference, presetInherited: scope?.type === 'entity' && ownPreset === undefined,
+    presetEntity: scope?.type === 'entity', presetInheritedReference: inheritedPreset,
     presetOptions, overrides: authored, sources, diagnostics,
     registryStatus: registry?.status ?? 'loading', scale, previewScale: getPaintPreviewScale(paint, scale) };
 }
@@ -171,10 +177,18 @@ export function setDestinationProperty(context, scope, destination, property, ra
 }
 
 export function selectDestinationPreset(context, scope, destination, value, { confirm } = {}) {
-  const state = getDestinationEditorState(context, scope, destination);
-  if (value === '') return clearDestinationProperty(context, scope, destination, 'preset');
-  if (value === state.presetReference) return true;
+  if (value === INHERITED_PAINT_PRESET_VALUE) return clearDestinationProperty(context, scope, destination, 'preset');
   const rawPaint = context.read(scope, destination.path);
+  const hasLocalPreset = owns(rawPaint, 'preset');
+  if ((value === '' || value === null) && hasLocalPreset && rawPaint.preset === null) return true;
+  if (value === '' || value === null) {
+    return context.mutate(scope, target => {
+      const promotedTarget = promote(target, destination);
+      const paint = getPathValue(promotedTarget, destination.path);
+      return setPathValue(promotedTarget, destination.path, { ...(isObject(paint) ? paint : {}), preset: null });
+    }, { preserveRawConfig: true });
+  }
+  if (hasLocalPreset && rawPaint.preset === value) return true;
   const hasProperties = isObject(rawPaint) ? Object.keys(rawPaint).some(key => key !== 'preset') : rawPaint != null;
   if ((hasProperties || PAINT_PROPERTIES.some(property => ownsDestinationProperty(context, scope, destination, property))) && confirm?.(value) !== true) return false;
   context.clearPaintPaletteState?.(scope, destination);
@@ -198,10 +212,10 @@ export function handlePaintPresetControl(context, target, value) {
   selectDestinationPreset(context, scope, destination, value, {
     confirm: name => window?.confirm?.(`Applying paint preset “${name}” replaces local paint properties. Continue?`) === true,
   });
-  // None means no local reference. The effective Paint may still use a Card
-  // preset, including when clearing an already inherited selection is a no-op.
+  // Inherited, None and named presets have separate selector values. The
+  // active local reference always wins when the control is resynchronized.
   const state = getDestinationEditorState(context, scope, destination);
-  target.value = state.presetInherited ? '' : String(state.presetReference ?? '');
+  target.value = state.presetInherited ? INHERITED_PAINT_PRESET_VALUE : String(state.presetReference ?? '');
   return true;
 }
 

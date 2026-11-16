@@ -3496,12 +3496,6 @@ ${this._renderPresetMasterControls()}
 	                          summary: this._getGradientStopsSummary(scope),
 	                          content: this._gradientStopsSection.render(scope),
 	                        });
-	                        const barGroup = `<div id="entity-${index}-bar-appearance" class="entity-fields" role="group" aria-label="Bar Appearance">
-                          ${renderBarAppearanceSection(this._createSectionContext(), scope, () => '', { root: this.shadowRoot, animation: true,
-                            paletteValues: this._paintPaletteValues(scope), paintPresetRegistry: this._paintPresetRegistry,
-                            paintChildren: () => ({ segments: segmentsGroup, gradient_stops: gradientStopsGroup }),
-                          })}
-                        </div>`;
 	                        const baselineGroup = this._renderOverrideGroup({
 	                          index,
 	                          group: 'baseline',
@@ -3524,15 +3518,23 @@ ${this._renderPresetMasterControls()}
                           index,
                           group: 'actions',
                           title: 'Actions',
-                          summary: this._getEntityRawEntries()[index] && ['tap_action', 'hold_action', 'double_tap_action'].some(slot => Object.prototype.hasOwnProperty.call(this._getEntityRawEntries()[index], slot)) ? 'Custom row actions' : 'Inherit card actions',
+                          summary: this._getEntityRawEntries()[index] && ['tap_action', 'hold_action', 'double_tap_action'].some(slot => Object.prototype.hasOwnProperty.call(this._getEntityRawEntries()[index], slot)) ? 'Custom row actions' : 'Inherited',
                           content: ['tap_action', 'hold_action', 'double_tap_action'].map(slot => this._renderActionSelector(slot, scope)).join(''),
                         });
+	                        const barAppearance = `<div id="entity-${index}-bar-appearance" class="entity-fields" role="group" aria-label="Bar Appearance">
+                          ${renderBarAppearanceSection(this._createSectionContext(), scope, () => '', { root: this.shadowRoot, animation: true,
+                            paletteValues: this._paintPaletteValues(scope), paintPresetRegistry: this._paintPresetRegistry,
+                            paintChildren: () => ({ segments: segmentsGroup, gradient_stops: gradientStopsGroup }),
+                          })}
+                        </div>`;
+	                        const barGroup = this._renderOverrideGroup({
+	                          index, group: 'bar', title: 'Bar', summary: this._getBarAppearanceSummary(scope),
+	                          content: `${barAppearance}${baselineGroup}${needleGroup}`,
+	                        });
 	                        return `
                           ${layoutGroup}
                           ${scaleGroup}
                           ${barGroup}
-                          ${baselineGroup}
-                          ${needleGroup}
 	                          ${targetGroup}
 	                          ${peakGroup}
 	                          ${floorGroup}

@@ -57,6 +57,7 @@ for (const source of ['src', 'dist']) {
     });
     await editor.locator('#card-paint-editor > summary').click();
     await editor.locator('button[data-action="toggle-entity-overrides"]').click();
+    await editor.locator('#entity-0-group-bar').click();
     await editor.locator('#entity-0-paint-editor > summary').click();
     const cardOpacity = editor.locator('#bar-opacity');
     const entityOpacity = editor.locator('#entity-0-bar-opacity');

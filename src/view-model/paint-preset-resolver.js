@@ -149,7 +149,12 @@ export function resolvePaintPreset({ paint, registry, inheritedPaint = null, the
   let source = inherited.paint ? 'inherited' : 'default';
   let presetOpacity = null;
   if (hasReference) {
-    if (!hasValidReference) {
+    if (reference === null) {
+      // Null is an explicit opt-out. Scoped resolution supplies a parent paint
+      // with preset-derived fields removed, while local authored properties
+      // continue to merge over that base.
+      source = inherited.paint ? 'inherited' : 'default';
+    } else if (!hasValidReference) {
       diagnostics.push(makeDiagnostic('paint_preset_reference_invalid', reference, inherited.paint ? 'inherited' : 'default', 'reference_must_be_nonempty_string'));
     } else if (registryIsLoading(registry)) {
       // Do not report a missing name until the dashboard read has completed.
@@ -242,12 +247,26 @@ export function resolveScopedPaintPreset({ inheritedPaint, paint, registry, them
   const inherited = resolvePaintPreset({
     paint: inheritedProperties, registry, inheritedPaint: inheritedFallback, themeAccent, canonicalPaint: true,
   });
+  // The normalized parent paint also carries the destination's ordinary
+  // standard defaults. Keep those when an Entity explicitly opts out of its
+  // preset, while still excluding every preset-derived property (the parent
+  // definition is resolved only after this input layer is read).
+  const inheritedManualProperties = { ...(inheritedPaint ?? {}) };
+  delete inheritedManualProperties.preset;
+  const inheritedManual = resolvePaintPreset({
+    paint: inheritedManualProperties, registry, inheritedPaint: defaultPaint(themeAccent), themeAccent, canonicalPaint: true,
+  });
+  const localProperties = authoredPaintProperties(paint);
+  const suppressInheritedPreset = Object.prototype.hasOwnProperty.call(localProperties, 'preset')
+    && localProperties.preset === null;
   const local = resolvePaintPreset({
-    paint: authoredPaintProperties(paint), registry, inheritedPaint: inherited.paint, themeAccent, canonicalPaint: true,
+    paint: localProperties, registry,
+    inheritedPaint: suppressInheritedPreset ? inheritedManual.paint : inherited.paint,
+    themeAccent, canonicalPaint: true,
   });
   return {
     paint: local.paint,
-    diagnostics: [...inherited.diagnostics, ...local.diagnostics],
+    diagnostics: [...(suppressInheritedPreset ? [] : inherited.diagnostics), ...local.diagnostics],
     source: local.source,
   };
 }

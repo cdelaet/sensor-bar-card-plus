@@ -60,6 +60,10 @@ async function openPaint(editor, host, destination) {
   if (entity) {
     const toggle = editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]');
     if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
+    const bar = editor.locator('#entity-0-group-bar');
+    if (await bar.getAttribute('aria-expanded') === 'false') await bar.click();
+    await expect(bar).toHaveAttribute('aria-expanded', 'true');
+    await expect(bar.locator('..').locator(':scope > .override-group-body')).toBeVisible();
   }
   if (destination !== 'bar') {
     const target = destination.startsWith('target-');
@@ -93,7 +97,7 @@ function layer(page, host, destination) {
 }
 
 for (const source of ['src', 'dist']) for (const host of hosts) for (const destination of destinations) {
-  test(`${host} ${destination} shares preset confirmation, active no-op and None (${source})`, async ({ page }) => {
+  test(`${host} ${destination} distinguishes inherited, None and named preset selection (${source})`, async ({ page }) => {
     const presets = {
       warm: { fill_style: 'gradient', opacity: 35,
         gradient_stops: [{ pos: 0, color: '#000000' }, { pos: 100, color: '#ffffff' }] },
@@ -108,17 +112,34 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
       ? 'Reset to Card paint settings' : 'Reset to default paint settings');
     const preset = paint.locator('[data-paint-preset="true"]');
     await expect(preset).toBeVisible();
-    await expect(preset).toHaveValue(host === 'Entity' ? '' : 'warm');
+    await expect(preset).toHaveValue(host === 'Entity' ? '__paint_preset_inherited__' : 'warm');
     await expect(paint.locator('[data-paint-property="fill_style"]')).toHaveValue('gradient');
     await expect(layer(page, host, destination)).toHaveCSS('opacity', '0.6');
-    const before = await savedPaint(page, host, destination);
-    const events = await page.evaluate(() => window.__paintEvents.length);
+    let before;
+    if (host === 'Entity') {
+      page.once('dialog', dialog => dialog.dismiss());
+      await preset.selectOption('warm');
+      await expect(preset).toHaveValue('__paint_preset_inherited__');
+      expect(await savedPaint(page, host, destination)).toEqual({ opacity: 60 });
+      page.once('dialog', dialog => dialog.accept());
+      await preset.selectOption('warm');
+      await expect.poll(() => savedPaint(page, host, destination)).toEqual({ preset: 'warm' });
+      await expect(preset).toHaveValue('warm');
+      await paint.locator('[data-paint-property="opacity"]').fill('60');
+      before = await savedPaint(page, host, destination);
+    } else {
+      before = await savedPaint(page, host, destination);
+      const events = await page.evaluate(() => window.__paintEvents.length);
+      await preset.selectOption('warm');
+      expect(await page.evaluate(() => window.__paintEvents.length)).toBe(events);
+      expect(await savedPaint(page, host, destination)).toEqual(before);
+    }
+    const localEvents = await page.evaluate(() => window.__paintEvents.length);
     await preset.selectOption('warm');
-    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(events);
-    expect(await savedPaint(page, host, destination)).toEqual(before);
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(localEvents);
     page.once('dialog', dialog => dialog.dismiss());
     await preset.selectOption('cool');
-    await expect(preset).toHaveValue(host === 'Entity' ? '' : 'warm');
+    await expect(preset).toHaveValue('warm');
     expect(await savedPaint(page, host, destination)).toEqual(before);
     page.once('dialog', dialog => dialog.accept());
     await preset.selectOption('cool');
@@ -128,12 +149,12 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
     await paint.locator('[data-paint-property="opacity"]').fill('0');
     await expect(layer(page, host, destination)).toHaveCSS('opacity', '0');
     await preset.selectOption('');
-    await expect.poll(() => savedPaint(page, host, destination)).toEqual({ opacity: 0 });
+    await expect.poll(() => savedPaint(page, host, destination)).toEqual({ preset: null, opacity: 0 });
     await expect(layer(page, host, destination)).toHaveCSS('opacity', '0');
     if (destination.startsWith('target-')) expect(await paint.evaluate(node => node === window.__targetPresetPaintNode)).toBe(true);
   });
 
-  test(`${host} ${destination} None removes a preset-only reference and refreshes effective Paint (${source})`, async ({ page }) => {
+  test(`${host} ${destination} None explicitly suppresses presets and refreshes effective Paint (${source})`, async ({ page }) => {
     const editor = await mount(page, source, host, destination, { preset: 'warm' },
       host === 'Entity' ? { fill_style: 'solid', color: '#08aabb', opacity: 80 } : undefined,
       { warm: { fill_style: 'solid', color: '#ee1234', opacity: 40 } });
@@ -144,7 +165,7 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
     await preset.focus();
     await preset.selectOption('');
     await preset.press('Tab');
-    expect((await savedPaint(page, host, destination))?.preset).toBeUndefined();
+    expect((await savedPaint(page, host, destination))?.preset).toBeNull();
     await expect(preset).toHaveValue('');
     await expect(paint.locator('[data-paint-property="opacity"]')).toHaveValue(host === 'Entity' ? '80' : '100');
     await expect(layer(page, host, destination)).toHaveCSS('opacity', host === 'Entity' ? '0.8' : '1');
@@ -163,7 +184,7 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
     const preset = paint.locator('[data-paint-preset="true"]');
     await expect(preset).toHaveValue('warm');
     await preset.focus(); await preset.selectOption(''); await preset.press('Tab');
-    expect(await savedPaint(page, host, destination)).toEqual(authored);
+    expect(await savedPaint(page, host, destination)).toEqual({ ...authored, preset: null });
     await expect(preset).toHaveValue('');
     await expect(paint.locator('input[type="color"][data-paint-property="color"]')).toHaveValue('#11aa44');
     await expect(paint.locator('[data-paint-property="opacity"]')).toHaveValue('65');
@@ -173,33 +194,97 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
     await expect(paint.locator('.paint-editor-description')).not.toContainText('warm');
   });
 
-  if (host === 'Entity') test(`${host} ${destination} None stays selected for an inherited Card preset (${source})`, async ({ page }) => {
+  if (host === 'Entity') test(`${host} ${destination} keeps Inherited, None and named references distinct (${source})`, async ({ page }) => {
     const parent = { preset: 'Hot-to-Cold' };
-    const editor = await mount(page, source, host, destination, undefined, parent, {
+    const presets = {
+      'Temperature Colors': { fill_style: 'solid', color: '#11aa44' },
+      'Hot-to-Cold': { fill_style: 'gradient', opacity: 40,
+        gradient_stops: [{ pos: 0, color: '#000000' }, { pos: 100, color: '#ffffff' }] },
+    };
+    const editor = await mount(page, source, host, destination,
+      { preset: 'Temperature Colors', color: '#aa2244', opacity: 70 }, parent, presets);
+    const paint = await openPaint(editor, host, destination);
+    const preset = paint.locator('[data-paint-preset="true"]');
+    await expect(preset.locator('option').nth(0)).toHaveAttribute('value', '__paint_preset_inherited__');
+    await expect(preset.locator('option').nth(0)).toHaveText('Inherited (Hot-to-Cold)');
+    await expect(preset.locator('option').nth(1)).toHaveAttribute('value', '');
+    await expect(preset.locator('option').nth(1)).toHaveText('None');
+    await expect(preset).toHaveValue('Temperature Colors');
+
+    // Inherited removes only the local reference and keeps its property values.
+    await preset.selectOption('__paint_preset_inherited__');
+    await expect.poll(() => savedPaint(page, host, destination)).toEqual({ color: '#aa2244', opacity: 70 });
+    await expect(preset).toHaveValue('__paint_preset_inherited__');
+    await expect(paint.locator('[data-paint-property="opacity"]')).toHaveValue('70');
+
+    // None writes null and keeps local fields as the Card preset changes.
+    await preset.selectOption('');
+    await expect.poll(() => savedPaint(page, host, destination)).toEqual({ color: '#aa2244', opacity: 70, preset: null });
+    await expect(preset).toHaveValue('');
+    const updated = await page.evaluate(() => structuredClone(window.__paintConfig));
+    set(updated, pathFor(destination), { preset: 'Temperature Colors' });
+    await page.evaluate(async next => {
+      window.__paintConfig = structuredClone(next);
+      const editor = document.querySelector('sensor-bar-card-plus-editor');
+      const runtime = document.querySelector('sensor-bar-card-plus');
+      editor.setConfig(next); runtime.setConfig(next);
+      await Promise.all([editor.updateComplete, runtime.updateComplete]);
+    }, updated);
+    await expect(preset).toHaveValue('');
+    await expect(paint.locator('[data-paint-property="opacity"]')).toHaveValue('70');
+    await expect(layer(page, host, destination)).toHaveCSS('opacity', '0.7');
+
+    // Selecting the now-inherited name creates a local reference.
+    page.once('dialog', dialog => dialog.accept());
+    await preset.selectOption('Temperature Colors');
+    await expect.poll(() => savedPaint(page, host, destination)).toEqual({ preset: 'Temperature Colors' });
+    const changedAgain = await page.evaluate(() => structuredClone(window.__paintConfig));
+    set(changedAgain, pathFor(destination), parent);
+    await page.evaluate(async next => {
+      window.__paintConfig = structuredClone(next);
+      const editor = document.querySelector('sensor-bar-card-plus-editor');
+      const runtime = document.querySelector('sensor-bar-card-plus');
+      editor.setConfig(next); runtime.setConfig(next);
+      await Promise.all([editor.updateComplete, runtime.updateComplete]);
+    }, changedAgain);
+    await expect(preset).toHaveValue('Temperature Colors');
+    await expect(layer(page, host, destination)).toHaveCSS('background-image',
+      'linear-gradient(to right, rgb(17, 170, 68) 0%, rgb(17, 170, 68) 100%)');
+  });
+
+  if (host === 'Entity') test(`${host} ${destination} Inherited preserves local properties and follows Card preset changes (${source})`, async ({ page }) => {
+    const parent = { preset: 'Hot-to-Cold', color: '#778899' };
+    const authored = { preset: 'Temperature Colors', color: '#aa2244', opacity: 70 };
+    const editor = await mount(page, source, host, destination, authored, parent, {
       'Temperature Colors': { fill_style: 'solid', color: '#11aa44' },
       'Hot-to-Cold': { fill_style: 'gradient', opacity: 40,
         gradient_stops: [{ pos: 0, color: '#000000' }, { pos: 100, color: '#ffffff' }] },
     });
     const paint = await openPaint(editor, host, destination);
     const preset = paint.locator('[data-paint-preset="true"]');
-    const before = await page.evaluate(() => structuredClone(window.__paintConfig));
-    const events = await page.evaluate(() => window.__paintEvents.length);
-    await preset.focus(); await preset.selectOption(''); await preset.press('Tab');
-    await expect(preset).toHaveValue('');
-    // A registry/hass refresh must not reinstate the inherited name in the local selector.
-    await editor.evaluate(editor => { editor.hass = { ...editor.hass }; });
-    await expect(preset).toHaveValue('');
-    expect(await page.evaluate(() => window.__paintConfig)).toEqual(before);
-    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(events);
-    expect(await savedPaint(page, host, destination)).toBeUndefined();
-    await expect(paint.locator('.paint-editor-description')).toContainText('Inherited · Preset · Hot-to-Cold');
-    await expect(paint.locator('[data-paint-property="fill_style"]')).toHaveValue('gradient');
-    await expect(layer(page, host, destination)).toHaveCSS('opacity', '0.4');
-    await expect(layer(page, host, destination)).toHaveCSS('background-image',
-      'linear-gradient(to right, rgb(0, 0, 0) 0%, rgb(255, 255, 255) 100%)');
+    await preset.focus();
+    await paint.evaluate(node => { window.__inheritedPresetNodes = [node,
+      node.querySelector('[data-paint-preset="true"]'), node.querySelector('[data-paint-property="opacity"]')]; });
+    await preset.selectOption('__paint_preset_inherited__');
+    await expect.poll(() => savedPaint(page, host, destination)).toEqual({ color: '#aa2244', opacity: 70 });
+    await expect(preset).toBeFocused();
+    expect(await paint.evaluate(node => node === window.__inheritedPresetNodes[0]
+      && window.__inheritedPresetNodes.every(item => item?.isConnected))).toBe(true);
+    const next = await page.evaluate(() => structuredClone(window.__paintConfig));
+    set(next, pathFor(destination), { preset: 'Temperature Colors', color: '#778899' });
+    await page.evaluate(async config => {
+      window.__paintConfig = structuredClone(config);
+      const editor = document.querySelector('sensor-bar-card-plus-editor');
+      const runtime = document.querySelector('sensor-bar-card-plus');
+      editor.setConfig(config); runtime.setConfig(config);
+      await Promise.all([editor.updateComplete, runtime.updateComplete]);
+    }, next);
+    await expect(preset).toHaveValue('__paint_preset_inherited__');
+    await expect(preset.locator('option').first()).toHaveText('Inherited (Temperature Colors)');
+    await expect(layer(page, host, destination)).toHaveCSS('opacity', '0.7');
   });
 
-  if (host === 'Card') test(`${host} ${destination} None preserves mounted controls, disclosures and scroll (${source})`, async ({ page }) => {
+  if (host === 'Card') test(`${host} ${destination} None preserves mounted controls, disclosures, focus and scroll (${source})`, async ({ page }) => {
     const authored = { fill_style: 'gradient', color: '#11aa44', opacity: 65, solid_fill: false,
       gradient_stops: [{ pos: 0, color: '#000000' }, { pos: 100, color: '#ffffff' }] };
     const editor = await mount(page, source, host, destination, { preset: 'warm', ...authored }, undefined,
@@ -235,7 +320,7 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
     expect(Math.abs(after.scroll - before.scroll)).toBeLessThanOrEqual(1);
     expect(Math.abs(after.top - before.top)).toBeLessThanOrEqual(1);
     expect(after.events).toBe(before.events + 1);
-    expect(await savedPaint(page, host, destination)).toEqual(authored);
+    expect(await savedPaint(page, host, destination)).toEqual({ ...authored, preset: null });
     await expect(layer(page, host, destination)).toHaveCSS('opacity', '0.65');
     await expect(layer(page, host, destination)).toHaveCSS('background-image',
       'linear-gradient(to right, rgb(0, 0, 0) 0%, rgb(255, 255, 255) 100%)');
@@ -464,6 +549,6 @@ for (const source of ['src', 'dist']) test(`Target None retains local gradient s
   await expect(preset).toHaveValue('Hot-to-Cold');
   await expect(runtime.locator('[data-layer="above-target"]')).toHaveCSS('display', 'block');
   await preset.focus(); await preset.selectOption(''); await preset.press('Tab');
-  expect((await page.evaluate(() => window.__targetConfig)).target.when_above.paint.preset).toBeUndefined();
+  expect((await page.evaluate(() => window.__targetConfig)).target.when_above.paint.preset).toBeNull();
   await expect(preset).toHaveValue('');
 });

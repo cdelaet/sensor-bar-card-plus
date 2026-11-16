@@ -6,6 +6,7 @@ import { BAR_PAINT, BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT, res
 import { getDestinationEditorState, handlePaintPresetControl, setDestinationEnabled, resetDestinationPaint, selectDestinationPreset,
   setDestinationProperty, clearDestinationProperty } from '../../src/editor/shared/paint-destination.js';
 import { getPathValue, setPathValue } from '../../src/editor/shared/editor-config.js';
+import { INHERITED_PAINT_PRESET_VALUE } from '../../src/editor/shared/paint-editor.js';
 import { compilePaint } from '../../src/view-model/paint-compiler.js';
 import { loadCardClass } from '../support/load-card-class.cjs';
 
@@ -32,6 +33,8 @@ describe('shared Paint destination contract regressions', () => {
       const card = {};
       set(card, destination.path, { preset: 'warm' });
       expect(scopeUsesPaintPreset(card), destination.id).toBe(true);
+      set(card, destination.path, { preset: null });
+      expect(scopeUsesPaintPreset(card), `${destination.id} explicit None`).toBe(false);
       expect(scopeUsesPaintPreset({}), `${destination.id} absent`).toBe(false);
     }
   });
@@ -165,14 +168,14 @@ for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TA
       expect(f.events).toHaveLength(0);
     });
 
-    it('keeps the active preset a no-op, preserves properties on None, and confirms replacement', () => {
+    it('keeps the locally active preset a no-op, preserves properties on None, and confirms replacement', () => {
       const f = fixture(host, destination, { preset: 'warm', color: '#abcdef' });
       expect(selectDestinationPreset(f.context, f.scope, destination, 'warm', { confirm: () => { throw Error('must not confirm'); } })).toBe(true);
       expect(f.events).toHaveLength(0);
       expect(selectDestinationPreset(f.context, f.scope, destination, 'cool', { confirm: () => false })).toBe(false);
       expect(f.events).toHaveLength(0);
       selectDestinationPreset(f.context, f.scope, destination, '');
-      expect(f.paint()).toEqual({ color: '#abcdef' });
+      expect(f.paint()).toEqual({ preset: null, color: '#abcdef' });
       selectDestinationPreset(f.context, f.scope, destination, 'cool', { confirm: () => true });
       expect(f.paint()).toEqual({ preset: 'cool' });
       expect(f.cleared.at(-1)).toEqual([f.scope, destination]);
@@ -202,23 +205,33 @@ for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TA
       expect(f.paint()).toEqual({ preset: 'warm', color: '#abcdef', opacity: 0 });
     });
 
-    if (host === 'Entity') it('keeps None as the local choice without disabling inherited Paint', () => {
-      const f = fixture(host, destination, undefined, { preset: 'warm' });
+    if (host === 'Entity') it('distinguishes Inherited, None and named presets while retaining local properties', () => {
+      const f = fixture(host, destination, { color: '#aabbcc', opacity: 65 }, { preset: 'warm', color: '#778899' });
       const before = structuredClone(f.config());
-      const control = { value: '', dataset: { kind: 'entity-paint-preset', index: '0' },
+      const control = { value: INHERITED_PAINT_PRESET_VALUE, dataset: { kind: 'entity-paint-preset', index: '0' },
         closest: () => ({ dataset: { paintDestination: destination.id } }) };
-      handlePaintPresetControl(f.context, control, '');
-      expect(control.value).toBe('');
+      expect(f.state()).toMatchObject({ presetInherited: true, presetReference: 'warm' });
+      expect(f.state().paint).toMatchObject({ fill_style: 'gradient', color: '#aabbcc', opacity: 65 });
+      handlePaintPresetControl(f.context, control, INHERITED_PAINT_PRESET_VALUE);
+      expect(control.value).toBe(INHERITED_PAINT_PRESET_VALUE);
       expect(f.config()).toEqual(before);
       expect(f.events).toHaveLength(0);
-      expect(f.state().paint).toMatchObject({ fill_style: 'gradient', opacity: 35 });
-      expect(f.state().sources.gradient_stops).toBe('Inherited');
-      selectDestinationPreset(f.context, f.scope, destination, 'cool');
-      setDestinationProperty(f.context, f.scope, destination, 'opacity', 65);
       handlePaintPresetControl(f.context, control, '');
-      expect(f.paint()).toEqual({ opacity: 65 });
       expect(control.value).toBe('');
-      expect(f.state().paint).toMatchObject({ fill_style: 'gradient', opacity: 65 });
+      expect(f.paint()).toEqual({ color: '#aabbcc', opacity: 65, preset: null });
+      expect(f.state().paint).toMatchObject({ fill_style: 'solid', color: '#aabbcc', opacity: 65 });
+      expect(f.state().sources.color).toBe('Override');
+      expect(f.state().sources.gradient_stops).toBe('Default');
+      const withoutInheritedPreset = f.state().paint;
+      f.context.mutate({ type: 'card' }, target => setPathValue(target, destination.path, {
+        preset: 'cool', color: '#445566', opacity: 75,
+      }));
+      expect(f.state().paint).toMatchObject({ fill_style: 'solid', color: '#aabbcc', opacity: 65 });
+      expect(f.state().paint).toEqual(withoutInheritedPreset);
+      selectDestinationPreset(f.context, f.scope, destination, 'cool', { confirm: () => true });
+      expect(f.paint()).toEqual({ preset: 'cool' });
+      expect(control.value).toBe('');
+      expect(f.state()).toMatchObject({ presetInherited: false, presetReference: 'cool', paint: { fill_style: 'solid', color: '#123456', opacity: 75 } });
     });
 
     if (host === 'Entity') it('resolves the parent preset before local overrides and identifies genuine inheritance', () => {
@@ -226,10 +239,35 @@ for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TA
       expect(f.state().paint).toMatchObject({ fill_style: 'gradient', opacity: 60, color: '#112233' });
       expect(f.state().sources.color).toBe('Inherited');
       expect(f.state().sources.opacity).toBe('Override');
-      selectDestinationPreset(f.context, f.scope, destination, 'warm');
-      expect(f.events).toHaveLength(0);
+      selectDestinationPreset(f.context, f.scope, destination, 'warm', { confirm: () => true });
+      expect(f.paint()).toEqual({ preset: 'warm' });
+      expect(f.events).toHaveLength(1);
       resetDestinationPaint(f.context, f.scope, destination);
       expect(f.state()).toMatchObject({ inherited: true, paint: { opacity: 35 } });
+    });
+
+    if (host === 'Entity') it('tracks Card preset changes through Inherited, None and explicit named selection', () => {
+      const f = fixture(host, destination, { preset: 'cool', color: '#aabbcc', opacity: 65 }, { preset: 'warm' });
+      selectDestinationPreset(f.context, f.scope, destination, INHERITED_PAINT_PRESET_VALUE);
+      expect(f.paint()).toEqual({ color: '#aabbcc', opacity: 65 });
+      expect(f.state()).toMatchObject({ presetInherited: true, presetReference: 'warm',
+        paint: { fill_style: 'gradient', color: '#aabbcc', opacity: 65 } });
+
+      f.context.mutate({ type: 'card' }, target => setPathValue(target, destination.path, { preset: 'cool' }));
+      expect(f.state()).toMatchObject({ presetInherited: true, presetReference: 'cool',
+        paint: { fill_style: 'solid', color: '#aabbcc', opacity: 65 } });
+
+      selectDestinationPreset(f.context, f.scope, destination, '');
+      expect(f.paint()).toEqual({ color: '#aabbcc', opacity: 65, preset: null });
+      f.context.mutate({ type: 'card' }, target => setPathValue(target, destination.path, { preset: 'warm' }));
+      expect(f.state()).toMatchObject({ presetInherited: false, presetReference: null,
+        paint: { fill_style: destination === BAR_PAINT ? 'bands' : 'solid', color: '#aabbcc', opacity: 65 } });
+
+      selectDestinationPreset(f.context, f.scope, destination, 'warm', { confirm: () => true });
+      expect(f.paint()).toEqual({ preset: 'warm' });
+      f.context.mutate({ type: 'card' }, target => setPathValue(target, destination.path, { preset: 'cool' }));
+      expect(f.state()).toMatchObject({ presetInherited: false, presetReference: 'warm',
+        paint: { fill_style: 'gradient', color: '#112233', opacity: 35 } });
     });
 
     if (destination !== BAR_PAINT) {

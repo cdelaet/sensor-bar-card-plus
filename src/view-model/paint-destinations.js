@@ -49,7 +49,10 @@ function valueAtPath(value, path) {
 }
 
 export function scopeUsesPaintPreset(config) {
-  return PAINT_DESTINATIONS.some(destination => valueAtPath(config, destination.path)?.preset !== undefined);
+  return PAINT_DESTINATIONS.some(destination => {
+    const reference = valueAtPath(config, destination.path)?.preset;
+    return typeof reference === 'string' && reference.trim() !== '';
+  });
 }
 
 /** Resolve a normalized destination using the same scope/preset ordering in

@@ -142,6 +142,37 @@ describe('pure dashboard paint preset resolution', () => {
     expect(result.diagnostics).toEqual([]);
   });
 
+  it('distinguishes omitted, null and named Entity references and preserves manual properties under None', () => {
+    const normalized = normalizeCardConfig({
+      bar: { paint: { preset: 'card', color: '#334455' } },
+      entities: [
+        { entity: 'sensor.omitted' },
+        { entity: 'sensor.none', bar: { paint: { preset: null, opacity: 65 } } },
+        { entity: 'sensor.named', bar: { paint: { preset: 'child' } } },
+      ],
+    });
+    const registry = registryWith({
+      card: { fill_style: 'gradient', color: '#ee0000', opacity: 40,
+        gradient_stops: [{ pos: 0, color: '#000000' }, { pos: 100, color: '#ffffff' }] },
+      child: { fill_style: 'solid', color: '#abcdef', opacity: 20 },
+    });
+    const resolve = index => resolveScopedPaintPreset({
+      inheritedPaint: normalized.bar.paint,
+      paint: normalized.entities[index].bar.paint,
+      registry,
+    });
+    const omitted = resolve(0);
+    const none = resolve(1);
+    const named = resolve(2);
+
+    expect(omitted.paint).toMatchObject({ fill_style: 'gradient', color: '#334455', opacity: 40 });
+    expect(omitted.paint.gradient_stops).toHaveLength(2);
+    expect(none.paint).toMatchObject({ fill_style: 'solid', color: '#334455', opacity: 65 });
+    expect(none.paint.gradient_stops).toBeNull();
+    expect(none.diagnostics).toEqual([]);
+    expect(named.paint).toMatchObject({ fill_style: 'solid', color: '#abcdef', opacity: 20 });
+  });
+
   it('inherits Card preset opacity through entity presets only when the child preset omits it', () => {
     const normalized = normalizeCardConfig({
       bar: { paint: { preset: 'card' } },

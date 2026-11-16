@@ -1,5 +1,11 @@
 const { test, expect } = require('@playwright/test');
 
+async function expandEntityBar(editor, index = 0) {
+  const bar = editor.locator(`#entity-${index}-group-bar`);
+  if (await bar.count() && await bar.getAttribute('aria-expanded') === 'false') await bar.click();
+  return bar;
+}
+
 async function mount(page, host, source, width = 360) {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({ host, width }) => {
@@ -839,6 +845,7 @@ for (const source of ['src', 'dist']) {
       night: { fill_style: 'bands', segments: [{ from: '0%', to: '100%', color: '#aa0000' }] },
     }, config);
     await editor.locator('button[data-action="toggle-entity-overrides"][data-index="1"]').click();
+    await expandEntityBar(editor, 1);
     await editor.locator('#entity-1-paint-editor summary').click();
     await expect(editor.locator('#entity-1-bar-fill-style')).toHaveValue('solid');
     expect(await saved(editor)).toEqual(config);
@@ -856,7 +863,7 @@ for (const source of ['src', 'dist']) {
 }
 
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
-  test(`${host} clears a preset reference without discarding local paint (${source})`, async ({ page }) => {
+  test(`${host} explicitly suppresses preset inheritance without discarding local paint (${source})`, async ({ page }) => {
     const config = { bar: { paint: { preset: 'night', fill_style: 'bands', color: '#123456', segments: [
       { from: '0%', to: '100%', color: '#abcdef' },
     ] } } };
@@ -865,7 +872,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
     await editor.locator('#card-paint-editor summary').click();
     const preset = editor.locator('#bar-paint-preset');
     await preset.selectOption('');
-    expect((await saved(editor)).bar.paint).toEqual({ fill_style: 'bands', color: '#123456', segments: [
+    expect((await saved(editor)).bar.paint).toEqual({ preset: null, fill_style: 'bands', color: '#123456', segments: [
       { from: '0%', to: '100%', color: '#abcdef' },
     ] });
     await expect(editor.locator('#bar-color')).toHaveValue('#123456');
@@ -894,6 +901,7 @@ for (const source of ['src', 'dist']) test(`Card registry updates reconcile inhe
     night: { fill_style: 'bands', segments: [{ from: '10%', to: '100%', color: '#aa0000' }] },
   }, { bar: { paint: { preset: 'night' } }, entities: ['sensor.power'] });
   await editor.locator('button[data-action="toggle-entity-overrides"]').click();
+  await expandEntityBar(editor);
   const childPaint = editor.locator('#entity-0-paint-editor');
   await childPaint.locator('summary').click();
   await editor.locator('#card-paint-editor summary').click();
@@ -919,6 +927,8 @@ for (const source of ['src', 'dist']) test(`Card external entity palette replace
   await editor.evaluate((el, value) => el.setConfig(value), config);
   await editor.locator('button[data-action="toggle-entity-overrides"]').first().click();
   await editor.locator('button[data-action="toggle-entity-overrides"]').nth(1).click();
+  await expandEntityBar(editor, 0);
+  await expandEntityBar(editor, 1);
   await editor.locator('#entity-0-paint-editor summary').click();
   await editor.locator('#entity-1-paint-editor summary').click();
   await editor.locator('#card-paint-editor summary').click();
@@ -970,6 +980,8 @@ for (const source of ['src', 'dist']) for (const palette of ['segments', 'gradie
     await editor.evaluate((el, value) => el.setConfig(value), config);
     await editor.locator('button[data-action="toggle-entity-overrides"]').nth(0).click();
     await editor.locator('button[data-action="toggle-entity-overrides"]').nth(1).click();
+    await expandEntityBar(editor, 0);
+    await expandEntityBar(editor, 1);
     for (const index of [0, 1]) {
       await editor.locator(`#entity-${index}-paint-editor summary`).click();
       await editor.locator(`#entity-${index}-group-${segment ? 'segments' : 'gradient-stops'}`).click();
@@ -1159,6 +1171,7 @@ for (const source of ['src', 'dist']) test(`Card entity inherits preset paint wh
     night: { fill_style: 'solid', color: '#123456' },
   }, { bar: { paint: { preset: 'night', opacity: 35 } }, entities: ['sensor.power'] });
   await editor.locator('button[data-action="toggle-entity-overrides"]').click();
+  await expandEntityBar(editor);
   const child = editor.locator('#entity-0-paint-editor');
   await expect(child.locator('.paint-editor-description')).toContainText('Inherited · Preset · night · Solid');
   await child.locator('summary').click();
@@ -1185,6 +1198,7 @@ for (const source of ['src', 'dist']) test(`Card entity selects and clears a pre
     night: { fill_style: 'solid', color: '#abcdef' },
   }, config);
   await editor.locator('button[data-action="toggle-entity-overrides"][data-index="0"]').click();
+  await expandEntityBar(editor);
   const paint = editor.locator('#entity-0-paint-editor');
   await paint.locator('summary').click();
   const preset = editor.locator('#entity-0-bar-paint-preset');
@@ -1192,7 +1206,7 @@ for (const source of ['src', 'dist']) test(`Card entity selects and clears a pre
   await preset.selectOption('night');
   expect((await saved(editor)).entities[0].bar.paint).toEqual({ preset: 'night' });
   await preset.selectOption('');
-  expect((await saved(editor)).entities[0].bar).toBeUndefined();
+  expect((await saved(editor)).entities[0].bar.paint).toEqual({ preset: null });
   await expect(editor.locator('#entity-0-bar-opacity')).toHaveValue('100');
   await expect(editor.locator('#entity-0-bar-color')).toHaveValue('#123456');
 });
@@ -1245,6 +1259,7 @@ for (const source of ['src', 'dist']) test(`Entity reset returns to Card paint a
     card: { fill_style: 'solid', color: '#123456' }, row: { fill_style: 'gradient' },
   }, config);
   await editor.locator('button[data-action="toggle-entity-overrides"][data-index="0"]').click();
+  await expandEntityBar(editor);
   const paint = editor.locator('#entity-0-paint-editor');
   await paint.locator('summary').click();
   const reset = paint.locator('[data-action="reset-paint"]');
@@ -1408,6 +1423,7 @@ for (const host of ['Card', 'Feature']) for (const width of [240, 360]) {
 test('Card row Paint inherits without promotion, promotes on edit and clears only its owned appearance', async ({ page }) => {
   const editor = await mount(page, 'Card', 'src');
   await editor.locator('button[data-action="toggle-entity-overrides"]').click();
+  await expandEntityBar(editor);
   const paint = editor.locator('#entity-0-paint-editor');
   await expect(paint.locator('.paint-editor-description')).toHaveText('Inherited · Bands · 1 segment');
   await paint.locator('summary').click();
@@ -1519,19 +1535,21 @@ for (const source of ['src', 'dist']) for (const width of [240, 360]) {
     const original = await saved(editor);
     const overrides = editor.locator('button[data-action="toggle-entity-overrides"]');
     await overrides.focus(); await page.keyboard.press('Space');
+    const bar = editor.locator('#entity-0-group-bar');
+    await expect(bar).toHaveAttribute('aria-expanded', 'false');
+    await bar.click();
     const group = editor.getByRole('group', { name: 'Bar Appearance', exact: true });
     const paint = group.locator('#entity-0-paint-editor');
-    await expect(editor.locator('#entity-0-group-bar')).toHaveCount(0);
     await expect(group.locator('#entity-0-bar-direction')).toBeVisible();
     await expect(paint.locator('summary')).toBeVisible();
     await expect(paint).not.toHaveAttribute('open');
     expect(await page.evaluate(() => window.__paintEvents)).toEqual([]);
     const geometry = await group.evaluate(el => {
-      const panel = el.closest('.override-panel'), bounds = el.getBoundingClientRect();
-      const style = getComputedStyle(panel), panelBounds = panel.getBoundingClientRect();
-      return { width: bounds.width, available: panel.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+      const body = el.closest('.override-group-body'), bounds = el.getBoundingClientRect();
+      const style = getComputedStyle(body), bodyBounds = body.getBoundingClientRect();
+      return { width: bounds.width, available: body.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
         paintWidth: el.querySelector('.paint-editor').getBoundingClientRect().width,
-        inset: bounds.left - panelBounds.left - parseFloat(style.borderLeftWidth) - parseFloat(style.paddingLeft) };
+        inset: bounds.left - bodyBounds.left - parseFloat(style.borderLeftWidth) - parseFloat(style.paddingLeft) };
     });
     expect(geometry.width).toBeCloseTo(geometry.available, 0);
     expect(geometry.paintWidth).toBeCloseTo(geometry.width, 0);
@@ -1541,6 +1559,8 @@ for (const source of ['src', 'dist']) for (const width of [240, 360]) {
     await direction.selectOption('reverse');
     expect((await saved(editor)).entities[0]).toEqual({ entity: 'sensor.power', bar: { direction: 'reverse' } });
     await direction.focus(); await page.keyboard.press('Tab');
+    await expect(group.locator('#entity-0-bar-animated')).toBeFocused();
+    await page.keyboard.press('Tab');
     await expect(paint.locator('summary')).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(paint).toHaveAttribute('open');
