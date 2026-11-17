@@ -634,6 +634,14 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     }
   }
 
+  _setElementValue(id, value) {
+    const element = this._getShadowElementById(id);
+    if (element && element !== this.shadowRoot.activeElement && !this._numericDrafts.values.has(id)) {
+      const nextValue = value === undefined || value === null ? '' : String(value);
+      if (element.value !== nextValue) element.value = nextValue;
+    }
+  }
+
   _setElementText(id, value) {
     const element = this._getShadowElementById(id);
     if (element) {
@@ -670,6 +678,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const count = this._getEntitiesValue().length;
     for (let index = 0; index < count; index += 1) {
       const scope = { type: 'entity', index };
+      this._setElementValue(`entity-${index}-min`, this._getEffectiveResolvableScopedValue(scope, 'min').fixed);
+      this._setElementValue(`entity-${index}-max`, this._getEffectiveResolvableScopedValue(scope, 'max').fixed);
+      this._setElementValue(`entity-${index}-label-width`, this._getEffectiveScopedLayoutValue(scope, 'width'));
+      this._setElementValue(`entity-${index}-baseline-value`, this._getEffectiveBaselineResolvableValue(scope).fixed);
       this._setElementChecked(`entity-${index}-scale-inherit`, !hasScaleOverride(this._createSectionContext(), scope));
       this._setElementChecked(`entity-${index}-baseline-inherit`, !this._hasBaselineOverride(scope));
       this._setElementChecked(`entity-${index}-needle-inherit`, !this._hasNeedleOverride(scope));
