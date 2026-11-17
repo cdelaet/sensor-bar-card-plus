@@ -787,7 +787,7 @@ export class SegmentsSection extends PaletteSection {
       : this._sortSegmentsForEditor([...committedSegments, draftSegment]);
     const applied = this._setScopedSegments(scope, nextSegments,
       { rerender: true, ...(hasPreparedPosition ? { sort: false } : {}) },
-      { type: 'add', item: draftSegment });
+      { type: 'add', ...(hasPreparedPosition ? { index: draftState.insertIndex } : {}), item: draftSegment });
     if (applied !== false) {
       this._segmentDrafts.set(this._getSegmentsScopeKey(scope), this._createSegmentDraftState(scope));
     }

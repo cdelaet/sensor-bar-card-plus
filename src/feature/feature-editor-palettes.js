@@ -59,7 +59,7 @@ export function createFeaturePaletteArray(context, kind, destination = BAR_PAINT
         const row = { ...rows[operation.index], [operation.field]: operation.value };
         if (operation.value === undefined) delete row[operation.field];
         rows[operation.index] = row;
-      } else if (operation.type === 'add') rows.push(cloneDeep(operation.item));
+      } else if (operation.type === 'add') rows.splice(operation.index ?? rows.length, 0, cloneDeep(operation.item));
       else if (operation.type === 'remove') rows.splice(operation.index, 1);
       else throw new Error('Unsupported palette operation');
       const applied = grouped ? createDestinationBindings(context, scope, destination).set(kind, rows)

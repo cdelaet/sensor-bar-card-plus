@@ -237,6 +237,74 @@ for(const host of hosts)for(const scope of host==='standalone'?['root','entity']
  }
  expect((await d.saved(page)).future).toEqual(original.future);
 });
+
+for (const source of ['src', 'dist']) for (const [host, scope] of [['standalone', 'root'], ['standalone', 'entity'], ['feature', 'root']]) {
+ const editorName=host==='feature'?'Tile Feature':scope==='entity'?'Entity':'Card';
+ test(`${editorName} inserts a Segment from the visible gap action in list order (${source})`, async ({page}) => {
+  const config=d.seed(host),entity=scope==='entity';
+  const segments=[
+   {from:'0%',to:'30%',color:'#4CAF50'},
+   {from:'70%',to:'100%',color:'#FF9800'},
+  ];
+  config.bar={paint:{fill_style:'bands',segments:structuredClone(segments)}};
+  if(entity)config.entities[0].bar={paint:{fill_style:'bands',segments:structuredClone(segments)}};
+  const editor=await d.mount(page,host,config,{source});
+  const entry={section:'Segments',scope:entity?'entity':'root'};
+  if(entity){await d.openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));await d.openDisclosure(editor.locator('#entity-0-group-bar'));}
+  await d.openSection(editor,entry);
+  const palette=editor.locator(entity?'#entity-0-group-segments':'#card-group-segments').locator('xpath=..');
+  const prefix=entity?'entity-':'';
+  const from=palette.locator(`input[data-kind="${prefix}segment-draft-from"]`);
+  const to=palette.locator(`input[data-kind="${prefix}segment-draft-to"]`);
+  const color=palette.locator(`input[data-kind="${prefix}segment-draft-color"]`);
+  const add=palette.locator(`button[data-action="add-${prefix}segment"]${entity?'[data-index="0"]':''}`);
+  const gap=palette.locator(`button.segment-undefined-action[data-action="add-${prefix}segment-from-undefined"]${entity?'[data-index="0"]':''}`);
+  const path=entity?'entities.0.bar.paint.segments':'bar.paint.segments';
+  const before=await d.saved(page);
+  await expect(gap).toHaveAttribute('data-from','30%');
+  await expect(gap).toHaveAttribute('data-to','70%');
+  await gap.click();
+  await expect(from).toHaveValue('30%');
+  await expect(to).toHaveValue('70%');
+  await from.press('Escape');
+  expect(await d.saved(page)).toEqual(before);
+
+  await gap.click();
+  await color.fill('#00ffff');
+  await d.commit(page,editor,()=>add.click());
+  const expected=[segments[0],{from:'30%',to:'70%',color:'#00ffff'},segments[1]];
+  expect(d.read(await d.saved(page),path)).toEqual(expected);
+  await expect(palette.locator(`input[data-kind="${prefix}segment-from"]`)).toHaveCount(3);
+  expect(await palette.locator(`input[data-kind="${prefix}segment-from"]`).evaluateAll(nodes=>nodes.map(node=>node.value))).toEqual(['0%','30%','70%']);
+  expect(await palette.locator('.segment-editor-row .section-note').allTextContents()).toEqual(['','','']);
+  const draftHint=palette.locator(`#${entity?'entity-0-':''}segment-draft-hint`);
+  await expect(draftHint).not.toHaveText('Duplicate segment start.');
+  const preview=await palette.locator('.segment-preview-interval[data-preview-kind="segment"]').evaluateAll(nodes=>nodes.map(node=>({left:node.style.left,width:node.style.width,color:node.style.backgroundColor})));
+  expect(preview).toContainEqual({left:'30%',width:'40%',color:'rgb(0, 255, 255)'});
+
+  await from.fill('70%');
+  await to.fill('100%');
+  await expect(draftHint).toHaveText('Duplicate segment start.');
+  await from.press('Escape');
+  await from.fill('100%');
+  await to.fill('110%');
+  await color.fill('#abcdef');
+  await d.commit(page,editor,()=>add.click());
+  const ordinary=[...expected,{from:'100%',to:'110%',color:'#abcdef'}];
+  expect(d.read(await d.saved(page),path)).toEqual(ordinary);
+  const paint=await page.evaluate(async segments=>{
+   const {normalizeCardConfig}=await import('/src/config/normalize.js');
+   const {getColor}=await import('/src/view-model/bar-render-model.js');
+   const config={scale:{min:0,max:100},bar:{paint:{fill_style:'bands',segments}}};
+   const card=await window.__sbcpRenderCard({config:{...config,entities:['sensor.power']},states:{'sensor.power':window.__sbcpCreateState(50)}});
+   return {css:card.shadowRoot.querySelector('.bar-paint-layer[data-layer="base"]').style.backgroundImage,
+    color:getColor(50,normalizeCardConfig({...config,entities:['sensor.power']}).entities[0],0,100)};
+  },ordinary);
+  expect(paint.color).toBe('#00ffff');
+  expect(paint.css).toContain('rgb(0, 255, 255) 30%');
+  expect(paint.css).toContain('rgb(0, 255, 255) 70%');
+ });
+}
 for(const key of ['target','baseline'])test(`feature ${key}: direct Value conversions, entity fallback, drafts and preservation`,async({page})=>{
  const config=d.seed('feature');config[key].at={value:25,future:'source metadata'};const editor=await d.mount(page,'feature',config);await d.openSection(editor,{section:key==='target'?'Target':'Baseline'});
  const input=editor.locator(`#${key}-value`),entity=editor.locator(`[data-kind="${key}-entity-source"]`),attribute=editor.locator(`[data-kind="${key}-attribute"]`);
