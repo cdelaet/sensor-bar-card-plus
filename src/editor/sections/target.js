@@ -313,6 +313,7 @@ export class TargetSection {
       return this._write(scope, path, Object.keys(nextSource).length ? nextSource : undefined, {
         prunePaths: [path.slice(0, -1), ['target']],
         forceTargetSyncScope: Object.keys(nextSource).length === 0 ? scope : undefined,
+        syncTargetControls: true,
       });
     }
     const path = this._directionalPropertyPath(field);
@@ -570,7 +571,7 @@ export class TargetSection {
         entityControl.hass = this.context.hass; entityControl.label = 'Target entity'; entityControl.allowCustomEntity = true;
       }
       const attributeKind = kind.replace('-entity-source', '-attribute');
-      let row = section.querySelector('.resolvable-source-attribute');
+      let row = section.querySelector('.target-shared-controls .resolvable-source-attribute');
       if (!source.entity) row?.remove();
       else if (row || section.ownerDocument) {
         if (!row) {
@@ -578,7 +579,7 @@ export class TargetSection {
           template.innerHTML = `<div class="field-row resolvable-source-attribute"><label>Target attribute</label>${renderEntityAttributeInput(
             attributeKind, scope.type === 'entity' ? scope.index : 'card', source.attribute, source.entity, this.context.hass)}</div>`;
           entityControl.closest('.field-row').after(template.content);
-          row = section.querySelector('.resolvable-source-attribute');
+          row = section.querySelector('.target-shared-controls .resolvable-source-attribute');
         }
         const control = row.querySelector(`[data-kind="${attributeKind}"]`);
         control?.setAttribute('aria-label', 'Target attribute');

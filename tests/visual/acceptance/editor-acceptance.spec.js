@@ -10,6 +10,48 @@ async function refs(editor) {await d.openDisclosure(editor.locator('#card-group-
 async function nearby(control,nested=false) {
  expect(await control.evaluate((el,nested)=>{const rect=el.getBoundingClientRect(),container=document.querySelector('#mount').getBoundingClientRect();return rect.bottom>(nested?container.top:0)&&rect.top<(nested?container.bottom:innerHeight);},nested)).toBe(true);
 }
+for(const source of ['src','dist'])test(`feature: Target edits retain Baseline disclosure clicks and values (${source})`,async({page})=>{
+ const editor=await d.mount(page,'feature',d.seed('feature'),source==='dist'?{source:'dist'}:{});
+ await d.openDisclosure(editor.locator('#card-group-marker-target'));
+ for(const [key,groups,kind] of [
+  ['above',['target-above','target-above-threshold'],'target-above-entity-source'],
+  ['below',['target-below','target-below-threshold'],'target-below-entity-source'],
+  ['shared',['target-shared'],'target-entity-source'],
+ ]) {
+  for(const group of groups)await d.openDisclosure(editor.locator(`#card-group-${group}`));
+  const value=`sensor.reference_${key}`,sourceControl=editor.locator(`[data-kind="${kind}"]`);
+  await sourceControl.fill(value);
+  const baseline=editor.locator('#card-group-baseline');
+  await d.openDisclosure(baseline);
+  await expect(baseline).toHaveAttribute('aria-expanded','true');
+  await expect(sourceControl).toHaveValue(value);
+  if(key==='shared')expect((await d.saved(page)).target.at).toEqual({fixed:50,entity:value});
+  else expect((await d.saved(page)).target[`when_${key}`].at).toEqual({fixed:50,entity:value});
+  await d.closeDisclosure(baseline);
+  await d.openDisclosure(baseline);
+  await d.closeDisclosure(baseline);
+ }
+});
+for(const source of ['src','dist'])test(`feature: unrelated disclosures work after Target edits and explicit blur (${source})`,async({page})=>{
+ const editor=await d.mount(page,'feature',d.seed('feature'),source==='dist'?{source:'dist'}:{});
+ await d.openDisclosure(editor.locator('#card-group-marker-target'));
+ await d.openDisclosure(editor.locator('#card-group-target-above'));
+ await d.openDisclosure(editor.locator('#card-group-target-above-threshold'));
+ const above=editor.locator('[data-kind="target-above-entity-source"]');
+ await above.fill('sensor.above_for_other_disclosure');
+ const peak=editor.locator('#card-group-marker-peak');
+ await d.openDisclosure(peak);
+ await expect(peak).toHaveAttribute('aria-expanded','true');
+ expect((await d.saved(page)).target.when_above.at).toEqual({fixed:50,entity:'sensor.above_for_other_disclosure'});
+ await d.closeDisclosure(peak);
+ await above.fill('sensor.above_after_explicit_blur');
+ await above.blur();
+ await editor.evaluate(el=>el.updateComplete);
+ const baseline=editor.locator('#card-group-baseline');
+ await d.openDisclosure(baseline);
+ await expect(baseline).toHaveAttribute('aria-expanded','true');
+ expect((await d.saved(page)).target.when_above.at).toEqual({fixed:50,entity:'sensor.above_after_explicit_blur'});
+});
 for(const host of hosts) {
  for(const scope of host==='standalone'?['root','entity']:['root']) {
   const sections=[...new Set(entries(host,'fields',scope).map(c=>c.section))];

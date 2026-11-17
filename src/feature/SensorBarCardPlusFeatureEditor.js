@@ -129,7 +129,9 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this.shadowRoot.addEventListener('focusout', event => {
       // Only editable controls can defer reconciliation until blur. Refreshing
       // after a button loses focus can move WebKit's pending click target.
-      if (event.target?.matches?.('input, select, ha-entity-picker, ha-entity-attribute-picker')) this._requestRender();
+      const kind = event.target?.dataset?.kind ?? '';
+      const targetSource = /^(?:target-(?:above-|below-)?entity-source|entity-target-(?:above-|below-)?entity-source)$/.test(kind);
+      if (!targetSource && event.target?.matches?.('input, select, ha-entity-picker, ha-entity-attribute-picker')) this._requestRender();
     });
     // HA may load its picker after the editor. No polling or global observers.
     customElements.whenDefined('ha-entity-picker').then(() => {
@@ -139,6 +141,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
 
   setConfig(config) {
     if (!isObject(config)) throw new Error('Invalid Sensor Bar Card Plus feature configuration');
+    const changed = serializeConfig(config) !== serializeConfig(this._config);
     const migrated = migrateExtremaConfig(config);
     if (migrated) {
       this.setConfig(migrated);
@@ -152,7 +155,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       });
       return;
     }
-    if (serializeConfig(config) !== serializeConfig(this._config)) {
+    if (changed) {
       for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT]) {
         const sections = destination === BAR_PAINT ? { segments: this._segmentsSection, gradientStops: this._gradientStopsSection }
           : destination === TARGET_ABOVE_PAINT ? this._targetPaintSections : destination === TARGET_BELOW_PAINT ? this._targetBelowPaintSections : this._baselinePaintSections[destination.id.replace('baseline-', '')];
@@ -170,7 +173,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       this._configReplaced = true;
     }
     this._syncPaintPresetRegistry();
-    this._requestRender();
+    if (changed || !this.shadowRoot?.innerHTML) this._requestRender();
   }
 
   set hass(value) { this._hass = value; this._syncPaintPresetRegistry(); this._requestRender(); }
@@ -240,7 +243,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
           : options?.targetEdit || options?.markerEdit?.key === 'target' ? patchFeatureTargetField(config, options.targetEdit ?? options.markerEdit)
             : options?.extremumEdit || ['peak', 'floor'].includes(options?.markerEdit?.key) ? patchFeatureExtremumField(config, options.extremumEdit ?? options.markerEdit) : mutation(config), options),
       source: (_scope, key) => key?.type === 'reference-marker' ? getFeatureReferenceMarkerSource(key.marker) : key === 'baseline' ? getFeatureBaselineSource(this._config) : key === 'target' ? getFeatureTargetSource(this._config) : getFeatureScaleSource(this._config, key),
-      setSource: (_scope, key, part, value) => this._mutate(config => key?.type === 'reference-marker' ? patchFeatureReferenceMarkerSource(config, key.index, part, value) : key?.type === 'reference-marker-label' ? patchFeatureReferenceMarkerLabelSource(config, key.index, part, value) : key === 'baseline' ? patchFeatureBaselineSource(config, part, value) : key === 'target' ? patchFeatureTargetSource(config, part, value) : patchFeatureScaleSource(config, key, part, value)),
+      setSource: (_scope, key, part, value) => this._mutate(config => key?.type === 'reference-marker' ? patchFeatureReferenceMarkerSource(config, key.index, part, value) : key?.type === 'reference-marker-label' ? patchFeatureReferenceMarkerLabelSource(config, key.index, part, value) : key === 'baseline' ? patchFeatureBaselineSource(config, part, value) : key === 'target' ? patchFeatureTargetSource(config, part, value) : patchFeatureScaleSource(config, key, part, value), key === 'target' ? { syncTargetControls: true } : {}),
     };
     Object.defineProperty(context, 'clearPaintPaletteState', {
       configurable: true,
@@ -265,7 +268,8 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     }
     this._config = next;
     this._forceTargetSync = options.forceTargetSyncScope?.type === 'card';
-    this._requestRender();
+    if (options.syncTargetControls) this._syncTargetControls();
+    else this._requestRender();
     this.dispatchEvent(new CustomEvent('config-changed', {
       bubbles: true, composed: true, detail: { config: cloneDeep(next) },
     }));
@@ -687,6 +691,15 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       const inputLabel = this.shadowRoot.querySelector(`#${control.id.replace(/-text-fallback$/, '')}`)?.labels?.[0]?.textContent;
       if (inputLabel) control.setAttribute('aria-label', `${inputLabel} (CSS value)`);
     }
+  }
+
+  _syncTargetControls() {
+    this._targetSection.syncControls(this.shadowRoot, root, { ...this._targetRenderOptions(root),
+      numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts,
+      replaced: this._configReplaced || this._forceTargetSync });
+    this._forceTargetSync = false;
+    const summary = this.shadowRoot.querySelector('#card-group-marker-target-summary');
+    if (summary) summary.textContent = this._targetSection._getCardTargetMarkerSummary();
   }
 
   _targetRenderOptions(scope) {
