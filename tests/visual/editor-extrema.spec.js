@@ -72,14 +72,27 @@ for (const source of ['src', 'dist']) for (const host of ['standalone', 'feature
   expect(await persisted.evaluate(el => el._config.floor.window_entity)).toBe('input_select.floor_window');
   if (host === 'standalone') {
     await persisted.locator('button[data-action="toggle-entity-overrides"]').click();
-    const peakGroup = persisted.locator('#entity-0-group-peak');
-    if (await peakGroup.getAttribute('aria-expanded') === 'false') await peakGroup.click();
-    const entityPeak = persisted.locator('#entity-0-peak-window-entity');
-    await expect(entityPeak).toHaveValue('input_select.shared_window');
-    await entityPeak.selectOption('input_select.floor_window');
-    saved = await page.evaluate(() => structuredClone(window.__windowHelperEvents.at(-1)));
-    expect(saved.entities[0].peak.window_entity).toBe('input_select.floor_window');
-    await expect(entityPeak).toHaveValue('input_select.floor_window');
+    for (const [key, inheritedHelper, localHelper] of [
+      ['peak', 'input_select.shared_window', 'input_select.floor_window'],
+      ['floor', 'input_select.floor_window', 'input_select.shared_window'],
+    ]) {
+      const group = persisted.locator(`#entity-0-group-${key}`);
+      if (await group.getAttribute('aria-expanded') === 'false') await group.click();
+      const helper = persisted.locator(`#entity-0-${key}-window-entity`);
+      const summary = persisted.locator(`#entity-0-group-${key}-summary`);
+      const inherit = persisted.locator(`#entity-0-${key}-inherit`);
+      await expect(helper).toHaveValue(inheritedHelper);
+      await helper.selectOption(localHelper);
+      saved = await page.evaluate(() => structuredClone(window.__windowHelperEvents.at(-1)));
+      expect(saved.entities[0][key].window_entity).toBe(localHelper);
+      await expect(helper).toHaveValue(localHelper);
+      await expect(summary).toHaveText('Enabled');
+      await expect(inherit).not.toBeChecked();
+      await inherit.check();
+      await expect(summary).toHaveText('Inherited');
+      expect(await persisted.evaluate((el, marker) => el._config.entities[0][marker], key)).toBeUndefined();
+      expect(await persisted.evaluate((el, marker) => el._config[marker].window_entity, key)).toBe(inheritedHelper);
+    }
   }
 });
 

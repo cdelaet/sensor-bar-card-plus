@@ -101,7 +101,7 @@ export class ExtremaSection {
 
   _getPeakSummary(scope) {
     if (scope?.type === 'entity' && !this._hasPeakOverride(scope)) return 'Inherited';
-    const peak = this._getScopedPeakConfig(scope);
+    const peak = this._getEffectiveScopedPeakConfig(scope);
     if (peak.mode === 'disabled') return peak.color ? 'Disabled • Custom color' : 'Disabled';
     if (peak.mode === 'enabled') return peak.color ? 'Enabled • Custom color' : 'Enabled';
     if (peak.color) return 'Custom color';

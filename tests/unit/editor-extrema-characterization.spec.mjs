@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createEditor } from '../support/load-card-class.cjs';
+import { createEditor, loadCardClass } from '../support/load-card-class.cjs';
 import { canonicalizeHistoricalWindow, parseHistoricalWindow } from '../../src/history/time-window.js';
 import { renderWindowOptions } from '../../src/editor/shared/editor-controls.js';
 const root = { type: 'card' }, row = { type: 'entity', index: 0 };
@@ -121,5 +121,58 @@ for (const source of ['src', 'dist']) describe(`standalone extrema characterizat
     expect(editor._draftConfig.peak).toEqual({ enabled: true, color: 'red', window: 'today' });
     expect(editor._draftConfig.peak_marker).toEqual({ show: true, color: 'blue', future: true });
     expect(editor._draftConfig.show_peak).toBeUndefined(); expect(editor._draftConfig.peak_color).toBeUndefined();
+  });
+});
+
+for (const source of ['src', 'dist']) describe(`extremum override summaries (${source})`, () => {
+  const row = { type: 'entity', index: 0 };
+
+  for (const key of ['peak', 'floor']) {
+    it(`${key} shows the effective local status for helper and static-window overrides, then restores Inherited when cleared`, () => {
+      const editor = createEditor({ source });
+      const summary = () => key === 'peak' ? editor._getPeakSummary(row) : editor._getFloorSummary(row);
+      const clear = () => key === 'peak' ? editor._clearPeakOverride(row) : editor._clearFloorOverride(row);
+      const cardMarker = { enabled: true, window: 'today', window_entity: 'input_select.card_window' };
+
+      editor.setConfig({ [key]: cardMarker, entities: [{ entity: 'sensor.row' }] });
+      expect(summary()).toBe('Inherited');
+
+      editor.setConfig({ [key]: cardMarker, entities: [{ entity: 'sensor.row', [key]: {
+        window_entity: 'input_select.row_window',
+      } }] });
+      expect(summary()).toBe('Enabled');
+      expect(editor._draftConfig.entities[0][key]).toEqual({ window_entity: 'input_select.row_window' });
+
+      editor.setConfig({ [key]: cardMarker, entities: [{ entity: 'sensor.row', [key]: { window: 'yesterday' } }] });
+      expect(summary()).toBe('Enabled');
+      expect(editor._draftConfig.entities[0][key]).toEqual({ window: 'yesterday' });
+
+      editor.setConfig({ [key]: cardMarker, entities: [{ entity: 'sensor.row', [key]: {
+        window_entity: 'input_select.row_window',
+      } }] });
+      const persistedBeforeSummaryAndClear = structuredClone(editor._draftConfig);
+      expect(summary()).toBe('Enabled');
+      expect(editor._draftConfig).toEqual(persistedBeforeSummaryAndClear);
+
+      clear();
+      expect(summary()).toBe('Inherited');
+      expect(editor._draftConfig.entities[0]).toEqual({ entity: 'sensor.row' });
+      expect(editor._draftConfig[key]).toEqual(cardMarker);
+    });
+  }
+
+  it('keeps Feature root summaries and helper configuration unchanged', () => {
+    const FeatureEditor = loadCardClass({ source }).featureEditor;
+    const editor = new FeatureEditor();
+    const config = {
+      type: 'custom:sensor-bar-card-plus-feature',
+      peak: { enabled: true, window: 'today', window_entity: 'input_select.peak_window' },
+      floor: { enabled: false, window: 'yesterday', window_entity: 'input_select.floor_window' },
+    };
+
+    editor.setConfig(config);
+    expect(editor._extremaSection._getMarkerResetSummary('peak')).toBe('Enabled · today');
+    expect(editor._extremaSection._getMarkerResetSummary('floor')).toBe('Disabled · yesterday');
+    expect(editor._config).toEqual(config);
   });
 });
