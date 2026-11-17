@@ -351,12 +351,13 @@ export class HistoricalHostRuntime {
 
   getResult(id) { return this.results.get(id) ?? null; }
 
-  setHass(hass) {
+  setHass(hass, consumers = null, onChange = this.onChange) {
     const previousConnection = this.hass?.connection;
     this.hass = hass;
     for (const entry of this.entries.values()) if (entry.context) entry.context.hass = hass;
     if (previousConnection !== hass?.connection) this.leave();
-    this.sync();
+    if (consumers !== null) this.setConsumers(consumers, onChange);
+    else this.sync();
     this.hub?.update(hass);
   }
 

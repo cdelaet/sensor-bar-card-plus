@@ -40,12 +40,24 @@ function configuredWindowLabel(value) {
 
 export function historyDiagnostics(entity, peak, floor) {
   return [['peak', 'Peak', peak], ['floor', 'Floor', floor]].flatMap(([key, name, item]) => {
-    if (!item?.enabled || !['pending', 'invalid', 'unavailable', 'partial', 'stale'].includes(item.status)) return [];
+    if (!item?.enabled) return [];
+    const diagnostics = [];
+    if (item.windowHelperIssue) {
+      const issue = item.windowHelperIssue;
+      const fallback = configuredWindowLabel(issue.fallback);
+      const message = issue.reason === 'unavailable'
+        ? `Dropdown Helper ${issue.helper} is unavailable; using static window “${fallback}”.`
+        : `Dropdown Helper ${issue.helper} selected unsupported option “${issue.option}”; using static window “${fallback}”.`;
+      diagnostics.push({ code: `history.window_helper.${issue.reason}`, severity: 'warning',
+        path: `history.${key}.window_entity`, entity,
+        area: `${name} marker · Window helper: ${issue.helper}`, reason: issue.reason, window: fallback, message });
+    }
+    if (!['pending', 'invalid', 'unavailable', 'partial', 'stale'].includes(item.status)) return diagnostics;
     const severity = item.status === 'pending' ? 'info'
       : ['partial', 'stale'].includes(item.status) ? 'warning' : 'error';
     const window = configuredWindowLabel(item.window);
     const reason = item.reason ?? 'History is unavailable';
-    return [{
+    diagnostics.push({
       code: `history.marker.${item.status}`,
       severity,
       path: `history.${key}`,
@@ -54,6 +66,7 @@ export function historyDiagnostics(entity, peak, floor) {
       window,
       reason,
       message: `${reason}. ${historyConsequence(name, item)}`,
-    }];
+    });
+    return diagnostics;
   });
 }

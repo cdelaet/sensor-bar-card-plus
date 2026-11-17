@@ -290,7 +290,7 @@ export class SensorBarCard extends HTMLElement {
     this._config = this.normalizeCardConfig(config);
     this._rowScales = new WeakMap();
     this._reconcileRowHistory(previousConfig?.entities ?? []);
-    this._historicalRuntime.setConsumers(historicalMarkerConsumers(this._config.entities), this._historicalUpdate);
+    this._historicalRuntime.setConsumers(historicalMarkerConsumers(this._config.entities, this._hass), this._historicalUpdate);
     this._targetDiagnostics = new Map();
     this._historyDiagnostics.clear();
     this._baseDiagnostics = validateNormalizedConfig(this._config);
@@ -534,7 +534,9 @@ export class SensorBarCard extends HTMLElement {
     const oldHass = this._hass;
     this._hass = hass;
     this._syncPaintPresetRegistry();
-    this._historicalRuntime.setHass(hass);
+    const rows = this._config?.entities ?? [];
+    const hasWindowHelper = rows.some(row => row.peak_marker?.window_entity || row.floor_marker?.window_entity);
+    this._historicalRuntime.setHass(hass, hasWindowHelper ? historicalMarkerConsumers(rows, hass) : null, this._historicalUpdate);
     if (!this._config.entities) return;
     
     if (!oldHass) {
@@ -747,6 +749,8 @@ export class SensorBarCard extends HTMLElement {
         ecfg.scale?.max?.entity,
         ecfg.baseline?.at?.entity,
         ...getTargetSourceEntities(ecfg),
+        ecfg.peak_marker?.window_entity,
+        ecfg.floor_marker?.window_entity,
         ...(ecfg.generic_markers ?? [])
           .filter((marker) => marker.accepted)
           .flatMap((marker) => [marker.source?.entity, marker.label?.entity])
@@ -3238,7 +3242,7 @@ ${barMarkerStyles}
       cardConfig: this._config,
       entityConfig: ecfg,
       entityState: stateObj,
-      historicalExtrema: historicalMarkerResults(this._historicalRuntime, ecfg),
+      historicalExtrema: historicalMarkerResults(this._historicalRuntime, ecfg, this._hass),
       previousScale: this._rowScales.get(entityCfg),
     });
     this._rowScales.set(entityCfg, { min: rowViewModel.min, max: rowViewModel.max });
@@ -3387,7 +3391,7 @@ ${barMarkerStyles}
         cardConfig: this._config,
         entityConfig: ecfg,
         entityState: previousStateObj,
-        historicalExtrema: historicalMarkerResults(this._historicalRuntime, ecfg),
+        historicalExtrema: historicalMarkerResults(this._historicalRuntime, ecfg, this._hass),
         previousScale,
       })
       : null;

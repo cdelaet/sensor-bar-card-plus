@@ -72,7 +72,14 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     this._requestUpdate();
   }
 
-  set hass(value) { this._hass = value; this._syncPaintPresetRegistry(); this._historicalRuntime.setHass(value); this._requestUpdate(); }
+  set hass(value) {
+    this._hass = value;
+    this._syncPaintPresetRegistry();
+    const rows = this._normalized?.entities ?? [];
+    const hasWindowHelper = rows.some(row => row.peak_marker?.window_entity || row.floor_marker?.window_entity);
+    this._historicalRuntime.setHass(value, hasWindowHelper ? historicalMarkerConsumers(rows, value) : null, () => this._requestUpdate());
+    this._requestUpdate();
+  }
   get hass() { return this._hass; }
   set context(value) {
     if (!this._config?.entity && this._context?.entity_id !== value?.entity_id) this._historicalRuntime.setConsumers([]);
@@ -155,7 +162,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       }) : null;
       this._baseDiagnostics = validateNormalizedConfig(this._normalized);
       this._diagnostics = this._baseDiagnostics;
-      this._historicalRuntime.setConsumers(historicalMarkerConsumers(this._normalized?.entities ?? []), () => this._requestUpdate());
+      this._historicalRuntime.setConsumers(historicalMarkerConsumers(this._normalized?.entities ?? [], this._hass), () => this._requestUpdate());
     }
 
     const normalizedAppearance = this._normalized?.entities?.[0] ?? null;
@@ -226,7 +233,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       const appearance = this._resolvedAppearance;
       row = buildRowViewModel({
         hass: this._hass, entityConfig: appearance, entityState: state,
-        historicalExtrema: historicalMarkerResults(this._historicalRuntime, appearance), previousScale: this._scaleHistory,
+        historicalExtrema: historicalMarkerResults(this._historicalRuntime, appearance, this._hass), previousScale: this._scaleHistory,
       });
       this._scaleHistory = { min: row.min, max: row.max };
       if (row.numericValue === null) {

@@ -260,6 +260,7 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | `peak.enabled` | `false` | boolean | Shows the Peak marker when a historical result is available. Omitted means hidden. | Yes |
 | `peak.color` | `#888888` | CSS color | Peak marker color. | Yes |
 | `peak.window` | `today` | calendar preset or rolling duration | Selects the Home Assistant history window used to calculate Peak. Legacy `peak.reset` is migrated by the editor; see [Peak and Floor history windows](#peak-and-floor-history-windows). | Yes |
+| `peak.window_entity` | absent | `input_select` entity ID | Uses the selected Dropdown Helper option as Peak's window. `peak.window` remains the static fallback. | Yes |
 | `peak.direction` | `inward` | `inward`, `outward` | Direction of the fixed triangle marker. Entity-level Peak direction inherits the card-level value unless overridden. | Yes |
 | `peak.label.show` | `false` | boolean | Shows the formatted Peak value label. | Yes — compact |
 | `peak.label.text` | absent | string | Optional plain text shown before the value and unit. | Yes |
@@ -274,6 +275,7 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | `floor.enabled` | `false` | boolean | Shows the Floor marker when a historical result is available. Omitted means hidden. | Yes |
 | `floor.color` | `#888888` | CSS color | Floor marker color. | Yes |
 | `floor.window` | `today` | calendar preset or rolling duration | Selects the Home Assistant history window used to calculate Floor. Legacy `floor.reset` is migrated by the editor; see [Peak and Floor history windows](#peak-and-floor-history-windows). | Yes |
+| `floor.window_entity` | absent | `input_select` entity ID | Uses the selected Dropdown Helper option as Floor's window. `floor.window` remains the static fallback. | Yes |
 | `floor.direction` | `inward` | `inward`, `outward` | Direction of the fixed triangle marker. Entity-level Floor direction inherits the card-level value unless overridden. | Yes |
 | `floor.label.show` | `false` | boolean | Shows the formatted Floor value label. | Yes — compact |
 | `floor.label.text` | absent | string | Optional plain text shown before the value and unit. | Yes |
@@ -1705,6 +1707,21 @@ The Visual Editor offers these 24 presets:
 | `this_year`, `previous_year` | |
 
 `quarterly` means the current 15-minute interval (`:00`, `:15`, `:30`, or `:45`), not a three-month quarter. Rolling windows count back from the current time; they are not aligned to calendar boundaries. YAML also accepts other positive integer durations written with `m`, `h`, `d`, or `w` (for example `45m` or `10d`) when eligible for the acquisition path. A duration longer than 24 hours must be a whole number of hours; unsupported or invalid values remain unavailable and produce a configuration diagnostic rather than silently selecting a different period.
+
+To change a marker's window from the dashboard, create a Dropdown Helper in Home Assistant and set its entity ID in `window_entity`:
+
+```yaml
+peak:
+  enabled: true
+  window: today
+  window_entity: input_select.peak_history_window
+floor:
+  enabled: true
+  window: yesterday
+  window_entity: input_select.floor_history_window
+```
+
+The helper's current option must be one of the supported calendar aliases or an eligible rolling duration, such as `today`, `previous_week`, `15m`, or `7d`. Peak and Floor can use separate helpers or the same helper. If its state is missing, unavailable, or unsupported, that marker uses its own static `window` and reports the fallback in Messages. The Visual Editor lists existing `input_select` helpers separately for Peak and Floor; it does not create helpers. At entity scope, the helper inherits with the rest of the marker settings and can be overridden independently.
 
 ### Recorder, statistics, and coverage
 

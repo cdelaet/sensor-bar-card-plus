@@ -80,6 +80,11 @@ function validateBaselineSuppressesNeedle(diagnostics, config, path, entity = nu
 
 function validateExtremumReset(diagnostics, config, path, entity = null) {
   for (const marker of ['peak_marker', 'floor_marker']) {
+    if (config?.[marker]?.window_entity_invalid) {
+      addWarning(diagnostics, `${marker}.invalid_window_entity`,
+        'Dropdown Helper must be an input_select entity ID; using the configured static history window.',
+        `${path}.${marker === 'peak_marker' ? 'peak' : 'floor'}.window_entity`, entity);
+    }
     if (config?.[marker]?.window_invalid) {
       const name = marker === 'peak_marker' ? 'Peak' : 'Floor';
       const configuredWindow = config[marker].window;

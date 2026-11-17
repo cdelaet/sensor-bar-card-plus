@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { loadCardClass } from '../support/load-card-class.cjs';
-import { historicalMarkerId } from '../../src/history/marker-consumers.js';
+import { historicalMarkerConsumers, historicalMarkerId } from '../../src/history/marker-consumers.js';
 import { HistoricalHostRuntime } from '../../src/history/host-runtime.js';
+import { normalizeCardConfig } from '../../src/config/normalize.js';
+import { parseHistoricalWindow } from '../../src/history/time-window.js';
 
 const entity = 'sensor.temperature';
 const spec = (calculation = 'max', source = entity) => ({ source: { entityId: source }, calculation,
@@ -62,6 +64,96 @@ const awaitValue = async (host, id = 'peak', value = 5) => vi.waitFor(() => expe
 const state = (value, timestamp = Date.now() - 1000) => ({ state: String(value), attributes: {}, last_updated: new Date(timestamp).toISOString() });
 
 describe('historical runtime host integration', () => {
+  it('updates helper windows through Card, entity inheritance and Tile Feature hass paths', async () => {
+    const { card, feature } = hosts();
+    const cardHost = card();
+    cardHost.setConfig({
+      peak: { enabled: true, window: 'today', window_entity: 'input_select.shared_window' },
+      floor: { enabled: true, window: 'yesterday', window_entity: 'input_select.shared_window' },
+      entities: [
+        { entity, peak: { enabled: true } },
+        { entity: 'sensor.other', peak: { enabled: true, window_entity: 'input_select.row_window' } },
+      ],
+    });
+    const makeHass = (shared, row = '1h') => ({ ...connectionFixture().hass, states: {
+      'input_select.shared_window': state(shared), 'input_select.row_window': state(row),
+    } });
+    expect(cardHost._shouldUpdate({ states: { 'input_select.shared_window': state('15m') } }, {
+      states: { 'input_select.shared_window': state('48h') },
+    })).toBe(true);
+    cardHost.hass = makeHass('15m');
+    const cardWindows = [...cardHost._historicalRuntime.entries.values()].map(entry => entry.spec.window);
+    expect(cardWindows).toEqual([parseHistoricalWindow('15m'), parseHistoricalWindow('15m'),
+      parseHistoricalWindow('1h'), parseHistoricalWindow('15m')]);
+    cardHost.hass = makeHass('48h');
+    expect([...cardHost._historicalRuntime.entries.values()].map(entry => entry.spec.window))
+      .toEqual([parseHistoricalWindow('48h'), parseHistoricalWindow('48h'),
+        parseHistoricalWindow('1h'), parseHistoricalWindow('48h')]);
+
+    const tileFeature = feature();
+    tileFeature._requestUpdate = () => {};
+    tileFeature.setConfig({ type: 'custom:sensor-bar-card-plus-feature', entity,
+      peak: { enabled: true, window: 'today', window_entity: 'input_select.shared_window' } });
+    tileFeature._reconcile();
+    tileFeature.hass = makeHass('15m');
+    expect([...tileFeature._historicalRuntime.entries.values()].map(entry => entry.spec.window))
+      .toEqual([parseHistoricalWindow('15m')]);
+    tileFeature.hass = makeHass('48h');
+    expect([...tileFeature._historicalRuntime.entries.values()].map(entry => entry.spec.window))
+      .toEqual([parseHistoricalWindow('48h')]);
+  });
+
+  it('rapidly switches from Recorder to statistics and discards a late response for an earlier helper window', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-11-17T08:00:00Z'));
+    const pendingRecorder = [];
+    const { hass, connection } = connectionFixture();
+    const callWS = vi.fn(request => {
+      if (request.type === 'history/history_during_period') return new Promise(resolve => pendingRecorder.push(resolve));
+      if (request.type === 'recorder/get_statistics_metadata') return Promise.resolve([
+        { statistic_id: entity, has_mean: true, mean_type: 1, display_unit_of_measurement: '°C' },
+      ]);
+      if (request.type === 'recorder/statistics_during_period') {
+        const start = Date.parse(request.start_time), end = Date.parse(request.end_time);
+        return Promise.resolve({ [entity]: Array.from({ length: (end - start) / 3600000 }, (_, index) => ({
+          start: start + index * 3600000, end: start + (index + 1) * 3600000, min: index, max: 9,
+        })) });
+      }
+      throw new Error(`Unexpected Recorder request: ${request.type}`);
+    });
+    const baseHass = { ...hass, callWS, states: { [entity]: { attributes: { unit_of_measurement: '°C' } } } };
+    const configuredRows = normalizeCardConfig({ entity,
+      peak: { enabled: true, window: 'today', window_entity: 'input_select.history_window' },
+    }).entities;
+    const firstHass = { ...baseHass, states: { ...baseHass.states, 'input_select.history_window': state('1h') } };
+    const runtime = new HistoricalHostRuntime();
+    runtime.setHass(firstHass, historicalMarkerConsumers(configuredRows, firstHass));
+    runtime.attach();
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(callWS.mock.calls[0][0].type).toBe('history/history_during_period');
+      expect(pendingRecorder).toHaveLength(1);
+
+      const secondHass = { ...baseHass, states: { ...baseHass.states, 'input_select.history_window': state('48h') } };
+      runtime.setHass(secondHass, historicalMarkerConsumers(configuredRows, secondHass));
+      const thirdHass = { ...baseHass, states: { ...baseHass.states, 'input_select.history_window': state('72h') } };
+      runtime.setHass(thirdHass, historicalMarkerConsumers(configuredRows, thirdHass));
+      await vi.advanceTimersByTimeAsync(0);
+      const current = [...runtime.entries.values()][0];
+      expect(current.spec.window).toEqual(parseHistoricalWindow('72h'));
+      expect(runtime.getResult(current.id)).toMatchObject({ value: 9 });
+
+      pendingRecorder[0]({ [entity]: [{ s: '999', lu: Date.parse('2026-11-17T07:55:00Z') / 1000 }] });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(runtime.getResult(current.id)).toMatchObject({ value: 9 });
+      expect(callWS.mock.calls.some(([request]) => request.type === 'recorder/statistics_during_period')).toBe(true);
+    } finally {
+      const service = runtime.hub?.service;
+      runtime.detach();
+      service?.clear();
+      vi.useRealTimers();
+    }
+  });
+
   it('recovers acquisition slots after disconnect and ignores retired responses', async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-31T08:00:00Z'));
     try {

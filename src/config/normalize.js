@@ -29,6 +29,14 @@ function normalizeAttribute(value) {
   return typeof value === 'string' && value !== '' ? value : null;
 }
 
+function normalizeWindowEntity(value) {
+  if (value === undefined || value === null || value === '') return { entity: null, invalid: false };
+  if (typeof value === 'string' && /^input_select\.[a-z0-9_]+$/i.test(value.trim())) {
+    return { entity: value.trim(), invalid: false };
+  }
+  return { entity: null, invalid: true };
+}
+
 function hasInvalidAttribute(value) {
   return value !== undefined && value !== null && value !== '' && typeof value !== 'string';
 }
@@ -1208,12 +1216,15 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
   };
   const hasReset = rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, 'reset');
   const hasWindow = rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, 'window');
+  const hasWindowEntity = rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, 'window_entity');
   const rawWindow = hasWindow ? rawMarker.window : hasReset ? rawMarker.reset : inherited.window ?? 'today';
   const legacyInvalid = !hasWindow && hasReset && !isValidReset(rawWindow);
   const normalizedWindow = !hasWindow && hasReset && typeof rawWindow === 'string' && rawWindow.trim().toLowerCase() === 'never'
     ? 'today' : typeof rawWindow === 'string' ? rawWindow.trim().toLowerCase() : rawWindow;
   const window = canonicalizeHistoricalWindow(normalizedWindow);
   const windowSpec = legacyInvalid || !isEligibleHistoricalWindow(window) ? null : parseHistoricalWindow(window);
+  const windowEntityInput = hasWindowEntity ? rawMarker.window_entity : inherited.window_entity;
+  const windowEntity = normalizeWindowEntity(windowEntityInput);
   const rawLabel = rawMarker?.label;
   const label = normalizeLabelConfig(rawMarker, inherited);
   const normalized = {
@@ -1230,6 +1241,9 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
       : normalizeMarkerDirection(inherited.direction),
     ...(isInvalidMarkerDirection(rawMarker?.direction) ? { direction_invalid: true } : {}),
     window, window_spec: windowSpec,
+    ...(windowEntity.entity ? { window_entity: windowEntity.entity }
+      : hasWindowEntity || inherited.window_entity_invalid ? { window_entity: null } : {}),
+    ...(windowEntity.invalid || (!hasWindowEntity && inherited.window_entity_invalid) ? { window_entity_invalid: true } : {}),
     ...(!windowSpec || (!hasWindow && !hasReset && inherited.window_invalid) ? { window_invalid: true } : {}),
     ...(legacyInvalid ? { window_invalid_source: 'reset' } : {}),
   };
@@ -1244,6 +1258,8 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
   const hasAdvancedConfig = key === 'floor'
     || hasReset
     || hasWindow
+    || hasWindowEntity
+    || !!windowEntity.entity
     || rawLabel !== undefined
     || inheritedAdvanced;
 

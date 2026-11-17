@@ -94,7 +94,8 @@ function getExtremumState(minValue, maxValue, result, enabled, window) {
   return {
     value, percent: Number.isFinite(value) ? toScalePct(value, minValue, maxValue) : null,
     visible: Number.isFinite(value), status: result?.status ?? 'pending', enabled,
-    window,
+    window: result?.configuredWindow ?? window,
+    windowHelperIssue: result?.windowHelperIssue ?? null,
     reason: enabled ? historyReason(result ?? { status: 'pending' }) : null,
   };
 }

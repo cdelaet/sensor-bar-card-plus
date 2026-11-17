@@ -3,6 +3,11 @@ import { canonicalizeHistoricalWindow, isEligibleHistoricalWindow } from '../his
 
 // Feature edits own a single field; standalone cleanup remains in the section.
 export function patchFeatureExtremumField(config, { key, path, value, field }) {
+  if (path[0] === 'window_entity') {
+    if (value !== undefined && value !== null && value !== ''
+      && (typeof value !== 'string' || !/^input_select\.[a-z0-9_]+$/i.test(value.trim()))) return config;
+    if (typeof value === 'string') value = value.trim();
+  }
   if (path[0] === 'window') {
     if (!isEligibleHistoricalWindow(value)) return config;
     value = canonicalizeHistoricalWindow(typeof value === 'string' ? value.trim().toLowerCase() : value);

@@ -582,6 +582,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         [`${key}-color`]: getColorPickerValue(marker.color, '#888888'),
         [`${key}-color-text-fallback`]: marker.color,
         [`${key}-window`]: this._extremaSection._getEffectiveMarkerExtras(root, key).window,
+        [`${key}-window-entity`]: this._extremaSection._getEffectiveMarkerExtras(root, key).windowEntity ?? '',
         [`${key}-direction`]: this._extremaSection._getEffectiveMarkerDirection(root, key),
         [`${key}-label-text`]: label.text,
         [`${key}-label-precision`]: label.precision,

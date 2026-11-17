@@ -8,7 +8,7 @@ import {
 } from './shared/editor-config.js';
 import {
   renderEntityAttributeInput, renderEntityInput, renderEntitySourceInput, renderBuiltinMarkerLabelControls,
-  renderWindowOptions, escapeAttribute, isHexColorValue, expandHexColor,
+  renderWindowOptions, renderWindowHelperOptions, escapeAttribute, isHexColorValue, expandHexColor,
   normalizeColorComparisonValue, getColorPickerValue, renderColorInput, getEntityAttributeSuggestions,
 } from './shared/editor-controls.js';
 import { editorStyles } from './shared/editor-styles.js';
@@ -276,6 +276,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return;
     }
     this._syncEntityPickers();
+    this._syncWindowHelperOptions();
     this._syncEntityAttributePickers();
     this._syncActionSelectors();
     this._syncPaintEditors();
@@ -4031,6 +4032,29 @@ ${this._renderFormattingSection({ type: 'card' })}
           this.shadowRoot?.querySelectorAll(selector).forEach(syncPicker);
         });
       }).catch(() => {});
+    }
+  }
+
+  _syncWindowHelperOptions() {
+    if (!this.shadowRoot) return;
+    const active = this.shadowRoot.activeElement;
+    for (const key of ['peak', 'floor']) {
+      const cardScope = { type: 'card' };
+      const card = this.shadowRoot.querySelector(`#${key}-window-entity`);
+      const cardHelper = this._extremaSection._getEffectiveMarkerExtras(cardScope, key).windowEntity ?? '';
+      if (card) {
+        const selected = card === active ? card.value : cardHelper;
+        card.innerHTML = renderWindowHelperOptions(this._hass, cardHelper);
+        card.value = selected;
+      }
+      this._getEntitiesValue().forEach((_, index) => {
+        const control = this.shadowRoot.querySelector(`#entity-${index}-${key}-window-entity`);
+        const helper = this._extremaSection._getEffectiveMarkerExtras({ type: 'entity', index }, key).windowEntity ?? '';
+        if (!control) return;
+        const selected = control === active ? control.value : helper;
+        control.innerHTML = renderWindowHelperOptions(this._hass, helper);
+        control.value = selected;
+      });
     }
   }
 

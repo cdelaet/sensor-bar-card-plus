@@ -90,6 +90,20 @@ export function renderWindowOptions(value) {
   return options.map(([option, label, disabled]) => `<option value="${escapeAttribute(option)}"${selected === option ? ' selected' : ''}${disabled ? ' disabled' : ''}>${escapeAttribute(label)}</option>`).join('');
 }
 
+export function renderWindowHelperOptions(hass, value) {
+  const selected = typeof value === 'string' ? value.trim() : '';
+  const helpers = Object.entries(hass?.states ?? {})
+    .filter(([entity]) => /^input_select\.[a-z0-9_]+$/i.test(entity))
+    .sort(([left], [right]) => left.localeCompare(right));
+  const options = [['', 'Static window'], ...helpers.map(([entity, state]) => [
+    entity, state?.attributes?.friendly_name || entity,
+  ])];
+  if (selected && !options.some(([entity]) => entity === selected)) {
+    options.push([selected, `Unavailable helper: ${selected}`]);
+  }
+  return options.map(([entity, label]) => `<option value="${escapeAttribute(entity)}"${selected === entity ? ' selected' : ''}>${escapeAttribute(label)}</option>`).join('');
+}
+
 export function escapeAttribute(value) {
   return normalizeTextValue(value)
     .replace(/&/g, '&amp;')
