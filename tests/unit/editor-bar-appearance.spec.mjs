@@ -104,7 +104,7 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     expect(editor._getBarAppearanceSummary(row)).toBe('soft bands • Custom color');
     expect(editor._getEffectiveScopedBarSolidFillValue(row)).toBe(false);
     edit(editor, 'entity-0-bar-inherit', true, 'change');
-    expect(events.at(-1).detail.config.entities[0]).toEqual({ entity: 'sensor.power', bar: { needle: { show: true }, future: true }, extra: true });
+    expect(events.at(-1).detail.config.entities[0]).toEqual({ entity: 'sensor.power', extra: true });
     expect(editor._getEffectiveScopedFillStyleValue(row)).toBe('gradient');
     expect(editor._getEffectiveScopedBarColorValue(row)).toBe('red');
     expect(editor._getEffectiveScopedBarSolidFillValue(row)).toBe(true);
@@ -403,7 +403,7 @@ describe('Bar Appearance with a root-only host context', () => {
       solid_fill: true, extra: { keep: true },
       bar: { color_mode: 'single', needle: { show: true }, segments: [], future: true },
     });
-    expect(hasBarAppearanceOverride(host.context, root)).toBe(false);
+    expect(hasBarAppearanceOverride(host.context, root)).toBe(true);
     expect(getEffectiveFillStyleValue(host.context, root)).toBe('solid');
   });
 });

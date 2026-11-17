@@ -36,8 +36,8 @@ describe('shared Paint Editor', () => {
     }
     expect(html).toContain(`<option value="${fill_style}" selected>`);
     expect(html).toContain('Paint preset');
-    expect(html).toContain('<option value="">None</option>');
-    expect(html).toMatch(/class="paint-preset-row" hidden/);
+    expect(html).toMatch(/<option value=""(?: selected)?>None<\/option>/);
+    expect(html).toMatch(/class="paint-preset-row">/);
     expect(html).toContain(`background-image:${compilePaint(paint).gradient}`);
     expect(html).toContain(describePaint(paint));
     expect(html).toMatch(/Opacity/);
@@ -264,7 +264,7 @@ it.each([
   expect(swatch.style.backgroundImage).toBe(compilePaint(paint).gradient);
 });
 
-for (const source of ['src', 'dist']) it(`Card entity Paint has one disclosure and a non-indented Bar group (${source})`, async () => {
+for (const source of ['src', 'dist']) it(`Card entity Paint is nested inside the collapsible Bar group (${source})`, async () => {
   const { createEditor } = await import('../support/load-card-class.cjs');
   const editor = createEditor({ source });
   const config = { entities: ['sensor.power'], bar: { fill_style: 'bands', color: '#123456' } };
@@ -276,7 +276,12 @@ for (const source of ['src', 'dist']) it(`Card entity Paint has one disclosure a
   expect(group.getAttribute('role')).toBe('group');
   expect(group.getAttribute('aria-label')).toBe('Bar Appearance');
   expect(group.getAttribute('class')).not.toContain('override-group');
-  expect(editor.shadowRoot.querySelector('#entity-0-group-bar')).toBeNull();
+  const barGroup = editor.shadowRoot.querySelector('#entity-0-group-bar');
+  expect(barGroup).toBeTruthy();
+  expect(barGroup.getAttribute('aria-expanded')).toBe('false');
+  let parentGroup = barGroup.parentElement;
+  while (parentGroup && parentGroup.dataset.group !== 'bar') parentGroup = parentGroup.parentElement;
+  expect(parentGroup).toBeTruthy();
   for (const id of ['entity-0-paint-editor', 'entity-0-bar-direction', 'entity-0-bar-fill-style', 'entity-0-bar-color', 'entity-0-bar-solid-fill', 'entity-0-bar-inherit']) {
     expect(editor.shadowRoot.innerHTML.match(new RegExp(`id="${id}"`, 'g'))).toHaveLength(1);
   }

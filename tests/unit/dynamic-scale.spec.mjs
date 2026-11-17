@@ -41,8 +41,9 @@ function setup(config = {}, initial = snapshot(50, 0, 100)) {
       dataset: { rowIndex: String(index) },
       elements,
       generic,
-      querySelector: (selector) => elements[selector] ?? null,
-      querySelectorAll: (selector) => selector === '.generic-marker[data-marker-id]' ? [generic] : [],
+      querySelector: (selector) => elements[selector] ?? elements[selector.split('[')[0]] ?? null,
+      querySelectorAll: (selector) => selector === '.generic-marker[data-marker-id]' ? [generic]
+        : selector.startsWith('.target-marker') && elements['.target-marker'] ? [elements['.target-marker']] : [],
       addEventListener: () => {},
     };
   });

@@ -5,13 +5,19 @@ import { buildBarRenderModel } from '../../src/view-model/bar-render-model.js';
 import { patchBar, renderBar } from '../../src/render/bar-renderer.js';
 
 function needleFromMarkup(html) {
-  const match = html.match(/class="needle-marker" data-edge="([^"]*)" style="([^"]*)"/);
-  if (!match) return null;
-  const style = Object.fromEntries(match[2].split(';').filter(Boolean).map(declaration => {
+  const markerClass = 'class="needle-marker"';
+  const markerIndex = html.indexOf(markerClass);
+  if (markerIndex < 0) return null;
+  const tagStart = html.lastIndexOf('<div', markerIndex);
+  const tagEnd = html.indexOf('>', markerIndex);
+  const attributes = html.slice(tagStart + '<div'.length, tagEnd);
+  const edge = attributes.match(/\bdata-edge="([^"]*)"/)?.[1] ?? '';
+  const styleText = attributes.match(/\bstyle="([^"]*)"/)?.[1] ?? '';
+  const style = Object.fromEntries(styleText.split(';').filter(Boolean).map(declaration => {
     const colon = declaration.indexOf(':');
     return [declaration.slice(0, colon), declaration.slice(colon + 1)];
   }));
-  return { style, dataset: { edge: match[1] } };
+  return { style, dataset: { edge } };
 }
 
 // Only the Needle subtree needs a DOM here; native browser tests cover the bar.
@@ -22,11 +28,12 @@ function needleDom(initialModel) {
     operations.push('remove'); needle = null; layer = null;
   } });
   let layer = needle ? wrapper() : null;
+  const targetMarker = { dataset: { markerId: 'target' }, style: {} };
   const track = {
     insertAdjacentHTML(position, markup) {
       expect(position).toBe('beforeend');
       needle = needleFromMarkup(markup);
-      expect(needle).not.toBeNull();
+      expect(needle, markup).not.toBeNull();
       layer = wrapper();
       operations.push('create');
     },
@@ -34,7 +41,9 @@ function needleDom(initialModel) {
   };
   const root = { querySelector: selector => ({
     '.bar-track': track, '.needle-marker': needle, '.needle-layer': layer,
-  })[selector] ?? null };
+  })[selector] ?? null,
+  querySelectorAll: selector => selector === '.target-marker' ? [targetMarker] : [],
+  };
   return { root, operations, get needle() { return needle; }, get layer() { return layer; } };
 }
 
