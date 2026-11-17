@@ -57,13 +57,14 @@ function validateScaleBounds(diagnostics, scale, path, entity = null) {
 
 function validateTargetRange(diagnostics, config, scaleBounds, path, entity = null) {
   const { min, max } = scaleBounds;
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return;
   const seen = new Set();
   for (const target of Object.values(getTargetDirections(config))) {
     if (seen.has(target.sourcePath)) continue;
     seen.add(target.sourcePath);
     const value = getStaticFixedValue(target.source);
-    if (Number.isFinite(value) && Number.isFinite(min) && Number.isFinite(max) && (value < min || value > max)) {
-      addWarning(diagnostics, 'target.outside_scale', 'Fixed target value is outside the fixed scale range.',
+    if (Number.isFinite(value) && (value < min || value > max)) {
+      addWarning(diagnostics, 'target.outside_scale', 'Fixed target value is outside the fixed Scale range and its marker is clipped to the nearest endpoint.',
         target.sourcePath === 'target.at' ? path : `${path}.${target.sourcePath}`, entity);
     }
   }
@@ -73,8 +74,8 @@ function validateBaselineRange(diagnostics, config, scaleBounds, path, entity = 
   const baseline = getStaticFixedValue(config?.baseline?.at);
   if (!Number.isFinite(baseline)) return;
   const { min, max } = scaleBounds;
-  if (Number.isFinite(min) && Number.isFinite(max) && (baseline < min || baseline > max)) {
-    addWarning(diagnostics, 'baseline.outside_scale', 'Fixed baseline value is outside the fixed scale range.', path, entity);
+  if (Number.isFinite(min) && Number.isFinite(max) && min <= max && (baseline < min || baseline > max)) {
+    addWarning(diagnostics, 'baseline.outside_scale', 'Fixed Baseline value is outside the fixed Scale range and is clipped to the nearest endpoint.', path, entity);
   }
 }
 
@@ -163,7 +164,7 @@ function validateGenericMarkers(diagnostics, markers, invalidList, path, entity 
       continue;
     }
     validateEntitySource(diagnostics, marker.source, `${markerPath}.at`, entity);
-    if (marker.invalidSource && !marker.invalidPercentage) {
+    if (marker.invalidSource && !marker.invalidPercentage && !marker.source?.entity_invalid) {
       addWarning(diagnostics, 'markers.invalid_source', 'Marker requires a valid fixed value, percentage, or entity source.', `${markerPath}.at`, entity);
     }
     if (marker.invalidPercentage) {
@@ -197,10 +198,9 @@ function getStaticSegmentBound(boundary) {
   return getFiniteNumber(boundary.fixed ?? boundary.value);
 }
 
-function validateSegments(diagnostics, segments, scaleBounds, path, entity = null, checkStatic = true) {
+function validateSegments(diagnostics, segments, path, entity = null, checkStatic = true) {
   if (!Array.isArray(segments) || !segments.length) return;
   const staticSegments = [];
-  const { min, max } = scaleBounds;
 
   for (let index = 0; index < segments.length; index += 1) {
     const segment = segments[index];
@@ -223,15 +223,6 @@ function validateSegments(diagnostics, segments, scaleBounds, path, entity = nul
 
     if (checkStatic && Number.isFinite(from) && Number.isFinite(to) && from > to) {
       addWarning(diagnostics, 'segments.from_gt_to', 'Segment start is greater than segment end.', segmentPath, entity);
-    }
-
-    if (Number.isFinite(min) && Number.isFinite(max)) {
-      if (Number.isFinite(from) && (from < min || from > max)) {
-        addWarning(diagnostics, 'segments.outside_scale', 'Segment boundary is outside the fixed scale range.', segmentPath, entity);
-      }
-      if (Number.isFinite(to) && (to < min || to > max)) {
-        addWarning(diagnostics, 'segments.outside_scale', 'Segment boundary is outside the fixed scale range.', segmentPath, entity);
-      }
     }
 
     if (checkStatic && Number.isFinite(from) && Number.isFinite(to)) {
@@ -355,12 +346,12 @@ function validateConfigScope(diagnostics, config, path, entity = null, inherited
   }
   const targetPaint = config?.target_above?.paint;
   if (targetPaint) {
-    validateSegments(diagnostics, targetPaint.segments, scaleBounds, `${path}.target.when_above.paint`, entity, true);
+    validateSegments(diagnostics, targetPaint.segments, `${path}.target.when_above.paint`, entity, true);
     validateGradientStops(diagnostics, targetPaint.gradient_stops, `${path}.target.when_above.paint`, entity);
   }
   const belowTargetPaint = config?.target_below?.paint;
   if (belowTargetPaint) {
-    validateSegments(diagnostics, belowTargetPaint.segments, scaleBounds, `${path}.target.when_below.paint`, entity, true);
+    validateSegments(diagnostics, belowTargetPaint.segments, `${path}.target.when_below.paint`, entity, true);
     validateGradientStops(diagnostics, belowTargetPaint.gradient_stops, `${path}.target.when_below.paint`, entity);
   }
   validateTargetRange(diagnostics, config, scaleBounds, path, entity);
@@ -370,13 +361,13 @@ function validateConfigScope(diagnostics, config, path, entity = null, inherited
   validateMarkerDirections(diagnostics, config, path, entity);
   validateBuiltinMarkerLabels(diagnostics, config, path, entity);
   const segments = paletteValidationSource(config, inheritedConfig, path, 'segments');
-  validateSegments(diagnostics, config?.bar?.segments, scaleBounds, segments.path, entity, !segments.inherited);
+  validateSegments(diagnostics, config?.bar?.segments, segments.path, entity, !segments.inherited);
   const gradientStops = paletteValidationSource(config, inheritedConfig, path, 'gradient_stops');
   if (!gradientStops.inherited) validateGradientStops(diagnostics, config?.bar?.gradient_stops, gradientStops.path, entity);
   for (const side of ['above', 'below']) {
     const paint = config?.baseline?.[side]?.paint;
     if (!paint || typeof paint !== 'object') continue;
-    validateSegments(diagnostics, paint.segments, scaleBounds, `${path}.baseline.${side}.paint`, entity, true);
+    validateSegments(diagnostics, paint.segments, `${path}.baseline.${side}.paint`, entity, true);
     validateGradientStops(diagnostics, paint.gradient_stops, `${path}.baseline.${side}.paint`, entity);
   }
 }
@@ -395,7 +386,6 @@ export function validateNormalizedConfig(config) {
   validateUnsupportedExtremaAliases(diagnostics, config, 'card');
   validateGenericMarkers(diagnostics, config.generic_markers, config.generic_markers_invalid, 'markers');
 
-  const seenEntities = new Set();
   const entities = Array.isArray(config.entities) ? config.entities : [];
   for (let index = 0; index < entities.length; index += 1) {
     const entityConfig = entities[index];
@@ -406,12 +396,6 @@ export function validateNormalizedConfig(config) {
     if (!entityId) {
       addWarning(diagnostics, 'entities.missing_entity', 'Entity row is missing an entity id.', path, null);
       continue;
-    }
-
-    if (seenEntities.has(entityId)) {
-      addWarning(diagnostics, 'entities.duplicate_entity', 'Duplicate entity id in the same card config.', path, entityId);
-    } else {
-      seenEntities.add(entityId);
     }
 
     validateConfigScope(diagnostics, entityConfig, path, entityId, config);

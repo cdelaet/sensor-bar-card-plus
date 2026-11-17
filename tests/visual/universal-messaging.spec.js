@@ -126,6 +126,46 @@ test(`Card and Tile Feature share live diagnostics, keyboard disclosure, recover
 });
 }
 
+for (const source of ['src', 'dist']) {
+test(`repeated entity rows retain scoped diagnostics and recover after structured source correction (${source})`, async ({ page }) => {
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
+  const invalidConfig = {
+    scale: { min: 0, max: 100 },
+    markers: [{ at: { entity: 'sensor.marker', attribute: 'position' }, show_marker: false }],
+    entities: [
+      { entity: 'sensor.shared', attribute: 'temperature', scale: { min: 0, max: 50 }, target: { at: 60 }, bar: { color: 'red' } },
+      { entity: 'sensor.shared', attribute: 'humidity', scale: { min: 0, max: 200 }, target: { at: 150 }, bar: { color: 'blue' } },
+    ],
+  };
+  await page.evaluate(async config => {
+    const states = { 'sensor.shared': window.__sbcpCreateState(25, { temperature: 25, humidity: 45 }) };
+    await window.__sbcpRenderCard({ width: 360, config, states });
+  }, invalidConfig);
+  const card = page.locator('sensor-bar-card-plus');
+
+  const scoped = await page.evaluate(() => document.querySelector('sensor-bar-card-plus')._diagnostics.warnings
+    .map(({ code, path, entity }) => ({ code, path, entity })));
+  expect(scoped.filter(item => item.code === 'source.invalid_entity_source')).toEqual([
+    { code: 'source.invalid_entity_source', path: 'markers[0].at', entity: null },
+  ]);
+  expect(scoped.some(item => item.code === 'markers.invalid_source' || item.code === 'entities.duplicate_entity')).toBe(false);
+  expect(scoped.filter(item => item.code === 'target.outside_scale')).toEqual([
+    { code: 'target.outside_scale', path: 'entities[0]', entity: 'sensor.shared' },
+  ]);
+  await expect(card.locator('.sbcp-message')).toHaveCount(2);
+
+  await page.evaluate(() => document.querySelector('sensor-bar-card-plus').setConfig({
+    scale: { min: 0, max: 100 },
+    markers: [{ at: { entity: { id: 'sensor.marker', attribute: 'position' } }, show_marker: false }],
+    entities: [
+      { entity: 'sensor.shared', attribute: 'temperature', scale: { min: 0, max: 50 }, target: { at: 40 }, bar: { color: 'red' } },
+      { entity: 'sensor.shared', attribute: 'humidity', scale: { min: 0, max: 200 }, target: { at: 150 }, bar: { color: 'blue' } },
+    ],
+  }));
+  await expect(card.locator('.sbcp-messages')).toBeHidden();
+});
+}
+
 test('ordinary sensor unavailability does not create a message by itself', async ({ page }) => {
   await page.goto('/tests/visual/fixtures/harness.html');
   await page.evaluate(async () => {

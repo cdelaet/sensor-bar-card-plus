@@ -261,13 +261,14 @@ describe('grouped palette diagnostic provenance', () => {
       .toEqual(['card.bar.paint.segments[1]']);
   });
 
-  it('retains entity-specific Scale checks for inherited grouped Segments at their authored path', () => {
+  it('allows reusable Paint Segment ranges to extend beyond card and entity Scales', () => {
     const config = normalizeCardConfig({ bar: { paint: { segments: [{ from: 10, to: 90, color: 'red' }] } }, entities: [
       entity, { entity: 'sensor.narrow', scale: { min: 0, max: 50 } },
       { entity: 'sensor.override', scale: { min: 0, max: 50 }, bar: { paint: { segments: [{ from: 10, to: 90, color: 'blue' }] } } },
     ] });
-    expect(validateNormalizedConfig(config).warnings.filter(warning => warning.code === 'segments.outside_scale').map(({ path, entity }) => ({ path, entity })))
-      .toEqual([{ path: 'card.bar.paint.segments[0]', entity: 'sensor.narrow' }, { path: 'entities[2].bar.paint.segments[0]', entity: 'sensor.override' }]);
+    expect(validateNormalizedConfig(config).warnings.filter(warning => warning.code === 'segments.outside_scale')).toEqual([]);
+    expect(config.entities[1].bar.paint.segments).toEqual(config.bar.paint.segments);
+    expect(config.entities[2].bar.paint.segments).toMatchObject([{ from: { fixed: 10 }, to: { fixed: 90 }, color: 'blue' }]);
     expect(config.entities[1].bar.paint[PAINT_PROPERTY_SOURCES]).toEqual({});
   });
 
