@@ -226,10 +226,13 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Entity', 'Fea
     expect(scope.target.when_above.marker.label.text).toBe('Upper ABXC');
     const clear = input.locator('..').getByRole('button', { name: 'Clear', exact: true });
     await clear.click();
-    await expect(input).toHaveValue('60');
+    // Clear removes the local fixed component; the remaining local entity
+    // source is a whole-source override, so the shared fixed fallback is not
+    // inherited while that local source remains.
+    await expect(input).toHaveValue('');
     expect(await input.evaluate(node => node === window.__directionalInput)).toBe(true);
     config = await saved(page); scope = host === 'Entity' ? config.entities[0] : config;
-    expect(scope.target.when_above.at).toBeUndefined();
+    expect(scope.target.when_above.at).toEqual({ entity: 'sensor.goal', future: true });
     expect(scope.target.when_above.marker.label.text).toBe('Upper ABXC');
     await expect(clear).toBeHidden();
     await page.evaluate(host => {
@@ -237,7 +240,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Entity', 'Fea
       scope.target = { ...scope.target, at: 55 };
       window.__replaceTarget(next);
     }, host);
-    await expect(input).toHaveValue('55');
+    await expect(input).toHaveValue('');
     await label.focus();
     const eventCount = await page.evaluate(() => window.__targetEvents.length);
     await page.evaluate(host => {

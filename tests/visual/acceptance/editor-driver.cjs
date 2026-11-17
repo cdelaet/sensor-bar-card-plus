@@ -70,6 +70,11 @@ async function openDisclosure(control) { if(await control.getAttribute('aria-exp
 async function closeDisclosure(control) { if(await control.getAttribute('aria-expanded')==='true') await control.click(); await expect(control).toHaveAttribute('aria-expanded','false'); }
 async function openSection(editor, entry) {
  const paintSection=['Bar Appearance','Segments','Gradient Stops'].includes(entry.section);
+ const entityNeedsBarParent=entry.scope==='entity'&&['Bar Appearance','Needle','Baseline','Segments','Gradient Stops'].includes(entry.section);
+ if(entityNeedsBarParent) {
+  await openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));
+  await openDisclosure(editor.locator('#entity-0-group-bar'));
+ }
  if(paintSection) {
   if(entry.scope==='entity') {
    await openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));
@@ -86,11 +91,18 @@ async function openSection(editor, entry) {
   if(await group.count())await openDisclosure(group);
  }
  if(entry.section==='Target') {
+  const targetDirection=entry.name?.match(/target-(above|below)-/)?.[1];
   const targetPaintDirection=entry.name?.match(/target-(above|below)-paint/)?.[1];
-  await openTarget(editor,entry.scope==='entity'?'Entity':'Card',targetPaintDirection?[targetPaintDirection]:['shared','appearance','labels']);
+  await openTarget(editor,entry.scope==='entity'?'Entity':'Card',targetDirection?[targetDirection]:['shared','appearance','labels']);
   if(targetPaintDirection) {
    const paint=editor.locator(`#${entry.scope==='entity'?'entity-0-':''}target-${targetPaintDirection}-paint-editor`);
    if(!await paint.evaluate(node=>node.open))await paint.locator(':scope > summary').click();
+   if(entry.name!==`target-${targetPaintDirection}-paint-enabled`) {
+    const enabled=paint.locator('[data-paint-enabled="true"]');
+    if(!await enabled.isChecked())await enabled.check();
+    await expect(enabled).toBeChecked();
+    await expect(paint.locator('.paint-editor-properties')).toBeVisible();
+   }
   }
  }
  const baselinePaint = entry.name?.match(/baseline-(above|below)-paint-/);

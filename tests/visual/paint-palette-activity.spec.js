@@ -60,7 +60,11 @@ async function mount(page, source, destination, mode, style) {
   const editor = page.locator(destination === 'Feature' ? 'sensor-bar-card-plus-feature-editor' : 'sensor-bar-card-plus-editor');
   const root = editor.locator(`#${rootId(destination)}`);
   await expect(root.locator('[data-paint-preset="true"] option[value="night"]')).toHaveCount(1);
-  if (destination === 'Entity') await editor.locator('button[data-action="toggle-entity-overrides"][data-index="0"]').click();
+  if (destination === 'Entity') {
+    await editor.locator('button[data-action="toggle-entity-overrides"][data-index="0"]').click();
+    const bar = editor.locator('#entity-0-group-bar');
+    if (await bar.getAttribute('aria-expanded') === 'false') await bar.click();
+  }
   await root.locator(':scope > summary').press('Enter');
   for (const group of ['segments', 'gradient-stops']) {
     await root.locator(`#${destination === 'Entity' ? 'entity-0' : 'card'}-group-${group}`).click();

@@ -7,6 +7,8 @@ for (const source of ['src', 'dist']) {
       const config = {
         scale: { min: 0, max: 100 },
         target: { at: 120 },
+        bar: { paint: { opacity: -1 } },
+        baseline: { above: { paint: { opacity: 140 } } },
         peak: { enabled: true, window: 'today' },
         floor: { enabled: true, window: '24h' },
       };

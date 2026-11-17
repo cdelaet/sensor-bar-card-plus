@@ -28,21 +28,21 @@ const configOf = editor => editor.evaluate(element => structuredClone(element._c
 for (const source of ['src', 'dist']) test(`public discovery and inherited/explicit entity UX (${source})`, async ({ page }) => {
   const editor = await mountEditor(page, { source });
   expect(await page.evaluate(() => window.customCardFeatures.find(feature => feature.type === 'sensor-bar-card-plus-feature').configurable)).toBe(true);
-  await expect(editor.getByRole('status')).toHaveText('Using parent card entity: sensor.parent');
+  await expect(editor.locator('#feature-entity-status')).toHaveText('Using parent card entity: sensor.parent');
   expect(await page.evaluate(() => window.__featureEditorEvents)).toHaveLength(0);
   await editor.locator('#formatting-unit').fill('W');
   expect((await configOf(editor)).entity).toBeUndefined();
   await editor.getByLabel('Use explicit entity').check();
   await editor.getByLabel('Entity override', { exact: true }).fill('input_number.override');
-  await expect(editor.getByRole('status')).toHaveText('Using explicit entity: input_number.override');
+  await expect(editor.locator('#feature-entity-status')).toHaveText('Using explicit entity: input_number.override');
   await editor.evaluate(element => { element.context = { entity_id: 'sensor.changed_parent' }; });
-  await expect(editor.getByRole('status')).toHaveText('Using explicit entity: input_number.override');
+  await expect(editor.locator('#feature-entity-status')).toHaveText('Using explicit entity: input_number.override');
   await editor.getByLabel('Use explicit entity').uncheck();
-  await expect(editor.getByRole('status')).toHaveText('Using parent card entity: sensor.changed_parent');
+  await expect(editor.locator('#feature-entity-status')).toHaveText('Using parent card entity: sensor.changed_parent');
   expect((await configOf(editor)).entity).toBeUndefined();
   const before = await page.evaluate(() => window.__featureEditorEvents.length);
   await editor.evaluate(element => { element.context = { entity_id: 'sensor.last_parent' }; });
-  await expect(editor.getByRole('status')).toHaveText('Using parent card entity: sensor.last_parent');
+  await expect(editor.locator('#feature-entity-status')).toHaveText('Using parent card entity: sensor.last_parent');
   expect(await page.evaluate(() => window.__featureEditorEvents.length)).toBe(before);
   expect(await page.evaluate(() => window.__featureEditorEvents.every(event => event.bubbles && event.composed))).toBe(true);
 });
@@ -82,13 +82,13 @@ test('shared fields preserve raw advanced config, focused nodes and config echoe
 
 test('Area/no-parent entity requirement and narrow layout stay usable', async ({ page }) => {
   const editor = await mountEditor(page, { width: 240, context: { area_id: 'kitchen' } });
-  await expect(editor.getByRole('status')).toHaveText('An entity is required. Select an entity below.');
+  await expect(editor.locator('#feature-entity-status')).toHaveText('An entity is required. Select an entity below.');
   expect(await page.evaluate(() => window.__featureEditorEvents)).toHaveLength(0);
   await editor.getByLabel('Entity override', { exact: true }).fill('sensor.custom');
-  await expect(editor.getByRole('status')).toHaveText('Using explicit entity: sensor.custom');
+  await expect(editor.locator('#feature-entity-status')).toHaveText('Using explicit entity: sensor.custom');
   await editor.getByLabel('Use explicit entity').uncheck();
-  await expect(editor.getByRole('status')).toContainText('An entity is required');
-  await editor.getByRole('status').click();
+  await expect(editor.locator('#feature-entity-status')).toContainText('An entity is required');
+  await editor.locator('#feature-entity-status').click();
   await expect(editor.locator('#scale-min')).toBeVisible();
   expect(await editor.evaluate(element => Array.from(element.shadowRoot.querySelectorAll('.section, input, select')).every(node => {
     const host = element.getBoundingClientRect();
@@ -106,7 +106,7 @@ test('HA picker value-changed shape supports explicit and Scale sources', async 
   await editor.locator('ha-entity-picker[data-kind="feature-entity-source"]').evaluate(picker => {
     picker.dispatchEvent(new CustomEvent('value-changed', { bubbles: true, composed: true, detail: { value: 'sensor.custom_picker_id' } }));
   });
-  await expect(editor.getByRole('status')).toHaveText('Using explicit entity: sensor.custom_picker_id');
+  await expect(editor.locator('#feature-entity-status')).toHaveText('Using explicit entity: sensor.custom_picker_id');
   await editor.locator('ha-entity-picker[data-kind="scale-max-entity-source"]').evaluate(picker => {
     picker.dispatchEvent(new CustomEvent('value-changed', { bubbles: true, composed: true, detail: { value: 'sensor.maximum' } }));
   });

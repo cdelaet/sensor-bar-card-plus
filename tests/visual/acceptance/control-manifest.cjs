@@ -39,6 +39,20 @@ for (const marker of ['target', 'peak', 'floor']) {
     field('target-below-paint-opacity', section, 'number', 'target.when_below.paint.opacity', '37');
     field('target-below-paint-preset', section, 'select', 'target.when_below.paint.preset', [''], { journey: 'paint-preset' });
     color('field', 'target-below-paint-color', section, 'target.when_below.paint.color');
+    for (const side of ['above', 'below']) {
+      field(`target-${side}-value`, section, 'value', `target.when_${side}.at`, '75%', { journey: 'directional' });
+      kind(`target-${side}-entity-source`, section, 'entity', `target.when_${side}.at.entity`, 'sensor.changed', { journey: 'directional' });
+      kind(`target-${side}-attribute`, section, 'text', null, 'temperature', { conditional: true, journey: 'directional' });
+      field(`target-${side}-show`, section, 'checkbox', `target.when_${side}.marker.enabled`, null, { journey: 'directional' });
+      field(`target-${side}-shape`, section, 'select', `target.when_${side}.marker.shape`, ['triangle', 'diamond'], { journey: 'directional' });
+      field(`target-${side}-direction`, section, 'select', `target.when_${side}.marker.direction`, ['outward', 'inward'], { journey: 'directional' });
+      color('field', `target-${side}-color`, section, `target.when_${side}.marker.color`, { journey: 'directional' });
+      for (const [suffix, type, value, key] of [
+        ['label-show', 'checkbox', null, 'show'], ['label-text', 'text', 'Directional label', 'text'],
+        ['label-show-value', 'checkbox', null, 'show_value'], ['label-show-unit', 'checkbox', null, 'show_unit'],
+        ['label-precision', 'number', '3', 'precision'],
+      ]) field(`target-${side}-${suffix}`, section, type, `target.when_${side}.marker.label.${key}`, value, { journey: 'directional' });
+    }
   } else {
     field(`${marker}-show`, section, 'checkbox', `${marker}.enabled`, null);
     field(`${marker}-window`, section, 'select', `${marker}.window`, ['15m', '48h', 'today']);
@@ -56,7 +70,7 @@ field('bar-solid-fill', 'Bar Appearance', 'checkbox', 'bar.solid_fill', null);
 field('bar-opacity', 'Bar Appearance', 'number', 'bar.paint.opacity', '37');
 field('bar-paint-preset', 'Bar Appearance', 'select', 'bar.paint.preset', [''], { journey: 'paint-preset' });
 field('bar-direction', 'Bar Appearance', 'select', 'bar.direction', ['normal', 'reverse'], { journey: 'direction' });
-field('bar-animated', 'Bar Appearance', 'checkbox', 'bar.animated', null, { hosts: ['feature'] });
+field('bar-animated', 'Bar Appearance', 'checkbox', 'bar.animated', null);
 color('field', 'bar-color', 'Bar Appearance', 'bar.color');
 field('bar-needle-mode', 'Needle', 'checkbox', 'bar.needle.show', null);
 color('field', 'bar-needle-color', 'Needle', 'bar.needle.color');
@@ -98,6 +112,16 @@ for (const family of ['segment','gradient']) {
 // fallback is tested as a restricted fallback, never as arbitrary CSS support.
 for (const entry of controls.filter(c=>c.section==='Segments' && c.type==='css')) entry.hosts=['feature'];
 for(const entry of controls.filter(c=>c.section==='Gradient Stops'&&c.type==='css')) entry.type='legacy-color';
+// Both editors expose routed segment text fallbacks. The Feature editor's CSS
+// acceptance is covered by its dedicated palette journeys; Card acceptance
+// retains its legacy color-only contract.
+for (const entry of controls.filter(c=>c.section==='Segments' && c.name.endsWith('color-text-fallback'))) {
+ entry.hosts=['standalone','feature'];entry.type='legacy-color';entry.journey='palettes';
+}
+kind('preset-master','Bar Appearance','checkbox',null,null,{hosts:['standalone'],journey:'paint-source',structural:true});
+for (const key of ['peak','floor']) {
+ field(`${key}-window-entity`,'Peak Floor','select',`${key}.window_entity`,'input_select.shared_window',{journey:'history'});
+}
 const entityNames = {
  'scale-direction':'entity-scale-direction','bar-direction':'entity-bar-direction',
  'scale-min':'entity-override-min','scale-max':'entity-override-max',
@@ -108,7 +132,8 @@ const entityNames = {
 };
 // Explicit scope translation reuses shared semantics while exercising the actual
 // standalone entity controls. Root config/other entity must stay untouched.
-for (const entry of [...controls].filter(c => c.hosts.includes('standalone') && !['Basics','References'].includes(c.section))) {
+for (const entry of [...controls].filter(c => c.hosts.includes('standalone') && !['Basics','References'].includes(c.section) && c.name !== 'preset-master'
+  && !(c.section === 'Segments' && c.name.endsWith('color-text-fallback')))) {
   const name = entityNames[entry.name] ?? `entity-${entry.name}`;
   controls.push({...entry, id:`kind:${name}`,route:'kind',name,hosts:['standalone'],scope:'entity',
     path:entry.path && `entities.0.${entry.path}`, journey:entry.journey, clear:false});
@@ -135,6 +160,7 @@ for (const [section,names,hosts,journey] of [
  ['Segments',['add-segment','remove-segment','add-entity-segment','remove-entity-segment'],['standalone','feature'],'palettes'],
  ['Gradient Stops',['add-gradient-stop','remove-gradient-stop','add-entity-gradient-stop','remove-entity-gradient-stop'],['standalone','feature'],'palettes'],
  ['Target',['toggle-target-group'],['standalone','feature'],'disclosures'],
+ ['Target',['clear-target-property'],['standalone','feature'],'directional'],
  ['Bar Appearance',['clear-paint-property','reset-paint'],['standalone','feature'],'paint-source'],
 ]) for (const name of names) add('action',name,section,'button',null,null,{hosts:name.includes('-entity-')?['standalone']:hosts,journey,structural:true,echo:journey!=='disclosures'});
 const inventory = controls.filter(c=>c.hosts.length);

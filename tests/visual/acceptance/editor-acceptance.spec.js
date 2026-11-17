@@ -23,10 +23,18 @@ for(const host of hosts) {
   const editor=await d.mount(page,host),discovered=new Set();
   async function collect(){for(const id of await d.discover(editor))discovered.add(id);}
   await collect();await refs(editor);
+  await d.openDisclosure(editor.locator('#card-group-marker-target'));
+  for(const side of ['above','below']) {
+   await d.openDisclosure(editor.locator(`#card-group-target-${side}`));
+   await d.openDisclosure(editor.locator(`#card-group-target-${side}-threshold`));
+   await editor.locator(`[data-kind="target-${side}-entity-source"]`).fill(`sensor.${side}_target`);
+   await collect();
+  }
   if(host==='feature'){
    await editor.locator('#feature-entity-override').check();await collect();
    for(const [group,key] of [['marker-target','target'],['baseline','baseline']]){
     await d.openDisclosure(editor.locator(`#card-group-${group}`));
+    if(key==='target')await d.openDisclosure(editor.locator('#card-group-target-shared'));
     await editor.locator(`[data-kind="${key}-entity-source"]`).fill('sensor.reference');await collect();
    }
   }
@@ -37,6 +45,12 @@ for(const host of hosts) {
   if(host==='standalone'){
    await d.openDisclosure(editor.locator('[data-action="toggle-entity-overrides"]').first());
    await d.openDisclosure(editor.locator('#entity-0-group-markers'));
+   await d.openDisclosure(editor.locator('#entity-0-group-target'));
+   for(const side of ['above','below']) {
+    await d.openDisclosure(editor.locator(`#card-group-entity-0-target-${side}`));
+    await d.openDisclosure(editor.locator(`#card-group-entity-0-target-${side}-threshold`));
+    await editor.locator(`[data-kind="entity-target-${side}-entity-source"][data-index="0"]`).fill(`sensor.entity_${side}_target`);
+   }
    await collect();
   }
   await d.mount(page,host,d.seed(host),{picker:true,iconPicker:host==='standalone'});await collect();
@@ -46,7 +60,7 @@ for(const host of hosts) {
   // A new routed control cannot silently pass discovery.
   await editor.evaluate(el=>{const input=document.createElement('input');input.dataset.field='uncovered-example';el.shadowRoot.append(input);});
   expect((await d.discover(editor)).filter(id=>!declared.has(id))).toEqual(['field:uncovered-example']);
-  const journeys=new Set(['fields','sources','palettes','inheritance','entities','pickers','disclosures','references','direction','paint-source']);
+  const journeys=new Set(['fields','sources','palettes','inheritance','entities','pickers','disclosures','references','direction','paint-source','paint-preset','directional','history']);
   for(const entry of inventory.filter(c=>c.hosts.includes(host)))expect(journeys.has(entry.journey),entry.id).toBe(true);
  });
  test(`${host}: Scale and Bar Direction default, edit and canonicalize only their owned keys`,async({page})=>{
@@ -429,12 +443,14 @@ for(const host of hosts)test(`${host}: Needle mode respects the host Baseline cl
  const config=d.seed(host),editor=await d.mount(page,host,config);await d.openSection(editor,{section:'Needle'});await d.commit(page,editor,()=>editor.locator('#bar-needle-mode').uncheck());await d.commit(page,editor,()=>editor.locator('#bar-needle-mode').check());
  if(host==='feature')expect((await d.saved(page)).baseline).toEqual(config.baseline);else expect((await d.saved(page)).baseline).toBeUndefined();
 });
-test('standalone: Shared Target inheritance preserves Paint and selective marker reset semantics',async({page})=>{
+test('standalone: Shared Target inheritance keeps Paint and restores omitted marker fields',async({page})=>{
  const config=d.seed('standalone');config.entities[0].target.label.precision=3;const editor=await d.mount(page,'standalone',config);await d.openSection(editor,{section:'Target',scope:'entity'});
  await d.commit(page,editor,()=>editor.locator('[data-kind="entity-target-inherit"]').first().click());
- expect((await d.saved(page)).entities[0].target).toEqual({label:{text:'Label',precision:3},when_exceeded:{fill_color:'red'},future:'marker metadata'});
+ expect((await d.saved(page)).entities[0].target).toEqual({when_exceeded:{fill_color:'red'},future:'marker metadata'});
  await expect(editor.locator('#entity-0-target-inherit')).not.toBeChecked();
- await d.reopen(page,editor);await d.openSection(editor,{section:'Target',scope:'entity'});await expect(editor.locator('#entity-0-target-label-text')).toHaveValue('Label');
+ await d.reopen(page,editor);await d.openSection(editor,{section:'Target',scope:'entity'});
+ await expect(editor.locator('#entity-0-target-label-text')).toHaveValue('Label');
+ await expect(editor.locator('#entity-0-target-label-precision')).toHaveValue('1');
 });
 for(const host of hosts)test(`${host}: blank numeric blur resets formatting and precision deliberately`,async({page})=>{
  const editor=await d.mount(page,host);await d.openSection(editor,{section:'Target'});
