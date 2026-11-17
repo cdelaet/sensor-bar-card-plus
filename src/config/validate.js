@@ -52,31 +52,6 @@ function validateScaleBounds(diagnostics, scale, path, entity = null) {
   if (Number.isFinite(min) && Number.isFinite(max) && min > max) {
     addWarning(diagnostics, 'scale.min_gt_max', 'Scale minimum is greater than maximum.', path, entity);
   }
-  return { min, max };
-}
-
-function validateTargetRange(diagnostics, config, scaleBounds, path, entity = null) {
-  const { min, max } = scaleBounds;
-  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return;
-  const seen = new Set();
-  for (const target of Object.values(getTargetDirections(config))) {
-    if (seen.has(target.sourcePath)) continue;
-    seen.add(target.sourcePath);
-    const value = getStaticFixedValue(target.source);
-    if (Number.isFinite(value) && (value < min || value > max)) {
-      addWarning(diagnostics, 'target.outside_scale', 'Fixed target value is outside the fixed Scale range and its marker is clipped to the nearest endpoint.',
-        target.sourcePath === 'target.at' ? path : `${path}.${target.sourcePath}`, entity);
-    }
-  }
-}
-
-function validateBaselineRange(diagnostics, config, scaleBounds, path, entity = null) {
-  const baseline = getStaticFixedValue(config?.baseline?.at);
-  if (!Number.isFinite(baseline)) return;
-  const { min, max } = scaleBounds;
-  if (Number.isFinite(min) && Number.isFinite(max) && min <= max && (baseline < min || baseline > max)) {
-    addWarning(diagnostics, 'baseline.outside_scale', 'Fixed Baseline value is outside the fixed Scale range and is clipped to the nearest endpoint.', path, entity);
-  }
 }
 
 function hasConfiguredResolvableValue(resolvable) {
@@ -332,7 +307,7 @@ function validateConfigScope(diagnostics, config, path, entity = null, inherited
   validateEntitySource(diagnostics, config?.scale?.min, `${path}.scale.min`, entity);
   validateEntitySource(diagnostics, config?.scale?.max, `${path}.scale.max`, entity);
   validateEntitySource(diagnostics, config?.baseline?.at, `${path}.baseline.at`, entity);
-  const scaleBounds = validateScaleBounds(diagnostics, config?.scale, path, entity);
+  validateScaleBounds(diagnostics, config?.scale, path, entity);
   const targetSourcePaths = new Set();
   for (const [side, target] of Object.entries(getTargetDirections(config))) {
     const sourcePath = `${path}.${target.sourcePath}`;
@@ -354,8 +329,6 @@ function validateConfigScope(diagnostics, config, path, entity = null, inherited
     validateSegments(diagnostics, belowTargetPaint.segments, `${path}.target.when_below.paint`, entity, true);
     validateGradientStops(diagnostics, belowTargetPaint.gradient_stops, `${path}.target.when_below.paint`, entity);
   }
-  validateTargetRange(diagnostics, config, scaleBounds, path, entity);
-  validateBaselineRange(diagnostics, config, scaleBounds, path, entity);
   validateBaselineSuppressesNeedle(diagnostics, config, path, entity);
   validateExtremumReset(diagnostics, config, path, entity);
   validateMarkerDirections(diagnostics, config, path, entity);

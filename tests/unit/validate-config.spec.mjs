@@ -604,34 +604,44 @@ describe('validateNormalizedConfig', () => {
     }));
   });
 
-  it('warns when a fixed target is outside a valid fixed Scale and explains endpoint clipping', () => {
-    const diagnostics = validateNormalizedConfig(normalize({
-      min: 0,
-      max: 100,
-      target: 120,
-      entities: [{ entity: 'sensor.one' }],
-    }));
+  it('does not warn for valid fixed Targets or Baselines outside Scale at Card or Entity scope', () => {
+    const config = normalize({
+      scale: { min: 0, max: 100 },
+      target: { at: 120 },
+      baseline: { at: 140 },
+      entities: [{
+        entity: 'sensor.one',
+        target: { at: -20 },
+        baseline: { at: -40 },
+      }],
+    });
+    const diagnostics = validateNormalizedConfig(config);
 
-    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
-      code: 'target.outside_scale',
-      path: 'card',
-      message: expect.stringContaining('clipped to the nearest endpoint'),
-    }));
+    expect(config.target_marker.source.fixed).toBe(120);
+    expect(config.baseline.at.fixed).toBe(140);
+    expect(config.entities[0].target_marker.source.fixed).toBe(-20);
+    expect(config.entities[0].baseline.at.fixed).toBe(-40);
+    expect(diagnostics.warnings.some(item => ['target.outside_scale', 'baseline.outside_scale'].includes(item.code))).toBe(false);
   });
 
-  it('warns when a fixed Baseline is outside a valid fixed Scale and explains endpoint clipping', () => {
-    const diagnostics = validateNormalizedConfig(normalize({
-      min: 0,
-      max: 100,
-      baseline: 120,
-      entities: [{ entity: 'sensor.one' }],
-    }));
+  it('preserves percentage and dynamic Target and Baseline sources without out-of-Scale warnings', () => {
+    const config = normalize({
+      scale: { min: 0, max: 100 },
+      target: { at: '50%' },
+      baseline: { at: { percent: 50 } },
+      entities: [{
+        entity: 'sensor.one',
+        target: { at: { entity: 'sensor.target', fixed: 120 } },
+        baseline: { at: { entity: 'sensor.baseline', fixed: -20 } },
+      }],
+    });
+    const diagnostics = validateNormalizedConfig(config);
 
-    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
-      code: 'baseline.outside_scale',
-      path: 'card',
-      message: expect.stringContaining('clipped to the nearest endpoint'),
-    }));
+    expect(config.target_marker.source.percent).toBe(50);
+    expect(config.baseline.at.percent).toBe(50);
+    expect(config.entities[0].target_marker.source).toMatchObject({ entity: 'sensor.target', fixed: 120 });
+    expect(config.entities[0].baseline.at).toMatchObject({ entity: 'sensor.baseline', fixed: -20 });
+    expect(diagnostics.warnings.some(item => ['target.outside_scale', 'baseline.outside_scale'].includes(item.code))).toBe(false);
   });
 
   it('warns when a segment starts above its end', () => {
@@ -744,6 +754,24 @@ describe('validateNormalizedConfig', () => {
     }));
   });
 
+  it('keeps out-of-range Gradient Stop warnings active', () => {
+    const diagnostics = validateNormalizedConfig(normalize({
+      entities: [{ entity: 'sensor.one' }],
+      bar: { fill_style: 'gradient', gradient_stops: [
+        { pos: -1, color: '#00ff00' },
+        { pos: 101, color: '#ff0000' },
+      ] },
+    }));
+
+    expect(diagnostics.warnings.filter(item => item.code === 'gradient_stops.outside_range')
+      .map(item => item.path).sort()).toEqual([
+        'card.bar.gradient_stops[0]',
+        'card.bar.gradient_stops[1]',
+        'entities[0].bar.gradient_stops[0]',
+        'entities[0].bar.gradient_stops[1]',
+      ]);
+  });
+
   it('does not warn on distinct gradient stop positions', () => {
     const diagnostics = validateNormalizedConfig(normalize({
       entities: [{ entity: 'sensor.one' }],
@@ -823,7 +851,7 @@ describe('validateNormalizedConfig', () => {
     ))).toBe(false);
   });
 
-  it('allows repeated entity rows and keeps their attribute, visual, and diagnostic scopes independent', () => {
+  it('allows repeated entity rows and keeps their attribute and visual settings independent', () => {
     const config = normalize({
       scale: { min: 0, max: 100 },
       entities: [
@@ -836,23 +864,21 @@ describe('validateNormalizedConfig', () => {
     expect(config.entities.map(row => row.attribute)).toEqual(['temperature', 'humidity']);
     expect(config.entities.map(row => row.bar.paint.color)).toEqual(['red', 'blue']);
     expect(diagnostics.warnings.some(item => item.code === 'entities.duplicate_entity')).toBe(false);
-    expect(diagnostics.warnings.filter(item => item.code === 'target.outside_scale')).toEqual([
-      expect.objectContaining({ path: 'entities[0]', entity: 'sensor.one' }),
-    ]);
+    expect(diagnostics.warnings.some(item => ['target.outside_scale', 'baseline.outside_scale'].includes(item.code))).toBe(false);
   });
 
-  it('keeps distinct row diagnostics scoped when repeated rows share an entity id', () => {
+  it('keeps malformed attribute diagnostics scoped when repeated rows share an entity id', () => {
     const diagnostics = validateNormalizedConfig(normalize({
       entities: [
-        { entity: 'sensor.one', attribute: 'temperature', scale: { min: 0, max: 50 }, target: { at: 80 } },
-        { entity: 'sensor.one', attribute: 'humidity', scale: { min: 0, max: 60 }, target: { at: 80 } },
+        { entity: 'sensor.one', attribute: 42 },
+        { entity: 'sensor.one', attribute: false },
       ],
     }));
 
-    expect(diagnostics.warnings.filter(item => item.code === 'target.outside_scale').map(({ path, entity }) => ({ path, entity })))
+    expect(diagnostics.warnings.filter(item => item.code === 'source.invalid_attribute').map(({ path, entity }) => ({ path, entity })))
       .toEqual([
-        { path: 'entities[0]', entity: 'sensor.one' },
-        { path: 'entities[1]', entity: 'sensor.one' },
+        { path: 'entities[0].attribute', entity: 'sensor.one' },
+        { path: 'entities[1].attribute', entity: 'sensor.one' },
       ]);
   });
 
@@ -866,7 +892,7 @@ describe('validateNormalizedConfig', () => {
     expect(validateNormalizedConfig(corrected).warnings).toEqual([]);
   });
 
-  it('does not add clipped-coordinate warnings when the fixed Scale itself is inverted', () => {
+  it('retains invalid Scale warnings after removing Target and Baseline range warnings', () => {
     const diagnostics = validateNormalizedConfig(normalize({
       scale: { min: 100, max: 0 },
       target: { at: 120 },

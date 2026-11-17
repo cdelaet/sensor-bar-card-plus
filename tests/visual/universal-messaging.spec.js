@@ -131,10 +131,12 @@ test(`repeated entity rows retain scoped diagnostics and recover after structure
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   const invalidConfig = {
     scale: { min: 0, max: 100 },
+    target: { at: 120 },
+    baseline: { at: 130 },
     markers: [{ at: { entity: 'sensor.marker', attribute: 'position' }, show_marker: false }],
     entities: [
-      { entity: 'sensor.shared', attribute: 'temperature', scale: { min: 0, max: 50 }, target: { at: 60 }, bar: { color: 'red' } },
-      { entity: 'sensor.shared', attribute: 'humidity', scale: { min: 0, max: 200 }, target: { at: 150 }, bar: { color: 'blue' } },
+      { entity: 'sensor.shared', attribute: 'temperature', scale: { min: 0, max: 50 }, target: { at: 60 }, baseline: { at: 70 }, bar: { color: 'red' } },
+      { entity: 'sensor.shared', attribute: 'humidity', scale: { min: 0, max: 200 }, target: { at: 250 }, baseline: { at: 300 }, bar: { color: 'blue' } },
     ],
   };
   await page.evaluate(async config => {
@@ -149,20 +151,82 @@ test(`repeated entity rows retain scoped diagnostics and recover after structure
     { code: 'source.invalid_entity_source', path: 'markers[0].at', entity: null },
   ]);
   expect(scoped.some(item => item.code === 'markers.invalid_source' || item.code === 'entities.duplicate_entity')).toBe(false);
-  expect(scoped.filter(item => item.code === 'target.outside_scale')).toEqual([
-    { code: 'target.outside_scale', path: 'entities[0]', entity: 'sensor.shared' },
+  expect(scoped.some(item => item.code === 'target.outside_scale' || item.code === 'baseline.outside_scale')).toBe(false);
+  await expect(card.locator('.sbcp-message')).toHaveCount(1);
+
+  const clipping = await card.evaluate(element => [...element.shadowRoot.querySelectorAll('.row[data-entity]')].map(row => ({
+    target: row.querySelector('.target-marker')?.style.left,
+    baseline: row.querySelector('.baseline-indicator')?.style.left,
+  })));
+  expect(clipping).toEqual([
+    { target: '100%', baseline: '100%' },
+    { target: '100%', baseline: '100%' },
   ]);
-  await expect(card.locator('.sbcp-message')).toHaveCount(2);
 
   await page.evaluate(() => document.querySelector('sensor-bar-card-plus').setConfig({
     scale: { min: 0, max: 100 },
+    target: { at: 120 },
+    baseline: { at: 130 },
     markers: [{ at: { entity: { id: 'sensor.marker', attribute: 'position' } }, show_marker: false }],
     entities: [
-      { entity: 'sensor.shared', attribute: 'temperature', scale: { min: 0, max: 50 }, target: { at: 40 }, bar: { color: 'red' } },
-      { entity: 'sensor.shared', attribute: 'humidity', scale: { min: 0, max: 200 }, target: { at: 150 }, bar: { color: 'blue' } },
+      { entity: 'sensor.shared', attribute: 'temperature', scale: { min: 0, max: 50 }, target: { at: 60 }, baseline: { at: 70 }, bar: { color: 'red' } },
+      { entity: 'sensor.shared', attribute: 'humidity', scale: { min: 0, max: 200 }, target: { at: 250 }, baseline: { at: 300 }, bar: { color: 'blue' } },
     ],
   }));
   await expect(card.locator('.sbcp-messages')).toBeHidden();
+});
+}
+
+for (const source of ['src', 'dist']) {
+test(`valid out-of-Scale Target and Baseline values stay quiet and clip in Card, Entity, and Tile Feature scopes (${source})`, async ({ page }) => {
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
+  const config = {
+    scale: { min: 0, max: 100 },
+    target: { at: 120 },
+    baseline: { at: 130 },
+    entities: [
+      { entity: 'sensor.row_a', scale: { min: 0, max: 50 }, target: { at: 60 }, baseline: { at: 70 } },
+      { entity: 'sensor.row_b', scale: { min: 0, max: 200 }, target: { at: 250 }, baseline: { at: 300 } },
+    ],
+  };
+  await page.evaluate(async config => {
+    const states = {
+      'sensor.row_a': window.__sbcpCreateState(25),
+      'sensor.row_b': window.__sbcpCreateState(100),
+      'sensor.feature': window.__sbcpCreateState(50),
+    };
+    await window.__sbcpRenderCard({ width: 360, config, states });
+    await window.__sbcpRenderFeature({ width: 360, config: { ...config, entities: undefined }, states,
+      context: { entity_id: 'sensor.feature' } });
+  }, config);
+
+  const result = await page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    const feature = document.querySelector('sensor-bar-card-plus-feature');
+    const outOfScaleWarnings = diagnostics => diagnostics.warnings.filter(({ code }) => (
+      code === 'target.outside_scale' || code === 'baseline.outside_scale'
+    ));
+    return {
+      cardWarnings: outOfScaleWarnings(card._diagnostics),
+      cardRows: [...card.shadowRoot.querySelectorAll('.row[data-entity]')].map(row => ({
+        target: row.querySelector('.target-marker')?.style.left,
+        baseline: row.querySelector('.baseline-indicator')?.style.left,
+      })),
+      featureWarnings: outOfScaleWarnings(feature._diagnostics),
+      featureTarget: feature._row.markers.find(marker => marker.type === 'target')?.position,
+      featureBaseline: feature._row.baselinePositionPercent,
+    };
+  });
+  expect(result.cardWarnings).toEqual([]);
+  expect(result.cardRows).toEqual([
+    { target: '100%', baseline: '100%' },
+    { target: '100%', baseline: '100%' },
+  ]);
+  expect(result.featureWarnings).toEqual([]);
+  expect(result.featureTarget).toBe(100);
+  expect(result.featureBaseline).toBe(100);
+  await expect(page.locator('sensor-bar-card-plus .sbcp-messages')).toBeHidden();
+  await expect(page.locator('sensor-bar-card-plus-feature .sbcp-messages')).toBeHidden();
 });
 }
 
