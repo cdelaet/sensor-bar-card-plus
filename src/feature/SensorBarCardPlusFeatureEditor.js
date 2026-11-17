@@ -62,7 +62,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       root: () => this.shadowRoot,
       isRendering: () => this._isRendering,
       render: () => this._requestRender(),
-      focus: selector => { this._pendingPaletteFocus = selector; },
+      focus: (selector, _scope, options) => this._focusPaletteControl(selector, options),
       hass: () => this._hass,
     };
     this._referenceMarkersSection = new ReferenceMarkersSection(context, { root: ui.root, render: () => this._requestRender() }, options);
@@ -71,7 +71,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     });
     const paletteUi = { ...ui,
       root: () => this.shadowRoot?.querySelector('#card-paint-editor'),
-      focus: selector => { this._pendingPaletteFocus = `#card-paint-editor ${selector}`; },
+      focus: (selector, _scope, options) => this._focusPaletteControl(`#card-paint-editor ${selector}`, options),
     };
     this._segmentsSection = new SegmentsSection(context, paletteUi, createFeaturePaletteArray(context, 'segments'));
     this._gradientStopsSection = new GradientStopsSection(context, paletteUi, createFeaturePaletteArray(context, 'gradient_stops'));
@@ -81,7 +81,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       const rootSelector = scope => `#${scope?.type === 'entity' ? `entity-${scope.index}-` : ''}baseline-${direction}-paint-editor`;
       const ui = { ...paletteUi,
         root: scope => this.shadowRoot?.querySelector(rootSelector(scope)),
-        focus: selector => { this._pendingPaletteFocus = `${rootSelector(root)} ${selector}`; },
+        focus: (selector, scope, focusOptions) => this._focusPaletteControl(`${rootSelector(scope)} ${selector}`, focusOptions),
       };
       this._baselinePaintSections[direction] = {
         segments: new SegmentsSection(context, ui, createFeaturePaletteArray(context, 'segments', destination)),
@@ -89,13 +89,13 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       };
     }
     const targetUi = { ...paletteUi, root: () => this.shadowRoot?.querySelector('#target-above-paint-editor'),
-      focus: selector => { this._pendingPaletteFocus = `#target-above-paint-editor ${selector}`; } };
+      focus: (selector, _scope, options) => this._focusPaletteControl(`#target-above-paint-editor ${selector}`, options) };
     this._targetPaintSections = {
       segments: new SegmentsSection(context, targetUi, createFeaturePaletteArray(context, 'segments', TARGET_ABOVE_PAINT)),
       gradientStops: new GradientStopsSection(context, targetUi, createFeaturePaletteArray(context, 'gradient_stops', TARGET_ABOVE_PAINT)),
     };
     const targetBelowUi = { ...paletteUi, root: scope => this.shadowRoot?.querySelector(`#${scope?.type === 'entity' ? `entity-${scope.index}-` : ''}target-below-paint-editor`),
-      focus: (selector, scope) => { this._pendingPaletteFocus = `#${scope?.type === 'entity' ? `entity-${scope.index}-` : ''}target-below-paint-editor ${selector}`; } };
+      focus: (selector, scope, options) => this._focusPaletteControl(`#${scope?.type === 'entity' ? `entity-${scope.index}-` : ''}target-below-paint-editor ${selector}`, options) };
     this._targetBelowPaintSections = {
       segments: new SegmentsSection(context, targetBelowUi, createFeaturePaletteArray(context, 'segments', TARGET_BELOW_PAINT)),
       gradientStops: new GradientStopsSection(context, targetBelowUi, createFeaturePaletteArray(context, 'gradient_stops', TARGET_BELOW_PAINT)),
@@ -422,6 +422,11 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const rowSelector = selector && active.dataset.kind && item !== undefined
       ? `${selector}[data-${active.dataset.segmentIndex !== undefined ? 'segment-index' : active.dataset.stopIndex !== undefined ? 'stop-index' : 'index'}="${item}"]` : selector;
     return rowSelector ? { selector: rowSelector, start: active.selectionStart, end: active.selectionEnd } : null;
+  }
+
+  _focusPaletteControl(selector, { immediate = false } = {}) {
+    if (immediate) this.shadowRoot?.querySelector(selector)?.focus?.({ preventScroll: true });
+    else this._pendingPaletteFocus = selector;
   }
 
   _render() {

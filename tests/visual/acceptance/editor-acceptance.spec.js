@@ -68,19 +68,52 @@ for(const host of hosts) {
    await d.reopen(page,editor);await d.openSection(editor,entry);await expect(d.control(editor,entry)).toHaveValue('normal');
   }
  });
- test(`${host}: Undefined Segment action prepares exact boundaries and effective color before explicit Add`,async({page})=>{
-  const config=d.seed(host);config.bar.color='#123456';config.bar.segments=[{from:0,to:50,color:'red'},{from:60,to:100,color:'blue'}];
-  const editor=await d.mount(page,host,config);await d.openSection(editor,{section:'Segments',scope:'root'});
-  const action=editor.locator('button[data-action="add-segment-from-undefined"][data-from="50"][data-to="60"]');
-  await expect(action).toBeVisible();const before=await d.saved(page),events=await d.count(page);
+ for(const source of ['src','dist'])for(const scope of host==='standalone'?['root','entity']:['root'])test(`${host} ${scope} Segments (${source}): undefined gap draft sync, edit, cancel and save`,async({page})=>{
+  test.setTimeout(30_000);
+  const config=d.seed(host),entity=scope==='entity',paint=entity?config.entities[0].bar:config.bar;
+  config.bar.fill_style='soft_bands';paint.fill_style='soft_bands';paint.color='#123456';paint.segments=[{from:0,to:50,color:'red'},{from:60,to:100,color:'blue'}];
+  const editor=await d.mount(page,host,config,{source});
+  if(entity){await d.openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));await d.openDisclosure(editor.locator('#entity-0-group-bar'));}
+  await d.openSection(editor,{section:'Segments',scope:entity?'entity':'root'});
+  const idPrefix=entity?'entity-0-':'',kindPrefix=entity?'entity-':'';
+  const kind=name=>`${kindPrefix}segment-${name}`;
+  const palette=editor.locator(entity?'#entity-0-group-segments':'#card-group-segments').locator('xpath=..');
+  const from=palette.locator(`#${idPrefix}segment-draft-from`),to=palette.locator(`#${idPrefix}segment-draft-to`);
+  const draft=from.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " segment-draft ")]');
+  const color=draft.locator(`input[data-kind="${kind('draft-color')}"]`);
+  const colorText=draft.locator(`input[data-kind="${kind('draft-color-text-fallback')}"]`);
+  const action=palette.locator(`button.segment-undefined-action[data-action="add-${entity?'entity-':''}segment-from-undefined"]${entity?'[data-index="0"]':''}`);
+  const authoredFrom=palette.locator(`input[data-kind="${kind('from')}"]`).first();
+  await expect(action).toBeVisible();await expect(action).toHaveAttribute('data-from','50');await expect(action).toHaveAttribute('data-to','60');await authoredFrom.fill('0.');
+  const before=await d.saved(page),events=await d.count(page);
+  await authoredFrom.evaluate(node=>window.__gapAuthoredNode=node);
+  await from.evaluate(node=>window.__gapDraftNode=node);
+  const scrollBefore=await page.evaluate(()=>({window:window.scrollY,mount:document.querySelector('#mount').scrollTop}));
   await action.click();
-  await expect(editor.locator('#segment-draft-from')).toHaveValue('50');
-  await expect(editor.locator('#segment-draft-to')).toHaveValue('60');
-  if(host==='feature')await expect(editor.locator('#segment-draft-color-text-fallback')).toHaveValue('#123456');
-  else await expect(editor.locator('input[data-kind="segment-draft-color"]')).toHaveValue('#123456');
+  await expect(from).toHaveValue('50');await expect(to).toHaveValue('60');await expect(color).toHaveValue('#123456');
+  if(await colorText.count())await expect(colorText).toHaveValue('#123456');
+  await expect(from).toBeFocused();await expect(editor.locator(entity?'#entity-0-group-segments':'#card-group-segments')).toHaveAttribute('aria-expanded','true');
+  expect(await authoredFrom.evaluate(node=>node===window.__gapAuthoredNode)).toBe(true);
+  expect(await authoredFrom).toHaveValue('0.');
+  expect(await from.evaluate(node=>node===window.__gapDraftNode)).toBe(true);
+  expect(await page.evaluate(()=>({window:window.scrollY,mount:document.querySelector('#mount').scrollTop}))).toEqual(scrollBefore);
   expect(await d.saved(page)).toEqual(before);expect(await d.count(page)).toBe(events);
-  await d.commit(page,editor,()=>editor.locator('button[data-action="add-segment"]').click());
-  expect((await d.saved(page)).bar.segments).toContainEqual({from:50,to:60,color:'#123456'});
+
+  await from.fill('51');await to.fill('59');await color.fill('#654321');
+  await expect(from).toHaveValue('51');await expect(to).toHaveValue('59');await expect(color).toHaveValue('#654321');
+  if(await colorText.count())await expect(colorText).toHaveValue('#654321');
+  await from.press('Escape');
+  expect(await d.saved(page)).toEqual(before);expect(await d.count(page)).toBe(events);
+
+  await authoredFrom.fill('0');await authoredFrom.press('Tab');
+  await palette.locator(`button.segment-undefined-action[data-action="add-${entity?'entity-':''}segment-from-undefined"]${entity?'[data-index="0"]':''}`).click();
+  await expect(from).toHaveValue('50');await expect(to).toHaveValue('60');await expect(color).toHaveValue('#123456');
+  await d.commit(page,editor,()=>draft.locator(`button[data-action="add-${entity?'entity-':''}segment"]${entity?'[data-index="0"]':''}`).click());
+  const after=await d.saved(page),updated=entity?after.entities[0].bar.segments:after.bar.segments;
+  expect(updated).toHaveLength(3);
+  expect(updated).toEqual(expect.arrayContaining([{from:0,to:50,color:'red'},{from:50,to:60,color:'#123456'},{from:60,to:100,color:'blue'}]));
+  const stripSegments=value=>{const copy=structuredClone(value);if(entity)delete copy.entities[0].bar.segments;else delete copy.bar.segments;return copy;};
+  expect(stripSegments(after)).toEqual(stripSegments(before));
  });
  test(`${host}: disclosures retain state through echo and normal close/reopen`,async({page})=>{
   const editor=await d.mount(page,host);await expect(editor.locator('.card-subgroup[data-expanded="true"]')).toHaveCount(0);
@@ -155,8 +188,12 @@ for(const host of hosts) {
  });
 }
 for(const host of hosts)for(const scope of host==='standalone'?['root','entity']:['root'])for(const family of ['segment','gradient'])test(`${host} ${scope} ${family}: draft, add/edit/remove, order, metadata and reopen`,async({page})=>{
- const editor=await d.mount(page,host),section=family==='segment'?'Segments':'Gradient Stops',entry={section,scope};await d.openSection(editor,entry);
- const prefix=scope==='entity'?'entity-':'',kind=name=>editor.locator(`[data-kind="${prefix}${family}-${name}"]${scope==='entity'?'[data-index="0"]':''}`).first();
+ const editor=await d.mount(page,host),section=family==='segment'?'Segments':'Gradient Stops',entry={section,scope};
+ const group=family==='segment'?'segments':'gradient-stops';
+ const palette=editor.locator(scope==='entity'?`#entity-0-group-${group}`:`#card-group-${group}`).locator('xpath=..');
+ const openPalette=async()=>{if(scope==='entity'){await d.openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));await d.openDisclosure(editor.locator('#entity-0-group-bar'));}await d.openSection(editor,entry);};
+ await openPalette();
+ const prefix=scope==='entity'?'entity-':'',kind=(name,index=0)=>palette.locator(`[data-kind="${prefix}${family}-${name}"]${scope==='entity'?'[data-index="0"]':''}`).nth(index);
  const configPath=`${scope==='entity'?'entities.0.':''}bar.${family==='segment'?'segments':'gradient_stops'}`;
  const field=kind(family==='segment'?'from':'pos');const original=await d.saved(page);
  for(const draft of family==='segment'?['','-','.','-.']:['']){
@@ -176,7 +213,7 @@ for(const host of hosts)for(const scope of host==='standalone'?['root','entity']
  // Gradient fallback is existing raw non-hex input. Edit it only to supported
  // interpolation paint; do not invent an arbitrary-CSS Gradient Stop journey.
  if(family==='gradient'){
-  const raw=d.seed(host);await d.foreign(editor,raw);await d.openSection(editor,entry);
+  const raw=d.seed(host);await d.foreign(editor,raw);await openPalette();
   const fallback=kind('color-text-fallback');await d.commit(page,editor,()=>fallback.fill('#778899'));expect(d.read(await d.saved(page),configPath)[0].color).toBe('#778899');
  }
  const draftPos=kind(`draft-${family==='segment'?'from':'pos'}`);await draftPos.fill(family==='segment'?'100%':'60');
@@ -185,18 +222,18 @@ for(const host of hosts)for(const scope of host==='standalone'?['root','entity']
  await d.colorPicker(kind('draft-color'),'#aabbcc');
  if(family==='segment'&&host==='feature')await kind('draft-color-text-fallback').fill('var(--some-theme-color)');
  const events=await d.count(page);await d.echo(page,editor);expect(await d.count(page)).toBe(events);
- const action=(verb)=>editor.locator(`[data-action="${verb}-${scope==='entity'?'entity-':''}${family==='segment'?'segment':'gradient-stop'}"]${scope==='entity'?'[data-index="0"]':''}`);
+ const action=(verb)=>palette.locator(`[data-action="${verb}-${scope==='entity'?'entity-':''}${family==='segment'?'segment':'gradient-stop'}"]${scope==='entity'?'[data-index="0"]':''}`);
  await d.commit(page,editor,()=>action('add').click());expect(d.read(await d.saved(page),configPath)).toHaveLength(3);
  await draftPos.fill(family==='segment'?'150%':'80');if(family==='segment')await kind('draft-to').fill('200%');await draftPos.press('Enter');await d.echo(page,editor);expect(d.read(await d.saved(page),configPath)).toHaveLength(4);
- const second=editor.locator(`[data-kind="${prefix}${family}-${family==='segment'?'from':'pos'}"]${scope==='entity'?'[data-index="0"]':''}`).nth(1);
+ const second=kind(family==='segment'?'from':'pos',1);
  await d.commit(page,editor,async()=>{await second.fill(family==='segment'?'55':'90');await second.press('Tab');});
  const rows=d.read(await d.saved(page),configPath);if(host==='feature'){expect(rows[0].future).toBe('first');expect(rows[1].future).toBe('second');} // Standalone deliberately canonicalizes palette rows.
  await d.commit(page,editor,()=>action('remove').first().click());expect(d.read(await d.saved(page),configPath)).toHaveLength(3);
- const result=d.read(await d.saved(page),configPath);await d.reopen(page,editor);await d.openSection(editor,entry);await expect(kind(family==='segment'?'from':'pos')).toHaveValue(String(family==='segment'?result[0].from:result[0].pos));
+ const result=d.read(await d.saved(page),configPath);await d.reopen(page,editor);await openPalette();await expect(kind(family==='segment'?'from':'pos')).toHaveValue(String(family==='segment'?result[0].from:result[0].pos));
  // Neither palette exposes reordering buttons; preserve its existing array order.
  expect(await editor.locator(`[data-action^="move-${family}"]`).count()).toBe(0);
  if(host==='feature'&&family==='segment'){
-  const autoConfig=d.seed(host);await d.foreign(editor,autoConfig);await d.openSection(editor,entry);const to=editor.locator('[data-kind="segment-to"]').last();await d.commit(page,editor,async()=>{await to.fill('90%');await to.press('Tab');});expect(d.read(await d.saved(page),configPath).at(-1).to).toBe('90%');await d.commit(page,editor,async()=>{await to.fill('');await to.press('Tab');});expect(d.read(await d.saved(page),configPath).at(-1).to).toBeUndefined();await d.reopen(page,editor);await d.openSection(editor,entry);await expect(editor.locator('[data-kind="segment-to"]').last()).toHaveValue('');
+  const autoConfig=d.seed(host);await d.foreign(editor,autoConfig);await openPalette();const to=palette.locator('[data-kind="segment-to"]').last();await d.commit(page,editor,async()=>{await to.fill('90%');await to.press('Tab');});expect(d.read(await d.saved(page),configPath).at(-1).to).toBe('90%');await d.commit(page,editor,async()=>{await to.fill('');await to.press('Tab');});expect(d.read(await d.saved(page),configPath).at(-1).to).toBeUndefined();await d.reopen(page,editor);await openPalette();await expect(palette.locator('[data-kind="segment-to"]').last()).toHaveValue('');
  }
  expect((await d.saved(page)).future).toEqual(original.future);
 });

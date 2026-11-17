@@ -183,7 +183,8 @@ export class PaletteSection {
         if (segment && action.endsWith('-from-undefined')) {
           if (!this._isCurrentSegmentGap(scope, target)) return true;
           this._prepareSegmentDraftFromUndefined(scope, target.dataset.from, target.dataset.to, Number(target.dataset.insertIndex));
-          this.ui.focus(`#${this.paletteId(`${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-from`)}`, scope);
+          this.syncRows?.(scope);
+          this.ui.focus(`#${this.paletteId(`${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-from`)}`, scope, { immediate: true });
         } else {
           this.ui.focus(`#${this.paletteId(`${isEntity ? `entity-${scope.index}-` : ''}${prefix}-draft-${segment ? 'from' : 'pos'}`)}`, scope);
           commit();

@@ -109,7 +109,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       const rootSelector = scope => `#${scope?.type === 'entity' ? `entity-${scope.index}-` : ''}baseline-${direction}-paint-editor`;
       const ui = { ...this._paletteUi({ paint: true }),
         root: scope => this.shadowRoot?.querySelector(rootSelector(scope)),
-        focus: (selector, scope) => this._queuePostRenderFocus(`${rootSelector(scope)} ${selector}`),
+        focus: (selector, scope, options) => this._focusPaletteControl(`${rootSelector(scope)} ${selector}`, options),
       };
       this._baselinePaintSections[direction] = {
         segments: new SegmentsSection(paintContext, ui, {
@@ -125,7 +125,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const targetRoot = scope => `#${scope?.type === 'entity' ? `entity-${scope.index}-` : ''}target-above-paint-editor`;
     const targetUi = { ...this._paletteUi({ paint: true }), root: scope => this.shadowRoot?.querySelector(targetRoot(scope)),
       render: () => { this._syncTargetEditors(); this._applyPendingFocus(); },
-      focus: (selector, scope) => this._queuePostRenderFocus(`${targetRoot(scope)} ${selector}`) };
+      focus: (selector, scope, options) => this._focusPaletteControl(`${targetRoot(scope)} ${selector}`, options) };
     this._targetPaintSections = {
       segments: new SegmentsSection(targetContext, targetUi, { destination: TARGET_ABOVE_PAINT,
         write: (scope, rows, options) => createDestinationBindings(targetContext, scope, TARGET_ABOVE_PAINT).set('segments', rows, options), autoEnds: true, cssText: true }),
@@ -134,7 +134,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     };
     const targetBelowRoot = scope => `#${scope?.type === 'entity' ? `entity-${scope.index}-` : ''}target-below-paint-editor`;
     const targetBelowUi = { ...targetUi, root: scope => this.shadowRoot?.querySelector(targetBelowRoot(scope)),
-      focus: (selector, scope) => this._queuePostRenderFocus(`${targetBelowRoot(scope)} ${selector}`) };
+      focus: (selector, scope, options) => this._focusPaletteControl(`${targetBelowRoot(scope)} ${selector}`, options) };
     this._targetBelowPaintSections = {
       segments: new SegmentsSection(targetContext, targetBelowUi, { destination: TARGET_BELOW_PAINT,
         write: (scope, rows, options) => createDestinationBindings(targetContext, scope, TARGET_BELOW_PAINT).set('segments', rows, options), autoEnds: true, cssText: true }),
@@ -713,6 +713,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _queuePostRenderFocus(selector) {
     this._pendingFocusSelector = selector || null;
+  }
+
+  _focusPaletteControl(selector, { immediate = false } = {}) {
+    if (immediate) this.shadowRoot?.querySelector(selector)?.focus?.({ preventScroll: true });
+    else this._queuePostRenderFocus(selector);
   }
 
   _applyPendingFocus() {
@@ -1938,7 +1943,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       root: scope => paint ? this.shadowRoot?.querySelector(selector(scope)) : this.shadowRoot,
       isRendering: () => this._isRendering,
       render: () => this._render(),
-      focus: (control, scope) => this._queuePostRenderFocus(paint ? `${selector(scope)} ${control}` : control),
+      focus: (control, scope, options) => this._focusPaletteControl(paint ? `${selector(scope)} ${control}` : control, options),
     };
   }
 
@@ -3778,7 +3783,7 @@ ${this._renderFormattingSection({ type: 'card' })}
       root: () => this.shadowRoot?.querySelector('#preset-paint-editor'),
       isRendering: () => this._isRendering,
       render: () => this._render(),
-      focus: selector => this._queuePostRenderFocus(`#preset-paint-editor ${selector}`),
+      focus: (selector, _scope, options) => this._focusPaletteControl(`#preset-paint-editor ${selector}`, options),
     };
     this._presetPaintSections = {
       segments: new SegmentsSection(context, ui, {

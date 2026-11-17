@@ -17,7 +17,7 @@ function seed(host) {
       entities: [{ entity: 'sensor.power', ...structuredClone(physical), layout: { height: 32, label: { position: 'hero', width: 150 }, hero: { value_size: 80 } } }, { entity: 'sensor.other', name: 'Other' }] } : {}) };
 }
 async function mount(page, host, config = seed(host), options = {}) {
-  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.goto(`/tests/visual/fixtures/harness.html${options.source === 'dist' ? '?source=dist' : ''}`);
   await page.evaluate(async ({ host, config, options }) => {
     if (options.picker) customElements.define('ha-entity-picker', class extends HTMLElement {
       constructor() { super(); const root = this.attachShadow({mode:'open'}); root.innerHTML='<input aria-label="Entity picker">';

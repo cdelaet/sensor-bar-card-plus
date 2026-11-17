@@ -212,7 +212,7 @@ export class SegmentsSection extends PaletteSection {
       to: this._formatSegmentBoundaryValue(to),
       color: this._getSegmentDraftColorDefault(scope),
       insertIndex: Number.isInteger(insertIndex) ? insertIndex : undefined,
-    });
+    }, { refreshOnly: true });
   }
 
   _isSegmentFillStyle(fillStyle) {
@@ -891,7 +891,7 @@ export class SegmentsSection extends PaletteSection {
     // A color edit keeps row identity but still changes the palette preview.
     this._syncPaletteActivity(scope, 'segments', this._isSegmentFillStyle(this.fillStyle(scope)), this._getSegmentsSummary(scope));
     if (this._getPaletteRoot(scope)?.ownerDocument) this._refreshSegmentUi(scope);
-    if (changed) this._syncSegmentDraftControls(scope);
+    this._syncSegmentDraftControls(scope);
     return changed;
   }
 
@@ -901,12 +901,13 @@ export class SegmentsSection extends PaletteSection {
     const draft = this._getSegmentDraftState(scope);
     for (const field of ['from', 'to']) {
       const control = this._getShadowElementById(`${prefix}segment-draft-${field}`, scope);
-      if (control) control.value = draft[field];
+      if (control && control.value !== draft[field]) control.value = draft[field];
     }
     const kind = entity ? 'entity-segment-draft-color' : 'segment-draft-color';
     const container = this._getShadowElementById(`${prefix}segment-draft-from`, scope)?.closest?.('.segment-draft');
     for (const control of container?.querySelectorAll?.(`input[data-kind="${kind}"], input[data-kind="${kind}-text-fallback"]`) ?? []) {
-      control.value = control.type === 'color' ? getColorPickerValue(draft.color, '#4a9eff') : draft.color;
+      const value = control.type === 'color' ? getColorPickerValue(draft.color, '#4a9eff') : draft.color;
+      if (control.value !== value) control.value = value;
     }
   }
 
