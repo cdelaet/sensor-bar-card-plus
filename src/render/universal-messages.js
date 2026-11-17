@@ -193,6 +193,7 @@ export const universalMessageStyles = `${disclosureStyles}
   .sbcp-message-count[data-severity="error"] { color: var(--error-color, #db4437); }
   .sbcp-message-icon { display: inline-flex; flex: 0 0 auto; width: 16px; height: 16px; }
   .sbcp-message-icon svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .sbcp-message > .sbcp-message-icon { transform: translateY(3px); }
   .sbcp-message-list { display: grid; gap: 6px; min-width: 0; padding: 6px 8px 0; }
   .sbcp-message-list[hidden] { display: none !important; }
   .sbcp-message {
