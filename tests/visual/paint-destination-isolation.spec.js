@@ -201,6 +201,8 @@ for (const source of ['src', 'dist']) {
       if (id.includes('entity-0-')) {
         const toggle = editor.locator('button[data-action="toggle-entity-overrides"][data-index="0"]');
         if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
+        const barGroup = editor.locator('#entity-0-group-bar');
+        if (await barGroup.getAttribute('aria-expanded') === 'false') await barGroup.click();
       }
       const baselineGroup = id.includes('entity-0-')
         ? editor.locator('button[data-group="baseline"][data-action="toggle-override-group"][data-index="0"]')
