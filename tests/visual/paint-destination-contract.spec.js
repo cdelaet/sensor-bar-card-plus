@@ -413,6 +413,84 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
   });
 }
 
+for (const source of ['src', 'dist']) for (const host of hosts) for (const destination of destinations) {
+  test(`${host} ${destination} canceled replacement preserves full canonical configuration (${source})`, async ({ page }) => {
+    const paint = { color: '#123456', opacity: 65, future_paint_metadata: { keep: true } };
+    const editor = await mount(page, source, host, destination, paint,
+      host === 'Entity' ? { preset: 'warm' } : undefined,
+      { warm: { fill_style: 'solid', color: '#aa2233' }, cool: { fill_style: 'solid', color: '#abcdef' } });
+    const section = await openPaint(editor, host, destination);
+    const preset = section.locator('[data-paint-preset="true"]');
+    const originalSelection = host === 'Entity' ? '__paint_preset_inherited__' : '';
+    await expect(preset).toHaveValue(originalSelection);
+    const before = await page.evaluate(() => structuredClone(window.__paintConfig));
+    let promptCount = 0;
+    let acceptPrompt = false;
+    page.on('dialog', dialog => {
+      promptCount += 1;
+      if (acceptPrompt) void dialog.accept();
+      else void dialog.dismiss();
+    });
+
+    await preset.selectOption('cool');
+
+    await expect(preset).toHaveValue(originalSelection);
+    expect(await page.evaluate(() => structuredClone(window.__paintConfig))).toEqual(before);
+    expect(await page.evaluate(() => window.__paintEvents)).toHaveLength(0);
+    expect(promptCount).toBe(1);
+
+    acceptPrompt = true;
+    await preset.selectOption('cool');
+    expect(promptCount).toBe(2);
+    await expect.poll(() => savedPaint(page, host, destination)).toEqual({ preset: 'cool' });
+  });
+}
+
+for (const source of ['src', 'dist']) for (const host of hosts) test(`${host} legacy Bar Paint cancellation preserves the full configuration (${source})`, async ({ page }) => {
+  const editor = await mount(page, source, host, 'bar', undefined, undefined,
+    { cool: { fill_style: 'solid', color: '#abcdef' } });
+  await page.evaluate(async host => {
+    const config = structuredClone(window.__paintConfig);
+    const scope = host === 'Entity' ? config.entities[0] : config;
+    scope.bar ??= {};
+    scope.bar.color = '#123456';
+    scope.bar.opacity = 65;
+    scope.bar.future_legacy_metadata = { keep: true };
+    window.__paintConfig = structuredClone(config);
+    const editor = document.querySelector('sensor-bar-card-plus-editor, sensor-bar-card-plus-feature-editor');
+    const runtime = document.querySelector('sensor-bar-card-plus, sensor-bar-card-plus-feature');
+    editor.setConfig(config);
+    runtime.setConfig(config);
+    await Promise.all([editor.updateComplete, runtime.updateComplete]);
+  }, host);
+  const section = await openPaint(editor, host, 'bar');
+  const preset = section.locator('[data-paint-preset="true"]');
+  await expect(preset).toHaveValue(host === 'Entity' ? '__paint_preset_inherited__' : '');
+  const before = await page.evaluate(() => structuredClone(window.__paintConfig));
+
+  page.once('dialog', dialog => dialog.dismiss());
+  await preset.selectOption('cool');
+
+  await expect(preset).toHaveValue(host === 'Entity' ? '__paint_preset_inherited__' : '');
+  expect(await page.evaluate(() => structuredClone(window.__paintConfig))).toEqual(before);
+});
+
+for (const source of ['src', 'dist']) test(`Card bar canceled replacement preserves an existing preset reference (${source})`, async ({ page }) => {
+  const editor = await mount(page, source, 'Card', 'bar',
+    { preset: 'warm', color: '#123456', future_paint_metadata: { keep: true } }, undefined,
+    { warm: { fill_style: 'solid', color: '#aa2233' }, cool: { fill_style: 'solid', color: '#abcdef' } });
+  const section = await openPaint(editor, 'Card', 'bar');
+  const preset = section.locator('[data-paint-preset="true"]');
+  const before = await page.evaluate(() => structuredClone(window.__paintConfig));
+
+  page.once('dialog', dialog => dialog.dismiss());
+  await preset.selectOption('cool');
+
+  await expect(preset).toHaveValue('warm');
+  expect(await page.evaluate(() => structuredClone(window.__paintConfig))).toEqual(before);
+  expect(await page.evaluate(() => window.__paintEvents)).toHaveLength(0);
+});
+
 // Focused follow-up: status must come from effective provenance, including after
 // native edits, rather than palette shape or equality with the default palette.
 for (const source of ['src', 'dist']) for (const host of hosts) for (const destination of destinations) {

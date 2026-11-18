@@ -152,6 +152,26 @@ function fixture(host, destination, paint, parentPaint) {
 }
 
 for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT]) for (const host of ['Card', 'Entity', 'Feature']) {
+  it(`consumes the canceled input/change selection for ${host}/${destination.id}`, () => {
+    const local = { color: '#123456', opacity: 65, future_paint_metadata: { keep: true } };
+    const f = fixture(host, destination, local, host === 'Entity' ? { preset: 'warm' } : undefined);
+    const control = { value: 'cool', dataset: { kind: host === 'Entity' ? 'entity-paint-preset' : 'bar-paint-preset', ...(host === 'Entity' ? { index: '0' } : {}) },
+      closest: () => ({ dataset: { paintDestination: destination.id } }),
+      ownerDocument: { defaultView: { confirm: () => false } } };
+    const before = structuredClone(f.config());
+    expect(handlePaintPresetControl(f.context, control, 'cool', { eventType: 'input' })).toBe(true);
+    expect(control.value).toBe(host === 'Entity' ? INHERITED_PAINT_PRESET_VALUE : '');
+    expect(f.config()).toEqual(before);
+    expect(f.events).toHaveLength(0);
+
+    control.value = host === 'Entity' ? INHERITED_PAINT_PRESET_VALUE : '';
+    expect(handlePaintPresetControl(f.context, control, control.value, { eventType: 'change' })).toBe(true);
+    expect(f.config()).toEqual(before);
+    expect(f.events).toHaveLength(0);
+  });
+}
+
+for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT]) for (const host of ['Card', 'Entity', 'Feature']) {
   describe(`${host} / ${destination.id} shared destination contract`, () => {
     it('opens without emitting, resolves presets before local properties, and agrees with runtime', () => {
       const f = fixture(host, destination, { preset: 'warm', opacity: 0 });

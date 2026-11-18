@@ -329,7 +329,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       if (event.type !== 'input') this._requestRender();
       return;
     }
-    if (handlePaintPresetControl(this._createSectionContext(), target, value)) return;
+    if (handlePaintPresetControl(this._createSectionContext(), target, value, { eventType: event.type })) return;
     if (handlePaintPropertyControl(this._createSectionContext(), target, value)) return;
     if (this._needleSection.handleField({ field, kind, value }) || this._baselineSection.handleField({ field, kind, value }) || this._targetSection.handleField({ field, kind, value }) || this._extremaSection.handleField({ field, kind, value })) return;
     const context = this._createSectionContext();

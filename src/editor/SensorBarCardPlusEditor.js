@@ -4420,7 +4420,7 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (field === 'layout-height') return void this._setLayoutHeight(value);
     if (field === 'layout-label-width') return void this._setScopedLayoutLabelWidth({ type: 'card' }, value);
     if (handleScaleField(this._createSectionContext(), { field, value })) return;
-    if (handlePaintPresetControl(this._createSectionContext(), target, value)) return;
+    if (handlePaintPresetControl(this._createSectionContext(), target, value, { eventType: event.type })) return;
     if (handlePaintPropertyControl(this._createSectionContext(), target, value)) return;
     if (handleBarAppearanceField(this._createSectionContext(), { field, value }, { animation: true })) return;
     if (this._needleSection.handleField({ field, kind, index: target.dataset?.index, value })) return;

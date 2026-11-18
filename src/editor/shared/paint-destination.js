@@ -10,6 +10,7 @@ import { INHERITED_PAINT_PRESET_VALUE } from './paint-editor.js';
 import { getPaintPreviewScale } from './paint-swatch.js';
 import { normalizeEditorColorValue } from './editor-controls.js';
 
+const cancelledPresetSelection = Symbol('cancelled-paint-preset-selection');
 const owns = (object, property) => Object.prototype.hasOwnProperty.call(object ?? {}, property);
 
 export function paintSourceSignature(config, destination) {
@@ -204,19 +205,33 @@ function controlDestination(target) {
     ?? BAR_PAINT;
 }
 
-export function handlePaintPresetControl(context, target, value) {
+export function handlePaintPresetControl(context, target, value, { eventType } = {}) {
   const field = target?.dataset?.field ?? target?.dataset?.kind;
   if (!field?.endsWith('paint-preset')) return false;
+  const selection = String(value ?? '');
+  const cancelled = target[cancelledPresetSelection];
+  if (eventType === 'input') delete target[cancelledPresetSelection];
+  else if (eventType === 'change' && cancelled) {
+    delete target[cancelledPresetSelection];
+    if (selection === cancelled.value || selection === cancelled.restored) {
+      target.value = cancelled.restored;
+      return true;
+    }
+  }
   const destination = controlDestination(target);
   const scope = target.dataset.index === undefined ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
   const window = target.ownerDocument?.defaultView;
-  selectDestinationPreset(context, scope, destination, value, {
+  const selected = selectDestinationPreset(context, scope, destination, value, {
     confirm: name => window?.confirm?.(`Applying paint preset “${name}” replaces local paint properties. Continue?`) === true,
   });
   // Inherited, None and named presets have separate selector values. The
   // active local reference always wins when the control is resynchronized.
   const state = getDestinationEditorState(context, scope, destination);
-  target.value = state.presetInherited ? INHERITED_PAINT_PRESET_VALUE : String(state.presetReference ?? '');
+  const restored = state.presetInherited ? INHERITED_PAINT_PRESET_VALUE : String(state.presetReference ?? '');
+  target.value = restored;
+  if (eventType === 'input' && selected === false) {
+    target[cancelledPresetSelection] = { value: selection, restored };
+  }
   return true;
 }
 
