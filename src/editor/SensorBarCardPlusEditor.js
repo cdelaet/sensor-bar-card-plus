@@ -9,7 +9,7 @@ import {
 import {
   renderEntityAttributeInput, renderEntityInput, renderEntitySourceInput, renderBuiltinMarkerLabelControls,
   renderWindowOptions, renderWindowHelperOptions, escapeAttribute, isHexColorValue, expandHexColor,
-  normalizeColorComparisonValue, getColorPickerValue, renderColorInput, getEntityAttributeSuggestions,
+  normalizeColorComparisonValue, getColorPickerValue, renderColorInput, formatScaleValueInput, getEntityAttributeSuggestions,
   isValidCssColor, syncColorInput, syncCssColorDrafts,
 } from './shared/editor-controls.js';
 import { editorStyles } from './shared/editor-styles.js';
@@ -710,7 +710,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this._setElementValue(`entity-${index}-min`, this._getEffectiveResolvableScopedValue(scope, 'min').fixed);
       this._setElementValue(`entity-${index}-max`, this._getEffectiveResolvableScopedValue(scope, 'max').fixed);
       this._setElementValue(`entity-${index}-label-width`, this._getEffectiveScopedLayoutValue(scope, 'width'));
-      this._setElementValue(`entity-${index}-baseline-value`, this._getEffectiveBaselineResolvableValue(scope).fixed);
+      this._setElementValue(`entity-${index}-baseline-value`, formatScaleValueInput(this._getEffectiveBaselineResolvableValue(scope)));
       this._setElementValue(`entity-${index}-formatting-unit`, getEffectiveFormattingValue(formattingContext, scope, 'unit'));
       this._setElementValue(`entity-${index}-formatting-decimal`, getEffectiveFormattingValue(formattingContext, scope, 'decimal'));
       this._setElementChecked(`entity-${index}-scale-inherit`, !hasScaleOverride(this._createSectionContext(), scope));

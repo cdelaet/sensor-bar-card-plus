@@ -81,6 +81,120 @@ for (const source of ['src', 'dist']) for (const scenario of scenarios) {
 }
 
 for (const source of ['src', 'dist']) {
+  test(`${source}: reproduce inherited percentage Baseline blanking after Entity Target edit`, async ({ page }) => {
+    const saved = config();
+    saved.baseline.at = { percent: 20 };
+    const editor = await mountEditor(page, source, saved);
+    await editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]').click();
+    await openGroup(editor, '#entity-0-group-bar');
+    await openGroup(editor, '#entity-0-group-baseline');
+    const baselineValue = editor.locator('#entity-0-baseline-value');
+    await expect(baselineValue).toHaveValue('20%');
+
+    await openGroup(editor, '#entity-0-group-target');
+    await openGroup(editor, '#card-group-entity-0-target-shared');
+    const targetValue = editor.locator('#entity-0-target-value');
+    await targetValue.fill('65');
+    await targetValue.press('Tab');
+    await expect.poll(() => editor.evaluate(el => el._draftConfig.entities[0].target.at.fixed)).toBe(65);
+
+    // Regression: mounted sync must keep the complete effective source value.
+    await expect(baselineValue).toHaveValue('20%');
+    expect(await editor.evaluate(el => el._getEffectiveBaselineResolvableValue({ type: 'entity', index: 0 }).percent)).toBe(20);
+
+    await openGroup(editor, '#card-group-baseline');
+    const cardBaseline = editor.locator('#baseline-value');
+    await cardBaseline.fill('25%');
+    await cardBaseline.press('Tab');
+    await expect(baselineValue).toHaveValue('25%');
+    expect(await editor.evaluate(el => el._draftConfig.entities[0])).toEqual({ entity: 'sensor.a', target: { at: { fixed: 65 } } });
+  });
+
+  test(`${source}: Baseline inheritance keeps local overrides and focused drafts through Target and Card edits`, async ({ page }) => {
+    const saved = config();
+    saved.baseline = { at: { percent: 20 }, above: { paint: { color: 'red' } }, below: { paint: { color: 'blue' } } };
+    saved.entities = [
+      { entity: 'sensor.inherited' },
+      { entity: 'sensor.percent', baseline: { at: { percent: 35 } } },
+      { entity: 'sensor.fixed', baseline: { at: { fixed: 12 } } },
+    ];
+    const editor = await mountEditor(page, source, saved);
+    await editor.evaluate(el => {
+      window.__baselineSyncEvents = [];
+      el.addEventListener('config-changed', event => window.__baselineSyncEvents.push(structuredClone(event.detail.config)));
+    });
+    await editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]').click();
+    await editor.locator('[data-action="toggle-entity-overrides"][data-index="1"]').click();
+    await editor.locator('[data-action="toggle-entity-overrides"][data-index="2"]').click();
+    for (const index of [0, 1, 2]) {
+      await openGroup(editor, `#entity-${index}-group-bar`);
+      await openGroup(editor, `#entity-${index}-group-baseline`);
+    }
+    await openGroup(editor, '#entity-0-group-target');
+    await openGroup(editor, '#card-group-entity-0-target-shared');
+
+    const inherited = editor.locator('#entity-0-baseline-value');
+    const localPercent = editor.locator('#entity-1-baseline-value');
+    const localFixed = editor.locator('#entity-2-baseline-value');
+    await expect(inherited).toHaveValue('20%');
+    await expect(localPercent).toHaveValue('35%');
+    await expect(localFixed).toHaveValue('12');
+    await expect(editor.locator('#entity-0-baseline-inherit')).toBeChecked();
+    await expect(editor.locator('#entity-1-baseline-inherit')).not.toBeChecked();
+
+    const beforeDraft = await editor.evaluate(el => structuredClone(el._draftConfig));
+    const countBeforeDraft = await page.evaluate(() => window.__baselineSyncEvents?.length ?? 0);
+    await inherited.fill('.');
+    await expect(inherited).toBeFocused();
+    expect(await editor.evaluate(el => structuredClone(el._draftConfig))).toEqual(beforeDraft);
+    expect(await page.evaluate(() => window.__baselineSyncEvents?.length ?? 0)).toBe(countBeforeDraft);
+
+    const entityTarget = editor.locator('#entity-0-target-value');
+    await entityTarget.evaluate(input => {
+      input.value = '65';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await expect(entityTarget).toHaveValue('65');
+    await expect(inherited).toHaveValue('.');
+    await expect(inherited).toBeFocused();
+    await expect(localPercent).toHaveValue('35%');
+    await expect(localFixed).toHaveValue('12');
+    await expect.poll(() => editor.evaluate(el => el._numericDrafts.values.get('entity-0-baseline-value'))).toBe('.');
+    expect(await editor.evaluate(el => el._draftConfig.entities)).toEqual([
+      { entity: 'sensor.inherited', target: { at: { fixed: 65 } } },
+      { entity: 'sensor.percent', baseline: { at: { percent: 35 } } },
+      { entity: 'sensor.fixed', baseline: { at: { fixed: 12 } } },
+    ]);
+    await expect.poll(() => page.evaluate(() => window.__baselineSyncEvents.length)).toBe(1);
+
+    await openGroup(editor, '#card-group-baseline');
+    const cardValue = editor.locator('#baseline-value');
+    await cardValue.fill('25%');
+    await cardValue.press('Tab');
+    await expect(inherited).toHaveValue('.');
+    await expect(localPercent).toHaveValue('35%');
+    await expect(localFixed).toHaveValue('12');
+    await expect.poll(() => editor.evaluate(el => el._getEffectiveBaselineResolvableValue({ type: 'entity', index: 0 }).percent)).toBe(25);
+    expect(await editor.evaluate(el => el._draftConfig.entities)).toEqual([
+      { entity: 'sensor.inherited', target: { at: { fixed: 65 } } },
+      { entity: 'sensor.percent', baseline: { at: { percent: 35 } } },
+      { entity: 'sensor.fixed', baseline: { at: { fixed: 12 } } },
+    ]);
+    await expect.poll(() => page.evaluate(() => window.__baselineSyncEvents.length)).toBe(2);
+
+    await editor.locator('#entity-1-baseline-inherit').check();
+    await expect(localPercent).toHaveValue('25%');
+    expect(await editor.evaluate(el => el._draftConfig.entities[1])).toEqual({ entity: 'sensor.percent' });
+    await expect(editor.locator('#entity-1-baseline-inherit')).toBeChecked();
+    await expect.poll(() => page.evaluate(() => window.__baselineSyncEvents.length)).toBe(3);
+
+    await expect(editor.locator('#entity-0-baseline-above-paint-color-text-fallback')).toHaveValue('red');
+    await expect(editor.locator('#entity-0-baseline-below-paint-color-text-fallback')).toHaveValue('blue');
+    expect(await editor.evaluate(el => el._draftConfig.baseline)).toEqual({
+      at: { percent: 25 }, above: { paint: { color: 'red' } }, below: { paint: { color: 'blue' } },
+    });
+  });
+
   test(`${source}: Card Formatting updates preserve local Entity overrides and clearing restores inheritance`, async ({ page }) => {
     const saved = config();
     saved.entities[0].formatting = { unit: 'Wh', decimal: 0 };
