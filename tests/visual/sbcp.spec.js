@@ -3748,7 +3748,8 @@ test('visual regression: inside-label-responsive-stack', async ({ page }) => {
   await expect(page.locator('#mount')).toHaveScreenshot('inside-label-responsive-stack.png');
 });
 
-test('off mode keeps narrow long values inside the row before hiding the unit', async ({ page }) => {
+test('off mode keeps narrow long values inside the row before hiding the unit', async ({ page, browserName }) => {
+  const browserSuffix = browserName === 'webkit' ? '-webkit' : '';
   const mount = await render(page, {
     width: 260,
     config: {
@@ -3790,6 +3791,13 @@ test('off mode keeps narrow long values inside the row before hiding the unit', 
         attributes: { friendly_name: 'Unavailable value' },
       },
     },
+  });
+
+  // Match the Home Assistant text colors used by the card's normal fallback
+  // styling so the new shared Messages disclosure is legible in this fixture.
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--primary-text-color', '#333');
+    document.documentElement.style.setProperty('--secondary-text-color', '#888');
   });
 
   const result = await page.evaluate(() => {
@@ -3835,7 +3843,7 @@ test('off mode keeps narrow long values inside the row before hiding the unit', 
     expect(row.valueRight).toBeLessThanOrEqual(row.mainRight + 0.5);
   }
 
-  await expect(mount).toHaveScreenshot('off-mode-narrow-long-unit.png');
+  await expect(mount).toHaveScreenshot(`off-mode-narrow-long-unit${browserSuffix}.png`);
 });
 
 test('left responsive presentation is stable through stateful shrink and grow traversals', async ({ page }) => {

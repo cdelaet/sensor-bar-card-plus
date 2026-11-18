@@ -25,15 +25,16 @@ async function mount(page,source,width=240,{cssInputs=false}={}){
 const saved=editor=>editor.evaluate(el=>structuredClone(el._config));
 const section=(editor,page,name)=>editor.locator('.section').filter({has:page.getByRole('heading',{name,exact:true})});
 async function end(editor,index,value){const control=editor.locator(`#card-paint-editor input[data-kind="segment-to"][data-index="${index}"]`);await control.fill(value);await control.press('Tab');return control;}
-for(const source of ['src','dist'])for(const width of [360,240])test(`Feature capabilities ${source} ${width}px: combined edit/echo, Auto ends and native CSS drafts`,async({page})=>{
+for(const source of ['src','dist'])for(const width of [360,240])test(`Feature capabilities ${source} ${width}px: combined edit/echo, Auto ends and native CSS drafts`,async({page,browserName})=>{
+ const browserSuffix=browserName==='webkit'?'-webkit':'';
  const editor=await mount(page,source,width),original=await saved(editor),segments=editor.locator('.card-subgroup[data-group="segments"]');
  expect(await page.evaluate(()=>window.__capabilityEvents)).toHaveLength(0);
- await expect(section(editor,page,'Bar Appearance')).toHaveScreenshot(`feature-capabilities-bar-${width}.png`);
- await expect(segments).toHaveScreenshot(`feature-capabilities-segments-${width}.png`);
+ await expect(section(editor,page,'Bar Appearance')).toHaveScreenshot(`feature-capabilities-bar-${width}${browserSuffix}.png`);
+ await expect(segments).toHaveScreenshot(`feature-capabilities-segments-${width}${browserSuffix}.png`);
  expect(await editor.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
  expect(await segments.evaluate(el=>Array.from(el.querySelectorAll('input,button')).every(node=>node.getBoundingClientRect().right<=el.getBoundingClientRect().right+1))).toBe(true);
- await expect(editor.locator('#bar-animated')).not.toBeChecked();await editor.locator('#bar-animated').check();await expect(editor.locator('#bar-animated')).toBeFocused();expect((await saved(editor)).bar.animated).toBeUndefined();
- await editor.locator('#bar-fill-style').selectOption('bands');expect((await saved(editor)).bar.animated).toBeUndefined();await editor.locator('#bar-animated').uncheck();expect((await saved(editor)).bar.animated).toBe(false);
+ const animated=editor.locator('#bar-animated');await expect(animated).not.toBeChecked();await animated.focus();await expect(animated).toBeFocused();await animated.press('Space');await expect(animated).toBeChecked();expect((await saved(editor)).bar.animated).toBeUndefined();
+ await editor.locator('#bar-fill-style').selectOption('bands');expect((await saved(editor)).bar.animated).toBeUndefined();await animated.uncheck();expect((await saved(editor)).bar.animated).toBe(false);
  const color=editor.locator('#segment-color-0-text-fallback');await color.evaluate(el=>window.__capabilityColorNode=el);await color.fill('var(');await expect(color).toBeFocused();
  const count=await page.evaluate(()=>window.__capabilityEvents.length);await editor.evaluate(async el=>{el.setConfig(el._config);el.context={entity_id:'sensor.changed'};el.hass={states:{}};await el.updateComplete;});
  expect(await page.evaluate(()=>window.__capabilityEvents.length)).toBe(count);await expect(color).toHaveValue('var(');await expect(color).toHaveAttribute('aria-invalid','true');expect(await color.evaluate(el=>el===window.__capabilityColorNode)).toBe(true);

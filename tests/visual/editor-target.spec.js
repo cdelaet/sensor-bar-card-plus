@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { openTarget } = require('./target-test-utils.cjs');
-test('standalone Target root/entity controls, labels and focus retain their appearance', async ({ page }) => {
+test('standalone Target root/entity controls, labels and focus retain their appearance', async ({ page, browserName }) => {
+  const browserSuffix = browserName === 'webkit' ? '-webkit' : '';
   await page.goto('/tests/visual/fixtures/harness.html');
   await page.evaluate(async () => {
     await customElements.whenDefined('sensor-bar-card-plus');
@@ -11,7 +12,7 @@ test('standalone Target root/entity controls, labels and focus retain their appe
   });
   const editor = page.locator('sensor-bar-card-plus-editor');
   await openTarget(editor);
-  await expect(editor.locator('.card-subgroup[data-group="marker-target"]')).toHaveScreenshot('target-root.png');
+  await expect(editor.locator('.card-subgroup[data-group="marker-target"]')).toHaveScreenshot(`target-root${browserSuffix}.png`);
   const rootValue = editor.locator('#target-value');
   await expect(rootValue).toHaveAttribute('type', 'text'); await expect(rootValue).toHaveValue('70');
   await rootValue.fill('25%');
@@ -20,7 +21,7 @@ test('standalone Target root/entity controls, labels and focus retain their appe
   expect((await editor.evaluate(el => el._draftConfig)).target.at).toEqual({ entity: { id: 'sensor.t', attribute: 'limit' }, fixed: 70 });
   await editor.locator('#target-label-text').fill('Target energy'); await expect(editor.locator('#target-label-text')).toBeFocused();
   await editor.locator('button[data-action="toggle-entity-overrides"]').click(); await openTarget(editor, 'Entity');
-  await expect(editor.locator('.override-group:not(.card-subgroup)[data-group="target"]')).toHaveScreenshot('target-entity.png');
+  await expect(editor.locator('.override-group:not(.card-subgroup)[data-group="target"]')).toHaveScreenshot(`target-entity${browserSuffix}.png`);
   const inherit = editor.locator('#entity-0-target-inherit'), show = editor.locator('#entity-0-target-show');
   await expect(inherit).toBeChecked(); await expect(show).toBeChecked(); await expect(show).not.toBeDisabled();
   const cardTarget = (await editor.evaluate(el => el._draftConfig)).target;

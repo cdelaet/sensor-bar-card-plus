@@ -138,7 +138,8 @@ test('late HA picker loading and CSS-to-hex typing preserve focus', async ({ pag
   expect(await page.evaluate(() => window.__featureEditorEvents.length)).toBe(eventCount);
 });
 
-test('Feature editor inherited composition has a focused visual baseline', async ({ page }) => {
+test('Feature editor inherited composition has a focused visual baseline', async ({ page, browserName }) => {
+  const browserSuffix = browserName === 'webkit' ? '-webkit' : '';
   const editor = await mountEditor(page, { config: { type, scale: { min: 0, max: 100 }, formatting: { unit: 'W', decimal: 1 }, bar: { fill_style: 'gradient', color: 'var(--accent-color)' } } });
-  await expect(editor).toHaveScreenshot('feature-editor-inherited.png');
+  await expect(editor).toHaveScreenshot(`feature-editor-inherited${browserSuffix}.png`);
 });

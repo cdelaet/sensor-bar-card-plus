@@ -1398,7 +1398,8 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
 }
 
 for (const host of ['Card', 'Feature']) for (const width of [240, 360]) {
-  test(`${host} Paint fits ${width}px collapsed and expanded`, async ({ page }) => {
+  test(`${host} Paint fits ${width}px collapsed and expanded`, async ({ page, browserName }) => {
+    const browserSuffix = browserName === 'webkit' ? '-webkit' : '';
     const editor = await mount(page, host, 'src', width);
     const paint = editor.locator('#card-paint-editor');
     await expect(paint).toHaveScreenshot(`paint-${host.toLowerCase()}-${width}-collapsed.png`);
@@ -1416,7 +1417,7 @@ for (const host of ['Card', 'Feature']) for (const width of [240, 360]) {
     expect(await editor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     await editor.evaluate(el => el.shadowRoot.activeElement?.blur());
     await page.mouse.move(0, 0);
-    await expect(paint).toHaveScreenshot(`paint-${host.toLowerCase()}-${width}-expanded.png`);
+    await expect(paint).toHaveScreenshot(`paint-${host.toLowerCase()}-${width}-expanded${browserSuffix}.png`);
   });
 }
 

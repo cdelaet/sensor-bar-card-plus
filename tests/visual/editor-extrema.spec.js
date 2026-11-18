@@ -96,7 +96,8 @@ for (const source of ['src', 'dist']) for (const host of ['standalone', 'feature
   }
 });
 
-for (const key of ['peak', 'floor']) test(`standalone ${key} root/entity controls and reset keyboard focus retain appearance`, async ({ page }) => {
+for (const key of ['peak', 'floor']) test(`standalone ${key} root/entity controls and reset keyboard focus retain appearance`, async ({ page, browserName }) => {
+  const browserSuffix = browserName === 'webkit' ? '-webkit' : '';
   await page.goto('/tests/visual/fixtures/harness.html');
   await page.evaluate(async () => {
     await customElements.whenDefined('sensor-bar-card-plus');
@@ -107,7 +108,7 @@ for (const key of ['peak', 'floor']) test(`standalone ${key} root/entity control
   });
   const editor = page.locator('sensor-bar-card-plus-editor');
   await editor.locator(`#card-group-marker-${key}`).click();
-  await expect(editor.locator(`.card-subgroup[data-group="marker-${key}"]`)).toHaveScreenshot(`${key}-root.png`);
+  await expect(editor.locator(`.card-subgroup[data-group="marker-${key}"]`)).toHaveScreenshot(`${key}-root${browserSuffix}.png`);
   await editor.locator(`#${key}-window`).focus(); await editor.locator(`#${key}-window`).press('ArrowDown');
   await expect(editor.locator(`#${key}-window`)).toBeFocused();
   await editor.locator(`#${key}-label-text`).fill('Changed energy'); await expect(editor.locator(`#${key}-label-text`)).toBeFocused();
@@ -123,7 +124,7 @@ for (const key of ['peak', 'floor']) test(`standalone ${key} root/entity control
   } else {
     await page.mouse.move(0, 0);
   }
-  await expect(entityGroup).toHaveScreenshot(`${key}-entity.png`);
+  await expect(entityGroup).toHaveScreenshot(`${key}-entity${browserSuffix}.png`);
   await editor.locator(`#entity-0-${key}-window`).focus();
   await editor.locator(`#entity-0-${key}-window`).selectOption('today'); await expect(editor.locator(`#entity-0-${key}-window`)).toBeFocused();
 });

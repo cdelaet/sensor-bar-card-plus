@@ -35,11 +35,12 @@ test('editor drafts, focus and disclosures survive echo and a structural render'
   await expect(editor.locator('input[data-kind="gradient-pos"]').nth(1)).toHaveValue('45');
 });
 
-test('standalone Scale and collapsed Target controls retain their layout', async ({ page }) => {
+test('standalone Scale and collapsed Target controls retain their layout', async ({ page, browserName }) => {
+  const browserSuffix = browserName === 'webkit' ? '-webkit' : '';
   const editor = await mountEditor(page);
   await editor.locator('#card-group-marker-target').click();
   await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
   await page.mouse.move(0, 0);
-  await expect(editor.locator('.section').filter({ has: page.getByRole('heading', { name: 'Scale', exact: true }) })).toHaveScreenshot('editor-scale-controls.png');
-  await expect(editor.locator('.card-subgroup[data-group="marker-target"]')).toHaveScreenshot('editor-target-controls.png');
+  await expect(editor.locator('.section').filter({ has: page.getByRole('heading', { name: 'Scale', exact: true }) })).toHaveScreenshot(`editor-scale-controls${browserSuffix}.png`);
+  await expect(editor.locator('.card-subgroup[data-group="marker-target"]')).toHaveScreenshot(`editor-target-controls${browserSuffix}.png`);
 });

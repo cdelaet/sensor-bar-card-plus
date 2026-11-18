@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
-async function mount(page) {
-  await page.goto('/tests/visual/fixtures/harness.html');
+async function mount(page, source) {
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async () => {
     await customElements.whenDefined('sensor-bar-card-plus');
     const editor = await customElements.get('sensor-bar-card-plus').getConfigElement();
@@ -12,14 +12,15 @@ async function mount(page) {
   });
   return page.locator('sensor-bar-card-plus-editor');
 }
-for (const section of ['needle', 'baseline']) test(`standalone ${section} root/entity controls and focus retain their appearance`, async ({ page }) => {
-  const editor = await mount(page);
+for (const source of ['src', 'dist']) for (const section of ['needle', 'baseline']) test(`standalone ${section} root/entity controls and focus retain their appearance (${source})`, async ({ page, browserName }) => {
+  const editor = await mount(page, source);
+  const browserSuffix = browserName === 'webkit' ? '-webkit' : '';
   if (section === 'baseline') await editor.locator('#card-group-baseline').click();
   if (section === 'needle') await editor.locator('#card-group-needle').click();
   const root = editor.locator(`.card-subgroup[data-group="${section}"]`);
   if (section === 'needle') await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
   await page.mouse.move(0, 0);
-  await expect(root).toHaveScreenshot(`${section}-root.png`);
+  await expect(root).toHaveScreenshot(`${section}-root${browserSuffix}.png`);
   const control = editor.locator(section === 'baseline' ? '#baseline-value' : '[data-field="bar-needle-color-text-fallback"]');
   if (section === 'baseline') {
     await expect(control).toHaveAttribute('type', 'text'); await expect(control).toHaveValue('0');
@@ -36,7 +37,7 @@ for (const section of ['needle', 'baseline']) test(`standalone ${section} root/e
   await editor.locator(`#entity-0-group-${section}`).click();
   await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
   await page.mouse.move(0, 0);
-  await expect(editor.locator(`.override-group:not(.card-subgroup)[data-group="${section}"]`)).toHaveScreenshot(`${section}-entity.png`);
+  await expect(editor.locator(`.override-group:not(.card-subgroup)[data-group="${section}"]`)).toHaveScreenshot(`${section}-entity${browserSuffix}.png`);
   if (section === 'baseline') {
     const inherit = editor.locator('#entity-0-baseline-inherit'), enable = editor.locator('#entity-0-baseline-show');
     await expect(inherit).toBeChecked(); await expect(enable).not.toBeChecked(); await expect(enable).not.toBeDisabled();
