@@ -7,6 +7,7 @@ const config = () => ({
   bar: { animated: false },
   baseline: { enabled: true, at: { fixed: 50 } },
   target: { at: { fixed: 60 }, enabled: true },
+  formatting: { unit: 'W', decimal: 2 },
 });
 
 async function mountEditor(page, source, saved = config()) {
@@ -45,6 +46,8 @@ const scenarios = [
   { name: 'Scale minimum', card: '#scale-min', entity: '#entity-0-min', value: '14', cardValue: el => el._getScaleFixedValue('min'), cardGroups: [], groups: ['#entity-0-group-scale'], provenance: '#entity-0-scale-inherit' },
   { name: 'Scale maximum', card: '#scale-max', entity: '#entity-0-max', value: '140', cardValue: el => el._getScaleFixedValue('max'), cardGroups: [], groups: ['#entity-0-group-scale'], provenance: '#entity-0-scale-inherit' },
   { name: 'Label width', card: '#layout-label-width', entity: '#entity-0-label-width', value: '135', cardValue: el => el._getScopedLayoutValue({ type: 'card' }, 'width'), cardGroups: [], groups: ['#entity-0-group-layout'], provenance: '#entity-0-layout-inherit' },
+  { name: 'Formatting Unit', card: '#formatting-unit', entity: '#entity-0-formatting-unit', value: 'kW', expectedCardValue: 'kW', cardValue: el => el._draftConfig.formatting.unit, cardGroups: [], groups: ['#entity-0-group-formatting'], provenance: '#entity-0-formatting-inherit' },
+  { name: 'Formatting Decimals', card: '#formatting-decimal', entity: '#entity-0-formatting-decimal', value: '3', expectedCardValue: 3, cardValue: el => el._draftConfig.formatting.decimal, cardGroups: [], groups: ['#entity-0-group-formatting'], provenance: '#entity-0-formatting-inherit' },
   { name: 'Baseline value', card: '#baseline-value', entity: '#entity-0-baseline-value', value: '55', cardValue: el => el._getBaselineResolvableValue({ type: 'card' }).fixed, cardGroups: ['#card-group-baseline'], groups: ['#entity-0-group-bar', '#entity-0-group-baseline'], provenance: '#entity-0-baseline-inherit' },
   { name: 'Target value', card: '#target-value', entity: '#entity-0-target-value', value: '75', cardValue: el => el._getTargetResolvableValue({ type: 'card' }).fixed, cardGroups: ['#card-group-marker-target', '#card-group-target-shared'], groups: ['#entity-0-group-target', '#card-group-entity-0-target-shared'], provenance: '#entity-0-target-inherit', source: '[data-target-source="source"]' },
 ];
@@ -58,7 +61,7 @@ for (const source of ['src', 'dist']) for (const scenario of scenarios) {
     await expect(cardControl).toBeFocused();
     await cardControl.press('Tab');
     await expect(cardControl).toHaveValue(scenario.value);
-    await expect.poll(() => editor.evaluate(scenario.cardValue)).toBe(Number(scenario.value));
+    await expect.poll(() => editor.evaluate(scenario.cardValue)).toBe(scenario.expectedCardValue ?? Number(scenario.value));
 
     await editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]').click();
     for (const group of scenario.groups) await openGroup(editor, group);
@@ -78,6 +81,62 @@ for (const source of ['src', 'dist']) for (const scenario of scenarios) {
 }
 
 for (const source of ['src', 'dist']) {
+  test(`${source}: Card Formatting updates preserve local Entity overrides and clearing restores inheritance`, async ({ page }) => {
+    const saved = config();
+    saved.entities[0].formatting = { unit: 'Wh', decimal: 0 };
+    const editor = await mountEditor(page, source, saved);
+    await editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]').click();
+    await openGroup(editor, '#entity-0-group-formatting');
+
+    const cardUnit = editor.locator('#formatting-unit');
+    await cardUnit.fill('kW');
+    await cardUnit.press('Tab');
+    const cardDecimal = editor.locator('#formatting-decimal');
+    await cardDecimal.fill('3');
+    await cardDecimal.press('Tab');
+    await expect(editor.locator('#entity-0-formatting-unit')).toHaveValue('Wh');
+    await expect(editor.locator('#entity-0-formatting-decimal')).toHaveValue('0');
+    await expect(editor.locator('#entity-0-formatting-inherit')).not.toBeChecked();
+    expect(await editor.evaluate(el => el._draftConfig.entities[0])).toEqual({
+      entity: 'sensor.a', formatting: { unit: 'Wh', decimal: 0 },
+    });
+
+    await editor.locator('#entity-0-formatting-inherit').check();
+    await expect(editor.locator('#entity-0-formatting-unit')).toHaveValue('kW');
+    await expect(editor.locator('#entity-0-formatting-decimal')).toHaveValue('3');
+    await expect(editor.locator('#entity-0-formatting-inherit')).toBeChecked();
+    expect(await editor.evaluate(el => el._draftConfig.entities[0])).toEqual({ entity: 'sensor.a' });
+
+    const reopened = await reopenEditor(page, editor);
+    await reopened.locator('[data-action="toggle-entity-overrides"][data-index="0"]').click();
+    await openGroup(reopened, '#entity-0-group-formatting');
+    await expect(reopened.locator('#entity-0-formatting-unit')).toHaveValue('kW');
+    await expect(reopened.locator('#entity-0-formatting-decimal')).toHaveValue('3');
+    await expect(reopened.locator('#entity-0-formatting-inherit')).toBeChecked();
+    expect(await reopened.evaluate(el => el._draftConfig.entities[0])).toEqual({ entity: 'sensor.a' });
+  });
+
+  test(`${source}: Card Formatting synchronization preserves a focused Entity decimal draft`, async ({ page }) => {
+    const editor = await mountEditor(page, source);
+    await editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]').click();
+    await openGroup(editor, '#entity-0-group-formatting');
+
+    const entityDecimal = editor.locator('#entity-0-formatting-decimal');
+    await entityDecimal.fill('');
+    await expect(entityDecimal).toBeFocused();
+    await expect.poll(() => editor.evaluate(el => el._numericDrafts.values.get('entity-0-formatting-decimal'))).toBe('');
+
+    await editor.locator('#formatting-decimal').evaluate(input => {
+      input.value = '3';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await expect.poll(() => editor.evaluate(el => el._draftConfig.formatting.decimal)).toBe(3);
+    await expect(entityDecimal).toBeFocused();
+    await expect(entityDecimal).toHaveValue('');
+    await expect.poll(() => editor.evaluate(el => el._numericDrafts.values.get('entity-0-formatting-decimal'))).toBe('');
+    expect(await editor.evaluate(el => el._draftConfig.entities[0])).toEqual({ entity: 'sensor.a' });
+  });
+
   test(`${source}: Card synchronization preserves an unfinished Entity Baseline draft`, async ({ page }) => {
     const editor = await mountEditor(page, source);
     await openGroup(editor, '#card-group-baseline');

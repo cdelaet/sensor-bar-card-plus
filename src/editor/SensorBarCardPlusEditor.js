@@ -700,10 +700,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     const count = this._getEntitiesValue().length;
     for (let index = 0; index < count; index += 1) {
       const scope = { type: 'entity', index };
+      const formattingContext = this._createSectionContext();
       this._setElementValue(`entity-${index}-min`, this._getEffectiveResolvableScopedValue(scope, 'min').fixed);
       this._setElementValue(`entity-${index}-max`, this._getEffectiveResolvableScopedValue(scope, 'max').fixed);
       this._setElementValue(`entity-${index}-label-width`, this._getEffectiveScopedLayoutValue(scope, 'width'));
       this._setElementValue(`entity-${index}-baseline-value`, this._getEffectiveBaselineResolvableValue(scope).fixed);
+      this._setElementValue(`entity-${index}-formatting-unit`, getEffectiveFormattingValue(formattingContext, scope, 'unit'));
+      this._setElementValue(`entity-${index}-formatting-decimal`, getEffectiveFormattingValue(formattingContext, scope, 'decimal'));
       this._setElementChecked(`entity-${index}-scale-inherit`, !hasScaleOverride(this._createSectionContext(), scope));
       this._setElementChecked(`entity-${index}-baseline-inherit`, !this._hasBaselineOverride(scope));
       this._setElementChecked(`entity-${index}-needle-inherit`, !this._hasNeedleOverride(scope));
