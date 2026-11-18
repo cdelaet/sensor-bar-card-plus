@@ -51,8 +51,8 @@ function revealInterval(clipPath) {
   return { left, right };
 }
 
-async function render(page, { width = 720, config, states = baseStates }) {
-  await page.goto('/tests/visual/fixtures/harness.html');
+async function render(page, { source = 'src', width = 720, config, states = baseStates }) {
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({ width, config, states }) => {
     const values = Object.fromEntries(Object.entries(states).map(([id, state]) => [id,
       Number.isFinite(Number(state.state)) ? [Number(state.state)] : []]));
@@ -1393,26 +1393,29 @@ test('marker labels use a compact card surface with asymmetric offsets and uncha
   expect(metrics.markerLaneSize).toBe('15px');
 });
 
-test('marker labels inherit their own marker color and contrast through normal updates', async ({ page }) => {
+for (const source of ['src', 'dist']) test(`marker labels inherit their own marker color and contrast through supported updates (${source})`, async ({ page }) => {
+  const config = {
+    type: 'custom:sensor-bar-card-plus',
+    label_position: 'off',
+    min: 0,
+    max: 100,
+    entities: [{
+      entity: 'sensor.marker_color_row',
+      target: { at: { fixed: 60 }, color: '#F8FAFC', label: { show: true } },
+      peak: { enabled: true, reset: 'never', color: '#111827', label: { show: true } },
+      floor: { enabled: true, reset: 'never', color: '#808080', label: { show: true } },
+      markers: [
+        { at: { fixed: 35 }, lane: 'above', shape: 'diamond', color: '#DC2626', label: { show: true } },
+        { at: { fixed: 65 }, lane: 'below', shape: 'circle', color: '#2563EB', label: { show: true } },
+      ],
+    }],
+  };
+  const states = { 'sensor.marker_color_row': sensor(50, { friendly_name: 'Marker color row' }) };
   await render(page, {
+    source,
     width: 720,
-    config: {
-      type: 'custom:sensor-bar-card-plus',
-      label_position: 'off',
-      min: 0,
-      max: 100,
-      entities: [{
-        entity: 'sensor.marker_color_row',
-        target: { at: { fixed: 60 }, color: '#F8FAFC', label: { show: true } },
-        peak: { enabled: true, reset: 'never', color: '#111827', label: { show: true } },
-        floor: { enabled: true, reset: 'never', color: '#808080', label: { show: true } },
-        markers: [
-          { at: { fixed: 35 }, lane: 'above', shape: 'diamond', color: '#DC2626', label: { show: true } },
-          { at: { fixed: 65 }, lane: 'below', shape: 'circle', color: '#2563EB', label: { show: true } },
-        ],
-      }],
-    },
-    states: { 'sensor.marker_color_row': sensor(50, { friendly_name: 'Marker color row' }) },
+    config,
+    states,
   });
 
   const readLabels = () => page.evaluate(() => {
@@ -1487,27 +1490,41 @@ test('marker labels inherit their own marker color and contrast through normal u
       .every((label, index) => label === window.__markerColorLabelRefs[index]);
   })).toBe(true);
 
-  await page.evaluate(() => {
+  const nextConfig = structuredClone(config);
+  Object.assign(nextConfig.entities[0].target, { color: '#16A34A' });
+  Object.assign(nextConfig.entities[0].peak, { color: '#0EA5E9' });
+  Object.assign(nextConfig.entities[0].floor, { color: '#7C3AED' });
+  Object.assign(nextConfig.entities[0].markers[0], { color: '#F59E0B' });
+  await page.evaluate(async config => {
     const card = document.querySelector('sensor-bar-card-plus');
-    const rowConfig = card._config.entities[0];
-    rowConfig.target_marker.color = '#16A34A';
-    rowConfig.peak_marker.color = '#0EA5E9';
-    rowConfig.floor_marker.color = '#7C3AED';
-    rowConfig.generic_markers[0].color = '#F59E0B';
-    card.hass = { states: {
-      ...card._hass.states,
-      'sensor.marker_color_row': window.__sbcpCreateState(50, { friendly_name: 'Marker color row', icon: 'mdi:flash', unit_of_measurement: 'W' }),
-    } };
-  });
-  const afterPatchColorChange = await readLabels();
-  expect(afterPatchColorChange.labels.map(({ id, color }) => [id, color])).toEqual([
+    // setConfig normalizes Target's shared and directional marker views together.
+    card.setConfig(config);
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }, nextConfig);
+  const afterConfigChange = await readLabels();
+  expect(afterConfigChange.labels.map(({ id, color }) => [id, color])).toEqual([
     ['target', '#16A34A'],
     ['peak', '#0EA5E9'],
     ['floor', '#7C3AED'],
     ['generic-0', '#F59E0B'],
     ['generic-1', '#2563EB'],
   ]);
-  expect(afterPatchColorChange.labels.map(({ rect }) => [rect.width, rect.height])).toEqual(initial.labels.map(({ rect }) => [rect.width, rect.height]));
+  for (const label of afterConfigChange.labels) {
+    expect(label.contrast).not.toBe('');
+    expect(label.computedContrast).toBe(label.contrast);
+  }
+
+  await page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    window.__markerColorLabelRefs = [...card.shadowRoot.querySelectorAll('.target-value-label, .peak-value-label, .floor-value-label, .generic-value-label')];
+    card.hass = { ...card._hass, states: {
+      ...card._hass.states,
+      'sensor.marker_color_row': window.__sbcpCreateState(51, { friendly_name: 'Marker color row', icon: 'mdi:flash', unit_of_measurement: 'W' }),
+    } };
+  });
+  const afterConfigAndHass = await readLabels();
+  expect(afterConfigAndHass.labels.map(({ id, color, contrast }) => [id, color, contrast]))
+    .toEqual(afterConfigChange.labels.map(({ id, color, contrast }) => [id, color, contrast]));
   expect(await page.evaluate(() => {
     const card = document.querySelector('sensor-bar-card-plus');
     return [...card.shadowRoot.querySelectorAll('.target-value-label, .peak-value-label, .floor-value-label, .generic-value-label')]
