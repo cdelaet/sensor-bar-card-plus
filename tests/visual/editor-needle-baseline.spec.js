@@ -32,6 +32,7 @@ for (const section of ['needle', 'baseline']) test(`standalone ${section} root/e
   }
   await expect(control).toBeFocused();
   await editor.locator('button[data-action="toggle-entity-overrides"]').click();
+  await editor.locator('#entity-0-group-bar').click();
   await editor.locator(`#entity-0-group-${section}`).click();
   await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
   await page.mouse.move(0, 0);
