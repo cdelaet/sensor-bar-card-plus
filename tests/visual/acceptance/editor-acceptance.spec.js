@@ -79,7 +79,9 @@ for(const host of hosts) {
   });
  }
  test(`${host}: coverage guard discovers conditional controls and structural actions`,async({page})=>{
-  const editor=await d.mount(page,host),discovered=new Set();
+  const config=d.seed(host);
+  config.bar.segments[0].color='red';
+  const editor=await d.mount(page,host,config),discovered=new Set();
   async function collect(){for(const id of await d.discover(editor))discovered.add(id);}
   await collect();await refs(editor);
   await d.openDisclosure(editor.locator('#card-group-marker-target'));
@@ -101,6 +103,7 @@ for(const host of hosts) {
   await ref(markerRow,'fixed').fill('75%');await collect();
   await ref(markerRow,'entity').fill('sensor.reference');await collect();
   await ref(markerRow,'attribute').fill('temperature');await collect();
+  await d.openSection(editor,{section:'Segments'});await collect();
   if(host==='standalone'){
    await d.openDisclosure(editor.locator('[data-action="toggle-entity-overrides"]').first());
    await d.openDisclosure(editor.locator('#entity-0-group-markers'));
@@ -207,7 +210,7 @@ for(const host of hosts) {
   const replacement=await d.saved(page);replacement.markers=[{at:'35%',label:{text:'Foreign'}}];replacement.future={keep:'foreign'};
   await d.foreign(editor,replacement);await expect(rootRows(editor)).toHaveCount(1);await expect(rootRows(editor).first()).toHaveAttribute('data-expanded','false');
   await d.openDisclosure(rootRows(editor).first().locator('.generic-marker-toggle'));await expect(ref(rootRows(editor).first(),'fixed')).toHaveValue('35%');expect(await d.count(page)).toBe(events);
-  await d.openSection(editor,{section:'Segments'});const from=editor.locator('[data-kind="segment-from"]').first();await from.fill('-.');await from.press('Tab');await d.echo(page,editor);await expect(from).toHaveValue('-.');
+  await d.openSection(editor,{section:'Segments'});const from=editor.locator('#card-paint-editor [data-kind="segment-from"]').first();await from.fill('-.');await from.press('Tab');await d.echo(page,editor);await expect(from).toHaveValue('-.');
   replacement.bar.segments=[{from:10,to:100,color:'#abcdef'}];await d.foreign(editor,replacement);await expect(from).toHaveValue('10');
  });
  for(const nested of [false,true]) {
@@ -261,7 +264,12 @@ for(const host of hosts) {
  });
 }
 for(const host of hosts)for(const scope of host==='standalone'?['root','entity']:['root'])for(const family of ['segment','gradient'])test(`${host} ${scope} ${family}: draft, add/edit/remove, order, metadata and reopen`,async({page})=>{
- const editor=await d.mount(page,host),section=family==='segment'?'Segments':'Gradient Stops',entry={section,scope};
+ const config=d.seed(host);
+ if(family==='segment') {
+  if(scope==='entity')config.entities[0].bar.segments[0].color='green';
+  else config.bar.segments[0].color='green';
+ }
+ const editor=await d.mount(page,host,config),section=family==='segment'?'Segments':'Gradient Stops',entry={section,scope};
  const group=family==='segment'?'segments':'gradient-stops';
  const palette=editor.locator(scope==='entity'?`#entity-0-group-${group}`:`#card-group-${group}`).locator('xpath=..');
  const openPalette=async()=>{if(scope==='entity'){await d.openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));await d.openDisclosure(editor.locator('#entity-0-group-bar'));}await d.openSection(editor,entry);};
@@ -277,12 +285,15 @@ for(const host of hosts)for(const scope of host==='standalone'?['root','entity']
  await d.commit(page,editor,async()=>{await field.fill('10');await field.press('Tab');});expect(d.read(await d.saved(page),configPath)[0][family==='segment'?'from':'pos']).toBe(10);
  if(family==='segment'){
   await d.commit(page,editor,async()=>{await kind('to').fill('45%');await kind('to').press('Enter');});expect(d.read(await d.saved(page),configPath)[0].to).toBe('45%');
+  const rowColor=kind('color-text-fallback');await expect(rowColor).toHaveValue('green');
+  await d.commit(page,editor,async()=>{await rowColor.fill('red');await rowColor.press('Tab');});
+  expect(d.read(await d.saved(page),configPath)[0].color).toBe('red');
  }
- await d.commit(page,editor,()=>d.colorPicker(kind('color'),'#334455'));expect(d.read(await d.saved(page),configPath)[0].color).toBe('#334455');
  if(family==='segment'&&host==='feature'){
   const css=kind('color-text-fallback');const before=await d.saved(page);await css.fill('rgb(');await css.press('Tab');await d.echo(page,editor);expect(await d.saved(page)).toEqual(before);await expect(css).toHaveValue('rgb(');
-  for(const color of ['red','#ff8800','rgb(10, 120, 200)','var(--some-theme-color)']){await d.commit(page,editor,async()=>{await css.fill(color);await css.press('Tab');});expect(d.read(await d.saved(page),configPath)[0].color).toBe(color);}
+  for(const color of ['rgb(10, 120, 200)','var(--some-theme-color)','#ff8800']){await d.commit(page,editor,async()=>{await css.fill(color);await css.press('Tab');});expect(d.read(await d.saved(page),configPath)[0].color).toBe(color);}
  }
+ await d.commit(page,editor,()=>d.colorPicker(kind('color'),'#334455'));expect(d.read(await d.saved(page),configPath)[0].color).toBe('#334455');
  // Gradient fallback is existing raw non-hex input. Edit it only to supported
  // interpolation paint; do not invent an arbitrary-CSS Gradient Stop journey.
  if(family==='gradient'){
@@ -292,8 +303,17 @@ for(const host of hosts)for(const scope of host==='standalone'?['root','entity']
  const draftPos=kind(`draft-${family==='segment'?'from':'pos'}`);await draftPos.fill(family==='segment'?'100%':'60');
  if(family==='segment')await kind('draft-to').fill('150%');
  if(family==='gradient'){const draftColor=kind('draft-color-text-fallback');const events=await d.count(page);await draftColor.fill('#abcdef');await kind('draft-color').focus();await d.echo(page,editor);expect(await d.count(page)).toBe(events);await expect(kind('draft-color')).toHaveValue('#abcdef');}
+ if(family==='segment'&&scope==='entity'){
+  const draftCss=kind('draft-color-text-fallback'),before=await d.saved(page),eventsBefore=await d.count(page);
+  await draftCss.fill('orange');await draftCss.press('Tab');await d.echo(page,editor);
+  expect(await d.saved(page)).toEqual(before);expect(await d.count(page)).toBe(eventsBefore);await expect(draftCss).toHaveValue('orange');
+ }
+ if(family==='segment'&&host==='feature'){
+  const draftCss=kind('draft-color-text-fallback'),before=await d.saved(page),eventsBefore=await d.count(page);
+  await draftCss.fill('var(--some-theme-color)');await draftCss.press('Tab');await d.echo(page,editor);
+  expect(await d.saved(page)).toEqual(before);expect(await d.count(page)).toBe(eventsBefore);await expect(draftCss).toHaveValue('var(--some-theme-color)');
+ }
  await d.colorPicker(kind('draft-color'),'#aabbcc');
- if(family==='segment'&&host==='feature')await kind('draft-color-text-fallback').fill('var(--some-theme-color)');
  const events=await d.count(page);await d.echo(page,editor);expect(await d.count(page)).toBe(events);
  const action=(verb)=>palette.locator(`[data-action="${verb}-${scope==='entity'?'entity-':''}${family==='segment'?'segment':'gradient-stop'}"]${scope==='entity'?'[data-index="0"]':''}`);
  await d.commit(page,editor,()=>action('add').click());expect(d.read(await d.saved(page),configPath)).toHaveLength(3);
@@ -608,7 +628,7 @@ test('standalone: every entity inheritance control restores the canonical card v
   const config=d.seed('standalone');config.entities[0].target={at:{fixed:50},color:'red',label:{show:true,decimal:1}};
   const editor=await d.mount(page,'standalone',config);await d.openSection(editor,entry);const input=d.control(editor,entry);await expect(input).not.toBeChecked();
   await d.commit(page,editor,()=>input.check());await expect(input).toBeChecked();const sectionPath={'Bar Appearance':'bar','Gradient Stops':'bar.gradient_stops','Segments':'bar.segments','References':'markers','Needle':'bar.needle'}[entry.section]??entry.section.toLowerCase();
-  if(entry.section==='Bar Appearance'){for(const part of ['fill_style','color','solid_fill'])expect(d.read(await d.saved(page),`entities.0.bar.${part}`)).toBeUndefined();expect((await d.saved(page)).entities[0].bar.needle).toEqual(config.entities[0].bar.needle);}
+  if(entry.section==='Bar Appearance')expect((await d.saved(page)).entities[0].bar).toBeUndefined();
   else expect(d.read(await d.saved(page),`entities.0.${sectionPath}`),entry.id).toBeUndefined();await d.reopen(page,editor);await d.openSection(editor,entry);await expect(d.control(editor,entry)).toBeChecked();
  }
 });
@@ -641,7 +661,7 @@ test('feature: palette aliases keep raw order, untouched metadata and omitted Au
   const config=d.seed('feature'),gradient=alias==='gradient_stops';delete config.bar[gradient?'gradient_stops':'segments'];
   config[alias]=gradient?[{pos:0,color:'#112233',future:'first'},{pos:100,color:'#445566',future:'second'}]:[{from:0,color:'red',future:'first'},{from:50,color:'blue',future:'second'}];
   const editor=await d.mount(page,'feature',config);await d.openSection(editor,{section:gradient?'Gradient Stops':'Segments'});
-  const input=editor.locator(`[data-kind="${gradient?'gradient-pos':'segment-from'}"]`).first();await d.commit(page,editor,async()=>{await input.fill('10');await input.press('Tab');});
+  const input=editor.locator(`#card-paint-editor [data-kind="${gradient?'gradient-pos':'segment-from'}"]`).first();await d.commit(page,editor,async()=>{await input.fill('10');await input.press('Tab');});
   const saved=await d.saved(page);expect(saved[alias][0]).toEqual({...config[alias][0],[gradient?'pos':'from']:10});expect(saved[alias][1]).toEqual(config[alias][1]);expect(saved.bar[gradient?'gradient_stops':'segments']).toBeUndefined();
   await d.reopen(page,editor);await d.openSection(editor,{section:gradient?'Gradient Stops':'Segments'});await expect(input).toHaveValue('10');
  }
@@ -731,7 +751,7 @@ for(const host of hosts)test(`${host}: canonical grouped paint editing, palettes
  await d.commit(page,editor,()=>editor.locator('#bar-solid-fill').uncheck());
  expect((await d.saved(page)).bar.paint).toMatchObject({color:'#4a9eff',solid_fill:false,opacity:35,future:{keep:true}});
  await d.openSection(editor,{section:'Segments'});
- const from=editor.locator('input[data-kind="segment-from"]').first();
+ const from=editor.locator('#card-paint-editor input[data-kind="segment-from"]').first();
  await d.commit(page,editor,async()=>{await from.fill('10%');await from.press('Enter');});
  expect((await d.saved(page)).bar.paint.segments[0].from).toBe('10%');
  expect((await d.saved(page)).bar.segments).toBeUndefined();
@@ -776,11 +796,11 @@ for(const host of hosts)test(`${host}: Paint preset selection and clearing prese
  expect((await d.saved(page)).bar.direction).toBe('reverse');
  const preset=editor.locator('#bar-paint-preset');
  await d.commit(page,editor,()=>preset.selectOption(''));
- expect((await d.saved(page)).bar.paint).toEqual({future:{keep:true}});
+ expect((await d.saved(page)).bar.paint).toEqual({preset:null,future:{keep:true}});
  if(host==='standalone'){
   await d.openSection(editor,{section:'Bar Appearance',scope:'entity'});
   await d.commit(page,editor,()=>editor.locator('#entity-0-bar-paint-preset').selectOption(''));
-  expect((await d.saved(page)).entities[0].bar.paint).toEqual({opacity:25,local:{keep:true}});
+  expect((await d.saved(page)).entities[0].bar.paint).toEqual({preset:null,opacity:25,local:{keep:true}});
   expect((await d.saved(page)).bar.direction).toBe('reverse');
  }
 });

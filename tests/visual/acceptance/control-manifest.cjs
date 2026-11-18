@@ -108,8 +108,8 @@ for (const family of ['segment','gradient']) {
     color('kind', `${family}-${draft}color`,section,null,{journey:'palettes',structural:true});
   }
 }
-// Segment CSS text is a Feature capability; existing non-hex Gradient Stop
-// fallback is tested as a restricted fallback, never as arbitrary CSS support.
+// Color text fallbacks mount only for authored non-hex values. Gradient Stop
+// fallback remains a restricted compatibility journey.
 for (const entry of controls.filter(c=>c.section==='Segments' && c.type==='css')) entry.hosts=['feature'];
 for(const entry of controls.filter(c=>c.section==='Gradient Stops'&&c.type==='css')) entry.type='legacy-color';
 // Both editors expose routed segment text fallbacks. The Feature editor's CSS
@@ -137,6 +137,9 @@ for (const entry of [...controls].filter(c => c.hosts.includes('standalone') && 
   const name = entityNames[entry.name] ?? `entity-${entry.name}`;
   controls.push({...entry, id:`kind:${name}`,route:'kind',name,hosts:['standalone'],scope:'entity',
     path:entry.path && `entities.0.${entry.path}`, journey:entry.journey, clear:false});
+}
+for (const name of ['entity-segment-color-text-fallback', 'entity-segment-draft-color-text-fallback']) {
+ kind(name, 'Segments', 'legacy-color', null, 'rgb(10, 120, 200)', { hosts:['standalone'], scope:'entity', journey:'palettes', structural:true });
 }
 for (const section of ['Scale','Target','Peak','Floor','References','Bar Appearance','Baseline','Needle','Segments','Gradient Stops','Layout','Formatting']) {
  const slug = {'References':'markers','Bar Appearance':'bar','Gradient Stops':'gradient-stops'}[section] ?? section.toLowerCase();

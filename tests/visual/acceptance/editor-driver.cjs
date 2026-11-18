@@ -254,7 +254,7 @@ async function fieldJourney(page,host,entry,options={}) {
    await commit(page,editor,()=>input.setChecked(checked));await expect(input).toBeChecked({checked});
    const config=await saved(page);
    const actual=read(config,entry.path)??(entry.scope==='entity'&&entry.name.includes('-label-')?read(config,entry.path.replace('entities.0.','')):undefined);
-   const fallback=/show-(?:value|unit|marker)$/.test(entry.name)||entry.name==='bar-animated';
+   const fallback=/show-(?:value|unit|marker)$/.test(entry.name)||['bar-animated','entity-bar-animated'].includes(entry.name);
    const effective = entry.name.endsWith('-paint-enabled') ? actual != null : typeof actual==='string'?!!actual:actual??fallback;
    expect(effective,entry.id).toBe(checked);
   }
