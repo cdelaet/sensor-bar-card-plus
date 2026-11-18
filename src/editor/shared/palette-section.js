@@ -7,8 +7,8 @@ let paletteGeneration = 0;
 const trackedPointerDocuments = new WeakSet();
 const pendingPalettePointerSyncs = new WeakMap();
 
-// Track only an active primary-pointer transaction. It lasts through the
-// browser's click dispatch and carries any palette syncs requested by blur.
+// Keep primary-pointer transactions through activation and carry any palette
+// syncs requested by blur.
 export function trackPalettePointerSync(root) {
   const document = root?.ownerDocument;
   if (!document?.addEventListener || trackedPointerDocuments.has(document)) return;
@@ -17,20 +17,43 @@ export function trackPalettePointerSync(root) {
     if (event.button !== 0) return;
     const previous = pendingPalettePointerSyncs.get(document);
     previous?.cleanup();
-    const transaction = { callbacks: [], cleanup: null };
+    const transaction = { callbacks: [], cleanup: null, changeRoot: null, changeListener: null };
     const finish = () => {
       if (pendingPalettePointerSyncs.get(document) !== transaction) return;
       transaction.cleanup();
       pendingPalettePointerSyncs.delete(document);
       for (const synchronize of transaction.callbacks) synchronize();
     };
+    const finishAfterClick = event => {
+      if (!event.defaultPrevented) {
+        const path = event.composedPath?.() ?? [];
+        const control = path.find(node => node?.matches?.('input[type="checkbox"]'))
+          ?? path.find(node => node?.tagName === 'LABEL')?.control;
+        if (control?.matches?.('input[type="checkbox"]')) {
+          if (transaction.changeListener) return;
+          // Checkbox input/change follow click. Sync only after the editor has
+          // processed change, or it can restore the pre-click checked value.
+          const changeRoot = path.find(node => node?.nodeType === 11 && node?.host) ?? document;
+          transaction.changeRoot = changeRoot;
+          transaction.changeListener = changeEvent => {
+            if (changeEvent.target === control) finish();
+          };
+          changeRoot.addEventListener('change', transaction.changeListener);
+          return;
+        }
+      }
+      finish();
+    };
     transaction.cleanup = () => {
-      document.removeEventListener('click', finish);
+      document.removeEventListener('click', finishAfterClick);
       document.removeEventListener('pointercancel', finish);
+      if (transaction.changeRoot && transaction.changeListener) {
+        transaction.changeRoot.removeEventListener('change', transaction.changeListener);
+      }
     };
     if (previous) transaction.callbacks.push(...previous.callbacks);
     pendingPalettePointerSyncs.set(document, transaction);
-    document.addEventListener('click', finish);
+    document.addEventListener('click', finishAfterClick);
     document.addEventListener('pointercancel', finish);
   }, true);
 }

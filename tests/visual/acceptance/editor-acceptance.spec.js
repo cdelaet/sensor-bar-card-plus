@@ -769,6 +769,140 @@ for(const host of hosts)test(`${host}: canonical grouped paint editing, palettes
  }
 });
 
+const paintDestinationNames=['bar','baseline-above','baseline-below','target-above','target-below'];
+function paintPath(scope,destination){
+ const prefix=scope==='entity'?'entities.0.':'';
+ return `${prefix}${destination==='bar'?'bar.paint':destination.startsWith('baseline-')?`baseline.${destination.slice(9)}.paint`:`target.when_${destination.slice(7)}.paint`}`;
+}
+async function expectPaintState(page,editor,host,path,color,solid){
+ const saved=await d.saved(page),actual=d.read(saved,path);
+ expect(actual).toMatchObject({color,solid_fill:solid});
+ const draft=await editor.evaluate((el,{host,path})=>{
+  const config=host==='feature'?el._config:el._draftConfig;
+  return path.reduce((value,key)=>value?.[key],config);
+ },{host,path:path.split('.')});
+ expect(draft).toMatchObject({color,solid_fill:solid});
+ const emitted=await page.evaluate(path=>path.reduce((value,key)=>value?.[key],window.__acceptance.events.at(-1)),path.split('.'));
+ expect(emitted).toMatchObject({color,solid_fill:solid});
+}
+function setTestPath(config,path,value){
+ const keys=Array.isArray(path)?path:path.split('.');let target=config;
+ for(const key of keys.slice(0,-1))target=target[key]??(target[key]={});
+ target[keys.at(-1)]=value;
+}
+function setGroupedPaint(owner,destination){
+ const paint={fill_style:'bands',color:'red',solid_fill:false,opacity:35};
+ if(destination==='bar'){
+  owner.bar=structuredClone(owner.bar??{});const raw=owner.bar,grouped={...(raw.paint??{})};
+  for(const property of ['fill_style','color','solid_fill','opacity','segments','gradient_stops'])if(Object.hasOwn(raw,property)){grouped[property]=raw[property];delete raw[property];}
+  raw.paint={...grouped,...paint};return;
+ }
+ if(destination.startsWith('baseline-')){
+  owner.baseline=structuredClone(owner.baseline??{});const side=destination.slice(9);
+  owner.baseline[side]={...(owner.baseline[side]??{}),paint:{...paint}};delete owner.baseline[side].color;return;
+ }
+ owner.target=structuredClone(owner.target??{});delete owner.target.when_exceeded;
+ const side=destination.slice(7);
+ owner.target[`when_${side}`]={...(owner.target[`when_${side}`]??{}),at:{fixed:50},paint:{...paint}};
+}
+function paintCaseConfig(host){
+ const config=d.seed(host);config.target=structuredClone(config.target);config.baseline=structuredClone(config.baseline);config.bar=structuredClone(config.bar);
+ for(const destination of paintDestinationNames)setGroupedPaint(config,destination);
+ if(host==='standalone'){
+  config.entities[0]=structuredClone(config.entities[0]);
+  for(const destination of paintDestinationNames)setGroupedPaint(config.entities[0],destination);
+ }
+ return config;
+}
+async function openPaintDestination(editor,scope,destination){
+ if(destination==='bar')await d.openSection(editor,{section:'Bar Appearance',scope});
+ else if(destination.startsWith('baseline-'))await d.openSection(editor,{section:'Baseline',scope});
+ else await d.openSection(editor,{section:'Target',scope,name:`${destination}-paint-color`});
+ const prefix=scope==='entity'?'entity-0-':'';
+ const id=destination==='bar'?`${prefix}${scope==='entity'?'':'card-'}paint-editor`:`${prefix}${destination}-paint-editor`;
+ const paint=editor.locator(`#${id}`);
+ if(!await paint.evaluate(element=>element.open))await paint.locator(':scope > summary').click();
+ const enabled=paint.locator('[data-paint-enabled="true"]');if(await enabled.count())await expect(enabled).toBeChecked();
+ await expect(paint.locator('[data-paint-property="solid_fill"]')).toBeVisible();
+ return paint;
+}
+
+for(const source of ['src','dist'])test(`Card Solid Fill sync waits for checkbox change after color click (${source})`,async({page})=>{
+ const config=paintCaseConfig('standalone'),editor=await d.mount(page,'standalone',config,{source});
+ const paint=await openPaintDestination(editor,'root','bar'),checkbox=paint.locator('[data-paint-property="solid_fill"]');
+ await editor.evaluate(el=>{
+  const root=el.shadowRoot,control=root.querySelector('#bar-solid-fill');window.__paintSyncTrace=[];
+  const trace=(name,event=null,phase=null)=>window.__paintSyncTrace.push({name,phase,type:event?.type??null,target:event?.target?.id??null,
+   checked:control.checked,connected:control.isConnected,same:root.querySelector('#bar-solid-fill')===control,
+   active:root.activeElement?.id??null,solid:window.__acceptance.saved.bar.paint?.solid_fill});
+  for(const type of ['input','change','focusout','pointerdown','pointerup','click']){
+   root.addEventListener(type,event=>trace('event',event,'capture'),true);
+   root.addEventListener(type,event=>trace('event',event,'bubble'));
+  }
+  el.addEventListener('config-changed',event=>trace(`config:${event.detail.config.bar.paint?.solid_fill}`));
+  const sync=el._syncPaintEditors.bind(el);
+  el._syncPaintEditors=(...args)=>{trace('sync:before');const result=sync(...args);trace('sync:after');return result;};
+ });
+ await d.commit(page,editor,()=>d.colorPicker(paint.locator('input[type="color"][data-paint-property="color"]'),'#4a9eff'));
+ const beforeEvents=await d.count(page);await pointerClick(page,checkbox);
+ await expect(checkbox).toBeChecked();expect(await d.count(page)).toBe(beforeEvents+1);
+ expect(d.read(await d.saved(page),'bar.paint')).toMatchObject({color:'#4a9eff',solid_fill:true});
+ const trace=await page.evaluate(()=>window.__paintSyncTrace);
+ const checkboxEvents=trace.filter(item=>item.name==='event'&&['bar-solid-fill','bar-color'].includes(item.target));
+ const index=(type,target='bar-solid-fill',phase='capture')=>trace.findIndex(item=>item.name==='event'&&item.type===type&&item.phase===phase&&item.target===target);
+ expect(index('input','bar-color')).toBeLessThan(index('change','bar-color'));
+ expect(index('change','bar-color')).toBeLessThan(index('pointerdown'));
+ expect(index('pointerdown')).toBeLessThan(index('focusout','bar-color'));
+ expect(index('focusout','bar-color')).toBeLessThan(index('pointerup'));
+ expect(index('pointerup')).toBeLessThan(index('click'));
+ expect(index('click')).toBeLessThan(index('input'));
+ expect(index('input')).toBeLessThan(index('change'));
+ const clickIndex=index('click'),inputIndex=index('input');
+ expect(trace.slice(clickIndex+1,inputIndex).some(item=>item.name==='sync:before')).toBe(false);
+ const changeBubble=index('change','bar-solid-fill','bubble'),lastSync=trace.map((item,i)=>item.name==='sync:after'?i:-1).filter(i=>i>=0).at(-1);
+ expect(lastSync).toBeGreaterThan(changeBubble);
+ expect(checkboxEvents.filter(item=>item.target==='bar-solid-fill').every(item=>item.same&&item.connected)).toBe(true);
+ expect(trace.filter((item,i)=>i>index('pointerdown')&&item.name.startsWith('config:')).map(item=>item.name)).toEqual(['config:true']);
+ expect(trace.filter(item=>item.name==='config:true')).toHaveLength(1);
+});
+
+for(const source of ['src','dist'])for(const [host,scope] of [['standalone','root'],['standalone','entity'],['feature','root']])test(`${host} ${scope} Solid Fill stays synchronized across Paint destinations (${source})`,async({page})=>{
+ const config=paintCaseConfig(host),editor=await d.mount(page,host,config,{source});
+ for(const destination of paintDestinationNames){
+  const paint=await openPaintDestination(editor,scope,destination),checkbox=paint.locator('[data-paint-property="solid_fill"]');
+  const path=paintPath(scope,destination),beforeColor=await d.count(page);
+  await d.commit(page,editor,()=>d.colorPicker(paint.locator('input[type="color"][data-paint-property="color"]'),'#4a9eff'));
+  expect(await d.count(page)).toBe(beforeColor+1);
+  const beforeOn=await d.count(page);await pointerClick(page,checkbox);await expect(checkbox).toBeChecked();
+  expect(await d.count(page)).toBe(beforeOn+1);
+  await expectPaintState(page,editor,host,path,'#4a9eff',true);
+
+  const reset=await d.saved(page);setTestPath(reset,`${path}.color`,'red');setTestPath(reset,`${path}.solid_fill`,true);
+  await d.foreign(editor,reset);
+  const fallback=paint.locator('input[data-css-color="true"][data-paint-property="color"]');
+  await expect(fallback).toHaveValue('red');
+  const beforeCss=await d.count(page);
+  await d.commit(page,editor,()=>fallback.fill('rgb(12, 34, 56)'));
+  expect(await d.count(page)).toBe(beforeCss+1);
+  const beforeOff=await d.count(page);await pointerClick(page,checkbox);await expect(checkbox).not.toBeChecked();
+  expect(await d.count(page)).toBe(beforeOff+1);
+  await expectPaintState(page,editor,host,path,'rgb(12, 34, 56)',false);
+  await fallback.fill('not-a-color');await expect(fallback).toHaveAttribute('aria-invalid','true');
+  const invalidEvents=await d.count(page);await pointerClick(page,checkbox);await expect(checkbox).toBeChecked();
+  expect(await d.count(page)).toBe(invalidEvents+1);
+  await expectPaintState(page,editor,host,path,'rgb(12, 34, 56)',true);
+  await expect(fallback).toHaveValue('not-a-color');await expect(fallback).toHaveAttribute('aria-invalid','true');
+
+  if(destination==='target-below'){
+   await checkbox.focus();let beforeKey=await d.count(page);
+   await page.keyboard.press('Space');await expect(checkbox).not.toBeChecked();expect(await d.count(page)).toBe(beforeKey+1);
+   await expectPaintState(page,editor,host,path,'rgb(12, 34, 56)',false);
+   beforeKey=await d.count(page);await page.keyboard.press('Space');await expect(checkbox).toBeChecked();expect(await d.count(page)).toBe(beforeKey+1);
+   await expectPaintState(page,editor,host,path,'rgb(12, 34, 56)',true);
+  }
+ }
+});
+
 test('standalone: editing inherited Severity into entity grouped Segments keeps percent coordinates',async({page})=>{
  const severity=[{from:0,to:100,color:'red'}];
  const editor=await d.mount(page,'standalone',{type:'custom:sensor-bar-card-plus',scale:{min:0,max:200},severity,
