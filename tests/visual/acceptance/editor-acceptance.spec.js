@@ -10,6 +10,23 @@ async function refs(editor) {await d.openDisclosure(editor.locator('#card-group-
 async function nearby(control,nested=false) {
  expect(await control.evaluate((el,nested)=>{const rect=el.getBoundingClientRect(),container=document.querySelector('#mount').getBoundingClientRect();return rect.bottom>(nested?container.top:0)&&rect.top<(nested?container.bottom:innerHeight);},nested)).toBe(true);
 }
+async function pointerClick(page,target) {
+ await target.scrollIntoViewIfNeeded();
+ await target.evaluate(button=>{
+  window.__segmentPointerLog=[];window.__segmentPendingTarget=button;
+  button.addEventListener('pointerdown',()=>window.__segmentPointerLog.push('pointerdown'),{once:true});
+  button.addEventListener('click',()=>window.__segmentPointerLog.push('click'),{once:true});
+ });
+ const before=await target.boundingBox();expect(before).not.toBeNull();
+ await page.mouse.move(before.x+before.width/2,before.y+before.height/2);
+ await page.mouse.down();
+ const after=await target.boundingBox();expect(after).not.toBeNull();
+ expect(Math.abs(after.x-before.x)).toBeLessThan(0.5);
+ expect(Math.abs(after.y-before.y)).toBeLessThan(0.5);
+ expect(await target.evaluate(button=>button.isConnected&&button===window.__segmentPendingTarget)).toBe(true);
+ await page.mouse.up();
+ expect(await page.evaluate(()=>window.__segmentPointerLog)).toEqual(['pointerdown','click']);
+}
 for(const source of ['src','dist'])test(`feature: Target edits retain Baseline disclosure clicks and values (${source})`,async({page})=>{
  const editor=await d.mount(page,'feature',d.seed('feature'),source==='dist'?{source:'dist'}:{});
  await d.openDisclosure(editor.locator('#card-group-marker-target'));
@@ -292,6 +309,161 @@ for(const host of hosts)for(const scope of host==='standalone'?['root','entity']
   const autoConfig=d.seed(host);await d.foreign(editor,autoConfig);await openPalette();const to=palette.locator('[data-kind="segment-to"]').last();await d.commit(page,editor,async()=>{await to.fill('90%');await to.press('Tab');});expect(d.read(await d.saved(page),configPath).at(-1).to).toBe('90%');await d.commit(page,editor,async()=>{await to.fill('');await to.press('Tab');});expect(d.read(await d.saved(page),configPath).at(-1).to).toBeUndefined();await d.reopen(page,editor);await openPalette();await expect(palette.locator('[data-kind="segment-to"]').last()).toHaveValue('');
  }
  expect((await d.saved(page)).future).toEqual(original.future);
+});
+
+for(const source of ['src','dist'])for(const [host,scope] of [['standalone','root'],['standalone','entity'],['feature','root']])test(`${host} ${scope} Segment Add pointer remains stable after Start, End and Color edits (${source})`,async({page})=>{
+ const config=d.seed(host),entity=scope==='entity',paint=entity?config.entities[0].bar:config.bar;
+ paint.fill_style='bands';paint.color='red';paint.segments=[{from:10,to:15,color:'#112233'},{from:40,to:60,color:'#445566'}];
+ const editor=await d.mount(page,host,config,{source});
+ await d.openSection(editor,{section:'Segments',scope:entity?'entity':'root'});
+ const prefix=entity?'entity-':'',idPrefix=entity?'entity-0-':'',index=entity?'[data-index="0"]':'';
+ const palette=editor.locator(entity?'#entity-0-group-segments':'#card-group-segments').locator('xpath=..');
+ const kind=name=>palette.locator(`input[data-kind="${prefix}segment-${name}"]${index}`).first();
+ const add=palette.locator(`button[data-action="add-${prefix}segment"]${index}`);
+ const path=entity?'entities.0.bar.segments':'bar.segments';
+ const rows=[{from:10,to:15,color:'#112233'},{from:40,to:60,color:'#445566'}];
+ const scenarios=[
+  {name:'Start',from:'20',to:'40',color:'#aabbcc',last:'from'},
+  {name:'End',from:'65',to:'70',color:'#c0ffee',last:'to'},
+  {name:'Color',from:'80',to:'90',color:'#def456',last:'color'},
+ ];
+ for(const scenario of scenarios){
+  const from=kind('draft-from'),to=kind('draft-to'),color=kind('draft-color');
+  if(scenario.last==='from'){
+   await to.fill(scenario.to);await d.colorPicker(color,scenario.color);await from.fill(scenario.from);
+  }else if(scenario.last==='to'){
+   await from.fill(scenario.from);await d.colorPicker(color,scenario.color);await to.fill(scenario.to);
+  }else{
+   await from.fill(scenario.from);await to.fill(scenario.to);await d.colorPicker(color,scenario.color);
+  }
+  await expect(add).toBeEnabled();
+  const beforeEvents=await d.count(page);
+  await pointerClick(page,add);
+  await expect.poll(()=>d.count(page)).toBe(beforeEvents+1);
+  rows.push({from:Number(scenario.from),to:Number(scenario.to),color:scenario.color});
+  if(host!=='feature')rows.sort((left,right)=>left.from-right.from);
+  expect(d.read(await d.saved(page),path)).toEqual(rows);
+  await d.echo(page,editor);
+  expect(await palette.locator(`input[data-kind="${prefix}segment-from"]${index}`).evaluateAll(nodes=>nodes.map(node=>node.value)))
+   .toEqual(rows.map(row=>String(row.from)));
+ }
+ // Repeat an Add after the pointer sequence and verify it emits exactly once.
+ const beforeEvents=await d.count(page),from=kind('draft-from'),to=kind('draft-to'),color=kind('draft-color');
+ await from.fill('95');await to.fill('99');await d.colorPicker(color,'#123abc');
+ await pointerClick(page,add);
+ await expect.poll(()=>d.count(page)).toBe(beforeEvents+1);
+ rows.push({from:95,to:99,color:'#123abc'});if(host!=='feature')rows.sort((left,right)=>left.from-right.from);
+ expect(d.read(await d.saved(page),path)).toEqual(rows);
+});
+
+for(const source of ['src','dist'])test(`Card Segment Add remains stable for touch pointer clicks (${source})`,async({browser})=>{
+ const context=await browser.newContext({hasTouch:true,baseURL:'http://127.0.0.1:4173',viewport:{width:900,height:720}});
+ try{
+  const page=await context.newPage(),config=d.seed('standalone');
+  config.bar.fill_style='bands';config.bar.color='red';config.bar.segments=[{from:10,to:15,color:'#112233'},{from:40,to:60,color:'#445566'}];
+  const editor=await d.mount(page,'standalone',config,{source});await d.openSection(editor,{section:'Segments'});
+  const palette=editor.locator('#card-group-segments').locator('xpath=..');
+  const from=palette.locator('#segment-draft-from'),to=palette.locator('#segment-draft-to');
+  const css=palette.locator('#segment-draft-color-text-fallback'),add=palette.locator('button[data-action="add-segment"]');
+  await from.fill('20');await to.fill('40');await css.fill('#aabbcc');
+  await add.evaluate(button=>{
+   window.__segmentPointerLog=[];window.__segmentPendingTarget=button;
+   button.addEventListener('pointerdown',event=>{window.__segmentPointerLog.push(`down:${event.pointerType}`);window.__segmentDownY=button.getBoundingClientRect().y;window.__segmentStableAtUp=false;});
+   button.addEventListener('pointerup',event=>{window.__segmentPointerLog.push(`up:${event.pointerType}`);window.__segmentStableAtUp=button.isConnected&&button===window.__segmentPendingTarget&&Math.abs(button.getBoundingClientRect().y-window.__segmentDownY)<0.5;});
+   button.addEventListener('click',event=>window.__segmentPointerLog.push(`click:${event.pointerType}`));
+  });
+  await add.scrollIntoViewIfNeeded();const box=await add.boundingBox();
+  const events=await d.count(page);
+  await page.touchscreen.tap(box.x+box.width/2,box.y+box.height/2);
+  const pointerLog=await page.evaluate(()=>window.__segmentPointerLog);
+  expect(pointerLog.slice(0,2)).toEqual(['down:touch','up:touch']);
+  expect(['click:touch','click:mouse']).toContain(pointerLog[2]);
+  expect(pointerLog).toHaveLength(3);
+  expect(await page.evaluate(()=>window.__segmentStableAtUp)).toBe(true);
+  await expect.poll(()=>d.count(page)).toBe(events+1);
+  expect(d.read(await d.saved(page),'bar.segments')).toEqual([
+   {from:10,to:15,color:'#112233'},{from:20,to:40,color:'#aabbcc'},{from:40,to:60,color:'#445566'},
+  ]);
+ }finally{await context.close();}
+});
+
+for(const source of ['src','dist'])for(const [host,scope] of [['standalone','root'],['standalone','entity'],['feature','root']])test(`${host} ${scope} Segment CSS draft remains editable through pointer Add (${source})`,async({page})=>{
+ const config=d.seed(host),entity=scope==='entity',paint=entity?config.entities[0].bar:config.bar;
+ paint.fill_style='bands';paint.color='red';paint.segments=[{from:10,to:15,color:'#112233'},{from:40,to:60,color:'#445566'}];
+ const editor=await d.mount(page,host,config,{source});
+ await d.openSection(editor,{section:'Segments',scope:entity?'entity':'root'});
+ const prefix=entity?'entity-':'',index=entity?'[data-index="0"]':'';
+ const palette=editor.locator(entity?'#entity-0-group-segments':'#card-group-segments').locator('xpath=..');
+ const kind=name=>palette.locator(`input[data-kind="${prefix}segment-${name}"]${index}`).first();
+ const add=palette.locator(`button[data-action="add-${prefix}segment"]${index}`);
+ const from=kind('draft-from'),to=kind('draft-to'),css=kind('draft-color-text-fallback');
+ await from.fill('20');await to.fill('40');await css.fill('#aabbcc');await expect(css).toBeVisible();await expect(add).toBeEnabled();
+ const events=await d.count(page);
+ await pointerClick(page,add);
+ await expect.poll(()=>d.count(page)).toBe(events+1);
+ const path=entity?'entities.0.bar.segments':'bar.segments';
+ expect(d.read(await d.saved(page),path)).toEqual(host==='feature' ? [
+  {from:10,to:15,color:'#112233'},{from:40,to:60,color:'#445566'},{from:20,to:40,color:'#aabbcc'},
+ ] : [
+  {from:10,to:15,color:'#112233'},{from:20,to:40,color:'#aabbcc'},{from:40,to:60,color:'#445566'},
+ ]);
+ await expect(kind('draft-color-text-fallback')).toHaveValue('red');
+});
+
+for(const source of ['src','dist'])for(const [host,scope] of [['standalone','root'],['standalone','entity'],['feature','root']])test(`${host} ${scope} Segment edit, delete, gap insertion, validation and keyboard Add (${source})`,async({page})=>{
+ const config=d.seed(host),entity=scope==='entity',paint=entity?config.entities[0].bar:config.bar;
+ paint.fill_style='bands';paint.color='red';paint.segments=[{from:10,to:15,color:'#112233'},{from:40,to:60,color:'#445566'},{from:70,to:80,color:'#778899'}];
+ const editor=await d.mount(page,host,config,{source});
+ await d.openSection(editor,{section:'Segments',scope:entity?'entity':'root'});
+ const prefix=entity?'entity-':'',index=entity?'[data-index="0"]':'',idPrefix=entity?'entity-0-':'';
+ const palette=editor.locator(entity?'#entity-0-group-segments':'#card-group-segments').locator('xpath=..');
+ const path=entity?'entities.0.bar.segments':'bar.segments';
+ const rows=()=>palette.locator('.segment-editor-row');
+ const edit=palette.locator(`input[data-kind="${prefix}segment-from"]${index}`).first();
+ const remove=palette.locator(`button[data-action="remove-${prefix}segment"]${index}`).last();
+ const changesBefore=await d.count(page);
+ await edit.fill('11');
+ await pointerClick(page,remove);
+ await expect.poll(()=>d.count(page)).toBe(changesBefore+2);
+ const edits=await page.evaluate(({start,path})=>window.__acceptance.events.slice(start).map(event=>structuredClone(path.split('.').reduce((value,key)=>value?.[key],event))),{start:changesBefore,path});
+ expect(edits[0]).toEqual([{from:11,to:15,color:'#112233'},{from:40,to:60,color:'#445566'},{from:70,to:80,color:'#778899'}]);
+ expect(edits[1]).toEqual([{from:11,to:15,color:'#112233'},{from:40,to:60,color:'#445566'}]);
+ expect(d.read(await d.saved(page),path)).toEqual([{from:11,to:15,color:'#112233'},{from:40,to:60,color:'#445566'}]);
+ await d.echo(page,editor);
+ const gap=palette.locator(`button.segment-undefined-action[data-action="add-${prefix}segment-from-undefined"]${index}`).first();
+ await expect(gap).toHaveAttribute('data-from','15');await expect(gap).toHaveAttribute('data-to','40');
+ const afterDelete=await d.count(page);
+ await pointerClick(page,gap);
+ expect(await d.count(page)).toBe(afterDelete);
+ await expect(palette.locator(`#${idPrefix}segment-draft-from`)).toHaveValue('15');
+ await expect(palette.locator(`#${idPrefix}segment-draft-to`)).toHaveValue('40');
+ const color=palette.locator(`input[data-kind="${prefix}segment-draft-color"]${index}`).first();
+ await d.colorPicker(color,'#aabbcc');
+ const beforeAdd=await d.count(page);
+ await pointerClick(page,palette.locator(`button[data-action="add-${prefix}segment"]${index}`));
+ await expect.poll(()=>d.count(page)).toBe(beforeAdd+1);
+ expect(d.read(await d.saved(page),path)).toEqual([
+  {from:11,to:15,color:'#112233'},{from:15,to:40,color:'#aabbcc'},{from:40,to:60,color:'#445566'},
+ ]);
+ await d.echo(page,editor);
+ const draftFrom=palette.locator(`#${idPrefix}segment-draft-from`),draftTo=palette.locator(`#${idPrefix}segment-draft-to`);
+ const add=palette.locator(`button[data-action="add-${prefix}segment"]${index}`);
+ const invalidEvents=await d.count(page);
+ await draftFrom.fill(host==='feature'?'':'65');await draftTo.fill('');
+ await expect(add).toBeDisabled();
+ await expect(palette.locator(`#${idPrefix}segment-draft-hint`)).toHaveText(host==='feature'?'Enter a start value to add a segment.':'Enter valid from/to values.');
+ expect(await d.count(page)).toBe(invalidEvents);
+ await draftFrom.fill('35');await draftTo.fill('50');
+ await expect(add).toBeDisabled();
+ await expect(palette.locator(`#${idPrefix}segment-draft-hint`)).toContainText('overlap');
+ expect(await d.count(page)).toBe(invalidEvents);
+ await draftFrom.fill('65');await draftTo.fill('70');
+ await d.colorPicker(color,'#fedcba');
+ await draftFrom.press('Enter');
+ await expect.poll(()=>d.count(page)).toBe(invalidEvents+1);
+ expect(d.read(await d.saved(page),path)).toEqual([
+  {from:11,to:15,color:'#112233'},{from:15,to:40,color:'#aabbcc'},{from:40,to:60,color:'#445566'},{from:65,to:70,color:'#fedcba'},
+ ]);
 });
 
 for (const source of ['src', 'dist']) for (const [host, scope] of [['standalone', 'root'], ['standalone', 'entity'], ['feature', 'root']]) {

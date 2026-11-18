@@ -4,6 +4,61 @@ import { readBarPaintProperty } from './bar-paint-bindings.js';
 import { serializeConfig, cloneDeep } from './editor-config.js';
 
 let paletteGeneration = 0;
+const trackedPointerDocuments = new WeakSet();
+const pendingPalettePointerSyncs = new WeakMap();
+
+// Track only an active primary-pointer transaction. It lasts through the
+// browser's click dispatch and carries any palette syncs requested by blur.
+export function trackPalettePointerSync(root) {
+  const document = root?.ownerDocument;
+  if (!document?.addEventListener || trackedPointerDocuments.has(document)) return;
+  trackedPointerDocuments.add(document);
+  document.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    const previous = pendingPalettePointerSyncs.get(document);
+    previous?.cleanup();
+    const transaction = { callbacks: [], cleanup: null };
+    const finish = () => {
+      if (pendingPalettePointerSyncs.get(document) !== transaction) return;
+      transaction.cleanup();
+      pendingPalettePointerSyncs.delete(document);
+      for (const synchronize of transaction.callbacks) synchronize();
+    };
+    transaction.cleanup = () => {
+      document.removeEventListener('click', finish);
+      document.removeEventListener('pointercancel', finish);
+    };
+    if (previous) transaction.callbacks.push(...previous.callbacks);
+    pendingPalettePointerSyncs.set(document, transaction);
+    document.addEventListener('click', finish);
+    document.addEventListener('pointercancel', finish);
+  }, true);
+}
+
+// A focusout triggered by pointerdown is followed by a click on the same target.
+// Keep palette synchronization until that click has been dispatched so an
+// in-place control update cannot move the target out from under the pointer.
+export function deferPaletteSyncUntilClick(eventOrTarget, synchronize, root) {
+  if (typeof synchronize !== 'function') return false;
+  const event = eventOrTarget?.target ? eventOrTarget : null;
+  const target = event?.relatedTarget ?? eventOrTarget;
+  const document = event?.target?.ownerDocument ?? root?.ownerDocument ?? target?.ownerDocument;
+  if (!document?.addEventListener) return false;
+  const transaction = pendingPalettePointerSyncs.get(document);
+  if (transaction) {
+    transaction.callbacks.push(synchronize);
+    return true;
+  }
+  if (!target?.isConnected || !target.matches?.(':active')) return false;
+  const finish = () => {
+    document.removeEventListener('click', finish);
+    document.removeEventListener('pointercancel', finish);
+    synchronize();
+  };
+  document.addEventListener('click', finish, { once: true });
+  document.addEventListener('pointercancel', finish, { once: true });
+  return true;
+}
 
 export class PaletteRowSession {
   constructor() {
@@ -195,7 +250,7 @@ export class PaletteSection {
           this.syncRows?.(scope);
           return true;
         }
-        write(rows().filter((_, i) => i !== index), { rerender: true, ...(segment ? { sort: true } : {}) }, { type: 'remove', index });
+        write(rows().filter((_, i) => i !== index), { rerender: true, paletteAction: true, ...(segment ? { sort: true } : {}) }, { type: 'remove', index });
       }
       return true;
     }
@@ -229,7 +284,10 @@ export class PaletteSection {
       return true;
     }
     if (draft) {
-      if (segment) this._setSegmentDraftField(scope, field, value);
+      if (segment) {
+        this._setSegmentDraftField(scope, field, value);
+        if (field === 'color' && target?.type === 'color') this._syncSegmentDraftControls?.(scope);
+      }
       else this._setGradientStopsDraftField(scope, field, value);
       return true;
     }
@@ -252,7 +310,7 @@ export class PaletteSection {
       const session = this._getPaletteSession(scope, current);
       const row = target.closest?.(segment ? '.segment-editor-row' : '.gradient-stop-row');
       if (row) row.dataset.paletteGeneration = String(session.generation);
-      write(next, segment ? { sort: false } : {}, { type: 'edit', index, field: 'color', value });
+      write(next, segment ? { sort: false, paletteSource: target } : { paletteSource: target }, { type: 'edit', index, field: 'color', value });
     }
     return true;
   }

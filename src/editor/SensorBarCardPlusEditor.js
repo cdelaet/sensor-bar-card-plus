@@ -15,6 +15,7 @@ import {
 import { editorStyles } from './shared/editor-styles.js';
 import { renderCardGroup, renderMarkersSection } from './shared/editor-disclosures.js';
 import { NumericInputDrafts } from './shared/editor-numeric-drafts.js';
+import { deferPaletteSyncUntilClick, trackPalettePointerSync } from './shared/palette-section.js';
 import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
 
 import {
@@ -98,7 +99,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     super();
     this.attachShadow({ mode: 'open' });
     this._segmentsSection = new SegmentsSection(this._createSectionContext(), this._paletteUi({ paint: true }), {
-      write: (scope, rows, options) => this._setScopedSegments(scope, rows, options),
+      write: (scope, rows, options, operation) => this._setScopedSegments(scope, rows,
+        { ...options, paletteEdit: true, paletteAction: options?.paletteAction ?? operation?.type !== 'edit' }, operation),
     });
     this._gradientStopsSection = new GradientStopsSection(this._createSectionContext(), this._paletteUi({ paint: true }), {
       write: (scope, rows, options) => this._setScopedGradientStops(scope, rows, options),
@@ -678,7 +680,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._refreshCardDerivedUi();
     this._refreshEntityDerivedUi();
     this._syncActionSelectors();
-    this._syncPaintEditors(options);
+    const syncPaintEditors = () => this._syncPaintEditors(options);
+    const pointerTarget = options.paletteEdit && !options.paletteAction
+      ? this.shadowRoot.querySelector(':active') : null;
+    if (pointerTarget !== options.paletteSource && deferPaletteSyncUntilClick(null, syncPaintEditors, this.shadowRoot)) return;
+    syncPaintEditors();
   }
 
   _refreshCardDerivedUi() {
@@ -3937,6 +3943,7 @@ ${this._renderFormattingSection({ type: 'card' })}
 
   _bindShadowListeners() {
     if (!this.shadowRoot || this._shadowListenersAttached) return;
+    trackPalettePointerSync(this.shadowRoot);
     this.shadowRoot.addEventListener('click', this._boundHandleClick);
     this.shadowRoot.addEventListener('change', this._boundHandleChange);
     this.shadowRoot.addEventListener('input', this._boundHandleInput);
@@ -3945,7 +3952,8 @@ ${this._renderFormattingSection({ type: 'card' })}
     this.shadowRoot.addEventListener('focusout', event => {
       if (event.target?.type === 'color' || event.target?.dataset?.cssColor === 'true'
         || /^(?:entity-)?(?:segment|gradient)-/.test(event.target?.dataset?.kind ?? '')) {
-        queueMicrotask(() => this._syncPaintEditors());
+        const synchronize = () => this._syncPaintEditors();
+        if (!deferPaletteSyncUntilClick(event, synchronize, this.shadowRoot)) queueMicrotask(synchronize);
       }
     });
     this._shadowListenersAttached = true;

@@ -786,10 +786,11 @@ export class SegmentsSection extends PaletteSection {
       ? [...committedSegments.slice(0, draftState.insertIndex), draftSegment, ...committedSegments.slice(draftState.insertIndex)]
       : this._sortSegmentsForEditor([...committedSegments, draftSegment]);
     const applied = this._setScopedSegments(scope, nextSegments,
-      { rerender: true, ...(hasPreparedPosition ? { sort: false } : {}) },
+      { rerender: true, paletteAction: true, ...(hasPreparedPosition ? { sort: false } : {}) },
       { type: 'add', ...(hasPreparedPosition ? { index: draftState.insertIndex } : {}), item: draftSegment });
     if (applied !== false) {
       this._segmentDrafts.set(this._getSegmentsScopeKey(scope), this._createSegmentDraftState(scope));
+      this.syncRows?.(scope);
     }
     return applied;
   }
@@ -828,7 +829,7 @@ export class SegmentsSection extends PaletteSection {
     const session = this._getPaletteSession(scope, currentSegments);
     const row = inputEl?.closest?.('.segment-editor-row');
     if (row) row.dataset.paletteGeneration = String(session.generation);
-    const applied = this._setScopedSegments(scope, nextSegments, { rerender: true }, { type: 'edit', index: segmentIndex, field, value: nextValue });
+    const applied = this._setScopedSegments(scope, nextSegments, { rerender: false, paletteSource: inputEl }, { type: 'edit', index: segmentIndex, field, value: nextValue });
     if (applied !== false && nextSegments[segmentIndex]) {
       const row = inputEl?.closest?.('.segment-editor-row');
       if (row) row.dataset.paletteIndex = String(segmentIndex);

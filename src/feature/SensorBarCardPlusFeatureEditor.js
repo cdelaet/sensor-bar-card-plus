@@ -8,6 +8,7 @@ import {
 import { editorStyles } from '../editor/shared/editor-styles.js';
 import { renderCardGroup, renderMarkersSection } from '../editor/shared/editor-disclosures.js';
 import { NumericInputDrafts } from '../editor/shared/editor-numeric-drafts.js';
+import { deferPaletteSyncUntilClick, trackPalettePointerSync } from '../editor/shared/palette-section.js';
 import { renderScaleSection, handleScaleField } from '../editor/sections/scale.js';
 import { getDirectionSelection } from '../editor/shared/direction-control.js';
 import {
@@ -42,6 +43,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
+    trackPalettePointerSync(this.shadowRoot);
     this._config = {};
     this._context = {};
     this._chooseEntity = false;
@@ -131,7 +133,11 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       // after a button loses focus can move WebKit's pending click target.
       const kind = event.target?.dataset?.kind ?? '';
       const targetSource = /^(?:target-(?:above-|below-)?entity-source|entity-target-(?:above-|below-)?entity-source)$/.test(kind);
-      if (!targetSource && event.target?.matches?.('input, select, ha-entity-picker, ha-entity-attribute-picker')) this._requestRender();
+      if (targetSource || !event.target?.matches?.('input, select, ha-entity-picker, ha-entity-attribute-picker')) return;
+      if (/^(?:entity-)?(?:segment|gradient)-/.test(kind)) {
+        const synchronize = () => this._syncControls();
+        if (!deferPaletteSyncUntilClick(event, synchronize, this.shadowRoot)) queueMicrotask(synchronize);
+      } else this._requestRender();
     });
     // HA may load its picker after the editor. No polling or global observers.
     customElements.whenDefined('ha-entity-picker').then(() => {
@@ -269,6 +275,11 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._config = next;
     this._forceTargetSync = options.forceTargetSyncScope?.type === 'card';
     if (options.syncTargetControls) this._syncTargetControls();
+    else if (options.paletteEdit) {
+      const synchronize = () => this._syncControls();
+      const pointerTarget = options.paletteAction ? null : this.shadowRoot?.querySelector(':active');
+      if (pointerTarget !== options.paletteSource && !deferPaletteSyncUntilClick(null, synchronize, this.shadowRoot)) synchronize();
+    }
     else this._requestRender();
     this.dispatchEvent(new CustomEvent('config-changed', {
       bubbles: true, composed: true, detail: { config: cloneDeep(next) },
@@ -326,7 +337,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     if (this._referenceMarkersSection.handleField({ target, kind, value })) return;
     if (this._segmentsSection.handle(event) || this._gradientStopsSection.handle(event)
       || this._handleBaselinePaletteEvent(event) || this._handleTargetPaletteEvent(event)) {
-      if (event.type !== 'input') this._requestRender();
       return;
     }
     if (handlePaintPresetControl(this._createSectionContext(), target, value, { eventType: event.type })) return;
