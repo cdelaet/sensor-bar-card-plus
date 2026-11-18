@@ -903,6 +903,43 @@ for(const source of ['src','dist'])for(const [host,scope] of [['standalone','roo
  }
 });
 
+// Checkbox follow-up is covered across every Paint destination above. Exercise
+// the other immediate pointer/selection paths through real editor controls.
+for(const source of ['src','dist'])for(const [host,scope,followup] of [
+ ['standalone','root','button'],['standalone','entity','dropdown'],['feature','root','disclosure'],
+])test(`${host} ${scope} Paint color edit followed immediately by ${followup} (${source})`,async({page})=>{
+ const config=paintCaseConfig(host),editor=await d.mount(page,host,config,{source});
+ const paint=await openPaintDestination(editor,scope,'bar'),path=paintPath(scope,'bar');
+ const fallback=paint.locator('input[data-css-color="true"][data-paint-property="color"]');
+ await expect(fallback).toHaveValue('red');
+ const beforeColor=await d.count(page);
+ await fallback.fill('rgb(12, 34, 56)');
+ await expect.poll(()=>d.count(page)).toBe(beforeColor+1);
+ await expectPaintState(page,editor,host,path,'rgb(12, 34, 56)',false);
+
+ const beforeFollowup=await d.count(page);
+ if(followup==='button'){
+  const clear=paint.locator('button[data-action="clear-paint-property"][data-property="color"]');
+  await pointerClick(page,clear);
+  await expect.poll(()=>d.count(page)).toBe(beforeFollowup+1);
+  const saved=await d.saved(page),paintConfig=d.read(saved,path);
+  expect(paintConfig.color).toBeUndefined();expect(paintConfig.solid_fill).toBe(false);
+ }else if(followup==='dropdown'){
+  const fillStyle=paint.locator('[data-paint-property="fill_style"]');
+  await fillStyle.selectOption('solid');
+  await expect(fillStyle).toHaveValue('solid');
+  await expect.poll(()=>d.count(page)).toBe(beforeFollowup+1);
+  await expectPaintState(page,editor,host,path,'rgb(12, 34, 56)',false);
+  expect(d.read(await d.saved(page),path).fill_style).toBe('solid');
+ }else{
+  const group=editor.locator('#card-group-segments');
+  await d.openDisclosure(group);
+  await expect(group).toHaveAttribute('aria-expanded','true');
+  expect(await d.count(page)).toBe(beforeFollowup);
+  await expectPaintState(page,editor,host,path,'rgb(12, 34, 56)',false);
+ }
+});
+
 test('standalone: editing inherited Severity into entity grouped Segments keeps percent coordinates',async({page})=>{
  const severity=[{from:0,to:100,color:'red'}];
  const editor=await d.mount(page,'standalone',{type:'custom:sensor-bar-card-plus',scale:{min:0,max:200},severity,
