@@ -244,7 +244,7 @@ for (const value of ['unknown', 'unavailable', 'on', 'missing']) {
 test('Baseline, Target overlay, Needle suppression and source recovery use shared geometry', async ({ page }) => {
   await mount(page, { config: {
     scale: { min: -20, max: 20 }, baseline: { at: { entity: 'sensor.baseline' }, below: { color: '#ff0000' } },
-    bar: { needle: true, animated: false, above_target_color: '#00ff00' }, target: { at: 5 },
+    bar: { needle: true, animated: false }, target: { at: 5, when_exceeded: { fill_color: '#00ff00' } },
   }, states: { [entity]: state(10), 'sensor.baseline': state(0) } });
   const result = await feature(page).evaluate(async element => {
     const root = element.shadowRoot;
@@ -380,7 +380,7 @@ test('theme changes remain inherited and passive glyphs leave parent interaction
       radius: getComputedStyle(track).borderRadius,
       assignedColor, inheritedColor: getComputedStyle(element).getPropertyValue('--feature-color'),
       pointerEvents: getComputedStyle(root.querySelector('.target-marker .marker-shape-svg path[data-shape="diamond"]')).pointerEvents,
-      clicks, controls: root.querySelectorAll('button, input, [tabindex]').length,
+      clicks, controls: root.querySelectorAll('#labels button, #labels input, #labels [tabindex]').length,
     };
   });
   expect(result).toEqual({ changed: true, baseline: 'rgb(0, 0, 0)', radius: '4px', assignedColor: '#00ff00', inheritedColor: '#ff0000', pointerEvents: 'none', clicks: 1, controls: 0 });

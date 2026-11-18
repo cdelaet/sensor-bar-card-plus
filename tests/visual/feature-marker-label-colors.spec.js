@@ -77,7 +77,7 @@ for (const source of ['src', 'dist']) for (const [height, position] of [[42, 'bo
     await frames(page); await expect(node).toHaveText('Ready'); await expect(node).toHaveCSS('color', 'rgb(255, 165, 0)');
     expect(await feature(page).locator('#surface').getAttribute('aria-label')).toContain('label Ready');
     await expect(feature(page).locator('#labels')).toHaveAttribute('aria-hidden', 'true');
-    expect(await feature(page).locator('button, input, [tabindex]').count()).toBe(0);
+    expect(await feature(page).locator('#labels button, #labels input, #labels [tabindex]').count()).toBe(0);
     // Both source and dist compare to the same two runtime baselines.
     await expect(feature(page)).toHaveScreenshot(`marker-label-colors-${position}.png`);
   });

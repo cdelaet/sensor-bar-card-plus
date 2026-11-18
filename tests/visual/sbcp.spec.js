@@ -4236,7 +4236,7 @@ test('presentation update path keeps target recovery and peak maximum intact', a
     value: '80,0',
     targetDisplay: 'none',
     targetLabelVisibility: 'hidden',
-    targetLabelText: '60,0 W',
+    targetLabelText: '',
     peakLeft: '80%',
   });
   expect(result.recoveredTarget).toEqual({

@@ -35,11 +35,13 @@ async function mount(page, source, host) {
 }
 
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Entity', 'Feature']) {
-  test(`${host} Needle checkbox keeps scope, control identity, focus and scroll (${source})`, async ({ page }) => {
+  test(`${host} Needle checkbox keeps scope, control identity, focus and scroll (${source})`, async ({ page, browserName }) => {
     const editor = await mount(page, source, host);
     if (host === 'Entity') {
       const overrides = editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]');
       if (await overrides.getAttribute('aria-expanded') === 'false') await overrides.click();
+      const bar = editor.locator('#entity-0-group-bar');
+      if (await bar.getAttribute('aria-expanded') === 'false') await bar.click();
     }
     if (host !== 'Feature') {
       const group = editor.locator(host === 'Entity' ? '#entity-0-group-needle' : '#card-group-needle');
@@ -50,8 +52,19 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Entity', 'Fea
     await checkbox.scrollIntoViewIfNeeded();
     await checkbox.evaluate(node => { window.__needleCheckboxNode = node; });
     const initialScroll = await page.evaluate(() => window.__needleCheckboxFrame.scrollTop);
+    const setNeedleState = async checked => {
+      if (browserName === 'webkit') {
+        // WebKit pointer activation doesn't focus native checkboxes; use the
+        // keyboard path when asserting the focus-preserving interaction.
+        await checkbox.focus();
+        await page.keyboard.press('Space');
+      } else {
+        await checkbox.setChecked(checked);
+      }
+      await expect(checkbox).toBeChecked({ checked });
+    };
 
-    await checkbox.check();
+    await setNeedleState(true);
     await expect(checkbox).toBeFocused();
     expect(await checkbox.evaluate(node => node === window.__needleCheckboxNode)).toBe(true);
     await expect.poll(() => page.evaluate(() => window.__needleCheckboxConfig)).toMatchObject(host === 'Entity'
@@ -64,11 +77,11 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Entity', 'Fea
       await inherit.check();
       await expect(checkbox).toBeChecked();
       expect((await page.evaluate(() => window.__needleCheckboxConfig)).entities[0].bar).toBeUndefined();
-      await checkbox.uncheck();
+      await setNeedleState(false);
       expect((await page.evaluate(() => window.__needleCheckboxConfig)).entities[0].bar.needle).toEqual({ show: false });
       expect((await page.evaluate(() => window.__needleCheckboxConfig)).bar.needle).toEqual({ show: true, color: '#d02070' });
     } else {
-      await checkbox.uncheck();
+      await setNeedleState(false);
       await expect(checkbox).toBeFocused();
       if (host === 'Card') expect((await page.evaluate(() => window.__needleCheckboxConfig)).bar?.needle).toBeUndefined();
       else expect((await page.evaluate(() => window.__needleCheckboxConfig)).bar.needle).toEqual({ show: false, color: '#123456' });

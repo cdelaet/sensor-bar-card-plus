@@ -1,20 +1,26 @@
 const { expandFeatureGroups } = require('./feature-editor-test-utils.cjs');
 const {test,expect}=require('@playwright/test');
 const type='custom:sensor-bar-card-plus-feature';
-async function mount(page,source,width=240){
+async function mount(page,source,width=240,{cssInputs=false}={}){
  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
- await page.evaluate(async({width,type})=>{
+ await page.evaluate(async({width,type,cssInputs})=>{
   await customElements.whenDefined('sensor-bar-card-plus-feature');
   const editor=await customElements.get('sensor-bar-card-plus-feature').getConfigElement();
   const config={type,future:{keep:true,unset:undefined},scale:{min:0,max:100},bar:{animated:false,fill_style:'band_gradient',color:'#123456',solid_fill:false,needle:{show:true,color:'#abcdef',future:true},segments:[{from:0,color:'var(--success-color)',future:{keep:true}},{from:50,color:'orange',future:{keep:true}},{from:80,color:'red',future:{keep:true}}],gradient_stops:[{pos:0,color:'#123456'},{pos:100,color:'#abcdef'}],future:{keep:true}},
    baseline:{at:{percent:35,future:{keep:true}},above:{color:'var(--success-color)'},below:{color:'rgb(100, 0, 0)'},future:{keep:true}},
    target:{at:'75%',shape:'triangle',direction:'outward',color:'#abcdef',label:{show:true,text:'Limit',precision:1},when_exceeded:{fill_color:'red'},future:{keep:true}},
    peak:{enabled:true,window:'today',color:'red'},floor:{enabled:true,color:'blue'},markers:[{at:'25%',color:'#abc',show_marker:false,label:{show:true,entity:'sensor.label'},future:{keep:true}}],formatting:{unit:'W'}};
+  if(cssInputs){
+   config.bar.color='red';config.bar.needle.color='blue';
+   config.baseline.above.paint={enabled:false,color:'green'};config.baseline.below.paint={enabled:false,color:'orange'};
+   config.target.color='purple';config.target.when_above={paint:{enabled:false,color:'green'}};config.target.when_below={paint:{enabled:false,color:'orange'}};
+   config.peak.color='purple';config.floor.color='orange';config.markers[0].color='orange';
+  }
   window.__capabilityEvents=[];window.__capabilityOriginal=structuredClone(config);
   editor.addEventListener('config-changed',e=>{window.__capabilityEvents.push(structuredClone(e.detail.config));editor.setConfig(e.detail.config);});
   editor.setConfig(config);editor.context={entity_id:'sensor.parent'};editor.hass={states:{}};
   const host=document.querySelector('#mount');host.style.width=`${width}px`;host.style.setProperty('--success-color','green');host.append(editor);await editor.updateComplete;
- },{width,type});const editor=page.locator('sensor-bar-card-plus-feature-editor');await expandFeatureGroups(editor);return editor;
+ },{width,type,cssInputs});const editor=page.locator('sensor-bar-card-plus-feature-editor');await expandFeatureGroups(editor);return editor;
 }
 const saved=editor=>editor.evaluate(el=>structuredClone(el._config));
 const section=(editor,page,name)=>editor.locator('.section').filter({has:page.getByRole('heading',{name,exact:true})});
@@ -61,11 +67,12 @@ for(const source of ['src','dist'])for(const key of ['target','baseline'])test(`
  await editor.evaluate(async(el,key)=>{el.setConfig({type:'custom:sensor-bar-card-plus-feature',[key]:{at:'0%'}});await el.updateComplete;},key);await expect(value).toHaveValue('0%');
 });
 for(const source of ['src','dist'])test(`Feature CSS colors ${source}: all direct controls, raw text, keyboard, replacement and Gradient Stop boundary`,async({page})=>{
- const editor=await mount(page,source);await editor.locator('.generic-marker-toggle').click();
+ const editor=await mount(page,source,240,{cssInputs:true});await editor.locator('.generic-marker-toggle').click();
  for(const side of ['above','below'])await editor.locator(`#baseline-${side}-paint-editor > summary`).click();
+ await editor.locator('#baseline-above-paint-enabled').check();await editor.locator('#baseline-below-paint-enabled').check();
  await editor.locator('#card-group-target-above').click();await editor.locator('#target-above-paint-editor > summary').click();
  await editor.locator('#card-group-target-below').click();await editor.locator('#target-below-paint-editor > summary').click();
- await editor.locator('#target-below-paint-enabled').check();
+ await editor.locator('#target-above-paint-enabled').check();await editor.locator('#target-below-paint-enabled').check();
  const ids=['bar-color','bar-needle-color','baseline-above-paint-color','baseline-below-paint-color','target-color','target-above-paint-color','target-below-paint-color','peak-color','floor-color','card-card-generic-marker-1-color'];
  for(const id of ids){
   const control=editor.locator(`#${id}-text-fallback`);expect(await control.getAttribute('aria-label')).toContain('CSS value');
@@ -79,7 +86,7 @@ for(const source of ['src','dist'])test(`Feature CSS colors ${source}: all direc
  expect((await saved(editor)).bar.gradient_stops).toEqual(before.bar.gradient_stops);
 });
 for(const source of ['src','dist'])test(`Feature automatic Segment draft ${source}: CSS validation, add/remove, ordering and echo`,async({page})=>{
- const editor=await mount(page,source),original=await saved(editor);
+ const editor=await mount(page,source,240,{cssInputs:true}),original=await saved(editor);
  await editor.locator('#segment-draft-from').fill('90');await editor.locator('#segment-draft-to').fill('');await editor.locator('#segment-draft-color-text-fallback').fill('var(');
  const add=editor.locator('#card-paint-editor [data-action="add-segment"]');await expect(add).toBeDisabled();expect(await page.evaluate(()=>window.__capabilityEvents.length)).toBe(0);
  await editor.evaluate(async el=>{el.setConfig(el._config);el.hass={states:{}};await el.updateComplete;});await expect(editor.locator('#segment-draft-color-text-fallback')).toHaveValue('var(');
