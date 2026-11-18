@@ -166,7 +166,7 @@ export function clearDestinationProperty(context, scope, destination, property) 
 export function setDestinationProperty(context, scope, destination, property, rawValue, options = {}) {
   if (!PAINT_PROPERTIES.includes(property)) return false;
   let value = rawValue;
-  if (property === 'color') value = normalizeEditorColorValue(rawValue, options.cssText) || undefined;
+  if (property === 'color') value = normalizeEditorColorValue(rawValue) || undefined;
   if (property === 'fill_style') value = String(rawValue ?? '').trim() || undefined;
   if (property === 'solid_fill') value = !!rawValue;
   if (property === 'opacity') {

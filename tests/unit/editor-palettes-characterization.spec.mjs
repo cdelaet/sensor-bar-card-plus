@@ -28,7 +28,7 @@ for (const source of ['src', 'dist']) describe(`standalone palette characterizat
     expect(editor._getSegmentDraftState(row).from).toBe('20%');
     editor._commitGradientStopPosEdit(root, 0, '10%');
     expect(editor._draftConfig.bar.gradient_stops).toEqual([
-      { pos: 10, color: '#abcdef' }, { pos: 80, color: 'red', extra: { keep: true } },
+      { pos: 10, color: '#abcdef' }, { pos: 80, color: ' red ', extra: { keep: true } },
     ]);
   });
 

@@ -112,7 +112,7 @@ for(const source of ['src','dist']) describe(`Feature capability closure (${sour
  });
  const colors=[['bar-color-text-fallback',['bar','color']],['bar-needle-color-text-fallback',['bar','needle','color']],['baseline-above-paint-color-text-fallback',['baseline','above','paint','color']],['baseline-below-paint-color-text-fallback',['baseline','below','paint','color']],['target-color-text-fallback',['target','color']],['target-above-paint-color-text-fallback',['target','when_above','paint','color']],['target-below-paint-color-text-fallback',['target','when_below','paint','color']],['peak-color-text-fallback',['peak','color']],['floor-color-text-fallback',['floor','color']],['card-card-generic-marker-1-color-text-fallback',['markers',0,'color']]];
  for(const [id,path] of colors)it(`${id} accepts direct CSS text verbatim, patches one path and retains invalid drafts`,async()=>{
-  const config=raw(),{editor,events,calls}=await setup(source,config);
+  const config=expectedAt(raw(),path,'var(--original-color)'),{editor,events,calls}=await setup(source,config);
   for(const color of ['#123456','#abc','red','rgb(1, 2, 3)','var(--warning-color)','  rgba(1, 2, 3, .5)  ']){
    await edit(editor,`#${id}`,color);const expected=expectedAt(config,path,color);if(id.startsWith('baseline-'))delete expected.baseline[path[1]].color;if(id.startsWith('target-above-paint'))delete expected.target.when_exceeded.fill_color;expect(editor._config).toEqual(expected);
   }
@@ -120,10 +120,10 @@ for(const source of ['src','dist']) describe(`Feature capability closure (${sour
   expect(editor._config).toEqual(saved);expect(events).toHaveLength(count);expect(editor.shadowRoot.querySelector(`#${id}`).value).toBe('var(');expect(calls).toContainEqual(['color','var(']);
  });
  it('Segment CSS drafts stay local through echo and reset on replacement, while hex Gradient Stops do not gain CSS entry',async()=>{
-  const {editor,events}=await setup(source);const control=editor.shadowRoot.querySelector('#segment-color-0-text-fallback');
+  const config=raw();config.bar.color='var(--base-color)';const {editor,events}=await setup(source,config);const control=editor.shadowRoot.querySelector('#segment-color-0-text-fallback');
   await edit(editor,'#segment-color-0-text-fallback','rgb(');expect(events).toHaveLength(0);editor.hass={states:{}};await editor.updateComplete;expect(editor.shadowRoot.querySelector('#segment-color-0-text-fallback')).toBe(control);expect(control.value).toBe('rgb(');
   await edit(editor,'#segment-draft-color-text-fallback','bogus');expect(editor._segmentsSection._getValidSegmentDraft(root)).toBeNull();
-  editor.setConfig({type,bar:{fill_style:'bands',segments:[{from:0,color:'blue'}]}});await editor.updateComplete;expect(editor.shadowRoot.querySelector('#segment-color-0-text-fallback').value).toBe('blue');expect(editor._cssColorDrafts.size).toBe(0);
+  editor.setConfig({type,bar:{fill_style:'bands',segments:[{from:0,color:'blue'}]}});await editor.updateComplete;expect(editor.shadowRoot.querySelector('#segment-color-0-text-fallback')?.value).toBe('blue');expect(editor._cssColorDrafts.size).toBe(0);
   await edit(editor,'#bar-fill-style','gradient','change');expect(editor.shadowRoot.innerHTML).not.toContain('data-kind="gradient-color-text-fallback"');expect(editor.shadowRoot.innerHTML).not.toContain('data-kind="gradient-draft-color-text-fallback"');
  });
 });

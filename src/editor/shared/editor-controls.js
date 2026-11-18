@@ -139,9 +139,59 @@ export function getColorPickerValue(value, fallbackHex = '#000000') {
   return expandHexColor(value) ?? expandHexColor(fallbackHex) ?? '#000000';
 }
 
-export function normalizeEditorColorValue(value, preserveText = false) {
+export function normalizeEditorColorValue(value) {
   const text = normalizeTextValue(value);
-  return preserveText && text.trim() ? text : text.trim();
+  return text.trim() ? text : '';
+}
+
+export function isValidCssColor(value, css = globalThis.CSS) {
+  const text = normalizeTextValue(value).trim();
+  if (!text) return true;
+  return typeof css?.supports === 'function' && css.supports('color', text);
+}
+
+export function syncColorInput(root, id, value, fallbackHex = '#000000', cssColorDrafts) {
+  const picker = root?.getElementById?.(id) ?? root?.querySelector?.(`#${id}`);
+  if (!picker || picker.type !== 'color') return;
+  const activeElement = root.activeElement ?? root.getRootNode?.().activeElement;
+
+  const rawValue = normalizeTextValue(value);
+  const needsText = !!rawValue.trim() && !isHexColorValue(rawValue);
+  const grid = picker.closest?.('.field-grid') ?? picker.parentElement;
+  let text = grid?.querySelector?.('input[data-css-color="true"]');
+  const extraDataset = Object.fromEntries(Object.entries(picker.dataset ?? {})
+    .filter(([key]) => !['field', 'kind', 'index'].includes(key))
+    .map(([key, entry]) => [key.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`), entry]));
+
+  picker.value = getColorPickerValue(rawValue, fallbackHex);
+  if (needsText && !text && picker.ownerDocument) {
+    const template = picker.ownerDocument.createElement('template');
+    template.innerHTML = renderColorInput({ id, field: picker.dataset.field, kind: picker.dataset.kind,
+      index: picker.dataset.index, value: rawValue, fallbackHex, extraDataset });
+    text = template.content.querySelector('input[data-css-color="true"]');
+    if (text) picker.after(text);
+  } else if (!needsText && text && activeElement !== text) {
+    if (typeof text.remove === 'function') text.remove();
+    else text.parentNode?.removeChild?.(text);
+    text = null;
+  }
+
+  if (text) {
+    const draft = cssColorDrafts?.get?.(text.id);
+    if (draft !== undefined) text.value = draft;
+    else if (activeElement !== text) text.value = rawValue;
+  }
+}
+
+export function syncCssColorDrafts(root, cssColorDrafts) {
+  for (const control of root?.querySelectorAll?.('input[data-css-color="true"]') ?? []) {
+    const draft = cssColorDrafts?.get?.(control.id);
+    if (draft !== undefined) control.value = draft;
+    control.setAttribute('aria-invalid', draft === undefined ? 'false' : 'true');
+    control.setCustomValidity?.(draft === undefined ? '' : 'Enter a valid CSS color.');
+    const inputLabel = root.querySelector?.(`#${control.id.replace(/-text-fallback$/, '')}`)?.labels?.[0]?.textContent;
+    if (inputLabel) control.setAttribute('aria-label', `${inputLabel} (CSS value)`);
+  }
 }
 
 export function normalizeScalePercentageInput(value) {
@@ -195,8 +245,8 @@ export function renderMarkerPercentageControls(key, mode, percent) {
     </div>`;
 }
 
-export function renderColorInput({ id, field = null, kind = null, index = null, value = '', fallbackHex = '#000000', placeholder = '', extraDataset = {}, cssText = false, label = 'Color' }) {
-  const controlValue = normalizeTextValue(value).trim();
+export function renderColorInput({ id, field = null, kind = null, index = null, value = '', fallbackHex = '#000000', placeholder = '', extraDataset = {}, label = 'Color' }) {
+  const controlValue = normalizeTextValue(value);
   const pickerValue = getColorPickerValue(controlValue, fallbackHex);
   const extraAttrs = Object.entries(extraDataset)
     .map(([key, entry]) => `data-${key}="${escapeAttribute(entry)}"`)
@@ -211,8 +261,8 @@ export function renderColorInput({ id, field = null, kind = null, index = null, 
   return `
       <div class="field-grid">
         <input id="${id}" type="color" ${baseAttrs} value="${escapeAttribute(pickerValue)}">
-        ${cssText || controlValue && !isHexColorValue(controlValue)
-          ? `<input${cssText ? ` id="${id}-text-fallback" data-css-color="true" aria-label="${escapeAttribute(label)} (CSS value)"` : ''} type="text" ${fallbackAttrs} value="${escapeAttribute(cssText ? value : controlValue)}" placeholder="${escapeAttribute(placeholder || 'CSS color value')}">`
+        ${controlValue.trim() && !isHexColorValue(controlValue)
+          ? `<input id="${id}-text-fallback" data-css-color="true" aria-label="${escapeAttribute(label)} (CSS value)" type="text" ${fallbackAttrs} value="${escapeAttribute(controlValue)}" placeholder="${escapeAttribute(placeholder || 'CSS color value')}">`
           : ''
         }
       </div>

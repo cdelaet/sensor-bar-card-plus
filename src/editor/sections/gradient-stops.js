@@ -1,6 +1,6 @@
 import { parsePercentLiteral } from '../../config/normalize.js';
 import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumberValue } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, getColorPickerValue } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, normalizeEditorColorValue, isValidCssColor, syncColorInput } from '../shared/editor-controls.js';
 import { PaletteRowSession, PaletteSection } from '../shared/palette-section.js';
 import { getDefaultPaintGradientStops } from '../shared/paint-editor-paint.js';
 
@@ -61,7 +61,7 @@ export class GradientStopsSection extends PaletteSection {
           return null;
         }
         const pos = this._normalizeGradientStopPosValue(stop.pos);
-        const color = normalizeTextValue(stop.color).trim();
+        const color = normalizeEditorColorValue(stop.color);
         if (pos === null || !color) {
           return null;
         }
@@ -219,7 +219,7 @@ export class GradientStopsSection extends PaletteSection {
   _setGradientStopsDraftField(scope, field, rawValue) {
     const currentDraft = this._getGradientStopsDraftState(scope);
     const nextValue = field === 'color'
-      ? normalizeTextValue(rawValue).trim()
+      ? normalizeEditorColorValue(rawValue)
       : normalizeTextValue(rawValue);
     this._setGradientStopsDraftState(scope, {
       ...currentDraft,
@@ -231,7 +231,7 @@ export class GradientStopsSection extends PaletteSection {
     const draft = this._getGradientStopsDraftState(scope);
     const pos = this._normalizeGradientStopPosValue(draft.pos);
     const color = normalizeTextValue(draft.color).trim();
-    if (pos === null || !color) {
+    if (pos === null || !color || !isValidCssColor(color)) {
       return null;
     }
     return { pos, color };
@@ -267,6 +267,7 @@ export class GradientStopsSection extends PaletteSection {
     if (!normalizedColor) {
       return 'Choose a color to add a stop.';
     }
+    if (!isValidCssColor(draft.color)) return 'Enter a valid CSS color.';
     if (this._hasGradientStopDuplicate(scope, this._normalizeGradientStopPosValue(draft.pos))) {
       return 'Position already exists.';
     }
@@ -552,7 +553,16 @@ export class GradientStopsSection extends PaletteSection {
     this._syncPaletteActivity(scope, 'gradient-stops', this.fillStyle(scope) === 'gradient', this._getGradientStopsSummary(scope));
     if (this._getPaletteRoot(scope)?.ownerDocument) this._refreshGradientDraftUi(scope);
     if (changed) this._syncGradientDraftControls(scope);
+    this._syncGradientColorInputs(scope, rows);
     return changed;
+  }
+
+  _syncGradientColorInputs(scope, rows = this._getScopedGradientStopsValue(scope) ?? []) {
+    const prefix = scope?.type === 'entity' ? `entity-${scope.index}-` : '';
+    const root = this._getPaletteRoot(scope);
+    rows.forEach((stop, index) => syncColorInput(root, `${prefix}gradient-color-${index}`,
+      stop?.color ?? '#4a9eff', '#4CAF50'));
+    syncColorInput(root, `${prefix}gradient-draft-color`, this._getGradientStopsDraftState(scope).color, '#4CAF50');
   }
 
   _syncGradientDraftControls(scope) {
@@ -561,11 +571,7 @@ export class GradientStopsSection extends PaletteSection {
     const draft = this._getGradientStopsDraftState(scope);
     const position = this._getShadowElementById(`${prefix}gradient-draft-pos`, scope);
     if (position) position.value = draft.pos;
-    const kind = entity ? 'entity-gradient-draft-color' : 'gradient-draft-color';
-    const container = position?.closest?.('.gradient-stop-draft');
-    for (const control of container?.querySelectorAll?.(`input[data-kind="${kind}"], input[data-kind="${kind}-text-fallback"]`) ?? []) {
-      control.value = control.type === 'color' ? getColorPickerValue(draft.color, '#4CAF50') : draft.color;
-    }
+    syncColorInput(this._getPaletteRoot(scope), `${prefix}gradient-draft-color`, draft.color, '#4CAF50');
   }
 
   render(scope = { type: 'card' }, renderGroup = ({ content }) => content, { section = true } = {}) {

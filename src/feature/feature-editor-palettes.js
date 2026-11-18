@@ -34,7 +34,6 @@ export function createFeaturePaletteArray(context, kind, destination = BAR_PAINT
     destination,
     patchOnly: true,
     autoEnds: kind === 'segments',
-    cssText: kind === 'segments',
     segmentSpace: () => {
       const config = context.read({ type: 'card' }, []);
       const path = palettePath(context, config, kind, destination);

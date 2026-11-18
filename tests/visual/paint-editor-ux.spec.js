@@ -131,3 +131,112 @@ for (const source of ['src', 'dist']) for (const destination of ['Card', 'Entity
     }
   });
 }
+
+for (const source of ['src', 'dist']) for (const destination of ['Card', 'Entity', 'Feature']) {
+  test(`${destination} consolidates CSS color controls across reopen and picker edits (${source})`, async ({ page }) => {
+    await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
+    const tag = destination === 'Feature' ? 'sensor-bar-card-plus-feature-editor' : 'sensor-bar-card-plus-editor';
+    await page.evaluate(async destination => {
+      const feature = destination === 'Feature';
+      const registration = customElements.get(feature ? 'sensor-bar-card-plus-feature' : 'sensor-bar-card-plus');
+      const editor = await registration.getConfigElement();
+      const paint = { fill_style: 'gradient', color: 'var(--initial-color)',
+        segments: [{ from: 0, color: 'var(--segment-color)' }, { from: 50, color: '#abc' }],
+        gradient_stops: [{ pos: 0, color: 'rgb(1, 2, 3)' }, { pos: 100, color: '#123456' }] };
+      const config = feature ? { type: 'custom:sensor-bar-card-plus-feature', bar: { paint } }
+        : destination === 'Entity'
+          ? { bar: { paint: { fill_style: 'gradient', color: '#112233' } },
+            entities: [{ entity: 'sensor.power', bar: { paint } }] }
+          : { bar: { paint }, entities: ['sensor.power'] };
+      window.__universalColorEvents = [];
+      document.querySelector('#mount').addEventListener('config-changed', event => {
+        window.__universalColorEvents.push(structuredClone(event.detail.config));
+        event.target.setConfig(event.detail.config);
+      });
+      editor.setConfig(config);
+      if (feature) editor.context = { entity_id: 'sensor.power' };
+      editor.hass = { states: {} };
+      document.querySelector('#mount').append(editor);
+      await editor.updateComplete;
+    }, destination);
+    let editor = page.locator(tag);
+    if (destination === 'Entity') {
+      await editor.locator('[data-action="toggle-entity-overrides"]').first().click();
+      const bar = editor.locator('#entity-0-group-bar');
+      if (await bar.getAttribute('aria-expanded') === 'false') await bar.click();
+    }
+    const prefix = destination === 'Entity' ? 'entity-0' : 'card';
+    const colorId = destination === 'Entity' ? 'entity-0-bar-color' : 'bar-color';
+    let paint = editor.locator(`#${prefix}-paint-editor`);
+    await paint.locator(':scope > summary').click();
+    for (const group of ['segments', 'gradient-stops']) {
+      const toggle = paint.locator(`.override-group[data-group="${group}"] .override-group-toggle`);
+      if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
+    }
+    await expect(paint.locator(`#${colorId}`)).toHaveValue('#4a9eff');
+    await expect(paint.locator(`#${colorId}-text-fallback`)).toHaveValue('var(--initial-color)');
+    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}segment-color-1-text-fallback`)).toHaveCount(0);
+    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-1-text-fallback`)).toHaveCount(0);
+    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}segment-color-0-text-fallback`)).toHaveValue('var(--segment-color)');
+    const gradientColor = paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-0-text-fallback`);
+    await gradientColor.fill('rgb(4, 5, 6)');
+    const segmentColor = paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}segment-color-0-text-fallback`);
+    await segmentColor.fill('rgb(7, 8, 9)');
+    expect(await editor.evaluate((element, destination) => {
+      const config = element._config ?? element._draftConfig;
+      const paint = destination === 'Entity' ? config.entities[0].bar.paint : config.bar.paint;
+      return [paint.gradient_stops[0].color, paint.segments[0].color];
+    }, destination)).toEqual(['rgb(4, 5, 6)', 'rgb(7, 8, 9)']);
+    const barText = paint.locator(`#${colorId}-text-fallback`);
+    const beforeInvalid = await editor.evaluate(element => structuredClone(element._config ?? element._draftConfig));
+    await barText.fill('rgb(');
+    await expect(barText).toBeFocused();
+    await expect(barText).toHaveAttribute('aria-invalid', 'true');
+    expect(await editor.evaluate(() => window.__universalColorEvents.length)).toBe(2);
+    expect(await editor.evaluate(element => element._config ?? element._draftConfig)).toMatchObject(destination === 'Entity'
+      ? { entities: [{ bar: { paint: { color: 'var(--initial-color)' } } }] }
+      : { bar: { paint: { color: 'var(--initial-color)' } } });
+    expect(beforeInvalid).toBeTruthy();
+
+    await barText.fill('var(--saved-color)');
+    const saved = await editor.evaluate(element => structuredClone(element._config ?? element._draftConfig));
+    const selector = destination === 'Entity' ? ['entities', 0, 'bar', 'paint'] : ['bar', 'paint'];
+    expect(await editor.evaluate((element, path) => path.reduce((value, key) => value?.[key], element._config ?? element._draftConfig).color, selector)).toBe('var(--saved-color)');
+    expect(await editor.evaluate(() => window.__universalColorEvents.length)).toBe(3);
+
+    await editor.evaluate(async (oldEditor, { destination, saved }) => {
+      const feature = destination === 'Feature';
+      const registration = customElements.get(feature ? 'sensor-bar-card-plus-feature' : 'sensor-bar-card-plus');
+      const reopened = await registration.getConfigElement();
+      reopened.setConfig(saved);
+      if (feature) reopened.context = { entity_id: 'sensor.power' };
+      reopened.hass = { states: {} };
+      oldEditor.replaceWith(reopened);
+      await reopened.updateComplete;
+    }, { destination, saved });
+    editor = page.locator(tag);
+    if (destination === 'Entity') {
+      await editor.locator('[data-action="toggle-entity-overrides"]').first().click();
+      const bar = editor.locator('#entity-0-group-bar');
+      if (await bar.getAttribute('aria-expanded') === 'false') await bar.click();
+    }
+    paint = editor.locator(`#${prefix}-paint-editor`);
+    await paint.locator(':scope > summary').click();
+    for (const group of ['segments', 'gradient-stops']) {
+      const toggle = paint.locator(`.override-group[data-group="${group}"] .override-group-toggle`);
+      if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
+    }
+    const reopenedText = paint.locator(`#${colorId}-text-fallback`);
+    await expect(reopenedText).toHaveValue('var(--saved-color)');
+    const picker = paint.locator(`input[type="color"][data-paint-property="color"]`);
+    await picker.evaluate(input => {
+      input.value = '#778899';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await expect(reopenedText).toHaveCount(0);
+    expect(await editor.evaluate((element, path) => path.reduce((value, key) => value?.[key], element._config ?? element._draftConfig).color, selector)).toBe('#778899');
+    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}segment-color-1-text-fallback`)).toHaveCount(0);
+    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-1-text-fallback`)).toHaveCount(0);
+  });
+}

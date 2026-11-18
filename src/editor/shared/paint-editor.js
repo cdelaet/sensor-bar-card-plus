@@ -1,4 +1,4 @@
-import { escapeAttribute, getColorPickerValue, isHexColorValue, renderColorInput, renderScalePercentageInput } from './editor-controls.js';
+import { escapeAttribute, renderColorInput, renderScalePercentageInput, syncColorInput } from './editor-controls.js';
 import { renderPaintSwatch, syncPaintSwatch } from './paint-swatch.js';
 
 const styleNames = { solid: 'Solid', gradient: 'Gradient', bands: 'Bands', soft_bands: 'Soft bands', band_gradient: 'Band gradient' };
@@ -44,7 +44,7 @@ function renderPaletteFields(paletteFields, options) {
  * Native disclosure state survives host renders by reading the mounted node.
  */
 export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {}, inherited = false,
-  scale, previewScale = scale, fields = {}, root, paletteContent = '', paletteFields = null, cssText = false,
+  scale, previewScale = scale, fields = {}, root, paletteContent = '', paletteFields = null,
   presetReference, presetInherited = false, presetEntity = false, presetInheritedReference, presetOptions = [], overrides = {}, diagnostics = [], registryStatus = 'unknown',
   showPropertyMeta = true, bodyId = null, resetLabel, resetDisabled = true,
   sources = {}, activation = null, enabled = true, destination = 'bar' }) {
@@ -110,7 +110,7 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
           <input ${fieldAttributes(controls.solid_fill)} type="checkbox" data-paint-property="solid_fill"${paint.solid_fill ? ' checked' : ''}>
           <label for="${controls.solid_fill.id}">Solid fill</label>
         </div>${propertyHeader('solid_fill', 'Solid fill')}</div></div>
-        ${labelRow('color', 'Color', renderColorInput({ ...controls.color, value: paint.color, fallbackHex: '#4a9eff', cssText, label: 'Color', placeholder: 'CSS color value', extraDataset: { 'paint-property': 'color' } }))}
+        ${labelRow('color', 'Color', renderColorInput({ ...controls.color, value: paint.color, fallbackHex: '#4a9eff', label: 'Color', placeholder: 'CSS color value', extraDataset: { 'paint-property': 'color' } }))}
         ${labelRow('opacity', 'Opacity', renderScalePercentageInput(controls.opacity.id, `${fieldRoutingAttributes(controls.opacity)} data-paint-property="opacity"`, paint.opacity ?? 100))}
       </div>
       ${paintChildren}
@@ -163,24 +163,14 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
     if (root.activeElement !== presetControl) presetControl.value = state.presetInherited
       ? INHERITED_PAINT_PRESET_VALUE : activeReference;
   }
-  // Effective colors can acquire a CSS value without replacing the mounted picker.
   const picker = editor.querySelector?.('input[type="color"][data-paint-property="color"]');
-  if (picker?.ownerDocument && paint.color && !isHexColorValue(paint.color)
-    && !picker.parentElement.querySelector('input[type="text"]')) {
-    const template = picker.ownerDocument.createElement('template');
-    template.innerHTML = renderColorInput({ id: picker.id, field: picker.dataset.field, kind: picker.dataset.kind,
-      index: picker.dataset.index, value: paint.color, extraDataset: { 'paint-property': 'color' } });
-    picker.after(template.content.querySelector('input[type="text"]'));
-  }
+  if (picker) syncColorInput(editor, picker.id, paint.color, '#4a9eff', cssColorDrafts);
   for (const property of ['fill_style', 'color', 'solid_fill', 'opacity']) {
     for (const control of editor.querySelectorAll?.(`[data-paint-property="${property}"]`) ?? []) {
       if (control === root.activeElement || property === 'opacity' && numericDrafts?.values?.has(control.id)) continue;
       if (property === 'solid_fill') control.checked = !!paint.solid_fill;
       else if (property === 'fill_style') control.value = paint.fill_style ?? 'bands';
       else if (property === 'opacity') control.value = String(paint.opacity ?? 100);
-      else if (property === 'color' && !cssColorDrafts?.has?.(control.id)) {
-        control.value = control.type === 'color' ? getColorPickerValue(paint.color, '#4a9eff') : paint.color ?? '';
-      }
     }
   }
   const opacity = editor.querySelector?.('[data-paint-property="opacity"]');

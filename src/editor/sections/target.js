@@ -2,7 +2,7 @@ import { readResolvableSourceParts, updateResolvableSourceParts, writeResolvable
 import { getAuthoredSharedTargetSource, normalizeDirectionalTargets, normalizeTargetMarkerShape } from '../../config/normalize.js';
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue, removePathsFromTarget,
   pruneEmptyObjectsInTarget, normalizeDecimalValue, getEffectiveDisplayValue } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderBuiltinMarkerLabelControls, formatScaleValueInput, getColorPickerValue, isHexColorValue, renderEntityAttributeInput, getEntityAttributeSuggestions } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderBuiltinMarkerLabelControls, formatScaleValueInput, getColorPickerValue, renderEntityAttributeInput, getEntityAttributeSuggestions, syncColorInput } from '../shared/editor-controls.js';
 import { renderResolvableSourceControls } from '../shared/resolvable-source-controls.js';
 import { renderPaintEditor, syncPaintEditor, describePaint } from '../shared/paint-editor.js';
 import { renderCardGroup } from '../shared/editor-disclosures.js';
@@ -11,7 +11,7 @@ import { TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT } from '../../view-model/paint-d
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from '../shared/editor-marker-controls.js';
 
 export class TargetSection {
-  constructor(context, options = {}) { this.options = options; this.context = context; this._expandedGroups = new Set(); }
+  constructor(context) { this.context = context; this._expandedGroups = new Set(); }
 
   _getCardTargetMarkerSummary() {
     const mode = this._getTargetMode({ type: 'card' });
@@ -148,7 +148,7 @@ export class TargetSection {
   }
 
   _setTargetColor(scope, rawValue) {
-    const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
+    const normalizedValue = normalizeEditorColorValue(rawValue);
     if (!normalizedValue || normalizeColorComparisonValue(normalizedValue) === normalizeColorComparisonValue('#888')) {
       return this._remove(scope, ['target', 'color'], {
         deprecatedKeys: [['target_color']],
@@ -268,7 +268,7 @@ export class TargetSection {
     }, { ...options, targetEdit: { path: path.slice(1), value, deprecatedKeys: options.deprecatedKeys ?? [] } });
   }
   _remove(scope, path, options) { return this._write(scope, path, undefined, options); }
-  _setText(scope, path, rawValue, options) { return this._write(scope, path, normalizeEditorColorValue(rawValue, this.options.cssText) || undefined, options); }
+  _setText(scope, path, rawValue, options) { return this._write(scope, path, normalizeEditorColorValue(rawValue) || undefined, options); }
   _effectiveDisplay(scope, path, fallbacks) { return getEffectiveDisplayValue(this.context, scope, path, fallbacks); }
   _getEffectiveMarkerDirection(scope, key) { return getEffectiveMarkerDirection(this.context, scope, key); }
   _setMarkerDirection(scope, key, value) { return setMarkerDirection(this.context, scope, key, value); }
@@ -319,7 +319,7 @@ export class TargetSection {
     const path = this._directionalPropertyPath(field);
     if (field === 'shape') value = normalizeTargetMarkerShape(value);
     else if (field === 'direction') value = value === 'outward' ? 'outward' : 'inward';
-    else if (field === 'color') value = normalizeEditorColorValue(value, this.options.cssText) || undefined;
+    else if (field === 'color') value = normalizeEditorColorValue(value) || undefined;
     else if (field === 'label-precision') {
       const precision = normalizeDecimalValue(value);
       if (value !== '' && precision === null) return false;
@@ -338,7 +338,7 @@ export class TargetSection {
     const { source, marker } = this._directionalTargets(scope)[side];
     const appearance = `<div class="field-row"><label for="${id}-shape">Shape</label><select id="${id}-shape" ${field('shape')}>${['diamond', 'triangle'].map(shape => `<option value="${shape}">${shape}</option>`).join('')}</select></div>
       <div class="field-row"><label for="${id}-direction">Direction</label><select id="${id}-direction" ${field('direction')}><option value="inward">Inward</option><option value="outward">Outward</option></select></div>
-      <div class="field-row"><label for="${id}-color">Color</label>${renderColorInput({ cssText: this.options.cssText, id: `${id}-color`, value: marker.color, fallbackHex: '#888',
+      <div class="field-row"><label for="${id}-color">Color</label>${renderColorInput({ id: `${id}-color`, value: marker.color, fallbackHex: '#888',
         ...(scope.type === 'entity' ? { kind: `entity-target-${side}-color`, index: scope.index } : { field: `target-${side}-color` }) })}</div>`;
     const labels = `<div class="field-row"><div class="toggle"><input id="${id}-label-show" type="checkbox" ${field('label-show')}><label for="${id}-label-show">Show label</label></div></div>
       <div class="field-row"><label for="${id}-label-text">Label text</label><input id="${id}-label-text" type="text" ${field('label-text')}></div>
@@ -371,16 +371,7 @@ export class TargetSection {
     const values = { value: formatScaleValueInput(source), shape: marker.shape, direction: marker.direction,
       color: getColorPickerValue(marker.color, '#888'), 'color-text-fallback': marker.color,
       'label-text': marker.label_text, 'label-precision': marker.label_precision ?? marker.label_decimal };
-    const picker = group.querySelector(`#${id}-color`);
-    let colorText = picker?.parentElement.querySelector('input[type="text"]');
-    if (picker && !isHexColorValue(marker.color) && !colorText) {
-      const template = section.ownerDocument.createElement('template');
-      template.innerHTML = renderColorInput({ id: picker.id, field: picker.dataset.field, kind: picker.dataset.kind,
-        index: picker.dataset.index, value: marker.color });
-      colorText = template.content.querySelector('input[type="text"]');
-      picker.after(colorText);
-    }
-    if (colorText) colorText.id = `${id}-color-text-fallback`;
+    syncColorInput(group, `${id}-color`, marker.color, '#888', options.cssColorDrafts);
     for (const [field, value] of Object.entries(values)) syncValue(group.querySelector(`#${id}-${field}`), value);
     for (const [field, checked] of [['show', marker.enabled !== false], ['label-show', marker.show_label === true],
       ['label-show-value', marker.label_show_value !== false], ['label-show-unit', marker.label_show_unit !== false]]) {
@@ -541,16 +532,7 @@ export class TargetSection {
       direction: this._getEffectiveMarkerDirection(scope, 'target'), color: getColorPickerValue(color, '#888'),
       'color-text-fallback': color, 'label-text': labels.text, 'label-precision': labels.precision,
     };
-    const picker = section.querySelector(`#${prefix}target-color`);
-    let colorText = picker?.parentElement?.querySelector?.('input[type="text"]');
-    if (picker?.ownerDocument && !isHexColorValue(color) && !colorText) {
-      const template = picker.ownerDocument.createElement('template');
-      template.innerHTML = renderColorInput({ id: picker.id, field: picker.dataset.field, kind: picker.dataset.kind,
-        index: picker.dataset.index, value: color });
-      colorText = template.content.querySelector('input[type="text"]');
-      picker.after(colorText);
-    }
-    if (colorText) colorText.id = `${prefix}target-color-text-fallback`;
+    syncColorInput(section, `${prefix}target-color`, color, '#888', options.cssColorDrafts);
     for (const [field, value] of Object.entries(values)) {
       const control = section.querySelector(`#${prefix}target-${field}`);
       if (control && (control !== root.activeElement || options.replaced)
@@ -630,7 +612,7 @@ export class TargetSection {
       <div class="field-row"><label for="${prefix}target-direction">Direction</label><select id="${prefix}target-direction" ${field('direction')} value="${this._getEffectiveMarkerDirection(scope, 'target')}">
         ${['inward', 'outward'].map(direction => `<option value="${direction}"${direction === this._getEffectiveMarkerDirection(scope, 'target') ? ' selected' : ''}>${direction === 'inward' ? 'Inward' : 'Outward'}</option>`).join('')}
       </select></div>
-      <div class="field-row"><label for="${prefix}target-color">Target color</label>${renderColorInput({ cssText: this.options.cssText, label: 'Target color', id: `${prefix}target-color`,
+      <div class="field-row"><label for="${prefix}target-color">Target color</label>${renderColorInput({ label: 'Target color', id: `${prefix}target-color`,
         ...(entity ? { kind: 'entity-target-color', index: scope.index } : { field: 'target-color' }), value: this._getEffectiveTargetColorValue(scope), fallbackHex: '#888' })}</div>`;
     const shared = `<div class="target-shared-controls">
       ${entity ? `<div class="field-row"><div class="toggle"><input id="${prefix}target-inherit" type="checkbox" ${field('inherit')}${this._hasTargetOverride(scope) ? '' : ' checked'}><label for="${prefix}target-inherit">Inherit card settings</label></div></div>` : ''}
@@ -652,7 +634,7 @@ export class TargetSection {
       if (entity) fields.index = scope.index;
       return { state, markup: renderPaintEditor({ ...state, id: `${prefix}target-${direction}-paint-editor`, root: options.root,
         fields, activation: binding('enabled'), resetLabel: entity ? 'Reset to Card paint settings' : 'Reset to default paint settings',
-        cssText: this.options.cssText, paletteFields: state.enabled ? options.paintChildren?.(scope, direction) : null }) };
+        paletteFields: state.enabled ? options.paintChildren?.(scope, direction) : null }) };
     };
     const above = renderPaint('above', TARGET_ABOVE_PAINT);
     const below = renderPaint('below', TARGET_BELOW_PAINT);

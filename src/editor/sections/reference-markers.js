@@ -1,6 +1,6 @@
 import { normalizeMarkerDirection } from '../../config/normalize.js';
 import { cloneDeep, isObject, setPathValue, deletePathValue, normalizeTextValue } from '../shared/editor-config.js';
-import { escapeAttribute, getEntityAttributeSuggestions, normalizeEditorColorValue, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput, getColorPickerValue } from '../shared/editor-controls.js';
+import { escapeAttribute, getEntityAttributeSuggestions, normalizeEditorColorValue, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput, getColorPickerValue, syncColorInput } from '../shared/editor-controls.js';
 import { renderResolvableSourceControls } from '../shared/resolvable-source-controls.js';
 import { readResolvableSourceParts, updateResolvableSourceParts, writeResolvableSourceParts } from '../shared/resolvable-source.js';
 import { normalizeMarkerLabelField } from '../shared/editor-marker-controls.js';
@@ -57,8 +57,7 @@ export function getMarkerLabelSource(label = {}) {
 
 // Array semantics and local UI identity; hosts retain persistence/render policy.
 export class ReferenceMarkersSection {
-  constructor(context, ui, options = {}) {
-    this.options = options;
+  constructor(context, ui) {
     this.context = context;
     this.ui = ui;
     this._genericMarkerUiIds = new Map();
@@ -221,7 +220,7 @@ export class ReferenceMarkersSection {
           </div>
           <div class="field-row">
             <label for="${rowId}-color">Color</label>
-            ${renderColorInput({ cssText: this.options.cssText, label: 'Reference marker color',
+            ${renderColorInput({ label: 'Reference marker color',
               id: `${rowId}-color`,
               kind: 'generic-marker-color',
               index: scopeIndex,
@@ -399,7 +398,7 @@ export class ReferenceMarkersSection {
     let path, normalized;
     if (field === 'show-marker') { path = ['show_marker']; normalized = value === false ? false : undefined; }
     else if (['lane', 'shape', 'direction'].includes(field)) { path = [field]; normalized = field === 'direction' ? normalizeMarkerDirection(value) : value; }
-    else if (field === 'color') { path = ['color']; normalized = normalizeEditorColorValue(value, this.options.cssText); }
+    else if (field === 'color') { path = ['color']; normalized = normalizeEditorColorValue(value); }
     else if (field.startsWith('label-')) {
       const labelField = field.slice(6).replace('show-value', 'show_value').replace('show-unit', 'show_unit');
       if (!['show', 'text', 'entity', 'attribute', 'show_value', 'show_unit', 'precision'].includes(labelField)) return false;
@@ -538,7 +537,7 @@ export class ReferenceMarkersSection {
 
   // Hosts call this during their existing synchronization pass. It does not
   // replace nodes, observe DOM or persist display defaults.
-  syncControls(hass, replaced = false, scope = { type: 'card' }) {
+  syncControls(hass, replaced = false, scope = { type: 'card' }, options = {}) {
     const root = this.ui.root();
     const prefix = `${scope.type}-${scope.type === 'entity' ? scope.index : 'card'}-generic-`;
     if (!root) return;
@@ -552,6 +551,7 @@ export class ReferenceMarkersSection {
         color: getColorPickerValue(marker?.color, '#888888'), 'color-text-fallback': marker?.color ?? '#888888',
         'label-text': label.text ?? '', 'label-precision': label.precision ?? label.decimal ?? '',
       };
+      syncColorInput(root, `${prefix}${ids[index]}-color`, marker?.color ?? '#888888', '#888888', options.cssColorDrafts);
       for (const [field, value] of Object.entries(values)) {
         const control = root.querySelector(`#${prefix}${ids[index]}-${field}`);
         if (control && (control !== root.activeElement || replaced)) control.value = String(value);

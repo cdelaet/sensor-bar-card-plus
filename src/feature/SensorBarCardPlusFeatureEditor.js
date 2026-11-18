@@ -3,6 +3,7 @@ import {
 } from '../editor/shared/editor-config.js';
 import {
   escapeAttribute, formatScaleValueInput, renderEntitySourceInput, renderEntityAttributeInput, renderWindowOptions, getEntityAttributeSuggestions, getColorPickerValue,
+  isValidCssColor, syncColorInput, syncCssColorDrafts,
 } from '../editor/shared/editor-controls.js';
 import { editorStyles } from '../editor/shared/editor-styles.js';
 import { renderCardGroup, renderMarkersSection } from '../editor/shared/editor-disclosures.js';
@@ -53,11 +54,10 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._numericDrafts = new NumericInputDrafts();
     this._expandedCardGroups = new Set();
     const context = this._createSectionContext();
-    const options = { cssText: true };
-    this._needleSection = new NeedleSection(context, options);
-    this._baselineSection = new BaselineSection(context, options);
-    this._targetSection = new TargetSection(context, options);
-    this._extremaSection = new ExtremaSection(context, options);
+    this._needleSection = new NeedleSection(context);
+    this._baselineSection = new BaselineSection(context);
+    this._targetSection = new TargetSection(context);
+    this._extremaSection = new ExtremaSection(context);
     const ui = {
       root: () => this.shadowRoot,
       isRendering: () => this._isRendering,
@@ -65,7 +65,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       focus: (selector, _scope, options) => this._focusPaletteControl(selector, options),
       hass: () => this._hass,
     };
-    this._referenceMarkersSection = new ReferenceMarkersSection(context, { root: ui.root, render: () => this._requestRender() }, options);
+    this._referenceMarkersSection = new ReferenceMarkersSection(context, { root: ui.root, render: () => this._requestRender() });
     customElements.whenDefined('ha-entity-attribute-picker').then(() => {
       if (this.isConnected && this.shadowRoot.querySelector('input[data-kind$="-attribute"]')) this._requestRender();
     });
@@ -290,11 +290,11 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       : target?.type === 'checkbox' ? target.checked : target?.value;
     if (target?.type === 'color') this._cssColorDrafts.delete(`${target.id}-text-fallback`);
     if (target?.dataset?.cssColor === 'true') {
-      const valid = !value.trim() || CSS.supports('color', value);
+      const valid = isValidCssColor(value, target.ownerDocument?.defaultView?.CSS);
       target.setCustomValidity?.(valid ? '' : 'Enter a valid CSS color.');
       target.setAttribute('aria-invalid', valid ? 'false' : 'true');
       if (valid) this._cssColorDrafts.delete(target.id); else this._cssColorDrafts.set(target.id, value);
-      if (!valid && kind !== 'segment-draft-color') return;
+      if (!valid && !kind?.endsWith('-draft-color')) return;
     }
     if (field === 'feature-entity-override') {
       this._chooseEntity = !!value;
@@ -330,12 +330,12 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       return;
     }
     if (handlePaintPresetControl(this._createSectionContext(), target, value)) return;
-    if (handlePaintPropertyControl(this._createSectionContext(), target, value, { cssText: true })) return;
+    if (handlePaintPropertyControl(this._createSectionContext(), target, value)) return;
     if (this._needleSection.handleField({ field, kind, value }) || this._baselineSection.handleField({ field, kind, value }) || this._targetSection.handleField({ field, kind, value }) || this._extremaSection.handleField({ field, kind, value })) return;
     const context = this._createSectionContext();
     if (handleScaleField(context, { field, kind, value })) return;
     if (handleFormattingField(context, { field, kind, value })) return;
-    handleBarAppearanceField(context, { field, kind, value }, { animation: true, cssText: true });
+    handleBarAppearanceField(context, { field, kind, value }, { animation: true });
   }
 
   _entityDescription() {
@@ -496,7 +496,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
           paletteValues: (paintScope, direction) => ({ segments: this._baselinePaintSections[direction].segments._getScopedSegmentsValue(paintScope),
             gradient_stops: this._baselinePaintSections[direction].gradientStops._getScopedGradientStopsValue(paintScope) }),
           paintChildren: (paintScope, direction) => this._renderBaselinePaintPalette(paintScope, direction),
-        })}${this._needleSection.render(root)}`, { animation: true, cssText: true, root: this.shadowRoot, paintPresetRegistry: this._paintPresetRegistry,
+        })}${this._needleSection.render(root)}`, { animation: true, root: this.shadowRoot, paintPresetRegistry: this._paintPresetRegistry,
           paletteValues: { segments: segmentRows, gradient_stops: gradientRows },
           paintChildren: () => ({ segments: this._segmentsSection.render(root, options => this._renderCardGroup(options), { section: false }), gradient_stops: this._gradientStopsSection.render(root, options => this._renderCardGroup(options), { section: false }) }),
         })}
@@ -541,6 +541,12 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       segments: this._segmentsSection._getScopedSegmentsValue(root),
       gradient_stops: this._gradientStopsSection._getScopedGradientStopsValue(root),
     }, { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts, registry: this._paintPresetRegistry });
+    const needle = this._needleSection._getEffectiveScopedNeedleConfig(root);
+    syncColorInput(this.shadowRoot, 'bar-needle-color', needle.color, '#ffffff', this._cssColorDrafts);
+    for (const key of ['peak', 'floor']) {
+      const marker = { ...this._extremaSection._getMarkerConfig(root, key), ...this._extremaSection._getEffectiveMarkerExtras(root, key) };
+      syncColorInput(this.shadowRoot, `${key}-color`, marker.color, key === 'peak' ? '#888' : '#888888', this._cssColorDrafts);
+    }
     const baselinePaletteValues = Object.fromEntries(['above', 'below'].map(direction => [direction, {
       segments: this._baselinePaintSections[direction].segments._getScopedSegmentsValue(root),
       gradient_stops: this._baselinePaintSections[direction].gradientStops._getScopedGradientStopsValue(root),
@@ -625,7 +631,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         }
       }
     }
-    this._referenceMarkersSection.syncControls(this._hass, this._configReplaced);
+    this._referenceMarkersSection.syncControls(this._hass, this._configReplaced, root, { cssColorDrafts: this._cssColorDrafts });
     const solid = paletteRoot?.querySelector('#bar-solid-fill');
     if (solid) solid.checked = !!paintState.paint.solid_fill;
     const animated = this.shadowRoot.querySelector('#bar-animated');
@@ -683,14 +689,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     }
     this._syncDisclosures();
     this._numericDrafts.apply(this.shadowRoot);
-    for (const control of this.shadowRoot.querySelectorAll('input[data-css-color="true"]')) {
-      const draft = this._cssColorDrafts.get(control.id);
-      if (draft !== undefined) control.value = draft;
-      control.setAttribute('aria-invalid', draft === undefined ? 'false' : 'true');
-      control.setCustomValidity?.(draft === undefined ? '' : 'Enter a valid CSS color.');
-      const inputLabel = this.shadowRoot.querySelector(`#${control.id.replace(/-text-fallback$/, '')}`)?.labels?.[0]?.textContent;
-      if (inputLabel) control.setAttribute('aria-label', `${inputLabel} (CSS value)`);
-    }
+    syncCssColorDrafts(this.shadowRoot, this._cssColorDrafts);
   }
 
   _syncTargetControls() {

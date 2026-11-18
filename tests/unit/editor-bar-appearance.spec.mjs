@@ -136,7 +136,7 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     editor.setConfig(events.at(-1).detail.config);
     expect(editor.shadowRoot.querySelector('[data-field="bar-color-text-fallback"]')).toBe(control);
     expect(editor._draftConfig.color).toBeUndefined();
-    expect(editor._draftConfig.bar.color).toBe('var(--accent-color)');
+    expect(editor._draftConfig.bar.color).toBe(' var(--accent-color) ');
     expect(editor._getFillStyleValue()).toBe('solid');
     edit(editor, '[data-kind="entity-bar-color-text-fallback"]', 'blue');
     expect(editor._getEffectiveScopedBarColorValue(row)).toBe('blue');
@@ -372,7 +372,7 @@ describe('Bar Appearance with a root-only host context', () => {
     expect(handleBarAppearanceField(host.context, { field: 'bar-fill-style', value: ' gradient ' })).toBe(true);
     expect(handleBarAppearanceField(host.context, { field: 'bar-color', value: ' var(--accent-color) ' })).toBe(true);
     expect(handleBarAppearanceField(host.context, { field: 'bar-solid-fill', value: true })).toBe(true);
-    expect(host.config()).toEqual({ extra: { keep: true }, bar: { future: true, fill_style: 'gradient', color: 'var(--accent-color)', solid_fill: true } });
+    expect(host.config()).toEqual({ extra: { keep: true }, bar: { future: true, fill_style: 'gradient', color: ' var(--accent-color) ', solid_fill: true } });
     expect(getEffectiveBarSolidFillValue(host.context, root)).toBe(true);
     expect(getBarAppearanceSummary(host.context, root)).toBe('gradient • Custom color');
     expect(hasBarAppearanceOverride(host.context, root)).toBe(true);

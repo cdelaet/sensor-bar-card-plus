@@ -202,7 +202,6 @@ export function renderBarAppearanceSection(context, scope, renderChildren = () =
     resetLabel: entity ? 'Reset to Card paint settings' : 'Reset to default paint settings',
     resetDisabled: !hasLocalBarPaintConfiguration(context, scope),
     fields: { preset: field('paint-preset'), fill_style: field('fill-style'), color: field('color'), solid_fill: field('solid-fill'), opacity: field('opacity'), index },
-    cssText: options.cssText,
     ...(palette && typeof palette === 'object' ? { paletteFields: palette } : { paletteContent: palette }),
     paintChildren: palette,
   });
