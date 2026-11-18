@@ -13,18 +13,52 @@ export function trackPalettePointerSync(root) {
   const document = root?.ownerDocument;
   if (!document?.addEventListener || trackedPointerDocuments.has(document)) return;
   trackedPointerDocuments.add(document);
+  const activePointers = new Set();
   document.addEventListener('pointerdown', event => {
-    if (event.button !== 0) return;
+    if (event.button === 0 && event.pointerId !== undefined) activePointers.add(event.pointerId);
+  }, true);
+  document.addEventListener('pointerup', event => {
+    if (event.buttons === 0) activePointers.delete(event.pointerId);
+    const transaction = pendingPalettePointerSyncs.get(document);
+    if (transaction?.pointerId === event.pointerId && event.buttons === 0) transaction.pointerReleased = true;
+  }, true);
+  document.addEventListener('pointercancel', event => {
+    activePointers.delete(event.pointerId);
+    const transaction = pendingPalettePointerSyncs.get(document);
+    if (transaction?.pointerId === event.pointerId) transaction.finish();
+  }, true);
+  // Some real pointer sequences end without click or pointercancel (for example
+  // a multi-touch gesture). Clear that stale transaction before a later keyboard
+  // interaction can accidentally enqueue unrelated focusout synchronization.
+  document.addEventListener('keydown', () => {
+    const transaction = pendingPalettePointerSyncs.get(document);
+    if (transaction?.pointerReleased && activePointers.size === 0) transaction.finish();
+  }, true);
+  document.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || event.isPrimary === false) return;
     const previous = pendingPalettePointerSyncs.get(document);
+    // Do not let another pointer take ownership while this activation is still
+    // down. Its pointerup/cancel must not complete the original transaction.
+    if (previous && (!previous.pointerReleased || activePointers.size > 1)) return;
     previous?.cleanup();
-    const transaction = { callbacks: [], cleanup: null, changeRoot: null, changeListener: null };
+    const transaction = { callbacks: [], cleanup: null, changeRoot: null, changeListener: null,
+      pointerId: event.pointerId, pointerType: event.pointerType, pointerReleased: false };
     const finish = () => {
       if (pendingPalettePointerSyncs.get(document) !== transaction) return;
       transaction.cleanup();
       pendingPalettePointerSyncs.delete(document);
       for (const synchronize of transaction.callbacks) synchronize();
     };
+    transaction.finish = finish;
     const finishAfterClick = event => {
+      const matchingPointer = event.pointerId === transaction.pointerId;
+      // WebKit reports the compatibility click after touch with a mouse pointer
+      // id. Accept it only after the owning touch ended and no other pointer is
+      // still down, so a second pointer cannot finish this transaction.
+      const compatibilityTouchClick = transaction.pointerType === 'touch'
+        && transaction.pointerReleased && activePointers.size === 0
+        && event.isTrusted && event.detail > 0 && event.pointerType === 'mouse';
+      if (!matchingPointer && !compatibilityTouchClick) return;
       if (!event.defaultPrevented) {
         const path = event.composedPath?.() ?? [];
         const control = path.find(node => node?.matches?.('input[type="checkbox"]'))
@@ -46,7 +80,6 @@ export function trackPalettePointerSync(root) {
     };
     transaction.cleanup = () => {
       document.removeEventListener('click', finishAfterClick);
-      document.removeEventListener('pointercancel', finish);
       if (transaction.changeRoot && transaction.changeListener) {
         transaction.changeRoot.removeEventListener('change', transaction.changeListener);
       }
@@ -54,7 +87,6 @@ export function trackPalettePointerSync(root) {
     if (previous) transaction.callbacks.push(...previous.callbacks);
     pendingPalettePointerSyncs.set(document, transaction);
     document.addEventListener('click', finishAfterClick);
-    document.addEventListener('pointercancel', finish);
   }, true);
 }
 
