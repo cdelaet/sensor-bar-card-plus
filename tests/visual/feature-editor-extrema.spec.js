@@ -47,7 +47,9 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
     // Headless native selects on this platform do not advance via arrows.
     // Protect focus/traversal; selectOption above covers actual change commits.
     await windowControl.selectOption('today'); await windowControl.press('ArrowDown'); await windowControl.press('Escape'); await expect(windowControl).toBeFocused();
-    await windowControl.press('Tab'); await expect(direction).toBeFocused();
+    const windowHelper = editor.locator(`#${key}-window-entity`);
+    await windowControl.press('Tab'); await expect(windowHelper).toBeFocused();
+    await windowHelper.press('Tab'); await expect(direction).toBeFocused();
     const config = await saved(editor), count = await page.evaluate(() => window.__extremaEvents.length);
     for (const invalid of ['0m', '1441m', '0h', '1s']) {
       await windowControl.evaluate((el, value) => { const option = new Option(value, value); el.add(option); el.value = value; el.dispatchEvent(new Event('change', { bubbles: true })); option.remove(); }, invalid);
