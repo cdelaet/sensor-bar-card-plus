@@ -182,6 +182,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._expandedOverrideGroups = new Set();
     this._expandedCardGroups = new Set();
     this._pendingFocusSelector = null;
+    this._pendingFocusViewport = null;
     this._boundHandleClick = (event) => this._handleClick(event);
     this._boundHandleChange = (event) => this._handleChange(event);
     this._boundHandleInput = (event) => this._handleInput(event);
@@ -746,9 +747,30 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._pendingFocusSelector = selector || null;
   }
 
-  _focusPaletteControl(selector, { immediate = false } = {}) {
-    if (immediate) this.shadowRoot?.querySelector(selector)?.focus?.({ preventScroll: true });
-    else this._queuePostRenderFocus(selector);
+  _focusPaletteControl(selector, { immediate = false, preserveViewport = false } = {}) {
+    if (immediate) {
+      this._pendingFocusViewport = null;
+      this.shadowRoot?.querySelector(selector)?.focus?.({ preventScroll: true });
+    } else {
+      this._queuePostRenderFocus(selector);
+      this._pendingFocusViewport = preserveViewport ? this._captureFocusViewport() : null;
+    }
+  }
+
+  _captureFocusViewport() {
+    const active = this.shadowRoot?.activeElement;
+    const elements = [];
+    const record = element => {
+      if (!element || elements.some(entry => entry.element === element)) return;
+      if (element.scrollTop || element.scrollLeft || element.scrollHeight > element.clientHeight
+        || element.scrollWidth > element.clientWidth) {
+        elements.push({ element, top: element.scrollTop, left: element.scrollLeft });
+      }
+    };
+    for (let element = active; element; element = element.parentElement) record(element);
+    for (let element = this.shadowRoot?.host; element; element = element.parentElement) record(element);
+    const view = this.ownerDocument?.defaultView;
+    return { view, x: view?.scrollX ?? 0, y: view?.scrollY ?? 0, elements };
   }
 
   _applyPendingFocus() {
@@ -757,15 +779,25 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     }
     const selector = this._pendingFocusSelector;
     this._pendingFocusSelector = null;
+    const viewport = this._pendingFocusViewport;
+    this._pendingFocusViewport = null;
     setTimeout(() => {
       const element = this.shadowRoot?.querySelector?.(selector);
-      if (!element || typeof element.focus !== 'function') {
-        return;
+      if (element && typeof element.focus === 'function') {
+        try {
+          element.focus({ preventScroll: true });
+        } catch (_error) {
+          element.focus();
+        }
       }
-      try {
-        element.focus({ preventScroll: true });
-      } catch (_error) {
-        element.focus();
+      if (viewport) {
+        for (const entry of viewport.elements) {
+          if (entry.element.isConnected) {
+            entry.element.scrollTop = entry.top;
+            entry.element.scrollLeft = entry.left;
+          }
+        }
+        viewport.view?.scrollTo(viewport.x, viewport.y);
       }
     }, 0);
   }

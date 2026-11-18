@@ -427,11 +427,21 @@ export class GradientStopsSection extends PaletteSection {
         ? { ...stop, pos: nextPos }
         : stop
     ));
+    const sortedStops = this._sanitizeGradientStopsForEmit(nextStops);
+    const nextIndex = sortedStops.findIndex(stop => stop.pos === nextPos);
+    const orderChanged = nextIndex !== stopIndex;
+    const rerender = this.array.patchOnly || orderChanged;
+    if (!this.array.patchOnly && orderChanged) {
+      const selector = scope?.type === 'entity'
+        ? `input[data-kind="entity-gradient-pos"][data-index="${scope.index}"][data-stop-index="${nextIndex}"]`
+        : `input[data-kind="gradient-pos"][data-index="${nextIndex}"]`;
+      this.ui.focus(selector, scope, { preserveViewport: true });
+    }
     this._clearGradientStopPosText(scope, stopIndex);
     const session = this._getPaletteSession(scope, currentStops);
     const row = inputEl?.closest?.('.gradient-stop-row');
     if (row) row.dataset.paletteGeneration = String(session.generation);
-    return this._setScopedGradientStops(scope, nextStops, { rerender: true }, { type: 'edit', index: stopIndex, field: 'pos', value: nextPos });
+    return this._setScopedGradientStops(scope, nextStops, { rerender }, { type: 'edit', index: stopIndex, field: 'pos', value: nextPos });
   }
 
   _getScopedGradientStopsValue(scope) {

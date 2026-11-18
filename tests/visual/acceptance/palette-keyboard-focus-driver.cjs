@@ -1,8 +1,9 @@
 const d = require('./editor-driver.cjs');
 
-async function mountPaletteEditor(page, source, scope, section = 'Gradient Stops') {
+async function mountPaletteEditor(page, source, scope, section = 'Gradient Stops', stops = [
+  { pos: 0, color: '#112233' }, { pos: 100, color: '#445566' },
+]) {
   const config = d.seed('standalone');
-  const stops = [{ pos: 0, color: '#112233' }, { pos: 100, color: '#445566' }];
   config.bar.fill_style = 'gradient';
   config.bar.gradient_stops = structuredClone(stops);
   config.entities[0].bar.fill_style = 'gradient';
