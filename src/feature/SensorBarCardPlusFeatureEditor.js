@@ -137,7 +137,10 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       if (/^(?:entity-)?(?:segment|gradient)-/.test(kind)) {
         const synchronize = () => this._syncControls();
         if (!deferPaletteSyncUntilClick(event, synchronize, this.shadowRoot)) queueMicrotask(synchronize);
-      } else this._requestRender();
+      } else {
+        const synchronize = () => this._requestRender();
+        if (!deferPaletteSyncUntilClick(event, synchronize, this.shadowRoot)) synchronize();
+      }
     });
     // HA may load its picker after the editor. No polling or global observers.
     customElements.whenDefined('ha-entity-picker').then(() => {

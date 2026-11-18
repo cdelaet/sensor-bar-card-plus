@@ -80,6 +80,32 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   await editor.evaluate(async el => { el.context = { entity_id: 'sensor.changed' }; el.hass = { states: {} }; el.setConfig(el._config); await el.updateComplete; });
   expect(await page.evaluate(() => window.__extremaEvents.length)).toBe(count); expect((await saved(editor)).entity).toBeUndefined();
 });
+
+for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feature Needle pointer toggles after marker color edits ${width}px (${source})`, async ({ page }) => {
+  const editor = await mount(page, source, width);
+  const color = editor.locator('[data-field="peak-color-text-fallback"]');
+  const needle = editor.locator('#bar-needle-mode');
+  await expect(needle).toBeChecked();
+
+  await color.fill('var(--primary-color)');
+  await expect(color).toBeFocused();
+  const beforeDisable = await page.evaluate(() => window.__extremaEvents.length);
+  await needle.click();
+  await expect(needle).not.toBeChecked();
+  expect((await saved(editor)).bar.needle).toBe(false);
+  expect((await saved(editor)).peak.color).toBe('var(--primary-color)');
+  expect(await page.evaluate(() => window.__extremaEvents.length)).toBe(beforeDisable + 1);
+
+  await color.fill('var(--secondary-color)');
+  await expect(color).toBeFocused();
+  const beforeEnable = await page.evaluate(() => window.__extremaEvents.length);
+  await needle.click();
+  await expect(needle).toBeChecked();
+  expect((await saved(editor)).bar.needle).toBe(true);
+  expect((await saved(editor)).peak.color).toBe('var(--secondary-color)');
+  expect(await page.evaluate(() => window.__extremaEvents.length)).toBe(beforeEnable + 1);
+});
+
 for (const source of ['src', 'dist']) test(`Feature extrema (${source}): defaults, unsupported reset metadata and foreign replacement`, async ({ page }) => {
   const editor = await mount(page, source, 240, true);
   expect(await saved(editor)).toEqual({ type: 'custom:sensor-bar-card-plus-feature' });
