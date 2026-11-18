@@ -15,7 +15,7 @@ module.exports = {
   retries: 0,
   projects: [
     { name: '', use: { browserName: 'chromium' } },
-    { name: 'webkit-editor-acceptance', testMatch: /acceptance\/editor-acceptance\.spec\.js/, use: { browserName: 'webkit' } },
+    { name: 'webkit-editor-acceptance', testMatch: /acceptance\/(?:editor-acceptance|editor-palette-escape-focus|editor-gradient-enter-focus)\.spec\.js/, use: { browserName: 'webkit' } },
     { name: 'webkit-reference-identity', testMatch: /editor-reference-marker-identity\.spec\.js/, use: { browserName: 'webkit' } },
     { name: 'webkit-editor-disclosure-scroll', testMatch: /(?:editor-disclosure-scroll|editor-inherited-sync|paint-editor-ux)\.spec\.js/, use: { browserName: 'webkit' } },
     { name: 'webkit-lazy-editors', testMatch: /lazy-editor-loading\.spec\.js/, use: { browserName: 'webkit' } },

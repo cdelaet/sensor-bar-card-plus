@@ -295,9 +295,14 @@ export class PaletteSection {
     if (mode === 'keydown') {
       if (event.key === 'Escape' && draft) {
         event.preventDefault?.();
-        if (segment) this._segmentDrafts.set(this._getSegmentsScopeKey(scope), this._createSegmentDraftState(scope));
-        else this._gradientStopsDrafts.set(this._getGradientStopsDraftKey(scope), this._createGradientStopDraftState(scope));
-        this.ui.render();
+        if (segment) {
+          this._segmentDrafts.set(this._getSegmentsScopeKey(scope), this._createSegmentDraftState(scope));
+          this._syncSegmentDraftControls(scope);
+        } else {
+          this._gradientStopsDrafts.set(this._getGradientStopsDraftKey(scope), this._createGradientStopDraftState(scope));
+          this._syncGradientDraftControls(scope);
+        }
+        refresh();
       } else if (event.key === 'Enter') {
         event.preventDefault?.();
         if (draft) commit();
