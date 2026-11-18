@@ -276,7 +276,10 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._forceTargetSync = options.forceTargetSyncScope?.type === 'card';
     if (options.syncTargetControls) this._syncTargetControls();
     else if (options.paletteEdit) {
-      const synchronize = () => this._syncControls();
+      const synchronize = () => {
+        this._syncControls();
+        this._applyPendingPaletteFocus();
+      };
       const pointerTarget = options.paletteAction ? null : this.shadowRoot?.querySelector(':active');
       if (pointerTarget !== options.paletteSource && !deferPaletteSyncUntilClick(null, synchronize, this.shadowRoot)) synchronize();
     }
@@ -443,6 +446,13 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     else this._pendingPaletteFocus = selector;
   }
 
+  _applyPendingPaletteFocus() {
+    if (!this._pendingPaletteFocus) return;
+    const selector = this._pendingPaletteFocus;
+    this._pendingPaletteFocus = null;
+    this.shadowRoot.querySelector(selector)?.focus?.({ preventScroll: true });
+  }
+
   _render() {
     const segmentRows = this._segmentsSection._getScopedSegmentsValue(root);
     const gradientRows = this._gradientStopsSection._getScopedGradientStopsValue(root);
@@ -522,10 +532,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       this._syncControls();
     }
     if (!defer) this._referenceStructureSignature = markerSignature;
-    if (this._pendingPaletteFocus) {
-      this.shadowRoot.querySelector(this._pendingPaletteFocus)?.focus?.({ preventScroll: true });
-      this._pendingPaletteFocus = null;
-    }
+    this._applyPendingPaletteFocus();
     if (this._pendingReferenceFocusId) {
       const heading = this.shadowRoot.querySelector(`.generic-marker-item[data-marker-ui-id="${this._pendingReferenceFocusId}"] .generic-marker-toggle`);
       heading?.focus({ preventScroll: true });
