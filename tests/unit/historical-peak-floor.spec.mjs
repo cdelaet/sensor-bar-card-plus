@@ -4,7 +4,7 @@ import { validateNormalizedConfig } from '../../src/config/validate.js';
 import { buildRowViewModel } from '../../src/view-model/row-view-model.js';
 import { renderMarker, patchMarker } from '../../src/render/bar-renderer.js';
 import { historicalMarkerConsumers, historicalMarkerId } from '../../src/history/marker-consumers.js';
-import { resolveTimeWindow } from '../../src/history/time-window.js';
+import { isEligibleHistoricalWindow, parseHistoricalWindow, resolveTimeWindow } from '../../src/history/time-window.js';
 import { HistoricalValueResolver } from '../../src/history/value-resolver.js';
 import { SharedObservationService } from '../../src/history/observation-service.js';
 import { loadCardClass } from '../support/load-card-class.cjs';
@@ -74,9 +74,11 @@ describe('historical Peak/Floor', () => {
       expect(normalized.peak_marker.window_spec).toMatchObject({ kind, period });
       expect(normalized.peak_marker.window).toBe(canonical);
     }
-    const selected = normalizeCardConfig({ entity, peak: { window: 'last_week', reset: 'yearly' } });
+    const selected = normalizeCardConfig({ entity,
+      peak: { window: 'last_week', reset: 'yearly' }, floor: { window: 'today', reset: 'bad' } });
     expect(selected.peak_marker.window).toBe('previous_week'); expect(selected.peak.window).toBe('previous_week');
     expect(selected.peak).not.toHaveProperty('reset'); expect(selected.peak_marker.window_invalid).toBeUndefined();
+    expect(selected.floor_marker.window).toBe('today'); expect(selected.floor_marker.window_invalid).toBeUndefined();
     const entityAlias = normalizeCardConfig({ entity, entities: [{ entity, peak: { window: 'last_month' }, floor: { reset: 'yearly' } }] });
     expect(entityAlias.entities[0].peak_marker.window).toBe('previous_month');
     expect(entityAlias.entities[0].peak.window).toBe('previous_month');
@@ -85,13 +87,37 @@ describe('historical Peak/Floor', () => {
     const validCanonical = normalizeCardConfig({ entity, peak: { window: 'previous_week' }, floor: { window: 'previous_month' } });
     expect(validateNormalizedConfig(validCanonical).warnings.map(w => w.code)).not.toContain('peak_marker.invalid_window');
     expect(validateNormalizedConfig(validCanonical).warnings.map(w => w.code)).not.toContain('floor_marker.invalid_window');
-    const invalid = normalizeCardConfig({ entity, peak: { enabled: true, reset: '24h' } });
+    const invalid = normalizeCardConfig({ entity, peak: { enabled: true, reset: 'bogus' }, floor: { enabled: true, reset: '1441m' },
+      entities: [{ entity }, { entity: 'sensor.other', peak: { reset: '1441m' }, floor: { reset: 'bogus' } }] });
     expect(invalid.peak_marker.window_invalid).toBe(true);
+    expect(invalid.floor_marker.window_invalid).toBe(true);
     expect(invalid.entities[0].peak_marker.window_invalid).toBe(true);
+    expect(invalid.entities[0].floor_marker.window_invalid).toBe(true);
+    expect(invalid.entities[1].peak_marker.window_invalid).toBe(true);
+    expect(invalid.entities[1].floor_marker.window_invalid).toBe(true);
     expect(historicalMarkerConsumers(invalid.entities)).toHaveLength(0);
-    expect(validateNormalizedConfig(invalid).errors.some(w => w.code === 'peak_marker.invalid_window')).toBe(true);
+    expect(validateNormalizedConfig(invalid).errors.map(w => w.code)).toEqual(expect.arrayContaining([
+      'peak_marker.invalid_window', 'floor_marker.invalid_window',
+    ]));
     expect(normalizeCardConfig({ entity, floor: { window: 'never' } }).floor_marker.window_invalid).toBe(true);
     expect(normalizeCardConfig({ entity, peak: { window: '__proto__' } }).peak_marker.window_invalid).toBe(true);
+  });
+
+  it('accepts eligible modern windows from legacy reset for Peak and Floor', () => {
+    const cases = [['24h', '24h'], ['7d', '7d'], ['yearly', 'this_year'], ['never', 'today']];
+    for (const key of ['peak', 'floor']) for (const [reset, expectedWindow] of cases) {
+      const legacy = normalizeCardConfig({ entity, [key]: { enabled: true, reset } });
+      const canonical = normalizeCardConfig({ entity, [key]: { enabled: true, window: expectedWindow } });
+      const marker = legacy[`${key}_marker`];
+      expect(isEligibleHistoricalWindow(marker.window)).toBe(true);
+      expect(marker.window).toBe(expectedWindow);
+      expect(marker.window_spec).toEqual(parseHistoricalWindow(expectedWindow));
+      expect(marker.window_spec).toEqual(canonical[`${key}_marker`].window_spec);
+      expect(marker.window_invalid).toBeUndefined();
+      expect(historicalMarkerConsumers(legacy.entities)).toContainEqual(expect.objectContaining({
+        spec: expect.objectContaining({ calculation: key === 'peak' ? 'max' : 'min', window: marker.window_spec }),
+      }));
+    }
   });
 
   it('retains correct status and never substitutes the live reading', () => {

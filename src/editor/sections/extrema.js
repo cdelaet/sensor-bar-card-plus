@@ -2,7 +2,6 @@ import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue,
   pruneEmptyObjectsInTarget, normalizeTextValue, normalizeNumberValue } from '../shared/editor-config.js';
 import { escapeAttribute, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderWindowOptions, renderWindowHelperOptions, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from '../shared/editor-marker-controls.js';
-import { isValidReset } from '../../utils/extrema.js';
 import { canonicalizeHistoricalWindow, parseHistoricalWindow, isEligibleHistoricalWindow } from '../../history/time-window.js';
 
 export function migrateExtremaConfig(config) {
@@ -24,9 +23,10 @@ export function migrateExtremaConfig(config) {
         if (windowChanged) rest.window = canonicalWindow;
       } else {
         const normalized = typeof reset === 'string' ? reset.trim().toLowerCase() : reset;
-        rest.window = isValidReset(reset)
-          ? normalized === 'never' ? 'today' : canonicalizeHistoricalWindow(normalized)
-          : parseHistoricalWindow(normalized) ? `invalid legacy reset: ${normalized}` : reset ?? null;
+        const migratedWindow = normalized === 'never' ? 'today' : canonicalizeHistoricalWindow(normalized);
+        rest.window = isEligibleHistoricalWindow(migratedWindow)
+          ? migratedWindow
+          : parseHistoricalWindow(migratedWindow) ? `invalid legacy reset: ${normalized}` : reset ?? null;
       }
       next[key] = rest;
       changed = true;

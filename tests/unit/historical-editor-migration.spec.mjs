@@ -34,14 +34,17 @@ for (const source of ['src', 'dist']) {
       it('keeps invalid legacy resets invalid and leaves unrelated configs unchanged', async () => {
         const Editor = loadCardClass({ source })[editorType]; const editor = new Editor(); const events = [];
         editor.dispatchEvent = event => { events.push(event.detail.config); return true; };
-        editor.setConfig({ entity: 'sensor.a', peak: { reset: '24h' }, floor: { reset: 'bad' } });
+        editor.setConfig({ entity: 'sensor.a', peak: { reset: 'bad' }, floor: { reset: '1441m' } });
         await Promise.resolve(); await Promise.resolve();
         expect(events).toHaveLength(1);
-        expect(events[0].peak.window).not.toBe('24h');
+        expect(events[0].peak.window).toBe('bad');
+        expect(events[0].floor.window).toBe('invalid legacy reset: 1441m');
         const normalized = normalizeCardConfig(events[0]);
         expect(normalized.peak_marker.window_invalid).toBe(true);
         expect(normalized.floor_marker.window_invalid).toBe(true);
-        expect(validateNormalizedConfig(normalized).errors.map(item => item.code)).toContain('peak_marker.invalid_window');
+        expect(validateNormalizedConfig(normalized).errors.map(item => item.code)).toEqual(expect.arrayContaining([
+          'peak_marker.invalid_window', 'floor_marker.invalid_window',
+        ]));
         editor.setConfig({ entity: 'sensor.a', other: { reset: 'never' } });
         await Promise.resolve(); await Promise.resolve();
         expect(events).toHaveLength(1);
@@ -61,10 +64,10 @@ for (const source of ['src', 'dist']) {
       it('maps legacy calendar and duration reset values to equivalent windows', async () => {
         const Editor = loadCardClass({ source })[editorType]; const editor = new Editor(); const events = [];
         editor.dispatchEvent = event => { events.push(event.detail.config); return true; };
-        editor.setConfig({ peak: { reset: 'monthly' }, floor: { reset: 'hourly' },
+        editor.setConfig({ peak: { reset: '24h' }, floor: { reset: '7d' },
           entities: [{ entity: 'sensor.a', peak: { reset: '23h' }, floor: { reset: 'yearly' } }] });
         await Promise.resolve(); await Promise.resolve();
-        expect(events[0]).toMatchObject({ peak: { window: 'this_month' }, floor: { window: 'hourly' },
+        expect(events[0]).toMatchObject({ peak: { window: '24h' }, floor: { window: '7d' },
           entities: [{ peak: { window: '23h' }, floor: { window: 'this_year' } }] });
       });
 

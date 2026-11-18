@@ -254,7 +254,7 @@ describe('validateNormalizedConfig', () => {
 
   it('reports unsupported marker windows as errors and leaves markers unavailable', () => {
     const normalized = normalize({
-      peak: { enabled: true, reset: '60m' },
+      peak: { enabled: true, reset: '1441m' },
       floor: { enabled: true, reset: '1h30m' },
       entities: [{ entity: 'sensor.one' }],
     });

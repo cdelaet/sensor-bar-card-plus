@@ -1,5 +1,4 @@
 import { getConfiguredTargetMarkers } from './directional-targets.js';
-import { isValidReset } from '../utils/extrema.js';
 import { getOverlayPaintDefaults } from './paint-defaults.js';
 import { canonicalizeHistoricalWindow, parseHistoricalWindow, isEligibleHistoricalWindow } from '../history/time-window.js';
 
@@ -1218,11 +1217,11 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
   const hasWindow = rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, 'window');
   const hasWindowEntity = rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, 'window_entity');
   const rawWindow = hasWindow ? rawMarker.window : hasReset ? rawMarker.reset : inherited.window ?? 'today';
-  const legacyInvalid = !hasWindow && hasReset && !isValidReset(rawWindow);
   const normalizedWindow = !hasWindow && hasReset && typeof rawWindow === 'string' && rawWindow.trim().toLowerCase() === 'never'
     ? 'today' : typeof rawWindow === 'string' ? rawWindow.trim().toLowerCase() : rawWindow;
   const window = canonicalizeHistoricalWindow(normalizedWindow);
-  const windowSpec = legacyInvalid || !isEligibleHistoricalWindow(window) ? null : parseHistoricalWindow(window);
+  const windowSpec = isEligibleHistoricalWindow(window) ? parseHistoricalWindow(window) : null;
+  const legacyInvalid = !hasWindow && hasReset && !windowSpec;
   const windowEntityInput = hasWindowEntity ? rawMarker.window_entity : inherited.window_entity;
   const windowEntity = normalizeWindowEntity(windowEntityInput);
   const rawLabel = rawMarker?.label;
