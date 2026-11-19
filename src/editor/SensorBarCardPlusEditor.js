@@ -10,7 +10,7 @@ import {
   renderEntityAttributeInput, renderEntityInput, renderEntitySourceInput, renderBuiltinMarkerLabelControls,
   renderWindowOptions, renderWindowHelperOptions, escapeAttribute, isHexColorValue, expandHexColor,
   normalizeColorComparisonValue, getColorPickerValue, renderColorInput, formatScaleValueInput, getEntityAttributeSuggestions,
-  isValidCssColor, syncColorInput, syncCssColorDrafts,
+  handleCssColorInput, syncColorInput, syncCssColorDrafts,
 } from './shared/editor-controls.js';
 import { editorStyles } from './shared/editor-styles.js';
 import { renderCardGroup, renderMarkersSection } from './shared/editor-disclosures.js';
@@ -4249,20 +4249,8 @@ ${this._renderFormattingSection({ type: 'card' })}
 
   _handleCssColorEvent(event) {
     const target = event.target;
-    if (target?.type === 'color') {
-      this._cssColorDrafts.delete(`${target.id}-text-fallback`);
-      return true;
-    }
-    if (target?.dataset?.cssColor !== 'true') return true;
-    const value = String(target.value ?? '');
-    const valid = isValidCssColor(value, target.ownerDocument?.defaultView?.CSS);
-    target.setCustomValidity?.(valid ? '' : 'Enter a valid CSS color.');
-    target.setAttribute('aria-invalid', valid ? 'false' : 'true');
-    const fallbackId = target.id || `${target.dataset.field ?? target.dataset.kind}-text-fallback`;
-    if (valid) this._cssColorDrafts.delete(fallbackId);
-    else this._cssColorDrafts.set(fallbackId, value);
-    const kind = target.dataset.kind?.replace(/-text-fallback$/, '');
-    return valid || !!kind?.endsWith('-draft-color');
+    const draftKey = target?.id || `${target?.dataset?.field ?? target?.dataset?.kind}-text-fallback`;
+    return handleCssColorInput(target, this._cssColorDrafts, String(target?.value ?? ''), draftKey);
   }
 
   _handleKeydown(event) {

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { renderColorInput } from '../../src/editor/shared/editor-controls.js';
+import { describe, expect, it, vi } from 'vitest';
+import { handleCssColorInput, renderColorInput } from '../../src/editor/shared/editor-controls.js';
 import { createDomEditorFixture, dispatchDomEvent } from '../support/dom-editor-fixture.mjs';
 
 const featureType = 'custom:sensor-bar-card-plus-feature';
@@ -32,6 +32,27 @@ describe('universal color renderer', () => {
     expect(html).not.toContain('data-css-color');
   });
 });
+
+it.each([['segment-draft-color', true], ['entity-gradient-draft-color', true], ['gradient-color', false]])
+  ('allows intermediate %s text to continue only for a palette draft', (kind, allowed) => {
+    const target = {
+      id: 'color-text-fallback',
+      dataset: { cssColor: 'true', kind: `${kind}-text-fallback` },
+      ownerDocument: { defaultView: { CSS: { supports: () => false } } },
+      setAttribute: vi.fn(),
+      setCustomValidity: vi.fn(),
+    };
+    const drafts = new Map();
+    expect(handleCssColorInput(target, drafts, 'rgb(')).toBe(allowed);
+    expect(drafts.get(target.id)).toBe('rgb(');
+    expect(target.setCustomValidity).toHaveBeenLastCalledWith('Enter a valid CSS color.');
+    expect(target.setAttribute).toHaveBeenLastCalledWith('aria-invalid', 'true');
+
+    expect(handleCssColorInput(target, drafts, ' ')).toBe(true);
+    expect(drafts.has(target.id)).toBe(false);
+    expect(target.setCustomValidity).toHaveBeenLastCalledWith('');
+    expect(target.setAttribute).toHaveBeenLastCalledWith('aria-invalid', 'false');
+  });
 
 for (const source of ['src', 'dist']) {
   describe(`standalone Card and Entity colors (${source})`, () => {
@@ -117,3 +138,25 @@ for (const source of ['src', 'dist']) {
     });
   });
 }
+
+it.each(['card', 'feature'])('%s preserves its color event value and draft key policies', async host => {
+  const { editor } = await createDomEditorFixture({ host });
+  editor.setConfig({ bar: { paint: { color: 'red' } } });
+  await editor.updateComplete;
+  const emitted = [];
+  editor.addEventListener('config-changed', event => emitted.push(event.detail.config));
+
+  const text = editor.shadowRoot.querySelector('#bar-color-text-fallback');
+  dispatchDomEvent(text, 'value-changed', { detail: { value: 'rgb(' } });
+  expect(editor._cssColorDrafts.get(text.id)).toBe(host === 'feature' ? 'rgb(' : undefined);
+  expect(emitted).toHaveLength(0);
+
+  text.removeAttribute('id');
+  text.value = 'var(';
+  dispatchDomEvent(text, 'input');
+  const key = host === 'feature' ? '' : `${text.dataset.field}-text-fallback`;
+  expect(editor._cssColorDrafts.get(key)).toBe('var(');
+  expect(text.validity.customError).toBe(true);
+  expect(text.getAttribute('aria-invalid')).toBe('true');
+  expect(emitted).toHaveLength(0);
+});

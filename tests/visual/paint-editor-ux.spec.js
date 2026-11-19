@@ -228,6 +228,10 @@ for (const source of ['src', 'dist']) for (const destination of ['Card', 'Entity
     }
     const reopenedText = paint.locator(`#${colorId}-text-fallback`);
     await expect(reopenedText).toHaveValue('var(--saved-color)');
+    await reopenedText.fill('rgb(');
+    await reopenedText.press('Tab');
+    await expect(reopenedText).toHaveAttribute('aria-invalid', 'true');
+    expect(await editor.evaluate(() => window.__universalColorEvents.length)).toBe(3);
     const picker = paint.locator(`input[type="color"][data-paint-property="color"]`);
     await picker.evaluate(input => {
       input.value = '#778899';
@@ -235,6 +239,10 @@ for (const source of ['src', 'dist']) for (const destination of ['Card', 'Entity
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
     await expect(reopenedText).toHaveCount(0);
+    expect(await editor.evaluate((element, id) => ({
+      draft: element._cssColorDrafts.has(`${id}-text-fallback`),
+      count: window.__universalColorEvents.length,
+    }), colorId)).toEqual({ draft: false, count: 4 });
     expect(await editor.evaluate((element, path) => path.reduce((value, key) => value?.[key], element._config ?? element._draftConfig).color, selector)).toBe('#778899');
     await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}segment-color-1-text-fallback`)).toHaveCount(0);
     await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-1-text-fallback`)).toHaveCount(0);

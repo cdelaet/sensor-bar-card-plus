@@ -3,7 +3,7 @@ import {
 } from '../editor/shared/editor-config.js';
 import {
   escapeAttribute, formatScaleValueInput, renderEntitySourceInput, renderEntityAttributeInput, renderWindowOptions, getEntityAttributeSuggestions, getColorPickerValue,
-  isValidCssColor, syncColorInput, syncCssColorDrafts,
+  handleCssColorInput, syncColorInput, syncCssColorDrafts,
 } from '../editor/shared/editor-controls.js';
 import { editorStyles } from '../editor/shared/editor-styles.js';
 import { renderCardGroup, renderMarkersSection } from '../editor/shared/editor-disclosures.js';
@@ -268,14 +268,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const kind = target?.dataset?.kind?.replace(/-text-fallback$/, '');
     const value = event.type === 'value-changed' ? event.detail?.value
       : target?.type === 'checkbox' ? target.checked : target?.value;
-    if (target?.type === 'color') this._cssColorDrafts.delete(`${target.id}-text-fallback`);
-    if (target?.dataset?.cssColor === 'true') {
-      const valid = isValidCssColor(value, target.ownerDocument?.defaultView?.CSS);
-      target.setCustomValidity?.(valid ? '' : 'Enter a valid CSS color.');
-      target.setAttribute('aria-invalid', valid ? 'false' : 'true');
-      if (valid) this._cssColorDrafts.delete(target.id); else this._cssColorDrafts.set(target.id, value);
-      if (!valid && !kind?.endsWith('-draft-color')) return;
-    }
+    if (!handleCssColorInput(target, this._cssColorDrafts, value)) return;
     if (field === 'feature-entity-override') {
       this._chooseEntity = !!value;
       if (!value) this._mutate(config => deletePathValue(config, ['entity']));

@@ -424,6 +424,7 @@ for (const source of ['src', 'dist']) {
       const color = editor.locator('#bar-color-text-fallback');
       await color.fill('var(');
       await color.focus();
+      await color.evaluate(input => input.setSelectionRange(1, 3));
       const beforeEvents = await d.count(page);
       const result = await editor.evaluate(async el => {
         const before = el.shadowRoot.querySelector('#bar-color-text-fallback');
@@ -431,9 +432,10 @@ for (const source of ['src', 'dist']) {
         if (el.updateComplete) await el.updateComplete;
         const after = el.shadowRoot.querySelector('#bar-color-text-fallback');
         return { sameNode: before === after, value: after?.value,
-          focused: el.shadowRoot.activeElement === after, invalid: after?.getAttribute('aria-invalid') };
+          focused: el.shadowRoot.activeElement === after, invalid: after?.getAttribute('aria-invalid'),
+          selection: [after?.selectionStart, after?.selectionEnd] };
       });
-      expect(result).toEqual({ sameNode: true, value: 'var(', focused: true, invalid: 'true' });
+      expect(result).toEqual({ sameNode: true, value: 'var(', focused: true, invalid: 'true', selection: [1, 3] });
       expect(await d.count(page)).toBe(beforeEvents);
     });
   }

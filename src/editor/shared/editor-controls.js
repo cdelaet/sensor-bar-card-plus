@@ -150,6 +150,22 @@ export function isValidCssColor(value, css = globalThis.CSS) {
   return typeof css?.supports === 'function' && css.supports('color', text);
 }
 
+// Returns false when an invalid color edit should stay local to the text input.
+export function handleCssColorInput(target, drafts, value, draftKey = target?.id) {
+  if (target?.type === 'color') {
+    drafts.delete(`${target.id}-text-fallback`);
+    return true;
+  }
+  if (target?.dataset?.cssColor !== 'true') return true;
+  const valid = isValidCssColor(value, target.ownerDocument?.defaultView?.CSS);
+  target.setCustomValidity?.(valid ? '' : 'Enter a valid CSS color.');
+  target.setAttribute('aria-invalid', valid ? 'false' : 'true');
+  if (valid) drafts.delete(draftKey);
+  else drafts.set(draftKey, value);
+  const kind = target.dataset.kind?.replace(/-text-fallback$/, '');
+  return valid || !!kind?.endsWith('-draft-color');
+}
+
 export function syncColorInput(root, id, value, fallbackHex = '#000000', cssColorDrafts) {
   const picker = root?.getElementById?.(id) ?? root?.querySelector?.(`#${id}`);
   if (!picker || picker.type !== 'color') return;
