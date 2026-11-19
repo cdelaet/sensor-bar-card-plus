@@ -36,7 +36,7 @@ import { getFeatureReferenceMarkerSource, patchFeatureReferenceMarkerSource, pat
 import { patchFeatureExtremumField } from './feature-editor-extrema.js';
 import { patchFeatureTargetField } from './feature-editor-target.js';
 import { patchFeatureNeedle, patchFeatureBaselineField } from './feature-editor-needle-baseline.js';
-import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
+import { releasePaintPresetConsumer, syncPaintPresetConsumer } from '../dashboard/paint-preset-consumer.js';
 
 const root = { type: 'card' };
 
@@ -52,7 +52,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._updateComplete = Promise.resolve();
     this._pendingRenderOptions = {};
     this._paintPresetHandle = null;
-    this._paintPresetSubscriptionGeneration = 0;
     this._paintPresetRegistry = { status: 'loading', presets: {} };
     this._cssColorDrafts = new Map();
     this._numericDrafts = new NumericInputDrafts();
@@ -199,41 +198,25 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
   connectedCallback() { this._syncPaintPresetRegistry(); this._requestRender(); }
   disconnectedCallback() {
     this._renderEpoch += 1; this._renderScheduled = false;
-    this._paintPresetSubscriptionGeneration += 1;
-    this._paintPresetHandle?.unsubscribe();
-    this._paintPresetHandle = null;
-    this._paintPresetRegistry = { status: 'loading', presets: {} };
+    releasePaintPresetConsumer(this);
   }
 
   _syncPaintPresetRegistry() {
     if (!this.isConnected || !this._hass?.connection) {
-      if (this._paintPresetHandle) {
-        this._paintPresetSubscriptionGeneration += 1;
-        this._paintPresetHandle.unsubscribe();
-        this._paintPresetHandle = null;
-      }
-      this._paintPresetRegistry = this._hass?.connection
+      releasePaintPresetConsumer(this, this._hass?.connection
         ? { status: 'loading', presets: {} }
-        : { status: 'empty', presets: {}, diagnostic: { code: 'connection_unavailable' } };
+        : { status: 'empty', presets: {}, diagnostic: { code: 'connection_unavailable' } });
       return;
     }
-    const path = dashboardPathFromLocation();
-    if (!this._paintPresetHandle) {
-      const generation = ++this._paintPresetSubscriptionGeneration;
+    syncPaintPresetConsumer(this, handle => {
       const synchronize = () => {
-        if (!this.isConnected || generation !== this._paintPresetSubscriptionGeneration) return;
+        if (!this.isConnected || this._paintPresetHandle !== handle) return;
         if (this.shadowRoot?.innerHTML) this._syncControls();
         else this._requestRender({ deferActivePointerSync: true });
       };
-      this._paintPresetHandle = subscribeDashboardPaintPresets(this._hass, path, snapshot => {
-        if (generation !== this._paintPresetSubscriptionGeneration || snapshot === this._paintPresetRegistry) return;
-        this._paintPresetRegistry = snapshot;
-        // Preset feedback can move pressed controls outside the Paint editors.
-        if (!deferPaletteSyncUntilClick(null, synchronize, this.shadowRoot)) synchronize();
-      });
-      return;
-    }
-    this._paintPresetHandle.update(this._hass, path);
+      // Preset feedback can move pressed controls outside the Paint editors.
+      if (!deferPaletteSyncUntilClick(null, synchronize, this.shadowRoot)) synchronize();
+    });
   }
 
   _requestRender(options = {}) {

@@ -52,7 +52,7 @@ import {
 } from '../utils/format.js';
 import { HistoricalHostRuntime } from '../history/host-runtime.js';
 import { historicalMarkerConsumers, historicalMarkerResults } from '../history/marker-consumers.js';
-import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
+import { releasePaintPresetConsumer, syncPaintPresetConsumer } from '../dashboard/paint-preset-consumer.js';
 import { authoredPaintProperties, resolveScopedPaintPreset } from '../view-model/paint-preset-resolver.js';
 import { resolveDestinationPaint, scopeUsesPaintPreset } from '../view-model/paint-destinations.js';
 import { resolveBaselinePaints } from '../view-model/baseline-paint-resolver.js';
@@ -202,7 +202,6 @@ export class SensorBarCard extends HTMLElement {
     this._diagnostics = { warnings: [], errors: [] };
     this._baseDiagnostics = this._diagnostics;
     this._paintPresetHandle = null;
-    this._paintPresetSubscriptionGeneration = 0;
     this._paintPresetRegistry = { status: 'loading', presets: {} };
     this._paintPresetEntityPaints = new WeakMap();
     this._paintPresetEntityBaselinePaints = new WeakMap();
@@ -258,10 +257,7 @@ export class SensorBarCard extends HTMLElement {
 
   disconnectedCallback() {
     this._historicalRuntime.detach();
-    this._paintPresetSubscriptionGeneration += 1;
-    this._paintPresetHandle?.unsubscribe();
-    this._paintPresetHandle = null;
-    this._paintPresetRegistry = { status: 'loading', presets: {} };
+    releasePaintPresetConsumer(this);
     this._refreshPaintPresetResolutions();
     this._tooltipController?.destroy();
     this._tooltipController = null;
@@ -671,36 +667,16 @@ export class SensorBarCard extends HTMLElement {
     const ownsPresetLibrary = Object.hasOwn(this._actionConfig ?? {}, 'preset_library');
     if (!this.isConnected || !this._hass?.connection || !(usesPreset || ownsPresetLibrary)) {
       if (this._paintPresetHandle) {
-        this._paintPresetSubscriptionGeneration += 1;
-        this._paintPresetHandle.unsubscribe();
-        this._paintPresetHandle = null;
-        this._paintPresetRegistry = { status: 'loading', presets: {} };
+        releasePaintPresetConsumer(this);
         this._refreshPaintPresetResolutions();
       }
       return;
     }
-    const path = dashboardPathFromLocation();
-    if (!this._paintPresetHandle) {
-      const generation = ++this._paintPresetSubscriptionGeneration;
-      this._paintPresetHandle = subscribeDashboardPaintPresets(this._hass, path, snapshot => {
-        if (generation !== this._paintPresetSubscriptionGeneration) return;
-        if (snapshot === this._paintPresetRegistry) return;
-        this._paintPresetRegistry = snapshot;
-        this._refreshPaintPresetResolutions();
-        this._logDiagnostics();
-        if (this._config?.entities && this._hass) this._update();
-      });
-      this._paintPresetRegistry = this._paintPresetHandle.getSnapshot();
+    syncPaintPresetConsumer(this, () => {
       this._refreshPaintPresetResolutions();
-      return;
-    }
-    const previous = this._paintPresetHandle.getSnapshot();
-    const next = this._paintPresetHandle.update(this._hass, path);
-    if (next !== previous && next !== this._paintPresetRegistry) {
-      this._paintPresetRegistry = next;
-      this._refreshPaintPresetResolutions();
+      this._logDiagnostics();
       if (this._config?.entities && this._hass) this._update();
-    }
+    });
   }
 
   _getDefaultEntityIcon(stateObj, entityId = '') {

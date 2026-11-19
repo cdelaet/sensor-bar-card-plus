@@ -10,7 +10,7 @@ import { barTrackStyles, barMarkerStyles, getBarAnimationStyles } from '../rende
 import { initializeUniversalMessageArea, renderUniversalMessageArea, syncUniversalMessageArea, universalMessageStyles } from '../render/universal-messages.js';
 import { HistoricalHostRuntime } from '../history/host-runtime.js';
 import { historicalMarkerConsumers, historicalMarkerResults } from '../history/marker-consumers.js';
-import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
+import { releasePaintPresetConsumer, syncPaintPresetConsumer } from '../dashboard/paint-preset-consumer.js';
 import { authoredPaintProperties, resolveScopedPaintPreset } from '../view-model/paint-preset-resolver.js';
 import { resolveBaselinePaints } from '../view-model/baseline-paint-resolver.js';
 import { resolveTargetAbovePaint, resolveTargetBelowPaint } from '../view-model/target-above-paint-resolver.js';
@@ -31,7 +31,6 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     this._historicalRuntime = new HistoricalHostRuntime();
     this._paintPresetHandle = null;
-    this._paintPresetSubscriptionGeneration = 0;
     this._paintPresetRegistry = { status: 'loading', presets: {} };
     this._paintPresetDiagnostics = [];
     this._baseDiagnostics = { warnings: [], errors: [] };
@@ -100,10 +99,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
 
   disconnectedCallback() {
     this._historicalRuntime.detach();
-    this._paintPresetSubscriptionGeneration += 1;
-    this._paintPresetHandle?.unsubscribe();
-    this._paintPresetHandle = null;
-    this._paintPresetRegistry = { status: 'loading', presets: {} };
+    releasePaintPresetConsumer(this);
     this._paintPresetDiagnostics = [];
     this._tooltipController?.destroy();
     this._tooltipController = null;
@@ -114,26 +110,12 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     const usesPreset = scopeUsesPaintPreset(this._config);
     if (!this.isConnected || !this._hass?.connection || !usesPreset) {
       if (this._paintPresetHandle) {
-        this._paintPresetSubscriptionGeneration += 1;
-        this._paintPresetHandle.unsubscribe();
-        this._paintPresetHandle = null;
-        this._paintPresetRegistry = { status: 'loading', presets: {} };
+        releasePaintPresetConsumer(this);
         this._requestUpdate();
       }
       return;
     }
-    const path = dashboardPathFromLocation();
-    if (!this._paintPresetHandle) {
-      const generation = ++this._paintPresetSubscriptionGeneration;
-      this._paintPresetHandle = subscribeDashboardPaintPresets(this._hass, path, snapshot => {
-        if (generation !== this._paintPresetSubscriptionGeneration || snapshot === this._paintPresetRegistry) return;
-        this._paintPresetRegistry = snapshot;
-        this._requestUpdate();
-      });
-      this._paintPresetRegistry = this._paintPresetHandle.getSnapshot();
-      return;
-    }
-    this._paintPresetHandle.update(this._hass, path);
+    syncPaintPresetConsumer(this, () => this._requestUpdate());
   }
 
   _requestUpdate() {
