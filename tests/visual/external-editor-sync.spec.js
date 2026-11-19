@@ -119,6 +119,74 @@ for (const source of ['src', 'dist']) for (const host of ['standalone', 'feature
 }
 
 for (const source of ['src', 'dist']) {
+  for (const timing of ['after close', 'during capture', 'before a deferred rebuild']) {
+    test(`stale Card icon selection is rejected ${timing} (${source})`, async ({ page }) => {
+      const config = d.seed('standalone');
+      config.entities = [{ entity: 'sensor.power', icon: 'mdi:flash' }, { entity: 'sensor.other', icon: 'mdi:water' }];
+      await page.addInitScript(() => {
+        customElements.define('ha-icon-picker', class extends HTMLElement {
+          constructor() {
+            super();
+            const root = this.attachShadow({ mode: 'open' });
+            root.innerHTML = '<input aria-label="Icon picker">';
+            const input = root.querySelector('input');
+            input.addEventListener('keydown', event => {
+              if (event.key !== 'Enter') return;
+              const value = input.value;
+              const commit = () => this.dispatchEvent(new CustomEvent('value-changed', { detail: { value } }));
+              if (this.deferSelection) window.completeIconSelection = commit;
+              else commit();
+            });
+          }
+          set value(value) { this.shadowRoot.querySelector('input').value = value ?? ''; }
+        });
+      });
+      const editor = await mount(page, 'standalone', source, { config, openSegments: false });
+      const picker = editor.locator('ha-icon-picker[data-kind="entity-icon-picker"][data-index="0"]');
+      const original = await picker.elementHandle();
+      const replacement = { ...config, entities: [config.entities[1]] };
+      const before = await d.count(page);
+      await original.evaluate((node, { timing, replacement }) => {
+        node.deferSelection = timing !== 'during capture';
+        const host = node.getRootNode().host;
+        if (!node.deferSelection) node.addEventListener('value-changed', () => {
+          window.__acceptance.saved = structuredClone(replacement);
+          host.setConfig(replacement);
+          window.iconDetachedDuringCapture = !node.isConnected;
+        }, { capture: true, once: true });
+      }, { timing, replacement });
+
+      const input = picker.locator('input');
+      await input.fill('mdi:star');
+      await input.press('Enter');
+      if (timing === 'during capture') {
+        expect(await page.evaluate(() => window.iconDetachedDuringCapture)).toBe(true);
+      } else {
+        const disclosure = editor.locator('#card-group-marker-peak');
+        if (timing === 'before a deferred rebuild') {
+          await disclosure.scrollIntoViewIfNeeded();
+          const box = await disclosure.boundingBox();
+          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+          await page.mouse.down();
+        }
+        await d.foreign(editor, replacement);
+        expect(await original.evaluate(node => node.isConnected)).toBe(timing === 'before a deferred rebuild');
+        await page.evaluate(() => window.completeIconSelection());
+        if (timing === 'before a deferred rebuild') await page.mouse.up();
+      }
+
+      expect(await d.count(page)).toBe(before);
+      expect((await d.saved(page)).entities).toEqual(replacement.entities);
+      await expect(input).toHaveValue('mdi:water');
+      // An ordinary entity edit keeps the same icon control and retargets it.
+      await editor.locator('input[data-kind="entity-input"][data-index="0"]').fill('sensor.updated');
+      await input.fill('mdi:leaf');
+      await input.press('Enter');
+      expect(await d.count(page)).toBe(before + 2);
+      expect((await d.saved(page)).entities).toEqual([{ entity: 'sensor.updated', icon: 'mdi:leaf' }]);
+    });
+  }
+
   for (const nested of [false, true]) {
     test(`deferred Card picker readiness restores the completed text selection (${source}, ${nested ? 'nested' : 'page'})`, async ({ page }) => {
       const config = d.seed('standalone');

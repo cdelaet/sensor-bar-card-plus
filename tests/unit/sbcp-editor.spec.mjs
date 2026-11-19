@@ -74,7 +74,7 @@ function dispatchValueChanged(el, value) {
 }
 
 function iconModeRadio(editor, mode) {
-  return editor.shadowRoot.querySelectorAll('input[data-kind="entity-icon-mode"]')
+  return [...editor.shadowRoot.querySelectorAll('input[data-kind="entity-icon-mode"]')]
     .find((radio) => radio.value === mode);
 }
 
@@ -437,7 +437,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('Custom enables the HA icon picker and emits its selected icon string', async () => {
-    const editor = createEditor({ withIconPicker: true });
+    const { editor } = await createDomEditorFixture({ withIconPicker: true });
     const events = trackConfigEvents(editor);
     editor.setConfig({ entities: [{ entity: 'sensor.one' }] });
 
@@ -454,7 +454,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('switches among Default, Custom, and Off without losing their config semantics', async () => {
-    const editor = createEditor({ withIconPicker: true });
+    const { editor } = await createDomEditorFixture({ withIconPicker: true });
     const events = trackConfigEvents(editor);
     editor.setConfig({ entities: [{ entity: 'sensor.one', icon: 'mdi:battery' }] });
 

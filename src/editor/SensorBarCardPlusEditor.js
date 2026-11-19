@@ -3492,7 +3492,7 @@ ${this._renderPresetMasterControls()}
                         ${(() => {
                           const iconMode = this._getEntityIconMode(entry, index);
                           const iconPicker = customElements.get?.('ha-icon-picker')
-                            ? `<ha-icon-picker data-kind="entity-icon-picker" data-index="${index}" label="Select an icon" placeholder="Search icons"${iconMode !== 'custom' ? ' disabled' : ''}></ha-icon-picker>`
+                            ? `<ha-icon-picker data-kind="entity-icon-picker" data-index="${index}" data-entity="${this._escapeAttribute(entry.entity)}" label="Select an icon" placeholder="Search icons"${iconMode !== 'custom' ? ' disabled' : ''}></ha-icon-picker>`
                             : `<input type="text" data-kind="entity-icon-value" data-index="${index}" value="${this._escapeAttribute(typeof entry.icon === 'string' ? entry.icon : '')}" placeholder="Select an icon"${iconMode !== 'custom' ? ' disabled' : ''} autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false">`;
                           return `<div class="entity-icon-field">
                             <label>Icon</label>
@@ -4268,6 +4268,9 @@ ${this._renderFormattingSection({ type: 'card' })}
       picker.disabled = mode !== 'custom';
       if (!picker._sbcpIconChangeHandler && typeof picker.addEventListener === 'function') {
         picker._sbcpIconChangeHandler = (event) => {
+          if (!picker.isConnected || picker.getRootNode() !== this.shadowRoot) return;
+          const current = this.shadowRoot.querySelector(`ha-icon-picker[data-kind="entity-icon-picker"][data-index="${index}"]`);
+          if (current !== picker || picker.dataset.entity !== this._getEntitiesValue()[index]?.entity) return;
           const selectedIcon = event.detail?.value;
           this._entityIconCustomPending.delete(index);
           this._setEntityIcon(index, typeof selectedIcon === 'string' && selectedIcon.trim() ? selectedIcon.trim() : undefined);
@@ -4525,6 +4528,8 @@ ${this._renderFormattingSection({ type: 'card' })}
       const entity = this._getEntitiesValue()[index]?.entity ?? '';
       const subtitle = this.shadowRoot.querySelector(`.entity-shell[data-entity-shell-index="${index}"] .entity-subtitle`);
       if (subtitle) subtitle.textContent = entity || 'Configure entity';
+      const iconPicker = this.shadowRoot.querySelector(`ha-icon-picker[data-kind="entity-icon-picker"][data-index="${index}"]`);
+      if (iconPicker) iconPicker.dataset.entity = entity;
       this._syncEntityAttributePickers();
       return;
     }
