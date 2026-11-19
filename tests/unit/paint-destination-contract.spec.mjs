@@ -94,7 +94,7 @@ describe('shared Paint destination contract regressions', () => {
         baseline: { at: 50, above: { paint: {} }, below: { paint: {} } },
       });
       for (const side of sides) {
-        const sections = editor._baselinePaintSections[side];
+        const sections = editor._paintSections[`baseline-${side}`];
         expect(sections.segments._getScopedSegmentsValue({ type: 'card' }).map(row => row.color))
           .toEqual(['#4CAF50', '#FF9800', '#F44336']);
         expect(sections.gradientStops._getScopedGradientStopsValue({ type: 'card' }).map(row => row.color))
@@ -108,8 +108,7 @@ describe('shared Paint destination contract regressions', () => {
       const paint = { fill_style: 'gradient', segments: [{ from: '0%', to: '100%', color: '#123456' }],
         gradient_stops: [{ pos: 0, color: '#000000' }, { pos: 100, color: '#ffffff' }] };
       editor.setConfig(setPathValue({ type: 'custom:sensor-bar-card-plus-feature', entity, baseline: { at: 50 } }, destination.path, paint));
-      const sections = destination === BAR_PAINT ? { segments: editor._segmentsSection, gradientStops: editor._gradientStopsSection }
-        : destination === TARGET_ABOVE_PAINT ? editor._targetPaintSections : destination === TARGET_BELOW_PAINT ? editor._targetBelowPaintSections : editor._baselinePaintSections[destination.id.slice(9)];
+      const sections = editor._paintSections[destination.id];
       const scope = { type: 'card' };
       const segmentSession = sections.segments._getPaletteSession(scope);
       const gradientSession = sections.gradientStops._getPaletteSession(scope);
@@ -411,8 +410,7 @@ for (const host of ['editor', 'featureEditor']) for (const destination of [BAR_P
     const scope = { type: 'card' };
     const apply = (paint, presets) => editor.setConfig(setPathValue({ type: 'custom:sensor-bar-card-plus-feature', entity,
       baseline: { at: 50 }, ...(presets ? { preset_library: { paint: presets } } : {}) }, destination.path, paint));
-    const sections = destination === BAR_PAINT ? { segments: editor._segmentsSection, gradientStops: editor._gradientStopsSection }
-      : destination === TARGET_ABOVE_PAINT ? editor._targetPaintSections : destination === TARGET_BELOW_PAINT ? editor._targetBelowPaintSections : editor._baselinePaintSections[destination.id.slice(9)];
+    const sections = editor._paintSections[destination.id];
     apply({ fill_style: 'gradient' });
     expect(sections.segments._getSegmentsSummary(scope)).toBe('Default bands');
     expect(sections.gradientStops._getGradientStopsSummary(scope)).toBe('Default gradient');

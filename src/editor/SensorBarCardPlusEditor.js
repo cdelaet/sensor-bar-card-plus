@@ -42,10 +42,13 @@ import { createBarPaintBindings, usesGroupedBarPaint, prepareBarPaintSegments } 
 import { renderPaintEditor, syncPaintEditor, describePaint } from './shared/paint-editor.js';
 import { renderPaintSwatch, syncPaintSwatch } from './shared/paint-swatch.js';
 import { resolvePaintEditorPaint } from './shared/paint-editor-paint.js';
-import { SegmentsSection } from './sections/segments.js';
-import { GradientStopsSection } from './sections/gradient-stops.js';
-import { BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT, BAR_PAINT } from '../view-model/paint-destinations.js';
+import { BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT, BAR_PAINT, PAINT_DESTINATIONS } from '../view-model/paint-destinations.js';
 import { createDestinationBindings, handlePaintAction, handlePaintPresetControl, handlePaintPropertyControl, paintSourceSignature } from './shared/paint-destination.js';
+import {
+  createPaintSectionPair, paintSectionSelector, scopePaintSectionUi, readPaintPalette, readDirectionalPaintPalettes,
+  renderPaintPalette, directionalPaintChildren, syncPaintSectionRows, syncDirectionalPaintRows, clearPaintSectionState,
+  handlePaintPaletteEvent, handlePaintSectionEvent,
+} from './shared/paint-sections.js';
 
 function paletteComparableConfig(config) {
   let comparable = cloneDeep(config ?? {});
@@ -99,52 +102,25 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    this._segmentsSection = new SegmentsSection(this._createSectionContext(), this._paletteUi({ paint: true }), {
-      write: (scope, rows, options, operation) => this._setScopedSegments(scope, rows,
-        { ...options, paletteEdit: true, paletteAction: options?.paletteAction ?? operation?.type !== 'edit' }, operation),
-    });
-    this._gradientStopsSection = new GradientStopsSection(this._createSectionContext(), this._paletteUi({ paint: true }), {
-      write: (scope, rows, options) => this._setScopedGradientStops(scope, rows, options),
-    });
-    this._baselinePaintSections = {};
-    for (const direction of ['above', 'below']) {
-      const paintContext = this._createSectionContext();
-      const destination = BASELINE_PAINTS.find(item => item.id === `baseline-${direction}`);
-      const rootSelector = scope => `#${scope?.type === 'entity' ? `entity-${scope.index}-` : ''}baseline-${direction}-paint-editor`;
-      const ui = { ...this._paletteUi({ paint: true }),
-        root: scope => this.shadowRoot?.querySelector(rootSelector(scope)),
-        focus: (selector, scope, options) => this._focusPaletteControl(`${rootSelector(scope)} ${selector}`, options),
-      };
-      this._baselinePaintSections[direction] = {
-        segments: new SegmentsSection(paintContext, ui, {
-          destination, write: (scope, rows, options) => createDestinationBindings(paintContext, scope, destination).set('segments', rows, options),
-          autoEnds: true,
-        }),
-        gradientStops: new GradientStopsSection(paintContext, ui, {
-          destination, write: (scope, rows, options) => createDestinationBindings(paintContext, scope, destination).set('gradient_stops', rows, options),
-        }),
-      };
-    }
-    const targetContext = this._createSectionContext();
-    const targetRoot = scope => `#${scope?.type === 'entity' ? `entity-${scope.index}-` : ''}target-above-paint-editor`;
-    const targetUi = { ...this._paletteUi({ paint: true }), root: scope => this.shadowRoot?.querySelector(targetRoot(scope)),
-      render: () => { this._syncTargetEditors(); this._applyPendingFocus(); },
-      focus: (selector, scope, options) => this._focusPaletteControl(`${targetRoot(scope)} ${selector}`, options) };
-    this._targetPaintSections = {
-      segments: new SegmentsSection(targetContext, targetUi, { destination: TARGET_ABOVE_PAINT,
-        write: (scope, rows, options) => createDestinationBindings(targetContext, scope, TARGET_ABOVE_PAINT).set('segments', rows, options), autoEnds: true }),
-      gradientStops: new GradientStopsSection(targetContext, targetUi, { destination: TARGET_ABOVE_PAINT,
-        write: (scope, rows, options) => createDestinationBindings(targetContext, scope, TARGET_ABOVE_PAINT).set('gradient_stops', rows, options) }),
+    const barArrays = {
+      segments: { write: (scope, rows, options, operation) => this._setScopedSegments(scope, rows,
+        { ...options, paletteEdit: true, paletteAction: options?.paletteAction ?? operation?.type !== 'edit' }, operation) },
+      gradient_stops: { write: (scope, rows, options) => this._setScopedGradientStops(scope, rows, options) },
     };
-    const targetBelowRoot = scope => `#${scope?.type === 'entity' ? `entity-${scope.index}-` : ''}target-below-paint-editor`;
-    const targetBelowUi = { ...targetUi, root: scope => this.shadowRoot?.querySelector(targetBelowRoot(scope)),
-      focus: (selector, scope, options) => this._focusPaletteControl(`${targetBelowRoot(scope)} ${selector}`, options) };
-    this._targetBelowPaintSections = {
-      segments: new SegmentsSection(targetContext, targetBelowUi, { destination: TARGET_BELOW_PAINT,
-        write: (scope, rows, options) => createDestinationBindings(targetContext, scope, TARGET_BELOW_PAINT).set('segments', rows, options), autoEnds: true }),
-      gradientStops: new GradientStopsSection(targetContext, targetBelowUi, { destination: TARGET_BELOW_PAINT,
-        write: (scope, rows, options) => createDestinationBindings(targetContext, scope, TARGET_BELOW_PAINT).set('gradient_stops', rows, options) }),
-    };
+    const ui = this._paletteUi();
+    const targetUi = { ...ui, render: () => { this._syncTargetEditors(); this._applyPendingFocus(); } };
+    this._paintSections = Object.fromEntries(PAINT_DESTINATIONS.map(destination => {
+      const context = this._createSectionContext();
+      const destinationUi = destination === TARGET_ABOVE_PAINT || destination === TARGET_BELOW_PAINT ? targetUi : ui;
+      const paletteUi = scopePaintSectionUi(this.shadowRoot, destinationUi, scope => paintSectionSelector(destination, scope));
+      const sections = createPaintSectionPair(context, paletteUi, property => destination === BAR_PAINT ? barArrays[property] : {
+        destination, autoEnds: property === 'segments',
+        write: (scope, rows, options) => createDestinationBindings(context, scope, destination).set(property, rows, options),
+      });
+      return [destination.id, sections];
+    }));
+    this._segmentsSection = this._paintSections.bar.segments;
+    this._gradientStopsSection = this._paintSections.bar.gradientStops;
     this._needleSection = new NeedleSection(this._createSectionContext());
     this._baselineSection = new BaselineSection(this._createSectionContext());
     this._targetSection = new TargetSection(this._createSectionContext());
@@ -245,7 +221,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._segmentsSection.prepareExternalSync();
     this._gradientStopsSection.prepareExternalSync();
     for (const destination of [...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT]) {
-      const sections = destination === TARGET_ABOVE_PAINT ? this._targetPaintSections : destination === TARGET_BELOW_PAINT ? this._targetBelowPaintSections : this._baselinePaintSections[destination.id.replace('baseline-', '')];
+      const sections = this._paintSections[destination.id];
       const changed = paletteSourceSignature(nextConfig, destination) !== paletteSourceSignature(this._config, destination);
       for (const section of [sections.segments, sections.gradientStops]) {
         if (changed) section.reset(); else section.prepareExternalSync();
@@ -331,22 +307,18 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       ? this.shadowRoot.querySelector('.paint-editor :active') : null;
     if (activePaintControl && deferPaletteSyncUntilClick(activePaintControl, synchronize, this.shadowRoot)) return;
     const context = this._createSectionContext();
+    const rowOptions = { deferActivePointerSync: options.deferActivePointerSync };
     for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) {
       syncBarPaintEditor(this.shadowRoot, context, scope, this._paintPaletteValues(scope), {
         numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts, registry: this._paintPresetRegistry,
       });
-      const baselinePalettes = Object.fromEntries(['above', 'below'].map(direction => [direction,
-        this._baselinePaintPaletteValues(scope, direction)]));
+      const baselinePalettes = readDirectionalPaintPalettes(this._paintSections, 'baseline', scope);
       this._baselineSection.syncPaintEditors(this.shadowRoot, scope, baselinePalettes, this._paintPresetRegistry,
         { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts,
-          paintChildren: (paintScope, direction) => this._renderBaselinePaintPalette(paintScope, direction) });
-      for (const direction of ['above', 'below']) {
-        this._baselinePaintSections[direction].segments.syncRows(scope, { deferActivePointerSync: options.deferActivePointerSync });
-        this._baselinePaintSections[direction].gradientStops.syncRows(scope, { deferActivePointerSync: options.deferActivePointerSync });
-      }
+          paintChildren: directionalPaintChildren(this._paintSections, 'baseline', opts => this._renderCardGroup(opts)) });
+      syncDirectionalPaintRows(this._paintSections, 'baseline', scope, rowOptions);
       this._syncTargetControls(scope, options);
-      this._segmentsSection.syncRows(scope, { deferActivePointerSync: options.deferActivePointerSync });
-      this._gradientStopsSection.syncRows(scope, { deferActivePointerSync: options.deferActivePointerSync });
+      syncPaintSectionRows(this._paintSections.bar, scope, rowOptions);
     }
     this._syncStandaloneColorControls();
   }
@@ -1919,15 +1891,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   }
 
   _paintPaletteValues(scope) {
-    return { segments: this._segmentsSection._getScopedSegmentsValue(scope), gradient_stops: this._gradientStopsSection._getScopedGradientStopsValue(scope) };
+    return readPaintPalette(this._paintSections.bar, scope);
   }
 
   _targetRenderOptions(scope) {
     return { root: this.shadowRoot, registry: this._paintPresetRegistry,
-      paletteValues: Object.fromEntries([['above', this._targetPaintSections], ['below', this._targetBelowPaintSections]].map(([direction, sections]) => [direction, {
-        segments: sections.segments._getScopedSegmentsValue(scope), gradient_stops: sections.gradientStops._getScopedGradientStopsValue(scope),
-      }])),
-      paintChildren: (paintScope, direction) => this._renderTargetPaintPalette(paintScope, direction) };
+      paletteValues: readDirectionalPaintPalettes(this._paintSections, 'target', scope),
+      paintChildren: directionalPaintChildren(this._paintSections, 'target', opts => this._renderCardGroup(opts)) };
   }
 
   _syncTargetControls(scope, options = {}) {
@@ -1936,57 +1906,23 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._targetSection.syncControls(this.shadowRoot, scope, { ...this._targetRenderOptions(scope),
       numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts,
       replaced: this._targetConfigReplaced || forceTargetSync });
-    for (const sections of [this._targetPaintSections, this._targetBelowPaintSections]) {
-      sections.segments.syncRows(scope, { deferActivePointerSync: options.deferActivePointerSync });
-      sections.gradientStops.syncRows(scope, { deferActivePointerSync: options.deferActivePointerSync });
-    }
+    syncDirectionalPaintRows(this._paintSections, 'target', scope, { deferActivePointerSync: options.deferActivePointerSync });
   }
 
   _syncTargetEditors() {
     for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) this._syncTargetControls(scope);
   }
 
-  _renderTargetPaintPalette(scope, direction = 'above') {
-    const sections = direction === 'below' ? this._targetBelowPaintSections : this._targetPaintSections;
-    const renderGroup = options => this._renderCardGroup({ ...options, group: `target-${direction}-${options.group}` });
-    return { segments: sections.segments.render(scope, renderGroup, { section: false }),
-      gradient_stops: sections.gradientStops.render(scope, renderGroup, { section: false }) };
-  }
-
-  _handleTargetPaletteEvent(event, mode) {
-    return [this._targetPaintSections, this._targetBelowPaintSections].some(sections => sections.segments.handle(event, mode) || sections.gradientStops.handle(event, mode));
-  }
-
-  _renderBaselinePaintPalette(scope, direction) {
-    const sections = this._baselinePaintSections[direction];
-    const renderGroup = options => this._renderCardGroup({ ...options, group: `baseline-${direction}-${options.group}` });
-    return {
-      segments: sections.segments.render(scope, renderGroup, { section: false }),
-      gradient_stops: sections.gradientStops.render(scope, renderGroup, { section: false }),
-    };
-  }
-
   _baselinePaintPaletteValues(scope, direction) {
-    const sections = this._baselinePaintSections[direction];
-    return { segments: sections.segments._getScopedSegmentsValue(scope),
-      gradient_stops: sections.gradientStops._getScopedGradientStopsValue(scope) };
+    return readPaintPalette(this._paintSections[`baseline-${direction}`], scope);
   }
 
-  _handleBaselinePaletteEvent(event, mode) {
-    for (const direction of ['above', 'below']) {
-      const sections = this._baselinePaintSections[direction];
-      if (sections.segments.handle(event, mode) || sections.gradientStops.handle(event, mode)) return true;
-    }
-    return false;
-  }
-
-  _paletteUi({ paint = false } = {}) {
-    const selector = scope => `#${scope?.type === 'entity' ? `entity-${scope.index}` : 'card'}-paint-editor`;
+  _paletteUi() {
     return {
-      root: scope => paint ? this.shadowRoot?.querySelector(selector(scope)) : this.shadowRoot,
+      root: () => this.shadowRoot,
       isRendering: () => this._isRendering,
       render: () => this._render(),
-      focus: (control, scope, options) => this._focusPaletteControl(paint ? `${selector(scope)} ${control}` : control, options),
+      focus: (control, _scope, options) => this._focusPaletteControl(control, options),
     };
   }
 
@@ -2035,12 +1971,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     };
     Object.defineProperty(context, 'clearPaintPaletteState', {
       configurable: true,
-      value: (scope, destination = BAR_PAINT, property) => {
-        const sections = destination === BAR_PAINT ? { segments: this._segmentsSection, gradientStops: this._gradientStopsSection }
-          : destination === TARGET_ABOVE_PAINT ? this._targetPaintSections : destination === TARGET_BELOW_PAINT ? this._targetBelowPaintSections : this._baselinePaintSections[destination.id.replace('baseline-', '')];
-        if (!property || property === 'segments') sections?.segments.clearScopeState(scope);
-        if (!property || property === 'gradient_stops') sections?.gradientStops.clearScopeState(scope);
-      },
+      value: (scope, destination = BAR_PAINT, property) => clearPaintSectionState(this._paintSections[destination.id], scope, property),
       writable: true,
     });
     return context;
@@ -3567,7 +3498,7 @@ ${this._renderPresetMasterControls()}
                           content: this._baselineSection.render(scope, undefined, { root: this.shadowRoot,
                             registry: this._paintPresetRegistry,
                             paletteValues: (paintScope, direction) => this._baselinePaintPaletteValues(paintScope, direction),
-                            paintChildren: (paintScope, direction) => this._renderBaselinePaintPalette(paintScope, direction),
+                            paintChildren: directionalPaintChildren(this._paintSections, 'baseline', opts => this._renderCardGroup(opts)),
                           }),
 	                        });
 	                        const targetGroup = this._renderOverrideGroup({
@@ -3657,7 +3588,7 @@ ${this._renderScaleSection({ type: 'card' })}
 
 ${renderBarAppearanceSection(this._createSectionContext(), { type: 'card' }, () => `${this._baselineSection.render({ type: 'card' }, options => this._renderCardGroup(options), { root: this.shadowRoot,
   registry: this._paintPresetRegistry, paletteValues: (paintScope, direction) => this._baselinePaintPaletteValues(paintScope, direction),
-  paintChildren: (paintScope, direction) => this._renderBaselinePaintPalette(paintScope, direction) })}${this._renderCardGroup({ group: 'needle', title: 'Needle', summary: this._getNeedleSummary({ type: 'card' }), content: this._needleSection.render({ type: 'card' }) })}`, { heading: 'Bar', root: this.shadowRoot, animation: true, paintPresetRegistry: this._paintPresetRegistry, paletteValues: this._paintPaletteValues({ type: 'card' }), paintChildren: () => ({ segments: this._segmentsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false }), gradient_stops: this._gradientStopsSection.render({ type: 'card' }, options => this._renderCardGroup(options), { section: false }) }) })}
+  paintChildren: directionalPaintChildren(this._paintSections, 'baseline', opts => this._renderCardGroup(opts)) })}${this._renderCardGroup({ group: 'needle', title: 'Needle', summary: this._getNeedleSummary({ type: 'card' }), content: this._needleSection.render({ type: 'card' }) })}`, { heading: 'Bar', root: this.shadowRoot, animation: true, paintPresetRegistry: this._paintPresetRegistry, paletteValues: this._paintPaletteValues({ type: 'card' }), paintChildren: () => renderPaintPalette(this._paintSections.bar, { type: 'card' }, opts => this._renderCardGroup(opts)) })}
 
 ${renderMarkersSection({
   renderGroup: options => this._renderCardGroup(options),
@@ -3687,13 +3618,10 @@ ${this._renderFormattingSection({ type: 'card' })}
       this._syncEntityIconPickers();
       this._syncActionSelectors();
       for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) {
-        this._segmentsSection.syncRows(scope);
-        this._gradientStopsSection.syncRows(scope);
+        syncPaintSectionRows(this._paintSections.bar, scope);
       }
       if (this._getSelectedPaintPresetName() !== null && this._presetPaintSections) {
-        const presetScope = { type: 'card' };
-        this._presetPaintSections.segments.syncRows(presetScope);
-        this._presetPaintSections.gradientStops.syncRows(presetScope);
+        syncPaintSectionRows(this._presetPaintSections, { type: 'card' });
       }
       this._numericDrafts.apply(this.shadowRoot, numericFocus);
       this._syncTargetEditors();
@@ -3761,14 +3689,8 @@ ${this._renderFormattingSection({ type: 'card' })}
       const context = this._createPresetPaintContext();
       const scope = { type: 'card' };
       const sections = this._ensurePresetPaintSections();
-      const paletteFields = {
-        segments: sections.segments.render(scope, ({ content }) => content, { section: false }),
-        gradient_stops: sections.gradientStops.render(scope, ({ content }) => content, { section: false }),
-      };
-      const paletteValues = {
-        segments: sections.segments._getScopedSegmentsValue(scope),
-        gradient_stops: sections.gradientStops._getScopedGradientStopsValue(scope),
-      };
+      const paletteFields = renderPaintPalette(sections, scope, ({ content }) => content);
+      const paletteValues = readPaintPalette(sections, scope);
       const state = getBarPaintEditorState(context, scope, paletteValues, { status: 'empty', presets: {} });
       const fields = Object.fromEntries(['fill_style', 'solid_fill', 'color', 'opacity'].map(property => [property, {
         id: `preset-paint-${property}`, field: `preset-paint-${property}`,
@@ -3823,20 +3745,10 @@ ${this._renderFormattingSection({ type: 'card' })}
   _ensurePresetPaintSections() {
     if (this._presetPaintSections) return this._presetPaintSections;
     const context = this._createPresetPaintContext();
-    const ui = {
-      root: () => this.shadowRoot?.querySelector('#preset-paint-editor'),
-      isRendering: () => this._isRendering,
-      render: () => this._render(),
-      focus: (selector, _scope, options) => this._focusPaletteControl(`#preset-paint-editor ${selector}`, options),
-    };
-    this._presetPaintSections = {
-      segments: new SegmentsSection(context, ui, {
-        write: (scope, rows, options) => createBarPaintBindings(context, scope).set('segments', rows, options),
-      }),
-      gradientStops: new GradientStopsSection(context, ui, {
-        write: (scope, rows, options) => createBarPaintBindings(context, scope).set('gradient_stops', rows, options),
-      }),
-    };
+    const ui = scopePaintSectionUi(this.shadowRoot, this._paletteUi(), () => '#preset-paint-editor');
+    this._presetPaintSections = createPaintSectionPair(context, ui, property => ({
+      write: (scope, rows, options) => createBarPaintBindings(context, scope).set(property, rows, options),
+    }));
     return this._presetPaintSections;
   }
 
@@ -3845,15 +3757,11 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (name === null || !this.shadowRoot?.querySelector('#preset-paint-editor')) return;
     const context = this._createPresetPaintContext();
     const sections = this._ensurePresetPaintSections();
-    const paletteValues = {
-      segments: sections.segments._getScopedSegmentsValue({ type: 'card' }),
-      gradient_stops: sections.gradientStops._getScopedGradientStopsValue({ type: 'card' }),
-    };
-    const state = getBarPaintEditorState(context, { type: 'card' }, paletteValues, { status: 'empty', presets: {} });
+    const scope = { type: 'card' };
+    const state = getBarPaintEditorState(context, scope, readPaintPalette(sections, scope), { status: 'empty', presets: {} });
     syncPaintEditor(this.shadowRoot, 'preset-paint-editor', { ...state, mode: 'manual', registryStatus: 'ready', diagnostics: [] },
       { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts });
-    sections.segments.syncRows({ type: 'card' });
-    sections.gradientStops.syncRows({ type: 'card' });
+    syncPaintSectionRows(sections, scope);
     const choice = [...this.shadowRoot.querySelectorAll('.paint-preset-choice')]
       .find(element => element.dataset.presetName === name);
     if (choice) {
@@ -3868,11 +3776,7 @@ ${this._renderFormattingSection({ type: 'card' })}
   }
 
   _resetPresetPaintSections() {
-    const sections = this._presetPaintSections;
-    if (!sections) return;
-    const scope = { type: 'card' };
-    sections.segments.clearScopeState(scope);
-    sections.gradientStops.clearScopeState(scope);
+    clearPaintSectionState(this._presetPaintSections, { type: 'card' });
   }
 
   _setPaintPresetMessage(message) {
@@ -4221,10 +4125,8 @@ ${this._renderFormattingSection({ type: 'card' })}
   _handleClick(event) {
     const presetManager = event.target?.closest?.('.paint-preset-manager');
     if (presetManager) {
-      if (this._presetPaintSections
-        && (this._presetPaintSections.segments.handle(event, 'click') || this._presetPaintSections.gradientStops.handle(event, 'click'))) return;
-    } else if (this._segmentsSection.handle(event, 'click') || this._gradientStopsSection.handle(event, 'click')
-      || this._handleBaselinePaletteEvent(event, 'click') || this._handleTargetPaletteEvent(event, 'click')) return;
+      if (handlePaintPaletteEvent(this._presetPaintSections, event, 'click')) return;
+    } else if (handlePaintSectionEvent(this._paintSections, event, 'click')) return;
     const target = event.target?.closest?.('[data-action]') ?? event.target;
     const action = target?.dataset?.action;
     if (!action) return;
@@ -4317,10 +4219,8 @@ ${this._renderFormattingSection({ type: 'card' })}
     if (!this._handleCssColorEvent(event)) return;
     const presetManager = event.target?.closest?.('.paint-preset-manager');
     if (presetManager) {
-      if (this._presetPaintSections
-        && (this._presetPaintSections.segments.handle(event, 'change') || this._presetPaintSections.gradientStops.handle(event, 'change'))) return;
-    } else if (this._segmentsSection.handle(event, 'change') || this._gradientStopsSection.handle(event, 'change')
-      || this._handleBaselinePaletteEvent(event, 'change') || this._handleTargetPaletteEvent(event, 'change')) return;
+      if (handlePaintPaletteEvent(this._presetPaintSections, event, 'change')) return;
+    } else if (handlePaintSectionEvent(this._paintSections, event, 'change')) return;
     const kind = event.target?.dataset?.kind;
     this._handleFieldEvent(event);
   }
@@ -4330,10 +4230,8 @@ ${this._renderFormattingSection({ type: 'card' })}
     const presetManager = event.target?.closest?.('.paint-preset-manager');
     if (!this._handleCssColorEvent(event)) return;
     if (presetManager) {
-      if (this._presetPaintSections
-        && (this._presetPaintSections.segments.handle(event, 'input') || this._presetPaintSections.gradientStops.handle(event, 'input'))) return;
-    } else if (this._segmentsSection.handle(event, 'input') || this._gradientStopsSection.handle(event, 'input')
-      || this._handleBaselinePaletteEvent(event, 'input') || this._handleTargetPaletteEvent(event, 'input')) return;
+      if (handlePaintPaletteEvent(this._presetPaintSections, event, 'input')) return;
+    } else if (handlePaintSectionEvent(this._paintSections, event, 'input')) return;
     const target = event.target;
     if (!target) return;
     if (target.tagName === 'HA-ENTITY-PICKER' || target.tagName === 'HA-ENTITY-ATTRIBUTE-PICKER') return;
@@ -4370,17 +4268,14 @@ ${this._renderFormattingSection({ type: 'card' })}
   _handleKeydown(event) {
     const presetManager = event.target?.closest?.('.paint-preset-manager');
     if (presetManager) {
-      if (this._presetPaintSections
-        && (this._presetPaintSections.segments.handle(event, 'keydown') || this._presetPaintSections.gradientStops.handle(event, 'keydown'))) return;
+      handlePaintPaletteEvent(this._presetPaintSections, event, 'keydown');
       return;
     }
-    this._segmentsSection.handle(event, 'keydown') || this._gradientStopsSection.handle(event, 'keydown')
-      || this._handleBaselinePaletteEvent(event, 'keydown') || this._handleTargetPaletteEvent(event, 'keydown');
+    handlePaintSectionEvent(this._paintSections, event, 'keydown');
   }
 
   _handleFieldEvent(event) {
-    if (this._segmentsSection.handle(event, 'field') || this._gradientStopsSection.handle(event, 'field')
-      || this._handleBaselinePaletteEvent(event, 'field') || this._handleTargetPaletteEvent(event, 'field')) return;
+    if (handlePaintSectionEvent(this._paintSections, event, 'field')) return;
     const target = event.target;
     const rawField = target?.dataset?.field;
     const rawKind = target?.dataset?.kind;
