@@ -189,11 +189,11 @@ function startEventSubscription(entry) {
     }, 'lovelace_updated');
   } catch (error) { request = Promise.reject(error); }
   Promise.resolve(request).then(unsubscribe => {
-    entry.eventPending = false;
     if (!entry.active || !entry.online || generation !== entry.eventGeneration || !entry.consumers.size) {
       try { Promise.resolve(unsubscribe?.()).catch(() => {}); } catch { /* Connection may already be closed. */ }
       return;
     }
+    entry.eventPending = false;
     entry.eventUnsubscribe = unsubscribe;
   }).catch(() => {
     if (generation === entry.eventGeneration) entry.eventPending = false;

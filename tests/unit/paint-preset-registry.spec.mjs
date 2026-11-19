@@ -8,7 +8,7 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function createConnection(config = {}) {
+function createConnection(config = {}, subscribe = ({ stop }) => Promise.resolve(stop)) {
   const listeners = new Map();
   const subscriptions = [];
   let response = config;
@@ -18,7 +18,7 @@ function createConnection(config = {}) {
     subscribeEvents: vi.fn((callback, eventType) => {
       const subscription = { callback, eventType, stop: vi.fn() };
       subscriptions.push(subscription);
-      return Promise.resolve(subscription.stop);
+      return subscribe(subscription);
     }),
     addEventListener: vi.fn((type, callback) => {
       const callbacks = listeners.get(type) ?? new Set();
@@ -222,6 +222,83 @@ describe('dashboard paint preset registry', () => {
     expect(connection.sendMessagePromise).toHaveBeenCalledTimes(2);
     expect(consumer.getSnapshot().presets.current.color).toBe('blue');
     consumer.unsubscribe();
+  });
+
+  it.each(['fulfillment', 'rejection'])('keeps the replacement pending after stale subscription %s', async (settlement) => {
+    const pendingConfig = deferred();
+    const original = deferred();
+    const replacement = deferred();
+    const subscribe = vi.fn(({ stop }) => Promise.resolve(stop))
+      .mockReturnValueOnce(original.promise)
+      .mockReturnValueOnce(replacement.promise);
+    const connection = createConnection(() => pendingConfig.promise, subscribe);
+    const hass = hassFor(connection);
+    const first = subscribeDashboardPaintPresets(hass, 'dashboard-a', vi.fn());
+    connection.connected = false;
+    connection.emit('disconnected');
+    connection.connected = true;
+    connection.emit('ready');
+    expect(connection.subscribeEvents).toHaveBeenCalledTimes(2);
+
+    const [stale, current] = connection.subscriptions;
+    if (settlement === 'fulfillment') original.resolve(stale.stop);
+    else original.reject(new Error('Original subscription failed'));
+    await flush();
+    expect(stale.stop).toHaveBeenCalledTimes(settlement === 'fulfillment' ? 1 : 0);
+
+    // Keep the registry loading so each joining consumer tries to start a listener.
+    expect(first.getSnapshot().status).toBe('loading');
+    const second = subscribeDashboardPaintPresets(hass, 'dashboard-a', vi.fn());
+    const third = subscribeDashboardPaintPresets(hass, 'dashboard-a', vi.fn());
+    expect(connection.subscribeEvents).toHaveBeenCalledTimes(2);
+    expect(connection.addEventListener.mock.calls.map(([type]) => type)).toEqual(['disconnected', 'ready']);
+
+    replacement.resolve(current.stop);
+    pendingConfig.resolve({});
+    await flush();
+    const reads = connection.sendMessagePromise.mock.calls.length;
+    const update = { event_type: 'lovelace_updated' };
+    stale.callback(update);
+    expect(connection.sendMessagePromise).toHaveBeenCalledTimes(reads);
+    connection.setResponse({ sbcp_fragments: { paint_presets: { current: { color: 'blue' } } } });
+    current.callback(update);
+    await flush();
+    expect(connection.sendMessagePromise).toHaveBeenCalledTimes(reads + 1);
+    expect(first.getSnapshot().presets.current.color).toBe('blue');
+    expect(second.getSnapshot()).toBe(first.getSnapshot());
+    expect(third.getSnapshot()).toBe(first.getSnapshot());
+
+    first.unsubscribe();
+    second.unsubscribe();
+    expect(current.stop).not.toHaveBeenCalled();
+    third.unsubscribe();
+    expect(current.stop).toHaveBeenCalledTimes(1);
+    expect(connection.removeEventListener.mock.calls).toEqual(connection.addEventListener.mock.calls);
+  });
+
+  it('allows a joining consumer to retry a failed current subscription while loading', async () => {
+    const pendingConfig = deferred();
+    const failed = deferred();
+    const subscribe = vi.fn(({ stop }) => Promise.resolve(stop)).mockReturnValueOnce(failed.promise);
+    const connection = createConnection(() => pendingConfig.promise, subscribe);
+    const hass = hassFor(connection);
+    const first = subscribeDashboardPaintPresets(hass, 'dashboard-a', vi.fn());
+    failed.reject(new Error('Current subscription failed'));
+    await flush();
+    expect(connection.subscribeEvents).toHaveBeenCalledTimes(1);
+
+    const second = subscribeDashboardPaintPresets(hass, 'dashboard-a', vi.fn());
+    const third = subscribeDashboardPaintPresets(hass, 'dashboard-a', vi.fn());
+    await flush();
+    expect(connection.subscribeEvents).toHaveBeenCalledTimes(2);
+    expect(connection.addEventListener).toHaveBeenCalledTimes(2);
+
+    pendingConfig.resolve({});
+    await flush();
+    first.unsubscribe();
+    second.unsubscribe();
+    third.unsubscribe();
+    expect(connection.subscriptions[1].stop).toHaveBeenCalledTimes(1);
   });
 
   it('starts empty before Home Assistant is ready and attaches when a connection arrives', async () => {
