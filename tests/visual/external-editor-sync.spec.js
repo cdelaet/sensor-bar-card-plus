@@ -72,6 +72,31 @@ async function installRegistry(page, editor) {
   await expect(editor.locator('#card-paint-editor .paint-registry-status')).toBeVisible();
 }
 
+async function publishPresets(editor, presets) {
+  await editor.evaluate((el, presets) => {
+    window.__registryDashboard = { sbcp_fragments: { paint_presets: presets } };
+    window.__registryListener({ event_type: 'lovelace_updated' });
+  }, presets);
+  await expect.poll(() => editor.evaluate(el => el._paintPresetRegistry.presets)).toEqual(presets);
+}
+
+async function mountFeatureExtremum(page, source, key, { showTargetPaint = false } = {}) {
+  const config = d.seed('feature');
+  config[key].enabled = false;
+  config.target.when_above = { paint: { preset: 'warm' } };
+  const editor = await mount(page, 'feature', source, { config, openSegments: false });
+  await d.openSection(editor, { section: 'Bar Appearance' });
+  await installRegistry(page, editor);
+  await publishPresets(editor, { warm: { fill_style: 'solid', color: 'red' } });
+  if (showTargetPaint) await d.openSection(editor, { section: 'Target', name: 'target-above-paint-preset' });
+  await editor.locator(`#card-group-marker-${key}`).click();
+  const checkbox = editor.locator(`#${key}-show`);
+  await expect(checkbox).not.toBeChecked();
+  await checkbox.scrollIntoViewIfNeeded();
+  await checkbox.focus();
+  return { editor, checkbox };
+}
+
 for (const source of ['src', 'dist']) for (const host of ['standalone', 'feature']) {
   test(`external hass refresh preserves Add Segment activation (${host}, ${source})`, async ({ page }) => {
     const editor = await mount(page, host, source);
@@ -119,6 +144,113 @@ for (const source of ['src', 'dist']) for (const host of ['standalone', 'feature
 }
 
 for (const source of ['src', 'dist']) {
+  test(`Feature preset warning waits for a held Peak checkbox (${source})`, async ({ page }) => {
+    const { editor, checkbox } = await mountFeatureExtremum(page, source, 'peak', { showTargetPaint: true });
+    const warning = editor.locator('#target-above-paint-editor .paint-preset-feedback');
+    await expect(warning).toBeHidden();
+    const beforeEvents = await d.count(page);
+    const box = await checkbox.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    const before = await checkbox.evaluate(node => {
+      window.__pressedExtremum = { node, focus: node.getRootNode().activeElement };
+      return { top: node.getBoundingClientRect().top, scroll: scrollY };
+    });
+
+    await publishPresets(editor, { alternate: { fill_style: 'solid', color: 'blue' } });
+    const during = await checkbox.evaluate(node => ({
+      sameNode: node === window.__pressedExtremum.node,
+      sameFocus: node.getRootNode().activeElement === window.__pressedExtremum.focus,
+      top: node.getBoundingClientRect().top, scroll: scrollY, checked: node.checked,
+    }));
+    const visibleWhileHeld = await warning.isVisible();
+    await page.mouse.up();
+
+    expect(during).toEqual({ ...before, sameNode: true, sameFocus: true, checked: false });
+    expect(visibleWhileHeld).toBe(false);
+    await expect(warning).toHaveText(/Preset .warm. was not found/);
+    await expect(checkbox).toBeChecked();
+    expect((await d.saved(page)).peak.enabled).toBe(true);
+    expect(await d.count(page)).toBe(beforeEvents + 1);
+    expect(await checkbox.evaluate(node => ({
+      sameNode: node === window.__pressedExtremum.node,
+      sameFocus: node.getRootNode().activeElement === window.__pressedExtremum.focus,
+      scroll: scrollY,
+    }))).toEqual({ sameNode: true, sameFocus: true, scroll: before.scroll });
+
+    await publishPresets(editor, { warm: { fill_style: 'solid', color: 'blue' } });
+    await expect(warning).toBeHidden();
+    await expect(checkbox).toBeChecked();
+    expect(await d.count(page)).toBe(beforeEvents + 1);
+  });
+
+  test(`Feature preset response during capture preserves the Floor toggle (${source})`, async ({ page }) => {
+    const { editor, checkbox } = await mountFeatureExtremum(page, source, 'floor');
+    const beforeEvents = await d.count(page);
+    await checkbox.evaluate(node => {
+      const root = node.getRootNode();
+      const record = event => ({ checked: node.checked, trusted: event.isTrusted, scroll: scrollY });
+      const reply = new Promise(resolve => node.addEventListener('click', event => {
+        window.__floorClick = { node, focus: root.activeElement, ...record(event) };
+        resolve({ sbcp_fragments: { paint_presets: { warm: { fill_style: 'solid', color: 'blue' } } } });
+      }, { capture: true, once: true }));
+      for (const type of ['input', 'change']) node.addEventListener(type, event => {
+        window[`__floor_${type}`] = record(event);
+      }, { once: true });
+      root.host.hass.connection.sendMessagePromise = () => reply;
+      window.__registryListener({ event_type: 'lovelace_updated' });
+    });
+    await checkbox.click();
+    await expect.poll(() => editor.evaluate(el => el._paintPresetRegistry.presets.warm?.color)).toBe('blue');
+    const trace = await checkbox.evaluate(node => ({
+      click: { checked: window.__floorClick.checked, trusted: window.__floorClick.trusted },
+      input: window.__floor_input?.checked, change: window.__floor_change?.checked,
+      sameNode: node === window.__floorClick.node,
+      sameFocus: node.getRootNode().activeElement === window.__floorClick.focus,
+      sameScroll: scrollY === window.__floorClick.scroll,
+    }));
+
+    expect(trace).toEqual({ click: { checked: true, trusted: true }, input: true,
+      change: true, sameNode: true, sameFocus: true, sameScroll: true });
+    await expect(checkbox).toBeChecked();
+    expect((await d.saved(page)).floor.enabled).toBe(true);
+    expect(await d.count(page)).toBe(beforeEvents + 1);
+  });
+
+  test(`Feature disconnect discards a deferred preset sync (${source})`, async ({ page }) => {
+    const { editor } = await mountFeatureExtremum(page, source, 'peak', { showTargetPaint: true });
+    const beforeEvents = await d.count(page);
+    const warning = editor.locator('#target-above-paint-editor .paint-preset-feedback');
+    const oldWarning = await warning.elementHandle();
+    await expect(warning).toBeHidden();
+    await page.evaluate(() => {
+      const button = document.createElement('button');
+      button.textContent = 'Outside editor';
+      button.style.cssText = 'position:fixed;top:0;right:0;z-index:10';
+      document.body.append(button);
+    });
+    const outside = page.getByRole('button', { name: 'Outside editor' });
+    // Let the checkbox's ordinary blur sync finish before testing registry teardown.
+    await outside.focus();
+    await editor.evaluate(el => el.updateComplete);
+    const box = await outside.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await publishPresets(editor, { alternate: { fill_style: 'solid', color: 'blue' } });
+    await expect(warning).toBeHidden();
+    await editor.evaluate(el => {
+      const sync = el._syncControls.bind(el);
+      el._syncControls = (...args) => { window.__detachedPresetSync = true; return sync(...args); };
+      el.remove();
+    });
+    await outside.evaluate(node => node.addEventListener('click', event => { window.__outsideRelease = event.isTrusted; }));
+    await page.mouse.up();
+    expect(await page.evaluate(() => window.__outsideRelease)).toBe(true);
+    expect(await page.evaluate(() => window.__detachedPresetSync)).toBeUndefined();
+    expect(await oldWarning.evaluate(node => node.hidden)).toBe(true);
+    expect(await d.count(page)).toBe(beforeEvents);
+  });
+
   for (const timing of ['after close', 'during capture', 'before a deferred rebuild']) {
     test(`stale Card icon selection is rejected ${timing} (${source})`, async ({ page }) => {
       const config = d.seed('standalone');

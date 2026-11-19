@@ -219,14 +219,17 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const path = dashboardPathFromLocation();
     if (!this._paintPresetHandle) {
       const generation = ++this._paintPresetSubscriptionGeneration;
+      const synchronize = () => {
+        if (!this.isConnected || generation !== this._paintPresetSubscriptionGeneration) return;
+        if (this.shadowRoot?.innerHTML) this._syncControls();
+        else this._requestRender({ deferActivePointerSync: true });
+      };
       this._paintPresetHandle = subscribeDashboardPaintPresets(this._hass, path, snapshot => {
         if (generation !== this._paintPresetSubscriptionGeneration || snapshot === this._paintPresetRegistry) return;
         this._paintPresetRegistry = snapshot;
-        if (this.shadowRoot?.innerHTML) this._syncControls({ deferActivePointerSync: true });
-        else this._requestRender({ deferActivePointerSync: true });
+        // Preset feedback can move pressed controls outside the Paint editors.
+        if (!deferPaletteSyncUntilClick(null, synchronize, this.shadowRoot)) synchronize();
       });
-      this._paintPresetRegistry = this._paintPresetHandle.getSnapshot();
-      if (this.shadowRoot?.innerHTML) this._syncControls({ deferActivePointerSync: true });
       return;
     }
     this._paintPresetHandle.update(this._hass, path);
