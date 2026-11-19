@@ -183,6 +183,12 @@ export class PaletteSection {
   _getShadowElementById(id, scope) { return this._getPaletteRoot(scope)?.querySelector(`#${this.paletteId(id)}`); }
   _renderListRows(items, renderItem) { return items.map(renderItem).join(''); }
 
+  _deferActivePointerSync(scope, synchronize) {
+    const root = this._getPaletteRoot(scope);
+    const active = root?.matches?.(':active') ? root : root?.querySelector?.(':active');
+    return active ? deferPaletteSyncUntilClick(active, synchronize, root) : false;
+  }
+
   _syncPaletteActivity(scope, group, active, summary) {
     const note = this._getPaletteRoot(scope)?.querySelector(`[data-palette-inactive="${group}"]`);
     if (!note) return;

@@ -49,6 +49,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._chooseEntity = false;
     this._renderEpoch = 0;
     this._updateComplete = Promise.resolve();
+    this._pendingRenderOptions = {};
     this._paintPresetHandle = null;
     this._paintPresetSubscriptionGeneration = 0;
     this._paintPresetRegistry = { status: 'loading', presets: {} };
@@ -185,9 +186,9 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     if (changed || !this.shadowRoot?.innerHTML) this._requestRender();
   }
 
-  set hass(value) { this._hass = value; this._syncPaintPresetRegistry(); this._requestRender(); }
+  set hass(value) { this._hass = value; this._syncPaintPresetRegistry(); this._requestRender({ deferActivePointerSync: true }); }
   get hass() { return this._hass; }
-  set context(value) { this._context = value ?? {}; this._syncPaintPresetRegistry(); this._requestRender(); }
+  set context(value) { this._context = value ?? {}; this._syncPaintPresetRegistry(); this._requestRender({ deferActivePointerSync: true }); }
   get context() { return this._context; }
   get updateComplete() { return this._updateComplete; }
   get _explicitEntity() { return typeof this._config.entity === 'string' ? this._config.entity.trim() : ''; }
@@ -221,24 +222,27 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       this._paintPresetHandle = subscribeDashboardPaintPresets(this._hass, path, snapshot => {
         if (generation !== this._paintPresetSubscriptionGeneration || snapshot === this._paintPresetRegistry) return;
         this._paintPresetRegistry = snapshot;
-        if (this.shadowRoot?.innerHTML) this._syncControls();
-        else this._requestRender();
+        if (this.shadowRoot?.innerHTML) this._syncControls({ deferActivePointerSync: true });
+        else this._requestRender({ deferActivePointerSync: true });
       });
       this._paintPresetRegistry = this._paintPresetHandle.getSnapshot();
-      if (this.shadowRoot?.innerHTML) this._syncControls();
+      if (this.shadowRoot?.innerHTML) this._syncControls({ deferActivePointerSync: true });
       return;
     }
     this._paintPresetHandle.update(this._hass, path);
   }
 
-  _requestRender() {
+  _requestRender(options = {}) {
+    this._pendingRenderOptions = { ...this._pendingRenderOptions, ...options };
     if (this._renderScheduled) return;
     this._renderScheduled = true;
     const epoch = this._renderEpoch;
     this._updateComplete = Promise.resolve().then(() => {
       if (epoch !== this._renderEpoch) return;
       this._renderScheduled = false;
-      this._render();
+      const renderOptions = this._pendingRenderOptions;
+      this._pendingRenderOptions = {};
+      this._render(renderOptions);
     });
   }
 
@@ -441,7 +445,28 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const item = active.dataset.segmentIndex ?? active.dataset.stopIndex ?? active.dataset.index;
     const rowSelector = selector && active.dataset.kind && item !== undefined
       ? `${selector}[data-${active.dataset.segmentIndex !== undefined ? 'segment-index' : active.dataset.stopIndex !== undefined ? 'stop-index' : 'index'}="${item}"]` : selector;
-    return rowSelector ? { selector: rowSelector, start: active.selectionStart, end: active.selectionEnd } : null;
+    if (!rowSelector) return null;
+    const paintId = active.closest?.('.paint-editor')?.id;
+    const selection = active.type === 'text'
+      ? { start: active.selectionStart, end: active.selectionEnd } : null;
+    return { selector: paintId ? `#${paintId} ${rowSelector}` : rowSelector,
+      start: selection?.start ?? null, end: selection?.end ?? null, viewport: this._captureFocusViewport(active) };
+  }
+
+  _captureFocusViewport(active = this.shadowRoot?.activeElement) {
+    if (!active) return null;
+    const elements = [];
+    const record = element => {
+      if (!element || elements.some(entry => entry.element === element)) return;
+      if (element.scrollTop || element.scrollLeft || element.scrollHeight > element.clientHeight
+        || element.scrollWidth > element.clientWidth) {
+        elements.push({ element, top: element.scrollTop, left: element.scrollLeft });
+      }
+    };
+    for (let element = active; element; element = element.parentElement) record(element);
+    for (let element = this.shadowRoot?.host; element; element = element.parentElement) record(element);
+    const view = this.ownerDocument?.defaultView;
+    return { view, x: view?.scrollX ?? 0, y: view?.scrollY ?? 0, elements };
   }
 
   _focusPaletteControl(selector, { immediate = false } = {}) {
@@ -456,7 +481,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this.shadowRoot.querySelector(selector)?.focus?.({ preventScroll: true });
   }
 
-  _render() {
+  _render(options = {}) {
     const segmentRows = this._segmentsSection._getScopedSegmentsValue(root);
     const gradientRows = this._gradientStopsSection._getScopedGradientStopsValue(root);
     const markers = this._referenceMarkersSection._getGenericMarkers(root);
@@ -474,6 +499,9 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const defer = activeKind?.endsWith('-text-fallback') || activeField?.endsWith('-text-fallback')
       || activeField === 'feature-entity-override' && !this._context.entity_id && !this._explicitEntity
       || this.shadowRoot.activeElement?.validity?.badInput && this._numericDrafts.captureFocus(this.shadowRoot);
+    const structureChanged = signature !== this._structureSignature || markerSignature !== this._referenceStructureSignature;
+    if (!defer && structureChanged
+      && deferPaletteSyncUntilClick(null, () => this._requestRender(options), this.shadowRoot)) return;
     let replaceReferences = false;
     if (markerSignature !== this._referenceStructureSignature && !defer) {
       this._isRendering = true;
@@ -527,12 +555,21 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       </div>`;
       } finally { this._isRendering = false; }
       this._structureSignature = signature;
-      this._syncControls();
+      this._syncControls(options);
       const active = focus && this.shadowRoot.querySelector(focus.selector);
       active?.focus?.({ preventScroll: true });
       if (active?.type === 'text' && focus.start != null) active.setSelectionRange?.(focus.start, focus.end);
+      if (focus?.viewport) {
+        for (const entry of focus.viewport.elements) {
+          if (entry.element.isConnected) {
+            entry.element.scrollTop = entry.top;
+            entry.element.scrollLeft = entry.left;
+          }
+        }
+        focus.viewport.view?.scrollTo(focus.viewport.x, focus.viewport.y);
+      }
     } else {
-      this._syncControls();
+      this._syncControls(options);
     }
     if (!defer) this._referenceStructureSignature = markerSignature;
     this._applyPendingPaletteFocus();
@@ -545,7 +582,11 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     this._configReplaced = false;
   }
 
-  _syncControls() {
+  _syncControls(options = {}) {
+    const activePaintControl = options.deferActivePointerSync
+      ? this.shadowRoot.querySelector('.paint-editor :active') : null;
+    if (activePaintControl
+      && deferPaletteSyncUntilClick(activePaintControl, () => this._syncControls(options), this.shadowRoot)) return;
     for (const picker of this.shadowRoot.querySelectorAll('ha-entity-picker')) {
       if (!picker._sbcpEntityChangeHandler && typeof picker.addEventListener === 'function') {
         picker._sbcpEntityChangeHandler = event => {
@@ -575,18 +616,19 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts,
         paintChildren: (paintScope, direction) => this._renderBaselinePaintPalette(paintScope, direction) });
     for (const direction of ['above', 'below']) {
-      this._baselinePaintSections[direction].segments.syncRows(root);
-      this._baselinePaintSections[direction].gradientStops.syncRows(root);
+      this._baselinePaintSections[direction].segments.syncRows(root, { deferActivePointerSync: options.deferActivePointerSync });
+      this._baselinePaintSections[direction].gradientStops.syncRows(root, { deferActivePointerSync: options.deferActivePointerSync });
     }
     this._targetSection.syncControls(this.shadowRoot, root, { ...this._targetRenderOptions(root),
       numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts,
       replaced: this._configReplaced || this._forceTargetSync });
     this._forceTargetSync = false;
     for (const sections of [this._targetPaintSections, this._targetBelowPaintSections]) {
-      sections.segments.syncRows(root); sections.gradientStops.syncRows(root);
+      sections.segments.syncRows(root, { deferActivePointerSync: options.deferActivePointerSync });
+      sections.gradientStops.syncRows(root, { deferActivePointerSync: options.deferActivePointerSync });
     }
-    const segmentsRebuilt = this._segmentsSection.syncRows(root);
-    const gradientStopsRebuilt = this._gradientStopsSection.syncRows(root);
+    const segmentsRebuilt = this._segmentsSection.syncRows(root, { deferActivePointerSync: options.deferActivePointerSync });
+    const gradientStopsRebuilt = this._gradientStopsSection.syncRows(root, { deferActivePointerSync: options.deferActivePointerSync });
     const paletteRoot = this._segmentsSection._getPaletteRoot(root);
     const color = paintState.paint.color;
     const values = {

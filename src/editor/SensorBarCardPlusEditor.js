@@ -189,7 +189,38 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._boundHandleValueChanged = (event) => this._handleValueChanged(event);
     this._boundHandleKeydown = (event) => this._handleKeydown(event);
     customElements.whenDefined?.('ha-entity-attribute-picker').then(() => {
-      if (this.shadowRoot?.querySelector('input[data-kind$="-attribute"]')) this._render();
+      if (!this.shadowRoot?.querySelector('input[data-kind$="-attribute"]')) return;
+      const active = this.shadowRoot.activeElement;
+      const item = active?.dataset?.segmentIndex ?? active?.dataset?.stopIndex ?? active?.dataset?.index;
+      const rowSelector = active?.id ? `#${active.id}`
+        : active?.dataset?.kind ? `[data-kind="${active.dataset.kind}"]${item === undefined ? '' : `[data-${active.dataset.segmentIndex !== undefined ? 'segment-index' : active.dataset.stopIndex !== undefined ? 'stop-index' : 'index'}="${item}"]`}`
+        : active?.dataset?.field ? `[data-field="${active.dataset.field}"]`
+        : active?.dataset?.action ? `[data-action="${active.dataset.action}"]` : null;
+      const paintId = active?.closest?.('.paint-editor')?.id;
+      const selection = active?.type === 'text'
+        ? { start: active.selectionStart, end: active.selectionEnd } : null;
+      const focus = rowSelector ? {
+        selector: paintId ? `#${paintId} ${rowSelector}` : rowSelector,
+        start: selection?.start ?? null, end: selection?.end ?? null,
+        viewport: this._captureFocusViewport(),
+      } : null;
+      const render = () => {
+        this._render();
+        const replacement = focus && this.shadowRoot?.querySelector(focus.selector);
+        replacement?.focus?.({ preventScroll: true });
+        if (replacement?.type === 'text' && focus.start != null) replacement.setSelectionRange?.(focus.start, focus.end);
+        if (focus?.viewport) {
+          for (const entry of focus.viewport.elements) {
+            if (entry.element.isConnected) {
+              entry.element.scrollTop = entry.top;
+              entry.element.scrollLeft = entry.left;
+            }
+          }
+          focus.viewport.view?.scrollTo(focus.viewport.x, focus.viewport.y);
+        }
+      };
+      if (deferPaletteSyncUntilClick(null, () => this._render(), this.shadowRoot)) return;
+      render();
     }).catch(() => {});
   }
 
@@ -286,7 +317,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._syncWindowHelperOptions();
     this._syncEntityAttributePickers();
     this._syncActionSelectors();
-    this._syncPaintEditors();
+    this._syncPaintEditors({ deferActivePointerSync: true });
   }
 
   connectedCallback() { this._syncPaintPresetRegistry(); }
@@ -317,11 +348,11 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         if (generation !== this._paintPresetSubscriptionGeneration || snapshot === this._paintPresetRegistry) return;
         this._paintPresetRegistry = snapshot;
         this._syncPresetMasterControls();
-        this._syncPaintEditors();
+        this._syncPaintEditors({ deferActivePointerSync: true });
       });
       this._paintPresetRegistry = this._paintPresetHandle.getSnapshot();
       this._syncPresetMasterControls();
-      this._syncPaintEditors();
+      this._syncPaintEditors({ deferActivePointerSync: true });
       return;
     }
     this._paintPresetHandle.update(this._hass, path);
@@ -329,6 +360,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _syncPaintEditors(options = {}) {
     if (!this.shadowRoot?.innerHTML) return;
+    const synchronize = () => this._syncPaintEditors(options);
+    const activePaintControl = options.deferActivePointerSync
+      ? this.shadowRoot.querySelector('.paint-editor :active') : null;
+    if (activePaintControl && deferPaletteSyncUntilClick(activePaintControl, synchronize, this.shadowRoot)) return;
     const context = this._createSectionContext();
     for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) {
       syncBarPaintEditor(this.shadowRoot, context, scope, this._paintPaletteValues(scope), {
@@ -340,12 +375,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts,
           paintChildren: (paintScope, direction) => this._renderBaselinePaintPalette(paintScope, direction) });
       for (const direction of ['above', 'below']) {
-        this._baselinePaintSections[direction].segments.syncRows(scope);
-        this._baselinePaintSections[direction].gradientStops.syncRows(scope);
+        this._baselinePaintSections[direction].segments.syncRows(scope, { deferActivePointerSync: options.deferActivePointerSync });
+        this._baselinePaintSections[direction].gradientStops.syncRows(scope, { deferActivePointerSync: options.deferActivePointerSync });
       }
       this._syncTargetControls(scope, options);
-      this._segmentsSection.syncRows(scope);
-      this._gradientStopsSection.syncRows(scope);
+      this._segmentsSection.syncRows(scope, { deferActivePointerSync: options.deferActivePointerSync });
+      this._gradientStopsSection.syncRows(scope, { deferActivePointerSync: options.deferActivePointerSync });
     }
     this._syncStandaloneColorControls();
   }
@@ -368,6 +403,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
 
   _syncPresetMasterControls() {
     if (!this.shadowRoot?.innerHTML) return;
+    if (deferPaletteSyncUntilClick(null, () => this._syncPresetMasterControls(), this.shadowRoot)) return;
     const isMaster = Object.hasOwn(this._draftConfig, 'preset_library');
     const otherMasterExists = (this._paintPresetRegistry?.masterCount ?? 0) > (isMaster ? 1 : 0);
     const diagnostic = this._paintPresetRegistry?.diagnostic?.code === 'multiple_preset_masters'
@@ -1959,7 +1995,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts,
       replaced: this._targetConfigReplaced || forceTargetSync });
     for (const sections of [this._targetPaintSections, this._targetBelowPaintSections]) {
-      sections.segments.syncRows(scope); sections.gradientStops.syncRows(scope);
+      sections.segments.syncRows(scope, { deferActivePointerSync: options.deferActivePointerSync });
+      sections.gradientStops.syncRows(scope, { deferActivePointerSync: options.deferActivePointerSync });
     }
   }
 

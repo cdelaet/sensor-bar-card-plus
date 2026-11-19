@@ -546,7 +546,8 @@ export class GradientStopsSection extends PaletteSection {
     return applied;
   }
 
-  syncRows(scope = { type: 'card' }) {
+  syncRows(scope = { type: 'card' }, { deferActivePointerSync = false } = {}) {
+    if (deferActivePointerSync && this._deferActivePointerSync(scope, () => this.syncRows(scope))) return false;
     const entity = scope?.type === 'entity';
     const index = Number(scope?.index);
     const rows = this._getScopedGradientStopsValue(scope) ?? [];
