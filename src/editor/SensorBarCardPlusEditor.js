@@ -15,6 +15,7 @@ import {
 import { editorStyles } from './shared/editor-styles.js';
 import { renderCardGroup, renderMarkersSection } from './shared/editor-disclosures.js';
 import { NumericInputDrafts } from './shared/editor-numeric-drafts.js';
+import { indexedControlSuffix, captureViewport, restoreViewport, captureFocusState, restoreFocusState } from './shared/interaction-state.js';
 import { deferPaletteSyncUntilClick, trackPalettePointerSync } from './shared/palette-section.js';
 import { dashboardPathFromLocation, subscribeDashboardPaintPresets } from '../dashboard/paint-preset-registry.js';
 
@@ -192,32 +193,13 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       const render = () => {
         if (!this.shadowRoot?.querySelector('input[data-kind$="-attribute"]')) return;
         const active = this.shadowRoot.activeElement;
-        const item = active?.dataset?.segmentIndex ?? active?.dataset?.stopIndex ?? active?.dataset?.index;
-        const rowSelector = active?.id ? `#${active.id}`
-          : active?.dataset?.kind ? `[data-kind="${active.dataset.kind}"]${item === undefined ? '' : `[data-${active.dataset.segmentIndex !== undefined ? 'segment-index' : active.dataset.stopIndex !== undefined ? 'stop-index' : 'index'}="${item}"]`}`
+        const selector = active?.id ? `#${active.id}`
+          : active?.dataset?.kind ? `[data-kind="${active.dataset.kind}"]${indexedControlSuffix(active.dataset)}`
           : active?.dataset?.field ? `[data-field="${active.dataset.field}"]`
           : active?.dataset?.action ? `[data-action="${active.dataset.action}"]` : null;
-        const paintId = active?.closest?.('.paint-editor')?.id;
-        const selection = active?.type === 'text'
-          ? { start: active.selectionStart, end: active.selectionEnd } : null;
-        const focus = rowSelector ? {
-          selector: paintId ? `#${paintId} ${rowSelector}` : rowSelector,
-          start: selection?.start ?? null, end: selection?.end ?? null,
-          viewport: this._captureFocusViewport(),
-        } : null;
+        const focus = captureFocusState(this, active, selector);
         this._render();
-        const replacement = focus && this.shadowRoot?.querySelector(focus.selector);
-        replacement?.focus?.({ preventScroll: true });
-        if (replacement?.type === 'text' && focus.start != null) replacement.setSelectionRange?.(focus.start, focus.end);
-        if (focus?.viewport) {
-          for (const entry of focus.viewport.elements) {
-            if (entry.element.isConnected) {
-              entry.element.scrollTop = entry.top;
-              entry.element.scrollLeft = entry.left;
-            }
-          }
-          focus.viewport.view?.scrollTo(focus.viewport.x, focus.viewport.y);
-        }
+        restoreFocusState(this.shadowRoot, focus);
       };
       if (deferPaletteSyncUntilClick(null, render, this.shadowRoot)) return;
       render();
@@ -793,24 +775,8 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       this.shadowRoot?.querySelector(selector)?.focus?.({ preventScroll: true });
     } else {
       this._queuePostRenderFocus(selector);
-      this._pendingFocusViewport = preserveViewport ? this._captureFocusViewport() : null;
+      this._pendingFocusViewport = preserveViewport ? captureViewport(this) : null;
     }
-  }
-
-  _captureFocusViewport() {
-    const active = this.shadowRoot?.activeElement;
-    const elements = [];
-    const record = element => {
-      if (!element || elements.some(entry => entry.element === element)) return;
-      if (element.scrollTop || element.scrollLeft || element.scrollHeight > element.clientHeight
-        || element.scrollWidth > element.clientWidth) {
-        elements.push({ element, top: element.scrollTop, left: element.scrollLeft });
-      }
-    };
-    for (let element = active; element; element = element.parentElement) record(element);
-    for (let element = this.shadowRoot?.host; element; element = element.parentElement) record(element);
-    const view = this.ownerDocument?.defaultView;
-    return { view, x: view?.scrollX ?? 0, y: view?.scrollY ?? 0, elements };
   }
 
   _applyPendingFocus() {
@@ -830,15 +796,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           element.focus();
         }
       }
-      if (viewport) {
-        for (const entry of viewport.elements) {
-          if (entry.element.isConnected) {
-            entry.element.scrollTop = entry.top;
-            entry.element.scrollLeft = entry.left;
-          }
-        }
-        viewport.view?.scrollTo(viewport.x, viewport.y);
-      }
+      restoreViewport(viewport);
     }, 0);
   }
 

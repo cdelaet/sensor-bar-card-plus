@@ -8,6 +8,7 @@ import {
 import { editorStyles } from '../editor/shared/editor-styles.js';
 import { renderCardGroup, renderMarkersSection } from '../editor/shared/editor-disclosures.js';
 import { NumericInputDrafts } from '../editor/shared/editor-numeric-drafts.js';
+import { indexedControlSuffix, captureFocusState, restoreFocusState } from '../editor/shared/interaction-state.js';
 import { deferPaletteSyncUntilClick, trackPalettePointerSync } from '../editor/shared/palette-section.js';
 import { renderScaleSection, handleScaleField } from '../editor/sections/scale.js';
 import { getDirectionSelection } from '../editor/shared/direction-control.js';
@@ -445,31 +446,8 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       : active.dataset.field ? `[data-field="${active.dataset.field}"]`
       : active.dataset.kind ? `[data-kind="${active.dataset.kind}"]`
       : markerId && active.dataset.action ? `.generic-marker-item[data-marker-ui-id="${markerId}"] [data-action="${active.dataset.action}"]` : active.dataset.action ? `[data-action="${active.dataset.action}"]` : null;
-    const item = active.dataset.segmentIndex ?? active.dataset.stopIndex ?? active.dataset.index;
-    const rowSelector = selector && active.dataset.kind && item !== undefined
-      ? `${selector}[data-${active.dataset.segmentIndex !== undefined ? 'segment-index' : active.dataset.stopIndex !== undefined ? 'stop-index' : 'index'}="${item}"]` : selector;
-    if (!rowSelector) return null;
-    const paintId = active.closest?.('.paint-editor')?.id;
-    const selection = active.type === 'text'
-      ? { start: active.selectionStart, end: active.selectionEnd } : null;
-    return { selector: paintId ? `#${paintId} ${rowSelector}` : rowSelector,
-      start: selection?.start ?? null, end: selection?.end ?? null, viewport: this._captureFocusViewport(active) };
-  }
-
-  _captureFocusViewport(active = this.shadowRoot?.activeElement) {
-    if (!active) return null;
-    const elements = [];
-    const record = element => {
-      if (!element || elements.some(entry => entry.element === element)) return;
-      if (element.scrollTop || element.scrollLeft || element.scrollHeight > element.clientHeight
-        || element.scrollWidth > element.clientWidth) {
-        elements.push({ element, top: element.scrollTop, left: element.scrollLeft });
-      }
-    };
-    for (let element = active; element; element = element.parentElement) record(element);
-    for (let element = this.shadowRoot?.host; element; element = element.parentElement) record(element);
-    const view = this.ownerDocument?.defaultView;
-    return { view, x: view?.scrollX ?? 0, y: view?.scrollY ?? 0, elements };
+    const rowSelector = selector && active.dataset.kind ? `${selector}${indexedControlSuffix(active.dataset)}` : selector;
+    return captureFocusState(this, active, rowSelector);
   }
 
   _focusPaletteControl(selector, { immediate = false } = {}) {
@@ -559,18 +537,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       } finally { this._isRendering = false; }
       this._structureSignature = signature;
       this._syncControls(options);
-      const active = focus && this.shadowRoot.querySelector(focus.selector);
-      active?.focus?.({ preventScroll: true });
-      if (active?.type === 'text' && focus.start != null) active.setSelectionRange?.(focus.start, focus.end);
-      if (focus?.viewport) {
-        for (const entry of focus.viewport.elements) {
-          if (entry.element.isConnected) {
-            entry.element.scrollTop = entry.top;
-            entry.element.scrollLeft = entry.left;
-          }
-        }
-        focus.viewport.view?.scrollTo(focus.viewport.x, focus.viewport.y);
-      }
+      restoreFocusState(this.shadowRoot, focus);
     } else {
       this._syncControls(options);
     }
