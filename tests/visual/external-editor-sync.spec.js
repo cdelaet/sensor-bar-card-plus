@@ -119,6 +119,93 @@ for (const source of ['src', 'dist']) for (const host of ['standalone', 'feature
 }
 
 for (const source of ['src', 'dist']) {
+  for (const nested of [false, true]) {
+    test(`deferred Card picker readiness restores the completed text selection (${source}, ${nested ? 'nested' : 'page'})`, async ({ page }) => {
+      const config = d.seed('standalone');
+      config.entities[0].attribute = 'unit_of_measurement';
+      const editor = await mount(page, 'standalone', source, { config, tall: true, nested, openSegments: false });
+      await d.openSection(editor, { section: 'Bar Appearance' });
+      const color = editor.locator('#bar-color-text-fallback');
+      await color.fill('var(');
+      await color.scrollIntoViewIfNeeded();
+      const beforeEvents = await d.count(page);
+      const before = await color.evaluate(input => {
+        window.__externalFocusNode = input;
+        const rect = input.getBoundingClientRect();
+        input.addEventListener('click', event => {
+          window.__externalSelection = { trusted: event.isTrusted, start: input.selectionStart,
+            end: input.selectionEnd, direction: input.selectionDirection };
+        }, { once: true });
+        return { x: rect.x, y: rect.y + rect.height / 2, width: rect.width,
+          page: scrollY, nested: document.querySelector('#mount').scrollTop };
+      });
+      expect(nested ? before.nested : before.page).toBeGreaterThan(0);
+      await page.mouse.move(before.x + before.width - 12, before.y);
+      await page.mouse.down();
+      await editor.evaluate(() => customElements.define('ha-entity-attribute-picker', class extends HTMLElement {}));
+      await expect(editor.locator('ha-entity-attribute-picker')).toHaveCount(0);
+      expect(await color.evaluate(node => node === window.__externalFocusNode)).toBe(true);
+      await page.mouse.move(before.x + 2, before.y, { steps: 5 });
+      await page.mouse.up();
+
+      const selection = await page.evaluate(() => window.__externalSelection);
+      expect(selection).toMatchObject({ trusted: true, start: 0, end: 4 });
+      await expect(editor.locator('ha-entity-attribute-picker').first()).toBeAttached();
+      expect(await color.evaluate(input => ({
+        replaced: input !== window.__externalFocusNode && !window.__externalFocusNode.isConnected,
+        focused: input.getRootNode().activeElement === input,
+        start: input.selectionStart, end: input.selectionEnd, direction: input.selectionDirection,
+        value: input.value, invalid: input.getAttribute('aria-invalid'),
+        page: scrollY, nested: document.querySelector('#mount').scrollTop,
+      }))).toEqual({ replaced: true, focused: true, start: 0, end: 4, direction: selection.direction, value: 'var(', invalid: 'true',
+        page: before.page, nested: before.nested });
+      expect(await d.count(page)).toBe(beforeEvents);
+    });
+  }
+
+  test(`foreign Card title update preserves a pending disclosure click (${source})`, async ({ page }) => {
+    const editor = await mount(page, 'standalone', source, { openSegments: false });
+    await d.openSection(editor, { section: 'Bar Appearance' });
+    const disclosure = editor.locator('#card-group-segments');
+    await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    await disclosure.scrollIntoViewIfNeeded();
+    const box = await disclosure.boundingBox();
+    const original = await disclosure.elementHandle();
+    const beforeEvents = await d.count(page);
+    const config = await d.saved(page);
+    config.title = 'Updated externally';
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await d.foreign(editor, config);
+    const retained = await disclosure.evaluate((node, old) => node === old, original);
+    await page.mouse.up();
+
+    expect({ retained, expanded: await disclosure.getAttribute('aria-expanded') })
+      .toEqual({ retained: true, expanded: 'true' });
+    await expect(editor.locator('#title')).toHaveValue('Updated externally');
+    expect(await d.count(page)).toBe(beforeEvents);
+  });
+
+  test(`foreign Card entity replacement invalidates a pressed row action (${source})`, async ({ page }) => {
+    const editor = await mount(page, 'standalone', source, { openSegments: false });
+    const remove = editor.locator('[data-action="remove-entity"][data-index="0"]');
+    await remove.scrollIntoViewIfNeeded();
+    const box = await remove.boundingBox();
+    const original = await remove.elementHandle();
+    const beforeEvents = await d.count(page);
+    const config = await d.saved(page);
+    config.entities.shift();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await d.foreign(editor, config);
+    const detached = await original.evaluate(node => !node.isConnected);
+    await page.mouse.up();
+
+    expect(detached).toBe(true);
+    await expect(editor.locator('.entity-subtitle')).toHaveText(['sensor.other']);
+    expect(await d.count(page)).toBe(beforeEvents);
+  });
+
   test(`Feature context refresh waits for Add Segment activation (${source})`, async ({ page }) => {
     const editor = await mount(page, 'feature', source);
     const add = await editSegmentDraft(editor);

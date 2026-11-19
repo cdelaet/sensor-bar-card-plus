@@ -189,22 +189,22 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._boundHandleValueChanged = (event) => this._handleValueChanged(event);
     this._boundHandleKeydown = (event) => this._handleKeydown(event);
     customElements.whenDefined?.('ha-entity-attribute-picker').then(() => {
-      if (!this.shadowRoot?.querySelector('input[data-kind$="-attribute"]')) return;
-      const active = this.shadowRoot.activeElement;
-      const item = active?.dataset?.segmentIndex ?? active?.dataset?.stopIndex ?? active?.dataset?.index;
-      const rowSelector = active?.id ? `#${active.id}`
-        : active?.dataset?.kind ? `[data-kind="${active.dataset.kind}"]${item === undefined ? '' : `[data-${active.dataset.segmentIndex !== undefined ? 'segment-index' : active.dataset.stopIndex !== undefined ? 'stop-index' : 'index'}="${item}"]`}`
-        : active?.dataset?.field ? `[data-field="${active.dataset.field}"]`
-        : active?.dataset?.action ? `[data-action="${active.dataset.action}"]` : null;
-      const paintId = active?.closest?.('.paint-editor')?.id;
-      const selection = active?.type === 'text'
-        ? { start: active.selectionStart, end: active.selectionEnd } : null;
-      const focus = rowSelector ? {
-        selector: paintId ? `#${paintId} ${rowSelector}` : rowSelector,
-        start: selection?.start ?? null, end: selection?.end ?? null,
-        viewport: this._captureFocusViewport(),
-      } : null;
       const render = () => {
+        if (!this.shadowRoot?.querySelector('input[data-kind$="-attribute"]')) return;
+        const active = this.shadowRoot.activeElement;
+        const item = active?.dataset?.segmentIndex ?? active?.dataset?.stopIndex ?? active?.dataset?.index;
+        const rowSelector = active?.id ? `#${active.id}`
+          : active?.dataset?.kind ? `[data-kind="${active.dataset.kind}"]${item === undefined ? '' : `[data-${active.dataset.segmentIndex !== undefined ? 'segment-index' : active.dataset.stopIndex !== undefined ? 'stop-index' : 'index'}="${item}"]`}`
+          : active?.dataset?.field ? `[data-field="${active.dataset.field}"]`
+          : active?.dataset?.action ? `[data-action="${active.dataset.action}"]` : null;
+        const paintId = active?.closest?.('.paint-editor')?.id;
+        const selection = active?.type === 'text'
+          ? { start: active.selectionStart, end: active.selectionEnd } : null;
+        const focus = rowSelector ? {
+          selector: paintId ? `#${paintId} ${rowSelector}` : rowSelector,
+          start: selection?.start ?? null, end: selection?.end ?? null,
+          viewport: this._captureFocusViewport(),
+        } : null;
         this._render();
         const replacement = focus && this.shadowRoot?.querySelector(focus.selector);
         replacement?.focus?.({ preventScroll: true });
@@ -219,7 +219,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
           focus.viewport.view?.scrollTo(focus.viewport.x, focus.viewport.y);
         }
       };
-      if (deferPaletteSyncUntilClick(null, () => this._render(), this.shadowRoot)) return;
+      if (deferPaletteSyncUntilClick(null, render, this.shadowRoot)) return;
       render();
     }).catch(() => {});
   }
@@ -302,6 +302,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._cssColorDrafts.clear();
 
     if (shouldRender) {
+      // Card disclosure clicks only change UI state, so they can complete safely
+      // while the accepted configuration is already updated.
+      const disclosure = this.shadowRoot?.querySelector('[data-action="toggle-card-group"]:active');
+      if (disclosure && deferPaletteSyncUntilClick(disclosure, () => this._render(), this.shadowRoot)) return;
       this._render();
     }
   }
