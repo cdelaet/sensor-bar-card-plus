@@ -7,7 +7,7 @@ export { getDefaultPaintSegments, getDefaultPaintGradientStops } from '../../con
 export function resolvePaintEditorPaint(paint, paletteValues = {}) {
   return { ...paint,
     segments: paint.segments ?? normalizeGaugeSegments(paletteValues?.segments
-      ?? (['bands', 'soft_bands', 'band_gradient'].includes(paint.fill_style) ? getDefaultPaintSegments() : [])),
+      ?? getDefaultPaintSegments()),
     gradient_stops: paint.gradient_stops ?? paletteValues?.gradient_stops ?? getDefaultPaintGradientStops(),
   };
 }

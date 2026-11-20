@@ -325,9 +325,6 @@ export class SegmentsSection extends PaletteSection {
         return cloneDeep(this._getScopedSegmentsValue({ type: 'card' }));
       }
     }
-    if (!this._isSegmentFillStyle(this.fillStyle(scope))) {
-      return [];
-    }
     return cloneDeep(this._getDefaultSegments());
   }
 

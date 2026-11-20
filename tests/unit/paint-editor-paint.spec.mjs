@@ -14,7 +14,7 @@ for (const fill_style of ['solid', 'gradient', 'bands', 'soft_bands', 'band_grad
     const context = { read: (_scope, path) => getPathValue(config, path), hass: { states: {} } };
     const state = getBarPaintEditorState(context, { type: 'card' }, null);
 
-    expect(resolved.segments).toHaveLength(['bands', 'soft_bands', 'band_gradient'].includes(fill_style) ? 3 : 0);
+    expect(resolved.segments).toHaveLength(3);
     expect(resolved.gradient_stops).toEqual([
       { pos: 0, color: '#4CAF50' }, { pos: 50, color: '#FF9800' }, { pos: 100, color: '#F44336' },
     ]);
