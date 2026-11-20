@@ -641,15 +641,51 @@ export class SharedObservationService {
     this.cacheExpiryTimer?.unref?.();
   }
 
+  _recoverRetentionFloor(history, record) {
+    const floor = history?.retentionFloor;
+    if (!Number.isFinite(floor) || !record || record.stale || record.error
+      || record.coverage?.kind === 'incomplete') return;
+    const acquired = record.acquiredWindow;
+    if (!acquired || !Number.isFinite(acquired.start) || !Number.isFinite(acquired.end)
+      || acquired.start > floor || acquired.end < floor) return;
+    const recorder = (record.observations ?? []).filter(observation =>
+      observation.origin !== 'live' && Number.isFinite(observation.timestamp));
+    let recoveredStart = null;
+
+    if (record.statisticsWindow && record.statistics) {
+      const statsWindow = record.statisticsWindow;
+      const statsCover = Number.isFinite(statsWindow.start) && statsWindow.start <= floor
+        && Number.isFinite(statsWindow.end) && statsWindow.end > floor
+        && record.statistics.missingBuckets === 0
+        && record.coverage?.statistics?.kind !== 'incomplete'
+        && Array.isArray(record.statistics.buckets)
+        && record.statistics.buckets.some(bucket => bucket.start <= floor && bucket.end > floor);
+      if (statsCover) recoveredStart = Math.max(acquired.start, statsWindow.start);
+      else if (record.rawWindow
+        && record.rawWindow.start <= floor && record.rawWindow.end >= floor
+        && recorder.some(observation => observation.timestamp <= record.rawWindow.start)) {
+        recoveredStart = record.rawWindow.start;
+      }
+    } else if (recorder.some(observation => observation.timestamp <= acquired.start)) {
+      recoveredStart = acquired.start;
+    }
+
+    if (recoveredStart !== null) {
+      const aligned = Math.ceil(recoveredStart / 60000) * 60000;
+      if (aligned < floor) history.retentionFloor = aligned;
+    }
+  }
+
   _consumerRecord(consumer, record, merge = true) {
     let incoming = record.observations ?? [];
+    let older = false;
     if (merge && record.acquiredWindow) {
       // A statistics refresh only replaces Recorder rows in its raw tail.
       // Retain the previous hour's rows for the statistics handoff.
       const acquired = record.statisticsWindow ? (record.rawWindow ?? { start: Infinity, end: Infinity }) : record.acquiredWindow;
       const windows = [...this.consumers.values()].filter((item) => item.family.history === consumer.family.history)
         .map((item) => item.window);
-      const older = Number.isFinite(record.acquisitionId) && Number.isFinite(consumer.recordMetadata?.acquisitionId)
+      older = Number.isFinite(record.acquisitionId) && Number.isFinite(consumer.recordMetadata?.acquisitionId)
         && record.acquisitionId < consumer.recordMetadata.acquisitionId;
       if (older) {
         incoming = incoming.filter((observation) => observation.origin === 'live');
@@ -677,6 +713,15 @@ export class SharedObservationService {
       }
     }
     if (merge) this._mergeIntoHistory(consumer, incoming);
+    const history = consumer.family.history;
+    // A cache record may outlive the history that produced its compacted
+    // observation array. Adopt its floor before deciding whether new Recorder
+    // evidence can safely lower it.
+    if (!Number.isFinite(history.retentionFloor) && Number.isFinite(record.retentionFloor)) {
+      history.retentionFloor = record.retentionFloor;
+    }
+    if (!older) this._recoverRetentionFloor(history, record);
+    if (!older && Number.isFinite(history.retentionFloor)) record.retentionFloor = history.retentionFloor;
     const observations = consumer.observations;
     const liveThrough = consumer.family.history.liveThrough ?? -Infinity;
     const historyStarts = [...this.consumers.values()]
