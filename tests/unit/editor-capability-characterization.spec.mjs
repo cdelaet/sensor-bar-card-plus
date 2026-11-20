@@ -15,7 +15,7 @@ for (const source of ['src', 'dist']) describe(`standalone capability baseline (
   });
   it('keeps conditional CSS fallback, explicit end validation and drafts unchanged', () => {
     const editor = createEditor({source}); editor.setConfig({bar:{color:'#abc',segments:[{from:0,color:'red'},{from:50,color:'blue'}]}});
-    expect(editor.shadowRoot.innerHTML).not.toContain('data-field="bar-color-text-fallback"');
+    expect(editor.shadowRoot.innerHTML).toContain('data-field="bar-color-text-fallback"');
     expect(editor._segmentsSection._getSegmentRowValidationMessage(root,0)).toBe('Enter valid from/to values.');
     editor._segmentsSection._setSegmentDraftField(root,'from','80'); editor._segmentsSection._setSegmentDraftField(root,'to','');
     expect(editor._segmentsSection._getValidSegmentDraft(root)).toBeNull();

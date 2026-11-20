@@ -2,7 +2,7 @@ import {
   cloneDeep, serializeConfig, isObject, getPathValue, setPathValue, deletePathValue,
 } from '../editor/shared/editor-config.js';
 import {
-  escapeAttribute, formatScaleValueInput, renderEntitySourceInput, renderEntityAttributeInput, renderWindowOptions, getEntityAttributeSuggestions, getColorPickerValue,
+  escapeAttribute, formatScaleValueInput, renderEntitySourceInput, renderEntityAttributeInput, renderWindowOptions, getEntityAttributeSuggestions,
   handleCssColorInput, syncColorInput, syncCssColorDrafts,
 } from '../editor/shared/editor-controls.js';
 import { editorStyles } from '../editor/shared/editor-styles.js';
@@ -506,17 +506,18 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       }
     }
     const context = this._createSectionContext();
+    const colorOptions = { cssColorDrafts: this._cssColorDrafts, replaced: this._configReplaced };
     const paintState = syncBarPaintEditor(this.shadowRoot, context, root, readPaintPalette(this._paintSections.bar, root),
-      { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts, registry: this._paintPresetRegistry });
+      { numericDrafts: this._numericDrafts, ...colorOptions, registry: this._paintPresetRegistry });
     const needle = this._needleSection._getEffectiveScopedNeedleConfig(root);
-    syncColorInput(this.shadowRoot, 'bar-needle-color', needle.color, '#ffffff', this._cssColorDrafts);
+    syncColorInput(this.shadowRoot, 'bar-needle-color', needle.color, '#ffffff', colorOptions);
     for (const key of ['peak', 'floor']) {
       const marker = { ...this._extremaSection._getMarkerConfig(root, key), ...this._extremaSection._getEffectiveMarkerExtras(root, key) };
-      syncColorInput(this.shadowRoot, `${key}-color`, marker.color, key === 'peak' ? '#888' : '#888888', this._cssColorDrafts);
+      syncColorInput(this.shadowRoot, `${key}-color`, marker.color, key === 'peak' ? '#888' : '#888888', colorOptions);
     }
     const baselinePaletteValues = readDirectionalPaintPalettes(this._paintSections, 'baseline', root);
     this._baselineSection.syncPaintEditors(this.shadowRoot, root, baselinePaletteValues, this._paintPresetRegistry,
-      { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts,
+      { numericDrafts: this._numericDrafts, ...colorOptions,
         paintChildren: directionalPaintChildren(this._paintSections, 'baseline', opts => this._renderCardGroup(opts)) });
     const rowOptions = { deferActivePointerSync: options.deferActivePointerSync };
     syncDirectionalPaintRows(this._paintSections, 'baseline', root, rowOptions);
@@ -528,7 +529,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     const segmentsRebuilt = this._segmentsSection.syncRows(root, rowOptions);
     const gradientStopsRebuilt = this._gradientStopsSection.syncRows(root, rowOptions);
     const paletteRoot = this._segmentsSection._getPaletteRoot(root);
-    const color = paintState.paint.color;
     const values = {
       'scale-min': getFeatureScaleSource(this._config, 'min').fixed,
       'scale-max': getFeatureScaleSource(this._config, 'max').fixed,
@@ -536,10 +536,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       'bar-fill-style': paintState.paint.fill_style,
       'bar-opacity': paintState.paint.opacity,
       'bar-direction': getDirectionSelection(context, root, ['bar', 'direction']),
-      'bar-color-text-fallback': color,
       'bar-needle-mode': this._needleSection._getScopedNeedleConfig(root).mode === 'enabled',
-      'bar-needle-color': getColorPickerValue(this._needleSection._getScopedNeedleConfig(root).color, '#ffffff'),
-      'bar-needle-color-text-fallback': this._needleSection._getScopedNeedleConfig(root).color,
       'baseline-value': formatScaleValueInput(getFeatureBaselineSource(this._config)),
       'formatting-unit': getFormattingValue(context, root, 'unit'),
       'formatting-decimal': getFormattingValue(context, root, 'decimal'),
@@ -548,8 +545,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       const marker = this._extremaSection._getMarkerConfig(root, key);
       const label = this._extremaSection._getBuiltinMarkerLabelOptions(root, key);
       Object.assign(values, {
-        [`${key}-color`]: getColorPickerValue(marker.color, '#888888'),
-        [`${key}-color-text-fallback`]: marker.color,
         [`${key}-window`]: this._extremaSection._getEffectiveMarkerExtras(root, key).window,
         [`${key}-window-entity`]: this._extremaSection._getEffectiveMarkerExtras(root, key).windowEntity ?? '',
         [`${key}-direction`]: this._extremaSection._getEffectiveMarkerDirection(root, key),
@@ -563,7 +558,7 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       }
     }
     for (const [field, value] of Object.entries(values)) {
-      const controlRoot = ['bar-fill-style', 'bar-opacity', 'bar-color', 'bar-color-text-fallback'].includes(field) ? paletteRoot : this.shadowRoot;
+      const controlRoot = ['bar-fill-style', 'bar-opacity'].includes(field) ? paletteRoot : this.shadowRoot;
       const control = controlRoot?.querySelector(`[data-field="${field}"]`);
       if (control && /^(peak|floor)-window$/.test(field) && control.options
         && ![...control.options].some(option => option.value === String(value))) control.innerHTML = renderWindowOptions(value);
@@ -571,7 +566,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
         if (control.type === 'checkbox') control.checked = !!value;
         else control.value = String(value);
       }
-      if (field === 'bar-color-text-fallback') control?.setAttribute('aria-label', 'Bar color (CSS value)');
     }
     for (const [id, checked] of [['baseline-show', this._baselineSection._getBaselineShow(root)]]) {
       const control = this.shadowRoot.querySelector(`#${id}`);

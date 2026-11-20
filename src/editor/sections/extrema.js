@@ -456,7 +456,7 @@ ${indent}                          <input id="entity-${index}-${key}-inherit" ty
                       </div>
                       <div class="field-row">
                         <label for="entity-${index}-${key}-color">${title} color</label>
-                        ${renderColorInput({ label: 'Marker color',
+                        ${renderColorInput({ label: `${title} color`,
                           id: `entity-${index}-${key}-color`,
                           kind: `entity-${key}-color`,
                           index,
@@ -499,7 +499,7 @@ ${indent}                          `;
             </div>
             <div class="field-row">
               <label for="${key}-color">${title} color</label>
-            ${renderColorInput({ label: 'Marker color',
+            ${renderColorInput({ label: `${title} color`,
                 id: `${key}-color`,
                 field: `${key}-color`,
                 value: marker.color,

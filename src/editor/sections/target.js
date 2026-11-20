@@ -2,7 +2,7 @@ import { readResolvableSourceParts, updateResolvableSourceParts, writeResolvable
 import { getAuthoredSharedTargetSource, normalizeDirectionalTargets, normalizeTargetMarkerShape } from '../../config/normalize.js';
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue, removePathsFromTarget,
   pruneEmptyObjectsInTarget, normalizeDecimalValue, getEffectiveDisplayValue } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderBuiltinMarkerLabelControls, formatScaleValueInput, getColorPickerValue, renderEntityAttributeInput, getEntityAttributeSuggestions, syncColorInput } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderBuiltinMarkerLabelControls, formatScaleValueInput, renderEntityAttributeInput, getEntityAttributeSuggestions, syncColorInput } from '../shared/editor-controls.js';
 import { renderResolvableSourceControls } from '../shared/resolvable-source-controls.js';
 import { renderPaintEditor, syncPaintEditor, describePaint } from '../shared/paint-editor.js';
 import { renderCardGroup } from '../shared/editor-disclosures.js';
@@ -369,9 +369,8 @@ export class TargetSection {
         && String(control.value ?? '') !== String(value ?? '')) control.value = String(value ?? '');
     };
     const values = { value: formatScaleValueInput(source), shape: marker.shape, direction: marker.direction,
-      color: getColorPickerValue(marker.color, '#888'), 'color-text-fallback': marker.color,
       'label-text': marker.label_text, 'label-precision': marker.label_precision ?? marker.label_decimal };
-    syncColorInput(group, `${id}-color`, marker.color, '#888', options.cssColorDrafts);
+    syncColorInput(group, `${id}-color`, marker.color, '#888', options);
     for (const [field, value] of Object.entries(values)) syncValue(group.querySelector(`#${id}-${field}`), value);
     for (const [field, checked] of [['show', marker.enabled !== false], ['label-show', marker.show_label === true],
       ['label-show-value', marker.label_show_value !== false], ['label-show-unit', marker.label_show_unit !== false]]) {
@@ -529,10 +528,9 @@ export class TargetSection {
     const color = this._getEffectiveTargetColorValue(scope) || '#888';
     const values = {
       value: formatScaleValueInput(source), shape: this._getEffectiveTargetShapeValue(scope),
-      direction: this._getEffectiveMarkerDirection(scope, 'target'), color: getColorPickerValue(color, '#888'),
-      'color-text-fallback': color, 'label-text': labels.text, 'label-precision': labels.precision,
+      direction: this._getEffectiveMarkerDirection(scope, 'target'), 'label-text': labels.text, 'label-precision': labels.precision,
     };
-    syncColorInput(section, `${prefix}target-color`, color, '#888', options.cssColorDrafts);
+    syncColorInput(section, `${prefix}target-color`, color, '#888', options);
     for (const [field, value] of Object.entries(values)) {
       const control = section.querySelector(`#${prefix}target-${field}`);
       if (control && (control !== root.activeElement || options.replaced)

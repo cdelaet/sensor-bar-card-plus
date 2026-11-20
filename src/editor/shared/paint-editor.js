@@ -110,8 +110,11 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
           <input ${fieldAttributes(controls.solid_fill)} type="checkbox" data-paint-property="solid_fill"${paint.solid_fill ? ' checked' : ''}>
           <label for="${controls.solid_fill.id}">Solid fill</label>
         </div>${propertyHeader('solid_fill', 'Solid fill')}</div></div>
-        ${labelRow('color', 'Color', renderColorInput({ ...controls.color, value: paint.color, fallbackHex: '#4a9eff', label: 'Color', placeholder: 'CSS color value', extraDataset: { 'paint-property': 'color' } }))}
-        ${labelRow('opacity', 'Opacity', renderScalePercentageInput(controls.opacity.id, `${fieldRoutingAttributes(controls.opacity)} data-paint-property="opacity"`, paint.opacity ?? 100))}
+        <div class="paint-color-opacity">
+          ${labelRow('color', 'Base color', renderColorInput({ ...controls.color, value: paint.color, fallbackHex: '#4a9eff', label: 'Base color', extraDataset: { 'paint-property': 'color' } }))}
+          ${labelRow('opacity', 'Opacity', `<div class="paint-opacity-control">${renderScalePercentageInput(controls.opacity.id,
+            `${fieldRoutingAttributes(controls.opacity)} data-paint-property="opacity"`, paint.opacity ?? 100)}</div>`)}
+        </div>
       </div>
       ${paintChildren}
       ${activation ? '</div>' : ''}
@@ -119,7 +122,7 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
   </details>`;
 }
 
-export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts, paletteFields } = {}) {
+export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts, replaced, paletteFields } = {}) {
   const editor = root?.querySelector(`#${id}`);
   if (!editor) return;
   const { paint, inherited, scale } = state;
@@ -164,8 +167,8 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
       ? INHERITED_PAINT_PRESET_VALUE : activeReference;
   }
   const picker = editor.querySelector?.('input[type="color"][data-paint-property="color"]');
-  if (picker) syncColorInput(editor, picker.id, paint.color, '#4a9eff', cssColorDrafts);
-  for (const property of ['fill_style', 'color', 'solid_fill', 'opacity']) {
+  if (picker) syncColorInput(editor, picker.id, paint.color, '#4a9eff', { cssColorDrafts, replaced });
+  for (const property of ['fill_style', 'solid_fill', 'opacity']) {
     for (const control of editor.querySelectorAll?.(`[data-paint-property="${property}"]`) ?? []) {
       if (control === root.activeElement || property === 'opacity' && numericDrafts?.values?.has(control.id)) continue;
       if (property === 'solid_fill') control.checked = !!paint.solid_fill;

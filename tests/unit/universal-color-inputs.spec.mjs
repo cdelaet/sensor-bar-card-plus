@@ -11,11 +11,11 @@ function changeColorPicker(picker, value) {
 }
 
 describe('universal color renderer', () => {
-  it.each(['#abc', '#A1b2C3'])('renders %s as a picker only', value => {
+  it.each(['#abc', '#A1b2C3'])('renders both controls for %s', value => {
     const html = renderColorInput({ id: 'color', field: 'color', value, fallbackHex: '#123456' });
     expect(html).toContain('type="color"');
-    expect(html).not.toContain('data-css-color');
-    expect(html).not.toContain('type="text"');
+    expect(html).toContain('data-css-color');
+    expect(html).toContain(`value="${value}"`);
   });
 
   it.each(['red', 'rgb(1, 2, 3)', 'var(--accent)', 'color-mix(in srgb, red, blue)'])
@@ -26,15 +26,15 @@ describe('universal color renderer', () => {
       expect(html).toContain(`value="${value}"`);
     });
 
-  it('renders an empty value with the fallback picker only', () => {
+  it('renders an empty text value with the fallback picker', () => {
     const html = renderColorInput({ id: 'color', field: 'color', value: '', fallbackHex: '#123456' });
-    expect(html).toContain('type="color" data-field="color" value="#123456"');
-    expect(html).not.toContain('data-css-color');
+    expect(html).toContain('type="color" data-field="color" aria-label="Color" value="#123456"');
+    expect(html).toContain('data-css-color');
   });
 
   it.each(['', '#abc', '#A1b2C3', 'rebeccapurple'])('renders both palette color controls for %j', value => {
     const html = renderColorInput({ id: 'color', kind: 'segment-color', value, palette: true });
-    expect(html).toContain('class="palette-color-controls"');
+    expect(html).toContain('class="color-controls palette-color-controls"');
     expect(html).toContain('type="color"');
     expect(html).toContain('id="color-text-fallback" data-css-color="true"');
     expect(html).toContain(`data-kind="segment-color-text-fallback" data-index="null" value="${value}"`);
@@ -74,7 +74,7 @@ for (const source of ['src', 'dist']) {
         editor.setConfig(event.detail.config);
       });
 
-      expect(editor.shadowRoot.querySelector('#bar-color-text-fallback')).toBeNull();
+      expect(editor.shadowRoot.querySelector('#bar-color-text-fallback').value).toBe('#abc');
       expect(editor.shadowRoot.querySelector('#bar-color').value).toBe('#aabbcc');
       const rowText = editor.shadowRoot.querySelector('#entity-0-bar-color-text-fallback');
       expect(rowText.value).toBe('var(--row-color)');
@@ -98,7 +98,7 @@ for (const source of ['src', 'dist']) {
       changeColorPicker(reopened.editor.shadowRoot.querySelector('#entity-0-bar-color'), '#445566');
       await reopened.editor.updateComplete;
       expect(reopened.editor._draftConfig.entities[0].bar.color).toBe('#445566');
-      expect(reopened.editor.shadowRoot.querySelector('#entity-0-bar-color-text-fallback')).toBeNull();
+      expect(reopened.editor.shadowRoot.querySelector('#entity-0-bar-color-text-fallback').value).toBe('#445566');
       reopened.dispose();
     });
   });
@@ -141,7 +141,7 @@ for (const source of ['src', 'dist']) {
       changeColorPicker(reopened.editor.shadowRoot.querySelector('#bar-color'), '#778899');
       await reopened.editor.updateComplete;
       expect(reopened.editor._config.bar.paint.color).toBe('#778899');
-      expect(reopened.editor.shadowRoot.querySelector('#bar-color-text-fallback')).toBeNull();
+      expect(reopened.editor.shadowRoot.querySelector('#bar-color-text-fallback').value).toBe('#778899');
       reopened.dispose();
     });
   });

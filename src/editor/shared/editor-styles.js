@@ -46,9 +46,14 @@ export const editorStyles = `
         .paint-editor-grid { display: grid; gap: 12px; align-items: end;
           grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); min-width: 0; }
         .paint-editor .field-grid { grid-template-columns: minmax(0, 1fr); }
+        .paint-color-opacity { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: end; gap: 12px; min-width: 0; }
+        .paint-color-opacity > :first-child { flex: 3 1 170px; }
+        .paint-color-opacity > :last-child { flex: 1 1 100px; }
+        .paint-opacity-control { display: flex; align-items: center; gap: 4px; min-width: 0; }
+        .paint-opacity-control input { flex: 1 1 0; min-width: 0; }
         .paint-editor .segment-draft { min-width: 0; }
         .paint-editor .list { grid-template-columns: minmax(0, 1fr); }
-        .list-row:is(.segment-row, .gradient-stop-row), .palette-row-actions, .palette-color-controls {
+        .list-row:is(.segment-row, .gradient-stop-row), .palette-row-actions, .color-controls {
           display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0;
         }
         .list-row:is(.segment-row, .gradient-stop-row) > input {
@@ -57,14 +62,16 @@ export const editorStyles = `
         .list-row.segment-row > input { flex-basis: 60px; }
         .palette-row-actions { flex: 1 1 150px; max-width: 280px; }
         .palette-color-controls { flex: 1 1 98px; }
-        .palette-color-controls input[type="color"] {
-          flex: 1 1 0; min-width: min(100%, 32px); max-width: 90px;
+        .color-controls input[type="color"] {
+          flex: 1 1 0; min-width: min(100%, 32px);
           color: var(--palette-color, var(--primary-text-color, #111));
         }
-        .palette-color-controls input[type="text"] {
-          flex: 1 1 0; min-width: min(100%, 60px); max-width: 144px;
+        .color-controls input[type="text"] {
+          flex: 2 1 0; min-width: min(100%, 60px);
           padding-inline: 6px;
         }
+        .palette-color-controls input[type="color"] { max-width: 90px; }
+        .palette-color-controls input[type="text"] { flex-grow: 1; max-width: 144px; }
         .palette-row-actions > button { flex: 0 0 auto; min-width: 36px; padding-inline: 6px; }
         @container (max-width: 360px) {
           .paint-preset-row { grid-template-columns: minmax(0, 1fr); }
@@ -245,6 +252,7 @@ export const editorStyles = `
           padding: 6px;
         }
         .generic-marker-body {
+          grid-template-columns: minmax(0, 1fr);
           gap: 12px;
           padding: 12px;
           border-top: 1px solid color-mix(in srgb, var(--divider-color, #888) 25%, transparent);
@@ -252,7 +260,7 @@ export const editorStyles = `
         }
         .generic-marker-pair,
         .generic-marker-options {
-          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
           align-items: end;
         }
         .generic-marker-precision {

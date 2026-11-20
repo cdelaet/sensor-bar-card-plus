@@ -148,7 +148,7 @@ for (const source of ['src', 'dist']) {
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
     }, value);
-    await changeColor('[data-paint-property="color"]', '#556677');
+    await changeColor('input[type="color"][data-paint-property="color"]', '#556677');
     await expect.poll(() => editor.evaluate(element => element._draftConfig.preset_library.paint.bands.color)).toBe('#556677');
     await changeColor('[data-paint-property="opacity"]', '63');
     await expect.poll(() => editor.evaluate(element => element._draftConfig.preset_library.paint.bands.opacity)).toBe(63);

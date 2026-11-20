@@ -11,7 +11,7 @@ function field(name, section, type, path, value, options) { add('field', name, s
 function kind(name, section, type, path, value, options) { add('kind', name, section, type, path, value, options); }
 function color(route, name, section, path, options = {}) {
   add(route, name, section, 'color', path, '#334455', options);
-  add(route, `${name}-text-fallback`, section, 'css', path, 'rgb(10, 120, 200)', { conditional: true, ...options });
+  add(route, `${name}-text-fallback`, section, 'css', path, 'rgb(10, 120, 200)', options);
 }
 field('title', 'Basics', 'text', 'title', 'Acceptance title', { hosts: ['standalone'], clear: true });
 for (const edge of ['min', 'max']) {
@@ -108,13 +108,9 @@ for (const family of ['segment','gradient']) {
     color('kind', `${family}-${draft}color`,section,null,{journey:'palettes',structural:true});
   }
 }
-// Color text fallbacks mount only for authored non-hex values. Gradient Stop
-// fallback remains a restricted compatibility journey.
+// Palette CSS controls use dedicated row-editing journeys.
 for (const entry of controls.filter(c=>c.section==='Segments' && c.type==='css')) entry.hosts=['feature'];
 for(const entry of controls.filter(c=>c.section==='Gradient Stops'&&c.type==='css')) entry.type='legacy-color';
-// Both editors expose routed segment text fallbacks. The Feature editor's CSS
-// acceptance is covered by its dedicated palette journeys; Card acceptance
-// retains its legacy color-only contract.
 for (const entry of controls.filter(c=>c.section==='Segments' && c.name.endsWith('color-text-fallback'))) {
  entry.hosts=['standalone','feature'];entry.type='legacy-color';entry.journey='palettes';
 }

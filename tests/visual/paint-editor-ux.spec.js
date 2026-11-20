@@ -303,7 +303,8 @@ for (const source of ['src', 'dist']) for (const destination of ['Card', 'Entity
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
-    await expect(reopenedText).toHaveCount(0);
+    await expect(reopenedText).toHaveValue('#778899');
+    await expect(reopenedText).toHaveAttribute('aria-invalid', 'false');
     expect(await editor.evaluate((element, id) => ({
       draft: element._cssColorDrafts.has(`${id}-text-fallback`),
       count: window.__universalColorEvents.length,

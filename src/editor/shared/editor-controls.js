@@ -135,7 +135,7 @@ export function normalizeColorComparisonValue(value) {
   return expandHexColor(normalizedText) ?? normalizedText;
 }
 
-export function getColorPickerValue(value, fallbackHex = '#000000') {
+function getColorPickerFallback(value, fallbackHex = '#000000') {
   return expandHexColor(value) ?? expandHexColor(fallbackHex) ?? '#000000';
 }
 
@@ -150,16 +150,16 @@ export function isValidCssColor(value, css = globalThis.CSS) {
   return typeof css?.supports === 'function' && css.supports('color', text);
 }
 
-function getPaletteColorText(picker) {
+function getColorTextInput(picker) {
   const group = picker.parentElement;
-  return group?.classList?.contains('palette-color-controls') ? group.querySelector('input[data-css-color="true"]') : null;
+  return group?.classList?.contains('color-controls') ? group.querySelector('input[data-css-color="true"]') : null;
 }
 
 // Returns false when an invalid color edit should stay local to the text input.
 export function handleCssColorInput(target, drafts, value, draftKey = target?.id) {
   if (target?.type === 'color') {
     drafts.delete(`${target.id}-text-fallback`);
-    const text = getPaletteColorText(target);
+    const text = getColorTextInput(target);
     if (text) {
       if (text.value !== target.value) text.value = target.value;
       text.setCustomValidity?.('');
@@ -177,8 +177,8 @@ export function handleCssColorInput(target, drafts, value, draftKey = target?.id
   return valid || !!kind?.endsWith('-draft-color');
 }
 
-function getPalettePickerValue(picker, value, fallbackHex) {
-  const fallback = getColorPickerValue(value, fallbackHex);
+function resolvePickerColor(picker, value, fallbackHex) {
+  const fallback = getColorPickerFallback(value, fallbackHex);
   const view = picker.ownerDocument?.defaultView;
   if (!picker.style || !view?.getComputedStyle) return fallback;
   if (value.trim() && !isHexColorValue(value) && isValidCssColor(value, view.CSS)) {
@@ -191,75 +191,29 @@ function getPalettePickerValue(picker, value, fallbackHex) {
   return fallback;
 }
 
-function getFieldPickerValue(picker, value, fallbackHex) {
-  const fallback = getColorPickerValue(value, fallbackHex);
-  const view = picker.ownerDocument?.defaultView;
-  if (!picker.style || !view?.getComputedStyle || !value.trim() || isHexColorValue(value)
-    || !isValidCssColor(value, view.CSS)) return fallback;
-  const previousColor = picker.style.getPropertyValue('color');
-  const previousColorPriority = picker.style.getPropertyPriority('color');
-  const previousPaletteColor = picker.style.getPropertyValue('--palette-color');
-  const previousPaletteColorPriority = picker.style.getPropertyPriority('--palette-color');
-  picker.style.setProperty('--palette-color', value);
-  picker.style.setProperty('color', 'var(--palette-color)');
-  const computed = view.getComputedStyle(picker);
-  const resolved = computed.getPropertyValue('--palette-color').trim();
-  const color = computed.color;
-  if (previousColor) picker.style.setProperty('color', previousColor, previousColorPriority);
-  else picker.style.removeProperty('color');
-  if (previousPaletteColor) picker.style.setProperty('--palette-color', previousPaletteColor, previousPaletteColorPriority);
-  else picker.style.removeProperty('--palette-color');
-  return resolved && isValidCssColor(resolved, view.CSS) ? color : fallback;
-}
-
-export function syncColorInput(root, id, value, fallbackHex = '#000000', cssColorDrafts) {
+export function syncColorInput(root, id, value, fallbackHex = '#000000', { cssColorDrafts, replaced } = {}) {
   const picker = root?.getElementById?.(id) ?? root?.querySelector?.(`#${id}`);
   if (!picker || picker.type !== 'color') return;
-  const activeElement = root.activeElement ?? root.getRootNode?.().activeElement;
-
   const rawValue = normalizeTextValue(value);
-  const paletteText = getPaletteColorText(picker);
-  if (paletteText) {
-    const pickerValue = getPalettePickerValue(picker, rawValue, fallbackHex);
-    if (picker.value !== pickerValue) picker.value = pickerValue;
-    if (activeElement !== paletteText && paletteText.value !== rawValue) paletteText.value = rawValue;
-    return;
-  }
-  const needsText = !!rawValue.trim() && !isHexColorValue(rawValue);
-  const grid = picker.closest?.('.field-grid') ?? picker.parentElement;
-  let text = grid?.querySelector?.('input[data-css-color="true"]');
-  const extraDataset = Object.fromEntries(Object.entries(picker.dataset ?? {})
-    .filter(([key]) => !['field', 'kind', 'index'].includes(key))
-    .map(([key, entry]) => [key.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`), entry]));
+  const pickerValue = resolvePickerColor(picker, rawValue, fallbackHex);
+  if (picker.value !== pickerValue) picker.value = pickerValue;
 
-  picker.value = getFieldPickerValue(picker, rawValue, fallbackHex);
-  if (needsText && !text && picker.ownerDocument) {
-    const template = picker.ownerDocument.createElement('template');
-    template.innerHTML = renderColorInput({ id, field: picker.dataset.field, kind: picker.dataset.kind,
-      index: picker.dataset.index, value: rawValue, fallbackHex, extraDataset });
-    text = template.content.querySelector('input[data-css-color="true"]');
-    if (text) picker.after(text);
-  } else if (!needsText && text && activeElement !== text) {
-    if (typeof text.remove === 'function') text.remove();
-    else text.parentNode?.removeChild?.(text);
-    text = null;
-  }
-
-  if (text) {
-    const draft = cssColorDrafts?.get?.(text.id);
-    if (draft !== undefined) text.value = draft;
-    else if (activeElement !== text) text.value = rawValue;
+  const text = getColorTextInput(picker);
+  if (!text) return;
+  const draft = cssColorDrafts?.get(text.id);
+  const activeElement = picker.getRootNode?.().activeElement;
+  if (draft !== undefined || replaced || text !== activeElement) {
+    const next = draft ?? rawValue;
+    if (text.value !== next) text.value = next;
   }
 }
 
 export function syncCssColorDrafts(root, cssColorDrafts) {
   for (const control of root?.querySelectorAll?.('input[data-css-color="true"]') ?? []) {
-    const draft = cssColorDrafts?.get?.(control.id);
-    if (draft !== undefined) control.value = draft;
+    const draft = cssColorDrafts?.get(control.id);
+    if (draft !== undefined && control.value !== draft) control.value = draft;
     control.setAttribute('aria-invalid', draft === undefined ? 'false' : 'true');
     control.setCustomValidity?.(draft === undefined ? '' : 'Enter a valid CSS color.');
-    const inputLabel = root.querySelector?.(`#${control.id.replace(/-text-fallback$/, '')}`)?.labels?.[0]?.textContent;
-    if (inputLabel) control.setAttribute('aria-label', `${inputLabel} (CSS value)`);
   }
 }
 
@@ -316,7 +270,7 @@ export function renderMarkerPercentageControls(key, mode, percent) {
 
 export function renderColorInput({ id, field = null, kind = null, index = null, value = '', fallbackHex = '#000000', placeholder = '', extraDataset = {}, label = 'Color', palette = false }) {
   const controlValue = normalizeTextValue(value);
-  const pickerValue = getColorPickerValue(controlValue, fallbackHex);
+  const pickerValue = getColorPickerFallback(controlValue, fallbackHex);
   const extraAttrs = Object.entries(extraDataset)
     .map(([key, entry]) => `data-${key}="${escapeAttribute(entry)}"`)
     .join(' ');
@@ -328,12 +282,9 @@ export function renderColorInput({ id, field = null, kind = null, index = null, 
     : `data-kind="${kind}-text-fallback" data-index="${index}"${extraAttrs ? ` ${extraAttrs}` : ''}`;
 
   return `
-      <div class="${palette ? 'palette-color-controls' : 'field-grid'}">
-        <input id="${id}" type="color" ${baseAttrs}${palette ? ` aria-label="${escapeAttribute(label)}"` : ''} value="${escapeAttribute(pickerValue)}">
-        ${palette || controlValue.trim() && !isHexColorValue(controlValue)
-          ? `<input id="${id}-text-fallback" data-css-color="true" aria-label="${escapeAttribute(label)} (CSS value)" type="text" ${fallbackAttrs} value="${escapeAttribute(controlValue)}" placeholder="${escapeAttribute(placeholder || 'CSS color value')}">`
-          : ''
-        }
+      <div class="color-controls${palette ? ' palette-color-controls' : ''}">
+        <input id="${id}" type="color" ${baseAttrs} aria-label="${escapeAttribute(label)}" value="${escapeAttribute(pickerValue)}">
+        <input id="${id}-text-fallback" data-css-color="true" aria-label="${escapeAttribute(label)} (CSS value)" type="text" ${fallbackAttrs} value="${escapeAttribute(controlValue)}" placeholder="${escapeAttribute(placeholder || 'CSS color value')}">
       </div>
     `;
 }

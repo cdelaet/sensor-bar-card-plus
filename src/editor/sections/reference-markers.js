@@ -1,6 +1,6 @@
 import { normalizeMarkerDirection } from '../../config/normalize.js';
 import { cloneDeep, isObject, setPathValue, deletePathValue, normalizeTextValue } from '../shared/editor-config.js';
-import { escapeAttribute, getEntityAttributeSuggestions, normalizeEditorColorValue, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput, getColorPickerValue, syncColorInput } from '../shared/editor-controls.js';
+import { escapeAttribute, getEntityAttributeSuggestions, normalizeEditorColorValue, renderColorInput, renderEntityAttributeInput, renderEntitySourceInput, syncColorInput } from '../shared/editor-controls.js';
 import { renderResolvableSourceControls } from '../shared/resolvable-source-controls.js';
 import { readResolvableSourceParts, updateResolvableSourceParts, writeResolvableSourceParts } from '../shared/resolvable-source.js';
 import { normalizeMarkerLabelField } from '../shared/editor-marker-controls.js';
@@ -548,10 +548,9 @@ export class ReferenceMarkersSection {
         fixed: source.fixed !== '' && source.fixed !== undefined && source.fixed !== null
           ? source.fixed : source.percent !== '' && source.percent !== undefined && source.percent !== null ? `${source.percent}%` : '',
         lane: marker?.lane ?? 'below', shape: marker?.shape ?? 'circle', direction: normalizeMarkerDirection(marker?.direction),
-        color: getColorPickerValue(marker?.color, '#888888'), 'color-text-fallback': marker?.color ?? '#888888',
         'label-text': label.text ?? '', 'label-precision': label.precision ?? label.decimal ?? '',
       };
-      syncColorInput(root, `${prefix}${ids[index]}-color`, marker?.color ?? '#888888', '#888888', options.cssColorDrafts);
+      syncColorInput(root, `${prefix}${ids[index]}-color`, marker?.color ?? '#888888', '#888888', { cssColorDrafts: options.cssColorDrafts, replaced: replaced || options.replaced });
       for (const [field, value] of Object.entries(values)) {
         const control = root.querySelector(`#${prefix}${ids[index]}-${field}`);
         if (control && (control !== root.activeElement || replaced)) control.value = String(value);

@@ -1,5 +1,5 @@
 import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumberValue } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, normalizeEditorColorValue, getColorPickerValue, syncColorInput } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, normalizeEditorColorValue, syncColorInput } from '../shared/editor-controls.js';
 import { getFiniteNumber, normalizeGaugeSegments, normalizeScaleConfig } from '../../config/normalize.js';
 import { getResolvedScale } from '../../config/resolve.js';
 import { getSegmentsForRendering, resolveSegmentBoundaryPct } from '../../view-model/bar-render-model.js';

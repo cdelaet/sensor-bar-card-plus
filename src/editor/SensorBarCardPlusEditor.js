@@ -9,7 +9,7 @@ import {
 import {
   renderEntityAttributeInput, renderEntityInput, renderEntitySourceInput, renderBuiltinMarkerLabelControls,
   renderWindowOptions, renderWindowHelperOptions, escapeAttribute, isHexColorValue, expandHexColor,
-  normalizeColorComparisonValue, getColorPickerValue, renderColorInput, formatScaleValueInput, getEntityAttributeSuggestions,
+  normalizeColorComparisonValue, renderColorInput, formatScaleValueInput, getEntityAttributeSuggestions,
   handleCssColorInput, syncColorInput, syncCssColorDrafts,
 } from './shared/editor-controls.js';
 import { editorStyles } from './shared/editor-styles.js';
@@ -252,7 +252,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       }
       this._targetConfigReplaced = !!targetOnlyReplacement;
       reconcile(() => {
-        this._syncPaintEditors();
+        this._syncPaintEditors({ replaced: true });
         this._syncEntityPickers();
       });
       this._targetConfigReplaced = false;
@@ -324,33 +324,35 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     if (activePaintControl && deferPaletteSyncUntilClick(activePaintControl, synchronize, this.shadowRoot)) return;
     const context = this._createSectionContext();
     const rowOptions = { deferActivePointerSync: options.deferActivePointerSync };
+    const colorOptions = { cssColorDrafts: this._cssColorDrafts, replaced: options.replaced };
     for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) {
       syncBarPaintEditor(this.shadowRoot, context, scope, this._paintPaletteValues(scope), {
-        numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts, registry: this._paintPresetRegistry,
+        numericDrafts: this._numericDrafts, ...colorOptions, registry: this._paintPresetRegistry,
       });
       const baselinePalettes = readDirectionalPaintPalettes(this._paintSections, 'baseline', scope);
       this._baselineSection.syncPaintEditors(this.shadowRoot, scope, baselinePalettes, this._paintPresetRegistry,
-        { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts,
+        { numericDrafts: this._numericDrafts, ...colorOptions,
           paintChildren: directionalPaintChildren(this._paintSections, 'baseline', opts => this._renderCardGroup(opts)) });
       syncDirectionalPaintRows(this._paintSections, 'baseline', scope, rowOptions);
       this._syncTargetControls(scope, options);
       syncPaintSectionRows(this._paintSections.bar, scope, rowOptions);
     }
-    this._syncStandaloneColorControls();
+    this._syncPresetPaintEditor(colorOptions);
+    this._syncStandaloneColorControls(colorOptions);
   }
 
-  _syncStandaloneColorControls() {
+  _syncStandaloneColorControls(colorOptions) {
     if (!this.shadowRoot?.innerHTML) return;
     for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) {
       const prefix = scope.type === 'entity' ? `entity-${scope.index}-` : '';
       const needle = this._needleSection._getEffectiveScopedNeedleConfig(scope);
       syncColorInput(this.shadowRoot, `${prefix}${scope.type === 'entity' ? 'needle-color' : 'bar-needle-color'}`,
-        needle.color, '#ffffff', this._cssColorDrafts);
+        needle.color, '#ffffff', colorOptions);
       for (const key of ['peak', 'floor']) {
         const marker = { ...this._extremaSection._getMarkerConfig(scope, key), ...this._extremaSection._getEffectiveMarkerExtras(scope, key) };
-        syncColorInput(this.shadowRoot, `${prefix}${key}-color`, marker.color, key === 'peak' ? '#888' : '#888888', this._cssColorDrafts);
+        syncColorInput(this.shadowRoot, `${prefix}${key}-color`, marker.color, key === 'peak' ? '#888' : '#888888', colorOptions);
       }
-      this._referenceMarkersSection.syncControls(this._hass, false, scope, { cssColorDrafts: this._cssColorDrafts });
+      this._referenceMarkersSection.syncControls(this._hass, false, scope, colorOptions);
     }
     syncCssColorDrafts(this.shadowRoot, this._cssColorDrafts);
   }
@@ -3304,10 +3306,6 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return normalizeColorComparisonValue(value);
   }
 
-  _getColorPickerValue(value, fallbackHex = '#000000') {
-    return getColorPickerValue(value, fallbackHex);
-  }
-
   _renderColorInput(options) {
     return renderColorInput(options);
   }
@@ -3633,15 +3631,8 @@ ${this._renderFormattingSection({ type: 'card' })}
       this._syncEntityAttributePickers();
       this._syncEntityIconPickers();
       this._syncActionSelectors();
-      for (const scope of [{ type: 'card' }, ...this._getEntitiesValue().map((_, index) => ({ type: 'entity', index }))]) {
-        syncPaintSectionRows(this._paintSections.bar, scope);
-      }
-      if (this._getSelectedPaintPresetName() !== null && this._presetPaintSections) {
-        syncPaintSectionRows(this._presetPaintSections, { type: 'card' });
-      }
       this._numericDrafts.apply(this.shadowRoot, numericFocus);
-      this._syncTargetEditors();
-      this._syncStandaloneColorControls();
+      this._syncPaintEditors();
       this._lastRenderedConfigJson = this._serializeConfig(this._draftConfig);
       this._applyPendingFocus();
     } finally {
@@ -3749,9 +3740,7 @@ ${this._renderFormattingSection({ type: 'card' })}
         const library = editor._cloneDeep(editor._getPaintPresetLibrary());
         library.paint = { ...(editor._isObject(library.paint) ? library.paint : {}), [selectedName]: definition };
         const nextConfig = editor._setPathValue(editor._draftConfig, ['preset_library'], library);
-        const applied = editor._applyUserConfig(nextConfig, options);
-        if (!options.rerender && applied) editor._syncPresetPaintEditor();
-        return applied;
+        return editor._applyUserConfig(nextConfig, options);
       },
       get hass() { return editor._hass; },
       get paintPresetRegistry() { return { status: 'empty', presets: {} }; },
@@ -3768,7 +3757,7 @@ ${this._renderFormattingSection({ type: 'card' })}
     return this._presetPaintSections;
   }
 
-  _syncPresetPaintEditor() {
+  _syncPresetPaintEditor({ replaced } = {}) {
     const name = this._getSelectedPaintPresetName();
     if (name === null || !this.shadowRoot?.querySelector('#preset-paint-editor')) return;
     const context = this._createPresetPaintContext();
@@ -3776,7 +3765,7 @@ ${this._renderFormattingSection({ type: 'card' })}
     const scope = { type: 'card' };
     const state = getBarPaintEditorState(context, scope, readPaintPalette(sections, scope), { status: 'empty', presets: {} });
     syncPaintEditor(this.shadowRoot, 'preset-paint-editor', { ...state, mode: 'manual', registryStatus: 'ready', diagnostics: [] },
-      { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts });
+      { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts, replaced });
     syncPaintSectionRows(sections, scope);
     const choice = [...this.shadowRoot.querySelectorAll('.paint-preset-choice')]
       .find(element => element.dataset.presetName === name);
@@ -4265,6 +4254,9 @@ ${this._renderFormattingSection({ type: 'card' })}
 
   _handleCssColorEvent(event) {
     const target = event.target;
+    // Removing a focused text field can dispatch its change during render.
+    if ((this._isRendering || target?.isConnected === false)
+      && (target?.type === 'color' || target?.dataset?.cssColor === 'true')) return false;
     const draftKey = target?.id || `${target?.dataset?.field ?? target?.dataset?.kind}-text-fallback`;
     return handleCssColorInput(target, this._cssColorDrafts, String(target?.value ?? ''), draftKey);
   }
