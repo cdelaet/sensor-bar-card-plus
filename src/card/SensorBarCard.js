@@ -669,8 +669,9 @@ export class SensorBarCard extends HTMLElement {
   }
 
   _syncPaintPresetRegistry() {
+    const actionEntities = Array.isArray(this._actionConfig?.entities) ? this._actionConfig.entities : [];
     const usesPreset = scopeUsesPaintPreset(this._actionConfig)
-      || (this._actionConfig?.entities ?? []).some(scopeUsesPaintPreset);
+      || actionEntities.some(scopeUsesPaintPreset);
     const ownsPresetLibrary = Object.hasOwn(this._actionConfig ?? {}, 'preset_library');
     if (!this.isConnected || !this._hass?.connection || !(usesPreset || ownsPresetLibrary)) {
       if (this._paintPresetHandle) {

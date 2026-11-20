@@ -995,11 +995,18 @@ export function normalizeLayoutConfig(entityConfig, cardConfig) {
   };
 }
 
+export function normalizeDecimalPlaces(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = getFiniteNumber(value);
+  return Number.isInteger(number) && number >= 0 && number <= 20 ? number : null;
+}
+
 export function normalizeFormattingConfig(entityConfig, cardConfig) {
   const cardFormatting = cardConfig?.formatting;
   const entityFormatting = entityConfig?.formatting;
+  const decimal = entityFormatting?.decimal ?? entityConfig.decimal ?? cardFormatting?.decimal ?? cardConfig?.decimal ?? null;
   return {
-    decimal: entityFormatting?.decimal ?? entityConfig.decimal ?? cardFormatting?.decimal ?? cardConfig?.decimal ?? null,
+    decimal: normalizeDecimalPlaces(decimal),
     unit: entityFormatting?.unit ?? entityConfig.unit ?? cardFormatting?.unit ?? cardConfig?.unit ?? null,
   };
 }
@@ -1323,6 +1330,9 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
     else delete normalizedEntity.attribute_invalid;
   }
 
+  const rawEntityDecimal = entityConfig.formatting?.decimal ?? entityConfig.decimal ?? null;
+  if (rawEntityDecimal !== null && rawEntityDecimal !== undefined && rawEntityDecimal !== ''
+    && normalizeDecimalPlaces(rawEntityDecimal) === null) normalizedEntity.decimal_invalid = true;
   normalizedEntity.layout = normalizeLayoutConfig(entityConfig, cardConfig);
   normalizedEntity.scale = normalizeScaleConfig(entityConfig, cardConfig);
   normalizedEntity.bar = normalizeBarConfig(entityConfig, cardConfig, {
@@ -1408,15 +1418,19 @@ export function normalizeCardConfig(rawConfig) {
   };
   baseConfig._height_explicit = rawConfig?.layout?.height !== undefined || rawConfig?.height !== undefined;
 
-  if (baseConfig.entity && !baseConfig.entities) {
-    baseConfig.entities = [{
+  let entitiesInput = baseConfig.entities;
+  if (baseConfig.entity && (entitiesInput === undefined || entitiesInput === null)) {
+    entitiesInput = [{
       entity: baseConfig.entity,
       ...(baseConfig.attribute !== undefined ? { attribute: baseConfig.attribute } : {}),
       ...(baseConfig.name !== undefined ? { name: baseConfig.name } : {}),
     }];
   }
-  baseConfig.entities = baseConfig.entities.map((e) =>
-    typeof e === 'string' ? { entity: e } : e
+  const entitiesInvalid = entitiesInput !== undefined && entitiesInput !== null && !Array.isArray(entitiesInput);
+  baseConfig.entities = (Array.isArray(entitiesInput) ? entitiesInput : []).map((e) =>
+    typeof e === 'string'
+      ? { entity: e }
+      : (e && typeof e === 'object' && !Array.isArray(e) ? e : { entity: null })
   );
 
   const normalizedCard = {
@@ -1429,6 +1443,10 @@ export function normalizeCardConfig(rawConfig) {
     enumerable: false,
   });
 
+  const rawCardDecimal = baseConfig.formatting?.decimal ?? baseConfig.decimal ?? null;
+  if (rawCardDecimal !== null && rawCardDecimal !== undefined && rawCardDecimal !== ''
+    && normalizeDecimalPlaces(rawCardDecimal) === null) normalizedCard.decimal_invalid = true;
+  normalizedCard.entities_invalid = entitiesInvalid;
   normalizedCard.layout = normalizeLayoutConfig(baseConfig, null);
   normalizedCard.scale = normalizeScaleConfig(rawConfig, null);
   normalizedCard.bar = normalizeBarConfig(baseConfig, null, {

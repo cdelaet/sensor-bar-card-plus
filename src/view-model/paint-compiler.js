@@ -239,13 +239,10 @@ export function getColor(pct, paint, minValue = 0, maxValue = 100) {
         .filter(Boolean);
     } else if (paint.gradient_stops && paint.gradient_stops.length >= 2) {
       stops = paint.gradient_stops.map(s => {
-        const hex = s.color.replace('#','');
-        const full = hex.length === 3
-          ? hex.split('').map(c => c+c).join('')
-          : hex;
-        return { p: s.pos, r: parseInt(full.slice(0,2),16), g: parseInt(full.slice(2,4),16), b: parseInt(full.slice(4,6),16) };
-      });
-      stops.sort((a,b) => a.p - b.p);
+        const rgb = hexToRgb(s?.color);
+        const pos = getFiniteNumber(s?.pos);
+        return rgb && pos !== null ? { p: pos, ...rgb } : null;
+      }).filter(Boolean).sort((a, b) => a.p - b.p);
     } else {
       stops = [
         { p: 0,   r: 76,  g: 175, b: 80  },
@@ -301,8 +298,9 @@ export function getGradientInterpolationStops(paint, minValue = 0, maxValue = 10
   if (paint.gradient_stops && paint.gradient_stops.length >= 2) {
     return paint.gradient_stops
       .map((s) => {
-        const rgb = hexToRgb(s.color);
-        return rgb ? { p: s.pos, ...rgb } : null;
+        const rgb = hexToRgb(s?.color);
+        const pos = getFiniteNumber(s?.pos);
+        return rgb && pos !== null ? { p: pos, ...rgb } : null;
       })
       .filter(Boolean)
       .sort((a, b) => a.p - b.p);

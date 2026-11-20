@@ -224,8 +224,17 @@ function validateGradientStops(diagnostics, stops, path, entity = null) {
   if (!Array.isArray(stops)) return;
   const seenPositions = new Set();
   for (let index = 0; index < stops.length; index += 1) {
-    const pos = getFiniteNumber(stops[index]?.pos);
+    if (!stops[index] || typeof stops[index] !== 'object' || Array.isArray(stops[index])) {
+      addWarning(diagnostics, 'gradient_stops.invalid_stop',
+        'Gradient stop must be an object with a position and color; ignoring this stop.', `${path}.gradient_stops[${index}]`, entity);
+      continue;
+    }
+    const pos = getFiniteNumber(stops[index].pos);
     const stopPath = `${path}.gradient_stops[${index}]`;
+    if (typeof stops[index].color !== 'string' || !stops[index].color.trim()) {
+      addWarning(diagnostics, 'gradient_stops.invalid_color',
+        'Gradient stop color must be a non-empty CSS color; ignoring this stop.', stopPath, entity);
+    }
     if (Number.isFinite(pos) && (pos < 0 || pos > 100)) {
       addWarning(
         diagnostics,
@@ -334,6 +343,10 @@ function validateConfigScope(diagnostics, config, path, entity = null, inherited
     validateSegments(diagnostics, belowTargetPaint.segments, `${path}.target.when_below.paint`, entity, true);
     validateGradientStops(diagnostics, belowTargetPaint.gradient_stops, `${path}.target.when_below.paint`, entity);
   }
+  if (config?.decimal_invalid === true) {
+    addWarning(diagnostics, 'formatting.invalid_decimal',
+      'Decimal places must be a whole number from 0 to 20; using default formatting.', `${path}.formatting.decimal`, entity);
+  }
   validateBaselineSuppressesNeedle(diagnostics, config, path, entity);
   validateExtremumReset(diagnostics, config, path, entity);
   validateMarkerDirections(diagnostics, config, path, entity);
@@ -360,6 +373,10 @@ export function validateNormalizedConfig(config) {
     return diagnostics;
   }
 
+  if (config.entities_invalid === true) {
+    addWarning(diagnostics, 'entities.invalid_structure',
+      'Entities must be a list; no entity rows were loaded.', 'entities', null);
+  }
   validateConfigScope(diagnostics, config, 'card');
   validateUnsupportedExtremaAliases(diagnostics, config, 'card');
   validateGenericMarkers(diagnostics, config.generic_markers, config.generic_markers_invalid, 'markers');
@@ -382,6 +399,10 @@ export function validateNormalizedConfig(config) {
         `${path}.entity`, entityId);
     }
 
+    if (entityConfig?.decimal_invalid === true) {
+      addWarning(diagnostics, 'formatting.invalid_decimal',
+        'Decimal places must be a whole number from 0 to 20; using default formatting.', `${path}.formatting.decimal`, entityId);
+    }
     validateConfigScope(diagnostics, entityConfig, path, entityId, config);
     if (Object.prototype.hasOwnProperty.call(entityConfig, 'markers')) {
       validateGenericMarkers(

@@ -1,6 +1,6 @@
 export function formatNumericDisplay(rawVal, decimal = null) {
   if (!Number.isFinite(rawVal)) return String(rawVal);
-  if (decimal !== null) {
+  if (Number.isInteger(decimal) && decimal >= 0 && decimal <= 20) {
     return rawVal.toLocaleString(undefined, {
       minimumFractionDigits: decimal,
       maximumFractionDigits: decimal,
