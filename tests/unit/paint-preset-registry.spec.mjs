@@ -64,6 +64,23 @@ describe('dashboard paint preset registry', () => {
     expect(connection.removeEventListener).toHaveBeenCalledTimes(2);
   });
 
+  it('preserves an owned __proto__ preset without prototype mutation', async () => {
+    const library = JSON.parse('{"paint":{"__proto__":{"fill_style":"solid","color":"#123456"}}}');
+    const connection = createConnection({ views: [
+      { cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: library }] },
+    ] });
+    const handle = subscribeDashboardPaintPresets(hassFor(connection), 'proto', () => {});
+    await flush();
+    const presets = handle.getSnapshot().presets;
+
+    expect(Object.hasOwn(presets, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(presets)).toBe(Object.prototype);
+    expect(presets.__proto__).toMatchObject({ fill_style: 'solid', color: '#123456' });
+    expect(Object.prototype.polluted).toBeUndefined();
+    handle.unsubscribe();
+    await flush();
+  });
+
   it('uses the sole saved master library across views and nested cards, preserving unknown categories', async () => {
     const library = { paint: { warm: { fill_style: 'solid', color: '#ff9800', opacity: 80 } }, layout: { future: true } };
     const connection = createConnection({ views: [

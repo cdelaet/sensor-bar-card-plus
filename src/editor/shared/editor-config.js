@@ -1,5 +1,10 @@
 // Immutable config primitives only. Cleanup, emission and session state belong
 // to the host; these functions never persist or normalize a complete config.
+function defineOwn(target, key, value) {
+  Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true });
+  return target;
+}
+
 export function cloneContainer(value) {
   return Array.isArray(value) ? [...value] : { ...(value ?? {}) };
 }
@@ -11,7 +16,7 @@ export function cloneDeep(value) {
   if (isObject(value)) {
     const clone = {};
     for (const [key, entry] of Object.entries(value)) {
-      clone[key] = cloneDeep(entry);
+      defineOwn(clone, key, cloneDeep(entry));
     }
     return clone;
   }
@@ -25,7 +30,7 @@ export function serializeConfig(value) {
     }
     if (isObject(input)) {
       return Object.keys(input).sort().reduce((acc, key) => {
-        acc[key] = normalize(input[key]);
+        defineOwn(acc, key, normalize(input[key]));
         return acc;
       }, {});
     }
@@ -50,15 +55,16 @@ export function setPathValue(target, path, value) {
 
   for (let index = 0; index < path.length - 1; index++) {
     const key = path[index];
-    const nextSource = isObject(sourceCursor?.[key]) || Array.isArray(sourceCursor?.[key])
-      ? sourceCursor[key]
-      : {};
-    cursor[key] = cloneContainer(nextSource);
+    const hasSource = sourceCursor != null
+      && Object.prototype.hasOwnProperty.call(sourceCursor, key)
+      && (isObject(sourceCursor[key]) || Array.isArray(sourceCursor[key]));
+    const nextSource = hasSource ? sourceCursor[key] : {};
+    defineOwn(cursor, key, cloneContainer(nextSource));
     cursor = cursor[key];
     sourceCursor = nextSource;
   }
 
-  cursor[path[path.length - 1]] = value;
+  defineOwn(cursor, path[path.length - 1], value);
   return root;
 }
 
@@ -68,7 +74,7 @@ export function deletePathValue(target, path) {
   }
 
   const [key, ...rest] = path;
-  if (!(key in target)) {
+  if (!Object.prototype.hasOwnProperty.call(target, key)) {
     return target;
   }
 
@@ -95,7 +101,7 @@ export function deletePathValue(target, path) {
 export function getPathValue(target, path) {
   let cursor = target;
   for (const key of path) {
-    if (cursor == null) return undefined;
+    if (cursor == null || !Object.prototype.hasOwnProperty.call(cursor, key)) return undefined;
     cursor = cursor[key];
   }
   return cursor;
@@ -105,7 +111,7 @@ export function hasPath(target, path) {
   let cursor = target;
   for (const key of path) {
     if (!isObject(cursor) && !Array.isArray(cursor)) return false;
-    if (!(key in cursor)) return false;
+    if (!Object.prototype.hasOwnProperty.call(cursor, key)) return false;
     cursor = cursor[key];
   }
   return true;

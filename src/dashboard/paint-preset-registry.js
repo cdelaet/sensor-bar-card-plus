@@ -75,7 +75,7 @@ function readPaintPresets(config) {
     diagnostic: { code: 'multiple_preset_masters', path: 'views', message: `Dashboard has ${masters.length} master Cards with preset_library; preset resolution is disabled.` } };
   if (masters.length === 1) {
     const library = masters[0].preset_library;
-    const presets = isRecord(library) && isRecord(library.paint) ? library.paint : {};
+    const presets = isRecord(library) && Object.hasOwn(library, 'paint') && isRecord(library.paint) ? library.paint : {};
     return { status: 'ready', presets, masterCount: 1, masterLibrary: library, diagnostic: null };
   }
   const fragments = config?.sbcp_fragments;
