@@ -20,6 +20,7 @@ module.exports = {
     { name: 'webkit-editor-disclosure-scroll', testMatch: /(?:editor-disclosure-scroll|editor-inherited-sync|external-editor-sync|editor-color-controls|paint-editor-ux)\.spec\.js/, use: { browserName: 'webkit' } },
     { name: 'webkit-lazy-editors', testMatch: /lazy-editor-loading\.spec\.js/, use: { browserName: 'webkit' } },
     { name: 'webkit-paint-destinations', testMatch: /(?:paint-destination-contract|paint-destination-isolation|paint-editor-default-segments|paint-header-scale-preview|paint-palette-activity|target-above-paint|target-directional)\.spec\.js/, use: { browserName: 'webkit' } },
+    { name: 'webkit-security-acceptance', testMatch: /acceptance\/security-hardening\.spec\.js/, use: { browserName: 'webkit' } },
   ],
   use: {
     headless: true,
