@@ -1,4 +1,5 @@
 import { getFiniteNumber } from '../config/normalize.js';
+import { collapseEqualTimestamps } from './calculations.js';
 import { fetchPlannedHistory, fetchRecorderStatistics, historySourceKey } from './history-provider.js';
 import { HISTORY_DEBUG_TRACE, historyDebugEnabled, historyDebugId, historyDebugLog, historyDebugTime } from './history-debug.js';
 
@@ -69,6 +70,34 @@ function mergeObservations(...lists) {
     if (!merged.has(key)) merged.set(key, observation);
   }
   return [...merged.values()].sort(compareObservations);
+}
+
+function collapseEqualTimestampGroups(observations) {
+  const result = [];
+  for (let index = 0; index < observations.length;) {
+    const timestamp = observations[index].timestamp;
+    let end = index + 1;
+    while (end < observations.length && observations[end].timestamp === timestamp) end += 1;
+    const group = observations.slice(index, end);
+    if (group.length <= 1) {
+      result.push(...group);
+    } else if (group.every(observation => observation.origin === 'live')) {
+      result.push(...collapseEqualTimestamps(group));
+    } else if (group.every(observation => observation.origin !== 'live')) {
+      result.push(...group);
+    } else {
+      // Preserve every Recorder row. Live rows in a mixed group only matter
+      // when they are the effective last transition, or when the group is
+      // ambiguous; retain that representation without keeping every transition.
+      const recorder = group.filter(observation => observation.origin !== 'live');
+      const effective = collapseEqualTimestamps(group)[0];
+      result.push(...recorder);
+      if (effective?.ambiguous) result.push({ ...effective, origin: 'live' });
+      else if (effective?.origin === 'live') result.push(effective);
+    }
+    index = end;
+  }
+  return result.sort(compareObservations);
 }
 
 export class SharedObservationService {
@@ -745,7 +774,7 @@ export class SharedObservationService {
     // transition. Keep the boundary sample for state continuity but require
     // calculations to report partial coverage, never a silently wrong extremum.
     const floor = Math.ceil(cutoff / 60000) * 60000;
-    history.observations = next;
+    history.observations = collapseEqualTimestampGroups(next);
     history.retentionFloor = Number.isFinite(history.retentionFloor)
       ? Math.max(history.retentionFloor, floor) : floor;
   }
@@ -920,9 +949,18 @@ export class SharedObservationService {
 
     for (const [key, record] of this.cache) {
       if (historySourceKey(record.source) !== sourceKey || !activeKeys.has(key)) continue;
-      const previous = record.observations;
-      if (!updatedHistories.has(previous)) updatedHistories.set(previous, mergeObservations(previous, [observation]));
-      record.observations = updatedHistories.get(previous);
+      const history = this.families.get(key)?.history;
+      if (history) {
+        // Active cache records are per-family views of the same source history.
+        // Keep the cache on the compacted shared array instead of growing an
+        // independent live copy that no compaction step owns.
+        record.observations = history.observations;
+        record.retentionFloor = history.retentionFloor ?? null;
+      } else {
+        const previous = record.observations;
+        if (!updatedHistories.has(previous)) updatedHistories.set(previous, mergeObservations(previous, [observation]));
+        record.observations = updatedHistories.get(previous);
+      }
       record.liveThrough = Math.max(record.liveThrough ?? -Infinity, observedAt);
       record.observedThrough = Math.max(record.observedThrough ?? -Infinity, observedAt);
       record.coverage = { ...record.coverage, liveObservedThrough: record.liveThrough };
