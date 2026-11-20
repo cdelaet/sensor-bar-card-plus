@@ -167,18 +167,22 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     customElements.whenDefined?.('ha-entity-attribute-picker').then(() => {
       const render = () => {
         if (!this.shadowRoot?.querySelector('input[data-kind$="-attribute"]')) return;
-        const active = this.shadowRoot.activeElement;
-        const selector = active?.id ? `#${active.id}`
-          : active?.dataset?.kind ? `[data-kind="${active.dataset.kind}"]${indexedControlSuffix(active.dataset)}`
-          : active?.dataset?.field ? `[data-field="${active.dataset.field}"]`
-          : active?.dataset?.action ? `[data-action="${active.dataset.action}"]` : null;
-        const focus = captureFocusState(this, active, selector);
+        const focus = this._captureControlFocus();
         this._render();
         restoreFocusState(this.shadowRoot, focus);
       };
       if (deferPaletteSyncUntilClick(null, render, this.shadowRoot)) return;
       render();
     }).catch(() => {});
+  }
+
+  _captureControlFocus() {
+    const active = this.shadowRoot?.activeElement;
+    const selector = active?.id ? `#${active.id}`
+      : active?.dataset?.kind ? `[data-kind="${active.dataset.kind}"]${indexedControlSuffix(active.dataset)}`
+      : active?.dataset?.field ? `[data-field="${active.dataset.field}"]`
+      : active?.dataset?.action ? `[data-action="${active.dataset.action}"]` : null;
+    return captureFocusState(this, active, selector);
   }
 
   setConfig(config) {
@@ -214,6 +218,15 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return;
     }
 
+    const restoringRenderedConfig = nextConfigJson === this._lastRenderedConfigJson;
+    const reconcile = update => {
+      if (!restoringRenderedConfig) return update();
+      const focus = this._captureControlFocus();
+      const viewport = focus ? null : captureViewport(this);
+      update();
+      if (focus) restoreFocusState(this.shadowRoot, focus);
+      else restoreViewport(viewport);
+    };
     const sourceChanged = paletteSourceSignature(nextConfig) !== paletteSourceSignature(this._config);
     const paletteOnlyReplacement = !sourceChanged && this.shadowRoot?.innerHTML
       && this._serializeConfig(paletteComparableConfig(nextConfig))
@@ -238,14 +251,15 @@ export class SensorBarCardPlusEditor extends HTMLElement {
         if (/^(?:entity-\d+-)?target-/.test(id)) this._numericDrafts.values.delete(id);
       }
       this._targetConfigReplaced = !!targetOnlyReplacement;
-      this._syncPaintEditors();
-      this._syncEntityPickers();
+      reconcile(() => {
+        this._syncPaintEditors();
+        this._syncEntityPickers();
+      });
       this._targetConfigReplaced = false;
       this._lastRenderedConfigJson = nextConfigJson;
       return;
     }
 
-    const shouldRender = !this.shadowRoot?.innerHTML || nextConfigJson !== this._lastRenderedConfigJson;
     this._lastEmittedConfigJson = null;
     this._entityIconCustomPending.clear();
     this._config = nextConfig;
@@ -258,13 +272,12 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._numericDrafts.reset();
     this._cssColorDrafts.clear();
 
-    if (shouldRender) {
-      // Card disclosure clicks only change UI state, so they can complete safely
-      // while the accepted configuration is already updated.
-      const disclosure = this.shadowRoot?.querySelector('[data-action="toggle-card-group"]:active');
-      if (disclosure && deferPaletteSyncUntilClick(disclosure, () => this._render(), this.shadowRoot)) return;
-      this._render();
-    }
+    // In-place edits can leave the DOM different from the last rendered config.
+    // Let a disclosure click finish safely before replacing the old controls.
+    const render = () => reconcile(() => this._render());
+    const disclosure = this.shadowRoot?.querySelector('[data-action="toggle-card-group"]:active');
+    if (disclosure && deferPaletteSyncUntilClick(disclosure, render, this.shadowRoot)) return;
+    render();
   }
 
   set hass(hass) {

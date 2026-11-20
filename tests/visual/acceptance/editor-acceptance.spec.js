@@ -263,13 +263,13 @@ for(const host of hosts) {
   await d.reopen(page,editor);await refs(editor);await expect(ref(rootRows(editor).first(),'label-text')).toHaveValue('Moved');
  });
 }
-for(const host of hosts)for(const scope of host==='standalone'?['root','entity']:['root'])for(const family of ['segment','gradient'])test(`${host} ${scope} ${family}: draft, add/edit/remove, order, metadata and reopen`,async({page})=>{
+for(const host of hosts)for(const scope of host==='standalone'?['root','entity']:['root'])for(const family of ['segment','gradient'])for(const source of host==='standalone'&&family==='gradient'?['src','dist']:['src'])test(`${host} ${scope} ${family}: draft, add/edit/remove, order, metadata and reopen${source==='dist'?' (dist)':''}`,async({page})=>{
  const config=d.seed(host);
  if(family==='segment') {
   if(scope==='entity')config.entities[0].bar.segments[0].color='green';
   else config.bar.segments[0].color='green';
  }
- const editor=await d.mount(page,host,config),section=family==='segment'?'Segments':'Gradient Stops',entry={section,scope};
+ const editor=await d.mount(page,host,config,{source}),section=family==='segment'?'Segments':'Gradient Stops',entry={section,scope};
  const group=family==='segment'?'segments':'gradient-stops';
  const palette=editor.locator(scope==='entity'?`#entity-0-group-${group}`:`#card-group-${group}`).locator('xpath=..');
  const openPalette=async()=>{if(scope==='entity'){await d.openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));await d.openDisclosure(editor.locator('#entity-0-group-bar'));}await d.openSection(editor,entry);};
@@ -297,8 +297,44 @@ for(const host of hosts)for(const scope of host==='standalone'?['root','entity']
  // Gradient fallback is existing raw non-hex input. Edit it only to supported
  // interpolation paint; do not invent an arbitrary-CSS Gradient Stop journey.
  if(family==='gradient'){
-  const raw=d.seed(host);await d.foreign(editor,raw);await openPalette();
-  const fallback=kind('color-text-fallback');await d.commit(page,editor,()=>fallback.fill('#778899'));expect(d.read(await d.saved(page),configPath)[0].color).toBe('#778899');
+  const raw=d.seed(host);
+  if (host === 'standalone') {
+    const picker = kind('color');
+    const originalPicker = await picker.elementHandle();
+    const reorderedEcho = Object.fromEntries(Object.entries(await d.saved(page)).reverse());
+    await editor.evaluate((element, config) => element.setConfig(config), reorderedEcho);
+    expect(await picker.evaluate((node, original) => node === original, originalPicker)).toBe(true);
+    expect(await d.count(page)).toBe(2);
+
+    const color = editor.locator(scope === 'entity' ? '#entity-0-bar-color-text-fallback' : '#bar-color-text-fallback');
+    await color.scrollIntoViewIfNeeded();
+    await color.evaluate(input => { input.focus(); input.setSelectionRange(1, 3); });
+    const before = await page.evaluate(() => scrollY);
+    await d.foreign(editor, raw);
+    expect(await color.evaluate(input => ({ focused: input.getRootNode().activeElement === input,
+      start: input.selectionStart, end: input.selectionEnd, scroll: scrollY })))
+      .toEqual({ focused: true, start: 1, end: 3, scroll: before });
+    const restored = await editor.evaluate((element, entity) => {
+      const prefix = entity ? 'entity-0-' : '';
+      const paint = element.shadowRoot.getElementById(`${prefix || 'card-'}paint-editor`);
+      return { positions: [...paint.querySelectorAll('.authored-gradient-stop-row input[type="number"]')].map(input => input.value),
+        firstColor: paint.querySelector(`#${prefix}gradient-color-0-text-fallback`)?.value };
+    }, scope === 'entity');
+    expect(restored).toEqual({ positions: ['0', '100'], firstColor: 'red' });
+    expect(await d.count(page)).toBe(2);
+  } else {
+    await d.foreign(editor, raw);
+  }
+  await openPalette();
+  const fallback = kind('color-text-fallback');
+  await d.commit(page, editor, async () => {
+    if (host === 'feature') return fallback.fill('#778899');
+    await fallback.click();
+    await page.keyboard.press('ControlOrMeta+A');
+    await page.keyboard.insertText('#778899');
+  });
+  expect(d.read(await d.saved(page), configPath)[0].color).toBe('#778899');
+  if (host === 'standalone') expect(await d.count(page)).toBe(3);
  }
  const draftPos=kind(`draft-${family==='segment'?'from':'pos'}`);await draftPos.fill(family==='segment'?'100%':'60');
  if(family==='segment')await kind('draft-to').fill('150%');

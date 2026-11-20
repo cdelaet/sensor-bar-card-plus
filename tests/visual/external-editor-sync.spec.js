@@ -406,6 +406,49 @@ for (const source of ['src', 'dist']) {
     expect(await d.count(page)).toBe(beforeEvents);
   });
 
+  for (const scope of ['root', 'entity']) {
+    test(`authoritative Card restore invalidates a pressed ${scope} Gradient Stop action (${source})`, async ({ page }) => {
+      const config = d.seed('standalone');
+      const editor = await d.mount(page, 'standalone', config, { source, tall: true, nested: true });
+      if (scope === 'entity') {
+        await d.openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));
+        await d.openDisclosure(editor.locator('#entity-0-group-bar'));
+      }
+      await d.openSection(editor, { section: 'Gradient Stops', scope });
+      const prefix = scope === 'entity' ? 'entity-0-' : '';
+      const palette = editor.locator(`#${prefix || 'card-'}paint-editor`);
+      const row = palette.locator('.authored-gradient-stop-row').first();
+      const position = row.locator('input[type="number"]');
+      await d.commit(page, editor, async () => { await position.fill('10'); await position.press('Tab'); });
+      await d.commit(page, editor, () => d.colorPicker(row.locator('input[type="color"]'), '#334455'));
+
+      const remove = row.getByRole('button', { name: 'Remove' });
+      await remove.scrollIntoViewIfNeeded();
+      const original = await remove.elementHandle();
+      const generation = await remove.getAttribute('data-palette-generation');
+      const box = await remove.boundingBox();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      const before = await page.evaluate(() => ({ page: scrollY, nested: document.querySelector('#mount').scrollTop }));
+      await d.foreign(editor, config);
+      const during = await row.evaluate((current, prefix) => ({
+        position: current.querySelector('input[type="number"]').value,
+        color: current.querySelector(`#${prefix}gradient-color-0-text-fallback`)?.value,
+        generation: current.dataset.paletteGeneration,
+        page: scrollY,
+        nested: document.querySelector('#mount').scrollTop,
+      }), prefix);
+      const detached = await original.evaluate(button => !button.isConnected);
+      await page.mouse.up();
+
+      expect(detached).toBe(true);
+      expect(during).toMatchObject({ position: '0', color: 'red', ...before });
+      expect(during.generation).not.toBe(generation);
+      expect(await d.count(page)).toBe(2);
+      expect(await d.saved(page)).toEqual(config);
+    });
+  }
+
   test(`Feature context refresh waits for Add Segment activation (${source})`, async ({ page }) => {
     const editor = await mount(page, 'feature', source);
     const add = await editSegmentDraft(editor);
