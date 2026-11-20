@@ -27,7 +27,9 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Check out release candidate
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
 
       - name: Validate release inputs and package version
         id: version
@@ -53,7 +55,7 @@ jobs:
 
       - name: Require the current main commit and successful Full Validation
         id: validation
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           RELEASE_SHA: ${{ github.sha }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
@@ -111,7 +113,7 @@ jobs:
               .addRaw(`Commit: ${sha}\n\nRun: ${run.html_url}\n`).write();
 
       - name: Set up Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: npm
@@ -136,7 +138,7 @@ jobs:
           done
 
       - name: Recheck main and release name immediately before tag creation
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           RELEASE_SHA: ${{ github.sha }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
@@ -163,17 +165,29 @@ jobs:
               }
             }
 
-      - name: Create and push annotated release tag
+      - name: Create annotated release tag
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
+          RELEASE_SHA: ${{ github.sha }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          git config --local user.name "github-actions[bot]"
-          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$RELEASE_TAG" "$GITHUB_SHA" -m "Sensor Bar Card Plus $RELEASE_TAG"
-          git push origin "refs/tags/$RELEASE_TAG"
+        with:
+          script: |
+            const tag = process.env.RELEASE_TAG;
+            const tagged = await github.rest.git.createTag({
+              ...context.repo,
+              tag,
+              message: `Sensor Bar Card Plus ${tag}`,
+              object: process.env.RELEASE_SHA,
+              type: 'commit',
+            });
+            await github.rest.git.createRef({
+              ...context.repo,
+              ref: `refs/tags/${tag}`,
+              sha: tagged.data.sha,
+            });
 
       - name: Verify the remote annotated tag target and message
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           RELEASE_SHA: ${{ github.sha }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
@@ -215,7 +229,7 @@ jobs:
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
 
       - name: Attach the exact tracked JavaScript pair, editor first
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           RELEASE_ID: ${{ steps.create_release.outputs.release_id }}
         with:
@@ -238,7 +252,7 @@ jobs:
 
       - name: Verify draft state and exact uploaded asset set
         id: draft
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           RELEASE_ID: ${{ steps.create_release.outputs.release_id }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
