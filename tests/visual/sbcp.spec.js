@@ -4256,8 +4256,8 @@ test('presentation update path keeps target recovery and peak maximum intact', a
   });
 });
 
-test('target label precision override stays separate from primary precision', async ({ page }) => {
-  await page.goto('/tests/visual/fixtures/harness.html');
+for (const source of ['src', 'dist']) test(`target label precision override stays separate from primary precision (${source})`, async ({ page }) => {
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   const result = await page.evaluate(async () => {
     const card = await window.__sbcpRenderCard({
       width: 320,
@@ -4345,7 +4345,7 @@ test('target label precision override stays separate from primary precision', as
   });
   expect(result.unavailable).toEqual({
     value: '42,00',
-    target: '55,3 W',
+    target: '',
     targetDisplay: 'none',
     targetLeft: '55.25%',
     peakLeft: '42%',

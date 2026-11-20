@@ -1162,7 +1162,9 @@ for (const source of ['src', 'dist']) test(`Card preset switching confirms repla
   expect((await saved(editor)).bar.paint).toEqual({ preset: 'second' });
   await editor.locator('#bar-opacity').fill('0');
   await preset.selectOption('');
-  expect((await saved(editor)).bar.paint).toEqual({ opacity: 0 });
+  expect((await saved(editor)).bar.paint).toEqual({ opacity: 0, preset: null });
+  await editor.locator('#bar-color').fill('#00bb00');
+  expect((await saved(editor)).bar.paint).toEqual({ opacity: 0, preset: null, color: '#00bb00' });
   expect((await saved(editor)).entities).toEqual(config.entities);
 });
 
