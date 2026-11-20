@@ -65,7 +65,7 @@ After Full Validation succeeds for the current `main` commit, prepare the releas
 gh workflow run release-dist.yml --ref main -f version=1.10.0 -f title="Historical Peak and Floor"
 ~~~
 
-The Release workflow checks that its commit is still the tip of `main`, requires successful Full Validation for that exact SHA, checks that the requested version matches `package.json`, refuses an existing tag or release, verifies both tracked dist files, and records each SHA-256 and size. It then creates and pushes the annotated `vX.Y.Z` tag, creates a DRAFT GitHub Release with the supplied title, and uploads the editor followed by the core. It verifies the exact two-asset set and downloads both to check bytes, hashes and sizes. The workflow never publishes the release.
+The Release workflow checks that its commit is still the tip of `main`, requires successful Full Validation for that exact SHA, checks that the requested version matches `package.json`, refuses an existing tag or release, verifies both tracked dist files, and records each SHA-256 and size. It then creates the annotated `vX.Y.Z` tag through the GitHub API, creates a DRAFT GitHub Release with the supplied title, and uploads the editor followed by the core. It verifies the exact two-asset set and downloads both to check bytes, hashes and sizes. The workflow never publishes the release.
 
 After the workflow succeeds, open the draft GitHub Release, paste and review the canonical release notes from the private `private/WHATS-NEW.md`, verify the title, notes, tag, and both attached JavaScript files, then manually click **Publish release**. Never publish an incomplete draft or a draft from a failed preparation run; repair and verify both matching assets first.
 

@@ -44,7 +44,7 @@ describe('malformed configuration recovery', () => {
 
     expect(row.formatting.decimal).toBeNull();
     expect(row.decimal_invalid).toBe(true);
-    expect(validateNormalizedConfig(config).warnings.map(item => item.code)).toContain('formatting.invalid_decimal');
+    expect(validateNormalizedConfig(config).warnings.filter(item => item.code === 'formatting.invalid_decimal')).toHaveLength(1);
     expect(() => card._buildRow(row, '42', 'W', 42, '#4a9eff', null, null, null, null, '#888', '#888', 0, 100)).not.toThrow();
     expect(formatNumericDisplay(42, 'x')).toBe((42).toLocaleString());
     expect(formatNumericDisplay(42, 2)).toBe((42).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -56,7 +56,7 @@ describe('malformed configuration recovery', () => {
     const cardInvalid = cardWith({ decimal: 'x', entities: [{ entity: 'sensor.power' }] }).config;
     expect(cardInvalid.decimal_invalid).toBe(true);
     expect(cardInvalid.entities[0].formatting.decimal).toBeNull();
-    expect(validateNormalizedConfig(cardInvalid).warnings.map(item => item.code)).toContain('formatting.invalid_decimal');
+    expect(validateNormalizedConfig(cardInvalid).warnings.filter(item => item.code === 'formatting.invalid_decimal')).toHaveLength(1);
   });
 
   it('normalizes malformed entity containers without throwing', () => {

@@ -399,10 +399,6 @@ export function validateNormalizedConfig(config) {
         `${path}.entity`, entityId);
     }
 
-    if (entityConfig?.decimal_invalid === true) {
-      addWarning(diagnostics, 'formatting.invalid_decimal',
-        'Decimal places must be a whole number from 0 to 20; using default formatting.', `${path}.formatting.decimal`, entityId);
-    }
     validateConfigScope(diagnostics, entityConfig, path, entityId, config);
     if (Object.prototype.hasOwnProperty.call(entityConfig, 'markers')) {
       validateGenericMarkers(
