@@ -50,9 +50,19 @@ function minuteBuckets(observations, window, ordered) {
   return buckets;
 }
 
+function retainedStart(record, fallback) {
+  return Number.isFinite(record?.retentionFloor) && record.retentionFloor > fallback
+    ? record.retentionFloor : fallback;
+}
+
 function calculateRecord(record, calculation, window) {
   if (window.acquisition?.mode !== 'statistics') {
-    const historyWindow = { start: Math.min(window.start, record.historyStart ?? window.start), end: window.end };
+    const historyStart = retainedStart(record, Math.min(window.start, record.historyStart ?? window.start));
+    if (historyStart >= window.end) {
+      return { value: null, sampleCount: 0, selectedObservation: null, boundaryIncluded: false,
+        orderingAmbiguous: false, requestedBoundsCovered: false };
+    }
+    const historyWindow = { start: historyStart, end: window.end };
     return minuteResult(minuteBuckets(record.observations, historyWindow, record.observationsOrdered === true), calculation, window, record.acquiredWindow);
   }
   if (!record.statisticsWindow || !record.statistics) return {
@@ -63,9 +73,10 @@ function calculateRecord(record, calculation, window) {
   const rawStart = Math.max(window.start, Number.isFinite(record.retainedRawStart)
     ? Math.min(statsEnd, record.retainedRawStart) : statsEnd);
   const rawWindow = { start: rawStart, end: window.end };
-  const historyWindow = { start: Math.min(rawStart, record.historyStart ?? rawStart), end: window.end };
-  const raw = window.end > rawStart ? minuteResult(minuteBuckets(record.observations, historyWindow, record.observationsOrdered === true),
-    calculation, rawWindow, record.acquiredWindow)
+  const historyStart = retainedStart(record, Math.min(rawStart, record.historyStart ?? rawStart));
+  const raw = window.end > rawStart && historyStart < window.end
+    ? minuteResult(minuteBuckets(record.observations, { start: historyStart, end: window.end },
+      record.observationsOrdered === true), calculation, rawWindow, record.acquiredWindow)
     : { value: null, sampleCount: 0, selectedObservation: null, boundaryIncluded: false, orderingAmbiguous: false };
   const buckets = record.statistics.buckets.filter(bucket => bucket.start >= window.start && bucket.end <= Math.min(statsEnd, window.end));
   const value = buckets.reduce((best, bucket) => {
@@ -76,7 +87,8 @@ function calculateRecord(record, calculation, window) {
   return { ...raw, value: chooseStats ? value : raw.value,
     selectedObservation: chooseStats ? null : raw.selectedObservation,
     sampleCount: buckets.length + raw.sampleCount,
-    requestedBoundsCovered: record.acquiredWindow?.start <= window.start && record.acquiredWindow?.end >= window.end };
+    requestedBoundsCovered: record.acquiredWindow?.start <= window.start && record.acquiredWindow?.end >= window.end
+      && !(Number.isFinite(record.retentionFloor) && record.retentionFloor > rawStart) };
 }
 
 function normalizeValueSpec(spec) {

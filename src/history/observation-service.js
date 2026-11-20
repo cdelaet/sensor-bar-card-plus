@@ -73,7 +73,7 @@ function mergeObservations(...lists) {
 
 export class SharedObservationService {
   constructor({ provider = fetchPlannedHistory, now = Date.now, ttlMs = 30000, maxEntries = 128,
-    maxConsumers = 256,
+    maxConsumers = 256, maxLiveObservations = 50000,
     requestTimeoutMs = 30000 } = {}) {
     if (typeof provider !== 'function') throw new TypeError('provider must be a function');
     this.provider = provider;
@@ -81,6 +81,8 @@ export class SharedObservationService {
     this.ttlMs = ttlMs;
     this.maxEntries = maxEntries;
     this.maxConsumers = maxConsumers;
+    this.maxLiveObservations = Math.max(1, Math.floor(maxLiveObservations));
+    this.liveCompactionSlack = Math.max(1, Math.min(5000, Math.floor(this.maxLiveObservations / 10)));
     this.requestTimeoutMs = requestTimeoutMs;
     this.cache = new Map();
     this.inflight = new Map();
@@ -656,6 +658,7 @@ export class SharedObservationService {
     return cloneRecord({
       ...base,
       ...record,
+      retentionFloor: consumer.family.history.retentionFloor ?? null,
       acquiredWindow: record.acquiredWindow ?? base.acquiredWindow ?? null,
       fetchedAt: record.fetchedAt ?? base.fetchedAt ?? null,
       retrievedAt: record.retrievedAt ?? base.retrievedAt ?? null,
@@ -711,6 +714,7 @@ export class SharedObservationService {
         owner.pruneHour = pruneHour;
       }
       history.push(incoming[0]);
+      this._compactLiveHistory(owner);
       return;
     }
     const merged = mergeObservations(original, incoming);
@@ -719,6 +723,31 @@ export class SharedObservationService {
     const boundaryTime = before.at(-1)?.timestamp;
     const boundary = before.filter((sample) => sample.timestamp === boundaryTime);
     consumer.observations = [...boundary, ...inOrAfter];
+    this._compactLiveHistory(owner);
+  }
+
+  _compactLiveHistory(history) {
+    const observations = history.observations;
+    const live = observations.filter(observation => observation.origin === 'live');
+    if (live.length <= this.maxLiveObservations + this.liveCompactionSlack) return;
+    const firstKept = live.length - this.maxLiveObservations;
+    const cutoff = live[firstKept]?.timestamp;
+    if (!Number.isFinite(cutoff)) return;
+    const boundaryTime = live[firstKept - 1]?.timestamp;
+    const next = observations.filter(observation => observation.origin !== 'live'
+      || observation.timestamp >= cutoff);
+    if (Number.isFinite(boundaryTime) && boundaryTime < cutoff) {
+      next.push(...observations.filter(observation => observation.origin === 'live'
+        && observation.timestamp === boundaryTime));
+      next.sort(compareObservations);
+    }
+    // A window that starts before this minute boundary may have lost a live
+    // transition. Keep the boundary sample for state continuity but require
+    // calculations to report partial coverage, never a silently wrong extremum.
+    const floor = Math.ceil(cutoff / 60000) * 60000;
+    history.observations = next;
+    history.retentionFloor = Number.isFinite(history.retentionFloor)
+      ? Math.max(history.retentionFloor, floor) : floor;
   }
 
   _decorateForActiveConsumers(source, window, record) {
@@ -751,7 +780,7 @@ export class SharedObservationService {
     if (!family) {
       let history = this.sourceHistories.get(historyKey);
       if (!history) {
-        history = { key: historyKey, observations: [], refs: 0 };
+        history = { key: historyKey, observations: [], refs: 0, retentionFloor: null };
         this.sourceHistories.set(historyKey, history);
       }
       history.refs += 1;
@@ -801,7 +830,7 @@ export class SharedObservationService {
           const nextHistoryKey = this._historyKey(sourceKey, nextWindow);
           let history = this.sourceHistories.get(nextHistoryKey);
           if (!history) {
-            history = previousHistory.key === nextHistoryKey ? previousHistory : { key: nextHistoryKey, observations: [], refs: 0 };
+            history = previousHistory.key === nextHistoryKey ? previousHistory : { key: nextHistoryKey, observations: [], refs: 0, retentionFloor: null };
             this.sourceHistories.set(nextHistoryKey, history);
           }
           history.refs += 1;
