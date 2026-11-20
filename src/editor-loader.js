@@ -1,7 +1,9 @@
 // Build defines are also supplied by the source-mode development server.
 const buildIdentity = typeof __SBCP_BUILD_ID__ === 'string' ? __SBCP_BUILD_ID__ : null;
 const editorFile = typeof __SBCP_EDITOR_FILE__ === 'string' ? __SBCP_EDITOR_FILE__ : './sensor-bar-card-plus-editor.js';
-const editorDigest = typeof __SBCP_EDITOR_DIGEST__ === 'string' ? __SBCP_EDITOR_DIGEST__ : '';
+// Used only to distinguish companion cache entries. The fetched bytes are not
+// hashed at runtime; build-identity equality below is the integrity check.
+const editorCacheKey = typeof __SBCP_EDITOR_DIGEST__ === 'string' ? __SBCP_EDITOR_DIGEST__ : '';
 const editorTags = ['sensor-bar-card-plus-editor', 'sensor-bar-card-plus-feature-editor'];
 const runtimeTags = ['sensor-bar-card-plus', 'sensor-bar-card-plus-feature'];
 const updateMessage = 'Sensor Bar Card Plus was updated. Refresh Home Assistant to load the matching visual editor.';
@@ -31,7 +33,7 @@ async function loadEditors() {
   // One request per explicit attempt, at most two module cache identities per page.
   // A failed import is cached by browsers, so the second attempt uses a new URL.
   const url = new URL(editorFile, import.meta.url);
-  url.searchParams.set('sbcp_build', editorDigest);
+  url.searchParams.set('sbcp_build', editorCacheKey);
   if (attempts++) url.searchParams.set('sbcp_retry', '1');
   let companion;
   try {
