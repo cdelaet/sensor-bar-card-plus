@@ -119,12 +119,12 @@ for(const source of ['src','dist']) describe(`Feature capability closure (${sour
   const saved=structuredClone(editor._config),count=events.length;await edit(editor,`#${id}`,'var(');editor.context={entity_id:'sensor.changed'};editor.setConfig(editor._config);await editor.updateComplete;
   expect(editor._config).toEqual(saved);expect(events).toHaveLength(count);expect(editor.shadowRoot.querySelector(`#${id}`).value).toBe('var(');expect(calls).toContainEqual(['color','var(']);
  });
- it('Segment CSS drafts stay local through echo and reset on replacement, while hex Gradient Stops do not gain CSS entry',async()=>{
+ it('Segment CSS drafts stay local through echo and reset on replacement, and hex Gradient Stop text stays editable',async()=>{
   const config=raw();config.bar.color='var(--base-color)';const {editor,events}=await setup(source,config);const control=editor.shadowRoot.querySelector('#segment-color-0-text-fallback');
   await edit(editor,'#segment-color-0-text-fallback','rgb(');expect(events).toHaveLength(0);editor.hass={states:{}};await editor.updateComplete;expect(editor.shadowRoot.querySelector('#segment-color-0-text-fallback')).toBe(control);expect(control.value).toBe('rgb(');
   await edit(editor,'#segment-draft-color-text-fallback','bogus');expect(editor._segmentsSection._getValidSegmentDraft(root)).toBeNull();
   editor.setConfig({type,bar:{fill_style:'bands',segments:[{from:0,color:'blue'}]}});await editor.updateComplete;expect(editor.shadowRoot.querySelector('#segment-color-0-text-fallback')?.value).toBe('blue');expect(editor._cssColorDrafts.size).toBe(0);
-  await edit(editor,'#bar-fill-style','gradient','change');expect(editor.shadowRoot.innerHTML).not.toContain('data-kind="gradient-color-text-fallback"');expect(editor.shadowRoot.innerHTML).not.toContain('data-kind="gradient-draft-color-text-fallback"');
+  await edit(editor,'#bar-fill-style','gradient','change');expect(editor.shadowRoot.querySelector('#gradient-color-0-text-fallback').value).toMatch(/^#/);expect(editor.shadowRoot.querySelector('#gradient-draft-color-text-fallback').value).toMatch(/^#/);
  });
 });
 it('all four capabilities have exact source/dist template parity in picker/fallback environments',async()=>{

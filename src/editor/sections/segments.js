@@ -943,13 +943,15 @@ export class SegmentsSection extends PaletteSection {
                             const validationMessage = validationMessages[segmentIndex] ?? '';
                             return `
                             <div class="segment-editor-row" data-palette-index="${segmentIndex}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}">
-                            <div class="list-row triple segment-row">
+                            <div class="list-row segment-row">
                               <input type="text" data-kind="entity-segment-from" data-index="${index}" data-segment-index="${segmentIndex}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}" value="${escapeAttribute(this._getSegmentBoundaryText(scope, segmentIndex, 'from', segment?.from))}" placeholder="0%">
                               <input type="text" data-kind="entity-segment-to" data-index="${index}" data-segment-index="${segmentIndex}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}" value="${escapeAttribute(this._getSegmentBoundaryText(scope, segmentIndex, 'to', segment?.to))}" placeholder="100%">
-                              ${renderColorInput({ id: `entity-${index}-segment-color-${segmentIndex}`, kind: 'entity-segment-color', index,
-                                value: segment?.color ?? '#4a9eff', fallbackHex: '#4a9eff', label: `Segment ${segmentIndex + 1} color`,
-                                extraDataset: { 'segment-index': segmentIndex, 'palette-generation': this._getPaletteSession(scope, entitySegments).generation } })}
-                              <button type="button" data-action="remove-entity-segment" data-index="${index}" data-segment-index="${segmentIndex}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}" aria-label="Remove" title="Remove">🗑</button>
+                              <div class="palette-row-actions">
+                                ${renderColorInput({ palette: true, id: `entity-${index}-segment-color-${segmentIndex}`, kind: 'entity-segment-color', index,
+                                  value: segment?.color ?? '#4a9eff', fallbackHex: '#4a9eff', label: `Segment ${segmentIndex + 1} color`,
+                                  extraDataset: { 'segment-index': segmentIndex, 'palette-generation': this._getPaletteSession(scope, entitySegments).generation } })}
+                                <button type="button" data-action="remove-entity-segment" data-index="${index}" data-segment-index="${segmentIndex}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}" aria-label="Remove" title="Remove">🗑</button>
+                              </div>
                             </div>
                             <div id="entity-${index}-segment-row-hint-${segmentIndex}" class="section-note"${validationMessage ? '' : ' style="display:none"'}>${escapeAttribute(validationMessage)}</div>
                             </div>
@@ -957,13 +959,15 @@ export class SegmentsSection extends PaletteSection {
                           })}
                           <div class="segment-draft">
                             <div class="segment-draft-heading">Add Segment</div>
-                            <div class="list-row triple segment-row">
+                            <div class="list-row segment-row">
                               <input id="entity-${index}-segment-draft-from" type="text" data-kind="entity-segment-draft-from" data-index="${index}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}" value="${escapeAttribute(this._getSegmentDraftState(scope).from)}" placeholder="0%">
                               <input id="entity-${index}-segment-draft-to" type="text" data-kind="entity-segment-draft-to" data-index="${index}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}" value="${escapeAttribute(this._getSegmentDraftState(scope).to)}" placeholder="100%">
-                              ${renderColorInput({ id: `entity-${index}-segment-draft-color`, kind: 'entity-segment-draft-color', index,
-                                value: this._getSegmentDraftState(scope).color, fallbackHex: '#4a9eff', label: 'New segment color',
-                                extraDataset: { 'palette-generation': this._getPaletteSession(scope, entitySegments).generation } })}
-                              <button type="button" data-action="add-entity-segment" data-index="${index}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}"${draftValidation.segment ? '' : ' disabled'}>Add</button>
+                              <div class="palette-row-actions">
+                                ${renderColorInput({ palette: true, id: `entity-${index}-segment-draft-color`, kind: 'entity-segment-draft-color', index,
+                                  value: this._getSegmentDraftState(scope).color, fallbackHex: '#4a9eff', label: 'New segment color',
+                                  extraDataset: { 'palette-generation': this._getPaletteSession(scope, entitySegments).generation } })}
+                                <button type="button" data-action="add-entity-segment" data-index="${index}" data-palette-generation="${this._getPaletteSession(scope, entitySegments).generation}"${draftValidation.segment ? '' : ' disabled'}>Add</button>
+                              </div>
                             </div>
                             <div id="entity-${index}-segment-draft-hint" class="section-note"${draftValidation.message ? '' : ' style="display:none"'}>${escapeAttribute(draftValidation.message)}</div>
                           </div>
@@ -989,11 +993,13 @@ export class SegmentsSection extends PaletteSection {
                     const validationMessage = validationMessages[index] ?? '';
                     return `
                     <div class="segment-editor-row" data-palette-index="${index}" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}">
-                    <div class="list-row triple segment-row">
+                    <div class="list-row segment-row">
                       <input type="text"${this.array.autoEnds ? ` aria-label="Segment ${index + 1} start"` : ''} data-kind="segment-from" data-index="${index}" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: 'card' }, index, 'from', segment?.from))}" placeholder="0%">
                       <input type="text"${this.array.autoEnds ? ` aria-label="Segment ${index + 1} end (blank = Auto)"` : ''} data-kind="segment-to" data-index="${index}" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}" value="${escapeAttribute(this._getSegmentBoundaryText({ type: 'card' }, index, 'to', segment?.to))}" placeholder="${this.array.autoEnds ? 'Auto' : '100%'}">
-                        ${renderColorInput({ id: `segment-color-${index}`, kind: 'segment-color', index, value: segment?.color ?? '#4a9eff', fallbackHex: '#4a9eff', label: `Segment ${index + 1} color`, extraDataset: { 'palette-generation': this._getPaletteSession({ type: 'card' }).generation } })}
-                      <button type="button" data-action="remove-segment" data-index="${index}" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}" aria-label="Remove" title="Remove">🗑</button>
+                        <div class="palette-row-actions">
+                          ${renderColorInput({ palette: true, id: `segment-color-${index}`, kind: 'segment-color', index, value: segment?.color ?? '#4a9eff', fallbackHex: '#4a9eff', label: `Segment ${index + 1} color`, extraDataset: { 'palette-generation': this._getPaletteSession({ type: 'card' }).generation } })}
+                        <button type="button" data-action="remove-segment" data-index="${index}" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}" aria-label="Remove" title="Remove">🗑</button>
+                        </div>
                     </div>
                       <div id="segment-row-hint-${index}" class="section-note"${validationMessage ? '' : ' style="display:none"'}>${escapeAttribute(validationMessage)}</div>
                       </div>
@@ -1001,11 +1007,13 @@ export class SegmentsSection extends PaletteSection {
                   })}
                     <div class="segment-draft">
                       <div class="segment-draft-heading">Add Segment</div>
-                      <div class="list-row triple segment-row">
+                      <div class="list-row segment-row">
                         <input id="segment-draft-from" type="text"${this.array.autoEnds ? ' aria-label="New segment start"' : ''} data-kind="segment-draft-from" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}" value="${escapeAttribute(this._getSegmentDraftState({ type: 'card' }).from)}" placeholder="0%">
                         <input id="segment-draft-to" type="text"${this.array.autoEnds ? ' aria-label="New segment end (blank = Auto)"' : ''} data-kind="segment-draft-to" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}" value="${escapeAttribute(this._getSegmentDraftState({ type: 'card' }).to)}" placeholder="${this.array.autoEnds ? 'Auto' : '100%'}">
-                        ${renderColorInput({ id: 'segment-draft-color', kind: 'segment-draft-color', value: this._getSegmentDraftState({ type: 'card' }).color, fallbackHex: '#4a9eff', label: 'New segment color', extraDataset: { 'palette-generation': this._getPaletteSession({ type: 'card' }).generation } })}
-                        <button type="button" data-action="add-segment" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}"${draftValidation.segment ? '' : ' disabled'}>Add</button>
+                        <div class="palette-row-actions">
+                          ${renderColorInput({ palette: true, id: 'segment-draft-color', kind: 'segment-draft-color', value: this._getSegmentDraftState({ type: 'card' }).color, fallbackHex: '#4a9eff', label: 'New segment color', extraDataset: { 'palette-generation': this._getPaletteSession({ type: 'card' }).generation } })}
+                          <button type="button" data-action="add-segment" data-palette-generation="${this._getPaletteSession({ type: 'card' }).generation}"${draftValidation.segment ? '' : ' disabled'}>Add</button>
+                        </div>
                       </div>
                       <div id="segment-draft-hint" class="section-note"${draftValidation.message ? '' : ' style="display:none"'}>${escapeAttribute(draftValidation.message)}</div>
                     </div>

@@ -83,7 +83,7 @@ for(const source of ['src','dist'])test(`Feature CSS colors ${source}: all direc
  }
  const before=await saved(editor);expect(before.markers[0]).toEqual({...await page.evaluate(()=>window.__capabilityOriginal.markers[0]),color:'orange'});
  await editor.locator('#bar-color-text-fallback').fill('var(');await editor.evaluate(async el=>{el.setConfig({...el._config,bar:{...el._config.bar,color:'blue'}});await el.updateComplete;});await expect(editor.locator('#bar-color-text-fallback')).toHaveValue('blue');await expect(editor.locator('#bar-color-text-fallback')).toHaveAttribute('aria-invalid','false');
- await editor.locator('#bar-fill-style').selectOption('gradient');await expect(editor.locator('[data-kind="gradient-color-text-fallback"]')).toHaveCount(0);await expect(editor.locator('[data-kind="gradient-draft-color-text-fallback"]')).toHaveCount(0);
+ await editor.locator('#bar-fill-style').selectOption('gradient');await expect(editor.locator('#gradient-color-0-text-fallback')).toHaveValue(before.bar.gradient_stops[0].color);await expect(editor.locator('#gradient-draft-color-text-fallback')).toHaveValue(/^#/);
  expect((await saved(editor)).bar.gradient_stops).toEqual(before.bar.gradient_stops);
 });
 for(const source of ['src','dist'])test(`Feature automatic Segment draft ${source}: CSS validation, add/remove, ordering and echo`,async({page})=>{

@@ -352,7 +352,7 @@ export class PaletteSection {
     if (draft) {
       if (segment) {
         this._setSegmentDraftField(scope, field, value);
-        if (field === 'color' && target?.type === 'color') this._syncSegmentDraftControls?.(scope);
+        if (field === 'color') this._syncSegmentDraftControls?.(scope);
       }
       else this._setGradientStopsDraftField(scope, field, value);
       return true;

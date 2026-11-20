@@ -46,32 +46,37 @@ export const editorStyles = `
         .paint-editor-grid { display: grid; gap: 12px; align-items: end;
           grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); min-width: 0; }
         .paint-editor .field-grid { grid-template-columns: minmax(0, 1fr); }
-        .paint-editor .list-row.segment-row {
-          grid-template-columns: minmax(48px, 0.65fr) minmax(48px, 0.65fr) minmax(104px, 1fr) 40px;
-        }
-        .paint-editor .list-row.gradient-stop-row {
-          grid-template-columns: minmax(64px, 0.65fr) minmax(104px, 1fr) 40px;
-        }
-        .paint-editor .list-row > .field-grid { grid-template-columns: minmax(0, 1fr); min-width: 0; }
-        .paint-editor .list-row input, .paint-editor .segment-draft { min-width: 0; }
+        .paint-editor .segment-draft { min-width: 0; }
         .paint-editor .list { grid-template-columns: minmax(0, 1fr); }
+        .list-row:is(.segment-row, .gradient-stop-row), .palette-row-actions, .palette-color-controls {
+          display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0;
+        }
+        .list-row:is(.segment-row, .gradient-stop-row) > input {
+          flex: 1 1 76px; min-width: min(100%, 60px); max-width: 80px;
+        }
+        .list-row.segment-row > input { flex-basis: 60px; }
+        .palette-row-actions { flex: 1 1 150px; max-width: 280px; }
+        .palette-color-controls { flex: 1 1 98px; }
+        .palette-color-controls input[type="color"] {
+          flex: 1 1 0; min-width: min(100%, 32px); max-width: 90px;
+          color: var(--palette-color, var(--primary-text-color, #111));
+        }
+        .palette-color-controls input[type="text"] {
+          flex: 1 1 0; min-width: min(100%, 60px); max-width: 144px;
+          padding-inline: 6px;
+        }
+        .palette-row-actions > button { flex: 0 0 auto; min-width: 36px; padding-inline: 6px; }
         @container (max-width: 360px) {
           .paint-preset-row { grid-template-columns: minmax(0, 1fr); }
           .paint-property-heading { align-items: flex-start; }
           .paint-editor .segment-undefined-row { flex-wrap: wrap; }
           .paint-editor .segment-undefined-label { flex: 1 1 80px; }
-          .paint-editor .list-row.segment-row, .paint-editor .list-row.gradient-stop-row {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-          .paint-editor .list-row.segment-row > :nth-child(3) { grid-column: 1 / -1; }
-          .paint-editor .list-row.segment-row > button, .paint-editor .list-row.gradient-stop-row > button {
-            grid-column: 1 / -1; width: 100%;
-          }
         }
-        @container (max-width: 220px) {
-          .paint-editor .list-row.segment-row, .paint-editor .list-row.gradient-stop-row {
-            grid-template-columns: minmax(0, 1fr);
-          }
+        @container (max-width: 150px) {
+          .paint-editor-summary { grid-template-columns: 12px 38px minmax(0, 1fr); column-gap: 6px; }
+          .paint-editor-swatch { width: 36px; }
+          .paint-editor-heading { overflow-wrap: anywhere; }
+          .segment-undefined-action { overflow-wrap: anywhere; }
         }
 	        :host {
 	          /* Changing form content must not become the browser's scroll anchor. */
@@ -253,25 +258,6 @@ export const editorStyles = `
         .generic-marker-precision {
           max-width: 220px;
         }
-	        .list-row.triple {
-	          grid-template-columns: repeat(3, minmax(120px, 1fr)) auto;
-	        }
-	        .list-row.segment-row {
-	          grid-template-columns: minmax(72px, 1fr) minmax(72px, 1fr) minmax(52px, 64px) 40px;
-	          align-items: center;
-	        }
-	        .list-row.segment-row > * {
-	          min-width: 0;
-	        }
-	        .list-row.segment-row > button {
-	          width: 40px;
-	          min-width: 40px;
-	          padding: 6px;
-	          justify-self: end;
-	        }
-	        .list-row.gradient-stop-row {
-	          grid-template-columns: minmax(110px, 1fr) minmax(120px, 1fr) auto;
-	        }
 	        .gradient-stop-list {
 	          display: grid;
 	          gap: 10px;
@@ -323,6 +309,7 @@ export const editorStyles = `
 	        .segment-undefined-action {
 	          flex: 0 0 auto;
 	          margin-left: auto;
+	          max-width: 100%;
 	          min-height: 32px;
 	          padding: 4px 8px;
 	          font-size: 0.82rem;
@@ -661,22 +648,6 @@ export const editorStyles = `
 	            min-width: 0;
 	            justify-content: flex-start;
 	          }
-	          .list-row.triple,
-	          .list-row.gradient-stop-row {
-	            grid-template-columns: repeat(2, minmax(0, 1fr));
-	          }
-	          .list-row.segment-row {
-	            grid-template-columns: repeat(3, minmax(0, 1fr)) 40px;
-	          }
-	          .list-row.triple > button,
-	          .list-row.gradient-stop-row > button {
-	            grid-column: 1 / -1;
-	            width: 100%;
-	          }
-	          .list-row.segment-row > button {
-	            grid-column: auto;
-	            width: 40px;
-	          }
 	        }
 	        @media (max-width: 480px) {
 	          .section {
@@ -719,20 +690,7 @@ export const editorStyles = `
 	          .generic-marker-options {
 	            grid-template-columns: minmax(0, 1fr);
 	          }
-	          .list-row.triple,
-	          .list-row.gradient-stop-row {
-	            grid-template-columns: minmax(0, 1fr);
-	          }
-	          .list-row.segment-row {
-	            grid-template-columns: repeat(2, minmax(0, 1fr));
-	          }
-	          .list-row > button,
-	          .list-row.triple > button,
-	          .list-row.gradient-stop-row > button {
-	            width: 100%;
-	          }
-	          .list-row.segment-row > button {
-	            grid-column: 1 / -1;
+	          .list-row > button {
 	            width: 100%;
 	          }
 	        }

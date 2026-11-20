@@ -442,19 +442,12 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       try {
       this.shadowRoot.innerHTML = `<style>${editorStyles}
         :host { container-type: inline-size; }
-        .list-row.gradient-stop-row .field-grid { grid-template-columns: minmax(0, 1fr); }
-        .list-row.segment-row > .field-grid { grid-template-columns: minmax(0, 1fr); }
         @container (max-width: 320px) {
-          .list-row.segment-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-          .list-row.gradient-stop-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .generic-marker-header { flex-wrap: wrap; }
           .generic-marker-toggle { flex-basis: 100%; }
           .generic-marker-actions { width: 100%; }
           .generic-marker-actions button { flex: 1 1 auto; }
           .generic-marker-pair, .generic-marker-options { grid-template-columns: minmax(0, 1fr); }
-          .list-row.segment-row > button, .list-row.gradient-stop-row > button {
-            grid-column: 1 / -1; width: 100%;
-          }
         }
         .inline-row { grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); }
         .section-note { overflow-wrap: anywhere; }
@@ -588,13 +581,13 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
     for (const [section, rebuilt] of [[this._segmentsSection, segmentsRebuilt], [this._gradientStopsSection, gradientStopsRebuilt]]) {
       const segment = section === this._segmentsSection;
       const rows = segment ? section._getScopedSegmentsValue(root) : section._getScopedGradientStopsValue(root);
-      for (const field of segment ? ['from', 'to', 'color', 'color-text-fallback'] : ['pos', 'color']) {
+      for (const field of segment ? ['from', 'to'] : ['pos']) {
         for (const control of paletteRoot?.querySelectorAll(`input[data-kind="${segment ? 'segment' : 'gradient'}-${field}"]`) ?? []) {
           const index = Number(control.dataset.index), row = rows[index];
           if (!row) continue;
-          const value = segment && !field.startsWith('color') ? section._getSegmentBoundaryText(root, index, field, row?.[field])
-            : !segment && field === 'pos' ? section._getGradientStopPosText(root, index, row?.pos ?? '') : row?.color;
-          if (rebuilt) control.value = segment && control.type === 'color' ? getColorPickerValue(value, '#4a9eff') : value ?? '';
+          const value = segment ? section._getSegmentBoundaryText(root, index, field, row[field])
+            : section._getGradientStopPosText(root, index, row.pos ?? '');
+          if (rebuilt) control.value = value ?? '';
         }
       }
     }

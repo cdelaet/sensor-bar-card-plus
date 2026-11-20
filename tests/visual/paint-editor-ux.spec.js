@@ -98,23 +98,29 @@ for (const source of ['src', 'dist']) for (const destination of ['Card', 'Entity
     await expect(root.getByText('Default bands', { exact: true })).toHaveCount(0);
   });
 
-  test(`${destination} palette rows expose full hex values at narrow and wide widths (${source})`, async ({ page }) => {
+  test(`${destination} palette rows wrap and keep color controls usable (${source})`, async ({ page }) => {
     for (const width of [240, 360, 600]) {
-      const { root } = await mount(page, source, destination, false, width);
-      const fallback = root.locator('input[data-kind$="gradient-color-text-fallback"]').first();
-      await fallback.fill('#abcdef');
-      const hexInputs = root.locator('.segment-row input[data-css-color], .gradient-stop-row input[data-kind$="color-text-fallback"]');
-      expect(await hexInputs.count()).toBeGreaterThan(0);
-      for (const input of await hexInputs.all()) {
-        const metrics = await input.evaluate(input => {
-          const style = getComputedStyle(input);
-          const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d'); ctx.font = style.font;
-          return { available: input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
-            required: ctx.measureText('#abcdef').width, right: input.getBoundingClientRect().right,
-            edge: input.closest('.paint-editor').getBoundingClientRect().right };
+      const { editor, root } = await mount(page, source, destination, false, width);
+      for (const selector of ['.segment-editor-row .segment-row', '.authored-gradient-stop-row',
+        '.segment-draft .segment-row', '.gradient-stop-draft .gradient-stop-row']) {
+        const row = root.locator(selector).first();
+        const controls = await row.evaluate(row => {
+          const bounds = row.getBoundingClientRect();
+          return [...row.querySelectorAll('input, button')].map(control => {
+            const rect = control.getBoundingClientRect();
+            return { width: rect.width, line: Math.round((rect.top + rect.height / 2 - bounds.top) / 4),
+              contained: rect.left >= bounds.left && rect.right <= bounds.right + 0.5 };
+          });
         });
-        expect(metrics.available, `${width}px hex input`).toBeGreaterThanOrEqual(metrics.required);
-        expect(metrics.right, JSON.stringify(metrics)).toBeLessThanOrEqual(metrics.edge);
+        const [picker, text, action] = controls.slice(-3);
+        expect(controls.every(control => control.contained && control.width > 0), `${width}px ${selector}`).toBe(true);
+        expect(picker.width).toBeGreaterThanOrEqual(30);
+        expect(picker.width).toBeLessThanOrEqual(90);
+        expect(text.width).toBeGreaterThanOrEqual(60);
+        expect(action.width).toBeLessThanOrEqual(48);
+        const lines = new Set(controls.map(control => control.line)).size;
+        if (width === 240 || width === 360 && destination === 'Entity') expect(lines).toBeGreaterThan(1);
+        else expect(lines).toBe(1);
       }
       expect(await root.evaluate(root => root.scrollWidth <= root.clientWidth), `${width}px palette containment`).toBe(true);
       for (const gap of await root.locator('.segment-undefined-row').all()) {
@@ -128,6 +134,49 @@ for (const source of ['src', 'dist']) for (const destination of ['Card', 'Entity
       }
       const draft = root.locator('.segment-draft .segment-row');
       if (await draft.count()) expect(await draft.evaluate(row => row.scrollWidth <= row.clientWidth)).toBe(true);
+
+      const count = () => page.evaluate(() => window.__uxEvents.length);
+      const initialCount = await count();
+      await editor.evaluate(node => node.style.setProperty('--palette-test-color', 'rgb(18, 52, 86)'));
+      for (const kind of ['segment', 'gradient']) {
+        const draftPicker = root.locator(`input[type="color"][data-kind$="${kind}-draft-color"]`);
+        const draftText = root.locator(`[data-kind$="${kind}-draft-color-text-fallback"]`);
+        const longColor = 'color-mix(in srgb, var(--palette-test-color) 50%, rgb(210 120 30) 50%)';
+        await draftText.fill(longColor);
+        await expect(draftText).toBeFocused();
+        await expect(draftText).toHaveValue(longColor);
+        await expect(draftPicker).toHaveValue('#72563a');
+        expect(await draftText.evaluate(input => {
+          input.scrollLeft = input.scrollWidth;
+          return input.scrollLeft;
+        })).toBeGreaterThan(0);
+        await draftText.fill('rgb(');
+        await expect(draftText).toHaveValue('rgb(');
+        await expect(draftText).toHaveAttribute('aria-invalid', 'true');
+        await draftPicker.evaluate(input => {
+          input.value = '#abcdef';
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        await expect(draftText).toBeFocused();
+        await expect(draftText).toHaveValue('#abcdef');
+        await expect(draftText).toHaveAttribute('aria-invalid', 'false');
+        await draftText.fill('var(--palette-test-color)');
+        await expect(draftPicker).toHaveValue('#123456');
+        await expect(draftText).toHaveAttribute('aria-invalid', 'false');
+      }
+      expect(await count()).toBe(initialCount);
+
+      const first = root.locator('.authored-gradient-stop-row').first();
+      const picker = first.locator('input[type="color"]');
+      const text = first.locator('[data-css-color="true"]');
+      await text.fill('rebeccapurple');
+      await expect(picker).toHaveValue('#663399');
+      await picker.evaluate(input => input.focus());
+      expect(await count()).toBe(initialCount + 1);
+      await picker.fill('#123456');
+      await expect(text).toHaveValue('#123456');
+      expect(await count()).toBe(initialCount + 2);
     }
   });
 }
@@ -175,8 +224,8 @@ for (const source of ['src', 'dist']) for (const destination of ['Card', 'Entity
     }
     await expect(paint.locator(`#${colorId}`)).toHaveValue('#4a9eff');
     await expect(paint.locator(`#${colorId}-text-fallback`)).toHaveValue('var(--initial-color)');
-    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}segment-color-1-text-fallback`)).toHaveCount(0);
-    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-1-text-fallback`)).toHaveCount(0);
+    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}segment-color-1-text-fallback`)).toHaveValue('#abc');
+    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-1-text-fallback`)).toHaveValue('#123456');
     await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}segment-color-0-text-fallback`)).toHaveValue('var(--segment-color)');
     const gradientColor = paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-0-text-fallback`);
     await gradientColor.fill('rgb(4, 5, 6)');
@@ -244,7 +293,7 @@ for (const source of ['src', 'dist']) for (const destination of ['Card', 'Entity
       count: window.__universalColorEvents.length,
     }), colorId)).toEqual({ draft: false, count: 4 });
     expect(await editor.evaluate((element, path) => path.reduce((value, key) => value?.[key], element._config ?? element._draftConfig).color, selector)).toBe('#778899');
-    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}segment-color-1-text-fallback`)).toHaveCount(0);
-    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-1-text-fallback`)).toHaveCount(0);
+    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}segment-color-1-text-fallback`)).toHaveValue('#abc');
+    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-1-text-fallback`)).toHaveValue('#123456');
   });
 }

@@ -31,6 +31,14 @@ describe('universal color renderer', () => {
     expect(html).toContain('type="color" data-field="color" value="#123456"');
     expect(html).not.toContain('data-css-color');
   });
+
+  it.each(['', '#abc', '#A1b2C3', 'rebeccapurple'])('renders both palette color controls for %j', value => {
+    const html = renderColorInput({ id: 'color', kind: 'segment-color', value, palette: true });
+    expect(html).toContain('class="palette-color-controls"');
+    expect(html).toContain('type="color"');
+    expect(html).toContain('id="color-text-fallback" data-css-color="true"');
+    expect(html).toContain(`data-kind="segment-color-text-fallback" data-index="null" value="${value}"`);
+  });
 });
 
 it.each([['segment-draft-color', true], ['entity-gradient-draft-color', true], ['gradient-color', false]])
@@ -109,9 +117,9 @@ for (const source of ['src', 'dist']) {
       });
 
       expect(editor.shadowRoot.querySelector('#bar-color-text-fallback').value).toBe(initial.bar.paint.color);
-      expect(editor.shadowRoot.querySelector('#segment-color-0-text-fallback')).toBeNull();
+      expect(editor.shadowRoot.querySelector('#segment-color-0-text-fallback').value).toBe('#abc');
       expect(editor.shadowRoot.querySelector('#gradient-color-0-text-fallback').value).toBe('var(--stop-color)');
-      expect(editor.shadowRoot.querySelector('#gradient-color-1-text-fallback')).toBeNull();
+      expect(editor.shadowRoot.querySelector('#gradient-color-1-text-fallback').value).toBe('#123456');
       expect(editor._config).toEqual(initial);
       expect(emitted).toHaveLength(0);
 
