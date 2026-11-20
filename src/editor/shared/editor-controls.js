@@ -191,6 +191,27 @@ function getPalettePickerValue(picker, value, fallbackHex) {
   return fallback;
 }
 
+function getFieldPickerValue(picker, value, fallbackHex) {
+  const fallback = getColorPickerValue(value, fallbackHex);
+  const view = picker.ownerDocument?.defaultView;
+  if (!picker.style || !view?.getComputedStyle || !value.trim() || isHexColorValue(value)
+    || !isValidCssColor(value, view.CSS)) return fallback;
+  const previousColor = picker.style.getPropertyValue('color');
+  const previousColorPriority = picker.style.getPropertyPriority('color');
+  const previousPaletteColor = picker.style.getPropertyValue('--palette-color');
+  const previousPaletteColorPriority = picker.style.getPropertyPriority('--palette-color');
+  picker.style.setProperty('--palette-color', value);
+  picker.style.setProperty('color', 'var(--palette-color)');
+  const computed = view.getComputedStyle(picker);
+  const resolved = computed.getPropertyValue('--palette-color').trim();
+  const color = computed.color;
+  if (previousColor) picker.style.setProperty('color', previousColor, previousColorPriority);
+  else picker.style.removeProperty('color');
+  if (previousPaletteColor) picker.style.setProperty('--palette-color', previousPaletteColor, previousPaletteColorPriority);
+  else picker.style.removeProperty('--palette-color');
+  return resolved && isValidCssColor(resolved, view.CSS) ? color : fallback;
+}
+
 export function syncColorInput(root, id, value, fallbackHex = '#000000', cssColorDrafts) {
   const picker = root?.getElementById?.(id) ?? root?.querySelector?.(`#${id}`);
   if (!picker || picker.type !== 'color') return;
@@ -211,7 +232,7 @@ export function syncColorInput(root, id, value, fallbackHex = '#000000', cssColo
     .filter(([key]) => !['field', 'kind', 'index'].includes(key))
     .map(([key, entry]) => [key.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`), entry]));
 
-  picker.value = getColorPickerValue(rawValue, fallbackHex);
+  picker.value = getFieldPickerValue(picker, rawValue, fallbackHex);
   if (needsText && !text && picker.ownerDocument) {
     const template = picker.ownerDocument.createElement('template');
     template.innerHTML = renderColorInput({ id, field: picker.dataset.field, kind: picker.dataset.kind,

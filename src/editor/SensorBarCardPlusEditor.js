@@ -294,7 +294,10 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._syncPaintEditors({ deferActivePointerSync: true });
   }
 
-  connectedCallback() { this._syncPaintPresetRegistry(); }
+  connectedCallback() {
+    this._syncPaintPresetRegistry();
+    this._syncPaintEditors({ deferActivePointerSync: true });
+  }
 
   disconnectedCallback() {
     releasePaintPresetConsumer(this);

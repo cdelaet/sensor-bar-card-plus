@@ -536,7 +536,6 @@ export class SensorBarCardPlusFeatureEditor extends HTMLElement {
       'bar-fill-style': paintState.paint.fill_style,
       'bar-opacity': paintState.paint.opacity,
       'bar-direction': getDirectionSelection(context, root, ['bar', 'direction']),
-      'bar-color': getColorPickerValue(color, '#4a9eff'),
       'bar-color-text-fallback': color,
       'bar-needle-mode': this._needleSection._getScopedNeedleConfig(root).mode === 'enabled',
       'bar-needle-color': getColorPickerValue(this._needleSection._getScopedNeedleConfig(root).color, '#ffffff'),

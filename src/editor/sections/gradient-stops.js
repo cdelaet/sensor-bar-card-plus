@@ -572,9 +572,9 @@ export class GradientStopsSection extends PaletteSection {
   _syncGradientColorInputs(scope, rows = this._getScopedGradientStopsValue(scope) ?? []) {
     const prefix = scope?.type === 'entity' ? `entity-${scope.index}-` : '';
     const root = this._getPaletteRoot(scope);
-    rows.forEach((stop, index) => syncColorInput(root, `${prefix}gradient-color-${index}`,
+    rows.forEach((stop, index) => syncColorInput(root, this.paletteId(`${prefix}gradient-color-${index}`),
       stop?.color ?? '#4a9eff', '#4CAF50'));
-    syncColorInput(root, `${prefix}gradient-draft-color`, this._getGradientStopsDraftState(scope).color, '#4CAF50');
+    syncColorInput(root, this.paletteId(`${prefix}gradient-draft-color`), this._getGradientStopsDraftState(scope).color, '#4CAF50');
   }
 
   _syncGradientDraftControls(scope) {
@@ -583,7 +583,7 @@ export class GradientStopsSection extends PaletteSection {
     const draft = this._getGradientStopsDraftState(scope);
     const position = this._getShadowElementById(`${prefix}gradient-draft-pos`, scope);
     if (position) position.value = draft.pos;
-    syncColorInput(this._getPaletteRoot(scope), `${prefix}gradient-draft-color`, draft.color, '#4CAF50');
+    syncColorInput(this._getPaletteRoot(scope), this.paletteId(`${prefix}gradient-draft-color`), draft.color, '#4CAF50');
   }
 
   render(scope = { type: 'card' }, renderGroup = ({ content }) => content, { section = true } = {}) {

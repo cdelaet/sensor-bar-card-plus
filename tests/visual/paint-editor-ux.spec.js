@@ -191,7 +191,8 @@ for (const source of ['src', 'dist']) for (const destination of ['Card', 'Entity
       const editor = await registration.getConfigElement();
       const paint = { fill_style: 'gradient', color: 'var(--initial-color)',
         segments: [{ from: 0, color: 'var(--segment-color)' }, { from: 50, color: '#abc' }],
-        gradient_stops: [{ pos: 0, color: 'rgb(1, 2, 3)' }, { pos: 100, color: '#123456' }] };
+        gradient_stops: [{ pos: 0, color: 'red' }, { pos: 50, color: 'var(--missing-color)' },
+          { pos: 100, color: 'rgb(1, 2, 3)' }] };
       const config = feature ? { type: 'custom:sensor-bar-card-plus-feature', bar: { paint } }
         : destination === 'Entity'
           ? { bar: { paint: { fill_style: 'gradient', color: '#112233' } },
@@ -205,10 +206,22 @@ for (const source of ['src', 'dist']) for (const destination of ['Card', 'Entity
       editor.setConfig(config);
       if (feature) editor.context = { entity_id: 'sensor.power' };
       editor.hass = { states: {} };
+      editor.style.setProperty('--initial-color', 'rgb(18, 52, 86)');
+      editor.style.setProperty('--segment-color', 'rgb(18, 52, 86)');
       document.querySelector('#mount').append(editor);
       await editor.updateComplete;
     }, destination);
     let editor = page.locator(tag);
+    const initialPrefix = destination === 'Entity' ? 'entity-0-' : '';
+    await expect(editor.locator(`#${initialPrefix}gradient-color-0`)).toHaveValue('#ff0000');
+    await expect(editor.locator(`#${initialPrefix}gradient-color-0-text-fallback`)).toHaveValue('red');
+    await expect(editor.locator(`#${initialPrefix}gradient-color-1`)).toHaveValue('#4caf50');
+    await expect(editor.locator(`#${initialPrefix}gradient-color-1-text-fallback`)).toHaveValue('var(--missing-color)');
+    await expect(editor.locator(`#${initialPrefix}gradient-color-2`)).toHaveValue('#010203');
+    await expect(editor.locator(`#${initialPrefix}gradient-color-2-text-fallback`)).toHaveValue('rgb(1, 2, 3)');
+    await expect(editor.locator(`#${initialPrefix}segment-color-0`)).toHaveValue('#123456');
+    await expect(editor.locator(`#${destination === 'Entity' ? 'entity-0-bar-color' : 'bar-color'}`)).toHaveValue('#123456');
+    expect(await editor.evaluate(() => window.__universalColorEvents.length)).toBe(0);
     if (destination === 'Entity') {
       await editor.locator('[data-action="toggle-entity-overrides"]').first().click();
       const bar = editor.locator('#entity-0-group-bar');
@@ -222,10 +235,13 @@ for (const source of ['src', 'dist']) for (const destination of ['Card', 'Entity
       const toggle = paint.locator(`.override-group[data-group="${group}"] .override-group-toggle`);
       if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
     }
-    await expect(paint.locator(`#${colorId}`)).toHaveValue('#4a9eff');
+    await expect(paint.locator(`#${colorId}`)).toHaveValue('#123456');
     await expect(paint.locator(`#${colorId}-text-fallback`)).toHaveValue('var(--initial-color)');
     await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}segment-color-1-text-fallback`)).toHaveValue('#abc');
-    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-1-text-fallback`)).toHaveValue('#123456');
+    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-1-text-fallback`)).toHaveValue('var(--missing-color)');
+    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-1`)).toHaveValue('#4caf50');
+    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-2-text-fallback`)).toHaveValue('rgb(1, 2, 3)');
+    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-2`)).toHaveValue('#010203');
     await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}segment-color-0-text-fallback`)).toHaveValue('var(--segment-color)');
     const gradientColor = paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-0-text-fallback`);
     await gradientColor.fill('rgb(4, 5, 6)');
@@ -294,6 +310,17 @@ for (const source of ['src', 'dist']) for (const destination of ['Card', 'Entity
     }), colorId)).toEqual({ draft: false, count: 4 });
     expect(await editor.evaluate((element, path) => path.reduce((value, key) => value?.[key], element._config ?? element._draftConfig).color, selector)).toBe('#778899');
     await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}segment-color-1-text-fallback`)).toHaveValue('#abc');
-    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-1-text-fallback`)).toHaveValue('#123456');
+    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-1-text-fallback`)).toHaveValue('var(--missing-color)');
+
+    await editor.evaluate((element, destination) => {
+      const next = structuredClone(element._config ?? element._draftConfig);
+      const configPaint = destination === 'Entity' ? next.entities[0].bar.paint : next.bar.paint;
+      configPaint.gradient_stops = [{ pos: 0, color: 'var(--replacement-color)' }];
+      element.style.setProperty('--replacement-color', 'rgb(18, 52, 86)');
+      element.setConfig(next);
+    }, destination);
+    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-0-text-fallback`)).toHaveValue('var(--replacement-color)');
+    await expect(paint.locator(`#${destination === 'Entity' ? 'entity-0-' : ''}gradient-color-0`)).toHaveValue('#123456');
+    expect(await editor.evaluate(() => window.__universalColorEvents.length)).toBe(4);
   });
 }

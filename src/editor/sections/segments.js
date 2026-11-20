@@ -903,13 +903,13 @@ export class SegmentsSection extends PaletteSection {
       const control = this._getShadowElementById(`${prefix}segment-draft-${field}`, scope);
       if (control && control.value !== draft[field]) control.value = draft[field];
     }
-    syncColorInput(this._getPaletteRoot(scope), `${prefix}segment-draft-color`, draft.color, '#4a9eff');
+    syncColorInput(this._getPaletteRoot(scope), this.paletteId(`${prefix}segment-draft-color`), draft.color, '#4a9eff');
   }
 
   _syncSegmentColorInputs(scope, rows = this._getScopedSegmentsValue(scope) ?? []) {
     const prefix = scope?.type === 'entity' ? `entity-${scope.index}-` : '';
     const root = this._getPaletteRoot(scope);
-    rows.forEach((segment, index) => syncColorInput(root, `${prefix}segment-color-${index}`,
+    rows.forEach((segment, index) => syncColorInput(root, this.paletteId(`${prefix}segment-color-${index}`),
       segment?.color ?? '#4a9eff', '#4a9eff'));
   }
 

@@ -413,6 +413,24 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
   });
 }
 
+for (const source of ['src', 'dist']) for (const host of ['Card', 'Entity', 'Feature']) for (const destination of ['baseline-above', 'target-above']) {
+  test(`${host} ${destination} resolves nested CSS color pickers on first open (${source})`, async ({ page }) => {
+    const paint = { fill_style: 'gradient', color: 'var(--accent-color)', gradient_stops: [
+      { pos: 0, color: 'red' }, { pos: 100, color: 'rgb(1, 2, 3)' },
+    ] };
+    const editor = await mount(page, source, host, destination, paint);
+    const section = await openPaint(editor, host, destination);
+    const pickers = section.locator('input[type="color"][data-kind$="gradient-color"]');
+    const text = section.locator('input[data-css-color="true"][data-kind$="gradient-color-text-fallback"]');
+    await expect(pickers.nth(0)).toHaveValue('#ff0000');
+    await expect(text.nth(0)).toHaveValue('red');
+    await expect(pickers.nth(1)).toHaveValue('#010203');
+    await expect(text.nth(1)).toHaveValue('rgb(1, 2, 3)');
+    await expect(section.locator('input[type="color"][data-paint-property="color"]')).toHaveValue('#09aabb');
+    expect(await page.evaluate(() => window.__paintEvents.length)).toBe(0);
+  });
+}
+
 for (const source of ['src', 'dist']) for (const host of hosts) for (const destination of destinations) {
   test(`${host} ${destination} canceled replacement preserves full canonical configuration (${source})`, async ({ page }) => {
     const paint = { color: '#123456', opacity: 65, future_paint_metadata: { keep: true } };
