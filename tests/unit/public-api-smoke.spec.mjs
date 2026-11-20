@@ -168,6 +168,16 @@ describe('Sensor Bar Card Plus public API smoke', () => {
     expect(html).toContain('class="main-line hero-mode"');
   });
 
+  it('does not resolve prototype-like entity names through hass.states', () => {
+    const card = createCard();
+    card._hass.states = {};
+    const rowCfg = card.normalizeCardConfig({ entity: '__proto__' }).entities[0];
+
+    expect(rowCfg.entity_invalid).toBe(true);
+    expect(card._resolve(rowCfg).name).toBeNull();
+    expect(() => card._buildRow(rowCfg, '0', '', 0, '#4a9eff', null, null, null, null, '#888', '#888', 0, 100)).not.toThrow();
+  });
+
   it('escapes dynamic text interpolated into row HTML', () => {
     const card = createCard();
     card._hass.states['sensor.one'] = sensor(42, {

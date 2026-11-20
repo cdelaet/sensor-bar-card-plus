@@ -22,6 +22,13 @@ async function update(element, value, others = {}) {
   await element.updateComplete;
 }
 
+it('rejects prototype-like and malformed Feature entity IDs', () => {
+  for (const entityId of ['__proto__', 'constructor', 'not.valid.id']) {
+    expect(() => feature({ type: 'custom:sensor-bar-card-plus-feature', entity: entityId }))
+      .toThrow(/valid entity id/);
+  }
+});
+
 it.each(['Card', 'Tile Feature'])('%s applies preset opacity once to the base layer and refreshes registry values', async host => {
   const classes = loadCardClass();
   const paintPreset = Object.assign(Object.create(null), {

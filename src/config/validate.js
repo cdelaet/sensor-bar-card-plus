@@ -1,5 +1,5 @@
 import { getTargetDirections } from './directional-targets.js';
-import { getFiniteNumber, UNSUPPORTED_EXTREMA_ALIASES, BAR_PAINT_DIAGNOSTICS, PAINT_PROPERTY_SOURCES } from './normalize.js';
+import { getFiniteNumber, looksLikeEntityId, UNSUPPORTED_EXTREMA_ALIASES, BAR_PAINT_DIAGNOSTICS, PAINT_PROPERTY_SOURCES } from './normalize.js';
 
 function createDiagnostic(code, message, path, entity = null) {
   return { code, message, path, entity };
@@ -374,6 +374,12 @@ export function validateNormalizedConfig(config) {
     if (!entityId) {
       addWarning(diagnostics, 'entities.missing_entity', 'Entity row is missing an entity id.', path, null);
       continue;
+    }
+
+    if (entityConfig?.entity_invalid === true || !looksLikeEntityId(entityId)) {
+      addWarning(diagnostics, 'entities.invalid_entity',
+        'Entity ID must use the domain.object_id form; this row remains unresolved until corrected.',
+        `${path}.entity`, entityId);
     }
 
     validateConfigScope(diagnostics, entityConfig, path, entityId, config);

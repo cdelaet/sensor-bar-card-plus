@@ -892,6 +892,16 @@ describe('validateNormalizedConfig', () => {
     expect(validateNormalizedConfig(corrected).warnings).toEqual([]);
   });
 
+  it('warns for malformed and prototype-like entity IDs', () => {
+    const config = normalize({ entities: [
+      { entity: '__proto__' }, { entity: 'constructor' }, { entity: 'not.valid.id' },
+    ] });
+    expect(config.entities.map(entity => entity.entity_invalid)).toEqual([true, true, true]);
+    expect(validateNormalizedConfig(config).warnings
+      .filter(item => item.code === 'entities.invalid_entity')
+      .map(item => item.path)).toEqual(['entities[0].entity', 'entities[1].entity', 'entities[2].entity']);
+  });
+
   it('retains invalid Scale warnings after removing Target and Baseline range warnings', () => {
     const diagnostics = validateNormalizedConfig(normalize({
       scale: { min: 100, max: 0 },

@@ -1301,13 +1301,18 @@ function normalizeLegacyMarkerFields(config) {
 }
 
 export function normalizeEntityConfig(entityConfig, cardConfig) {
+  const rawEntity = entityConfig.entity;
   const normalizedEntity = {
     ...entityConfig,
     _normalized: true,
-    entity: entityConfig.entity,
+    entity: typeof rawEntity === 'string' ? rawEntity.trim() : rawEntity,
     name: entityConfig.name ?? null,
     icon: entityConfig.icon,
   };
+  if (rawEntity !== undefined && rawEntity !== null && rawEntity !== ''
+    && (typeof rawEntity !== 'string' || !looksLikeEntityId(rawEntity))) {
+    normalizedEntity.entity_invalid = true;
+  }
   recordUnsupportedExtremaAliases(normalizedEntity, entityConfig);
 
   if (entityConfig.attribute !== undefined) {

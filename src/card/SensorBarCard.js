@@ -189,6 +189,12 @@ import { attachRowActionHandlers, resolveRowAction } from '../actions/row-action
  *       max: 100
  */
 
+function getKnownState(states, entityId) {
+  if (!states || typeof entityId !== 'string' || !looksLikeEntityId(entityId)) return null;
+  const key = entityId.trim();
+  return Object.prototype.hasOwnProperty.call(states, key) ? states[key] : null;
+}
+
 export class SensorBarCard extends HTMLElement {
   static async getConfigElement() {
     return createConfigEditor('sensor-bar-card-plus-editor');
@@ -549,7 +555,7 @@ export class SensorBarCard extends HTMLElement {
   // Merge global config with per-entity overrides
   _resolve(entityCfg) {
     const ecfg = entityCfg?._normalized ? entityCfg : this.normalizeEntityConfig(entityCfg, this._config);
-    const stateObj = this._hass?.states?.[ecfg.entity] ?? null;
+    const stateObj = getKnownState(this._hass?.states, ecfg.entity);
     const resolvedBaselinePaints = this._paintPresetEntityBaselinePaints.get(entityCfg);
     const targetAbove = this._paintPresetEntityTargetAbove.get(entityCfg)
       ?? resolveTargetAbovePaint(ecfg.target_above, this._config.target_above, this._paintPresetRegistry);
@@ -734,8 +740,8 @@ export class SensorBarCard extends HTMLElement {
       ].filter(Boolean);
       
       for (const ent of entitiesToWatch) {
-        const oldState = oldHass.states[ent] ?? null;
-        const newState = newHass.states[ent] ?? null;
+        const oldState = getKnownState(oldHass?.states, ent);
+        const newState = getKnownState(newHass?.states, ent);
         if (oldState !== newState) {
           return true;
         }
@@ -3238,7 +3244,7 @@ ${barMarkerStyles}
 
   _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue, rowIndex = this._config.entities?.indexOf(entityCfg) ?? -1) {
     const ecfg = this._resolve(entityCfg);
-    const stateObj = this._hass?.states?.[entityCfg.entity] ?? null;
+    const stateObj = getKnownState(this._hass?.states, entityCfg.entity);
     const rowViewModel = stateObj
       ? this._buildRowViewModel(entityCfg, ecfg, stateObj)
       : null;
@@ -3484,7 +3490,7 @@ ${barMarkerStyles}
     if (!rowsEl) return;
 
     const entities = this._config.entities;
-    const presence = entities.map(entityCfg => !!this._hass.states[entityCfg.entity]);
+    const presence = entities.map(entityCfg => !!getKnownState(this._hass.states, entityCfg.entity));
     const presenceChanged = presence.some((present, index) => present !== this._rowPresence[index]);
 
     // First render: build all rows from scratch
@@ -3496,7 +3502,7 @@ ${barMarkerStyles}
       let html = '';
       for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
         const entityCfg = entities[entityIndex];
-        const stateObj = this._hass.states[entityCfg.entity];
+        const stateObj = getKnownState(this._hass.states, entityCfg.entity);
         if (!stateObj) {
           html += `<div class="row" data-row-index="${entityIndex}"><span style="color:var(--error-color,red);font-size:12px;">Entity not found: ${escapeHtml(entityCfg.entity)}</span></div>`;
           continue;
@@ -3523,7 +3529,7 @@ ${barMarkerStyles}
       const builtRows = rowsEl.querySelectorAll('.row[data-entity]');
       builtRows.forEach((row) => {
         const entityCfg = entities[Number(row.dataset.rowIndex)];
-        const stateObj = entityCfg ? this._hass.states[entityCfg.entity] : null;
+        const stateObj = entityCfg ? getKnownState(this._hass.states, entityCfg.entity) : null;
         if (entityCfg && stateObj) {
           this._patchRow(row, entityCfg, stateObj);
         }
@@ -3542,7 +3548,7 @@ ${barMarkerStyles}
     for (const row of rows) {
       const entityCfg = entities[Number(row.dataset.rowIndex)];
       if (!entityCfg) continue;
-      const stateObj = this._hass.states[entityCfg.entity];
+      const stateObj = getKnownState(this._hass.states, entityCfg.entity);
       if (!stateObj) continue;
       this._patchRow(row, entityCfg, stateObj, previousHass);
     }

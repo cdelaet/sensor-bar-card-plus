@@ -1,4 +1,4 @@
-import { getFiniteNumber } from './normalize.js';
+import { getFiniteNumber, looksLikeEntityId } from './normalize.js';
 
 export function resolveEntityState(stateObj, attribute = null) {
   if (!stateObj) {
@@ -25,7 +25,9 @@ export function resolveEntityState(stateObj, attribute = null) {
 }
 
 export function resolveEntitySource(hass, entityId, attribute = null) {
-  const stateObj = entityId ? hass?.states?.[entityId] ?? null : null;
+  const states = hass?.states;
+  const key = typeof entityId === 'string' && looksLikeEntityId(entityId) ? entityId.trim() : null;
+  const stateObj = key && states && Object.prototype.hasOwnProperty.call(states, key) ? states[key] : null;
   return resolveEntityState(stateObj, attribute);
 }
 
