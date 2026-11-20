@@ -1,6 +1,7 @@
 import { getConfiguredTargetMarkers } from './directional-targets.js';
 import { getOverlayPaintDefaults } from './paint-defaults.js';
 import { canonicalizeHistoricalWindow, parseHistoricalWindow, isEligibleHistoricalWindow } from '../history/time-window.js';
+import { isSafeCssColorValue } from '../utils/css-values.js';
 
 export const UNSUPPORTED_EXTREMA_ALIASES = Symbol.for('sensor-bar-card-plus.unsupported-extrema-aliases');
 export const INVALID_PAINT_OPACITY = Symbol.for('sensor-bar-card-plus.invalid-paint-opacity');
@@ -632,9 +633,10 @@ function isPaintObject(value) {
 }
 
 function isPaintColor(value) {
-  // Colors remain CSS strings, including variables and named colors. Do not
-  // make pure normalization depend on browser CSS.supports or a new parser.
-  return typeof value === 'string' && value.trim() !== '';
+  // Colors remain CSS strings, including variables and named colors. Reject
+  // only values that could escape an HTML attribute or add declarations.
+  // Do not make pure normalization depend on browser CSS.supports.
+  return isSafeCssColorValue(value);
 }
 
 function isValidGroupedPaintProperty(property, value) {

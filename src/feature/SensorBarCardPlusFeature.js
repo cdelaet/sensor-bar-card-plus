@@ -17,6 +17,7 @@ import { resolveTargetAbovePaint, resolveTargetBelowPaint } from '../view-model/
 import { scopeUsesPaintPreset } from '../view-model/paint-destinations.js';
 import { formatNumericDisplay } from '../utils/format.js';
 import { setStyleIfChanged } from '../utils/dom.js';
+import { safeCssColor } from '../utils/css-values.js';
 import { getFeatureLabelGeometry, layoutFeatureMarkerLabels } from './marker-label-layout.js';
 
 // Discovery sees parent context, not the feature's optional entity override.
@@ -389,7 +390,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       const node = this._labelNodes.get(marker.id);
       node.hidden = true;
       node.dataset.lane = marker.lane;
-      setStyleIfChanged(node, '--marker-color', getEffectiveMarkerColor(marker));
+      setStyleIfChanged(node, '--marker-color', safeCssColor(getEffectiveMarkerColor(marker), '#888888'));
     }
     this._labels.hidden = Boolean(status);
     const required = row?.markerLabelLaneOccupancy?.above || row?.markerLabelLaneOccupancy?.below;

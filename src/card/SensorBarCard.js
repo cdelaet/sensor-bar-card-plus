@@ -45,6 +45,7 @@ import {
   getMarkerLaneOccupancy,
 } from '../view-model/marker-view-model.js';
 import { escapeHtml, setStyleIfChanged, setStyleTextIfChanged, setDatasetIfChanged, setClassNameIfChanged } from '../utils/dom.js';
+import { safeCssColor } from '../utils/css-values.js';
 import {
   formatDisplayWithUnit,
   formatNumericDisplay,
@@ -3101,7 +3102,7 @@ ${barMarkerStyles}
   }
 
   _getMarkerLabelColorStyle(marker) {
-    const color = this._getEffectiveMarkerColor(marker);
+    const color = safeCssColor(this._getEffectiveMarkerColor(marker), '#888888');
     return `--marker-color:${color};--marker-contrast-color:${this._getMarkerContrastColor(color)};`;
   }
 
@@ -3207,7 +3208,7 @@ ${barMarkerStyles}
 
   _patchMarkerLabelAppearance(labelEl, marker) {
     if (!labelEl || !marker) return;
-    const markerColor = this._getEffectiveMarkerColor(marker);
+    const markerColor = safeCssColor(this._getEffectiveMarkerColor(marker), '#888888');
     this._setStyleIfChanged(labelEl, '--marker-color', markerColor);
     this._setStyleIfChanged(labelEl, '--marker-contrast-color', this._getMarkerContrastColor(markerColor));
   }
@@ -3248,6 +3249,8 @@ ${barMarkerStyles}
     const baselinePct = rowViewModel?.baselinePercent ?? this._resolveBaselinePct(ecfg, safeMin, safeMax);
     const lp   = layout.label.position;
     const h    = rowViewModel?.attributes?.baseHeight ?? layout.height;
+    const numericLabelWidth = getFiniteNumber(layout.label.width);
+    const labelWidth = numericLabelWidth === null ? 100 : Math.max(0, numericLabelWidth);
     const name = rowViewModel?.name
       ?? ecfg.name
       ?? stateObj?.attributes?.friendly_name
@@ -3311,7 +3314,7 @@ ${barMarkerStyles}
       </div>` : '';
 
     const leftLabel  = lp === 'left'
-      ? `<div class="label-left" style="flex:0 1 min(${layout.label.width}px, var(--sbcp-left-label-share));max-width:min(${layout.label.width}px, var(--sbcp-left-label-share));"><span class="label-left-text">${escapedName}</span></div>`
+      ? `<div class="label-left" style="flex:0 1 min(${labelWidth}px, var(--sbcp-left-label-share));max-width:min(${labelWidth}px, var(--sbcp-left-label-share));"><span class="label-left-text">${escapedName}</span></div>`
       : '';
     const rightValue = lp !== 'inside' && lp !== 'above' && lp !== 'hero'
       ? `<div class="value-right" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}" data-hide-unit="false">${this._formatRightValueMarkup(stateDisplay, unit, false)}</div>`

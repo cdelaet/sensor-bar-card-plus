@@ -5,6 +5,7 @@ import { getResolvedScale } from '../../config/resolve.js';
 import { getSegmentsForRendering, resolveSegmentBoundaryPct } from '../../view-model/bar-render-model.js';
 import { PaletteRowSession, PaletteSection } from '../shared/palette-section.js';
 import { getDefaultPaintSegments } from '../shared/paint-editor-paint.js';
+import { safeCssColor } from '../../utils/css-values.js';
 
 export const MIXED_INTERVAL_PREVIEW_WEIGHT = 10;
 export const MIN_SEGMENT_PREVIEW_WIDTH = 1;
@@ -656,7 +657,7 @@ export class SegmentsSection extends PaletteSection {
     return this._getSegmentPreviewRows(scope).map((interval, index) => {
       const undefinedRegion = interval.type === 'undefined';
       const color = !undefinedRegion && interval.segment?.color
-        ? `background-color:${escapeAttribute(interval.segment.color)};`
+        ? `background-color:${safeCssColor(interval.segment.color, '#4a9eff')};`
         : '';
       const description = undefinedRegion ? 'No Segment is defined for this range.' : 'Authored Segment range.';
       return `<span class="segment-preview-interval${undefinedRegion ? ' segment-undefined-region' : ''}${interval.invalid ? ' segment-invalid-region' : ''}" data-preview-kind="${undefinedRegion ? 'undefined' : 'segment'}" style="left:${interval.previewStart}%;width:${interval.previewWidth}%;${color}" aria-label="${escapeAttribute(description)}"></span>`;

@@ -1,4 +1,5 @@
 import { colorModeToFillStyle, getFiniteNumber, parsePercentLiteral } from '../config/normalize.js';
+import { safeCssColor } from '../utils/css-values.js';
 import { toScalePct } from './scale-projection.js';
 
 function resolveCssGradientStops(stops) {
@@ -74,7 +75,7 @@ export function getSeverityInterpolationStops(paint, minValue = 0, maxValue = 10
       anchor = band.from + ((band.to - band.from) / 2);
     }
     if (!stops.length || stops[stops.length - 1].p !== anchor) {
-      stops.push({ p: anchor, ...(rgb ?? { color: band.color }) });
+      stops.push({ p: anchor, ...(rgb ?? { color: safeCssColor(band.color, '#4a9eff') }) });
     }
   }
 
@@ -93,7 +94,8 @@ export function getBandsGradientCss(bands, _fallbackColor = '#4a9eff', scaleDire
   // colors beyond the first and last Segment.
   const stops = [];
   for (const band of sorted) {
-    stops.push({ color: band.color, p: band.from }, { color: band.color, p: band.to });
+    const color = safeCssColor(band.color, '#4a9eff');
+    stops.push({ color, p: band.from }, { color, p: band.to });
   }
 
   const projectedStops = scaleDirection === 'reverse'
@@ -112,10 +114,11 @@ export function getSoftBandBlendWidthPct() {
 
 export function pushGradientColorStop(stops, pos, color) {
   if (!Array.isArray(stops) || !color) return;
+  const safeColor = safeCssColor(color, '#4a9eff');
   const clampedPos = Math.min(100, Math.max(0, pos));
   const last = stops[stops.length - 1];
-  if (last && last.color === color && Math.abs(last.p - clampedPos) < 0.0001) return;
-  stops.push({ p: clampedPos, color });
+  if (last && last.color === safeColor && Math.abs(last.p - clampedPos) < 0.0001) return;
+  stops.push({ p: clampedPos, color: safeColor });
 }
 
 export function getSoftBandGradientStops(paint, minValue = 0, maxValue = 100) {
@@ -221,7 +224,7 @@ export function getSegmentsForRendering(paint, minValue = 0, maxValue = 100) {
 
 export function getColor(pct, paint, minValue = 0, maxValue = 100) {
   const fillStyle = getEffectiveFillStyle(paint);
-  if (fillStyle === 'solid') return paint.color;
+  if (fillStyle === 'solid') return safeCssColor(paint.color, '#4a9eff');
 
   if (fillStyle === 'gradient' || fillStyle === 'band_gradient' || fillStyle === 'soft_bands') {
     let stops;
@@ -250,7 +253,7 @@ export function getColor(pct, paint, minValue = 0, maxValue = 100) {
         { p: 100, r: 244, g: 67,  b: 54  },
       ];
     }
-    if (!stops || !stops.length) return paint.color;
+    if (!stops || !stops.length) return safeCssColor(paint.color, '#4a9eff');
     let lo = stops[0], hi = stops[stops.length - 1];
     for (let i = 0; i < stops.length - 1; i++) {
       if (pct >= stops[i].p && pct <= stops[i + 1].p) {
@@ -263,15 +266,15 @@ export function getColor(pct, paint, minValue = 0, maxValue = 100) {
 
   // Bands mode
   for (const s of getSegmentsForRendering(paint, minValue, maxValue)) {
-    if (pct >= s.from && pct <= s.to) return s.color;
+    if (pct >= s.from && pct <= s.to) return safeCssColor(s.color, '#4a9eff');
   }
-  return paint.color;
+  return safeCssColor(paint.color, '#4a9eff');
 }
 
 export function buildFullScaleGradientStyle(stops, scaleDirection = 'normal') {
   if (!Array.isArray(stops) || !stops.length) return null;
   const cssStops = projectGradientStops(stops, scaleDirection).map((stop) => {
-    const cssColor = stop.color ?? rgbToCss(stop);
+    const cssColor = stop.color != null ? safeCssColor(stop.color, '#4a9eff') : rgbToCss(stop);
     return cssColor ? `${cssColor} ${stop.p}%` : null;
   }).filter(Boolean);
   if (!cssStops.length) return null;
@@ -318,7 +321,8 @@ export function rgbToCss(rgb) {
 }
 
 export function buildSolidGradientStyle(color) {
-  return `linear-gradient(to right,${color} 0%,${color} 100%)`;
+  const safeColor = safeCssColor(color, '#4a9eff');
+  return `linear-gradient(to right,${safeColor} 0%,${safeColor} 100%)`;
 }
 
 export function getBasePaintGradient(color, paint, minValue = 0, maxValue = 100, scaleDirection = 'normal') {

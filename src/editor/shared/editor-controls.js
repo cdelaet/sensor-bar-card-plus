@@ -1,4 +1,5 @@
 import { normalizeTextValue, normalizeNumberValue } from './editor-config.js';
+import { isSafeCssColorValue } from '../../utils/css-values.js';
 import { canonicalizeHistoricalWindow, isEligibleHistoricalWindow } from '../../history/time-window.js';
 
 // Templates preserve the existing IDs/data routing. The host supplies resolved
@@ -147,6 +148,7 @@ export function normalizeEditorColorValue(value) {
 export function isValidCssColor(value, css = globalThis.CSS) {
   const text = normalizeTextValue(value).trim();
   if (!text) return true;
+  if (!isSafeCssColorValue(text)) return false;
   return typeof css?.supports === 'function' && css.supports('color', text);
 }
 

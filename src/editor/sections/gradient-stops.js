@@ -3,6 +3,7 @@ import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumb
 import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, normalizeEditorColorValue, isValidCssColor, syncColorInput } from '../shared/editor-controls.js';
 import { PaletteRowSession, PaletteSection } from '../shared/palette-section.js';
 import { getDefaultPaintGradientStops } from '../shared/paint-editor-paint.js';
+import { safeCssColor } from '../../utils/css-values.js';
 
 export class GradientStopsSection extends PaletteSection {
   constructor(context, ui, array) {
@@ -496,12 +497,12 @@ export class GradientStopsSection extends PaletteSection {
     }
     const cssStops = stops
       .map((stop) => {
-        const color = normalizeTextValue(stop.color).trim();
+        const rawColor = normalizeTextValue(stop.color).trim();
         const pos = this._normalizeGradientStopPosValue(stop.p ?? stop.pos);
-        if (!color || pos === null) {
+        if (!rawColor || pos === null) {
           return null;
         }
-        return `${color} ${pos}%`;
+        return `${safeCssColor(rawColor, '#4a9eff')} ${pos}%`;
       })
       .filter(Boolean);
     if (!cssStops.length) {

@@ -1,13 +1,14 @@
 import { normalizeMarkerShape } from '../view-model/marker-view-model.js';
 import { getEffectiveMarkerColor, getMarkerContrastColor } from '../view-model/bar-render-model.js';
 import { escapeHtml, setStyleIfChanged, setStyleTextIfChanged, setDatasetIfChanged, setClassNameIfChanged } from '../utils/dom.js';
+import { safeCssColor } from '../utils/css-values.js';
 
 // Operates inside the adapter's existing DOM. No entity, history or layout state.
 
 export function renderMarker(marker) {
   if (!marker) return '';
   const position = Number.isFinite(marker.position) ? marker.position : 0;
-  const color = getEffectiveMarkerColor(marker);
+  const color = safeCssColor(getEffectiveMarkerColor(marker), '#888888');
   const contrastColor = getMarkerContrastColor(color);
   const display = marker.visible ? '' : 'none';
   const defaultShape = marker.type === 'target' ? 'diamond' : marker.type === 'generic' ? 'circle' : 'triangle';
@@ -73,7 +74,7 @@ export function patchMarker(markerEl, marker) {
   if (marker.visible && Number.isFinite(marker.position)) {
     setStyleIfChanged(markerEl, 'left', `${marker.position}%`);
   }
-  const markerColor = getEffectiveMarkerColor(marker);
+  const markerColor = safeCssColor(getEffectiveMarkerColor(marker), '#888888');
   setStyleIfChanged(markerEl, '--marker-color', markerColor);
   setStyleIfChanged(markerEl, '--marker-contrast-color', getMarkerContrastColor(markerColor));
 }
@@ -104,9 +105,11 @@ function reconcilePaintLayers(container, layers) {
 }
 
 function renderNeedle(needleState) {
+  const color = safeCssColor(needleState.color, '#ffffff');
+  const borderColor = safeCssColor(needleState.borderColor, '#f3f4f6');
   return needleState.configured ? `
       <div class="needle-layer">
-        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${needleState.pct ?? 0}%;--needle-color:${needleState.color};--needle-border-color:${needleState.borderColor};display:${needleState.show ? 'block' : 'none'};"></div>
+        <div class="needle-marker" data-edge="${needleState.edge}" style="left:${needleState.pct ?? 0}%;--needle-color:${color};--needle-border-color:${borderColor};display:${needleState.show ? 'block' : 'none'};"></div>
       </div>` : '';
 }
 
@@ -140,8 +143,8 @@ export function patchBar(root, model, { revealDuration = 600 } = {}) {
   if (needleEl) {
     setStyleIfChanged(needleEl, 'display', model.needle.show ? 'block' : 'none');
     setStyleIfChanged(needleEl, 'left', `${model.needle.pct ?? 0}%`);
-    setStyleIfChanged(needleEl, '--needle-color', model.needle.color);
-    setStyleIfChanged(needleEl, '--needle-border-color', model.needle.borderColor);
+    setStyleIfChanged(needleEl, '--needle-color', safeCssColor(model.needle.color, '#ffffff'));
+    setStyleIfChanged(needleEl, '--needle-border-color', safeCssColor(model.needle.borderColor, '#f3f4f6'));
     setDatasetIfChanged(needleEl, 'edge', model.needle.edge);
   }
   const markers = model.markers;
@@ -179,10 +182,13 @@ export function renderBar(model, { insideContent = '' } = {}) {
   const floorMarker = renderMarker(getMarker('floor'));
   const genericMarkers = model.markers.filter(marker => marker.type === 'generic').map(renderMarker).join('');
   const needleMarker = renderNeedle(needleState);
-  const paintLayers = fillState.paintLayers.map(layer => `
-                  <div class="bar-paint-layer" data-layer="${layer.id}" style="z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}"></div>`).join('');
+  const paintLayers = fillState.paintLayers.map(layer => {
+    const style = escapeHtml(`z-index:${layer.zIndex};${layer.paintStyle}${layer.revealStyle}`);
+    return `
+                  <div class="bar-paint-layer" data-layer="${layer.id}" style="${style}"></div>`;
+  }).join('');
   return `<div class="bar-track">
-                <div class="bar-fill-reveal${fillState.needleMode ? ' needle-mode' : ''}${model.animated ? '' : ' no-anim'}" style="${fillState.revealStyle}">
+                <div class="bar-fill-reveal${fillState.needleMode ? ' needle-mode' : ''}${model.animated ? '' : ' no-anim'}" style="${escapeHtml(fillState.revealStyle)}">
 ${paintLayers}
                 </div>
                 ${baselineIndicator}

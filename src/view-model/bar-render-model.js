@@ -1,4 +1,5 @@
 import * as paintCompiler from './paint-compiler.js';
+import { safeCssColor } from '../utils/css-values.js';
 import { projectScaleInterval, projectScalePercent, toScalePct } from './scale-projection.js';
 
 export {
@@ -85,11 +86,12 @@ export function getBasePaintGradient(color, ecfg, minValue = 0, maxValue = 100, 
 }
 
 export function getOverlayGradient(startPct, endPct, color) {
-  if (!color) return null;
+  const safeColor = safeCssColor(color, '');
+  if (!safeColor) return null;
   const start = Math.min(100, Math.max(0, startPct));
   const end = Math.min(100, Math.max(0, endPct));
   if (end <= start) return null;
-  return `linear-gradient(to right,transparent 0%,transparent ${start}%,${color} ${start}%,${color} ${end}%,transparent ${end}%,transparent 100%)`;
+  return `linear-gradient(to right,transparent 0%,transparent ${start}%,${safeColor} ${start}%,${safeColor} ${end}%,transparent ${end}%,transparent 100%)`;
 }
 
 export function getNormalizedPercent(valuePct, baselinePct = null) {
@@ -297,7 +299,7 @@ export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, b
   const paint = target?.paint;
   // The normalized destination is authoritative, including null. The mirror
   // fallback serves old internal callers only, never a disabled destination.
-  const legacyColor = target === undefined ? ecfg?.bar?.above_target_color : null;
+  const legacyColor = target === undefined ? safeCssColor(ecfg?.bar?.above_target_color, '') : '';
   const active = !!aboveTargetGeometry && (paint
     ? (needleActive ? aboveTargetViolation : target.legacy || aboveTargetViolation)
     : !!legacyColor && (!needleActive || aboveTargetViolation));
