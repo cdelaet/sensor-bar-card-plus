@@ -17,8 +17,8 @@ describe('historical time windows', () => {
   });
 
   it('accepts whole-minute recent windows and whole-hour longer windows', () => {
-    for (const value of ['1m', '1440m', '24h', '1500m', '48h']) expect(isEligibleHistoricalWindow(value)).toBe(true);
-    for (const value of ['1441m', '0m', '1s', 'bad']) expect(isEligibleHistoricalWindow(value)).toBe(false);
+    for (const value of ['1m', '1440m', '24h', '1500m', '48h', '30d', '365d', '366d']) expect(isEligibleHistoricalWindow(value)).toBe(true);
+    for (const value of ['1441m', '0m', '1s', 'bad', '367d', '9999w', '1000000w']) expect(isEligibleHistoricalWindow(value)).toBe(false);
   });
   it('requires rolling durations to contain whole minutes without rounding observations', () => {
     const now = Date.parse('2026-10-31T12:34:56.789Z');
@@ -33,6 +33,13 @@ describe('historical time windows', () => {
     const day = resolveTimeWindow({ kind: 'rolling', duration: { amount: 24, unit: 'hour' } }, { ...brussels, now });
     expect(day.start).toBe(Date.parse('2026-10-30T12:15:00Z'));
     expect(planHistoricalAcquisition(day, now).mode).toBe('raw');
+  });
+  it('rejects rolling and absolute windows beyond the 366-day limit', () => {
+    const now = Date.parse('2026-10-31T12:00:00Z');
+    const boundary = resolveTimeWindow({ kind: 'absolute', start: now - 366 * 24 * 3600000, end: now }, { ...brussels, now });
+    expect(planHistoricalAcquisition(boundary, now).mode).toBe('statistics');
+    const excessive = resolveTimeWindow({ kind: 'absolute', start: now - 367 * 24 * 3600000, end: now }, { ...brussels, now });
+    expect(planHistoricalAcquisition(excessive, now)).toMatchObject({ mode: 'invalid', reason: expect.stringContaining('366-day') });
   });
   it('plans raw within the last 24 hours and complete-hour statistics beyond it', () => {
     const now = Date.parse('2026-10-31T12:34:00Z');

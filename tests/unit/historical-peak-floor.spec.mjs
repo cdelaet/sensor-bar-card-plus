@@ -101,6 +101,7 @@ describe('historical Peak/Floor', () => {
     ]));
     expect(normalizeCardConfig({ entity, floor: { window: 'never' } }).floor_marker.window_invalid).toBe(true);
     expect(normalizeCardConfig({ entity, peak: { window: '__proto__' } }).peak_marker.window_invalid).toBe(true);
+    expect(normalizeCardConfig({ entity, peak: { window: '9999w' } }).peak_marker.window_invalid).toBe(true);
   });
 
   it('accepts eligible modern windows from legacy reset for Peak and Floor', () => {

@@ -82,6 +82,7 @@ describe('dynamic historical marker windows', () => {
     ['unknown', state('unknown')],
     ['invalid option', state('fortnight')],
     ['ineligible duration', state('1441m')],
+    ['over-limit duration', state('9999w')],
   ])('falls back to the static window and reports a %s helper state', (label, helperState) => {
     const config = rows({ peak: { enabled: true, window: 'yesterday', window_entity: helper('history_window') } });
     const helperStates = helperState ? { [helper('history_window')]: helperState } : {};
@@ -91,7 +92,7 @@ describe('dynamic historical marker windows', () => {
     expect(windows(consumers)).toEqual({ peak: parseHistoricalWindow('yesterday') });
     expect(results.peak).toMatchObject({ status: 'available', configuredWindow: 'yesterday',
       windowHelperIssue: { helper: helper('history_window'), fallback: 'yesterday' } });
-    expect(results.peak.windowHelperIssue.reason).toMatch(label === 'invalid option' || label === 'ineligible duration' ? 'invalid' : 'unavailable');
+    expect(results.peak.windowHelperIssue.reason).toMatch(label === 'invalid option' || label === 'ineligible duration' || label === 'over-limit duration' ? 'invalid' : 'unavailable');
   });
 
   it('recovers from fallback when the selected helper option becomes valid', () => {

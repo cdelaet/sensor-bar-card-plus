@@ -1706,7 +1706,7 @@ The Visual Editor offers these 24 presets:
 | `this_month`, `previous_month` | |
 | `this_year`, `previous_year` | |
 
-`quarterly` means the current 15-minute interval (`:00`, `:15`, `:30`, or `:45`), not a three-month quarter. Rolling windows count back from the current time; they are not aligned to calendar boundaries. YAML also accepts other positive integer durations written with `m`, `h`, `d`, or `w` (for example `45m` or `10d`) when eligible for the acquisition path. A duration longer than 24 hours must be a whole number of hours; unsupported or invalid values remain unavailable and produce a configuration diagnostic rather than silently selecting a different period.
+`quarterly` means the current 15-minute interval (`:00`, `:15`, `:30`, or `:45`), not a three-month quarter. Rolling windows count back from the current time; they are not aligned to calendar boundaries. YAML also accepts other positive integer durations written with `m`, `h`, `d`, or `w` (for example `45m` or `10d`) when eligible for the acquisition path. A duration longer than 24 hours must be a whole number of hours. Rolling and absolute windows are limited to 366 days (the longest calendar-year period, including leap years); longer values are rejected before any Recorder request is planned and produce a configuration diagnostic rather than silently selecting a different period.
 
 To change a marker's window from the dashboard, create a Dropdown Helper in Home Assistant and set its entity ID in `window_entity`:
 
