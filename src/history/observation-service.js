@@ -72,6 +72,19 @@ function mergeObservations(...lists) {
   return [...merged.values()].sort(compareObservations);
 }
 
+function statisticsBucketsCoverFloor(buckets, start, floor) {
+  if (!Array.isArray(buckets) || !Number.isFinite(start) || !Number.isFinite(floor)) return false;
+  let cursor = start;
+  for (const bucket of [...buckets].sort((a, b) => a.start - b.start)) {
+    if (!Number.isFinite(bucket?.start) || !Number.isFinite(bucket?.end) || bucket.end <= start) continue;
+    if (bucket.start > floor) break;
+    if (bucket.start !== cursor) return false;
+    cursor = bucket.end;
+    if (cursor > floor) return true;
+  }
+  return false;
+}
+
 function collapseEqualTimestampGroups(observations) {
   const result = [];
   for (let index = 0; index < observations.length;) {
@@ -520,6 +533,9 @@ export class SharedObservationService {
             ...(retainedRecorder.length ? { retainedRawStart: previousHour } : {}),
             requestedWindow: item.requestedWindow,
             acquiredWindow: { start: queryWindow.start, end: Math.min(queryWindow.end, this.now()) },
+            recorderBoundaryTimestamp: recorder
+              .filter(observation => observation.timestamp <= queryWindow.start)
+              .at(-1)?.timestamp ?? null,
             fetchedAt: this.now(),
             requestStartedAt: item.startedAt,
             acquisitionId: item.id,
@@ -546,7 +562,7 @@ export class SharedObservationService {
             if (cached.acquiredWindow && this._covers(record, cached.acquiredWindow)) {
               const cachedScope = cached.coverage?.requested ?? cached.requestedWindow ?? cached.acquiredWindow;
               if (this._coverageCovers(record, cachedScope, record.acquisitionMode)) {
-                this.cache.set(key, cloneRecord(record, { requestedWindow: cached.requestedWindow }));
+                this.cache.set(key, cloneRecord(record, { requestedWindow: cached.requestedWindow, cache: 'hit' }));
               }
             } else if (!cached.acquiredWindow || !record.acquiredWindow
               || (cached.acquiredWindow.start < record.acquiredWindow.end
@@ -642,14 +658,17 @@ export class SharedObservationService {
   }
 
   _recoverRetentionFloor(history, record) {
+    // Only a fresh acquisition can prove recovery. A cached record still
+    // carries old acquired-window/boundary metadata and must not lower a floor.
+    // Raw HA history cannot prove interval completeness; require an explicit
+    // complete response plus a fresh boundary. Statistics additionally require
+    // complete, contiguous buckets through the floor.
     const floor = history?.retentionFloor;
     if (!Number.isFinite(floor) || !record || record.stale || record.error
-      || record.coverage?.kind === 'incomplete') return;
+      || record.cache !== 'miss' || record.coverage?.kind === 'incomplete') return;
     const acquired = record.acquiredWindow;
     if (!acquired || !Number.isFinite(acquired.start) || !Number.isFinite(acquired.end)
       || acquired.start > floor || acquired.end < floor) return;
-    const recorder = (record.observations ?? []).filter(observation =>
-      observation.origin !== 'live' && Number.isFinite(observation.timestamp));
     let recoveredStart = null;
 
     if (record.statisticsWindow && record.statistics) {
@@ -658,15 +677,17 @@ export class SharedObservationService {
         && Number.isFinite(statsWindow.end) && statsWindow.end > floor
         && record.statistics.missingBuckets === 0
         && record.coverage?.statistics?.kind !== 'incomplete'
-        && Array.isArray(record.statistics.buckets)
-        && record.statistics.buckets.some(bucket => bucket.start <= floor && bucket.end > floor);
+        && statisticsBucketsCoverFloor(record.statistics.buckets, statsWindow.start, floor);
       if (statsCover) recoveredStart = Math.max(acquired.start, statsWindow.start);
-      else if (record.rawWindow
+      else if (record.coverage?.complete === true && record.rawWindow
         && record.rawWindow.start <= floor && record.rawWindow.end >= floor
-        && recorder.some(observation => observation.timestamp <= record.rawWindow.start)) {
+        && Number.isFinite(record.recorderBoundaryTimestamp)
+        && record.recorderBoundaryTimestamp <= record.rawWindow.start) {
         recoveredStart = record.rawWindow.start;
       }
-    } else if (recorder.some(observation => observation.timestamp <= acquired.start)) {
+    } else if (record.coverage?.complete === true
+      && Number.isFinite(record.recorderBoundaryTimestamp)
+      && record.recorderBoundaryTimestamp <= acquired.start) {
       recoveredStart = acquired.start;
     }
 
@@ -877,7 +898,7 @@ export class SharedObservationService {
     const cacheKey = this._cacheKey(normalized, window);
     const cached = this.cache.get(cacheKey);
     if (cached && (!family.recordMetadata || (cached.acquisitionId ?? 0) > (family.recordMetadata.acquisitionId ?? 0))) {
-      this._consumerRecord(consumer, cached);
+      this._consumerRecord(consumer, cloneRecord(cached, { cache: 'hit' }));
     }
     this.consumers.set(consumer.id, consumer);
     this._scheduleCacheExpiry();
@@ -919,7 +940,7 @@ export class SharedObservationService {
       const nextCached = this.cache.get(this._cacheKey(normalized, nextWindow));
       if (nextCached && (!consumer.recordMetadata
         || (nextCached.acquisitionId ?? 0) > (consumer.recordMetadata.acquisitionId ?? 0))) {
-        this._consumerRecord(consumer, nextCached);
+        this._consumerRecord(consumer, cloneRecord(nextCached, { cache: 'hit' }));
       }
       this._scheduleCacheExpiry();
     };

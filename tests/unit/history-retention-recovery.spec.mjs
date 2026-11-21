@@ -55,7 +55,7 @@ describe('retention floor recovery', () => {
   });
 
   it('restores the floor after complete raw Recorder reacquisition', async () => {
-    const service = new SharedObservationService({ provider: providerFor(), now: () => 15_000_000, maxLiveObservations: 3 });
+    const service = new SharedObservationService({ provider: providerFor({ coverage: { complete: true, kind: 'complete' } }), now: () => 15_000_000, maxLiveObservations: 3 });
     const stop = service.subscribe(source.entityId, window, () => {});
     await service.request({ hass: {}, sources: [source.entityId], window });
     for (const [index, value] of [1, 2, 3, 4, 5, 6, 7].entries()) {
@@ -107,7 +107,7 @@ describe('retention floor recovery', () => {
       }],
       acquiredWindow: { start: requested.start, end: requested.end }, retrievedAt: 1000,
       observedThrough: requested.start, status: 'available', stale: false,
-      coverage: { complete: false, kind: 'unknown' },
+      coverage: { complete: true, kind: 'complete' },
     }]]);
     const service = new SharedObservationService({ provider, now: () => 15_000_000, maxLiveObservations: 3 });
     const stopWide = service.subscribe(source.entityId, window, () => {});
@@ -157,13 +157,17 @@ describe('retention floor recovery', () => {
       source, observations: [], acquiredWindow: { start: 0, end: 12_000_000 },
       statisticsWindow: { start: 0, end: 12_000_000 },
       statistics: { buckets: [{ start: 0, end: 12_000_000, min: 1, max: 8 }], missingBuckets: 0 },
-      acquisitionMode: 'statistics', status: 'available', stale: false,
+      acquisitionMode: 'statistics', status: 'available', stale: false, cache: 'miss',
       coverage: { complete: false, kind: 'unknown', statistics: { kind: 'unknown' } },
     };
     service._consumerRecord(consumer, statsRecord, true);
     expect(history.retentionFloor).toBe(0);
 
     history.retentionFloor = floor;
+    const cached = { ...statsRecord, cache: 'hit' };
+    service._consumerRecord(consumer, cached, true);
+    expect(history.retentionFloor).toBe(floor);
+
     const incomplete = { ...statsRecord, statistics: { ...statsRecord.statistics, missingBuckets: 1 } };
     service._consumerRecord(consumer, incomplete, true);
     expect(history.retentionFloor).toBe(floor);
@@ -175,7 +179,7 @@ describe('retention floor recovery', () => {
 
   it('uses a complete recovery for multiple consumers and repeated refreshes', async () => {
     const narrow = { ...window, start: 8_040_000, cacheKey: 'absolute:8040000:12000000' };
-    const provider = providerFor();
+    const provider = providerFor({ coverage: { complete: true, kind: 'complete' } });
     const service = new SharedObservationService({ provider, now: () => 15_000_000, maxLiveObservations: 3 });
     const stopWide = service.subscribe(source.entityId, window, () => {});
     const stopNarrow = service.subscribe(source.entityId, narrow, () => {});
@@ -306,6 +310,101 @@ describe('retention floor recovery', () => {
     });
     expect((await resolver.resolve(spec, { hass: { config: { time_zone: 'UTC' } } })).status).toBe('partial');
 
+    stopAgain(); service.clear();
+  });
+
+
+
+  it('does not lower the floor from a reused cached record', async () => {
+    const provider = providerFor({ coverage: { complete: true, kind: 'complete' } });
+    const service = new SharedObservationService({ provider, now: () => 15_000_000, maxLiveObservations: 3 });
+    const stop = service.subscribe(source.entityId, window, () => {});
+    await service.request({ hass: {}, sources: [source.entityId], window });
+    for (const [index, value] of [100, 1, 2, 3, 4, 5, 6].entries()) {
+      service.ingestLiveState({ source: source.entityId, state: liveState(value), timestamp: 9_000_000 + index * 70_000 });
+    }
+    const history = [...service.sourceHistories.values()][0];
+    const floor = history.retentionFloor;
+    expect(floor).toBeGreaterThan(window.start);
+    expect(history.observations.some(observation => observation.value === 100)).toBe(false);
+
+    // This is a cache hit carrying the old Recorder boundary and acquisition
+    // metadata; it is not a fresh acquisition that replaces discarded history.
+    await service.request({ hass: {}, sources: [source.entityId], window });
+    expect(history.retentionFloor).toBe(floor);
+
+    const record = {
+      ...history, observations: history.observations,
+      acquiredWindow: { start: window.start, end: window.end }, historyStart: window.start,
+      status: 'available', coverage: { complete: false, kind: 'unknown' },
+      observationsOrdered: true,
+    };
+    const resolver = new HistoricalValueResolver({
+      now: () => 15_000_000,
+      service: { request: async () => new Map([['sensor.one\u0000', record]]) },
+    });
+    expect((await resolver.resolve(spec, { hass: { config: { time_zone: 'UTC' } } })).status).toBe('partial');
+
+    stop(); service.clear();
+  });
+
+
+
+  it('does not restore a fresh raw response that only supplies a boundary', async () => {
+    const service = new SharedObservationService({ provider: providerFor(), now: () => 15_000_000, maxLiveObservations: 3 });
+    const stop = service.subscribe(source.entityId, window, () => {});
+    await service.request({ hass: {}, sources: [source.entityId], window });
+    for (const [index, value] of [1, 2, 3, 4, 5, 6].entries()) {
+      service.ingestLiveState({ source: source.entityId, state: liveState(value), timestamp: 9_000_000 + index * 70_000 });
+    }
+    const history = [...service.sourceHistories.values()][0];
+    const floor = history.retentionFloor;
+    await service.request({ hass: {}, sources: [source.entityId], window, force: true });
+    expect(history.retentionFloor).toBe(floor);
+    stop(); service.clear();
+  });
+
+  it('does not restore statistics across a bucket gap despite a covering later bucket', () => {
+    const service = new SharedObservationService({ now: () => 15_000_000, maxLiveObservations: 3 });
+    const stop = service.subscribe(source.entityId, window, () => {});
+    for (const [index, value] of [1, 2, 3, 4, 5, 6].entries()) {
+      service.ingestLiveState({ source: source.entityId, state: liveState(value), timestamp: 9_000_000 + index * 70_000 });
+    }
+    const history = [...service.sourceHistories.values()][0];
+    const floor = history.retentionFloor;
+    const consumer = [...service.consumers.values()][0];
+    const statsRecord = {
+      source, observations: [], acquiredWindow: { start: 0, end: 12_000_000 },
+      statisticsWindow: { start: 0, end: 12_000_000 },
+      statistics: { buckets: [
+        { start: 0, end: 4_000_000, min: 1, max: 8 },
+        { start: 6_000_000, end: 12_000_000, min: 2, max: 7 },
+      ], missingBuckets: 0 },
+      acquisitionMode: 'statistics', status: 'available', stale: false, cache: 'miss',
+      coverage: { complete: false, kind: 'unknown', statistics: { kind: 'unknown' } },
+    };
+    service._consumerRecord(consumer, statsRecord, true);
+    expect(history.retentionFloor).toBe(floor);
+    stop(); service.clear();
+  });
+
+
+
+  it('does not recover from a cached record when a later subscription mounts', async () => {
+    const service = new SharedObservationService({
+      provider: providerFor({ coverage: { complete: true, kind: 'complete' } }),
+      now: () => 15_000_000, maxLiveObservations: 3,
+    });
+    const stop = service.subscribe(source.entityId, window, () => {});
+    await service.request({ hass: {}, sources: [source.entityId], window });
+    for (const [index, value] of [100, 1, 2, 3, 4, 5, 6].entries()) {
+      service.ingestLiveState({ source: source.entityId, state: liveState(value), timestamp: 9_000_000 + index * 70_000 });
+    }
+    const oldFloor = [...service.sourceHistories.values()][0].retentionFloor;
+    stop();
+
+    const stopAgain = service.subscribe(source.entityId, window, () => {});
+    expect([...service.sourceHistories.values()][0].retentionFloor).toBe(oldFloor);
     stopAgain(); service.clear();
   });
 
