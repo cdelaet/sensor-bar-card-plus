@@ -10,6 +10,11 @@ async function refs(editor) {await d.openDisclosure(editor.locator('#card-group-
 async function nearby(control,nested=false) {
  expect(await control.evaluate((el,nested)=>{const rect=el.getBoundingClientRect(),container=document.querySelector('#mount').getBoundingClientRect();return rect.bottom>(nested?container.top:0)&&rect.top<(nested?container.bottom:innerHeight);},nested)).toBe(true);
 }
+async function clickInPlace(page,target) {
+ const box=await target.boundingBox();
+ if(!box) throw new Error('Target is not visible for an in-place click');
+ await page.mouse.click(box.x+box.width/2,box.y+box.height/2);
+}
 async function pointerClick(page,target) {
  await target.scrollIntoViewIfNeeded();
  await target.evaluate(button=>{
@@ -164,8 +169,9 @@ for(const host of hosts) {
   const before=await d.saved(page),events=await d.count(page);
   await authoredFrom.evaluate(node=>window.__gapAuthoredNode=node);
   await from.evaluate(node=>window.__gapDraftNode=node);
+  await action.scrollIntoViewIfNeeded();
   const scrollBefore=await page.evaluate(()=>({window:window.scrollY,mount:document.querySelector('#mount').scrollTop}));
-  await action.click();
+  await clickInPlace(page,action);
   await expect(from).toHaveValue('50');await expect(to).toHaveValue('60');await expect(color).toHaveValue('#123456');
   if(await colorText.count())await expect(colorText).toHaveValue('#123456');
   await expect(from).toBeFocused();await expect(editor.locator(entity?'#entity-0-group-segments':'#card-group-segments')).toHaveAttribute('aria-expanded','true');
