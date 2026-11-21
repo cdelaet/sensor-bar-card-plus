@@ -499,9 +499,13 @@ export class SharedObservationService {
             coverage: { complete: false, kind: 'unknown', reason: 'History response omitted the requested source',
               requested: item.requestedWindow } };
         } else {
-          const activeLive = (this.sourceHistories.get(this._historyKey(item.sourceKey, item.window))?.observations ?? [])
+          const activeHistory = this.sourceHistories.get(this._historyKey(item.sourceKey, item.window));
+          const activeLive = (activeHistory?.observations ?? [])
             .filter((observation) => observation.origin === 'live');
           const cachedLive = previous?.observations.filter((observation) => observation.origin === 'live') ?? [];
+          const retentionFloor = Number.isFinite(activeHistory?.retentionFloor)
+            ? activeHistory.retentionFloor
+            : Number.isFinite(previous?.retentionFloor) ? previous.retentionFloor : null;
           const recorder = (response.observations ?? []).map((observation, index) => ({
             timestamp: observation.timestamp, value: observation.value, state: observation.state,
             order: observation.order ?? index, orderKnown: observation.orderKnown === true,
@@ -533,6 +537,7 @@ export class SharedObservationService {
             ...(retainedRecorder.length ? { retainedRawStart: previousHour } : {}),
             requestedWindow: item.requestedWindow,
             acquiredWindow: { start: queryWindow.start, end: Math.min(queryWindow.end, this.now()) },
+            ...(Number.isFinite(retentionFloor) ? { retentionFloor } : {}),
             recorderBoundaryTimestamp: recorder
               .filter(observation => observation.timestamp <= queryWindow.start)
               .at(-1)?.timestamp ?? null,
