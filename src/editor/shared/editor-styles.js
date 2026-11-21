@@ -207,6 +207,7 @@ export const editorStyles = `
         }
         .generic-marker-header {
           display: flex;
+          flex-wrap: wrap;
           align-items: center;
           gap: 8px;
           min-width: 0;
@@ -217,7 +218,7 @@ export const editorStyles = `
           grid-template-columns: minmax(0, auto) minmax(0, 1fr);
           align-items: center;
           gap: 4px 10px;
-          flex: 1 1 auto;
+          flex: 1 1 12rem;
           min-width: 0;
           min-height: 40px;
           padding: 4px 6px;
@@ -231,7 +232,7 @@ export const editorStyles = `
         }
         .generic-marker-title {
           font-weight: 700;
-          white-space: nowrap;
+          overflow-wrap: anywhere;
         }
         .generic-marker-summary {
           min-width: 0;
@@ -243,6 +244,8 @@ export const editorStyles = `
         .generic-marker-actions {
           display: flex;
           flex: 0 0 auto;
+          flex-wrap: wrap;
+          max-width: 100%;
           gap: 4px;
           align-items: center;
         }

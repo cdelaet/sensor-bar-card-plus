@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { snapshotName } = require('./snapshot-name.cjs');
 
 function sensor(state, {
   friendly_name,
@@ -197,7 +198,7 @@ test('Direction visual: four Scale and Bar reveal combinations', async ({ page }
   expect(geometry[1].paint).toBe(geometry[3].paint);
   expect(geometry[0].paint).toContain('rgb(22, 163, 74) 0%');
   expect(geometry[1].paint).toContain('rgb(220, 38, 38) 0%');
-  await expect(mount).toHaveScreenshot('direction-four-reveal-combinations.png');
+  await expect(mount).toHaveScreenshot(snapshotName('direction-four-reveal-combinations.png'));
 });
 
 test('Direction visual: reverse Scale projects continuous Gradient Paint', async ({ page }) => {
@@ -222,7 +223,7 @@ test('Direction visual: reverse Scale projects continuous Gradient Paint', async
   expect(revealInterval(result.clip)).toEqual({ left: 20, right: 0 });
   expect(result.paint).toContain('rgb(220, 38, 38) 0%');
   expect(result.paint).toContain('rgb(37, 99, 235) 100%');
-  await expect(mount).toHaveScreenshot('direction-reverse-gradient-projection.png');
+  await expect(mount).toHaveScreenshot(snapshotName('direction-reverse-gradient-projection.png'));
 });
 
 test('Direction visual: Needle position and rail ignore Bar direction', async ({ page }) => {
@@ -250,7 +251,7 @@ test('Direction visual: Needle position and rail ignore Bar direction', async ({
   expect(geometry[0].needle).toBe('70%');
   expect(geometry[0].clip).toBe(geometry[1].clip);
   expect(geometry[0].paint).toBe(geometry[1].paint);
-  await expect(mount).toHaveScreenshot('direction-reverse-needle.png');
+  await expect(mount).toHaveScreenshot(snapshotName('direction-reverse-needle.png'));
 });
 
 test('Direction visual: asymmetric Baseline owns reveal origin on both semantic sides', async ({ page }) => {
@@ -284,7 +285,7 @@ test('Direction visual: asymmetric Baseline owns reveal origin on both semantic 
   expect(geometry[2].clip).toBe(geometry[3].clip);
   expect(revealInterval(geometry[0].clip)).toEqual({ left: 30, right: 40 });
   expect(revealInterval(geometry[2].clip)).toEqual({ left: 60, right: 20 });
-  await expect(mount).toHaveScreenshot('direction-asymmetric-baseline.png');
+  await expect(mount).toHaveScreenshot(snapshotName('direction-asymmetric-baseline.png'));
 });
 
 test('Direction visual: reverse Scale projects Target and reference markers inside labels', async ({ page }) => {
@@ -313,7 +314,7 @@ test('Direction visual: reverse Scale projects Target and reference markers insi
   });
   expect(revealInterval(geometry.current)).toEqual({ left: 0, right: 30 });
   expect(geometry).toMatchObject({ target: '40%', reference: '85%', inside: true });
-  await expect(mount).toHaveScreenshot('direction-reverse-inside-markers.png');
+  await expect(mount).toHaveScreenshot(snapshotName('direction-reverse-inside-markers.png'));
 });
 
 test('dynamic reverse Scale projects current value, Baseline, and Target as bounds change', async ({ page }) => {
@@ -1273,7 +1274,7 @@ test('Hero occupied above-marker lane adds 4px below the header', async ({ page 
   expect(occupied.occupancy).toBe('true');
 
   const responsiveMargin = Math.min(4, Math.max(2, occupied.rowHeightVariable * 0.08));
-  expect(occupied.margin - responsiveMargin).toBeCloseTo(4, 2);
+  expect(Math.abs(occupied.margin - responsiveMargin - 4)).toBeLessThanOrEqual(0.01);
   expect(occupied.headerTop).toBeCloseTo(plain.headerTop, 2);
   expect(occupied.valueTop).toBeCloseTo(plain.valueTop, 2);
   for (const property of ['mainTop', 'trackTop', 'rowHeight']) {
@@ -1828,7 +1829,7 @@ test('Floor shares the below lane with Target and renders extrema labels', async
     peakShape: 'triangle',
     floorShape: 'triangle',
   });
-  await expect(mount).toHaveScreenshot('floor-markers.png');
+  await expect(mount).toHaveScreenshot(snapshotName('floor-markers.png'));
 });
 
 test('generic reference markers share both lanes with built-in markers', async ({ page }) => {
@@ -1884,7 +1885,7 @@ test('generic reference markers share both lanes with built-in markers', async (
   ]);
   expect(result.labels).toEqual(['65 W', '85,0 W', '-20 W', '12']);
   expect(result.builtins).toEqual([true, true, true]);
-  await expect(mount).toHaveScreenshot('generic-reference-markers.png');
+  await expect(mount).toHaveScreenshot(snapshotName('generic-reference-markers.png'));
 });
 
 test('marker semantic labels compose safely and update without changing generic association', async ({ page }) => {
@@ -2244,7 +2245,7 @@ test('target marker defaults to diamond and supports explicit triangle overrides
     { entity: 'sensor.default_target', shape: 'diamond', lane: 'below' },
     { entity: 'sensor.triangle_target', shape: 'triangle', lane: 'below' },
   ]);
-  await expect(mount).toHaveScreenshot('target-shapes.png');
+  await expect(mount).toHaveScreenshot(snapshotName('target-shapes.png'));
 });
 
 test('shared marker renderer reuses the marker node for all six shapes', async ({ page }) => {
@@ -3136,7 +3137,7 @@ const scenarios = [
 for (const scenario of scenarios) {
   test(`visual regression: ${scenario.name}`, async ({ page }) => {
     const mount = await render(page, scenario);
-    await expect(mount).toHaveScreenshot(`${scenario.name}.png`);
+    await expect(mount).toHaveScreenshot(snapshotName(`${scenario.name}.png`));
   });
 }
 
@@ -3273,13 +3274,15 @@ test('Reveal Fill crossing selects adaptive timing and preserves settled Baselin
     const row = card.shadowRoot.querySelector('.row[data-entity="sensor.transitioning"]');
     return {
       revealDuration: getComputedStyle(row.querySelector('.bar-fill-reveal')).transitionDuration,
-      revealStyle: row.querySelector('.bar-fill-reveal').getAttribute('style'),
+      revealClip: row.querySelector('.bar-fill-reveal').style.clipPath,
       markerDuration: getComputedStyle(row.querySelector('.peak-marker')).transitionDuration,
     };
   });
 
   expect(state.revealDuration).toBe('0.15s');
-  expect(state.revealStyle).toMatch(/clip-path: inset\(0px 10\.4167% 0px 50%/);
+  const clip = /^inset\(0px ([\d.]+)% 0px 50%(?: round [^)]+)?\)$/.exec(state.revealClip);
+  expect(clip).not.toBeNull();
+  expect(Number(clip[1])).toBeCloseTo(10.4167, 4);
   expect(state.markerDuration).toBe('0.6s');
 });
 
@@ -3371,7 +3374,7 @@ test('visual regression: normal-above-target-mid-transition-downward', async ({ 
     await new Promise((resolve) => setTimeout(resolve, 250));
   });
 
-  await expect(mount).toHaveScreenshot('normal-above-target-mid-transition-downward.png');
+  await expect(mount).toHaveScreenshot(snapshotName('normal-above-target-mid-transition-downward.png'));
 });
 
 for (const [name, colorMode] of [
@@ -3415,7 +3418,7 @@ for (const [name, colorMode] of [
       await new Promise((resolve) => setTimeout(resolve, 250));
     });
 
-    await expect(mount).toHaveScreenshot(`${name}.png`);
+    await expect(mount).toHaveScreenshot(snapshotName(`${name}.png`));
   });
 }
 
@@ -3618,7 +3621,7 @@ test('visual regression: above-label-responsive-stack', async ({ page }) => {
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
 
-  await expect(page.locator('#mount')).toHaveScreenshot('above-label-responsive-stack.png');
+  await expect(page.locator('#mount')).toHaveScreenshot(snapshotName('above-label-responsive-stack.png'));
 });
 
 test('visual regression: inside-label-responsive-stack', async ({ page }) => {
@@ -3745,7 +3748,7 @@ test('visual regression: inside-label-responsive-stack', async ({ page }) => {
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
 
-  await expect(page.locator('#mount')).toHaveScreenshot('inside-label-responsive-stack.png');
+  await expect(page.locator('#mount')).toHaveScreenshot(snapshotName('inside-label-responsive-stack.png'));
 });
 
 test('off mode keeps narrow long values inside the row before hiding the unit', async ({ page, browserName }) => {

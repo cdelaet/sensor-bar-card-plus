@@ -111,6 +111,9 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Entity', 'Fea
       controls.push([palettePicker(editor.locator('#preset-paint-editor'), 'gradient-color'), 'red', '#ff0000']);
     }
     await checkColors(controls, '#4a9eff');
+    const peakToggle = editor.locator(entity ? '#entity-0-peak-enabled' : '#peak-show');
+    await expect(peakToggle).toBeChecked();
+    await expect(peakToggle).toHaveCSS('accent-color', 'rgb(0, 117, 255)');
     expect(await count(page)).toBe(0);
     expect(await editor.evaluate(el => el._draftConfig ?? el._config)).toEqual(config);
 
@@ -164,6 +167,7 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Entity', 'Fea
     expect(await input.evaluate(control => control === window.__colorDraft)).toBe(true);
     await expect(input).toHaveValue(longDraft);
     await checkColors(controls.slice(1), '#225588');
+    await expect(peakToggle).toHaveCSS('accent-color', 'rgb(0, 117, 255)');
     expect(await count(page)).toBe(0);
 
     const replacement = structuredClone(config);

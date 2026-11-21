@@ -1,5 +1,6 @@
 const { expandFeatureGroups, featureGroup } = require('./feature-editor-test-utils.cjs');
 const { test, expect } = require('@playwright/test');
+const { snapshotName } = require('./snapshot-name.cjs');
 async function mount(page, source, width, percentage = false) {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({ width, percentage }) => {
@@ -26,7 +27,7 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   const original = await page.evaluate(() => window.__physicalOriginal);
   expect(await saved(editor)).toEqual(original); expect(await page.evaluate(() => window.__physicalEvents)).toHaveLength(0);
   for (const name of ['Needle', 'Baseline']) {
-    await expect(name === 'Baseline' ? featureGroup(editor, 'baseline') : editor.locator('.inline-row').filter({ has: page.locator('#bar-needle-mode') })).toHaveScreenshot(`feature-${name.toLowerCase()}-${width}.png`);
+    await expect(name === 'Baseline' ? featureGroup(editor, 'baseline') : editor.locator('.inline-row').filter({ has: page.locator('#bar-needle-mode') })).toHaveScreenshot(snapshotName(`feature-${name.toLowerCase()}-${width}.png`));
   }
   expect(await editor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   await expect(featureGroup(editor, 'baseline')).toHaveAttribute('data-expanded', 'true');

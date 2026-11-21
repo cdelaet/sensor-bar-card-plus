@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { snapshotName } = require('./snapshot-name.cjs');
 
 const type = 'custom:sensor-bar-card-plus-feature';
 async function mountEditor(page, { source = 'src', width = 360, context = { entity_id: 'sensor.parent' }, config = { type } } = {}) {
@@ -86,16 +87,19 @@ test('Area/no-parent entity requirement and narrow layout stay usable', async ({
   expect(await page.evaluate(() => window.__featureEditorEvents)).toHaveLength(0);
   await editor.getByLabel('Entity override', { exact: true }).fill('sensor.custom');
   await expect(editor.locator('#feature-entity-status')).toHaveText('Using explicit entity: sensor.custom');
-  await editor.getByLabel('Use explicit entity').uncheck();
+  await editor.getByLabel('Use explicit entity').click();
   await expect(editor.locator('#feature-entity-status')).toContainText('An entity is required');
+  expect((await configOf(editor)).entity).toBeUndefined();
+  expect(await page.evaluate(() => window.__featureEditorEvents.at(-1).config.entity)).toBeUndefined();
   await editor.locator('#feature-entity-status').click();
+  await expect(editor.getByLabel('Use explicit entity')).toHaveCount(0);
   await expect(editor.locator('#scale-min')).toBeVisible();
   expect(await editor.evaluate(element => Array.from(element.shadowRoot.querySelectorAll('.section, input, select')).every(node => {
     const host = element.getBoundingClientRect();
     const rect = node.getBoundingClientRect();
     return rect.width === 0 || rect.left >= host.left - 1 && rect.right <= host.right + 1;
   }))).toBe(true);
-  await expect(editor).toHaveScreenshot('feature-editor-required-narrow.png');
+  await expect(editor).toHaveScreenshot(snapshotName('feature-editor-required-narrow.png'));
 });
 
 test('HA picker value-changed shape supports explicit and Scale sources', async ({ page }) => {

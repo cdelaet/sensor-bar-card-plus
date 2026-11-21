@@ -21,6 +21,11 @@ module.exports = {
     { name: 'webkit-lazy-editors', testMatch: /lazy-editor-loading\.spec\.js/, use: { browserName: 'webkit' } },
     { name: 'webkit-paint-destinations', testMatch: /(?:paint-destination-contract|paint-destination-isolation|paint-editor-default-segments|paint-header-scale-preview|paint-palette-activity|target-above-paint|target-directional)\.spec\.js/, use: { browserName: 'webkit' } },
     { name: 'webkit-security-acceptance', testMatch: /acceptance\/security-hardening\.spec\.js/, use: { browserName: 'webkit' } },
+    {
+      name: 'webkit-visual',
+      testMatch: /(?:^|[/\\])(?:card-feature|editor-(?:bar-appearance|extrema|infrastructure|needle-baseline|palettes|reference-markers|sections|target)|feature-editor(?:-(?:capabilities|extrema|needle-baseline|palettes|reference-markers|target|ux))?|feature-marker-label-colors|minimum-height|paint-editor|sbcp)\.spec\.js$/,
+      use: { browserName: 'webkit' },
+    },
   ],
   use: {
     headless: true,

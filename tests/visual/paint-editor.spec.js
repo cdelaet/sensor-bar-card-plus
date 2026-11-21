@@ -1,4 +1,6 @@
 const { test, expect } = require('@playwright/test');
+const { snapshotName } = require('./snapshot-name.cjs');
+const { PNG } = require('playwright-core/lib/utilsBundle');
 
 async function expandEntityBar(editor, index = 0) {
   const bar = editor.locator(`#entity-${index}-group-bar`);
@@ -1404,7 +1406,7 @@ for (const host of ['Card', 'Feature']) for (const width of [240, 360]) {
     const browserSuffix = browserName === 'webkit' ? '-webkit' : '';
     const editor = await mount(page, host, 'src', width);
     const paint = editor.locator('#card-paint-editor');
-    await expect(paint).toHaveScreenshot(`paint-${host.toLowerCase()}-${width}-collapsed.png`);
+    await expect(paint).toHaveScreenshot(snapshotName(`paint-${host.toLowerCase()}-${width}-collapsed.png`));
     await paint.locator('summary').click();
     await editor.locator('#card-group-segments').click();
     await editor.locator('#card-group-gradient-stops').click();
@@ -1473,7 +1475,7 @@ for (const host of ['Card', 'Feature']) for (const solid_fill of [false, true]) 
 });
 
 for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
-  test(`${host} swatches composite translucent and opaque paint once (${source})`, async ({ page }) => {
+  test(`${host} swatches composite translucent and opaque paint once (${source})`, async ({ page, browserName }) => {
     const editor = await mount(page, host, source);
     await editor.evaluate(el => el.style.setProperty('--card-background-color', '#fff'));
     const swatch = editor.locator('#card-paint-editor .paint-editor-swatch');
@@ -1504,7 +1506,14 @@ for (const source of ['src', 'dist']) for (const host of ['Card', 'Feature']) {
       const bounds = await swatch.boundingBox();
       const actualPixels = await page.screenshot({ clip: { x: Math.floor(bounds.x + bounds.width / 2), y: Math.floor(bounds.y + bounds.height / 2), width: 2, height: 2 } });
       const expectedPixels = await page.screenshot({ clip: { x: 1, y: 1, width: 2, height: 2 } });
-      expect(actualPixels.equals(expectedPixels)).toBe(true);
+      const actualImage = PNG.sync.read(actualPixels);
+      const expectedImage = PNG.sync.read(expectedPixels);
+      expect([actualImage.width, actualImage.height]).toEqual([expectedImage.width, expectedImage.height]);
+      for (const [index, channel] of actualImage.data.entries()) {
+        // WebKit can round RGB by one level when compositing the two surfaces.
+        const tolerance = browserName === 'webkit' && index % 4 !== 3 ? 1 : 0;
+        expect(Math.abs(channel - expectedImage.data[index]), `${expected}, channel ${index}`).toBeLessThanOrEqual(tolerance);
+      }
     }
     expect(await page.evaluate(() => window.__paintEvents)).toEqual([]);
   });
@@ -1557,7 +1566,7 @@ for (const source of ['src', 'dist']) for (const width of [240, 360]) {
     expect(geometry.width).toBeCloseTo(geometry.available, 0);
     expect(geometry.paintWidth).toBeCloseTo(geometry.width, 0);
     expect(geometry.inset).toBeCloseTo(0, 0);
-    if (source === 'src') await expect(group).toHaveScreenshot(`entity-paint-${width}-collapsed.png`);
+    if (source === 'src') await expect(group).toHaveScreenshot(snapshotName(`entity-paint-${width}-collapsed.png`));
     const direction = group.locator('#entity-0-bar-direction');
     await direction.selectOption('reverse');
     expect((await saved(editor)).entities[0]).toEqual({ entity: 'sensor.power', bar: { direction: 'reverse' } });
@@ -1587,7 +1596,7 @@ for (const source of ['src', 'dist']) for (const width of [240, 360]) {
     }
     if (source === 'src') {
       await editor.evaluate(el => el.shadowRoot.activeElement?.blur()); await page.mouse.move(0, 0);
-      await expect(group).toHaveScreenshot(`entity-paint-${width}-expanded.png`);
+      await expect(group).toHaveScreenshot(snapshotName(`entity-paint-${width}-expanded.png`));
     }
     await paint.locator('#entity-0-bar-fill-style').selectOption('gradient');
     await paint.locator('#entity-0-bar-color').evaluate(node => {

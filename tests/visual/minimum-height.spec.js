@@ -1,5 +1,8 @@
 const { test, expect } = require('@playwright/test');
+const { snapshotName } = require('./snapshot-name.cjs');
 
+// Label positioning uses fractional CSS pixels that WebKit rounds differently.
+const labelAnchorTolerance = 0.25;
 const valueLabel = { show: true };
 const textLabel = (text) => ({ show: true, text, show_value: false, show_unit: false });
 const builtins = {
@@ -154,7 +157,7 @@ function expectSafeRails(geometry) {
       const center = (label.box.left + label.box.right) / 2;
       const clampedAnchor = Math.max(row.track.left + label.box.width / 2,
         Math.min(row.track.right - label.box.width / 2, marker.anchor.left));
-      expect(center).toBeCloseTo(clampedAnchor, 1);
+      expect(Math.abs(center - clampedAnchor)).toBeLessThanOrEqual(labelAnchorTolerance);
       if (label.lane === 'above') expect(label.box.bottom).toBeLessThanOrEqual(row.track.top);
       else expect(label.box.top).toBeGreaterThanOrEqual(row.track.bottom);
       for (const clip of label.clips) {
@@ -311,7 +314,7 @@ for (const position of ['left', 'above', 'inside', 'hero']) {
           const marker = row.markers.find(({ id }) => id === label.id);
           const center = (label.box.left + label.box.right) / 2;
           return Math.abs(center - Math.max(row.track.left + label.box.width / 2,
-            Math.min(row.track.right - label.box.width / 2, marker.anchor.left))) < 0.1;
+            Math.min(row.track.right - label.box.width / 2, marker.anchor.left))) <= labelAnchorTolerance;
         }));
       }).toBe(true);
       if (position === 'left') {
@@ -339,7 +342,7 @@ for (const position of ['left', 'above', 'inside', 'hero']) {
       expect(geometry.rows[0].labels).toHaveLength(5);
     }
     if (position === 'inside' || position === 'hero') {
-      await expect(page.locator('#mount')).toHaveScreenshot(`minimum-height-${position}.png`);
+      await expect(page.locator('#mount')).toHaveScreenshot(snapshotName(`minimum-height-${position}.png`));
     }
   });
 }

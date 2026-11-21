@@ -1,5 +1,6 @@
 const { expandFeatureGroups } = require('./feature-editor-test-utils.cjs');
 const { test, expect } = require('@playwright/test');
+const { snapshotName } = require('./snapshot-name.cjs');
 async function mount(page, source, style, width) {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({ style, width }) => {
@@ -28,7 +29,7 @@ for (const source of ['src', 'dist']) for (const style of ['bands', 'gradient'])
     const editor = await mount(page, source, style, width);
     const original = await page.evaluate(() => window.__paletteOriginal);
     const section = editor.locator(`.card-subgroup[data-group="${style === 'bands' ? 'segments' : 'gradient-stops'}"]`);
-    await expect(section).toHaveScreenshot(`feature-${style}-${width}.png`);
+    await expect(section).toHaveScreenshot(snapshotName(`feature-${style}-${width}.png`));
     expect(await editor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     const segment = style === 'bands';
     const draft = editor.locator(segment ? '#segment-draft-from' : '#gradient-draft-pos');

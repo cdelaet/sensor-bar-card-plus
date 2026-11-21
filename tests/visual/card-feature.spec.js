@@ -104,7 +104,11 @@ for (const [width, height, position] of [[640, 42, 'bottom'], [96, 24, 'inline']
     });
     for (const element of [feature(page), card]) {
       await expect(element.locator('[data-layer="base"]')).toHaveCSS('background-image', expectedPaint);
-      await expect(element.locator('.bar-fill-reveal')).toHaveCSS('clip-path', 'inset(0px 34.8% 0px 0% round 6px)');
+      const reveal = element.locator('.bar-fill-reveal');
+      await expect.poll(() => reveal.evaluate(node => {
+        const clip = /^inset\(0px ([\d.]+)% 0px 0% round 6px\)$/.exec(getComputedStyle(node).clipPath);
+        return clip ? Number(clip[1]).toFixed(4) : getComputedStyle(node).clipPath;
+      })).toBe('34.8000');
     }
   });
 }
