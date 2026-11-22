@@ -4,7 +4,7 @@ These practical examples show useful Sensor Bar Card Plus combinations rather th
 
 The standalone comparisons below follow the **Visual Examples** view in the [example dashboard](../examples/dashboards/sensor-bar-card-plus-screenshots.yaml). To try its live controls, load the [playground package](../examples/packages/sensor_bar_card_plus_playground_package.yaml) as well. The comparison sensor is `sensor.sbcp_examples_primary`, initially **7200 W** on a **0–10000 W** Scale. The fixed-Scale cards below also work with your own power sensor without those helpers.
 
-Each YAML block is a complete card unless introduced as a replacement or an addition to an existing card.
+Each YAML block is a complete card unless introduced as a replacement or an addition to an existing card. New Bar Paint uses grouped `bar.paint`; examples using flat Bar Paint fields preserve supported compatibility syntax.
 
 ## Card Feature
 
@@ -67,6 +67,7 @@ features:
       max: { fixed: 3000 }
     baseline:
       at: { fixed: 0 }
+      # Legacy side-color shorthand remains supported.
       above: { color: "#22c55e" }
       below: { color: "#3b82f6" }
     target:
@@ -96,7 +97,7 @@ peak: { enabled: true, window: today }
 floor: { enabled: true, window: 7d }
 ```
 
-Recorder retention, supported statistics and known coverage limits determine whether each result is available. See [Recorder, statistics, and coverage](configuration.md#recorder-statistics-and-coverage) for the details and status indicators.
+Recorder retention, supported statistics and known coverage limits determine whether each result is available. SBCP reports detected history issues in the shared Messages area. A returned Recorder response does not prove that all requested history is complete. See [Recorder, statistics, and coverage](configuration.md#recorder-statistics-and-coverage).
 
 ### Choose a different history window
 
@@ -135,9 +136,28 @@ entities:
 
 Attributes do not have long-term statistics and therefore cannot supply windows longer than 24 hours. See [Recorder, statistics, and coverage](configuration.md#recorder-statistics-and-coverage) for details.
 
-### History status indicators
+### Change Peak and Floor windows with Dropdown Helpers
 
-On a visible Peak or Floor marker, `!` means partial history and `~` means a stale cached result; hover or keyboard-focus the marker for the reason, or tap it on touch screens. A row-level badge shows `…` when all unresolved enabled Peak/Floor results are pending, and `!` when any such result is unresolved; hover, focus, or tap the badge for its explanation. Normally available history has no indicator. A missing historical result is not replaced with the current sensor reading, and Recorder retention gaps are not always detectable. See [Recorder, statistics, and coverage](configuration.md#recorder-statistics-and-coverage).
+Create the two `input_select` Dropdown Helpers in Home Assistant and give each a list of supported window options such as `today`, `yesterday`, `24h`, and `7d`. The current option selects that marker's window; the configured `window` remains its fallback if the helper is unavailable or has an unsupported value.
+
+```yaml
+type: custom:sensor-bar-card-plus
+entity: sensor.grid_power
+peak:
+  enabled: true
+  window: today
+  window_entity: input_select.peak_history_window
+floor:
+  enabled: true
+  window: yesterday
+  window_entity: input_select.floor_history_window
+```
+
+Peak and Floor can use separate helpers as shown or share one `input_select` when both should follow the same selection. The Visual Editor lists existing Dropdown Helpers separately for each marker. See [Peak and Floor history windows](configuration.md#peak-and-floor-history-windows) for the complete supported window list and fallback behavior.
+
+### Recorder messages and history completeness
+
+Recorder problems appear in the shared **Messages** area with the affected marker/window, severity, explanation, and recovery or fallback where applicable. Messages update when the issue changes and clear after recovery. `partial` means SBCP detected a coverage problem; `available` means no incompleteness is known, not that a raw response proves complete history. Unknown retention gaps may not be detectable. A missing result is never replaced with the current sensor reading. See [Recorder, statistics, and coverage](configuration.md#recorder-statistics-and-coverage).
 
 ### Explicit entity override: power beside a switch
 
@@ -436,11 +456,108 @@ entities:
     name: Live Baseline · side colors
     baseline:
       at: { entity: input_number.sbcp_examples_baseline, fixed: 2000 }
-      below: { color: "#60A5FA" }
-      above: { color: "#34D399" }
+      below:
+        paint: { fill_style: solid, color: "#60A5FA" }
+      above:
+        paint: { fill_style: solid, color: "#34D399" }
 ```
 
 Move the reading below, equal to, and above the live Baseline to see the direction change. These cards use reveal fill; adding Needle would not show it while Baseline resolves. See [Baseline](configuration.md#baseline) for further combinations.
+
+## Universal Paint and presets
+
+Universal Paint gives the Bar and its Baseline/Target overlays the same fill controls. These two standalone Card configurations demonstrate one optional dashboard library and one consumer; add both Cards to the same dashboard. Put the master Card anywhere on that dashboard, then save the dashboard before consumers resolve its definitions. Without an available master or matching definition, the consumer remains usable and reports the preset issue while using the documented fallback.
+
+**Preset Master Card:**
+
+```yaml
+type: custom:sensor-bar-card-plus
+title: Paint Presets
+scale:
+  min: { fixed: 0 }
+  max: { fixed: 10000 }
+preset_library:
+  paint:
+    Energy:
+      fill_style: gradient
+      gradient_stops:
+        - { pos: 0, color: '#22c55e' }
+        - { pos: 70, color: '#facc15' }
+        - { pos: 100, color: '#ef4444' }
+      opacity: 90
+entities:
+  - entity: sensor.sbcp_examples_primary
+```
+
+In the Visual Editor, designate this card **Preset Master** and edit the **Paint Presets** library. A dashboard may have zero or one master; duplicate masters conflict even when a library is empty. Save the dashboard after changing the master library before consumers resolve the updated definitions.
+
+**Consuming Card:**
+
+```yaml
+type: custom:sensor-bar-card-plus
+entity: sensor.sbcp_examples_primary
+scale:
+  min: { fixed: 0 }
+  max: { fixed: 10000 }
+bar:
+  paint:
+    preset: Energy
+baseline:
+  at: { fixed: 0 }
+  above:
+    paint:
+      preset: Energy
+```
+
+The same preset can be reused at multiple destinations, as above. A selected preset supplies all six Paint properties, using standard defaults for properties it omits; it does not inherit omitted properties from the Card's previous Paint. Add a local property alongside `preset` to override only that property. For example, `paint: { preset: Thermal, opacity: 60 }` keeps the Thermal style, colors, and palettes while setting opacity to 60%. The **Reapply preset** action clears local overrides and returns to the preset definition; it appears beside the selector when an explicitly selected preset has local changes and requires confirmation. Preset names are exact and case-sensitive; renaming or deleting one leaves existing references to be corrected. A master library is shared across views of its dashboard, not across dashboards. Copying a consumer alone does not copy its definitions. See [Paint presets and Preset Master](configuration.md#paint-presets-and-preset-master).
+
+### Directional Baseline Paint and opacity
+
+This example uses separate Above and Below Paint and makes the Below layer translucent. Opacity affects only that Baseline layer; labels and markers remain fully opaque.
+
+```yaml
+type: custom:sensor-bar-card-plus
+entity: sensor.grid_power
+scale:
+  min: { fixed: -3000 }
+  max: { fixed: 3000 }
+baseline:
+  at: { fixed: 0 }
+  above:
+    paint:
+      fill_style: solid
+      color: '#22c55e'
+  below:
+    paint:
+      fill_style: solid
+      color: '#3b82f6'
+      opacity: 55
+```
+
+### Above and Below Target Paint
+
+A shared Target threshold can be used for both directions, or each direction can define its own threshold and marker. This example uses independent limits. Paint activates only on strict violation; at equality neither layer is active. In Fill mode, only the occupied/revealed region intersecting the violating side is painted. In Needle mode, only the interval from threshold to current reading is painted.
+
+```yaml
+type: custom:sensor-bar-card-plus
+entity: sensor.grid_power
+scale:
+  min: { fixed: -3000 }
+  max: { fixed: 3000 }
+bar:
+  needle: false
+target:
+  when_above:
+    at: { fixed: 2500 }
+    marker: { color: '#f97316' }
+    paint: { fill_style: solid, color: '#ef4444', opacity: 85 }
+  when_below:
+    at: { fixed: -2000 }
+    marker: { color: '#3b82f6' }
+    paint: { fill_style: solid, color: '#3b82f6' }
+```
+
+When both thresholds are configured, the lower value must not exceed the upper value. If ordering is invalid, SBCP keeps normally visible markers and suppresses both Target Paint layers, with the issue shown in Messages. Legacy `target.when_exceeded.fill_color` retains its Fill-mode behavior for existing cards; it does not use the canonical Fill activation gate. See [Target behavior](configuration.md#directional-paint-behavior).
 
 ## Target, Peak and Floor
 
@@ -467,7 +584,7 @@ floor:
   color: "#60A5FA"
 ```
 
-The revealed portion above Target becomes vivid blue **#00B2FF**, distinct from the magenta palette color. Moving the reading to 3000 W, then 9000 W, then 7200 W adds samples to the configured Recorder windows. Peak and Floor show the highest and lowest values in those windows, which may include earlier samples and are not reset when the card is recreated. Detected partial or stale history is marked on a visible marker.
+The revealed portion above Target becomes vivid blue **#00B2FF**, distinct from the magenta palette color. Moving the reading to 3000 W, then 9000 W, then 7200 W adds samples to the configured Recorder windows. Peak and Floor show the highest and lowest values in those windows, which may include earlier samples and are not reset when the card is recreated. Detected partial or stale history is reported in the shared **Messages** area.
 
 Use just `target`, `peak`, or `floor` when only one reference is needed. See [Target](configuration.md#target-marker), [Peak](configuration.md#peak-marker), [Floor](configuration.md#floor-marker), and [history windows](configuration.md#peak-and-floor-history-windows).
 
@@ -788,7 +905,7 @@ entities:
 
 ### Power relative to a live reference
 
-Baseline shows how far the reading lies above or below a live reference, with the same blue/green side colors as the comparison. A Pin labels that origin; an independent **Now** label shows the reading at the rail endpoint. Use a reference source in the same unit as the power sensor.
+Baseline shows how far the reading lies above or below a live reference, with the same blue/green side colors as the comparison. These side colors use supported compatibility shorthand; new authoring can put each color under its side's `paint`. A Pin labels that origin; an independent **Now** label shows the reading at the rail endpoint. Use a reference source in the same unit as the power sensor.
 
 ![Power relative to a live Baseline, with a Reference Pin and an independent Now label](images/examples/power-reference.png)
 

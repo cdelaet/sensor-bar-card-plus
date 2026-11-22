@@ -11,7 +11,7 @@ Sensor Bar Card Plus (SBCP) presents numeric sensor values as configurable bars 
 
 ![Sensor Bar Card Plus showcase](images/showcase-v1.10.png)
 
-Both presentations support structured YAML, animated reveal fills, Needle gauges, five fill styles, dynamic Scales, independent Scale and Bar Direction, Baseline fill origins, Target/Peak/Floor and Reference Markers, and a Visual Editor. The standalone card also supports multiple entities, attribute values, tap, hold and double-tap actions, five label layouts including Hero, per-entity overrides, and responsive row content.
+Both presentations support structured YAML, animated reveal fills, Needle gauges, five fill styles, dynamic Scales, independent Scale and Bar Direction, Baseline fill origins, directional Target and Baseline Paint, Peak/Floor and Reference Markers, and a Visual Editor. Universal Paint gives the Bar and each overlay the same fill controls; named Paint presets can be shared by cards on one dashboard. The standalone card also supports multiple entities, attribute values, tap, hold and double-tap actions, five label layouts including Hero, per-entity overrides, and responsive row content.
 
 Now you have no excuse not to build that pretty dashboard. Go forth and dash those boards. -Chris (with unapologetic dadhumor)
 
@@ -35,6 +35,10 @@ Now you have no excuse not to build that pretty dashboard. Go forth and dash tho
 On upgrade, replace the editor file first, then the core file, and refresh Home Assistant. The filenames stay fixed; no manual stale-hash cleanup is required. The visual editors load when opened. If an update leaves a visual editor unavailable, refresh Home Assistant; if the problem persists, download both matching files again.
 
 ## Your first card
+
+### Start with the Visual Editor
+
+In Home Assistant, add **Sensor Bar Card Plus** from the card picker, choose your entity, and configure the Scale and appearance in the Visual Editor with its live preview. You can switch to YAML at any time. The example below is the same kind of standalone card written out explicitly.
 
 This example shows a power sensor on a 0–3000 W scale, with a gradient fill and a 2500 W target:
 
@@ -88,13 +92,15 @@ features:
 
 The Feature inherits the Tile's entity when its own `entity` is omitted. An optional `entity: sensor.other_power` inside the Feature overrides that source; the inherited Tile entity is never written into Feature YAML. Use singular `entity`, not `entities`.
 
-The Feature reuses SBCP's Scale, Bar, Segments, Gradient Stops, Needle, Baseline, marker and formatting configuration where applicable. It shows the Bar and compact marker labels; title, multi-row Layouts, Hero and primary-value presentation belong to the standalone card or parent Tile. See [Card Feature Configuration](docs/configuration.md#card-feature-configuration) for applicability and [Card Feature examples](docs/examples.md#card-feature) for complete Tile configurations.
+The Feature reuses SBCP's Scale, Bar and Universal Paint (including directional Target Paint), Segments, Gradient Stops, Needle, Baseline, markers and formatting configuration where applicable. It can consume dashboard Paint presets, but cannot own the Preset Master library. It shows the Bar and compact marker labels; title, multi-row Layouts, Hero and primary-value presentation belong to the standalone card or parent Tile. See [Card Feature Configuration](docs/configuration.md#card-feature-configuration) for applicability and [Card Feature examples](docs/examples.md#card-feature) for complete Tile configurations.
 
 ## How a card works
 
 Each standalone card row starts with a sensor state or a scalar entity attribute. SBCP compares that value with the row’s effective minimum and maximum to place it on a Scale. Those bounds, Baseline, Target, and generic marker values can also use live Home Assistant entity sources. The track represents the Scale; the fill or Needle shows the current value. Peak and Floor show extrema based on a calendar or rolling history window. Scale Direction controls where values appear (highest value right or left); Bar Direction chooses whether a reveal fills left-to-right or right-to-left. A Baseline sets its own reveal origin, where the card fills below or above the Baseline. Labels and layout determine how the value and its context fit around the track.
 
 Card settings provide defaults for supported row settings. Entity rows can override layout, scale, bar, Baseline, Target, Peak, Floor, generic markers, and formatting; card-only settings such as `title` and `entities` are not row overrides. Lists such as markers replace the inherited list. See [Configuration: scope and inheritance](docs/configuration.md#scope-inheritance-and-replacement) for the detailed rules.
+
+Configuration and runtime diagnostics appear in a shared **Messages** area at the bottom of the card or Feature. It stays hidden when there are no active messages and collapsed by default; messages describe affected configuration, severity, fallback or consequence, and clear when the issue recovers.
 
 ## Rendering and fill styles
 
@@ -166,11 +172,11 @@ Markers add values worth seeing against a row’s scale. They do not set the fil
 
 ### Target
 
-Target is a configured threshold or reference. It supports fixed, percentage, and entity-driven values, including existing dynamic behavior. Its default shape is Diamond. Set `target.shape: triangle` to keep the former triangle appearance. Target labels and above-target fill color are optional.
+Target supports fixed, percentage, or entity-driven shared and independent Above and Below thresholds, with separate directional markers and Paint. The Visual Editor has Shared, Above, and Below Target sections. Its default marker is Diamond; set `target.shape: triangle` for the former triangle. Canonical Paint activates on a threshold violation; equality does not activate it. Existing legacy upper-Target fill configuration keeps its established Fill-mode behavior. Target labels are optional. See [Target](docs/configuration.md#target-marker) for the exact rules.
 
 ### Peak and Floor
 
-Peak and Floor show the highest and lowest values in a Home Assistant history window. Because Home Assistant Recorder supplies the history, results can be recovered after a dashboard reload or card recreation when the requested data is retained. Choose calendar windows such as `today` or `previous_week`, or rolling windows such as `24h` and `7d`. Recent windows use Recorder state history; longer windows require compatible long-term statistics. A visible `!` marks detected partial history and `~` marks a stale cached result; row-level `…` and `!` badges indicate pending or unresolved history and provide reason tooltips on hover, keyboard focus, or touch. The badge shows `…` when all unresolved enabled Peak/Floor results are pending. Recorder retention gaps are not always detectable, and Peak/Floor are not substituted with the current reading. See [Peak and Floor history windows](docs/configuration.md#peak-and-floor-history-windows) and [Recorder coverage and status indicators](docs/configuration.md#recorder-statistics-and-coverage).
+Peak and Floor show the highest and lowest values in a Home Assistant history window and can recover after a dashboard reload when the requested data is retained. Choose calendar windows such as `today` or `previous_week`, or rolling windows such as `24h` and `7d`. A Dropdown Helper can change either window dynamically; each marker can use its own helper or share one. Windows longer than 24 hours require compatible long-term statistics; entity attributes are limited to raw Recorder history. SBCP now presents pending, partial, stale, unavailable, and invalid history diagnostics in the shared **Messages** area. A returned Recorder response does not prove full historical coverage, and Peak/Floor are not substituted with the current reading. See [Peak and Floor history windows](docs/configuration.md#peak-and-floor-history-windows) and [Recorder coverage](docs/configuration.md#recorder-statistics-and-coverage).
 
 ### Generic Reference Markers
 
@@ -201,7 +207,7 @@ entities:
 
 Markers can occupy the `above` or `below` lane. Their shapes are Circle, Diamond, Triangle, Chevron, Arrow, and Pin. Direction (`inward` or `outward`) affects directional shapes; Circle and Diamond do not change with direction. Marker color and labels can distinguish a forecast, reserve, comfort bound, or other reference.
 
-Up to four markers can appear above the bar and four below it. Peak uses an above slot; Floor and Target use below slots. A marker label can display a different entity with `label.entity`, and `show_marker: false` makes it a label-only information anchor that still uses a slot. In the standalone card, nearby labels can overlap; hovering a marker on pointer-based devices brings its label to the front. Card Feature labels adapt to available width without hover promotion. For units, unavailable states, inheritance, clamping, and full syntax, see [Generic Reference Markers](docs/configuration.md#generic-reference-markers).
+Each lane holds up to four markers. Peak uses an above slot; Floor and Target use below slots, and distinct enabled Above/Below Targets can reserve two below slots. A marker label can display a different entity with `label.entity`, and `show_marker: false` makes it a label-only information anchor that still uses a slot. In the standalone card, nearby labels can overlap; hovering a marker on pointer-based devices brings its label to the front. Card Feature labels adapt to available width without hover promotion. For units, unavailable states, inheritance, clamping, and full syntax, see [Generic Reference Markers](docs/configuration.md#generic-reference-markers).
 
 ## Practical examples
 
@@ -218,7 +224,7 @@ The interactive Playground brings feature combinations together in larger workin
 
 ## Visual Editor
 
-Both presentations have a Home Assistant Visual Editor and live preview. The reorganized editor includes Scale and Bar Direction controls. The standalone editor also configures entity rows, supported attribute values, Layout, tap, hold and double-tap actions, Scale, Bar and markers. The Card Feature editor offers applicable shared sections: Entities, Scale, Markers, Bar Appearance, Segments, Gradient Stops and Formatting, with parent-entity inheritance or an explicit override. When palettes are unset, the editor displays shared default Segments and Gradient Stops for inspection; they remain display-only until edited. Home Assistant Tile cards continue to own interactions for Card Features.
+Both presentations have a Home Assistant Visual Editor and live preview. The editor includes Universal Paint controls, dashboard Paint preset selection, and directional Target controls. A standalone Card can be designated **Preset Master** to edit its dashboard's Paint Presets; consumers select those presets and can add local overrides. **Reapply preset** clears those local Paint changes after confirmation. The master must be on the same dashboard as its consumers. The reorganized editor includes Scale and Bar Direction controls. The standalone editor also configures entity rows, supported attribute values, Layout, tap, hold and double-tap actions, Scale, Bar and markers. The Card Feature editor offers applicable shared sections: Entities, Scale, Markers, Bar Appearance, Segments, Gradient Stops and Formatting, with parent-entity inheritance or an explicit override. When palettes are unset, the editor displays shared default Segments and Gradient Stops for inspection; they remain display-only until edited. Home Assistant Tile cards continue to own interactions for Card Features.
 
 Color controls pair a native picker with an editable CSS value. The picker shows the resolved color, and the editor preserves the authored CSS expression until you edit it. Paint groups show Base color alongside Opacity when space allows.
 
@@ -228,6 +234,8 @@ Target, Peak, Floor, Generic Reference Markers, and individual generic markers h
 
 ![Standalone Visual Editor screenshot](images/visual-editor.png)
 
+This screenshot predates the v1.11 Universal Paint, preset-management, and directional Target controls; current editor behavior is described above.
+
 ## Responsive behavior and data details
 
 The standalone card adapts label and icon placement to available width, while keeping the bar and value useful where possible. Tapping an entity row opens Home Assistant’s standard more-info dialog by default; tap, hold and double-tap actions can be configured for the card or individual rows. If an entity is missing, its row shows an error while other rows remain available. Dynamic scales and reference values update as their source entities change. When a primary reading is unknown or unavailable, the card cannot place a new numeric value; Peak and Floor continue to resolve from the configured Home Assistant history window.
@@ -236,7 +244,7 @@ Standalone marker labels can overlap when references are close together. Compact
 
 ## Compatibility
 
-Existing standalone dashboards do not require a configuration migration for v1.8.0. Target’s default appearance changed to Diamond; set `target.shape: triangle` to retain the former triangle. Legacy flat configuration remains supported. See [Legacy compatibility and migration](docs/configuration.md#legacy-compatibility-and-migration) for aliases and the converter.
+Existing standalone dashboards do not require a syntax migration for v1.11.0. Target’s default appearance changed to Diamond; set `target.shape: triangle` to retain the former triangle. A selected named Paint preset now uses standard defaults for omitted properties, including opacity `100`; add a local property when that destination should differ from the preset. Ordinary Card-to-Entity Paint inheritance remains when no Entity preset is explicitly selected. Legacy flat configuration remains supported. See [Legacy compatibility and migration](docs/configuration.md#legacy-compatibility-and-migration) for aliases and the converter.
 
 ## Documentation and examples
 
