@@ -16,6 +16,8 @@ export const editorStyles = `
         .paint-editor-properties[hidden] { display: none; }
         .paint-preset-row { display: grid; grid-template-columns: minmax(92px, 0.7fr) minmax(0, 1.3fr); gap: 8px; align-items: center; min-width: 0; }
         .paint-preset-row[hidden] { display: none; }
+        .paint-preset-control { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+        .paint-preset-control select { flex: 1 1 150px; min-width: 0; }
         .paint-editor-actions { display: flex; justify-content: flex-end; }
         .paint-property-row, .paint-palette-field { display: grid; gap: 6px; min-width: 0; }
         .paint-property-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; min-width: 0; }

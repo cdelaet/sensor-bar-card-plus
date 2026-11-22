@@ -121,9 +121,8 @@ export function getDestinationEditorState(context, scope, destination = BAR_PAIN
     const inheritedSource = resolved.inheritedPaint != null
       && owns(resolved.inheritedPaint[PAINT_PROPERTY_SOURCES], property);
     const inheritedPreset = parentPreset && owns(parentPreset, property);
-    const inherited = ownPreset === undefined || ownPreset === null
-      ? inheritedSource || ownPreset === undefined && inheritedPreset
-      : property === 'opacity' && !owns(preset, 'opacity') && (inheritedSource || inheritedPreset);
+    const inherited = (ownPreset === undefined || ownPreset === null)
+      && (inheritedSource || ownPreset === undefined && inheritedPreset);
     const fromPreset = owns(preset, property) && (!parent || ownPreset !== undefined);
     const invalidOpacity = property === 'opacity' && owns(resolved.normalized, INVALID_PAINT_OPACITY);
     const local = authored[property] && owns(resolved.normalized?.[PAINT_PROPERTY_SOURCES], property);
@@ -137,10 +136,12 @@ export function getDestinationEditorState(context, scope, destination = BAR_PAIN
   if (owns(resolved.normalized, INVALID_PAINT_OPACITY)) diagnostics.push({
     code: 'paint_opacity_invalid', severity: 'warning', path: 'paint.opacity', reference: null, fallback: 'default_opacity',
   });
+  const hasLocalOverrides = PAINT_PROPERTIES.some(property => authored[property]);
+  const canReapplyPreset = typeof ownPreset === 'string' && ownPreset.trim() !== '' && hasLocalOverrides;
   return { bindings, paint, enabled, destination: destination.id, inherited: !!parent && !configured, resetDisabled: !configured,
     presetReference, presetInherited: scope?.type === 'entity' && ownPreset === undefined,
     presetEntity: scope?.type === 'entity', presetInheritedReference: inheritedPreset,
-    presetOptions, overrides: authored, sources, diagnostics,
+    presetOptions, overrides: authored, canReapplyPreset, sources, diagnostics,
     registryStatus: registry?.status ?? 'loading', scale, previewScale: getPaintPreviewScale(paint, scale) };
 }
 
@@ -198,6 +199,16 @@ export function selectDestinationPreset(context, scope, destination, value, { co
     destination.path, { preset: value }), { preserveRawConfig: true, rerender: true });
 }
 
+export function reapplyDestinationPreset(context, scope, destination, { confirm } = {}) {
+  const paint = context.read(scope, destination.path);
+  if (!isObject(paint) || typeof paint.preset !== 'string' || !paint.preset.trim()) return false;
+  if (!PAINT_PROPERTIES.some(property => ownsDestinationProperty(context, scope, destination, property))) return false;
+  if (confirm?.(paint.preset) !== true) return false;
+  context.clearPaintPaletteState?.(scope, destination);
+  return context.mutate(scope, target => setPathValue(clearDestinationConfiguration(target, destination),
+    destination.path, { preset: paint.preset }), { preserveRawConfig: true, rerender: true });
+}
+
 function controlDestination(target) {
   const id = target?.closest?.('.paint-editor')?.dataset?.paintDestination;
   return [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT].find(destination => destination.id === id)
@@ -248,11 +259,16 @@ export function handlePaintPropertyControl(context, target, value, options = {})
 
 export function handlePaintAction(context, target) {
   const action = target?.dataset?.action;
-  if (!['reset-paint', 'clear-paint-property'].includes(action)) return false;
+  if (!['reset-paint', 'clear-paint-property', 'reapply-paint-preset'].includes(action)) return false;
   if (target.disabled) return true;
   const destination = controlDestination(target);
   const scope = target.dataset.index === undefined ? { type: 'card' } : { type: 'entity', index: Number(target.dataset.index) };
-  if (action === 'clear-paint-property') {
+  if (action === 'reapply-paint-preset') {
+    reapplyDestinationPreset(context, scope, destination, {
+      confirm: name => target.ownerDocument?.defaultView?.confirm?.(
+        `Reapply “${name}”? This will discard your local Paint changes.`) === true,
+    });
+  } else if (action === 'clear-paint-property') {
     clearDestinationProperty(context, scope, destination, target.dataset.property);
   } else if (hasDestinationConfiguration(context, scope, destination)) {
     const message = scope.type === 'entity' ? 'Reset this Entity to Card paint?' : 'Reset paint to its default?';

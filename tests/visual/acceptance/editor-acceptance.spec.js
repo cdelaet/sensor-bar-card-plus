@@ -1017,3 +1017,35 @@ for(const host of hosts)test(`${host}: Paint preset selection and clearing prese
   expect((await d.saved(page)).bar.direction).toBe('reverse');
  }
 });
+
+for(const source of ['src','dist'])for(const [host,scope] of [
+ ['standalone','root'],['standalone','entity'],['feature','root'],
+])test(`${host} ${scope}: Reapply preset confirms, clears overrides and persists (${source})`,async({page})=>{
+ const config=d.seed(host),path=scope==='entity'?'entities.0.bar.paint':'bar.paint';
+ const paint={preset:'Thermal',opacity:42};
+ if(scope==='entity')config.entities[0].bar.paint=paint;else config.bar.paint=paint;
+ const editor=await d.mount(page,host,config,source==='dist'?{source:'dist'}:{});
+ await d.openSection(editor,{section:'Bar Appearance',...(scope==='entity'?{scope:'entity'}:{})});
+ const editorId=scope==='entity'?'#entity-0-paint-editor':'#card-paint-editor';
+ const reapply=editor.locator(`${editorId} button[data-action="reapply-paint-preset"]`);
+ await expect(reapply).toBeVisible();
+ const before=await d.count(page),cancelled=page.waitForEvent('dialog').then(async dialog=>{
+  const message=dialog.message();await dialog.dismiss();return message;
+ });
+ await reapply.click();
+ expect(await cancelled).toBe('Reapply “Thermal”? This will discard your local Paint changes.');
+ expect(await d.count(page)).toBe(before);
+ expect(d.read(await d.saved(page),path)).toEqual(paint);
+ const accepted=page.waitForEvent('dialog').then(async dialog=>{
+  const message=dialog.message();await dialog.accept();return message;
+ });
+ await reapply.click();
+ expect(await accepted).toBe('Reapply “Thermal”? This will discard your local Paint changes.');
+ await expect.poll(()=>d.count(page)).toBe(before+1);
+ expect(d.read(await d.saved(page),path)).toEqual({preset:'Thermal'});
+ await expect(reapply).toBeHidden();
+ await d.reopen(page,editor);
+ await d.openSection(editor,{section:'Bar Appearance',...(scope==='entity'?{scope:'entity'}:{})});
+ expect(d.read(await d.saved(page),path)).toEqual({preset:'Thermal'});
+ await expect(editor.locator(`${editorId} button[data-action="reapply-paint-preset"]`)).toBeHidden();
+});

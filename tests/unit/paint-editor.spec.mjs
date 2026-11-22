@@ -66,6 +66,28 @@ describe('shared Paint Editor', () => {
     expect(missing).toContain('<option value="missing" selected>missing (unavailable)</option>');
   });
 
+  it('shows Reapply preset only for an explicit named preset with local overrides', () => {
+    const { bindings } = bindingFor({}, []);
+    const visible = renderPaintEditor({ id: 'paint', bindings, presetReference: 'Thermal',
+      overrides: { opacity: true }, fields: { opacity: { id: 'opacity' } } });
+    expect(visible).toMatch(/data-action="reapply-paint-preset"[^>]*>Reapply preset/);
+    const noOverrides = renderPaintEditor({ id: 'paint', bindings, presetReference: 'Thermal' });
+    expect(noOverrides).toMatch(/data-action="reapply-paint-preset"[^>]* hidden>/);
+    const inherited = renderPaintEditor({ id: 'paint', bindings, presetReference: 'Thermal', presetInherited: true,
+      overrides: { opacity: true } });
+    expect(inherited).toMatch(/data-action="reapply-paint-preset"[^>]* hidden>/);
+  });
+
+  it('updates Reapply preset visibility after local overrides change', () => {
+    const button = { hidden: true };
+    const editor = { querySelector: selector => selector.includes('reapply-paint-preset') ? button : null };
+    const root = { activeElement: null, querySelector: () => editor };
+    syncPaintEditor(root, 'paint', { paint: {}, canReapplyPreset: true });
+    expect(button.hidden).toBe(false);
+    syncPaintEditor(root, 'paint', { paint: {}, canReapplyPreset: false });
+    expect(button.hidden).toBe(true);
+  });
+
   it('renders reset only for consumers and reflects whether local paint can be reset', () => {
     const { bindings } = bindingFor({ color: '#123456' }, []);
     const consumer = renderPaintEditor({ id: 'paint', bindings, resetLabel: 'Reset to default paint settings', resetDisabled: false });

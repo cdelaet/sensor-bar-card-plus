@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { normalizeCardConfig } from '../../src/config/normalize.js';
 import { buildRowViewModel } from '../../src/view-model/row-view-model.js';
 import { buildBarRenderModel } from '../../src/view-model/bar-render-model.js';
@@ -6,7 +6,7 @@ import { BAR_PAINT, BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT, res
 import { resolveBaselinePaints } from '../../src/view-model/baseline-paint-resolver.js';
 import { resolveTargetAbovePaint, resolveTargetBelowPaint } from '../../src/view-model/target-above-paint-resolver.js';
 import { getDestinationEditorState, handlePaintPresetControl, setDestinationEnabled, resetDestinationPaint, selectDestinationPreset,
-  setDestinationProperty, clearDestinationProperty } from '../../src/editor/shared/paint-destination.js';
+  reapplyDestinationPreset, handlePaintAction, setDestinationProperty, clearDestinationProperty } from '../../src/editor/shared/paint-destination.js';
 import { getPathValue, setPathValue } from '../../src/editor/shared/editor-config.js';
 import { INHERITED_PAINT_PRESET_VALUE } from '../../src/editor/shared/paint-editor.js';
 import { compilePaint } from '../../src/view-model/paint-compiler.js';
@@ -189,6 +189,19 @@ for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TA
       expect(f.events).toHaveLength(0);
     });
 
+    it('uses a selected preset as the complete destination definition in Card and Entity scope', () => {
+      const f = fixture(host, destination, { preset: 'cool' },
+        host === 'Entity' ? { preset: 'warm', color: '#abcdef', opacity: 25 } : undefined);
+      const state = f.state();
+      const runtime = resolveConfiguredDestination(f.context.read(f.scope, []),
+        host === 'Entity' ? f.config() : null, destination, registry).paint;
+      expect(state.paint.opacity).toBe(100);
+      expect(state.paint.fill_style).toBe('solid');
+      expect(state.paint.color).toBe('#123456');
+      expect(compilePaint(state.paint, { samplePercent: 50 }).gradient)
+        .toBe(compilePaint(runtime, { samplePercent: 50 }).gradient);
+    });
+
     it('keeps the locally active preset a no-op, preserves properties on None, and confirms replacement', () => {
       const f = fixture(host, destination, { preset: 'warm', color: '#abcdef' });
       expect(selectDestinationPreset(f.context, f.scope, destination, 'warm', { confirm: () => { throw Error('must not confirm'); } })).toBe(true);
@@ -200,6 +213,64 @@ for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TA
       selectDestinationPreset(f.context, f.scope, destination, 'cool', { confirm: () => true });
       expect(f.paint()).toEqual({ preset: 'cool' });
       expect(f.cleared.at(-1)).toEqual([f.scope, destination]);
+    });
+
+    it('switches presets by clearing all six local properties and destination aliases only', () => {
+      const authored = { preset: 'warm', fill_style: 'bands', color: '#abcdef', solid_fill: true,
+        segments: [{ from: '0%', to: '100%', color: '#abcdef' }],
+        gradient_stops: [{ pos: 0, color: '#abcdef' }, { pos: 100, color: '#123456' }], opacity: 45 };
+      const f = fixture(host, destination, authored);
+      if (destination.aliases?.color?.[0]) f.context.mutate(f.scope, target => setPathValue(target,
+        destination.aliases.color[0], '#ff0000'));
+      f.events.length = 0;
+      expect(selectDestinationPreset(f.context, f.scope, destination, 'cool', { confirm: () => true })).toBe(true);
+      expect(f.paint()).toEqual({ preset: 'cool' });
+      expect(f.config().baseline.at).toBe(50);
+      expect(f.config().future).toBe(true);
+      expect(f.config().entities[0].future).toBe(true);
+      if (destination.aliases?.color?.[0]) expect(getPathValue(f.context.read(f.scope, []), destination.aliases.color[0])).toBeUndefined();
+    });
+
+    it('reapplies only an explicit preset with local overrides, confirms, and preserves sibling settings', () => {
+      const f = fixture(host, destination, { preset: 'warm', color: '#abcdef', opacity: 60 },
+        host === 'Entity' ? { preset: 'cool', opacity: 25 } : undefined);
+      if (destination.aliases?.color?.[0]) f.context.mutate(f.scope, target => setPathValue(target,
+        destination.aliases.color[0], '#ff0000'));
+      f.events.length = 0;
+      const before = structuredClone(f.config());
+      const confirm = vi.fn(() => false);
+      expect(reapplyDestinationPreset(f.context, f.scope, destination, { confirm })).toBe(false);
+      expect(confirm).toHaveBeenCalledWith('warm');
+      expect(f.config()).toEqual(before);
+      expect(f.events).toHaveLength(0);
+
+      expect(reapplyDestinationPreset(f.context, f.scope, destination, { confirm: () => true })).toBe(true);
+      expect(f.paint()).toEqual({ preset: 'warm' });
+      expect(f.config().baseline.at).toBe(50);
+      expect(f.config().future).toBe(true);
+      expect(f.config().entities[0].future).toBe(true);
+      expect(f.cleared.at(-1)).toEqual([f.scope, destination]);
+    });
+
+    it('does not prompt or mutate when the selected preset has no local overrides', () => {
+      const f = fixture(host, destination, { preset: 'warm' });
+      const confirm = vi.fn(() => { throw new Error('no confirmation expected'); });
+      expect(reapplyDestinationPreset(f.context, f.scope, destination, { confirm })).toBe(false);
+      expect(confirm).not.toHaveBeenCalled();
+      expect(f.events).toHaveLength(0);
+      expect(f.state().canReapplyPreset).toBe(false);
+    });
+
+    it('routes the Reapply preset action through confirmation and leaves canceled edits untouched', () => {
+      const f = fixture(host, destination, { preset: 'warm', opacity: 45 });
+      const confirm = vi.fn(() => false);
+      const button = { dataset: { action: 'reapply-paint-preset', ...(host === 'Entity' ? { index: '0' } : {}) },
+        closest: () => ({ dataset: { paintDestination: destination.id } }),
+        ownerDocument: { defaultView: { confirm } } };
+      expect(handlePaintAction(f.context, button)).toBe(true);
+      expect(confirm).toHaveBeenCalledWith('Reapply “warm”? This will discard your local Paint changes.');
+      expect(f.paint()).toEqual({ preset: 'warm', opacity: 45 });
+      expect(f.events).toHaveLength(0);
     });
 
     it('clears individual authored properties and resets only its own configuration', () => {
@@ -252,7 +323,7 @@ for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TA
       selectDestinationPreset(f.context, f.scope, destination, 'cool', { confirm: () => true });
       expect(f.paint()).toEqual({ preset: 'cool' });
       expect(control.value).toBe('');
-      expect(f.state()).toMatchObject({ presetInherited: false, presetReference: 'cool', paint: { fill_style: 'solid', color: '#123456', opacity: 75 } });
+      expect(f.state()).toMatchObject({ presetInherited: false, presetReference: 'cool', paint: { fill_style: 'solid', color: '#123456', opacity: 100 } });
     });
 
     if (host === 'Entity') it('treats null as None and preserves the default resolution across scopes', () => {

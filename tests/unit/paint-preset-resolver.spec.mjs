@@ -46,12 +46,12 @@ describe('pure dashboard paint preset resolution', () => {
       .toBe('linear-gradient(to right,rgb(0,0,0) 0%,rgb(255,255,255) 100%)');
   });
 
-  it('keeps inherited opacity when a preset replaces inherited fill paint', () => {
+  it('uses default opacity when a selected preset omits opacity', () => {
     const result = resolvePaintPreset({
       paint: { preset: 'plain' }, registry: registryWith({ plain: { fill_style: 'solid', color: '#abcdef' } }),
       inheritedPaint: inherited,
     });
-    expect(result.paint).toMatchObject({ fill_style: 'solid', color: '#abcdef', opacity: 40 });
+    expect(result.paint).toMatchObject({ fill_style: 'solid', color: '#abcdef', opacity: 100 });
   });
 
   it('treats an undefined preset opacity as omitted', () => {
@@ -60,7 +60,19 @@ describe('pure dashboard paint preset resolution', () => {
       registry: registryWith({ plain: { fill_style: 'solid', color: '#abcdef', opacity: undefined } }),
       inheritedPaint: inherited,
     });
-    expect(result.paint.opacity).toBe(40);
+    expect(result.paint.opacity).toBe(100);
+  });
+
+  it('uses standard defaults for every property omitted by a preset, rather than inherited values', () => {
+    const result = resolvePaintPreset({
+      paint: { preset: 'plain' }, registry: registryWith({ plain: { fill_style: 'solid', color: '#abcdef' } }),
+      inheritedPaint: { ...inherited, solid_fill: true, opacity: 42,
+        gradient_stops: [{ pos: 0, color: '#111111' }, { pos: 100, color: '#222222' }] },
+    });
+
+    expect(result.paint).toMatchObject({ fill_style: 'solid', color: '#abcdef', solid_fill: false, opacity: 100 });
+    expect(result.paint.segments).toBeNull();
+    expect(result.paint.gradient_stops).toBeNull();
   });
 
   it.each([[0, 0], [100, 100], [37.5, 37.5], ['42.25', 42.25]])(
@@ -173,7 +185,7 @@ describe('pure dashboard paint preset resolution', () => {
     expect(named.paint).toMatchObject({ fill_style: 'solid', color: '#abcdef', opacity: 20 });
   });
 
-  it('inherits Card preset opacity through entity presets only when the child preset omits it', () => {
+  it('does not inherit Card preset properties when Entity selects another preset', () => {
     const normalized = normalizeCardConfig({
       bar: { paint: { preset: 'card' } },
       entities: [{ entity: 'sensor.power', bar: { paint: { preset: 'entity' } } }],
@@ -192,8 +204,34 @@ describe('pure dashboard paint preset resolution', () => {
     });
 
     expect(inherited.paint.opacity).toBe(28);
-    expect(child.paint.opacity).toBe(28);
+    expect(child.paint.opacity).toBe(100);
     expect(explicitChild.paint.opacity).toBe(72);
+  });
+
+  it.each([
+    ['fill_style', 'solid'],
+    ['color', '#445566'],
+    ['solid_fill', true],
+    ['segments', [{ from: '0%', to: '100%', color: '#445566' }]],
+    ['gradient_stops', [{ pos: 0, color: '#445566' }, { pos: 100, color: '#abcdef' }]],
+    ['opacity', 60],
+  ])('applies a local %s override over a complete preset without changing other properties', (property, value) => {
+    const definition = {
+      fill_style: 'gradient', color: '#123456', solid_fill: false, opacity: 35,
+      segments: [{ from: '0%', to: '100%', color: '#123456' }],
+      gradient_stops: [{ pos: 0, color: '#123456' }, { pos: 100, color: '#abcdef' }],
+    };
+    const expected = resolvePaintPreset({ paint: { preset: 'thermal' }, registry: registryWith({ thermal: definition }) }).paint;
+    const actual = resolvePaintPreset({ paint: { preset: 'thermal', [property]: value },
+      registry: registryWith({ thermal: definition }), inheritedPaint: inherited }).paint;
+
+    expect(actual[property]).toEqual(property === 'segments'
+      ? expect.arrayContaining([expect.objectContaining({ color: '#445566' })])
+      : property === 'gradient_stops' ? value : value);
+    for (const key of ['fill_style', 'color', 'solid_fill', 'segments', 'gradient_stops', 'opacity']) {
+      if (key === property) continue;
+      expect(actual[key]).toEqual(expected[key]);
+    }
   });
 
   it('preserves normalized ordinary paint when no preset reference is present', () => {

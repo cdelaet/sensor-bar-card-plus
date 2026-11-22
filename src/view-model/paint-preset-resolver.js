@@ -204,9 +204,8 @@ export function resolvePaintPreset({ paint, registry, inheritedPaint = null, the
   const overrides = validLocalOverrides ? local : Object.fromEntries(
     Object.prototype.hasOwnProperty.call(local, 'opacity') ? [['opacity', local.opacity]] : [],
   );
-  const opacity = Object.prototype.hasOwnProperty.call(local, 'opacity') && local.opacity !== undefined
-    ? local.opacity
-    : presetOpacity?.authored ? presetOpacity.value : inheritedOpacity(inheritedPaint);
+  const localOpacity = Object.prototype.hasOwnProperty.call(local, 'opacity') && local.opacity !== undefined;
+  const opacity = localOpacity ? local.opacity : source === 'preset' ? base.opacity : inheritedOpacity(inheritedPaint);
   const effectivePaint = mergeBase(base, overrides, opacity);
   const effective = canonicalPaint
     ? cloneCanonicalDefinition(effectivePaint)

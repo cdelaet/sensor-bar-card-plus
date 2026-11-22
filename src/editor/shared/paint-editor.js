@@ -97,7 +97,10 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
       ${activation ? `<div class="paint-editor-properties"${enabled ? '' : ' hidden'}>` : ''}
       <div class="paint-preset-row">
         <label for="${controls.preset.id}">Paint preset</label>
-        <select ${fieldAttributes(controls.preset)} data-paint-preset="true">${options}</select>
+        <div class="paint-preset-control">
+          <select ${fieldAttributes(controls.preset)} data-paint-preset="true">${options}</select>
+          <button type="button" data-action="reapply-paint-preset"${fields.index !== undefined ? ` data-index="${fields.index}"` : ''}${stateCanReapply(presetReference, presetInherited, overrides) ? '' : ' hidden'}>Reapply preset</button>
+        </div>
       </div>
       ${activation ? '' : resetAction}
       <div class="paint-preset-feedback" role="status" aria-live="polite"${feedbackText ? '' : ' hidden'}>${escapeAttribute(feedbackText)}</div>
@@ -122,12 +125,19 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
   </details>`;
 }
 
+function stateCanReapply(presetReference, presetInherited, overrides) {
+  return typeof presetReference === 'string' && presetReference.trim() !== '' && !presetInherited
+    && Object.values(overrides).some(Boolean);
+}
+
 export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts, replaced, paletteFields } = {}) {
   const editor = root?.querySelector(`#${id}`);
   if (!editor) return;
   const { paint, inherited, scale } = state;
   const reset = editor.querySelector?.('[data-action="reset-paint"]');
   if (reset) reset.disabled = state.resetDisabled ?? true;
+  const reapply = editor.querySelector?.('[data-action="reapply-paint-preset"]');
+  if (reapply) reapply.hidden = !state.canReapplyPreset;
   const activation = editor.querySelector?.('[data-paint-enabled="true"]');
   if (activation) activation.checked = state.enabled;
   const properties = editor.querySelector?.('.paint-editor-properties');
