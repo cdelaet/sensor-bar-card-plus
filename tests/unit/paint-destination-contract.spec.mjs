@@ -41,6 +41,60 @@ describe('shared Paint destination contract regressions', () => {
     }
   });
 
+  for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TARGET_BELOW_PAINT]) {
+    it(`identifies conflicted preset references for the ${destination.id} editor`, () => {
+      const f = fixture('Card', destination, { preset: 'Thermal' });
+      f.context.paintPresetRegistry = { status: 'ready', presets: {}, conflicts: { Thermal: 3 } };
+      const state = f.state();
+      expect(state.diagnostics).toContainEqual(expect.objectContaining({
+        code: 'paint_preset_conflict', reference: 'Thermal', ownerCount: 3,
+      }));
+      expect(state.diagnostics.some(item => item.code === 'paint_preset_missing')).toBe(false);
+      expect(state.presetOptions).toContainEqual({ value: 'Thermal', label: 'Thermal (conflict)' });
+    });
+  }
+
+  it('uses own-property conflict lookup for a reserved preset name in the editor', () => {
+    const f = fixture('Card', BAR_PAINT, { preset: '__proto__' });
+    f.context.paintPresetRegistry = { status: 'ready', presets: {}, conflicts: JSON.parse('{"__proto__":2}') };
+    const state = f.state();
+    expect(state.diagnostics).toContainEqual(expect.objectContaining({ code: 'paint_preset_conflict', reference: '__proto__' }));
+    expect(state.presetOptions).toContainEqual({ value: '__proto__', label: '__proto__ (conflict)' });
+  });
+
+  it('keeps Entity Paint inheritance and overrides correct when its Card preset conflicts', () => {
+    const conflictRegistry = {
+      status: 'ready',
+      presets: { Energy: { fill_style: 'solid', color: '#abcdef' } },
+      conflicts: { Thermal: 2 },
+    };
+    const card = fixture('Card', BAR_PAINT, { preset: 'Thermal', opacity: 55 });
+    card.context.paintPresetRegistry = conflictRegistry;
+    const cardState = card.state();
+    expect(cardState.diagnostics).toContainEqual(expect.objectContaining({
+      code: 'paint_preset_conflict', reference: 'Thermal', fallback: 'default',
+    }));
+
+    const inherited = fixture('Entity', BAR_PAINT, { color: '#334455', opacity: 35 }, { preset: 'Thermal' });
+    inherited.context.paintPresetRegistry = conflictRegistry;
+    const inheritedState = inherited.state();
+    expect(inheritedState).toMatchObject({ presetInherited: true, presetReference: 'Thermal',
+      paint: { color: '#334455', opacity: 35 } });
+    expect(inheritedState.diagnostics).toContainEqual(expect.objectContaining({
+      code: 'paint_preset_conflict', reference: 'Thermal',
+    }));
+    expect(inheritedState.diagnostics.some(item => item.code === 'paint_preset_missing')).toBe(false);
+
+    const overridden = fixture('Entity', BAR_PAINT, { preset: 'Energy', opacity: 25 }, { preset: 'Thermal' });
+    overridden.context.paintPresetRegistry = conflictRegistry;
+    const overriddenState = overridden.state();
+    expect(overriddenState).toMatchObject({ presetInherited: false, presetReference: 'Energy',
+      paint: { fill_style: 'solid', color: '#abcdef', opacity: 25 } });
+    expect(overriddenState.diagnostics.some(item => item.reference === 'Energy'
+      && item.code.startsWith('paint_preset'))).toBe(false);
+    expect(overriddenState.paint).not.toHaveProperty('preset');
+  });
+
   for (const side of sides) {
     it(`explicitly enables ${side} with Solid theme defaults and visible paint`, () => {
       const config = { baseline: { at: 50, [side]: { paint: {} } } };

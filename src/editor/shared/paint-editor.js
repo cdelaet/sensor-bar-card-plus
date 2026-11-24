@@ -64,9 +64,11 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
   const options = [inheritedOption, `<option value=""${!presetInherited && presetReference == null ? ' selected' : ''}>None</option>`,
     ...presetOptions.map(option => `<option value="${escapeAttribute(option.value)}"${selection === option.value ? ' selected' : ''}>${escapeAttribute(option.label)}</option>`),
     ...(presetReference != null && !presetInherited && !presetOptions.some(option => option.value === referenceName)
-      ? [`<option value="${escapeAttribute(referenceName)}" selected>${escapeAttribute(`${referenceName || '(empty name)'} (unavailable)`)}</option>`] : [])].join('');
+      ? [`<option value="${escapeAttribute(referenceName)}" selected>${escapeAttribute(`${referenceName || '(empty name)'} (${diagnostics.some(item => item.code === 'paint_preset_conflict' && item.reference === referenceName) ? 'conflict' : 'unavailable'})`)}</option>`] : [])].join('');
   const feedback = diagnostics.find(item => item.code?.startsWith('paint_preset') || item.code === 'paint_registry_unavailable');
-  const feedbackText = feedback?.code === 'paint_preset_missing'
+  const feedbackText = feedback?.code === 'paint_preset_conflict'
+    ? `Preset “${feedback.reference}” is defined by ${feedback.ownerCount ?? 'multiple'} Cards in this dashboard. ${feedback.fallback === 'default' ? 'Using default paint.' : 'Using inherited paint.'}`
+    : feedback?.code === 'paint_preset_missing'
     ? `Preset “${feedback.reference}” was not found. Using inherited paint.`
     : feedback?.code === 'paint_preset_invalid'
       ? `Preset “${feedback.reference}” is invalid. Using inherited paint.`
@@ -166,15 +168,16 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
     const inheritedReferenceName = state.presetInheritedReference == null ? '' : String(state.presetInheritedReference);
     const inheritedOption = state.presetEntity
       ? `<option value="${INHERITED_PAINT_PRESET_VALUE}">Inherited${inheritedReferenceName ? ` (${escapeAttribute(inheritedReferenceName)})` : ''}</option>` : '';
+    const conflict = state.diagnostics?.find(item => item.code === 'paint_preset_conflict' && item.reference === activeReference);
     const optionHtml = `${inheritedOption}<option value="">None</option>${(state.presetOptions ?? []).map(option => `<option value="${escapeAttribute(option.value)}">${escapeAttribute(option.label)}</option>`).join('')}${activeReference && !state.presetInherited && !(state.presetOptions ?? []).some(option => option.value === activeReference)
-      ? `<option value="${escapeAttribute(activeReference)}">${escapeAttribute(`${activeReference} (unavailable)`)}</option>` : ''}`;
+      ? `<option value="${escapeAttribute(activeReference)}">${escapeAttribute(`${activeReference} (${conflict ? 'conflict' : 'unavailable'})`)}</option>` : ''}`;
     if (presetControl.dataset.options !== optionHtml) {
       presetControl.innerHTML = optionHtml;
       presetControl.dataset.options = optionHtml;
     }
     presetControl.closest?.('.paint-preset-row')?.removeAttribute('hidden');
-    if (root.activeElement !== presetControl) presetControl.value = state.presetInherited
-      ? INHERITED_PAINT_PRESET_VALUE : activeReference;
+    const selectedPreset = state.presetInherited ? INHERITED_PAINT_PRESET_VALUE : activeReference;
+    if (root.activeElement !== presetControl || presetControl.value !== selectedPreset) presetControl.value = selectedPreset;
   }
   const picker = editor.querySelector?.('input[type="color"][data-paint-property="color"]');
   if (picker) syncColorInput(editor, picker.id, paint.color, '#4a9eff', { cssColorDrafts, replaced });
@@ -204,7 +207,9 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
     }
   }
   const diagnostic = state.diagnostics?.find(item => item.code?.startsWith('paint_preset') || item.code === 'paint_registry_unavailable');
-  const message = diagnostic?.code === 'paint_preset_missing'
+  const message = diagnostic?.code === 'paint_preset_conflict'
+    ? `Preset “${diagnostic.reference}” is defined by ${diagnostic.ownerCount ?? 'multiple'} Cards in this dashboard. ${diagnostic.fallback === 'default' ? 'Using default paint.' : 'Using inherited paint.'}`
+    : diagnostic?.code === 'paint_preset_missing'
     ? `Preset “${diagnostic.reference}” was not found. Using inherited paint.`
     : diagnostic?.code === 'paint_preset_invalid'
       ? `Preset “${diagnostic.reference}” is invalid. Using inherited paint.`

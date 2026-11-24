@@ -360,49 +360,43 @@ export class SensorBarCardPlusEditor extends HTMLElement {
   _syncPresetMasterControls() {
     if (!this.shadowRoot?.innerHTML) return;
     if (deferPaletteSyncUntilClick(null, () => this._syncPresetMasterControls(), this.shadowRoot)) return;
-    const isMaster = Object.hasOwn(this._draftConfig, 'preset_library');
-    const otherMasterExists = (this._paintPresetRegistry?.masterCount ?? 0) > (isMaster ? 1 : 0);
-    const diagnostic = this._paintPresetRegistry?.diagnostic?.code === 'multiple_preset_masters'
-      ? this._paintPresetRegistry.diagnostic.message : '';
     const current = this.shadowRoot?.querySelector('.preset-master-section');
-    const shouldShowSection = isMaster || !otherMasterExists || !!diagnostic;
-    if (isMaster && current) {
-      this._syncPresetMasterWarning(current, diagnostic);
-      return;
-    }
-    const shouldShowCheckbox = !isMaster && !otherMasterExists;
-    const hasCheckbox = !!current?.querySelector('#preset-master');
-    if (!shouldShowSection) {
-      current?.remove();
-      return;
-    }
-    if (!current || hasCheckbox !== shouldShowCheckbox) {
-      const markup = this._renderPresetMasterControls();
-      if (current) current.outerHTML = markup;
-      else this.shadowRoot?.querySelector('.editor > .section')?.insertAdjacentHTML('beforebegin', markup);
-      this._syncPresetMasterWarning(this.shadowRoot.querySelector('.preset-master-section'), diagnostic);
-      return;
-    }
-    this._syncPresetMasterWarning(current, diagnostic);
+    if (current) this._syncPresetMasterWarnings(current);
   }
 
-  _syncPresetMasterWarning(section, diagnostic) {
+  _getPresetLibraryConflictWarnings() {
+    const paint = this._getPaintPresetLibrary().paint;
+    const conflicts = this._paintPresetRegistry?.conflicts;
+    if (!this._isObject(paint) || !this._isObject(conflicts)) return [];
+    return Object.keys(paint)
+      .filter(name => Object.hasOwn(conflicts, name) && Number.isInteger(conflicts[name]) && conflicts[name] > 1)
+      .map(name => ({ name, ownerCount: conflicts[name] }));
+  }
+
+  _syncPresetMasterWarnings(section) {
     if (!section) return;
-    let warning = section?.querySelector('.preset-master-warning');
-    if (!diagnostic) {
-      warning?.remove();
-      return;
+    const container = section.querySelector('.paint-preset-authoring-warnings');
+    if (!container) return;
+    const warnings = this._getPresetLibraryConflictWarnings();
+    const byName = new Map();
+    for (const node of [...container.children]) {
+      const name = node.dataset.presetName;
+      if (!warnings.some(warning => warning.name === name) || byName.has(name)) node.remove();
+      else byName.set(name, node);
     }
-    if (!warning) {
-      warning = this.ownerDocument.createElement('div');
-      warning.className = 'paint-preset-feedback preset-master-warning';
-      warning.setAttribute('role', 'status');
-      warning.setAttribute('aria-live', 'polite');
-      const designation = section.querySelector('.preset-master-title') ?? section.querySelector('#preset-master');
-      if (designation) designation.parentElement.after(warning);
-      else section.prepend(warning);
+    for (const { name, ownerCount } of warnings) {
+      let node = byName.get(name);
+      if (!node) {
+        node = this.ownerDocument.createElement('div');
+        node.className = 'paint-preset-feedback paint-preset-authoring-warning';
+        node.dataset.presetName = name;
+        node.setAttribute('role', 'status');
+        container.append(node);
+      }
+      const message = `Paint preset "${name}" is defined by ${ownerCount} Cards in this dashboard. Rename or remove this definition so only one Card defines it.`;
+      if (node.textContent !== message) node.textContent = message;
     }
-    if (warning.textContent !== diagnostic) warning.textContent = diagnostic;
+    container.hidden = warnings.length === 0;
   }
 
   _cloneContainer(value) {
@@ -3626,6 +3620,7 @@ ${this._renderFormattingSection({ type: 'card' })}
       </div>
     `;
 
+      this._syncPresetMasterControls();
       this._bindShadowListeners();
       this._syncEntityPickers();
       this._syncEntityAttributePickers();
@@ -3642,18 +3637,14 @@ ${this._renderFormattingSection({ type: 'card' })}
 
   _renderPresetMasterControls() {
     const isMaster = Object.hasOwn(this._draftConfig, 'preset_library');
-    const otherMasterExists = (this._paintPresetRegistry?.masterCount ?? 0) > (isMaster ? 1 : 0);
-    const diagnostic = this._paintPresetRegistry?.diagnostic?.code === 'multiple_preset_masters'
-      ? this._paintPresetRegistry.diagnostic.message : '';
     const paintPresetsOpen = this.shadowRoot?.querySelector('#paint-presets')?.open === true;
-    if (!isMaster && otherMasterExists && !diagnostic) return '';
     return `<div class="section preset-master-section">
-      ${isMaster || !otherMasterExists ? `<div class="toggle">
+      <div class="toggle">
         <input id="preset-master" type="checkbox" data-kind="preset-master"${isMaster ? ' checked' : ''}>
-        <label for="preset-master">Preset Master</label>
-      </div>` : ''}
-      ${isMaster ? '<div class="preset-master-title" role="status">This Card is the Preset Master.</div>' : ''}
-      ${diagnostic ? `<div class="paint-preset-feedback preset-master-warning" role="status" aria-live="polite">${this._escapeAttribute(diagnostic)}</div>` : ''}
+        <label for="preset-master">Share Paint Presets</label>
+      </div>
+      ${isMaster ? '<div class="preset-master-title" role="status">This Card shares its Paint Presets with this dashboard.</div>' : ''}
+      <div class="paint-preset-authoring-warnings" role="status" aria-live="polite" hidden></div>
       ${isMaster ? `<details id="paint-presets" class="paint-presets-disclosure"${paintPresetsOpen ? ' open' : ''}>
         <summary>Paint Presets</summary>
         ${this._renderPaintPresetLibrary()}
@@ -4299,7 +4290,7 @@ ${this._renderFormattingSection({ type: 'card' })}
         if (hasContents) {
           const confirm = this.ownerDocument?.defaultView?.confirm;
           if (typeof confirm !== 'function' || !confirm.call(this.ownerDocument.defaultView,
-            'Removing Preset Master will remove its preset library. Continue?')) {
+            "Turning off Share Paint Presets will remove this Card's preset library. Continue?")) {
             target.checked = true;
             return;
           }

@@ -106,9 +106,13 @@ export function getDestinationEditorState(context, scope, destination = BAR_PAIN
   const inheritedPreset = parent ? getPathValue(parent, [...destination.path, 'preset']) : undefined;
   const presetReference = ownPreset !== undefined ? ownPreset : inheritedPreset;
   const presetOptions = Object.keys(registry?.presets ?? {}).filter(name => name.trim()).map(name => ({ value: name, label: name }));
+  const presetName = String(presetReference ?? '');
+  const conflictCount = registry?.conflicts && Object.hasOwn(registry.conflicts, presetName)
+    ? registry.conflicts[presetName] : 0;
   if (presetReference !== undefined && presetReference !== null
-    && !presetOptions.some(option => option.value === String(presetReference))) {
-    presetOptions.push({ value: String(presetReference ?? ''), label: `${String(presetReference || '(empty name)')} (unavailable)` });
+    && !presetOptions.some(option => option.value === presetName)) {
+    presetOptions.push({ value: presetName,
+      label: `${String(presetName || '(empty name)')} (${conflictCount > 1 ? 'conflict' : 'unavailable'})` });
   }
   const presetFailed = resolved.diagnostics.some(item => item.reference === presetReference && item.code !== 'paint_opacity_invalid');
   const preset = registry?.status === 'ready' && !presetFailed ? registry?.presets?.[presetReference] : null;
@@ -132,7 +136,10 @@ export function getDestinationEditorState(context, scope, destination = BAR_PAIN
   const scaleConfig = normalizeScaleConfig(local, parent);
   const { min, max } = getResolvedScale(context.hass, scaleConfig);
   const scale = { minValue: min, maxValue: max, scaleDirection: scaleConfig.direction };
-  const diagnostics = [...resolved.diagnostics];
+  const diagnostics = resolved.diagnostics.map(diagnostic => diagnostic.code === 'paint_preset_conflict'
+    && registry?.conflicts && Object.hasOwn(registry.conflicts, String(diagnostic.reference))
+    ? { ...diagnostic, ownerCount: registry.conflicts[diagnostic.reference] }
+    : diagnostic);
   if (owns(resolved.normalized, INVALID_PAINT_OPACITY)) diagnostics.push({
     code: 'paint_opacity_invalid', severity: 'warning', path: 'paint.opacity', reference: null, fallback: 'default_opacity',
   });

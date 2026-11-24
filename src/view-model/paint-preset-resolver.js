@@ -163,6 +163,8 @@ export function resolvePaintPreset({ paint, registry, inheritedPaint = null, the
       if (registryIsUnavailable(registry)) {
         diagnostics.push(makeDiagnostic('paint_registry_unavailable', reference,
           inherited.paint ? 'inherited' : 'default', registry?.diagnostic?.code ?? 'registry_unavailable'));
+      } else if (isRecord(registry?.conflicts) && Object.prototype.hasOwnProperty.call(registry.conflicts, reference)) {
+        diagnostics.push(makeDiagnostic('paint_preset_conflict', reference, inherited.paint ? 'inherited' : 'default'));
       } else if (!presets || !Object.prototype.hasOwnProperty.call(presets, reference)) {
         diagnostics.push(makeDiagnostic('paint_preset_missing', reference, inherited.paint ? 'inherited' : 'default'));
       } else {

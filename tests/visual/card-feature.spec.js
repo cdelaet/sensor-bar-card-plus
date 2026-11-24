@@ -11,6 +11,80 @@ async function mount(page, options = {}) {
 }
 const feature = page => page.locator('sensor-bar-card-plus-feature').first();
 
+for (const source of ['src', 'dist']) {
+  test(`Card registry updates reconcile owner and consumer Messages without duplicates (${source})`, async ({ page }) => {
+    await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
+    await page.evaluate(async () => {
+      window.history.replaceState({}, '', '/dashboard-paint/view');
+      const configs = [
+        { type: 'custom:sensor-bar-card-plus', entity: 'sensor.power',
+          preset_library: { paint: { Thermal: { fill_style: 'solid', color: '#ff0000' }, Energy: { color: '#00ff00' } } },
+          bar: { paint: { preset: 'Thermal' } } },
+        { type: 'custom:sensor-bar-card-plus', entity: 'sensor.power',
+          preset_library: { paint: { Thermal: { fill_style: 'solid', color: '#0000ff' }, Sunset: { color: '#ffaa00' } } } },
+        { type: 'custom:sensor-bar-card-plus', entity: 'sensor.power' },
+      ];
+      window.__paintDashboard = { views: [{ cards: structuredClone(configs) }] };
+      window.__paintRegistryFetches = 0;
+      const connection = {
+        connected: true,
+        sendMessagePromise: async () => { window.__paintRegistryFetches += 1; return structuredClone(window.__paintDashboard); },
+        subscribeEvents: async callback => { window.__paintRegistryListener = callback; return () => {}; },
+        addEventListener() {}, removeEventListener() {},
+      };
+      const hass = { connected: true, connection, states: { 'sensor.power': window.__sbcpCreateState(42) } };
+      const mount = document.querySelector('#mount');
+      window.__paintCards = configs.map(config => {
+        const card = document.createElement('sensor-bar-card-plus');
+        card.setConfig(config);
+        mount.append(card);
+        card.hass = hass;
+        return card;
+      });
+    });
+
+    const card = index => page.locator('sensor-bar-card-plus').nth(index);
+    const messages = index => card(index).locator('.sbcp-messages');
+    const warningCount = index => messages(index).locator('.sbcp-message-count[data-severity="warning"] span:last-child');
+    await expect(messages(0).locator('.sbcp-message')).toHaveCount(2);
+    await expect(messages(1).locator('.sbcp-message')).toHaveCount(1);
+    await expect(messages(2)).toBeHidden();
+    await expect(messages(0)).toContainText('defined by 2 Cards');
+    await expect(messages(0)).toContainText('defined more than once in this dashboard and cannot be used');
+    await expect(messages(1)).toContainText('defined by 2 Cards');
+    await expect(warningCount(0)).toHaveText('2');
+    await expect(warningCount(1)).toHaveText('1');
+    await expect(messages(0).locator('.sbcp-disclosure-panel')).toBeHidden();
+
+    for (let update = 0; update < 2; update += 1) {
+      const fetchCount = await page.evaluate(() => window.__paintRegistryFetches);
+      await page.evaluate(() => window.__paintRegistryListener?.({ event_type: 'lovelace_updated' }));
+      await expect.poll(() => page.evaluate(() => window.__paintRegistryFetches)).toBeGreaterThan(fetchCount);
+      await expect(messages(0).locator('.sbcp-message')).toHaveCount(2);
+      await expect(messages(1).locator('.sbcp-message')).toHaveCount(1);
+      await expect(warningCount(0)).toHaveText('2');
+    }
+
+    const fetchCount = await page.evaluate(() => window.__paintRegistryFetches);
+    await page.evaluate(() => {
+      const cardB = window.__paintCards[1];
+      cardB.setConfig({ type: 'custom:sensor-bar-card-plus', entity: 'sensor.power' });
+      window.__paintDashboard = { views: [{ cards: [
+        structuredClone(window.__paintCards[0]._actionConfig),
+        structuredClone(window.__paintCards[1]._actionConfig),
+        structuredClone(window.__paintCards[2]._actionConfig),
+      ] }] };
+      window.__paintRegistryListener?.({ event_type: 'lovelace_updated' });
+    });
+    await expect.poll(() => page.evaluate(() => window.__paintRegistryFetches)).toBeGreaterThan(fetchCount);
+    await expect.poll(() => card(0).evaluate(element => element._paintPresetRegistry.conflicts)).toEqual({});
+    await expect.poll(() => card(0).evaluate(element => element._paintPresetDiagnostics)).toEqual([]);
+    await expect(messages(0).locator('.sbcp-message')).toHaveCount(0);
+    await expect(messages(1).locator('.sbcp-message')).toHaveCount(0);
+    await expect(messages(0)).toBeHidden();
+  });
+}
+
 test('Direction visual: standalone and Card Feature rendering stay in parity', async ({ page }) => {
   await page.goto('/tests/visual/fixtures/harness.html');
   const config = {

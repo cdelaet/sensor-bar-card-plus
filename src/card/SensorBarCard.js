@@ -588,6 +588,7 @@ export class SensorBarCard extends HTMLElement {
     this._paintPresetDiagnostics = [];
     this._diagnostics = this._baseDiagnostics ?? { warnings: [], errors: [] };
     if (!this._config) return;
+    const authoringDiagnostics = this._paintPresetAuthoringDiagnostics();
     const inheritedProperties = authoredPaintProperties(this._config.bar.paint);
     const entities = this._config.entities ?? [];
     const rootBaseline = resolveBaselinePaints(this._config.baseline, null, this._paintPresetRegistry);
@@ -602,10 +603,6 @@ export class SensorBarCard extends HTMLElement {
     diagnostics.push(...rootTargetBelow.diagnostics.map(diagnostic => ({
       ...diagnostic, path: `target.when_below.${diagnostic.path}`, entity: null,
     })));
-    const registryWarning = this._paintPresetRegistry?.diagnostic?.code === 'multiple_preset_masters'
-      ? { ...this._paintPresetRegistry.diagnostic, code: 'multiple_preset_masters', path: 'preset_library',
-        severity: 'warning', fallback: 'preset_resolution_disabled' }
-      : null;
     const base = this._baseDiagnostics ?? { warnings: [], errors: [] };
     if (!Object.prototype.hasOwnProperty.call(inheritedProperties, 'preset')
       && !entities.some(entity => Object.prototype.hasOwnProperty.call(authoredPaintProperties(entity.bar?.paint), 'preset'))
@@ -616,9 +613,8 @@ export class SensorBarCard extends HTMLElement {
       && !entities.some(entity => entity.target_above?.paint?.preset !== undefined)
       && !entities.some(entity => entity.target_below?.paint?.preset !== undefined)
       && !entities.some(entity => ['above', 'below'].some(side => entity.baseline?.[side]?.paint?.preset !== undefined))) {
-      this._diagnostics = registryWarning ? {
-        ...base, warnings: [...(base.warnings ?? []), registryWarning],
-      } : base;
+      this._paintPresetDiagnostics = authoringDiagnostics;
+      this._diagnostics = { ...base, warnings: [...(base.warnings ?? []), ...authoringDiagnostics] };
       return;
     }
     const cardHasPreset = Object.prototype.hasOwnProperty.call(inheritedProperties, 'preset');
@@ -658,14 +654,33 @@ export class SensorBarCard extends HTMLElement {
         entity: entity.entity,
       })));
     }
-    this._paintPresetDiagnostics = diagnostics;
+    this._paintPresetDiagnostics = [...authoringDiagnostics, ...diagnostics];
     this._diagnostics = {
       ...base,
-      warnings: [...(base.warnings ?? []), ...diagnostics.map(diagnostic => ({
+      warnings: [...(base.warnings ?? []), ...authoringDiagnostics, ...diagnostics.map(diagnostic => ({
         ...diagnostic,
         message: `${diagnostic.code}: ${diagnostic.reference ?? 'paint'}`,
-      })), ...(registryWarning ? [registryWarning] : [])],
+      }))],
     };
+  }
+
+  _paintPresetAuthoringDiagnostics() {
+    const library = this._actionConfig?.preset_library;
+    const paint = library && typeof library === 'object' && !Array.isArray(library) ? library.paint : null;
+    const conflicts = this._paintPresetRegistry?.conflicts;
+    if (!paint || typeof paint !== 'object' || Array.isArray(paint)
+      || !conflicts || typeof conflicts !== 'object' || Array.isArray(conflicts)) return [];
+    return Object.keys(paint)
+      .filter(name => Object.hasOwn(conflicts, name) && Number.isInteger(conflicts[name]) && conflicts[name] > 1)
+      .map(name => ({
+        code: 'paint_preset_duplicate_definition',
+        severity: 'warning',
+        path: `preset_library.paint.${name}`,
+        area: 'Shared Paint Presets',
+        reference: name,
+        ownerCount: conflicts[name],
+        message: `Paint preset "${name}" is defined by ${conflicts[name]} Cards in this dashboard. Rename or remove this definition so only one Card defines it.`,
+      }));
   }
 
   _syncPaintPresetRegistry() {
@@ -684,6 +699,7 @@ export class SensorBarCard extends HTMLElement {
       this._refreshPaintPresetResolutions();
       this._logDiagnostics();
       if (this._config?.entities && this._hass) this._update();
+      else this._syncUniversalMessages();
     });
   }
 

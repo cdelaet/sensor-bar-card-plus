@@ -98,7 +98,7 @@ it('attaches editors without a preset and follows dashboard, connection and atta
   expect(card._paintPresetRegistry).toMatchObject({ dashboardPath: 'dashboard-a', status: 'ready' });
   expect(syncMaster).toHaveBeenCalledTimes(2);
   expect(first.connection.subscribeEvents).toHaveBeenCalledOnce();
-  expect(card.shadowRoot.querySelector('#preset-master')).toBeNull();
+  expect(card.shadowRoot.querySelector('#preset-master')).not.toBeNull();
 
   window.history.replaceState({}, '', '/dashboard-b/view');
   card.hass = first;

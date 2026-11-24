@@ -14,7 +14,7 @@ function createConnection(config = {}, subscribe = ({ stop }) => Promise.resolve
   let response = config;
   const connection = {
     connected: true,
-    sendMessagePromise: vi.fn(() => typeof response === 'function' ? response() : Promise.resolve(response)),
+    sendMessagePromise: vi.fn(message => typeof response === 'function' ? response(message) : Promise.resolve(response)),
     subscribeEvents: vi.fn((callback, eventType) => {
       const subscription = { callback, eventType, stop: vi.fn() };
       subscriptions.push(subscription);
@@ -33,6 +33,7 @@ function createConnection(config = {}, subscribe = ({ stop }) => Promise.resolve
   return connection;
 }
 
+const card = paint => ({ type: 'custom:sensor-bar-card-plus', preset_library: { paint } });
 const hassFor = connection => ({ connection, connected: true });
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
 
@@ -64,18 +65,25 @@ describe('dashboard paint preset registry', () => {
     expect(connection.removeEventListener).toHaveBeenCalledTimes(2);
   });
 
-  it('preserves an owned __proto__ preset without prototype mutation', async () => {
-    const library = JSON.parse('{"paint":{"__proto__":{"fill_style":"solid","color":"#123456"}}}');
+  it('excludes duplicate __proto__ presets without prototype mutation', async () => {
+    const library = JSON.parse('{"paint":{"__proto__":{"fill_style":"solid","color":"#123456"},"unique":{"color":"green"}}}');
+    const duplicate = JSON.parse('{"paint":{"__proto__":{"fill_style":"gradient","color":"#abcdef"}}}');
     const connection = createConnection({ views: [
-      { cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: library }] },
+      { cards: [
+        { type: 'custom:sensor-bar-card-plus', preset_library: library },
+        { type: 'custom:sensor-bar-card-plus', preset_library: duplicate },
+      ] },
     ] });
     const handle = subscribeDashboardPaintPresets(hassFor(connection), 'proto', () => {});
     await flush();
     const presets = handle.getSnapshot().presets;
 
-    expect(Object.hasOwn(presets, '__proto__')).toBe(true);
+    expect(Object.hasOwn(presets, '__proto__')).toBe(false);
+    expect(presets).toEqual({ unique: { color: 'green' } });
     expect(Object.getPrototypeOf(presets)).toBe(Object.prototype);
-    expect(presets.__proto__).toMatchObject({ fill_style: 'solid', color: '#123456' });
+    expect(handle.getSnapshot().conflicts).toEqual(JSON.parse('{"__proto__":2}'));
+    expect(Object.hasOwn(handle.getSnapshot().conflicts, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(handle.getSnapshot().conflicts)).toBe(Object.prototype);
     expect(Object.prototype.polluted).toBeUndefined();
     handle.unsubscribe();
     await flush();
@@ -89,8 +97,8 @@ describe('dashboard paint preset registry', () => {
     ], sbcp_fragments: { paint_presets: { ignored: { color: 'red' } } } });
     const consumer = subscribeDashboardPaintPresets(hassFor(connection), 'dashboard-a', vi.fn());
     await flush();
-    expect(consumer.getSnapshot()).toMatchObject({ status: 'ready', masterCount: 1, presets: library.paint, masterLibrary: library });
-    expect(Object.isFrozen(consumer.getSnapshot().masterLibrary.layout)).toBe(true);
+    expect(consumer.getSnapshot()).toMatchObject({ status: 'ready', libraryCount: 1,
+      conflicts: {}, presets: library.paint });
     consumer.unsubscribe();
   });
 
@@ -105,58 +113,126 @@ describe('dashboard paint preset registry', () => {
       const connection = createConnection({ views: [location] });
       const consumer = subscribeDashboardPaintPresets(hassFor(connection), `location-${index}`, vi.fn());
       await flush();
-      expect(consumer.getSnapshot()).toMatchObject({ status: 'ready', masterCount: 1 });
+      expect(consumer.getSnapshot()).toMatchObject({ status: 'ready', libraryCount: 1 });
       consumer.unsubscribe();
     }
   });
 
-  it('detects duplicate masters across separate native Card locations', async () => {
+  it('merges unique names and excludes shared names across separate native Card locations', async () => {
     const connection = createConnection({ views: [{
-      header: { card: { type: 'custom:sensor-bar-card-plus', preset_library: {} } },
-      sidebar: { sections: [{ cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: {} }] }] },
+      header: { card: card({ Thermal: { color: 'red' }, Energy: { color: 'green' } }) },
+      sidebar: { sections: [{ cards: [card({ Thermal: { color: 'blue' }, Sunset: { color: 'orange' } })] }] },
     }] });
     const consumer = subscribeDashboardPaintPresets(hassFor(connection), 'cross-location-duplicate', vi.fn());
     await flush();
-    expect(consumer.getSnapshot()).toMatchObject({ status: 'conflict', masterCount: 2, diagnostic: { code: 'multiple_preset_masters' } });
+    expect(consumer.getSnapshot().status).toBe('ready');
+    expect(consumer.getSnapshot().presets).toEqual({ Energy: { color: 'green' }, Sunset: { color: 'orange' } });
+    expect(consumer.getSnapshot().conflicts).toEqual({ Thermal: 2 });
+    expect(consumer.getSnapshot()).toMatchObject({ libraryCount: 2, diagnostic: null });
+    expect(Object.isFrozen(consumer.getSnapshot().conflicts)).toBe(true);
     consumer.unsubscribe();
   });
 
-  it('publishes master library category additions, edits, and removals', async () => {
+  it('counts each defining card for three-way conflicts and treats identical definitions as duplicates', async () => {
+    const shared = { color: 'red' };
+    const connection = createConnection({ views: [{ cards: [
+      card({ Thermal: shared, Energy: { color: 'green' } }),
+      card({ Thermal: { color: 'red' }, Sunset: { color: 'orange' } }),
+      card({ Thermal: shared }),
+    ] }] });
+    const consumer = subscribeDashboardPaintPresets(hassFor(connection), 'three-owners', vi.fn());
+    await flush();
+    expect(consumer.getSnapshot().status).toBe('ready');
+    expect(consumer.getSnapshot().libraryCount).toBe(3);
+    expect(consumer.getSnapshot().presets).toEqual({ Energy: { color: 'green' }, Sunset: { color: 'orange' } });
+    expect(consumer.getSnapshot().conflicts).toEqual({ Thermal: 3 });
+    consumer.unsubscribe();
+  });
+
+  it('accepts multiple empty libraries and discovers definitions in supported nested containers and views', async () => {
+    const connection = createConnection({ views: [
+      { cards: [card({})] },
+      { sections: [{ sections: [{ cards: [{ type: 'vertical-stack', cards: [card({ nested: { color: 'blue' } })] }] }] }] },
+      { footer: { card: card({ footer: { color: 'gold' }, nested: { color: 'yellow' } }) }, sidebar: { sections: [{ cards: [card({})] }] } },
+    ] });
+    const consumer = subscribeDashboardPaintPresets(hassFor(connection), 'nested-views', vi.fn());
+    await flush();
+    expect(consumer.getSnapshot().status).toBe('ready');
+    expect(consumer.getSnapshot().libraryCount).toBe(4);
+    expect(consumer.getSnapshot().presets).toEqual({ footer: { color: 'gold' } });
+    expect(consumer.getSnapshot().conflicts).toEqual({ nested: 2 });
+    consumer.unsubscribe();
+  });
+
+  it('ignores unrelated library category edits in the Paint-only registry snapshot', async () => {
     const changed = vi.fn();
     const connection = createConnection({ views: [{ cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: { paint: {}, layout: { version: 1 } } }] }] });
     const consumer = subscribeDashboardPaintPresets(hassFor(connection), 'category-changes', changed);
     await flush();
-    const firstRevision = consumer.getSnapshot().revision;
+    const snapshot = consumer.getSnapshot();
+    const notifications = changed.mock.calls.length;
     connection.setResponse({ views: [{ cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: { paint: {}, layout: { version: 2 }, future: { enabled: true } } }] }] });
     connection.subscriptions[0].callback({ event_type: 'lovelace_updated' });
     await flush();
-    expect(consumer.getSnapshot().masterLibrary).toEqual({ paint: {}, layout: { version: 2 }, future: { enabled: true } });
-    const secondRevision = consumer.getSnapshot().revision;
-    expect(secondRevision).toBeGreaterThan(firstRevision);
+    expect(consumer.getSnapshot()).toBe(snapshot);
+    expect(consumer.getSnapshot().revision).toBe(snapshot.revision);
 
     connection.setResponse({ views: [{ cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: { paint: {} } }] }] });
     connection.subscriptions[0].callback({ event_type: 'lovelace_updated' });
     await flush();
-    expect(consumer.getSnapshot().masterLibrary).toEqual({ paint: {} });
-    expect(consumer.getSnapshot().revision).toBeGreaterThan(secondRevision);
-    expect(changed).toHaveBeenCalledTimes(4);
+    expect(consumer.getSnapshot()).toBe(snapshot);
+    expect(changed).toHaveBeenCalledTimes(notifications);
     consumer.unsubscribe();
   });
 
-  it('uses legacy dashboard presets only when no master exists and reports duplicate masters', async () => {
+  it('uses legacy dashboard presets only when no card-owned library exists', async () => {
     const legacy = createConnection({ views: [{ cards: [] }], sbcp_fragments: { paint_presets: { old: { color: 'red' } } } });
     const legacyConsumer = subscribeDashboardPaintPresets(hassFor(legacy), 'legacy', vi.fn());
     await flush();
-    expect(legacyConsumer.getSnapshot()).toMatchObject({ status: 'ready', masterCount: 0, presets: { old: { color: 'red' } } });
+    expect(legacyConsumer.getSnapshot()).toMatchObject({ status: 'ready', libraryCount: 0, presets: { old: { color: 'red' } } });
     legacyConsumer.unsubscribe();
 
-    const duplicate = createConnection({ views: [{ cards: [
-      { type: 'custom:sensor-bar-card-plus', preset_library: {} },
-      { type: 'grid', cards: [{ type: 'custom:sensor-bar-card-plus', preset_library: { paint: { hidden: { color: 'blue' } } } }] },
+    const owned = createConnection({ views: [{ cards: [card({}),
+      { type: 'grid', cards: [card({ hidden: { color: 'blue' } })] },
     ] }], sbcp_fragments: { paint_presets: { old: { color: 'red' } } } });
-    const consumer = subscribeDashboardPaintPresets(hassFor(duplicate), 'duplicate', vi.fn());
+    const consumer = subscribeDashboardPaintPresets(hassFor(owned), 'owned-empty-authoritative', vi.fn());
     await flush();
-    expect(consumer.getSnapshot()).toMatchObject({ status: 'conflict', masterCount: 2, presets: {}, diagnostic: { code: 'multiple_preset_masters' } });
+    expect(consumer.getSnapshot().status).toBe('ready');
+    expect(consumer.getSnapshot().libraryCount).toBe(2);
+    expect(consumer.getSnapshot().presets).toEqual({ hidden: { color: 'blue' } });
+    expect(consumer.getSnapshot().conflicts).toEqual({});
+    expect(Object.hasOwn(consumer.getSnapshot().presets, 'old')).toBe(false);
+    consumer.unsubscribe();
+  });
+
+  it('revisions conflict appearance, disappearance, and owner-count changes after saved updates', async () => {
+    const connection = createConnection({ views: [{ cards: [card({ Thermal: { color: 'red' }, Energy: { color: 'green' } })] }] });
+    const consumer = subscribeDashboardPaintPresets(hassFor(connection), 'conflict-refresh', vi.fn());
+    await flush();
+    const initial = consumer.getSnapshot();
+    connection.setResponse({ views: [{ cards: [card({ Thermal: { color: 'red' }, Energy: { color: 'green' } }),
+      card({ Thermal: { color: 'blue' } })] }] });
+    connection.subscriptions[0].callback({ event_type: 'lovelace_updated' });
+    await flush();
+    const conflict = consumer.getSnapshot();
+    expect(conflict.conflicts).toEqual({ Thermal: 2 });
+    expect(conflict.presets).toEqual({ Energy: { color: 'green' } });
+    expect(conflict.revision).toBeGreaterThan(initial.revision);
+
+    connection.setResponse({ views: [{ cards: [card({ Thermal: { color: 'red' }, Energy: { color: 'green' } }),
+      card({ Thermal: { color: 'blue' } }), card({ Thermal: { color: 'gold' } })] }] });
+    connection.subscriptions[0].callback({ event_type: 'lovelace_updated' });
+    await flush();
+    const three = consumer.getSnapshot();
+    expect(three.conflicts).toEqual({ Thermal: 3 });
+    expect(three.revision).toBeGreaterThan(conflict.revision);
+
+    connection.setResponse({ views: [{ cards: [card({ Thermal: { color: 'red' }, Energy: { color: 'green' } })] }] });
+    connection.subscriptions[0].callback({ event_type: 'lovelace_updated' });
+    await flush();
+    expect(consumer.getSnapshot().conflicts).toEqual({});
+    expect(consumer.getSnapshot().presets.Thermal).toEqual({ color: 'red' });
+    expect(consumer.getSnapshot().revision).toBeGreaterThan(three.revision);
     consumer.unsubscribe();
   });
 
@@ -165,7 +241,7 @@ describe('dashboard paint preset registry', () => {
       sbcp_fragments: { paint_presets: { legacy: { color: 'red' } } } });
     const consumer = subscribeDashboardPaintPresets(hassFor(connection), 'empty-master', vi.fn());
     await flush();
-    expect(consumer.getSnapshot()).toMatchObject({ status: 'ready', masterCount: 1, presets: {} });
+    expect(consumer.getSnapshot()).toMatchObject({ status: 'ready', libraryCount: 1, presets: {} });
     consumer.unsubscribe();
   });
 
@@ -184,9 +260,31 @@ describe('dashboard paint preset registry', () => {
     consumer.unsubscribe();
   });
 
+  it('keeps the same snapshot and notification count when a saved library refresh changes nothing', async () => {
+    const configuration = { views: [{ cards: [card({ warm: { color: 'red' } })] }] };
+    const connection = createConnection(configuration);
+    const changed = vi.fn();
+    const consumer = subscribeDashboardPaintPresets(hassFor(connection), 'unchanged-refresh', changed);
+    await flush();
+    const snapshot = consumer.getSnapshot();
+    const notificationCount = changed.mock.calls.length;
+
+    connection.setResponse({ views: [{ cards: [card({ warm: { color: 'red' } })] }] });
+    connection.subscriptions[0].callback({ event_type: 'lovelace_updated' });
+    await flush();
+
+    expect(connection.sendMessagePromise).toHaveBeenCalledTimes(2);
+    expect(consumer.getSnapshot()).toBe(snapshot);
+    expect(consumer.getSnapshot().revision).toBe(snapshot.revision);
+    expect(changed).toHaveBeenCalledTimes(notificationCount);
+    consumer.unsubscribe();
+  });
+
   it('isolates registries between dashboards and Home Assistant connections', async () => {
-    const firstConnection = createConnection({ sbcp_fragments: { paint_presets: { one: { color: 'red' } } } });
-    const secondConnection = createConnection({ sbcp_fragments: { paint_presets: { two: { color: 'blue' } } } });
+    const firstConnection = createConnection(({ url_path }) => Promise.resolve({
+      views: [{ cards: [card({ [url_path === 'dashboard-a' ? 'one' : 'other']: { color: 'red' } })] }],
+    }));
+    const secondConnection = createConnection({ views: [{ cards: [card({ two: { color: 'blue' } })] }] });
     const first = subscribeDashboardPaintPresets(hassFor(firstConnection), 'dashboard-a', vi.fn());
     const otherDashboard = subscribeDashboardPaintPresets(hassFor(firstConnection), 'dashboard-b', vi.fn());
     const otherConnection = subscribeDashboardPaintPresets(hassFor(secondConnection), 'dashboard-a', vi.fn());
@@ -195,7 +293,7 @@ describe('dashboard paint preset registry', () => {
     expect(firstConnection.sendMessagePromise).toHaveBeenCalledTimes(2);
     expect(secondConnection.sendMessagePromise).toHaveBeenCalledTimes(1);
     expect(first.getSnapshot().presets).toEqual({ one: { color: 'red' } });
-    expect(otherDashboard.getSnapshot().presets).toEqual({ one: { color: 'red' } });
+    expect(otherDashboard.getSnapshot().presets).toEqual({ other: { color: 'red' } });
     expect(otherConnection.getSnapshot().presets).toEqual({ two: { color: 'blue' } });
     first.unsubscribe(); otherDashboard.unsubscribe(); otherConnection.unsubscribe();
   });

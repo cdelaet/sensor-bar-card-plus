@@ -29,6 +29,23 @@ it('rejects prototype-like and malformed Feature entity IDs', () => {
   }
 });
 
+it('Feature reconciliation reports a conflicting preset with its normal default fallback and no authoring warning', async () => {
+  const element = feature({ type: 'custom:sensor-bar-card-plus-feature', entity,
+    bar: { paint: { preset: 'Thermal', opacity: 45 } } });
+  element._paintPresetRegistry = {
+    status: 'ready', presets: Object.create(null), conflicts: Object.assign(Object.create(null), { Thermal: 2 }),
+  };
+  element.context = { entity_id: entity };
+  element.hass = hass(42);
+  await element.updateComplete;
+
+  expect(element._paintPresetDiagnostics).toContainEqual(expect.objectContaining({
+    code: 'paint_preset_conflict', reference: 'Thermal', fallback: 'inherited', entity,
+  }));
+  expect(element._diagnostics.warnings.some(warning => warning.code === 'paint_preset_duplicate_definition')).toBe(false);
+  expect(element._resolvedAppearance.bar.paint.opacity).toBe(45);
+});
+
 it.each(['Card', 'Tile Feature'])('%s applies preset opacity once to the base layer and refreshes registry values', async host => {
   const classes = loadCardClass();
   const paintPreset = Object.assign(Object.create(null), {
@@ -131,6 +148,93 @@ it.each(['Card', 'Tile Feature'])('%s resolves Baseline presets without a Bar pr
   }
   expect(appearance.baseline.above.paint).toMatchObject({
     fill_style: 'solid', color: '#ff5500', opacity: 35,
+  });
+});
+
+describe('Card preset authoring diagnostics', () => {
+  const createCard = config => {
+    const { card: Card } = loadCardClass();
+    const element = new Card();
+    element._render = () => {};
+    element._logDiagnostics = () => {};
+    element.setConfig({ entity, ...config });
+    return element;
+  };
+
+  const refresh = (element, registry) => {
+    element._paintPresetRegistry = registry;
+    element._refreshPaintPresetResolutions();
+    return element._diagnostics.warnings;
+  };
+
+  it('warns only cards that define shared names, including owners that do not consume them', () => {
+    const registry = {
+      status: 'ready',
+      presets: Object.assign(Object.create(null), {
+        Energy: Object.assign(Object.create(null), { fill_style: 'solid', color: 'green' }),
+        Sunset: Object.assign(Object.create(null), { fill_style: 'solid', color: 'orange' }),
+      }),
+      conflicts: Object.assign(Object.create(null), { Thermal: 3 }),
+    };
+    const cards = [
+      createCard({ preset_library: { paint: { Thermal: {}, Energy: {} } } }),
+      createCard({ preset_library: { paint: { Thermal: {}, Sunset: {} } } }),
+      createCard({ preset_library: { paint: { Thermal: {} } } }),
+      createCard({ bar: { paint: { preset: 'Thermal' } } }),
+      createCard({ bar: { paint: { preset: 'Energy' } } }),
+    ];
+    const warnings = cards.map(card => refresh(card, registry).filter(issue => issue.code === 'paint_preset_duplicate_definition'));
+
+    expect(warnings.slice(0, 3).map(items => items.map(issue => issue.reference))).toEqual([
+      ['Thermal'], ['Thermal'], ['Thermal'],
+    ]);
+    expect(warnings.slice(0, 3).flat().map(issue => issue.ownerCount)).toEqual([3, 3, 3]);
+    expect(warnings[0][0].message).toBe('Paint preset "Thermal" is defined by 3 Cards in this dashboard. Rename or remove this definition so only one Card defines it.');
+    expect(warnings[3]).toEqual([]);
+    expect(warnings[4]).toEqual([]);
+    expect(cards[0]._paintPresetDiagnostics.map(issue => issue.code)).toEqual(['paint_preset_duplicate_definition']);
+    expect(cards[3]._paintPresetDiagnostics.map(issue => issue.code)).toContain('paint_preset_conflict');
+    expect(cards[4]._paintPresetDiagnostics).toEqual([]);
+    expect(cards[4]._paintPresetEntityPaints.get(cards[4]._config.entities[0]).color).toBe('green');
+  });
+
+  it('reports separate duplicate names and counts even for identical library definitions', () => {
+    const library = { paint: { Thermal: { color: 'red' }, Energy: { color: 'green' } } };
+    const registry = { status: 'ready', presets: {}, conflicts: { Thermal: 2, Energy: 2 } };
+    const first = createCard({ preset_library: structuredClone(library) });
+    const second = createCard({ preset_library: structuredClone(library) });
+
+    for (const card of [first, second]) {
+      const warnings = refresh(card, registry).filter(issue => issue.code === 'paint_preset_duplicate_definition');
+      expect(warnings.map(issue => issue.reference)).toEqual(['Thermal', 'Energy']);
+      expect(warnings.map(issue => issue.ownerCount)).toEqual([2, 2]);
+      expect(warnings.map(issue => issue.area)).toEqual(['Shared Paint Presets', 'Shared Paint Presets']);
+    }
+  });
+
+  it('does not warn for empty libraries', () => {
+    const card = createCard({ preset_library: {} });
+    const warnings = refresh(card, { status: 'ready', presets: {}, conflicts: {} });
+    expect(warnings).toEqual([]);
+  });
+
+  it('uses own-property lookup for reserved names and tracks saved conflict changes without accumulation', () => {
+    const library = JSON.parse('{"paint":{"__proto__":{},"Thermal":{}}}');
+    const card = createCard({ preset_library: library });
+    const conflicts = JSON.parse('{"__proto__":2,"Thermal":2}');
+    const first = refresh(card, { status: 'ready', presets: {}, conflicts });
+    expect(first.filter(issue => issue.code === 'paint_preset_duplicate_definition').map(issue => issue.reference))
+      .toEqual(['__proto__', 'Thermal']);
+    expect(Object.getPrototypeOf(conflicts)).toBe(Object.prototype);
+
+    const changed = JSON.parse('{"__proto__":3,"Thermal":3}');
+    const updated = refresh(card, { status: 'ready', presets: {}, conflicts: changed });
+    expect(updated.filter(issue => issue.code === 'paint_preset_duplicate_definition').map(issue => issue.ownerCount))
+      .toEqual([3, 3]);
+    const repeated = refresh(card, { status: 'ready', presets: {}, conflicts: changed });
+    expect(repeated.filter(issue => issue.code === 'paint_preset_duplicate_definition')).toHaveLength(2);
+    const recovered = refresh(card, { status: 'ready', presets: { __proto__: {}, Thermal: {} }, conflicts: {} });
+    expect(recovered.filter(issue => issue.code === 'paint_preset_duplicate_definition')).toEqual([]);
   });
 });
 

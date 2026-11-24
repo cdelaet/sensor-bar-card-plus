@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { JSDOM } from 'jsdom';
 import { createPaintBindings } from '../../src/editor/shared/paint-bindings.js';
 import { describePaint, renderPaintEditor, syncPaintEditor } from '../../src/editor/shared/paint-editor.js';
 import { getBarPaintEditorState } from '../../src/editor/sections/bar-appearance.js';
@@ -64,6 +65,58 @@ describe('shared Paint Editor', () => {
 
     const missing = renderPaintEditor({ id: 'paint', bindings, presetReference: 'missing' });
     expect(missing).toContain('<option value="missing" selected>missing (unavailable)</option>');
+  });
+
+  it('shows a conflict label and inline feedback instead of classifying a conflicted preset as missing', () => {
+    const { bindings } = bindingFor({}, []);
+    const html = renderPaintEditor({ id: 'paint', bindings, presetReference: 'Thermal',
+      diagnostics: [{ code: 'paint_preset_conflict', reference: 'Thermal', ownerCount: 3, fallback: 'default' }] });
+    expect(html).toContain('<option value="Thermal" selected>Thermal (conflict)</option>');
+    expect(html).toContain('Preset “Thermal” is defined by 3 Cards in this dashboard. Using default paint.');
+    expect(html).not.toContain('Thermal (unavailable)');
+    expect(html).not.toContain('was not found');
+    const inheritedHtml = renderPaintEditor({ id: 'paint', bindings, presetReference: 'Thermal',
+      diagnostics: [{ code: 'paint_preset_conflict', reference: 'Thermal', ownerCount: 3, fallback: 'inherited' }] });
+    expect(inheritedHtml).toContain('Preset “Thermal” is defined by 3 Cards in this dashboard. Using inherited paint.');
+  });
+
+  it('synchronizes missing, conflicted and available preset feedback without losing selection or overrides', () => {
+    const paint = { fill_style: 'solid', color: '#123456', opacity: 65 };
+    const bindings = { read: () => paint };
+    const initial = {
+      paint, presetReference: 'Thermal', presetOptions: [], overrides: { opacity: true },
+      canReapplyPreset: true, registryStatus: 'ready',
+      diagnostics: [{ code: 'paint_preset_missing', reference: 'Thermal', fallback: 'inherited' }],
+    };
+    const document = new JSDOM(`<body>${renderPaintEditor({ id: 'paint', bindings, ...initial })}</body>`).window.document;
+    const control = document.querySelector('[data-paint-preset="true"]');
+    control.focus();
+    expect(document.querySelector('.paint-preset-feedback').textContent).toContain('was not found');
+
+    const conflicted = {
+      ...initial,
+      presetOptions: [{ value: 'Thermal', label: 'Thermal (conflict)' }],
+      diagnostics: [{ code: 'paint_preset_conflict', reference: 'Thermal', ownerCount: 3, fallback: 'inherited' }],
+    };
+    syncPaintEditor(document, 'paint', conflicted);
+    expect(control.value).toBe('Thermal');
+    expect(document.activeElement).toBe(control);
+    expect(document.querySelector('[data-action="reapply-paint-preset"]').hidden).toBe(false);
+    expect(document.querySelector('.paint-preset-feedback').textContent).toContain('defined by 3 Cards');
+    expect(document.querySelector('.paint-preset-feedback').textContent).toContain('Using inherited paint.');
+    expect(document.querySelector('.paint-preset-feedback').hidden).toBe(false);
+
+    syncPaintEditor(document, 'paint', {
+      ...conflicted,
+      presetOptions: [{ value: 'Thermal', label: 'Thermal' }],
+      diagnostics: [],
+    });
+    expect(control.value).toBe('Thermal');
+    expect(document.activeElement).toBe(control);
+    expect(document.querySelector('.paint-preset-feedback').hidden).toBe(true);
+    expect(document.querySelector('.paint-preset-feedback').textContent).toBe('');
+    expect(document.querySelector('[data-action="reapply-paint-preset"]').hidden).toBe(false);
+    expect(paint).toEqual({ fill_style: 'solid', color: '#123456', opacity: 65 });
   });
 
   it('shows Reapply preset only for an explicit named preset with local overrides', () => {

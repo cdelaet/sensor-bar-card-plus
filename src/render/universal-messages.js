@@ -16,7 +16,6 @@ function fallbackDescription(diagnostic) {
   if (diagnostic.fallback === 'default_opacity') return 'Using 100% opacity.';
   if (diagnostic.fallback === 'inherited') return 'Using the inherited paint.';
   if (diagnostic.fallback === 'default') return 'Using the default paint.';
-  if (diagnostic.fallback === 'preset_resolution_disabled') return '';
   if (diagnostic.code === 'paint.legacy_conflict') return '';
   if (diagnostic.code === 'paint.invalid_value' && !String(diagnostic.path ?? '').endsWith('.opacity')) {
     return 'The invalid property falls back independently; other valid Paint properties remain active.';
@@ -32,6 +31,12 @@ function diagnosticExplanation(diagnostic) {
   switch (diagnostic.code) {
     case 'paint_preset_missing':
       cause = `Paint preset ${reference} was not found.`;
+      break;
+    case 'paint_preset_conflict':
+      cause = `Paint preset ‘${diagnostic.reference ?? ''}’ is defined more than once in this dashboard and cannot be used.`;
+      break;
+    case 'paint_preset_duplicate_definition':
+      cause = `Paint preset ‘${diagnostic.reference ?? ''}’ is defined by ${diagnostic.ownerCount} Cards in this dashboard. Rename or remove this definition so only one Card defines it.`;
       break;
     case 'paint_preset_invalid':
       cause = `Paint preset ${reference} is invalid${reason}.`;
@@ -50,9 +55,6 @@ function diagnosticExplanation(diagnostic) {
       break;
     case 'inherited_paint_invalid':
       cause = `Inherited Paint is invalid${reason}.`;
-      break;
-    case 'multiple_preset_masters':
-      cause = diagnostic.message ?? 'More than one master Card defines the dashboard Paint library.';
       break;
     default:
       break;
@@ -266,6 +268,8 @@ export function syncUniversalMessageArea(area, diagnostics) {
   area.hidden = messages.length === 0;
   if (!messages.length) {
     area._sbcpMessageSignature = '';
+    list.replaceChildren();
+    counts.replaceChildren();
     return;
   }
   const signature = JSON.stringify(messages);

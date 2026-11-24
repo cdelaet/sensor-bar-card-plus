@@ -3,7 +3,7 @@ import { normalizeCardConfig } from '../../src/config/normalize.js';
 import { compilePaint, getSegmentsForRendering } from '../../src/view-model/paint-compiler.js';
 import { resolvePaintPreset, resolveScopedPaintPreset } from '../../src/view-model/paint-preset-resolver.js';
 
-const registryWith = presets => ({ presets });
+const registryWith = (presets, conflicts = {}) => ({ presets, conflicts });
 
 const inherited = Object.freeze({
   fill_style: 'bands', color: '#112233', solid_fill: false, opacity: 40,
@@ -355,10 +355,68 @@ describe('pure dashboard paint preset resolution', () => {
     }));
   });
 
+  it('falls back to inherited paint and reports a conflict instead of a missing preset', () => {
+    const result = resolvePaintPreset({
+      paint: { preset: 'Thermal' }, registry: registryWith({ Energy: { fill_style: 'solid', color: 'green' } }, { Thermal: 2 }),
+      inheritedPaint: inherited,
+    });
+    expect(result.source).toBe('inherited');
+    expect(result.paint).toMatchObject({ fill_style: 'bands', color: '#112233', opacity: 40 });
+    expect(result.diagnostics).toEqual([expect.objectContaining({
+      code: 'paint_preset_conflict', path: 'paint.preset', reference: 'Thermal', fallback: 'inherited',
+    })]);
+    expect(result.diagnostics.some(diagnostic => diagnostic.code === 'paint_preset_missing')).toBe(false);
+  });
+
+  it('uses default paint for a conflict when no valid inherited paint exists', () => {
+    const result = resolvePaintPreset({
+      paint: { preset: 'Thermal' }, registry: registryWith({}, { Thermal: 3 }), themeAccent: '#123456',
+    });
+    expect(result.source).toBe('default');
+    expect(result.paint).toMatchObject({ fill_style: 'bands', color: '#123456', opacity: 100 });
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: 'paint_preset_conflict', reference: 'Thermal', fallback: 'default',
+    }));
+  });
+
+  it('resolves a unique preset while another name is conflicted', () => {
+    const result = resolvePaintPreset({
+      paint: { preset: 'Energy' },
+      registry: registryWith({ Energy: { fill_style: 'solid', color: '#abcdef' } }, { Thermal: 2 }),
+      inheritedPaint: inherited,
+    });
+    expect(result.source).toBe('preset');
+    expect(result.paint).toMatchObject({ fill_style: 'solid', color: '#abcdef' });
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it('checks conflicts with own-property lookup for the reserved __proto__ name', () => {
+    const conflicts = JSON.parse('{"__proto__":2}');
+    const result = resolvePaintPreset({ paint: { preset: '__proto__' }, registry: registryWith({}, conflicts), inheritedPaint: inherited });
+    expect(result.source).toBe('inherited');
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: 'paint_preset_conflict', reference: '__proto__', fallback: 'inherited',
+    }));
+    expect(Object.getPrototypeOf(conflicts)).toBe(Object.prototype);
+  });
+
   it('waits for the registry before reporting a preset as missing', () => {
-    const result = resolvePaintPreset({ paint: { preset: 'pending' }, registry: { status: 'loading', presets: {} } });
+    const result = resolvePaintPreset({ paint: { preset: 'pending' }, registry: { status: 'loading', presets: {}, conflicts: { pending: 2 } } });
     expect(result.diagnostics).toEqual([]);
     expect(result.source).toBe('default');
+  });
+
+  it('preserves registry-unavailable behavior ahead of conflict lookup', () => {
+    const result = resolvePaintPreset({
+      paint: { preset: 'Thermal' },
+      registry: { status: 'error', diagnostic: { code: 'dashboard_config_unavailable' }, presets: {}, conflicts: { Thermal: 2 } },
+      inheritedPaint: inherited,
+    });
+    expect(result.source).toBe('inherited');
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: 'paint_registry_unavailable', reference: 'Thermal', fallback: 'inherited',
+    }));
+    expect(result.diagnostics.some(diagnostic => diagnostic.code === 'paint_preset_conflict')).toBe(false);
   });
 
   it.each([

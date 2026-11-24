@@ -132,4 +132,27 @@ describe('master Paint Presets library editor', () => {
     expect(events.at(-1).bar.paint.preset).toBe('warm');
     expect(editor._config).toEqual(saved);
   });
+
+  it('keeps a conflicted definition editable, renamable and removable', async () => {
+    const library = { paint: { Thermal: { fill_style: 'solid', color: 'red' } }, layout: { keep: true } };
+    const { editor, window, events } = await createMaster({ preset_library: library, bar: { paint: { preset: 'Thermal' } } });
+    editor._paintPresetRegistry = { status: 'ready', presets: {}, conflicts: { Thermal: 2 } };
+    editor._syncPresetMasterControls();
+    expect(editor.shadowRoot.querySelector('.paint-preset-authoring-warning').textContent).toContain('Thermal');
+    expect(editor.shadowRoot.querySelector('[data-preset-name="Thermal"]')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#preset-paint-color')).not.toBeNull();
+
+    window.prompt = vi.fn(() => 'Warm');
+    click(null, editor.shadowRoot.querySelector('[data-action="rename-paint-preset"]'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(events.at(-1).preset_library.paint).toEqual({ Warm: library.paint.Thermal });
+    expect(events.at(-1).preset_library.layout).toEqual({ keep: true });
+    expect(editor.shadowRoot.querySelector('.paint-preset-authoring-warning')).toBeNull();
+
+    window.confirm = vi.fn(() => true);
+    click(null, editor.shadowRoot.querySelector('[data-action="delete-paint-preset"]'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(events.at(-1).preset_library).toEqual({ paint: {}, layout: { keep: true } });
+    expect(editor.shadowRoot.querySelector('.paint-preset-authoring-warning')).toBeNull();
+  });
 });

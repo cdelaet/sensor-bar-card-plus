@@ -230,12 +230,6 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     }
     this._diagnostics = { ...this._diagnostics, warnings: [
       ...(this._diagnostics?.warnings ?? []).filter(issue => issue.code !== 'target.invalid_ordering'),
-      ...(this._paintPresetRegistry?.diagnostic?.code === 'multiple_preset_masters' ? [{
-        ...this._paintPresetRegistry.diagnostic,
-        path: 'preset_library',
-        severity: 'warning',
-        fallback: 'preset_resolution_disabled',
-      }] : []),
       ...(row?.targetDiagnostics ?? []),
       ...(row?.historyDiagnostics ?? []),
     ] };

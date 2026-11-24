@@ -50,8 +50,19 @@ describe('universal message presentation', () => {
 
     syncUniversalMessageArea(area, { warnings: [], errors: [] });
     expect(area.hidden).toBe(true);
+    expect(area.querySelector('.sbcp-message-list').childNodes).toHaveLength(0);
+    expect(area.querySelector('.sbcp-message-counts').childNodes).toHaveLength(0);
+
     syncUniversalMessageArea(area, { warnings: [warning], errors: [] });
     expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(area.hidden).toBe(false);
+    expect(area.querySelectorAll('.sbcp-message')).toHaveLength(1);
+    expect(area.querySelector('.sbcp-message-count[data-severity="warning"] span:last-child').textContent).toBe('1');
+    expect(area.querySelector('.sbcp-message-count[data-severity="error"] span:last-child').textContent).toBe('0');
+
+    syncUniversalMessageArea(area, { warnings: [warning], errors: [] });
+    expect(area.querySelectorAll('.sbcp-message')).toHaveLength(1);
+    expect(area.querySelector('.sbcp-message-count[data-severity="warning"] span:last-child').textContent).toBe('1');
   });
 
   it('formats the diagnostic fallback without replacing its underlying reason', () => {
@@ -62,20 +73,46 @@ describe('universal message presentation', () => {
     expect(area.querySelector('.sbcp-message-area').textContent).toBe('Bar Paint · opacity');
   });
 
-  it('reports invalid presets and master conflicts with their real fallback', () => {
+  it('reports invalid and missing presets with their real fallback', () => {
     const { area } = makeArea();
     syncUniversalMessageArea(area, { warnings: [
       { code: 'paint_preset_invalid', path: 'target.when_above.paint.preset', reference: 'broken',
         reason: 'invalid_paint_property', fallback: 'inherited' },
-      { code: 'multiple_preset_masters', path: 'preset_library', severity: 'warning',
-        message: 'Dashboard has 2 master Cards with preset_library; preset resolution is disabled.',
-        fallback: 'preset_resolution_disabled' },
       { code: 'paint_preset_missing', path: 'entities.sensor.power.target.when_below.paint.preset',
         entity: 'sensor.power', reference: 'low', fallback: 'inherited' },
     ], errors: [] });
     expect(area.textContent).toContain('Paint preset “broken” is invalid (invalid paint property). Using the inherited paint.');
-    expect(area.textContent).toContain('Dashboard has 2 master Cards with preset_library; preset resolution is disabled.');
+    expect(area.textContent).not.toContain('preset resolution is disabled');
     expect(area.textContent).toContain('sensor.power · Target below Paint · preset');
+  });
+
+  it('explains a conflicting preset reference and its inherited fallback', () => {
+    const { area } = makeArea();
+    syncUniversalMessageArea(area, { warnings: [{
+      code: 'paint_preset_conflict', path: 'bar.paint.preset', reference: 'Thermal', fallback: 'inherited',
+    }], errors: [] });
+    expect(area.textContent).toContain('Paint preset ‘Thermal’ is defined more than once in this dashboard and cannot be used. Using the inherited paint.');
+  });
+
+  it('formats each authored duplicate separately from a consumed conflict and keeps the count visible while collapsed', () => {
+    const { area } = makeArea();
+    syncUniversalMessageArea(area, { warnings: [
+      { code: 'paint_preset_duplicate_definition', severity: 'warning', path: 'preset_library.paint.Thermal',
+        area: 'Shared Paint Presets', reference: 'Thermal', ownerCount: 3 },
+      { code: 'paint_preset_conflict', severity: 'warning', path: 'bar.paint.preset',
+        reference: 'Thermal', fallback: 'inherited' },
+      { code: 'paint_preset_duplicate_definition', severity: 'warning', path: 'preset_library.paint.Energy',
+        area: 'Shared Paint Presets', reference: 'Energy', ownerCount: 2 },
+    ], errors: [] });
+
+    expect(area.querySelectorAll('.sbcp-message')).toHaveLength(3);
+    expect(area.querySelector('.sbcp-message-count[data-severity="warning"] span:last-child').textContent).toBe('3');
+    expect(area.querySelector('button').getAttribute('aria-expanded')).toBe('false');
+    expect(area.querySelector('.sbcp-disclosure-panel').hidden).toBe(true);
+    expect(area.textContent).toContain('Shared Paint Presets');
+    expect(area.textContent).toContain('Paint preset ‘Thermal’ is defined by 3 Cards in this dashboard. Rename or remove this definition so only one Card defines it.');
+    expect(area.textContent).toContain('Paint preset ‘Energy’ is defined by 2 Cards in this dashboard. Rename or remove this definition so only one Card defines it.');
+    expect(area.textContent).toContain('Paint preset ‘Thermal’ is defined more than once in this dashboard and cannot be used. Using the inherited paint.');
   });
 
   it('renders marker history diagnostics by severity and deduplicates repeated conditions', () => {

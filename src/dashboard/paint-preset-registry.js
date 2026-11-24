@@ -46,15 +46,15 @@ function freezeClone(value) {
   return Object.freeze(clone);
 }
 
-function freezeSnapshot({ dashboardPath, status, presets, diagnostic, revision, masterCount = 0, masterLibrary = null }) {
+function freezeSnapshot({ dashboardPath, status, presets, conflicts = {}, libraryCount = 0, diagnostic, revision }) {
   return Object.freeze({
     dashboardPath,
     status,
     presets: freezeClone(presets),
+    conflicts: freezeClone(conflicts),
+    libraryCount,
     diagnostic: diagnostic ? Object.freeze({ ...diagnostic }) : null,
     revision,
-    masterCount,
-    masterLibrary: masterLibrary === null ? null : freezeClone(masterLibrary),
   });
 }
 
@@ -71,12 +71,24 @@ function stableValue(value) {
 
 function readPaintPresets(config) {
   const masters = findMasters(config);
-  if (masters.length > 1) return { status: 'conflict', presets: {}, masterCount: masters.length,
-    diagnostic: { code: 'multiple_preset_masters', path: 'views', message: `Dashboard has ${masters.length} master Cards with preset_library; preset resolution is disabled.` } };
-  if (masters.length === 1) {
-    const library = masters[0].preset_library;
-    const presets = isRecord(library) && Object.hasOwn(library, 'paint') && isRecord(library.paint) ? library.paint : {};
-    return { status: 'ready', presets, masterCount: 1, masterLibrary: library, diagnostic: null };
+  if (masters.length > 0) {
+    const owners = new Map();
+    for (const master of masters) {
+      const library = master.preset_library;
+      const paint = isRecord(library) && Object.hasOwn(library, 'paint') && isRecord(library.paint) ? library.paint : {};
+      for (const name of Object.keys(paint)) {
+        const definitions = owners.get(name) ?? [];
+        definitions.push(paint[name]);
+        owners.set(name, definitions);
+      }
+    }
+    const presets = {};
+    const conflicts = {};
+    for (const [name, definitions] of owners) {
+      if (definitions.length > 1) Object.defineProperty(conflicts, name, { value: definitions.length, enumerable: true });
+      else Object.defineProperty(presets, name, { value: definitions[0], enumerable: true });
+    }
+    return { status: 'ready', presets, conflicts, libraryCount: masters.length, diagnostic: null };
   }
   const fragments = config?.sbcp_fragments;
   if (fragments === undefined) return { status: 'empty', presets: {}, diagnostic: {
@@ -92,7 +104,7 @@ function readPaintPresets(config) {
   if (!isRecord(presets)) return { status: 'empty', presets: {}, diagnostic: {
     code: 'paint_presets_malformed', path: REGISTRY_PATH, message: 'Dashboard paint_presets must be an object.',
   } };
-  return { status: 'ready', presets, masterCount: 0, diagnostic: null };
+  return { status: 'ready', presets, libraryCount: 0, diagnostic: null };
 }
 
 function report(entry, snapshot) {
@@ -110,16 +122,16 @@ function publish(entry, result) {
     dashboardPath: entry.dashboardPath,
     status: result.status,
     presets: result.presets,
+    conflicts: result.conflicts ?? {},
+    libraryCount: result.libraryCount ?? 0,
     diagnostic: result.diagnostic,
-    masterCount: result.masterCount ?? 0,
-    masterLibrary: result.masterLibrary ?? null,
   };
   const current = entry.snapshot;
   if (current.status === next.status
     && current.diagnostic?.code === next.diagnostic?.code
     && current.diagnostic?.message === next.diagnostic?.message
-    && current.masterCount === next.masterCount
-    && stableValue(current.masterLibrary) === stableValue(next.masterLibrary)
+    && current.libraryCount === next.libraryCount
+    && stableValue(current.conflicts) === stableValue(next.conflicts)
     && stableValue(current.presets) === stableValue(next.presets)) return;
   report(entry, freezeSnapshot({ ...next, revision: current.revision + 1 }));
 }

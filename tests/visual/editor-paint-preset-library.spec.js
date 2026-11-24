@@ -66,8 +66,10 @@ for (const source of ['src', 'dist']) {
     await expect(editor.locator('.paint-preset-choice')).toHaveAttribute('data-preset-name', 'warm');
   });
 
-  test(`recurring hass updates preserve preset name input identity, focus and text (${source})`, async ({ page }) => {
-    const editor = await mount(page, source);
+  test(`recurring hass and registry updates preserve preset focus and keep owner warnings outside the disclosure (${source})`, async ({ page }) => {
+    const editor = await mount(page, source, 320, {
+      preset_library: { paint: { Thermal: { color: '#aa3300' } }, future: { keep: true } },
+    });
     await editor.locator('#paint-presets > summary').click();
     const name = editor.locator('#paint-preset-name');
     await name.fill('Copper');
@@ -84,22 +86,27 @@ for (const source of ['src', 'dist']) {
     await page.waitForTimeout(500);
     await editor.evaluate(() => window.clearInterval(window.__presetHassTimer));
     await editor.evaluate(element => {
-      const master = { type: 'custom:sensor-bar-card-plus', preset_library: structuredClone(element._draftConfig.preset_library) };
-      const duplicate = { type: 'custom:sensor-bar-card-plus', preset_library: {} };
-      const dashboard = { views: [{ cards: [master, duplicate] }] };
+      const owner = { type: 'custom:sensor-bar-card-plus', preset_library: structuredClone(element._draftConfig.preset_library) };
+      const duplicate = { type: 'custom:sensor-bar-card-plus', preset_library: { paint: { Thermal: { color: '#aa3300' } } } };
+      window.__presetDashboard = { views: [{ cards: [owner, duplicate] }] };
       element.hass = {
         states: element._hass?.states ?? {},
         connection: {
           connected: true,
-          sendMessagePromise: async () => structuredClone(dashboard),
+          sendMessagePromise: async () => structuredClone(window.__presetDashboard),
           subscribeEvents: async callback => { window.__presetRegistryListener = callback; return () => {}; },
           addEventListener() {}, removeEventListener() {},
         },
       };
     });
-    await expect(editor.locator('.preset-master-warning')).toContainText('2 master Cards');
+    const warning = editor.locator('.paint-preset-authoring-warning');
+    await expect(warning).toHaveCount(1);
+    await expect(warning).toContainText('Paint preset "Thermal" is defined by 2 Cards');
     await editor.evaluate(() => window.__presetRegistryListener?.({ event_type: 'lovelace_updated' }));
     await page.waitForTimeout(100);
+    await editor.evaluate(() => window.__presetRegistryListener?.({ event_type: 'lovelace_updated' }));
+    await page.waitForTimeout(100);
+    await expect(editor.locator('.paint-preset-authoring-warning')).toHaveCount(1);
 
     const state = await name.evaluate(input => ({
       same: input === window.__presetNameInput,
@@ -109,6 +116,25 @@ for (const source of ['src', 'dist']) {
       selectionEnd: input.selectionEnd,
     }));
     expect(state).toEqual({ same: true, focused: true, value: 'Copper', selectionStart: 2, selectionEnd: 4 });
+
+    await editor.locator('#paint-presets > summary').click();
+    await expect(editor.locator('#paint-presets')).not.toHaveAttribute('open', '');
+    await expect(warning).toBeVisible();
+    expect(await editor.evaluate(element => {
+      const section = element.shadowRoot.querySelector('.preset-master-section');
+      const container = section.querySelector('.paint-preset-authoring-warnings');
+      return section.contains(container)
+        && Boolean(container.compareDocumentPosition(section.querySelector('#paint-presets')) & Node.DOCUMENT_POSITION_FOLLOWING);
+    })).toBe(true);
+
+    await editor.evaluate(element => {
+      window.__presetDashboard = { views: [{ cards: [{
+        type: 'custom:sensor-bar-card-plus', preset_library: structuredClone(element._draftConfig.preset_library),
+      }] }] };
+      window.__presetRegistryListener?.({ event_type: 'lovelace_updated' });
+    });
+    await expect(editor.locator('.paint-preset-authoring-warning')).toHaveCount(0);
+    await expect(editor.locator('.preset-master-section > .paint-preset-authoring-warnings')).toHaveCount(1);
   });
 
   test(`preset palette rows and five style previews stay consistent (${source})`, async ({ page }) => {
