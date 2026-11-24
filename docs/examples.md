@@ -466,50 +466,53 @@ Move the reading below, equal to, and above the live Baseline to see the directi
 
 ## Universal Paint and presets
 
-Universal Paint gives the Bar and its Baseline/Target overlays the same fill controls. These two standalone Card configurations demonstrate one optional dashboard library and one consumer; add both Cards to the same dashboard. Put the master Card anywhere on that dashboard, then save the dashboard before consumers resolve its definitions. Without an available master or matching definition, the consumer remains usable and reports the preset issue while using the documented fallback.
-
-**Preset Master Card:**
+Universal Paint gives the Bar and its Baseline/Target overlays the same fill controls. Standalone Cards can each define `preset_library.paint`; all contributed libraries are merged by exact name across the current dashboard, including other views. The following valid dashboard fragment intentionally defines `Thermal` twice to demonstrate a conflict. This is a conflict example, not a recommended production configuration:
 
 ```yaml
-type: custom:sensor-bar-card-plus
-title: Paint Presets
-scale:
-  min: { fixed: 0 }
-  max: { fixed: 10000 }
-preset_library:
-  paint:
-    Energy:
-      fill_style: gradient
-      gradient_stops:
-        - { pos: 0, color: '#22c55e' }
-        - { pos: 70, color: '#facc15' }
-        - { pos: 100, color: '#ef4444' }
-      opacity: 90
-entities:
-  - entity: sensor.sbcp_examples_primary
+views:
+  - title: Paint libraries
+    path: paint-libraries
+    cards:
+      # Intentional duplicate for demonstration: Thermal is defined by both Cards.
+      - type: custom:sensor-bar-card-plus
+        title: Card A · shared library
+        entity: sensor.sbcp_examples_primary
+        preset_library:
+          paint:
+            Thermal: { fill_style: solid, color: '#ef4444' }
+            Energy:
+              fill_style: gradient
+              gradient_stops:
+                - { pos: 0, color: '#22c55e' }
+                - { pos: 70, color: '#facc15' }
+                - { pos: 100, color: '#ef4444' }
+              opacity: 90
+      - type: custom:sensor-bar-card-plus
+        title: Card B · shared library
+        entity: sensor.sbcp_examples_primary
+        preset_library:
+          paint:
+            Thermal: { fill_style: solid, color: '#f97316' }
+            Sunset: { fill_style: solid, color: '#a855f7' }
+      - type: custom:sensor-bar-card-plus
+        title: Consumer · unique preset
+        entity: sensor.sbcp_examples_primary
+        scale:
+          min: { fixed: 0 }
+          max: { fixed: 10000 }
+        bar:
+          paint: { preset: Energy }
+        baseline:
+          at: { fixed: 0 }
+          above:
+            paint: { preset: Energy }
 ```
 
-In the Visual Editor, designate this card **Preset Master** and edit the **Paint Presets** library. A dashboard may have zero or one master; duplicate masters conflict even when a library is empty. Save the dashboard after changing the master library before consumers resolve the updated definitions.
+Here `Thermal` is conflicted and unavailable. Each defining Card shows its own duplicate-definition warning; identical definitions under the same name would conflict as well. `Energy` and `Sunset` are unique names and remain available; a Card or Feature can reference them with `preset`. A consumer that references `Thermal` instead receives a separate conflict-resolution warning and uses its established fallback Paint. The duplicate is intentional for this example; in a production dashboard, give presets that should be available unique names. Multiple empty libraries are valid and do not conflict.
 
-**Consuming Card:**
+The Visual Editor's **Share Paint Presets** control adds or removes a standalone Card's library. Save dashboard changes before expecting other Cards or Features to resolve them. Libraries are shared across views within one dashboard and isolated from other dashboards. With no Card libraries, the legacy `sbcp_fragments.paint_presets` fallback is used; one or more Card libraries take precedence, even when empty. No card identifiers, locations or manual linking are needed.
 
-```yaml
-type: custom:sensor-bar-card-plus
-entity: sensor.sbcp_examples_primary
-scale:
-  min: { fixed: 0 }
-  max: { fixed: 10000 }
-bar:
-  paint:
-    preset: Energy
-baseline:
-  at: { fixed: 0 }
-  above:
-    paint:
-      preset: Energy
-```
-
-The same preset can be reused at multiple destinations, as above. A selected preset supplies all six Paint properties, using standard defaults for properties it omits; it does not inherit omitted properties from the Card's previous Paint. Add a local property alongside `preset` to override only that property. For example, `paint: { preset: Thermal, opacity: 60 }` keeps the Thermal style, colors, and palettes while setting opacity to 60%. The **Reapply preset** action clears local overrides and returns to the preset definition; it appears beside the selector when an explicitly selected preset has local changes and requires confirmation. Preset names are exact and case-sensitive; renaming or deleting one leaves existing references to be corrected. A master library is shared across views of its dashboard, not across dashboards. Copying a consumer alone does not copy its definitions. See [Paint presets and Preset Master](configuration.md#paint-presets-and-preset-master).
+A selected preset supplies all six Paint properties, using standard defaults for properties it omits; it does not inherit omitted properties from the Card's previous Paint. Add a local property alongside `preset` to override only that property. For example, `paint: { preset: Energy, opacity: 60 }` keeps the Energy style and palettes while setting opacity to 60%. The **Reapply preset** action clears local overrides and returns to the preset definition; it appears beside the selector when an explicitly selected preset has local changes and requires confirmation. The same preset can be reused at multiple destinations, as above. Here, if either Card renames or deletes its `Thermal` definition, existing references are unchanged and resolve against the other Card's saved definition; if no Card defines a referenced name after saved changes, it becomes missing. See [Paint presets and shared libraries](configuration.md#paint-presets-and-shared-libraries).
 
 ### Directional Baseline Paint and opacity
 

@@ -117,7 +117,7 @@ See:
 
 ## Universal Paint and presets
 
-All five Paint destinations use the same fill controls. A selected named preset supplies all six Paint properties, standard defaults fill any omissions, and local properties override only their matching preset properties. See the [Universal Paint examples](../../docs/examples.md#universal-paint-and-presets) for a Preset Master and consuming Card configuration, including the **Reapply preset** action.
+All five Paint destinations use the same fill controls. A selected named preset supplies all six Paint properties, standard defaults fill any omissions, and local properties override only their matching preset properties. See the [Universal Paint examples](../../docs/examples.md#universal-paint-and-presets) for multiple Cards sharing preset libraries, a consuming Card, and the **Reapply preset** action.
 
 ---
 

@@ -11,7 +11,7 @@ For focused, copyable configurations and visual comparisons, see the [Examples G
 - [Configuration hierarchy](#configuration-tree)
 - [Property overview](#configuration-overview)
 - [Universal Paint](#universal-paint)
-- [Paint presets and Preset Master](#paint-presets-and-preset-master)
+- [Paint presets and shared libraries](#paint-presets-and-shared-libraries)
 - [Card-level options](#top-level-card-options)
 - [Entity-level options](#top-level-entity-options)
 - [Layout](#layout-options-and-responsive-behavior)
@@ -334,9 +334,9 @@ bar:
     opacity: 65
 ```
 
-### Paint presets and Preset Master
+### Paint presets and shared libraries
 
-An ordinary standalone SBCP Card can own a dashboard Paint library under `preset_library.paint`. Each entry is a named Paint definition using the six Paint properties (it does not include another `preset` reference):
+Any standalone SBCP Card can contribute a dashboard Paint library under `preset_library.paint`. Each entry defines a named Paint preset using the six Paint properties; a definition does not include another `preset` reference:
 
 ```yaml
 preset_library:
@@ -349,11 +349,17 @@ preset_library:
       opacity: 90
 ```
 
+Defining a preset and referencing one are separate actions. A standalone Card defines presets by including them in its `preset_library.paint`; a Card or Card Feature references one by setting `preset` at a Paint destination. The Visual Editor offers the **Share Paint Presets** checkbox on each standalone Card, whether or not other Cards already contribute a library. Card Features can reference shared presets but cannot define a library.
+
+All standalone Card libraries on the current dashboard are merged by exact, case-sensitive preset name, including libraries on other views. Names defined by exactly one Card are available. A name defined by two or more Cards is a duplicate conflict, even when the Paint definitions are identical; only that name becomes unavailable, while unique names continue to work. Multiple empty libraries are valid. Each Card that defines a conflicting name displays a duplicate-definition warning in its Messages area. A Card or Feature that references a conflicting name receives a separate conflict-resolution warning and uses the normal fallback Paint for that destination. No Card identifiers, locations or manual linking are needed.
+
+Libraries are isolated between dashboards. Registry updates use the saved Home Assistant dashboard configuration, so save changes before expecting consumers to resolve updated definitions. When no Card contributes a `preset_library`, the legacy `sbcp_fragments.paint_presets` fallback remains available. One or more Card libraries take precedence over that fallback, including when their Paint definitions are empty.
+
+Duplicate-definition warnings remain visible in Messages when the Paint Presets disclosure is collapsed. Conflicting definitions remain editable, renamable and removable; a conflicting name is unavailable for resolution until it becomes unique.
+
 Reference an exact, case-sensitive name at any Paint destination with `preset`. A selected preset is a complete replacement for that destination: start with its six properties, use each property's standard default when omitted, then apply any locally authored Paint properties as overrides. Omitted properties do not inherit from the previously configured destination or parent Card. For example, a preset without `opacity` uses `100` even if the parent Card's Paint uses another opacity. Editing one property keeps the preset reference and authors only that local override; the other properties continue to come from the preset or its defaults. Invalid or missing preset references produce a Messages diagnostic and fall back to same-destination inherited Paint, then standard defaults (ultimately the theme accent). They never fall back to ordinary Bar Paint for a Baseline or Target destination.
 
-The Visual Editor calls the designation **Preset Master** and its library section **Paint Presets**. The master checkbox and library controls are available on a standalone Card; Card Features and ordinary consuming Cards select and use definitions but do not own the library. A dashboard may have zero or one master; a master is optional. Two or more masters produce a conflict and disable preset resolution, even when a library is empty. Consumers can reuse definitions across views of the same dashboard, but a library is not shared with another dashboard. Copying an ordinary consuming Card to another dashboard does not copy the master definitions; add/designate a master there or configure local Paint. Save the dashboard after creating or editing the master library so other cards can resolve the saved definitions.
-
-Renaming or deleting a definition does not rewrite existing references; those references become missing and are diagnosed until updated or the definition is restored. Home Assistant's normal Save/Cancel actions apply to edits to the master and its library.
+Renaming or deleting a definition never rewrites existing references. After saved dashboard configuration updates the registry, a reference is missing if no Card defines that name, resolves against the remaining definition if exactly one Card defines it, and remains conflicted if multiple Cards still define it. Home Assistant's normal Save/Cancel actions apply to each Card's library edits.
 
 At Entity scope an omitted `preset` keeps ordinary Card-to-Entity inheritance, including the Card preset; choosing an explicit named preset replaces the inherited Paint as described above. The editor's **Inherited** selection removes only the local preset reference; **None** writes `preset: null` and keeps local Paint properties. Selecting a different named preset asks for confirmation only when local Paint overrides would be discarded. **Reapply preset** appears beside the selector when a named preset is explicitly selected and local Paint overrides exist. After confirmation it removes that destination's six local Paint properties and legacy aliases, retains the preset reference and unrelated destination settings, and resolves the preset again; cancel leaves the configuration unchanged. With no local overrides, the action is unavailable. Card and Feature selectors offer None and available names. The entity selector additionally offers Inherited. Reset actions are destination-specific: **Reset to default paint settings** at Card scope and **Reset to Card paint settings** for entity overrides remove local canonical and legacy configuration for that destination.
 
@@ -464,7 +470,7 @@ Legacy flat options are listed separately in the Legacy Compatibility and Migrat
 | `title` | string | `—` | Optional Lovelace card title | — |
 | `entity` | string | `—` | Creates one row without an `entities` list | Yes — optional override |
 | `entities` | list | required unless using `entity` shorthand | Rows to render; items may be entity ID strings or entity objects | — |
-| `preset_library.paint` | name-to-Paint map | absent | Optional Paint Presets library owned by a standalone Card designated as the dashboard's **Preset Master**. At most one master may exist per dashboard. | — |
+| `preset_library.paint` | name-to-Paint map | absent | Optional Paint Presets library shared by this standalone Card with its current dashboard. Multiple Cards may contribute libraries; unique names merge and duplicate names conflict. | — |
 | `layout` | object | see below | Default layout for all rows | — |
 | `scale` | object | `min: 0`, `max: 100`, `direction: normal` | Default Scale for all rows | Yes |
 | `bar` | object | see below | Default Bar direction, fill, Needle and animation settings | Yes |
