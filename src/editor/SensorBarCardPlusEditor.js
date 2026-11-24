@@ -3695,7 +3695,7 @@ ${this._renderFormattingSection({ type: 'card' })}
       }]));
       paintEditor = `<div class="paint-preset-editor-heading">Editing <strong>${this._escapeAttribute(selectedName)}</strong></div>${renderPaintEditor({
         ...state, mode: 'manual', id: 'preset-paint-editor', root: this.shadowRoot, fields,
-        paletteFields, showPropertyMeta: false, registryStatus: 'ready', diagnostics: [],
+        paletteFields, showPropertyMeta: false, showPresetSelector: false, registryStatus: 'ready', diagnostics: [],
         bodyId: 'preset-paint-editor-body',
       })}`;
     }
@@ -3756,7 +3756,7 @@ ${this._renderFormattingSection({ type: 'card' })}
     const scope = { type: 'card' };
     const state = getBarPaintEditorState(context, scope, readPaintPalette(sections, scope), { status: 'empty', presets: {} });
     syncPaintEditor(this.shadowRoot, 'preset-paint-editor', { ...state, mode: 'manual', registryStatus: 'ready', diagnostics: [] },
-      { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts, replaced });
+      { numericDrafts: this._numericDrafts, cssColorDrafts: this._cssColorDrafts, replaced, showPresetSelector: false });
     syncPaintSectionRows(sections, scope);
     const choice = [...this.shadowRoot.querySelectorAll('.paint-preset-choice')]
       .find(element => element.dataset.presetName === name);

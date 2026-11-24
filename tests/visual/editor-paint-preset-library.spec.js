@@ -33,12 +33,17 @@ for (const source of ['src', 'dist']) {
     await editor.locator('#paint-presets > summary').click();
     await expect(editor.locator('.paint-preset-choice')).toHaveCount(1);
     await expect(editor.locator('.paint-preset-swatch')).toBeVisible();
+    await expect(editor.locator('#preset-paint-editor [data-paint-preset="true"]')).toHaveCount(0);
+    await expect(editor.locator('#preset-paint-editor [data-action="reapply-paint-preset"]')).toHaveCount(0);
     await editor.locator('#preset-paint-editor > summary').click();
     await expect(editor.locator('#preset-paint-opacity')).toHaveValue('72');
     await editor.locator('#preset-paint-opacity').fill('61');
     await editor.locator('#preset-paint-opacity').dispatchEvent('change');
     await expect.poll(() => editor.evaluate(element => element._draftConfig.preset_library.paint.warm.opacity)).toBe(61);
     expect(await editor.evaluate(element => element._config.preset_library.paint.warm.opacity)).toBe(72);
+    await editor.evaluate(element => { element._syncPresetPaintEditor(); element._syncPresetPaintEditor(); });
+    await expect(editor.locator('#preset-paint-editor [data-paint-preset="true"]')).toHaveCount(0);
+    await expect(editor.locator('#preset-paint-editor [data-action="reapply-paint-preset"]')).toHaveCount(0);
 
     await editor.locator('#paint-preset-name').fill('  cool  ');
     await editor.locator('[data-action="add-paint-preset"]').click();

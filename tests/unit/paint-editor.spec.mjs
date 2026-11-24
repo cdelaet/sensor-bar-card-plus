@@ -67,6 +67,27 @@ describe('shared Paint Editor', () => {
     expect(missing).toContain('<option value="missing" selected>missing (unavailable)</option>');
   });
 
+  it('omits the preset selector and Reapply action when disabled and removes them during sync', () => {
+    const { bindings } = bindingFor({}, []);
+    const defaultHtml = renderPaintEditor({ id: 'paint', bindings });
+    expect(defaultHtml).toContain('data-paint-preset="true"');
+    expect(defaultHtml).toContain('data-action="reapply-paint-preset"');
+
+    const hiddenHtml = renderPaintEditor({ id: 'preset-paint', bindings, showPresetSelector: false,
+      presetReference: 'nested', overrides: { opacity: true } });
+    expect(hiddenHtml).not.toContain('data-paint-preset="true"');
+    expect(hiddenHtml).not.toContain('data-action="reapply-paint-preset"');
+    for (const property of ['fill_style', 'solid_fill', 'color', 'opacity']) {
+      expect(hiddenHtml).toContain(`data-paint-property="${property}"`);
+    }
+
+    const document = new JSDOM(`<body>${defaultHtml.replaceAll('id="paint"', 'id="preset-paint"')}</body>`).window.document;
+    syncPaintEditor(document, 'preset-paint', { paint: {} }, { showPresetSelector: false });
+    expect(document.querySelector('.paint-preset-row')).toBeNull();
+    expect(document.querySelector('[data-paint-preset="true"]')).toBeNull();
+    expect(document.querySelector('[data-action="reapply-paint-preset"]')).toBeNull();
+  });
+
   it('shows a conflict label and inline feedback instead of classifying a conflicted preset as missing', () => {
     const { bindings } = bindingFor({}, []);
     const html = renderPaintEditor({ id: 'paint', bindings, presetReference: 'Thermal',

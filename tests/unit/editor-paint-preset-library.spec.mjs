@@ -34,6 +34,9 @@ describe('master Paint Presets library editor', () => {
     expect(root.querySelector('[role="listbox"] .paint-preset-choice').dataset.presetName).toBe('warm');
     expect(root.querySelector('.paint-preset-swatch').style.backgroundImage).toContain('linear-gradient');
     expect(root.querySelector('#preset-paint-fill_style')).not.toBeNull();
+    expect(root.querySelector('#preset-paint-editor [data-paint-preset="true"]')).toBeNull();
+    expect(root.querySelector('#preset-paint-editor [data-action="reapply-paint-preset"]')).toBeNull();
+    expect(root.querySelector('#bar-paint-preset')).not.toBeNull();
     expect(root.querySelector('#preset-paint-color')).not.toBeNull();
     expect(root.querySelector('#preset-paint-solid_fill')).not.toBeNull();
     expect(root.querySelector('#preset-paint-opacity').value).toBe('72');
@@ -72,6 +75,14 @@ describe('master Paint Presets library editor', () => {
     expect(events.at(-1).bar.paint.preset).toBe('warm');
     expect(events.at(-1).future.keep).toBe(true);
     expect(editor._config).toEqual(saved);
+
+    editor._syncPresetPaintEditor();
+    editor._syncPresetPaintEditor();
+    expect(root.querySelector('#preset-paint-editor [data-paint-preset="true"]')).toBeNull();
+    expect(root.querySelector('#preset-paint-editor [data-action="reapply-paint-preset"]')).toBeNull();
+    expect(events.at(-1).preset_library.paint.warm).toMatchObject({
+      fill_style: 'bands', solid_fill: true, opacity: 61, color: '#336699',
+    });
   });
 
   it('creates unique trimmed names in the local draft and preserves unknown categories', async () => {
@@ -141,6 +152,8 @@ describe('master Paint Presets library editor', () => {
     expect(editor.shadowRoot.querySelector('.paint-preset-authoring-warning').textContent).toContain('Thermal');
     expect(editor.shadowRoot.querySelector('[data-preset-name="Thermal"]')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#preset-paint-color')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#preset-paint-editor [data-paint-preset="true"]')).toBeNull();
+    expect(editor.shadowRoot.querySelector('#preset-paint-editor [data-action="reapply-paint-preset"]')).toBeNull();
 
     window.prompt = vi.fn(() => 'Warm');
     click(null, editor.shadowRoot.querySelector('[data-action="rename-paint-preset"]'));

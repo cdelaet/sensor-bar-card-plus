@@ -46,7 +46,7 @@ function renderPaletteFields(paletteFields, options) {
 export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {}, inherited = false,
   scale, previewScale = scale, fields = {}, root, paletteContent = '', paletteFields = null,
   presetReference, presetInherited = false, presetEntity = false, presetInheritedReference, presetOptions = [], overrides = {}, diagnostics = [], registryStatus = 'unknown',
-  showPropertyMeta = true, bodyId = null, resetLabel, resetDisabled = true,
+  showPropertyMeta = true, showPresetSelector = true, bodyId = null, resetLabel, resetDisabled = true,
   sources = {}, activation = null, enabled = true, destination = 'bar' }) {
   const controls = Object.fromEntries(['fill_style', 'solid_fill', 'color', 'opacity'].map(key => [key,
     fields[key] ?? { id: `${id}-${key}`, field: key },
@@ -97,13 +97,13 @@ export function renderPaintEditor({ id, bindings, paint = bindings.read() ?? {},
       ${activation ? `<div class="toggle"><input ${fieldAttributes(activation)} type="checkbox" data-paint-enabled="true"${enabled ? ' checked' : ''}><label for="${activation.id}">Enable Paint</label></div>` : ''}
       ${activation ? resetAction : ''}
       ${activation ? `<div class="paint-editor-properties"${enabled ? '' : ' hidden'}>` : ''}
-      <div class="paint-preset-row">
+      ${showPresetSelector ? `<div class="paint-preset-row">
         <label for="${controls.preset.id}">Paint preset</label>
         <div class="paint-preset-control">
           <select ${fieldAttributes(controls.preset)} data-paint-preset="true">${options}</select>
           <button type="button" data-action="reapply-paint-preset"${fields.index !== undefined ? ` data-index="${fields.index}"` : ''}${stateCanReapply(presetReference, presetInherited, overrides) ? '' : ' hidden'}>Reapply preset</button>
         </div>
-      </div>
+      </div>` : ''}
       ${activation ? '' : resetAction}
       <div class="paint-preset-feedback" role="status" aria-live="polite"${feedbackText ? '' : ' hidden'}>${escapeAttribute(feedbackText)}</div>
       <div class="paint-registry-status" role="status"${registryMessage ? '' : ' hidden'}>${escapeAttribute(registryMessage)}</div>
@@ -132,9 +132,10 @@ function stateCanReapply(presetReference, presetInherited, overrides) {
     && Object.values(overrides).some(Boolean);
 }
 
-export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts, replaced, paletteFields } = {}) {
+export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts, replaced, paletteFields, showPresetSelector = true } = {}) {
   const editor = root?.querySelector(`#${id}`);
   if (!editor) return;
+  if (!showPresetSelector) editor.querySelector?.('.paint-preset-row')?.remove();
   const { paint, inherited, scale } = state;
   const reset = editor.querySelector?.('[data-action="reset-paint"]');
   if (reset) reset.disabled = state.resetDisabled ?? true;
@@ -162,7 +163,7 @@ export function syncPaintEditor(root, id, state, { numericDrafts, cssColorDrafts
   if (description && description.textContent !== text) description.textContent = text;
   const swatch = editor.querySelector?.('.paint-editor-swatch');
   syncPaintSwatch(swatch, paint, previewScale);
-  const presetControl = editor.querySelector?.('[data-paint-preset="true"]');
+  const presetControl = showPresetSelector ? editor.querySelector?.('[data-paint-preset="true"]') : null;
   if (presetControl?.options) {
     const activeReference = state.presetReference == null ? '' : String(state.presetReference);
     const inheritedReferenceName = state.presetInheritedReference == null ? '' : String(state.presetInheritedReference);
