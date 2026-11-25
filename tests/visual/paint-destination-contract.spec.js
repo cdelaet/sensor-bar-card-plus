@@ -55,6 +55,24 @@ async function mount(page, source, host, destination, paint, parentPaint, preset
   return page.locator(host === 'Feature' ? 'sensor-bar-card-plus-feature-editor' : 'sensor-bar-card-plus-editor');
 }
 
+async function mountMultiEntityEditor(page, source) {
+  const editor = await mount(page, source, 'Card', 'bar');
+  await page.evaluate(() => {
+    const editor = document.querySelector('sensor-bar-card-plus-editor');
+    const runtime = document.querySelector('sensor-bar-card-plus');
+    const config = structuredClone(window.__paintConfig);
+    config.entities = ['sensor.one', 'sensor.two', 'sensor.three'].map((entity, index) => ({
+      entity, name: `Entity ${index + 1}`,
+    }));
+    delete config.entity;
+    window.__paintConfig = structuredClone(config);
+    editor.setConfig(config);
+    runtime.setConfig(config);
+  });
+  await expect(editor.locator('.entity-shell')).toHaveCount(3);
+  return editor;
+}
+
 async function openPaint(editor, host, destination) {
   const entity = host === 'Entity';
   if (entity) {
@@ -86,6 +104,37 @@ async function openPaint(editor, host, destination) {
   return paint;
 }
 
+async function rememberPaintEditorNodes(paint) {
+  await paint.evaluate(node => {
+    const disclosures = [...node.querySelectorAll('details')];
+    disclosures.forEach(disclosure => { disclosure.open = true; });
+    window.__paintEditorNodeRefs = {
+      editor: node,
+      preset: node.querySelector('[data-paint-preset="true"]'),
+      fillStyle: node.querySelector('[data-paint-property="fill_style"]'),
+      solidFill: node.querySelector('[data-paint-property="solid_fill"]'),
+      color: node.querySelector('[data-paint-property="color"]'),
+      opacity: node.querySelector('[data-paint-property="opacity"]'),
+      swatch: node.querySelector('.paint-editor-swatch'),
+      disclosures,
+    };
+  });
+}
+
+async function paintEditorNodesArePreserved(paint) {
+  return paint.evaluate(node => {
+    const refs = window.__paintEditorNodeRefs;
+    return !!refs && node === refs.editor
+      && node.querySelector('[data-paint-preset="true"]') === refs.preset
+      && node.querySelector('[data-paint-property="fill_style"]') === refs.fillStyle
+      && node.querySelector('[data-paint-property="solid_fill"]') === refs.solidFill
+      && node.querySelector('[data-paint-property="color"]') === refs.color
+      && node.querySelector('[data-paint-property="opacity"]') === refs.opacity
+      && node.querySelector('.paint-editor-swatch') === refs.swatch
+      && refs.disclosures.every(disclosure => disclosure.isConnected && disclosure.open);
+  });
+}
+
 const savedPaint = (page, host, destination) => page.evaluate(({ host, path }) => {
   const config = host === 'Entity' ? window.__paintConfig.entities[0] : window.__paintConfig;
   return path.reduce((value, key) => value?.[key], config);
@@ -96,12 +145,57 @@ function layer(page, host, destination) {
   return runtime.locator(`.bar-paint-layer[data-layer="${destination === 'bar' ? 'base' : destination === 'target-above' ? 'above-target' : destination === 'target-below' ? 'below-target' : destination}"]`);
 }
 
+for (const source of ['src', 'dist']) {
+  test(`structural Entity moves never focus a stale action button (${source})`, async ({ page }) => {
+    const editor = await mountMultiEntityEditor(page, source);
+    const names = () => editor.locator('[data-kind="entity-name"]').evaluateAll(inputs => inputs.map(input => input.value));
+    const actionHasFocus = () => editor.evaluate(node => node.shadowRoot.activeElement?.matches(
+      'button[data-action="move-entity-up"], button[data-action="move-entity-down"], button[data-action="remove-entity"], button[data-action="duplicate-entity"]') ?? false);
+
+    await editor.locator('[data-action="move-entity-down"][data-index="1"]').click();
+    await expect.poll(names).toEqual(['Entity 1', 'Entity 3', 'Entity 2']);
+    expect(await actionHasFocus()).toBe(false);
+
+    await editor.locator('[data-action="move-entity-up"][data-index="2"]').click();
+    await expect.poll(names).toEqual(['Entity 1', 'Entity 2', 'Entity 3']);
+    expect(await actionHasFocus()).toBe(false);
+  });
+
+  test(`removing Entity 2 does not focus another Entity action (${source})`, async ({ page }) => {
+    const editor = await mountMultiEntityEditor(page, source);
+    await editor.locator('[data-action="remove-entity"][data-index="1"]').click();
+    await expect(editor.locator('[data-kind="entity-name"]')).toHaveCount(2);
+    await expect(editor.locator('[data-kind="entity-name"]').nth(1)).toHaveValue('Entity 3');
+    expect(await editor.evaluate(node => node.shadowRoot.activeElement?.matches(
+      'button[data-action="move-entity-up"], button[data-action="move-entity-down"], button[data-action="remove-entity"], button[data-action="duplicate-entity"]') ?? false)).toBe(false);
+  });
+
+  test(`duplicating Entity 2 keeps its explicit post-render focus (${source})`, async ({ page }) => {
+    const editor = await mountMultiEntityEditor(page, source);
+    await editor.locator('[data-action="duplicate-entity"][data-index="1"]').click();
+    const duplicateName = editor.locator('[data-kind="entity-name"][data-index="2"]');
+    await expect(duplicateName).toHaveValue('Entity 2 copy');
+    await expect.poll(() => editor.evaluate(node => {
+      const active = node.shadowRoot.activeElement;
+      return active?.dataset.index === '2'
+        && ['entity-name', 'entity-picker', 'entity-input'].includes(active.dataset.kind);
+    })).toBe(true);
+  });
+}
+
 for (const source of ['src', 'dist']) for (const host of hosts) for (const destination of destinations) {
   test(`${host} ${destination} distinguishes inherited, None and named preset selection (${source})`, async ({ page }) => {
     const presets = {
       warm: { fill_style: 'gradient', opacity: 35,
         gradient_stops: [{ pos: 0, color: '#000000' }, { pos: 100, color: '#ffffff' }] },
       cool: { fill_style: 'solid', color: '#123456' },
+      banded: { fill_style: 'band_gradient', segments: [
+        { from: 0, to: 50, color: '#000000' }, { from: 50, to: 100, color: '#ffffff' },
+      ] },
+      segmented: { fill_style: 'bands', segments: [
+        { from: 0, to: 30, color: '#112233' }, { from: 30, to: 70, color: '#445566' },
+        { from: 70, to: 100, color: '#778899' },
+      ] },
     };
     const editor = await mount(page, source, host, destination,
       host === 'Entity' ? { opacity: 60 } : { preset: 'warm', opacity: 60 },
@@ -111,6 +205,7 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
     await expect(paint.locator('[data-action="reset-paint"]')).toHaveText(host === 'Entity'
       ? 'Reset to Card paint settings' : 'Reset to default paint settings');
     const preset = paint.locator('[data-paint-preset="true"]');
+    await rememberPaintEditorNodes(paint);
     await expect(preset).toBeVisible();
     await expect(preset).toHaveValue(host === 'Entity' ? '__paint_preset_inherited__' : 'warm');
     await expect(paint.locator('[data-paint-property="fill_style"]')).toHaveValue('gradient');
@@ -144,10 +239,40 @@ for (const source of ['src', 'dist']) for (const host of hosts) for (const desti
     page.once('dialog', dialog => dialog.accept());
     await preset.selectOption('cool');
     await expect.poll(() => savedPaint(page, host, destination)).toEqual({ preset: 'cool' });
+    expect(await paintEditorNodesArePreserved(paint)).toBe(true);
+    await expect(layer(page, host, destination)).toHaveCSS('background-image',
+      'linear-gradient(to right, rgb(18, 52, 86) 0%, rgb(18, 52, 86) 100%)');
+    await preset.selectOption('banded');
+    await expect(paint.locator('[data-paint-property="fill_style"]')).toHaveValue('band_gradient');
+    await expect(paint.locator('[data-paint-source="segments"]')).toHaveText('Preset');
+    await expect(paint.locator('.segment-editor-row')).toHaveCount(2);
+    await expect(paint.locator('.segment-editor-row input[type="color"]').first()).toHaveValue('#000000');
+    await expect(paint.locator('.segment-editor-row input[type="color"]').nth(1)).toHaveValue('#ffffff');
+    await preset.selectOption('segmented');
+    await expect(paint.locator('[data-paint-property="fill_style"]')).toHaveValue('bands');
+    await expect(paint.locator('[data-paint-source="segments"]')).toHaveText('Preset');
+    await expect(paint.locator('.segment-editor-row')).toHaveCount(3);
+    await expect(paint.locator('.segment-editor-row input[type="color"]').first()).toHaveValue('#112233');
+    await expect(paint.locator('.segment-editor-row input[type="color"]').nth(2)).toHaveValue('#778899');
+    await preset.selectOption('warm');
+    await expect(paint.locator('[data-paint-property="fill_style"]')).toHaveValue('gradient');
+    await expect(paint.locator('[data-paint-source="gradient_stops"]')).toHaveText('Preset');
+    await expect(paint.locator('.authored-gradient-stop-row')).toHaveCount(2);
+    await preset.selectOption('cool');
+    await expect(paint.locator('[data-paint-property="fill_style"]')).toHaveValue('solid');
+    expect(await paintEditorNodesArePreserved(paint)).toBe(true);
     await expect(layer(page, host, destination)).toHaveCSS('background-image',
       'linear-gradient(to right, rgb(18, 52, 86) 0%, rgb(18, 52, 86) 100%)');
     await paint.locator('[data-paint-property="opacity"]').fill('0');
     await expect(layer(page, host, destination)).toHaveCSS('opacity', '0');
+    const reapply = paint.locator('[data-action="reapply-paint-preset"]');
+    await expect(reapply).toBeVisible();
+    page.once('dialog', dialog => dialog.accept());
+    await reapply.click();
+    await expect.poll(() => savedPaint(page, host, destination)).toEqual({ preset: 'cool' });
+    await expect(paint.locator('[data-paint-property="opacity"]')).toHaveValue('100');
+    expect(await paintEditorNodesArePreserved(paint)).toBe(true);
+    await paint.locator('[data-paint-property="opacity"]').fill('0');
     await preset.selectOption('');
     await expect.poll(() => savedPaint(page, host, destination)).toEqual({ preset: null, opacity: 0 });
     await expect(layer(page, host, destination)).toHaveCSS('opacity', '0');
@@ -846,4 +971,143 @@ for (const source of ['src', 'dist']) test(`Target None retains local gradient s
   await preset.focus(); await preset.selectOption(''); await preset.press('Tab');
   expect((await page.evaluate(() => window.__targetConfig)).target.when_above.paint.preset).toBeNull();
   await expect(preset).toHaveValue('');
+});
+
+async function mountPresetScrollEditor(page, source, viewportHeight, controlTop, paint) {
+  await page.setViewportSize({ width: 900, height: viewportHeight });
+  const editor = await mount(page, source, 'Card', 'bar', paint, undefined, {
+    warm: { fill_style: 'bands', segments: Array.from({ length: 12 }, (_, index) => ({
+      from: index * 8, to: (index + 1) * 8, color: index % 2 ? '#aa0000' : '#00aa00',
+    })) },
+    cool: { fill_style: 'solid', color: '#0000aa' },
+  });
+  const section = await openPaint(editor, 'Card', 'bar');
+  const preset = section.locator('[data-paint-preset="true"]');
+  await editor.evaluate((node, height) => {
+    const parent = node.parentElement;
+    const host = document.createElement('div');
+    host.dataset.test = 'preset-scroll-host';
+    const root = host.attachShadow({ mode: 'open' });
+    const viewport = document.createElement('div');
+    viewport.dataset.test = 'preset-scroll-viewport';
+    viewport.style.cssText = `height:${height - 80}px;overflow:auto;position:relative`;
+    const before = document.createElement('div'); before.style.height = '3500px';
+    const after = document.createElement('div'); after.style.height = '3500px';
+    const slot = document.createElement('slot');
+    viewport.append(before, slot, after);
+    root.append(viewport);
+    parent.before(host);
+    host.append(parent);
+    window.__presetScrollViewport = viewport;
+  }, viewportHeight);
+  await preset.evaluate((control, top) => {
+    const viewport = window.__presetScrollViewport;
+    viewport.scrollTop += control.getBoundingClientRect().top - viewport.getBoundingClientRect().top - top;
+  }, controlTop);
+  return { editor, section, preset };
+}
+
+async function measurePresetViewport(page, preset) {
+  return preset.evaluate(control => ({
+    scrollTop: window.__presetScrollViewport.scrollTop,
+    top: control.getBoundingClientRect().top - window.__presetScrollViewport.getBoundingClientRect().top,
+    viewportTop: control.getBoundingClientRect().top,
+    pageY: window.scrollY,
+    focused: control.getRootNode().activeElement === control,
+  }));
+}
+
+async function choosePresetInPlace(page, preset, value) {
+  const box = await preset.boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await preset.selectOption(value);
+}
+
+const viewportCases = [
+  { name: 'upper half of tall viewport', height: 1500, top: 240 },
+  { name: 'lower half of tall viewport', height: 1500, top: 980 },
+  { name: 'short viewport', height: 640, top: 240 },
+];
+
+for (const source of ['src', 'dist']) for (const viewportCase of viewportCases) {
+  test(`named preset selection preserves focus and scroll in the ${viewportCase.name} (${source})`, async ({ page }) => {
+    const { editor, preset } = await mountPresetScrollEditor(page, source,
+      viewportCase.height, viewportCase.top, { preset: 'warm' });
+    const before = await measurePresetViewport(page, preset);
+    expect(Math.abs(before.top - viewportCase.top)).toBeLessThanOrEqual(1);
+    expect(before.pageY).toBe(0);
+
+    await choosePresetInPlace(page, preset, 'cool');
+    await expect.poll(() => editor.evaluate(node => node._draftConfig.bar.paint.preset)).toBe('cool');
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
+    const after = await measurePresetViewport(page, preset);
+    expect(Math.abs(after.scrollTop - before.scrollTop)).toBeLessThanOrEqual(1);
+    expect(Math.abs(after.top - before.top)).toBeLessThanOrEqual(1);
+    expect(Math.abs(after.viewportTop - before.viewportTop)).toBeLessThanOrEqual(1);
+    expect(after.pageY).toBe(before.pageY);
+    expect(after.focused).toBe(true);
+  });
+}
+
+for (const source of ['src', 'dist']) test(`confirmed and cancelled preset selection preserve focus and scroll (${source})`, async ({ page }) => {
+  const { editor, preset } = await mountPresetScrollEditor(page, source, 1500, 240,
+    { preset: 'warm', opacity: 55 });
+  const beforeCancel = await measurePresetViewport(page, preset);
+  page.once('dialog', dialog => dialog.dismiss());
+  await choosePresetInPlace(page, preset, 'cool');
+  await expect.poll(() => editor.evaluate(node => node._draftConfig.bar.paint.preset)).toBe('warm');
+  await expect(preset).toHaveValue('warm');
+  const afterCancel = await measurePresetViewport(page, preset);
+  expect(afterCancel.scrollTop).toBe(beforeCancel.scrollTop);
+  expect(afterCancel.top).toBe(beforeCancel.top);
+  expect(afterCancel.viewportTop).toBe(beforeCancel.viewportTop);
+  expect(afterCancel.focused).toBe(true);
+
+  page.once('dialog', dialog => dialog.accept());
+  await choosePresetInPlace(page, preset, 'cool');
+  await expect.poll(() => editor.evaluate(node => node._draftConfig.bar.paint.preset)).toBe('cool');
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const afterConfirm = await measurePresetViewport(page, preset);
+  expect(afterConfirm.scrollTop).toBe(beforeCancel.scrollTop);
+  expect(afterConfirm.top).toBe(beforeCancel.top);
+  expect(afterConfirm.viewportTop).toBe(beforeCancel.viewportTop);
+  expect(afterConfirm.focused).toBe(true);
+});
+
+for (const source of ['src', 'dist']) test(`repeated preset selection preserves manual scroll (${source})`, async ({ page }) => {
+  const { editor, preset } = await mountPresetScrollEditor(page, source, 1500, 240, { preset: 'warm' });
+  let position = await measurePresetViewport(page, preset);
+  for (const name of ['cool', 'warm', 'cool']) {
+    await choosePresetInPlace(page, preset, name);
+    await expect.poll(() => editor.evaluate(node => node._draftConfig.bar.paint.preset)).toBe(name);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const next = await measurePresetViewport(page, preset);
+    expect(next.scrollTop).toBe(position.scrollTop);
+    expect(next.top).toBe(position.top);
+    expect(next.viewportTop).toBe(position.viewportTop);
+    expect(next.focused).toBe(true);
+    position = next;
+  }
+
+  await page.evaluate(() => { window.__presetScrollViewport.scrollTop += 120; });
+  const manuallyScrolled = await measurePresetViewport(page, preset);
+  expect(manuallyScrolled.scrollTop).toBe(position.scrollTop + 120);
+  expect(manuallyScrolled.top).toBe(position.top - 120);
+  expect(manuallyScrolled.viewportTop).toBe(position.viewportTop - 120);
+
+  await choosePresetInPlace(page, preset, 'warm');
+  await expect.poll(() => editor.evaluate(node => node._draftConfig.bar.paint.preset)).toBe('warm');
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const afterSelection = await measurePresetViewport(page, preset);
+  expect(afterSelection.scrollTop).toBe(manuallyScrolled.scrollTop);
+  expect(afterSelection.top).toBe(manuallyScrolled.top);
+  expect(afterSelection.viewportTop).toBe(manuallyScrolled.viewportTop);
+  expect(afterSelection.focused).toBe(true);
+
+  await page.evaluate(() => { window.__presetScrollViewport.scrollTop += 60; });
+  const afterManualScroll = await measurePresetViewport(page, preset);
+  expect(afterManualScroll.scrollTop).toBe(afterSelection.scrollTop + 60);
+  expect(afterManualScroll.top).toBe(afterSelection.top - 60);
+  expect(afterManualScroll.viewportTop).toBe(afterSelection.viewportTop - 60);
 });

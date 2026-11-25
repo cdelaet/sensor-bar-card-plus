@@ -7,15 +7,18 @@ export function indexedControlSuffix({ segmentIndex, stopIndex, index }) {
 
 export function captureViewport(editor, active = editor.shadowRoot?.activeElement) {
   const elements = [];
+  const seen = new Set();
   const record = element => {
-    if (!element || elements.some(entry => entry.element === element)) return;
+    if (!element || seen.has(element)) return;
+    seen.add(element);
     if (element.scrollTop || element.scrollLeft || element.scrollHeight > element.clientHeight
       || element.scrollWidth > element.clientWidth) {
       elements.push({ element, top: element.scrollTop, left: element.scrollLeft });
     }
   };
-  for (let element = active; element; element = element.parentElement) record(element);
-  for (let element = editor.shadowRoot?.host; element; element = element.parentElement) record(element);
+  const parent = element => element.assignedSlot ?? element.parentElement ?? element.getRootNode?.().host ?? null;
+  for (let element = active; element; element = parent(element)) record(element);
+  for (let element = editor.shadowRoot?.host; element; element = parent(element)) record(element);
   const view = editor.ownerDocument?.defaultView;
   return { view, x: view?.scrollX ?? 0, y: view?.scrollY ?? 0, elements };
 }
@@ -28,7 +31,9 @@ export function restoreViewport(viewport) {
       entry.element.scrollLeft = entry.left;
     }
   }
-  viewport.view?.scrollTo(viewport.x, viewport.y);
+  if (viewport.view && (viewport.view.scrollX !== viewport.x || viewport.view.scrollY !== viewport.y)) {
+    viewport.view.scrollTo(viewport.x, viewport.y);
+  }
 }
 
 export function captureFocusState(editor, active, selector) {

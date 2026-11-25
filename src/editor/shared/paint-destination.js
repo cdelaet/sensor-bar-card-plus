@@ -203,7 +203,7 @@ export function selectDestinationPreset(context, scope, destination, value, { co
   if ((hasProperties || PAINT_PROPERTIES.some(property => ownsDestinationProperty(context, scope, destination, property))) && confirm?.(value) !== true) return false;
   context.clearPaintPaletteState?.(scope, destination);
   return context.mutate(scope, target => setPathValue(clearDestinationConfiguration(target, destination),
-    destination.path, { preset: value }), { preserveRawConfig: true, rerender: true });
+    destination.path, { preset: value }), { preserveRawConfig: true, preservePaintViewport: true });
 }
 
 export function reapplyDestinationPreset(context, scope, destination, { confirm } = {}) {
@@ -213,7 +213,7 @@ export function reapplyDestinationPreset(context, scope, destination, { confirm 
   if (confirm?.(paint.preset) !== true) return false;
   context.clearPaintPaletteState?.(scope, destination);
   return context.mutate(scope, target => setPathValue(clearDestinationConfiguration(target, destination),
-    destination.path, { preset: paint.preset }), { preserveRawConfig: true, rerender: true });
+    destination.path, { preset: paint.preset }), { preserveRawConfig: true, preservePaintViewport: true });
 }
 
 function controlDestination(target) {

@@ -150,6 +150,7 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     this._presetPaintSections = null;
     this._isRendering = false;
     this._renderScheduled = false;
+    this._scheduledRenderViewport = null;
     this._lastRenderedConfigJson = null;
     this._lastEmittedConfigJson = null;
     this._shadowListenersAttached = false;
@@ -600,12 +601,20 @@ export class SensorBarCardPlusEditor extends HTMLElement {
     return true;
   }
 
-  _scheduleRender() {
-    if (this._renderScheduled || this._isRendering) return;
+  _scheduleRender(viewport = null) {
+    if (this._isRendering) return;
+    if (this._renderScheduled) {
+      if (viewport) this._scheduledRenderViewport = viewport;
+      return;
+    }
     this._renderScheduled = true;
+    this._scheduledRenderViewport = viewport;
     setTimeout(() => {
       this._renderScheduled = false;
       this._render();
+      const pendingViewport = this._scheduledRenderViewport;
+      this._scheduledRenderViewport = null;
+      restoreViewport(pendingViewport);
     }, 0);
   }
 
@@ -619,11 +628,19 @@ export class SensorBarCardPlusEditor extends HTMLElement {
       return false;
     }
 
+    const interaction = options.preservePaintViewport
+      ? { focus: this._captureControlFocus(), viewport: null }
+      : null;
+    if (interaction && !interaction.focus) interaction.viewport = captureViewport(this);
+    const viewport = rerender && !targetOnly ? captureViewport(this) : null;
     this._updateConfig(nextConfig);
     this._emitConfigChanged(options);
     this._refreshDerivedEditorUi(options);
     if (rerender && !targetOnly) {
-      this._scheduleRender();
+      this._scheduleRender(viewport);
+    } else if (options.preservePaintViewport) {
+      if (interaction?.focus) restoreFocusState(this.shadowRoot, interaction.focus);
+      else restoreViewport(interaction?.viewport);
     }
     if (targetOnly) this._applyPendingFocus();
     return true;

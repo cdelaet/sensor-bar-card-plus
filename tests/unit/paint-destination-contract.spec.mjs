@@ -186,11 +186,12 @@ function fixture(host, destination, paint, parentPaint) {
   if (parentPaint !== undefined && host === 'Entity') config = setPathValue(config, destination.path, parentPaint);
   const path = scope.type === 'entity' ? ['entities', 0, ...destination.path] : destination.path;
   if (paint !== undefined) config = setPathValue(config, path, paint);
-  const events = [], cleared = [];
+  const events = [], cleared = [], mutations = [];
   const context = {
     hass: { states: {} }, paintPresetRegistry: registry,
     read(at, path = []) { return getPathValue(at.type === 'entity' ? config.entities[at.index] : config, path); },
-    mutate(at, mutation) {
+    mutate(at, mutation, options = {}) {
+      mutations.push(options);
       const before = at.type === 'entity' ? config.entities[at.index] : config;
       const after = mutation(before);
       if (JSON.stringify(before) === JSON.stringify(after)) return false;
@@ -200,7 +201,7 @@ function fixture(host, destination, paint, parentPaint) {
     },
     clearPaintPaletteState(at, target) { cleared.push([at, target]); },
   };
-  return { scope, context, events, cleared, config: () => config, paint: () => getPathValue(config, path),
+  return { scope, context, events, cleared, mutations, config: () => config, paint: () => getPathValue(config, path),
     state: () => getDestinationEditorState(context, scope, destination) };
 }
 
@@ -266,6 +267,8 @@ for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TA
       expect(f.paint()).toEqual({ preset: null, color: '#abcdef' });
       selectDestinationPreset(f.context, f.scope, destination, 'cool', { confirm: () => true });
       expect(f.paint()).toEqual({ preset: 'cool' });
+      expect(f.mutations.at(-1)).toMatchObject({ preserveRawConfig: true });
+      expect(f.mutations.at(-1)).not.toHaveProperty('rerender');
       expect(f.cleared.at(-1)).toEqual([f.scope, destination]);
     });
 
@@ -300,6 +303,8 @@ for (const destination of [BAR_PAINT, ...BASELINE_PAINTS, TARGET_ABOVE_PAINT, TA
 
       expect(reapplyDestinationPreset(f.context, f.scope, destination, { confirm: () => true })).toBe(true);
       expect(f.paint()).toEqual({ preset: 'warm' });
+      expect(f.mutations.at(-1)).toMatchObject({ preserveRawConfig: true });
+      expect(f.mutations.at(-1)).not.toHaveProperty('rerender');
       expect(f.config().baseline.at).toBe(50);
       expect(f.config().future).toBe(true);
       expect(f.config().entities[0].future).toBe(true);
