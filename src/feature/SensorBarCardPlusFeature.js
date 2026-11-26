@@ -338,13 +338,13 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       .filter(marker => marker.visible && (marker.showMarker || marker.labelVisible))
       .map(marker => {
         const type = marker.type === 'generic' ? 'Reference marker' : `${marker.type[0].toUpperCase()}${marker.type.slice(1)}`;
-        const anchor = `${formatNumericDisplay(marker.value)}${row.displayUnit ? ` ${row.displayUnit}` : ''}`;
+        const anchor = `${formatNumericDisplay(marker.value, null, this._hass?.locale)}${row.displayUnit ? ` ${row.displayUnit}` : ''}`;
         return `${type} at ${anchor}${marker.labelVisible && marker.label?.text ? `; label ${marker.label.text}` : ''}.`;
       }).join(' ');
     this._surface.setAttribute('aria-label', status
       ? `${name}${this._entity && name !== this._entity ? ` (${this._entity})` : ''}: ${status}${row ? ` (${row.state})` : ''}`
       : textValue !== null ? `${name}${this._entity && name !== this._entity ? ` (${this._entity})` : ''}: ${textValue}`
-      : `${name} (${this._entity}): ${row.primaryPresentation.text}. Range ${formatNumericDisplay(row.min)} to ${formatNumericDisplay(row.max)}${row.displayUnit ? ` ${row.displayUnit}` : ''}.${markerDescription ? ` ${markerDescription}` : ''}`);
+      : `${name} (${this._entity}): ${row.primaryPresentation.text}. Range ${formatNumericDisplay(row.min, null, this._hass?.locale)} to ${formatNumericDisplay(row.max, null, this._hass?.locale)}${row.displayUnit ? ` ${row.displayUnit}` : ''}.${markerDescription ? ` ${markerDescription}` : ''}`);
     if (status || textValue !== null) return;
 
     const model = buildBarRenderModel(row, this._resolvedAppearance, { height: 'var(--sbcp-row-height)' });

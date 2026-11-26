@@ -23,7 +23,7 @@ module.exports = {
     { name: 'webkit-security-acceptance', testMatch: /acceptance\/security-hardening\.spec\.js/, use: { browserName: 'webkit' } },
     {
       name: 'webkit-visual',
-      testMatch: /(?:^|[/\\])(?:card-feature|editor-(?:bar-appearance|extrema|infrastructure|needle-baseline|palettes|reference-markers|sections|target)|feature-editor(?:-(?:capabilities|extrema|needle-baseline|palettes|reference-markers|target|ux))?|feature-marker-label-colors|minimum-height|paint-editor|sbcp)\.spec\.js$/,
+      testMatch: /(?:^|[/\\])(?:card-feature|locale|editor-(?:bar-appearance|extrema|infrastructure|needle-baseline|palettes|reference-markers|sections|target)|feature-editor(?:-(?:capabilities|extrema|needle-baseline|palettes|reference-markers|target|ux))?|feature-marker-label-colors|minimum-height|paint-editor|sbcp)\.spec\.js$/,
       use: { browserName: 'webkit' },
     },
   ],

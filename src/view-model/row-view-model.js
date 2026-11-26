@@ -137,9 +137,10 @@ export function buildRowViewModel(options) {
   const percent = numericValue !== null ? toScalePct(numericValue, safeMin, safeMax) : 0;
   const positionPercent = numericValue !== null ? projectScalePercent(percent, scaleDirection) : null;
   const decimal = entityConfig?.formatting?.decimal ?? null;
+  const numberLocale = hass?.locale ?? null;
   const primaryPresentation = numericValue === null
     ? createTextPresentation(rawState)
-    : createNumericPresentation(numericValue, displayUnit, decimal);
+    : createNumericPresentation(numericValue, displayUnit, decimal, numberLocale);
 
   const targets = resolveDirectionalTargets(entityConfig, hass, safeMin, safeMax);
   const targetMarkers = targets.markerSides.map(side => {
@@ -148,7 +149,7 @@ export function buildRowViewModel(options) {
     const label = Number.isFinite(value) ? createMarkerLabelPresentation(value, targetUnit,
       marker?.label_precision ?? marker?.label_decimal ?? decimal, {
         text: marker?.label_text, showValue: marker?.label_show_value, showUnit: marker?.label_show_unit,
-      }) : null;
+      }, numberLocale) : null;
     return createMarkerModel({ id: side === 'above' ? 'target' : 'target-below', type: 'target',
       value, position: Number.isFinite(value) ? projectScalePercent(toScalePct(value, safeMin, safeMax), scaleDirection) : null,
       lane: 'below', visible: enabled && Number.isFinite(value), color: marker?.color,
@@ -169,7 +170,7 @@ export function buildRowViewModel(options) {
   const targetPositionPercent = firstTarget?.position ?? null;
   const targetVisible = firstTarget?.visible ?? false;
   const targetPresentation = targetValue !== null
-    ? createNumericPresentation(targetValue, targetUnit, targets[targets.markerSides[0]].marker?.label_decimal ?? decimal) : null;
+    ? createNumericPresentation(targetValue, targetUnit, targets[targets.markerSides[0]].marker?.label_decimal ?? decimal, numberLocale) : null;
   const targetLabelPresentation = firstTarget?.label;
 
   const baselineValue = entityConfig?.baseline?.enabled === false
@@ -188,24 +189,24 @@ export function buildRowViewModel(options) {
   const peakLabelPrecision = entityConfig?.peak_marker?.label_precision ?? peakDecimal;
   const floorLabelPrecision = entityConfig?.floor_marker?.label_precision ?? floorDecimal;
   const peakPresentation = peakState.visible
-    ? createNumericPresentation(peakState.value, targetUnit, peakDecimal)
+    ? createNumericPresentation(peakState.value, targetUnit, peakDecimal, numberLocale)
     : null;
   const floorPresentation = floorState.visible
-    ? createNumericPresentation(floorState.value, targetUnit, floorDecimal)
+    ? createNumericPresentation(floorState.value, targetUnit, floorDecimal, numberLocale)
     : null;
   const peakLabelPresentation = peakState.visible
     ? createMarkerLabelPresentation(peakState.value, targetUnit, peakLabelPrecision, {
       text: entityConfig?.peak_marker?.label_text,
       showValue: entityConfig?.peak_marker?.label_show_value,
       showUnit: entityConfig?.peak_marker?.label_show_unit,
-    })
+    }, numberLocale)
     : null;
   const floorLabelPresentation = floorState.visible
     ? createMarkerLabelPresentation(floorState.value, targetUnit, floorLabelPrecision, {
       text: entityConfig?.floor_marker?.label_text,
       showValue: entityConfig?.floor_marker?.label_show_value,
       showUnit: entityConfig?.floor_marker?.label_show_unit,
-    })
+    }, numberLocale)
     : null;
   const genericMarkers = (entityConfig?.generic_markers ?? [])
     .filter((marker) => marker.accepted)
@@ -232,7 +233,7 @@ export function buildRowViewModel(options) {
           text: marker.label.text,
           showValue: marker.label.showValue,
           showUnit: marker.label.showUnit,
-        })
+        }, numberLocale)
         : null;
       return {
         id: marker.id,

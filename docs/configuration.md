@@ -1744,7 +1744,7 @@ For a Card Feature, `formatting` applies to marker labels and the accessible val
 
 ### Decimal Precision
 
-Use `formatting.decimal` to display exactly how many fractional digits are shown per row, including trailing zeroes. Values are rounded to that precision; omitting the setting keeps the raw locale-aware numeric display.
+Use `formatting.decimal` to display exactly how many fractional digits are shown per row, including trailing zeroes. Values are rounded to that precision. When omitted, numeric values use Home Assistant's locale-aware default of up to two fractional digits; for example, `1234.567` displays as `1,234.57` with comma-decimal formatting. Set `formatting.decimal: 3` to retain all three fractional digits.
 
 For example, `decimal: 2` displays `42` as `42.00` and `100.8` as `100.80`.
 

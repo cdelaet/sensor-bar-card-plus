@@ -740,6 +740,9 @@ export class SensorBarCard extends HTMLElement {
 
   _shouldUpdate(oldHass, newHass) {
     if (!this._config || !this._config.entities) return true;
+
+    if (oldHass?.locale?.number_format !== newHass?.locale?.number_format
+      || oldHass?.locale?.language !== newHass?.locale?.language) return true;
     
     for (const entityCfg of this._config.entities) {
       const ecfg = this._resolve(entityCfg);
@@ -1018,7 +1021,7 @@ export class SensorBarCard extends HTMLElement {
   }
 
   _formatNumericDisplay(rawVal, decimal = null) {
-    return formatNumericDisplay(rawVal, decimal);
+    return formatNumericDisplay(rawVal, decimal, this._hass?.locale);
   }
 
   _getNormalizedPercent(valuePct, baselinePct = null) {
