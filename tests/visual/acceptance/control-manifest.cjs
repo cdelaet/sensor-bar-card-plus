@@ -161,6 +161,7 @@ for (const [section,names,hosts,journey] of [
  ['Target',['toggle-target-group'],['standalone','feature'],'disclosures'],
  ['Target',['clear-target-property'],['standalone','feature'],'directional'],
  ['Bar Appearance',['clear-paint-property','reset-paint'],['standalone','feature'],'paint-source'],
+ ['Bar Appearance',['reapply-paint-preset'],['standalone','feature'],'paint-preset'],
 ]) for (const name of names) add('action',name,section,'button',null,null,{hosts:name.includes('-entity-')?['standalone']:hosts,journey,structural:true,echo:journey!=='disclosures'});
 const inventory = controls.filter(c=>c.hosts.length);
 const selector = entry => `[data-${entry.route}="${entry.name}"]${entry.scope==='entity'?'[data-index="0"]':''}`;

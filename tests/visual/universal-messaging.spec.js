@@ -392,7 +392,7 @@ test(`preset messages retain invalid and missing causes and clear after registry
 }
 
 for (const source of ['src', 'dist']) {
-test(`a master Card reports duplicate dashboard masters without any preset references (${source})`, async ({ page }) => {
+test(`multiple empty dashboard Paint libraries are valid without preset references (${source})`, async ({ page }) => {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async () => {
     const dashboard = { views: [{ cards: [
@@ -411,8 +411,8 @@ test(`a master Card reports duplicate dashboard masters without any preset refer
     } });
   });
   const area = page.locator('sensor-bar-card-plus .sbcp-messages');
-  await expect(area).toBeVisible();
-  await expect(area).toContainText('Dashboard has 2 master Cards');
-  await expect(area).toContainText('preset resolution is disabled');
+  await expect(area).toBeHidden();
+  await expect.poll(() => page.locator('sensor-bar-card-plus').evaluate(element => element._paintPresetRegistry))
+    .toMatchObject({ status: 'ready', libraryCount: 2, conflicts: {} });
 });
 }

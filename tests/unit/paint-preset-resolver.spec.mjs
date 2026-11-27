@@ -71,8 +71,37 @@ describe('pure dashboard paint preset resolution', () => {
     });
 
     expect(result.paint).toMatchObject({ fill_style: 'solid', color: '#abcdef', solid_fill: false, opacity: 100 });
-    expect(result.paint.segments).toBeNull();
+    expect(result.paint.segments).toHaveLength(3);
+    expect(getSegmentsForRendering(result.paint)).toHaveLength(3);
     expect(result.paint.gradient_stops).toBeNull();
+  });
+
+  it.each([{}, { fill_style: 'bands' }, { opacity: 60 }])(
+    'keeps omitted preset segments renderable for %j', definition => {
+      const result = resolvePaintPreset({ paint: { preset: 'plain' }, registry: registryWith({ plain: definition }) });
+
+      expect(result.paint.fill_style).toBe('bands');
+      expect(result.paint.segments).toHaveLength(3);
+      expect(compilePaint(result.paint).gradient).toMatch(/^linear-gradient/);
+    },
+  );
+
+  it('preserves an explicitly empty preset segment list', () => {
+    const result = resolvePaintPreset({
+      paint: { preset: 'empty' }, registry: registryWith({ empty: { fill_style: 'bands', segments: [] } }),
+    });
+
+    expect(result.paint.segments).toEqual([]);
+    expect(getSegmentsForRendering(result.paint)).toEqual([]);
+    expect(compilePaint(result.paint).gradient).toBeNull();
+  });
+
+  it('uses a renderable standard palette when the unresolved preset has no inherited paint', () => {
+    const result = resolvePaintPreset({ paint: { preset: 'missing' }, registry: registryWith({}) });
+
+    expect(result.source).toBe('default');
+    expect(result.paint.segments).toHaveLength(3);
+    expect(compilePaint(result.paint).gradient).toMatch(/^linear-gradient/);
   });
 
   it.each([[0, 0], [100, 100], [37.5, 37.5], ['42.25', 42.25]])(

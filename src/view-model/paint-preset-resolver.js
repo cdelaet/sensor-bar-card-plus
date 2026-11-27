@@ -1,7 +1,7 @@
 import {
   BAR_PAINT_DIAGNOSTICS, INVALID_PAINT_OPACITY, PAINT_PROPERTY_SOURCES, normalizeBarConfig, normalizePaintOpacity,
 } from '../config/normalize.js';
-import { DEFAULT_PAINT_COLOR } from '../config/paint-defaults.js';
+import { DEFAULT_PAINT_COLOR, getDefaultPaintSegments } from '../config/paint-defaults.js';
 
 const PRESET_PROPERTIES = new Set(['fill_style', 'color', 'solid_fill', 'segments', 'gradient_stops', 'opacity']);
 const PRESET_PATH = 'paint.preset';
@@ -30,6 +30,9 @@ function normalizeDefinition(definition, { preset = false, canonical = false } =
   }
 
   const input = cloneValue(definition);
+  if (preset && !Object.prototype.hasOwnProperty.call(input, 'segments')) {
+    input.segments = getDefaultPaintSegments();
+  }
   let normalizedOpacity = null;
   let presetOpacity = null;
   if ((preset || canonical) && Object.prototype.hasOwnProperty.call(input, 'opacity') && input.opacity !== undefined) {
@@ -83,7 +86,7 @@ function defaultPaint(themeAccent) {
   const color = typeof themeAccent === 'string' && themeAccent.trim()
     ? themeAccent
     : DEFAULT_PAINT_COLOR;
-  return normalizeDefinition({ fill_style: 'bands', color, solid_fill: false }).paint;
+  return normalizeDefinition({ fill_style: 'bands', color, solid_fill: false, segments: getDefaultPaintSegments() }).paint;
 }
 
 function getPresetMap(registry) {

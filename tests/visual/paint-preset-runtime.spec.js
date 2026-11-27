@@ -1,5 +1,43 @@
 const { test, expect } = require('@playwright/test');
 
+const segmentPresetCases = [
+  { name: 'empty', definition: {}, hasBands: true },
+  { name: 'bands', definition: { fill_style: 'bands' }, hasBands: true },
+  { name: 'opacity', definition: { opacity: 60 }, hasBands: true },
+  { name: 'explicitly-empty', definition: { fill_style: 'bands', segments: [] }, hasBands: false },
+];
+
+for (const source of ['src', 'dist']) for (const preset of segmentPresetCases) {
+  test(`preset ${preset.name} Segment semantics render in Card and Feature (${source})`, async ({ page }) => {
+    await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
+    await page.evaluate(async ({ name, definition }) => {
+      const entity = 'sensor.paint_preset_segments';
+      const hass = { states: { [entity]: window.__sbcpCreateState(42) }, connected: true, connection: {
+        connected: true,
+        sendMessagePromise: async () => ({ sbcp_fragments: { paint_presets: { [name]: definition } } }),
+        subscribeEvents: async () => () => {}, addEventListener() {}, removeEventListener() {},
+      } };
+      const bar = { animated: false, paint: { preset: name } };
+      await window.__sbcpRenderCard({ hass, config: {
+        scale: { min: 0, max: 100 }, bar, entities: [{ entity }],
+      } });
+      await window.__sbcpRenderFeature({ hass, context: { entity_id: entity }, config: {
+        type: 'custom:sensor-bar-card-plus-feature', entity, scale: { min: 0, max: 100 }, bar,
+      } });
+    }, preset);
+
+    const cardLayer = page.locator('sensor-bar-card-plus .bar-paint-layer[data-layer="base"]').first();
+    const featureLayer = page.locator('sensor-bar-card-plus-feature .bar-paint-layer[data-layer="base"]').first();
+    if (preset.hasBands) {
+      await expect(cardLayer).toHaveCSS('background-image', /linear-gradient/);
+      await expect(featureLayer).toHaveCSS('background-image', /linear-gradient/);
+    } else {
+      await expect(cardLayer).toHaveCSS('background-image', 'none');
+      await expect(featureLayer).toHaveCSS('background-image', 'none');
+    }
+  });
+}
+
 for (const source of ['src', 'dist']) {
   test(`dashboard paint preset runtime is shared and patches both hosts (${source})`, async ({ page }) => {
     await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);

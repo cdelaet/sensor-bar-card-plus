@@ -18,6 +18,7 @@ export const editorStyles = `
         .paint-preset-row[hidden] { display: none; }
         .paint-preset-control { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
         .paint-preset-control select { flex: 1 1 150px; min-width: 0; }
+        .paint-preset-control > button[hidden] { display: inline-block; visibility: hidden; }
         .paint-editor-actions { display: flex; justify-content: flex-end; }
         .paint-property-row, .paint-palette-field { display: grid; gap: 6px; min-width: 0; }
         .paint-property-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; min-width: 0; }
