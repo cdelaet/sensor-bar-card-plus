@@ -9,7 +9,7 @@
 
 Sensor Bar Card Plus (SBCP) presents numeric sensor values as configurable bars or gauges in Home Assistant dashboards. Use it as a standalone card or as a native Card Feature inside a Tile card. It is useful when a value needs visual context: its scale, operating range, target, historic extrema, or relationship to a neutral point.
 
-![Sensor Bar Card Plus showcase](images/showcase-v1.10.png)
+![Sensor Bar Card Plus showcase](images/showcase-v1.11.png)
 
 Both presentations support structured YAML, animated reveal fills, Needle gauges, five fill styles, dynamic Scales, independent Scale and Bar Direction, Baseline fill origins, directional Target and Baseline Paint, Peak/Floor and Reference Markers, and a Visual Editor. Universal Paint gives the Bar and each overlay the same fill controls; named Paint presets can be shared by cards on one dashboard. The standalone card also supports multiple entities, attribute values, tap, hold and double-tap actions, five label layouts including Hero, per-entity overrides, and responsive row content.
 
@@ -234,9 +234,19 @@ Target, Baseline and Generic Reference Marker positions use a direct **Value** f
 
 Target, Peak, Floor, Generic Reference Markers, and individual generic markers have collapsible editor groups. Baseline is configured under **Bar Appearance**; entity-level Baseline remains with the standalone entity overrides. The editor keeps its local disclosure state out of saved YAML. You can continue editing the same structured configuration manually at any time.
 
-![Standalone Visual Editor screenshot](images/visual-editor.png)
+### Universal Paint
 
-This screenshot predates the v1.11 Universal Paint, preset-management, and directional Target controls; current editor behavior is described above.
+Configure colors, gradients, segments, opacity, and more
+using the Visual Editor, with a live preview.
+
+![Universal Paint editor](images/visual-editor.png)
+
+### Shared Paint Presets
+
+Create named Paint presets and share them across Cards
+on the same Home Assistant dashboard.
+
+![Shared Paint Presets](images/visual-editor-presets.png)
 
 ## Responsive behavior and data details
 

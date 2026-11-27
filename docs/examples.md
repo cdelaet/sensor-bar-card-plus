@@ -466,6 +466,12 @@ Move the reading below, equal to, and above the live Baseline to see the directi
 
 ## Universal Paint and presets
 
+*Three named Paint presets applied to the same Grid sensor. The editor displays each preset's resolved Paint while the live preview shows its appearance.*
+
+![Paint Preset 1](images/examples/paint-boombox.png)
+![Paint Preset 2](images/examples/paint-milkacow.png)
+![Paint Preset 3](images/examples/paint-mutedmint.png)
+
 Universal Paint gives the Bar and its Baseline/Target overlays the same fill controls. Standalone Cards can each define `preset_library.paint`; all contributed libraries are merged by exact name across the current dashboard, including other views. The following valid dashboard fragment intentionally defines `Thermal` twice to demonstrate a conflict. This is a conflict example, not a recommended production configuration:
 
 ```yaml
@@ -538,6 +544,23 @@ baseline:
 ```
 
 ### Above and Below Target Paint
+
+The following comparison demonstrates directional Target Paint
+in Fill and Needle modes.
+
+![Directional Target Paint: Above and Below Target in Fill and Needle modes](images/examples/target-directional-paint.png)
+
+The left column demonstrates Above Target Paint, while the
+right column demonstrates Below Target Paint.
+
+- **Fill mode (top):** Target Paint affects only the revealed
+  portion of the bar beyond the violated threshold.
+- **Needle mode (bottom):** The full Paint rail remains visible,
+  with directional Target Paint applied between the threshold
+  and the current reading.
+
+In both modes, directional Paint activates only when the
+reading strictly violates its threshold.
 
 A shared Target threshold can be used for both directions, or each direction can define its own threshold and marker. This example uses independent limits. Paint activates only on strict violation; at equality neither layer is active. In Fill mode, only the occupied/revealed region intersecting the violating side is painted. In Needle mode, only the interval from threshold to current reading is painted.
 
