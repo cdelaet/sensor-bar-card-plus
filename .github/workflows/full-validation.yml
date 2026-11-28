@@ -102,6 +102,9 @@ jobs:
       - name: Install required Playwright browsers
         run: npx playwright install --with-deps chromium webkit
 
+      - name: Enable keyboard navigation to all controls
+        run: defaults write NSGlobalDomain AppleKeyboardUIMode -int 2
+
       - name: Run complete Playwright suite against existing baselines
         run: npm run test:visual -- --workers=1 --update-snapshots=none
 
