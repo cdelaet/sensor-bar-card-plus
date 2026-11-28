@@ -34,38 +34,34 @@ The package scripts in `package.json` are:
 
 ~~~sh
 npm run test:unit
+npm run test:visual:fast
+npm run test:visual:complete
 npm run test:visual
 npm run verify-dist
 npm test
 ~~~
 
-`npm test` runs the build, unit tests, and Playwright visual tests in sequence. The unit suite checks configuration normalization, conversion, formatting, and card behavior. The Playwright suite checks rendered behavior including fill and Baseline cases, Target/Peak/Floor and generic reference markers, marker shapes and labels, responsive layouts, and clipping or rounded-edge regressions.
+`npm run test:visual:fast` runs high-value Chromium and WebKit browser journeys for lazy editor loading, source/dist Paint editing, Target Paint lifecycle, and keyboard navigation. Use it during everyday development. `npm run test:visual:complete` runs the complete Chromium/WebKit suite with two workers and snapshot updates disabled. Run this once locally before release candidates. `npm test` retains the build, unit, and complete visual sequence.
 
-GitHub's **Fast Validation** (`.github/workflows/validate.yml`) runs HACS validation, verifies both production bundles and their ESM syntax, runs focused native-browser lazy-loading checks, and runs unit tests on pushes to `main` and pull requests. It does not run the complete Playwright suite on ordinary pushes or pull requests.
+GitHub's **Fast Validation** (`.github/workflows/validate.yml`) runs HACS, verifies committed dist reproducibility and ESM syntax, runs the complete unit suite, and runs the focused Chromium/WebKit browser regression on pushes to `main` and pull requests. Scheduled runs only perform HACS validation and cannot qualify a release. The browser smoke job checks both source and dist where the journey covers both. The exhaustive browser suite remains available as an optional manually dispatched workflow.
 
-Before preparing a release, explicitly run **Full Validation** for the intended commit:
-
-~~~sh
-gh workflow run full-validation.yml --ref main
-~~~
-
-Full Validation runs HACS validation, dist verification, unit tests, and the complete Chromium and WebKit Playwright suite on macOS. The workflow run is tied to the exact `main` commit selected at dispatch; its run page and job summaries identify that SHA. Release preparation requires this successful Full Validation result for the exact same SHA; a successful Fast Validation run alone is insufficient.
+The developer's MacBook is the primary environment for complete visual regression testing. Release preparation requires successful Fast Validation for the exact current `main` SHA; the manual Full Validation workflow is optional and is not a release prerequisite.
 
 ## Visual regression snapshots
 
-The single canonical Playwright snapshot set is stored under `tests/visual/snapshots/`. The visual harness fixes the accent color, so screenshots do not depend on the developer's macOS accent preference.
+The single canonical Playwright snapshot set is stored under `tests/visual/snapshots/`, without an OS-version suffix. Snapshots cover SBCP-rendered bars, gradients, markers, labels, feature output and responsive composition. Editor controls use state/configuration, keyboard and geometry/containment assertions instead of pixel comparisons, since checkbox and select appearance is controlled by the OS. The visual harness pins locale and accent color.
 
-Run `npm run test:visual` to compare against the canonical snapshots. After an intentional visual change, run `npm run test:visual:update`, review every changed image, and commit intended snapshot changes with the code. Do not accept image changes blindly: snapshots should reflect intentional UI changes. The screenshot comparator allows up to 50 differing pixels at a per-pixel threshold of 0.2 to accommodate small macOS rasterization differences; this tolerance is not intended to mask layout or appearance changes. GitHub validation checks the same committed snapshot set with updates disabled.
+Run `npm run test:visual:complete` to compare against the canonical snapshots. After an intentional rendering change, generate snapshots locally with `npm run test:visual:update`, inspect every changed image, and commit only reviewed baselines. CI uses updates disabled and never generates or uploads replacement baselines. The comparator keeps its existing 50-pixel, 0.2 threshold for small rasterization differences; it is not raised to absorb layout or appearance changes.
 
 ## Release preparation
 
-After Full Validation succeeds for the current `main` commit, prepare the release draft:
+After Fast Validation succeeds for the current `main` commit, prepare the release draft:
 
 ~~~sh
 gh workflow run release-dist.yml --ref main -f version=1.11.0 -f title="Universal Paint and Dashboard Presets"
 ~~~
 
-The Release workflow checks that its commit is still the tip of `main`, requires successful Full Validation for that exact SHA, checks that the requested version matches `package.json`, refuses an existing tag or release, verifies both tracked dist files, and records each SHA-256 and size. It then creates the annotated `vX.Y.Z` tag through the GitHub API, creates a DRAFT GitHub Release with the supplied title, and uploads the editor followed by the core. It verifies the exact two-asset set and downloads both to check bytes, hashes and sizes. The workflow never publishes the release.
+The Release workflow checks that its commit is still the tip of `main`, requires successful Fast Validation from a `push` event for that exact SHA (scheduled HACS-only and pull request runs do not qualify), checks that the requested version matches `package.json`, refuses an existing tag or release, verifies both tracked dist files, and records each SHA-256 and size. It then creates the annotated `vX.Y.Z` tag through the GitHub API, creates a DRAFT GitHub Release with the supplied title, and uploads the editor followed by the core. It verifies the exact two-asset set and downloads both to check bytes, hashes and sizes. The workflow never publishes the release.
 
 After the workflow succeeds, open the draft GitHub Release, paste and review the canonical release notes from the private `private/WHATS-NEW.md`, verify the title, notes, tag, and both attached JavaScript files, then manually click **Publish release**. Never publish an incomplete draft or a draft from a failed preparation run; repair and verify both matching assets first.
 

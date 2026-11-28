@@ -16,6 +16,8 @@
     "test:unit": "node tools/run-vitest.cjs",
     "test:visual": "playwright test",
     "test:visual:update": "playwright test --workers=1 --update-snapshots",
+    "test:visual:fast": "playwright test lazy-editor-loading.spec.js paint-editor.spec.js paint-destination-contract.spec.js acceptance/editor-acceptance.spec.js --project='' --project=webkit-lazy-editors --project=webkit-paint-destinations --project=webkit-visual --project=webkit-editor-acceptance --grep 'runtime rendering does not request or register editors|Card entity Paint navigation and editing at (240|360)px|Card target-(above|below) None preserves mounted controls, disclosures, focus and scroll|standalone: entity Paint is directly reachable by keyboard at 240px' --workers=2",
+    "test:visual:complete": "playwright test --workers=2 --update-snapshots=none",
     "test:acceptance": "playwright test acceptance",
     "test:acceptance:chromium": "playwright test acceptance --project=''",
     "test:acceptance:webkit": "playwright test acceptance --project=webkit-editor-acceptance",
