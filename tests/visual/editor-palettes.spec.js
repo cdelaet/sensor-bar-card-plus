@@ -1,4 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
+const { test, expect } = require('./visual-test.cjs');
 const { snapshotName } = require('./snapshot-name.cjs');
 async function mount(page, style) {
   await page.goto('/tests/visual/fixtures/harness.html');
@@ -22,7 +23,7 @@ for (const [style, group] of [['bands', 'segments'], ['gradient', 'gradient-stop
     await editor.locator(`#card-group-${group}`).click();
     await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
     await page.mouse.move(0, 0);
-    await expect(editor.locator(`.card-subgroup[data-group="${group}"]`)).toHaveScreenshot(snapshotName(`palette-${group}-root.png`));
+    await expectEditorLayout(editor.locator(`.card-subgroup[data-group="${group}"]`), expect);
     const draft = editor.locator(style === 'bands' ? '#segment-draft-from' : '#gradient-draft-pos');
     await draft.fill(style === 'bands' ? '50%' : '80');
     await draft.press('Enter');
@@ -31,6 +32,6 @@ for (const [style, group] of [['bands', 'segments'], ['gradient', 'gradient-stop
     await editor.locator('#entity-0-group-bar').click();
     await editor.locator('#entity-0-paint-editor > summary').click();
     await editor.locator(`#entity-0-group-${group}`).click();
-    await expect(editor.locator(`.override-group:not(.card-subgroup)[data-group="${group}"]`)).toHaveScreenshot(snapshotName(`palette-${group}-override.png`));
+    await expectEditorLayout(editor.locator(`.override-group:not(.card-subgroup)[data-group="${group}"]`), expect);
   });
 }

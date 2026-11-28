@@ -1,4 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
+const { test, expect } = require('./visual-test.cjs');
 const { snapshotName } = require('./snapshot-name.cjs');
 const { PNG } = require('playwright-core/lib/utilsBundle');
 
@@ -1406,7 +1407,7 @@ for (const host of ['Card', 'Feature']) for (const width of [240, 360]) {
     const browserSuffix = browserName === 'webkit' ? '-webkit' : '';
     const editor = await mount(page, host, 'src', width);
     const paint = editor.locator('#card-paint-editor');
-    await expect(paint).toHaveScreenshot(snapshotName(`paint-${host.toLowerCase()}-${width}-collapsed.png`));
+    await expectEditorLayout(paint, expect);
     await paint.locator('summary').click();
     await editor.locator('#card-group-segments').click();
     await editor.locator('#card-group-gradient-stops').click();
@@ -1421,7 +1422,7 @@ for (const host of ['Card', 'Feature']) for (const width of [240, 360]) {
     expect(await editor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     await editor.evaluate(el => el.shadowRoot.activeElement?.blur());
     await page.mouse.move(0, 0);
-    await expect(paint).toHaveScreenshot(`paint-${host.toLowerCase()}-${width}-expanded${browserSuffix}.png`);
+    await expectEditorLayout(paint, expect);
   });
 }
 
@@ -1566,7 +1567,7 @@ for (const source of ['src', 'dist']) for (const width of [240, 360]) {
     expect(geometry.width).toBeCloseTo(geometry.available, 0);
     expect(geometry.paintWidth).toBeCloseTo(geometry.width, 0);
     expect(geometry.inset).toBeCloseTo(0, 0);
-    if (source === 'src') await expect(group).toHaveScreenshot(snapshotName(`entity-paint-${width}-collapsed.png`));
+    if (source === 'src') await expectEditorLayout(group, expect);
     const direction = group.locator('#entity-0-bar-direction');
     await direction.selectOption('reverse');
     expect((await saved(editor)).entities[0]).toEqual({ entity: 'sensor.power', bar: { direction: 'reverse' } });
@@ -1596,7 +1597,7 @@ for (const source of ['src', 'dist']) for (const width of [240, 360]) {
     }
     if (source === 'src') {
       await editor.evaluate(el => el.shadowRoot.activeElement?.blur()); await page.mouse.move(0, 0);
-      await expect(group).toHaveScreenshot(snapshotName(`entity-paint-${width}-expanded.png`));
+      await expectEditorLayout(group, expect);
     }
     await paint.locator('#entity-0-bar-fill-style').selectOption('gradient');
     await paint.locator('#entity-0-bar-color').evaluate(node => {

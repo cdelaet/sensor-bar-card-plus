@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 for (const scaleDirection of ['normal', 'reverse']) {
   test(`paint layers reconcile membership, order and identity with ${scaleDirection} Scale`, async ({ page }) => {

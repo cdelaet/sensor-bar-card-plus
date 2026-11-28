@@ -1,5 +1,6 @@
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
 const { expandFeatureGroups, featureGroup } = require('./feature-editor-test-utils.cjs');
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 const { snapshotName } = require('./snapshot-name.cjs');
 async function mount(page, source, width, empty = false) {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
@@ -30,7 +31,7 @@ for(const source of ['src','dist']) for(const width of [360,240]) test(`Feature 
   const section=featureGroup(editor,'generic-markers');
   await rows(editor).first().getByRole('button',{name:/Reference marker 1/}).click();
   await page.mouse.move(0, 0);
-  await expect(section).toHaveScreenshot(snapshotName(`feature-reference-markers-${width}.png`));
+  await expectEditorLayout(section, expect);
   expect(await editor.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
   expect(await section.evaluate(el=>Array.from(el.querySelectorAll('input,select,button')).filter(node=>node.getBoundingClientRect().width>0).every(node=>node.getBoundingClientRect().right<=el.getBoundingClientRect().right+1&&node.getBoundingClientRect().left>=el.getBoundingClientRect().left-1))).toBe(true);
   let row=rows(editor).first();const id=await row.getAttribute('data-marker-ui-id');

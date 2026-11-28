@@ -1,4 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
+const { test, expect } = require('./visual-test.cjs');
 const { snapshotName } = require('./snapshot-name.cjs');
 
 async function expectHeaderControlsToFit(group) {
@@ -38,7 +39,7 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`stan
   const root = editor.locator('.card-subgroup[data-group="generic-markers"]');
   await root.locator('[data-action="toggle-generic-marker"]').first().click();
   await expectHeaderControlsToFit(root);
-  await expect(root).toHaveScreenshot(snapshotName(`reference-markers-root-${width}.png`));
+  await expectEditorLayout(root, expect);
   const row = root.locator('.generic-marker-item').first(), id = await row.getAttribute('data-marker-ui-id');
   const text = row.locator('[data-kind="generic-marker-label-text"]');
   await text.evaluate(node => { window.__standaloneReferenceText = node; });
@@ -50,6 +51,6 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`stan
   const entity = editor.locator('.override-group:not(.card-subgroup)[data-group="markers"]');
   await entity.locator('[data-action="toggle-generic-marker"]').click();
   await expectHeaderControlsToFit(entity);
-  await expect(entity).toHaveScreenshot(snapshotName(`reference-markers-entity-${width}.png`));
+  await expectEditorLayout(entity, expect);
   const value = entity.locator('[data-kind="generic-marker-fixed"]'); await value.fill('40%'); await expect(value).toBeFocused();
 });

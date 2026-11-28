@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 const variants = [
   { id: 'short', name: 'Power', value: '7.2', unit: 'kW' },

@@ -1,4 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
+const { test, expect } = require('./visual-test.cjs');
 const { snapshotName } = require('./snapshot-name.cjs');
 async function mount(page, source = 'src', width = 360, nested = false) {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
@@ -60,7 +61,7 @@ for(const source of ['src','dist'])for(const width of [360,240])test(`Canonical 
  ]);
  for(const paint of canonical.paintEditors)await expect(editor.locator(`#${paint.id}`)).not.toHaveAttribute('open','');
  await expect(editor.locator('.card-subgroup[data-expanded="true"]')).toHaveCount(0);expect(await page.evaluate(()=>window.__uxEvents)).toHaveLength(0);
- await expect(editor).toHaveScreenshot(snapshotName(`feature-ux-initial-${width}.png`));
+ await expectEditorLayout(editor, expect);
  for(const group of canonical.featureGroups){const opened=[];for(const ancestor of group.ancestors){const parent=editor.locator(`#card-group-${ancestor}`);if(await parent.getAttribute('aria-expanded')==='false'){await parent.click();opened.push(parent);}}const paint=group.paintAncestor?editor.locator(`#${group.paintAncestor}`):null;let openedPaint=false;if(paint&&await paint.getAttribute('open')===null){await paint.locator('.paint-editor-summary').click();openedPaint=true;}const button=editor.locator(`#card-group-${group.group}`);await button.evaluate(el=>window.__uxDisclosure=el);await button.click();await expect(button).toHaveAttribute('aria-expanded','true');expect(await button.evaluate(el=>el===window.__uxDisclosure)).toBe(true);await button.press('Enter');await expect(button).toHaveAttribute('aria-expanded','false');if(openedPaint)await paint.locator('.paint-editor-summary').click();for(const parent of opened.reverse())await parent.click();}
  expect(await page.evaluate(()=>window.__uxEvents)).toHaveLength(0);
  const targetRoot=editor.locator('#card-group-marker-target');await targetRoot.click();const targetAbove=editor.locator('#card-group-target-above');await targetAbove.click();const targetPaint=editor.locator('#target-above-paint-editor');await expect(targetPaint).toBeVisible();await targetPaint.locator('.paint-editor-summary').click();await expect(targetPaint).toHaveAttribute('open','');
@@ -74,8 +75,8 @@ for(const source of ['src','dist'])for(const width of [360,240])test(`Canonical 
  await openReferences(editor);await editor.locator('.generic-marker-toggle').first().click();await editor.locator('[data-kind="generic-marker-label-text"]').first().fill('Changed');
  await expect(editor.locator('.generic-marker-item').first()).toHaveAttribute('data-expanded','true');
  await page.mouse.move(0,0);
- const markers=editor.locator('.section').filter({has:page.getByRole('heading',{name:'Markers',exact:true})});await expect(markers).toHaveScreenshot(snapshotName(`feature-ux-markers-${width}.png`));
- const bar=editor.locator('.section').filter({has:page.getByRole('heading',{name:'Bar Appearance',exact:true})});await expect(bar).toHaveScreenshot(snapshotName(`feature-ux-bar-${width}.png`));
+ const markers=editor.locator('.section').filter({has:page.getByRole('heading',{name:'Markers',exact:true})});await expectEditorLayout(markers, expect);
+ const bar=editor.locator('.section').filter({has:page.getByRole('heading',{name:'Bar Appearance',exact:true})});await expectEditorLayout(bar, expect);
  expect(await editor.evaluate(el=>Array.from(el.shadowRoot.querySelectorAll('.override-group-toggle')).filter(node=>node.getClientRects().length>0).every(node=>{const r=node.getBoundingClientRect(),host=el.getBoundingClientRect();return r.left>=host.left-1&&r.right<=host.right+1;}))).toBe(true);
  const saved=await editor.evaluate(el=>structuredClone(el._config));expect(saved.future).toEqual({keep:true,unset:undefined});expect(saved.bar).toEqual(await page.evaluate(()=>window.__uxOriginal.bar));expect(saved.entity).toBeUndefined();
  const before=await page.evaluate(()=>window.__uxEvents.length);await editor.evaluate(async el=>{el.setConfig({...el._config,future:{keep:'foreign'}});await el.updateComplete;});await expect(editor.locator('#card-group-marker-target')).toHaveAttribute('aria-expanded','true');await expect(editor.locator('.generic-marker-item').first()).toHaveAttribute('data-expanded','false');expect(await page.evaluate(()=>window.__uxEvents.length)).toBe(before);

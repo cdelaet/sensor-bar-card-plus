@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 async function mount(page, source, host) {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);

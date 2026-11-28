@@ -16,7 +16,7 @@ export const editorStyles = `
         .paint-editor-properties[hidden] { display: none; }
         .paint-preset-row { display: grid; grid-template-columns: minmax(92px, 0.7fr) minmax(0, 1.3fr); gap: 8px; align-items: center; min-width: 0; }
         .paint-preset-row[hidden] { display: none; }
-        .paint-preset-control { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+        .paint-preset-control { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; align-self: start; min-width: 0; }
         .paint-preset-control select { flex: 1 1 150px; min-width: 0; }
         .paint-preset-control > button[hidden] { position: absolute; visibility: hidden; }
         .paint-editor-actions { display: flex; justify-content: flex-end; }

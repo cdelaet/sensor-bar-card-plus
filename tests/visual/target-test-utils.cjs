@@ -3,7 +3,13 @@ const { expect } = require('@playwright/test');
 async function openTarget(editor, scope = 'Card', parts = ['shared', 'appearance', 'labels']) {
   const entity = scope === 'Entity';
   const open = async control => {
-    if (await control.getAttribute('aria-expanded') === 'false') await control.click();
+    if (await control.getAttribute('aria-expanded') === 'false') {
+      await control.scrollIntoViewIfNeeded();
+      const bounds = await control.boundingBox();
+      if (!bounds) throw new Error('Target disclosure is not visible for an in-place click');
+      const page = control.page();
+      await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    }
     await expect(control).toHaveAttribute('aria-expanded', 'true');
   };
   if (entity) await open(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));

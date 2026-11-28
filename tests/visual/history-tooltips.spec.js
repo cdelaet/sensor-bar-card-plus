@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 test('history diagnostics use the shared message area instead of marker tooltips', async ({ page }) => {
   await page.goto('/tests/visual/fixtures/harness.html');

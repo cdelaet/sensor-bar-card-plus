@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 const textOnly = text => ({ show: true, text, show_value: false, show_unit: false });
 const frames = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 const feature = page => page.locator('sensor-bar-card-plus-feature');

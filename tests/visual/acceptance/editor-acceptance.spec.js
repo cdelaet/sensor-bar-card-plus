@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../visual-test.cjs');
 const { inventory, groups } = require('./control-manifest.cjs');
 const d = require('./editor-driver.cjs');
 test.setTimeout(90_000);

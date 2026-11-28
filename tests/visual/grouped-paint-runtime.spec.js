@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 for (const source of ['src', 'dist']) for (const scaleDirection of ['normal', 'reverse']) for (const barDirection of ['normal', 'reverse']) {
   test(`grouped paint runtime ${source}, Scale ${scaleDirection}, Bar ${barDirection}`, async ({ page }) => {
     await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);

@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 const colors = ['#3949AB', '#1E88E5', '#29B6F6', '#26C6DA', '#26A69A', '#66BB6A', '#D4E157', '#FFCA28',
   '#FFA726', '#FB8C00', '#E53935', '#8E24AA'];

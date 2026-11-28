@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 for (const fillStyle of ['solid', 'gradient', 'bands', 'soft_bands', 'band_gradient']) {
   for (const scaleDirection of ['normal', 'reverse']) for (const barDirection of ['normal', 'reverse']) {

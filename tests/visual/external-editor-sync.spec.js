@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 const d = require('./acceptance/editor-driver.cjs');
 
 async function mount(page, host, source, options = {}) {

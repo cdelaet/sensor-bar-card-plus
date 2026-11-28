@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 const properties = ['gradient_stops', 'segments', 'fill_style', 'color', 'solid_fill', 'opacity'];
 const segments = Array.from({ length: 12 }, (_, i) => ({ from: `${i * 8}%`, to: `${(i + 1) * 8}%`, color: '#abcdef' }));

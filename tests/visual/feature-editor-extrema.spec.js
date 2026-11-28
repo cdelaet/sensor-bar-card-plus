@@ -1,5 +1,6 @@
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
 const { expandFeatureGroups, featureGroup } = require('./feature-editor-test-utils.cjs');
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 const { snapshotName } = require('./snapshot-name.cjs');
 async function mount(page, source, width, empty = false) {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
@@ -29,7 +30,7 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   for (const key of ['peak', 'floor']) {
     const section = featureGroup(editor, `marker-${key}`);
     await page.mouse.move(0, 0);
-    await expect(section).toHaveScreenshot(snapshotName(`feature-${key}-${width}.png`));
+    await expectEditorLayout(section, expect);
     const other = key === 'peak' ? 'floor' : 'peak', before = await saved(editor);
     await editor.locator(`#${key}-show`).uncheck(); await editor.locator(`#${key}-show`).check();
     const direction = editor.locator(`#${key}-direction`); await expect(direction.locator('option')).toHaveText(['Inward', 'Outward']);

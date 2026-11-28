@@ -1,4 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
+const { test, expect } = require('./visual-test.cjs');
 const { snapshotName } = require('./snapshot-name.cjs');
 
 async function mountEditor(page) {
@@ -39,10 +40,10 @@ test('Scale and Formatting preserve focused fields and inherited override presen
 test('Formatting root and override controls retain their pre-extraction appearance', async ({ page }) => {
   const editor = await mountEditor(page);
   await page.mouse.move(0, 0);
-  await expect(editor.locator('.section').filter({ has: page.getByRole('heading', { name: 'Formatting', exact: true }) })).toHaveScreenshot(snapshotName('editor-formatting-root.png'));
+  await expectEditorLayout(editor.locator('.section').filter({ has: page.getByRole('heading', { name: 'Formatting', exact: true }) }), expect);
   await editor.locator('button[data-action="toggle-entity-overrides"]').click();
   await editor.locator('#entity-0-group-formatting').click();
   await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
   await page.mouse.move(0, 0);
-  await expect(editor.locator('.override-group[data-group="formatting"]')).toHaveScreenshot(snapshotName('editor-formatting-override.png'));
+  await expectEditorLayout(editor.locator('.override-group[data-group="formatting"]'), expect);
 });

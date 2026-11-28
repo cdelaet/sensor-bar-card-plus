@@ -1,4 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
+const { test, expect } = require('./visual-test.cjs');
 const { snapshotName } = require('./snapshot-name.cjs');
 
 const type = 'custom:sensor-bar-card-plus-feature';
@@ -99,7 +100,7 @@ test('Area/no-parent entity requirement and narrow layout stay usable', async ({
     const rect = node.getBoundingClientRect();
     return rect.width === 0 || rect.left >= host.left - 1 && rect.right <= host.right + 1;
   }))).toBe(true);
-  await expect(editor).toHaveScreenshot(snapshotName('feature-editor-required-narrow.png'));
+  await expectEditorLayout(editor, expect);
 });
 
 test('HA picker value-changed shape supports explicit and Scale sources', async ({ page }) => {
@@ -145,5 +146,5 @@ test('late HA picker loading and CSS-to-hex typing preserve focus', async ({ pag
 test('Feature editor inherited composition has a focused visual baseline', async ({ page, browserName }) => {
   const browserSuffix = browserName === 'webkit' ? '-webkit' : '';
   const editor = await mountEditor(page, { config: { type, scale: { min: 0, max: 100 }, formatting: { unit: 'W', decimal: 1 }, bar: { fill_style: 'gradient', color: 'var(--accent-color)' } } });
-  await expect(editor).toHaveScreenshot(`feature-editor-inherited${browserSuffix}.png`);
+  await expectEditorLayout(editor, expect);
 });

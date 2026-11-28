@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 const state = { state: '42', attributes: { friendly_name: 'Temperature', unit_of_measurement: '°C' } };
 

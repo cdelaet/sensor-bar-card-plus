@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 const { PNG } = require('playwright-core/lib/utilsBundle');
 const state = (value, unit = 'W') => ({ state: String(value), attributes: { unit_of_measurement: unit } });
 const entity = 'sensor.power';

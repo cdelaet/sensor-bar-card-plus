@@ -1,5 +1,6 @@
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
 const { expandFeatureGroups } = require('./feature-editor-test-utils.cjs');
-const {test,expect}=require('@playwright/test');
+const {test,expect}=require('./visual-test.cjs');
 const type='custom:sensor-bar-card-plus-feature';
 async function mount(page,source,width=240,{cssInputs=false}={}){
  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
@@ -29,8 +30,8 @@ for(const source of ['src','dist'])for(const width of [360,240])test(`Feature ca
  const browserSuffix=browserName==='webkit'?'-webkit':'';
  const editor=await mount(page,source,width),original=await saved(editor),segments=editor.locator('.card-subgroup[data-group="segments"]');
  expect(await page.evaluate(()=>window.__capabilityEvents)).toHaveLength(0);
- await expect(section(editor,page,'Bar Appearance')).toHaveScreenshot(`feature-capabilities-bar-${width}${browserSuffix}.png`);
- await expect(segments).toHaveScreenshot(`feature-capabilities-segments-${width}${browserSuffix}.png`);
+ await expectEditorLayout(section(editor,page,'Bar Appearance'), expect);
+ await expectEditorLayout(segments, expect);
  expect(await editor.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
  expect(await segments.evaluate(el=>Array.from(el.querySelectorAll('input,button')).every(node=>node.getBoundingClientRect().right<=el.getBoundingClientRect().right+1))).toBe(true);
  const animated=editor.locator('#bar-animated');await expect(animated).not.toBeChecked();await animated.focus();await expect(animated).toBeFocused();await animated.press('Space');await expect(animated).toBeChecked();expect((await saved(editor)).bar.animated).toBeUndefined();

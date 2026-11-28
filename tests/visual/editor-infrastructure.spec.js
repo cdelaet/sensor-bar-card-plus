@@ -1,4 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
+const { test, expect } = require('./visual-test.cjs');
 
 async function mountEditor(page) {
   await page.goto('/tests/visual/fixtures/harness.html');
@@ -41,6 +42,6 @@ test('standalone Scale and collapsed Target controls retain their layout', async
   await editor.locator('#card-group-marker-target').click();
   await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
   await page.mouse.move(0, 0);
-  await expect(editor.locator('.section').filter({ has: page.getByRole('heading', { name: 'Scale', exact: true }) })).toHaveScreenshot(`editor-scale-controls${browserSuffix}.png`);
-  await expect(editor.locator('.card-subgroup[data-group="marker-target"]')).toHaveScreenshot(`editor-target-controls${browserSuffix}.png`);
+  await expectEditorLayout(editor.locator('.section').filter({ has: page.getByRole('heading', { name: 'Scale', exact: true }) }), expect);
+  await expectEditorLayout(editor.locator('.card-subgroup[data-group="marker-target"]'), expect);
 });

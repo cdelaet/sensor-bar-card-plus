@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 for (const [scaleDirection, barDirection] of [['normal', 'normal'], ['normal', 'reverse'], ['reverse', 'normal'], ['reverse', 'reverse']]) {
   for (const needleEnabled of [true, false]) {

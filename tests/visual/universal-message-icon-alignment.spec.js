@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 for (const source of ['src', 'dist']) {
   test(`severity icons align with diagnostic context in narrow Card and Tile layouts (${source})`, async ({ page }) => {

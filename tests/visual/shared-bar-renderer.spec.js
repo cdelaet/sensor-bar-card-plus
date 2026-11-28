@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 test('card and feature report unavailable history without legacy marker diagnostics', async ({ page }) => {
   await page.goto('/tests/visual/fixtures/harness.html');

@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 const invalidConfig = {
   bar: { color: '#00aa00', paint: { color: '#123456', opacity: -1 } },

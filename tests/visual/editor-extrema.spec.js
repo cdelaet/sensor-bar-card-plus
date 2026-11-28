@@ -1,4 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
+const { test, expect } = require('./visual-test.cjs');
 for (const source of ['src', 'dist']) for (const host of ['standalone', 'feature']) test(`${host} extrema selects, saves, cancels and restores window helpers (${source})`, async ({ page }) => {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async host => {
@@ -108,7 +109,7 @@ for (const key of ['peak', 'floor']) test(`standalone ${key} root/entity control
   });
   const editor = page.locator('sensor-bar-card-plus-editor');
   await editor.locator(`#card-group-marker-${key}`).click();
-  await expect(editor.locator(`.card-subgroup[data-group="marker-${key}"]`)).toHaveScreenshot(`${key}-root${browserSuffix}.png`);
+  await expectEditorLayout(editor.locator(`.card-subgroup[data-group="marker-${key}"]`), expect);
   await editor.locator(`#${key}-window`).focus(); await editor.locator(`#${key}-window`).press('ArrowDown');
   await expect(editor.locator(`#${key}-window`)).toBeFocused();
   await editor.locator(`#${key}-label-text`).fill('Changed energy'); await expect(editor.locator(`#${key}-label-text`)).toBeFocused();
@@ -124,7 +125,7 @@ for (const key of ['peak', 'floor']) test(`standalone ${key} root/entity control
   } else {
     await page.mouse.move(0, 0);
   }
-  await expect(entityGroup).toHaveScreenshot(`${key}-entity${browserSuffix}.png`);
+  await expectEditorLayout(entityGroup, expect);
   await editor.locator(`#entity-0-${key}-window`).focus();
   await editor.locator(`#entity-0-${key}-window`).selectOption('today'); await expect(editor.locator(`#entity-0-${key}-window`)).toBeFocused();
 });

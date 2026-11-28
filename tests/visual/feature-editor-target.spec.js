@@ -1,5 +1,6 @@
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
 const { expandFeatureGroups, featureGroup } = require('./feature-editor-test-utils.cjs');
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 const { snapshotName } = require('./snapshot-name.cjs');
 const { openTarget } = require('./target-test-utils.cjs');
 async function mount(page, source, width, percentage = false) {
@@ -27,7 +28,7 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   const editor = await mount(page, source, width), original = await page.evaluate(() => window.__targetOriginal);
   expect(await page.evaluate(() => window.__targetEvents)).toHaveLength(0);
   const section = featureGroup(editor, 'marker-target');
-  await expect(section).toHaveScreenshot(snapshotName(`feature-target-${width}.png`));
+  await expectEditorLayout(section, expect);
   expect(await editor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   await expect(section.locator('#target-direction option')).toHaveText(['Inward', 'Outward']);
   await expect(section.locator('#target-shape option')).toHaveText(['diamond', 'triangle']);

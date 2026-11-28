@@ -1,4 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
+const { test, expect } = require('./visual-test.cjs');
 async function mount(page, source) {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async () => {
@@ -20,7 +21,7 @@ for (const source of ['src', 'dist']) for (const section of ['needle', 'baseline
   const root = editor.locator(`.card-subgroup[data-group="${section}"]`);
   if (section === 'needle') await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
   await page.mouse.move(0, 0);
-  await expect(root).toHaveScreenshot(`${section}-root${browserSuffix}.png`);
+  await expectEditorLayout(root, expect);
   const control = editor.locator(section === 'baseline' ? '#baseline-value' : '[data-field="bar-needle-color-text-fallback"]');
   if (section === 'baseline') {
     await expect(control).toHaveAttribute('type', 'text'); await expect(control).toHaveValue('0');
@@ -37,7 +38,7 @@ for (const source of ['src', 'dist']) for (const section of ['needle', 'baseline
   await editor.locator(`#entity-0-group-${section}`).click();
   await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
   await page.mouse.move(0, 0);
-  await expect(editor.locator(`.override-group:not(.card-subgroup)[data-group="${section}"]`)).toHaveScreenshot(`${section}-entity${browserSuffix}.png`);
+  await expectEditorLayout(editor.locator(`.override-group:not(.card-subgroup)[data-group="${section}"]`), expect);
   if (section === 'baseline') {
     const inherit = editor.locator('#entity-0-baseline-inherit'), enable = editor.locator('#entity-0-baseline-show');
     await expect(inherit).toBeChecked(); await expect(enable).not.toBeChecked(); await expect(enable).not.toBeDisabled();

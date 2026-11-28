@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 const { count, foreign, mount, openSection, openDisclosure, colorPicker, saved } = require('./acceptance/editor-driver.cjs');
 const { openTarget } = require('./target-test-utils.cjs');
 

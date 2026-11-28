@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 const state = (value, attributes = {}) => ({ state: String(value), attributes });
 const entity = 'sensor.power';

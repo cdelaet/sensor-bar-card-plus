@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../visual-test.cjs');
 const { d, mountPaletteEditor, paletteSelector, focusAndMeasure, expectFocusAndViewport } = require('./palette-keyboard-focus-driver.cjs');
 
 for (const source of ['src', 'dist']) for (const scope of ['root', 'entity']) {

@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 test('Actions selectors round-trip without replacing the focused editor control', async ({ page }) => {
   await page.goto('/tests/visual/fixtures/harness.html');

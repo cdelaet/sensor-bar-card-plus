@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 const { testLocale } = require('../support/test-locale.cjs');
 
 test('browser tests use the canonical test locale', async ({ page, browserName }) => {

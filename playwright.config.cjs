@@ -3,7 +3,7 @@ const { testLocale } = require('./tests/support/test-locale.cjs');
 
 module.exports = {
   testDir: path.join(__dirname, 'tests/visual'),
-  snapshotPathTemplate: '{testDir}/snapshots/{testFilePath}-snapshots/{arg}-{platform}{ext}',
+  snapshotPathTemplate: '{testDir}/snapshots/{testFilePath}-snapshots/{arg}{ext}',
   updateSnapshots: 'none',
   expect: {
     toHaveScreenshot: {

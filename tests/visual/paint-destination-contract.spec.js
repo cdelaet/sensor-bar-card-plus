@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 const hosts = ['Card', 'Entity', 'Feature'];
 const destinations = ['bar', 'baseline-above', 'baseline-below', 'target-above', 'target-below'];

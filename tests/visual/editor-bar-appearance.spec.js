@@ -1,4 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
+const { test, expect } = require('./visual-test.cjs');
 const { snapshotName } = require('./snapshot-name.cjs');
 
 async function mountEditor(page) {
@@ -45,12 +46,12 @@ test('Bar Appearance controls retain inherited behavior inside the Bar section',
 test('Bar root and Bar Appearance override preserve their controls', async ({ page }) => {
   const editor = await mountEditor(page);
   await page.mouse.move(0, 0);
-  await expect(editor.locator('.section').filter({ has: page.getByRole('heading', { name: 'Bar', exact: true }) })).toHaveScreenshot(snapshotName('editor-bar-appearance-root.png'));
+  await expectEditorLayout(editor.locator('.section').filter({ has: page.getByRole('heading', { name: 'Bar', exact: true }) }), expect);
   await editor.locator('button[data-action="toggle-entity-overrides"]').click();
   await editor.locator('#entity-0-group-bar').click();
   await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
   await page.mouse.move(0, 0);
-  await expect(editor.getByRole('group', { name: 'Bar Appearance', exact: true })).toHaveScreenshot(snapshotName('editor-bar-appearance-override.png'));
+  await expectEditorLayout(editor.getByRole('group', { name: 'Bar Appearance', exact: true }), expect);
 });
 
 test('Entity Bar disclosure orders inheritance, direction, animation, Paint, Baseline and Needle', async ({ page }) => {

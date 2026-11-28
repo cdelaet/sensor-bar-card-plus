@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 const { openTarget, mount } = require('./target-test-utils.cjs');
 
 const saved = page => page.evaluate(() => window.__targetConfig);

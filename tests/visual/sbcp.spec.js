@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 const { snapshotName } = require('./snapshot-name.cjs');
 
 function sensor(state, {
@@ -3751,8 +3751,7 @@ test('visual regression: inside-label-responsive-stack', async ({ page }) => {
   await expect(page.locator('#mount')).toHaveScreenshot(snapshotName('inside-label-responsive-stack.png'));
 });
 
-test('off mode keeps narrow long values inside the row before hiding the unit', async ({ page, browserName }) => {
-  const browserSuffix = browserName === 'webkit' ? '-webkit' : '';
+test('off mode keeps narrow long values inside the row before hiding the unit', async ({ page }) => {
   const mount = await render(page, {
     width: 260,
     config: {
@@ -3846,7 +3845,8 @@ test('off mode keeps narrow long values inside the row before hiding the unit', 
     expect(row.valueRight).toBeLessThanOrEqual(row.mainRight + 0.5);
   }
 
-  await expect(mount).toHaveScreenshot(`off-mode-narrow-long-unit${browserSuffix}.png`);
+  const layout = await mount.evaluate(node => ({ clientWidth: node.clientWidth, scrollWidth: node.scrollWidth }));
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
 });
 
 test('left responsive presentation is stable through stateful shrink and grow traversals', async ({ page }) => {

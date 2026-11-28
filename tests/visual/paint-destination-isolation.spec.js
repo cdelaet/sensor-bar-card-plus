@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 const destinations = ['Preset', 'Card', 'Entity', 'Feature'];
 const rootId = destination => destination === 'Preset' ? 'preset-paint-editor'

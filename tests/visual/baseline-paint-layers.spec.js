@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 for (const scaleDirection of ['normal', 'reverse']) {
   test(`independent Baseline layers preserve compositing and patching with ${scaleDirection} Scale`, async ({ page }) => {
