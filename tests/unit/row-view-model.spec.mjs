@@ -29,6 +29,41 @@ function normalizeDecimalString(value) {
 }
 
 describe('buildRowViewModel', () => {
+  it('formats numeric values and marker labels using the HA locale while retaining precision overrides', () => {
+    const hass = {
+      locale: { language: 'en-US', number_format: 'space_comma' },
+      states: { 'sensor.power': sensor(-1234.567, { unit_of_measurement: 'W' }) },
+    };
+    const entityConfig = createNormalizedEntity({
+      formatting: { decimal: 1 },
+      target: { at: { fixed: 2345.678 }, label: { show: true, decimal: 2 } },
+      entities: [{ entity: 'sensor.power' }],
+    });
+    const row = buildRowViewModel({ hass, entityConfig, entityState: hass.states['sensor.power'] });
+
+    expect(row.primaryPresentation.text).toBe('-1\u202f234,6 W');
+    expect(row.targetPresentation.text).toBe('2\u202f345,68 W');
+    expect(row.targetLabelPresentation.number).toBe('2\u202f345,68');
+  });
+
+  it('uses two fractional digits by default and honors explicit three-digit precision', () => {
+    const hass = {
+      locale: { language: 'en-US', number_format: 'language' },
+      states: { 'sensor.power': sensor(1234.567) },
+    };
+    const defaultConfig = createNormalizedEntity({ entities: [{ entity: 'sensor.power' }] });
+    const explicitConfig = createNormalizedEntity({
+      formatting: { decimal: 3 },
+      entities: [{ entity: 'sensor.power' }],
+    });
+
+    const defaultRow = buildRowViewModel({ hass, entityConfig: defaultConfig, entityState: hass.states['sensor.power'] });
+    const explicitRow = buildRowViewModel({ hass, entityConfig: explicitConfig, entityState: hass.states['sensor.power'] });
+
+    expect(defaultRow.primaryPresentation.number).toBe('1,234.57');
+    expect(explicitRow.primaryPresentation.number).toBe('1,234.567');
+  });
+
   it('builds basic runtime row state from a normalized entity config', () => {
     const hass = {
       states: {

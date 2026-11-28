@@ -1,4 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
+const { test, expect } = require('./visual-test.cjs');
 
 async function mountEditor(page) {
   await page.goto('/tests/visual/fixtures/harness.html');
@@ -20,6 +21,7 @@ async function mountEditor(page) {
 
 test('editor drafts, focus and disclosures survive echo and a structural render', async ({ page }) => {
   const editor = await mountEditor(page);
+  await editor.locator('#card-paint-editor > summary').click();
   await editor.locator('#card-group-gradient-stops').click();
   await editor.locator('#gradient-draft-pos').fill('45');
   const title = editor.locator('#title');
@@ -34,11 +36,12 @@ test('editor drafts, focus and disclosures survive echo and a structural render'
   await expect(editor.locator('input[data-kind="gradient-pos"]').nth(1)).toHaveValue('45');
 });
 
-test('standalone shared controls retain their pre-extraction appearance', async ({ page }) => {
+test('standalone Scale and collapsed Target controls retain their layout', async ({ page, browserName }) => {
+  const browserSuffix = browserName === 'webkit' ? '-webkit' : '';
   const editor = await mountEditor(page);
   await editor.locator('#card-group-marker-target').click();
   await editor.evaluate(element => element.shadowRoot.activeElement?.blur());
   await page.mouse.move(0, 0);
-  await expect(editor.locator('.section').filter({ has: page.getByRole('heading', { name: 'Scale', exact: true }) })).toHaveScreenshot('editor-scale-controls.png');
-  await expect(editor.locator('.card-subgroup[data-group="marker-target"]')).toHaveScreenshot('editor-target-controls.png');
+  await expectEditorLayout(editor.locator('.section').filter({ has: page.getByRole('heading', { name: 'Scale', exact: true }) }), expect);
+  await expectEditorLayout(editor.locator('.card-subgroup[data-group="marker-target"]'), expect);
 });

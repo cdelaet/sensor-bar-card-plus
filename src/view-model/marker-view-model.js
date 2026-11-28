@@ -1,9 +1,4 @@
-function hasConfiguredSource(source) {
-  if (!source) return false;
-  return source.entity !== null && source.entity !== undefined && source.entity !== ''
-    || source.fixed !== null && source.fixed !== undefined && source.fixed !== ''
-    || Number.isFinite(source.percent);
-}
+import { getConfiguredTargetMarkers } from '../config/directional-targets.js';
 
 const MARKER_SHAPES = new Set(['circle', 'diamond', 'triangle', 'chevron', 'arrow', 'pin']);
 
@@ -48,12 +43,12 @@ export function hasMarkerLabelContent(label) {
 }
 
 export function getMarkerLaneOccupancy(entityConfig) {
-  const targetConfig = entityConfig?.target_marker;
+  const targetConfigs = getConfiguredTargetMarkers(entityConfig);
   const peakConfig = entityConfig?.peak_marker;
   const floorConfig = entityConfig?.floor_marker;
   const genericMarkers = (entityConfig?.generic_markers ?? []).filter((marker) => marker.accepted);
   return {
-    below: (targetConfig?.enabled !== false && hasConfiguredSource(targetConfig?.source))
+    below: targetConfigs.length > 0
       || floorConfig?.show === true
       || genericMarkers.some((marker) => marker.lane === 'below'),
     above: peakConfig?.show === true || genericMarkers.some((marker) => marker.lane === 'above'),
@@ -61,15 +56,13 @@ export function getMarkerLaneOccupancy(entityConfig) {
 }
 
 export function getMarkerLabelLaneOccupancy(entityConfig) {
-  const targetConfig = entityConfig?.target_marker;
+  const targetConfigs = getConfiguredTargetMarkers(entityConfig);
   const peakConfig = entityConfig?.peak_marker;
   const floorConfig = entityConfig?.floor_marker;
   const genericMarkers = (entityConfig?.generic_markers ?? []).filter((marker) => marker.accepted);
   return {
-    below: (targetConfig?.enabled !== false
-      && hasConfiguredSource(targetConfig?.source)
-      && targetConfig?.show_label === true
-      && hasMarkerLabelContent({ text: targetConfig.label_text, showValue: targetConfig.label_show_value, showUnit: targetConfig.label_show_unit }))
+    below: targetConfigs.some(({ marker }) => marker?.show_label === true
+      && hasMarkerLabelContent({ text: marker.label_text, showValue: marker.label_show_value, showUnit: marker.label_show_unit }))
       || (floorConfig?.show === true && floorConfig?.show_label === true
         && hasMarkerLabelContent({ text: floorConfig.label_text, showValue: floorConfig.label_show_value, showUnit: floorConfig.label_show_unit }))
       || genericMarkers.some((marker) => marker.lane === 'below' && marker.label?.show === true && hasMarkerLabelContent(marker.label)),

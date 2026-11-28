@@ -29,21 +29,21 @@ for (const source of ['src', 'dist']) describe(`standalone Target characterizati
     expect(editor._draftConfig.target.label).toEqual({ text: 'Goal energy', precision: 2, show_value: false });
     expect(editor._setBuiltinMarkerLabelField(root, 'target', 'precision', '-1')).toBe(false);
   });
-  it('retains local inheritance, presentation and the precise override clear fields', () => {
+  it('clears shared inheritance overrides while retaining unrelated metadata and presentation defaults', () => {
     const editor = createEditor({ source }); editor.setConfig({ target: { at: 10, shape: 'triangle', direction: 'outward', label: { text: 'Root' } }, entities: [{ entity: 'sensor.a', target: { enabled: false, at: 20, shape: 'triangle', label: { show: true, text: 'Local', precision: 1, decimal: 2 }, future: true } }] });
     expect(editor._getEffectiveTargetShapeValue(row)).toBe('triangle'); expect(editor._getEffectiveMarkerDirection(row, 'target')).toBe('outward');
     editor._clearTargetOverride(row);
-    expect(editor._draftConfig.entities[0].target).toEqual({ label: { text: 'Local', precision: 1 }, future: true });
+    expect(editor._draftConfig.entities[0].target).toEqual({ future: true });
     editor._setTargetShape(root, 'diamond'); expect(editor._draftConfig.target.shape).toBeUndefined();
     editor._setMarkerDirection(root, 'target', 'inward'); expect(editor._draftConfig.target.direction).toBeUndefined();
   });
-  it('stores exceeded-fill drafts locally when disabled and restores them through echo', () => {
-    const editor = createEditor({ source }); editor.setConfig({ target: { at: 10 } });
-    expect(editor._setTargetAboveFillColor(root, 'red')).toBe(false); expect(editor._draftConfig.target.when_exceeded).toBeUndefined();
-    editor._setTargetAboveFillEnabled(root, true); expect(editor._draftConfig.target.when_exceeded.fill_color).toBe('red');
-    editor._setTargetAboveFillEnabled(root, false); editor.setConfig(editor._draftConfig);
-    expect(editor._getTargetAboveFillDraft(root)).toBe('red');
-    editor._setTargetAboveFillEnabled(root, true); expect(editor._draftConfig.target.when_exceeded.fill_color).toBe('red');
+  it('reads legacy exceeded fill through shared Paint without rewriting config on open', () => {
+    const editor = createEditor({ source });
+    const config = { target: { at: 10, when_exceeded: { fill_color: 'red', future: true } } };
+    editor.setConfig(config);
+    expect(editor._draftConfig).toEqual(config);
+    expect(editor.shadowRoot.querySelector('#target-above-paint-color')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#target-above-fill-enabled')).toBeNull();
     expect(editor._getCardTargetMarkerSummary()).toBe('10 · Diamond');
   });
 
@@ -77,6 +77,26 @@ for (const source of ['src', 'dist']) describe(`standalone Target characterizati
     editor._targetSection.handleField({ kind: 'entity-target-entity-source', index: 0, value: 'sensor.next' });
     editor._targetSection.handleField({ kind: 'entity-target-attribute', index: 0, value: 'temperature' });
     expect(editor._draftConfig.entities[0]).toMatchObject({ future_row: true, target: { at: { entity: { id: 'sensor.next', attribute: 'temperature' }, percent: 25 } } });
+  });
+
+  for (const side of ['above', 'below']) it(`clears the ${side} fallback and Entity independently, then restores inherited source`, () => {
+    const editor = createEditor({ source });
+    editor.setConfig({ target: {
+      at: { fixed: 1, entity: 'sensor.shared_target' },
+      when_above: { at: { fixed: 50, entity: 'sensor.sbcp_playground_target' }, marker: { color: 'red' }, paint: { color: 'red' } },
+      when_below: { at: { fixed: 50, entity: 'sensor.sbcp_playground_target' }, marker: { color: 'blue' }, paint: { color: 'blue' } },
+    } });
+    editor._targetSection.handleClick({ dataset: {
+      action: 'clear-target-property', index: 'card', direction: side, property: 'value',
+    } });
+
+    expect(editor._draftConfig.target[`when_${side}`].at).toEqual({ entity: 'sensor.sbcp_playground_target' });
+    editor._targetSection.handleField({ kind: `target-${side}-entity-source`, value: '' });
+
+    expect(editor._draftConfig.target[`when_${side}`].at).toBeUndefined();
+    expect(editor._draftConfig.target.at).toEqual({ fixed: 1, entity: 'sensor.shared_target' });
+    expect(editor._draftConfig.target[`when_${side}`].marker).toEqual(side === 'above' ? { color: 'red' } : { color: 'blue' });
+    expect(editor._draftConfig.target[`when_${side}`].paint).toEqual(side === 'above' ? { color: 'red' } : { color: 'blue' });
   });
 
   it('inherits a percentage Value/Entity, creates a complete override on edit, and restores inheritance', () => {

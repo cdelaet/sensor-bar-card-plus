@@ -4,13 +4,20 @@ import { resolveEntitySource } from '../config/resolve.js';
 import { validateNormalizedConfig } from '../config/validate.js';
 import { buildRowViewModel } from '../view-model/row-view-model.js';
 import { buildBarRenderModel, getRevealTransitionDuration, getEffectiveMarkerColor } from '../view-model/bar-render-model.js';
-import { renderBar, patchBar, renderHistoryStatus, patchHistoryStatus } from '../render/bar-renderer.js';
+import { renderBar, patchBar } from '../render/bar-renderer.js';
 import { attachTooltips } from '../render/tooltip-controller.js';
 import { barTrackStyles, barMarkerStyles, getBarAnimationStyles } from '../render/bar-styles.js';
+import { initializeUniversalMessageArea, renderUniversalMessageArea, syncUniversalMessageArea, universalMessageStyles } from '../render/universal-messages.js';
 import { HistoricalHostRuntime } from '../history/host-runtime.js';
 import { historicalMarkerConsumers, historicalMarkerResults } from '../history/marker-consumers.js';
+import { releasePaintPresetConsumer, syncPaintPresetConsumer } from '../dashboard/paint-preset-consumer.js';
+import { authoredPaintProperties, resolveScopedPaintPreset } from '../view-model/paint-preset-resolver.js';
+import { resolveBaselinePaints } from '../view-model/baseline-paint-resolver.js';
+import { resolveTargetAbovePaint, resolveTargetBelowPaint } from '../view-model/target-above-paint-resolver.js';
+import { scopeUsesPaintPreset } from '../view-model/paint-destinations.js';
 import { formatNumericDisplay } from '../utils/format.js';
 import { setStyleIfChanged } from '../utils/dom.js';
+import { safeCssColor } from '../utils/css-values.js';
 import { getFeatureLabelGeometry, layoutFeatureMarkerLabels } from './marker-label-layout.js';
 
 // Discovery sees parent context, not the feature's optional entity override.
@@ -24,6 +31,10 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     super();
     this.attachShadow({ mode: 'open' });
     this._historicalRuntime = new HistoricalHostRuntime();
+    this._paintPresetHandle = null;
+    this._paintPresetRegistry = { status: 'loading', presets: {} };
+    this._paintPresetDiagnostics = [];
+    this._baseDiagnostics = { warnings: [], errors: [] };
     this._scaleHistory = null;
     this._previousRow = null;
     this._labelNodes = new Map();
@@ -57,14 +68,22 @@ export class SensorBarCardPlusFeature extends HTMLElement {
     this._configKey = key;
     this._config = { ...config, ...(typeof config.entity === 'string' ? { entity: config.entity.trim() } : {}) };
     this._configChanged = true;
+    this._syncPaintPresetRegistry();
     this._requestUpdate();
   }
 
-  set hass(value) { this._hass = value; this._historicalRuntime.setHass(value); this._requestUpdate(); }
+  set hass(value) {
+    this._hass = value;
+    this._syncPaintPresetRegistry();
+    const rows = this._normalized?.entities ?? [];
+    const hasWindowHelper = rows.some(row => row.peak_marker?.window_entity || row.floor_marker?.window_entity);
+    this._historicalRuntime.setHass(value, hasWindowHelper ? historicalMarkerConsumers(rows, value) : null, () => this._requestUpdate());
+    this._requestUpdate();
+  }
   get hass() { return this._hass; }
   set context(value) {
     if (!this._config?.entity && this._context?.entity_id !== value?.entity_id) this._historicalRuntime.setConsumers([]);
-    this._context = value; this._requestUpdate();
+    this._context = value; this._syncPaintPresetRegistry(); this._requestUpdate();
   }
   get context() { return this._context; }
   set color(value) { this._color = value; this._requestUpdate(); }
@@ -75,14 +94,29 @@ export class SensorBarCardPlusFeature extends HTMLElement {
 
   connectedCallback() {
     this._historicalRuntime.attach();
+    this._syncPaintPresetRegistry();
     this._requestUpdate();
   }
 
   disconnectedCallback() {
     this._historicalRuntime.detach();
+    releasePaintPresetConsumer(this);
+    this._paintPresetDiagnostics = [];
     this._tooltipController?.destroy();
     this._tooltipController = null;
     this._stopLabelLayout();
+  }
+
+  _syncPaintPresetRegistry() {
+    const usesPreset = scopeUsesPaintPreset(this._config);
+    if (!this.isConnected || !this._hass?.connection || !usesPreset) {
+      if (this._paintPresetHandle) {
+        releasePaintPresetConsumer(this);
+        this._requestUpdate();
+      }
+      return;
+    }
+    syncPaintPresetConsumer(this, () => this._requestUpdate());
   }
 
   _requestUpdate() {
@@ -109,8 +143,64 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         entity: undefined,
         entities: entity ? [{ entity, ...(this._config.attribute !== undefined ? { attribute: this._config.attribute } : {}) }] : [],
       }) : null;
-      this._diagnostics = validateNormalizedConfig(this._normalized);
-      this._historicalRuntime.setConsumers(historicalMarkerConsumers(this._normalized?.entities ?? []), () => this._requestUpdate());
+      this._baseDiagnostics = validateNormalizedConfig(this._normalized);
+      this._diagnostics = this._baseDiagnostics;
+      this._historicalRuntime.setConsumers(historicalMarkerConsumers(this._normalized?.entities ?? [], this._hass), () => this._requestUpdate());
+    }
+
+    const normalizedAppearance = this._normalized?.entities?.[0] ?? null;
+    this._resolvedAppearance = normalizedAppearance;
+    this._paintPresetDiagnostics = [];
+    this._diagnostics = this._baseDiagnostics;
+    const baselinePaints = normalizedAppearance
+      ? resolveBaselinePaints(normalizedAppearance.baseline, this._normalized.baseline, this._paintPresetRegistry)
+      : { paints: {}, diagnostics: [] };
+    const targetAbove = resolveTargetAbovePaint(normalizedAppearance?.target_above, this._normalized?.target_above, this._paintPresetRegistry);
+    const targetBelow = resolveTargetBelowPaint(normalizedAppearance?.target_below, this._normalized?.target_below, this._paintPresetRegistry);
+    if (normalizedAppearance && (Object.prototype.hasOwnProperty.call(authoredPaintProperties(this._normalized.bar.paint), 'preset')
+      || Object.prototype.hasOwnProperty.call(authoredPaintProperties(normalizedAppearance.bar.paint), 'preset')
+      || Object.keys(baselinePaints.paints).length
+      || targetAbove.paint !== undefined
+      || targetBelow.paint !== undefined
+      || baselinePaints.diagnostics.length)) {
+      const resolved = resolveScopedPaintPreset({
+        inheritedPaint: this._normalized.bar.paint,
+        paint: normalizedAppearance.bar.paint,
+        registry: this._paintPresetRegistry,
+      });
+      const baseline = { ...normalizedAppearance.baseline };
+      for (const side of ['above', 'below']) {
+        if (Object.prototype.hasOwnProperty.call(baselinePaints.paints, side)) {
+          baseline[side] = { ...normalizedAppearance.baseline?.[side], paint: baselinePaints.paints[side] };
+        }
+      }
+      this._resolvedAppearance = {
+        ...normalizedAppearance,
+        bar: { ...normalizedAppearance.bar, paint: resolved.paint },
+        ...(Object.keys(baselinePaints.paints).length ? { baseline } : {}),
+        target_above: targetAbove,
+        target_below: targetBelow,
+      };
+      this._paintPresetDiagnostics = resolved.diagnostics.map(diagnostic => ({
+        ...diagnostic,
+        path: `bar.${diagnostic.path}`,
+        entity,
+      })).concat(baselinePaints.diagnostics.map(diagnostic => ({
+        ...diagnostic,
+        path: `baseline.${diagnostic.path}`,
+        entity,
+      }))).concat(targetAbove.diagnostics.map(diagnostic => ({
+        ...diagnostic, path: `target.when_above.${diagnostic.path}`, entity,
+      }))).concat(targetBelow.diagnostics.map(diagnostic => ({
+        ...diagnostic, path: `target.when_below.${diagnostic.path}`, entity,
+      })));
+      this._diagnostics = {
+        ...this._baseDiagnostics,
+        warnings: [...(this._baseDiagnostics.warnings ?? []), ...this._paintPresetDiagnostics.map(diagnostic => ({
+          ...diagnostic,
+          message: `${diagnostic.code}: ${diagnostic.reference ?? 'paint'}`,
+        }))],
+      };
     }
 
     const source = resolveEntitySource(this._hass, entity, this._normalized?.entities?.[0]?.attribute);
@@ -123,10 +213,10 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       : null;
     let textValue = null;
     if (state && this._normalized?.entities[0]) {
-      const appearance = this._normalized.entities[0];
+      const appearance = this._resolvedAppearance;
       row = buildRowViewModel({
         hass: this._hass, entityConfig: appearance, entityState: state,
-        historicalExtrema: historicalMarkerResults(this._historicalRuntime, appearance), previousScale: this._scaleHistory,
+        historicalExtrema: historicalMarkerResults(this._historicalRuntime, appearance, this._hass), previousScale: this._scaleHistory,
       });
       this._scaleHistory = { min: row.min, max: row.max };
       if (row.numericValue === null) {
@@ -138,6 +228,11 @@ export class SensorBarCardPlusFeature extends HTMLElement {
         else status = 'Not numeric';
       }
     }
+    this._diagnostics = { ...this._diagnostics, warnings: [
+      ...(this._diagnostics?.warnings ?? []).filter(issue => issue.code !== 'target.invalid_ordering'),
+      ...(row?.targetDiagnostics ?? []),
+      ...(row?.historyDiagnostics ?? []),
+    ] };
     this._row = row;
     this._status = status;
     this._textValue = textValue;
@@ -157,10 +252,11 @@ export class SensorBarCardPlusFeature extends HTMLElement {
           display: block;
           width: 100%;
           min-width: 0;
-          height: var(--feature-height, 42px);
+          min-height: var(--feature-height, 42px);
+          height: auto;
         }
         .surface {
-          position: relative; height: 100%; min-width: 0;
+          position: relative; height: var(--feature-height, 42px); min-width: 0;
           --label-above: 0px; --label-below: 0px;
           --sbcp-row-height: calc(var(--feature-height, 42px) - var(--label-above) - var(--label-below));
         }
@@ -203,27 +299,28 @@ export class SensorBarCardPlusFeature extends HTMLElement {
           font: inherit;
           font-size: 12px;
         }
+        ${universalMessageStyles}
         @media (prefers-reduced-motion: reduce) {
           .surface *, .surface *::before, .surface *::after { transition: none !important; animation: none !important; }
         }
       </style>
       <div id="surface" class="surface" role="group">
-        ${renderHistoryStatus(null)}
         <div id="bar" hidden></div>
         <div id="labels" class="compact-labels" aria-hidden="true"></div>
         <div id="status" class="status" aria-hidden="true"></div>
-      </div>`;
+      </div>
+      ${renderUniversalMessageArea()}`;
     this._surface = this.shadowRoot.querySelector('#surface');
     this._bar = this.shadowRoot.querySelector('#bar');
     this._labels = this.shadowRoot.querySelector('#labels');
     this._statusEl = this.shadowRoot.querySelector('#status');
+    initializeUniversalMessageArea(this.shadowRoot.querySelector('.sbcp-messages'));
   }
 
   _render(row, status) {
     this._ensureDom();
     if (this.isConnected) this._tooltipController ??= attachTooltips(this.shadowRoot);
-    const historySummary = status ? null : row?.historyStatusSummary;
-    patchHistoryStatus(this._surface, historySummary);
+    syncUniversalMessageArea(this.shadowRoot.querySelector('.sbcp-messages'), this._diagnostics);
     const textValue = !status ? this._textValue : null;
     if (typeof this._color === 'string' && this._color) this.style.setProperty('--feature-color', this._color);
     else this.style.removeProperty('--feature-color');
@@ -241,21 +338,21 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       .filter(marker => marker.visible && (marker.showMarker || marker.labelVisible))
       .map(marker => {
         const type = marker.type === 'generic' ? 'Reference marker' : `${marker.type[0].toUpperCase()}${marker.type.slice(1)}`;
-        const anchor = `${formatNumericDisplay(marker.value)}${row.displayUnit ? ` ${row.displayUnit}` : ''}`;
-        return `${type} at ${anchor}${marker.labelVisible && marker.label?.text ? `; label ${marker.label.text}` : ''}${marker.historyStatus === 'partial' ? '; partial history' : marker.historyStatus === 'stale' ? '; stale history' : ''}${marker.historyReason && ['partial', 'stale'].includes(marker.historyStatus) ? `: ${marker.historyReason}` : ''}.`;
+        const anchor = `${formatNumericDisplay(marker.value, null, this._hass?.locale)}${row.displayUnit ? ` ${row.displayUnit}` : ''}`;
+        return `${type} at ${anchor}${marker.labelVisible && marker.label?.text ? `; label ${marker.label.text}` : ''}.`;
       }).join(' ');
     this._surface.setAttribute('aria-label', status
       ? `${name}${this._entity && name !== this._entity ? ` (${this._entity})` : ''}: ${status}${row ? ` (${row.state})` : ''}`
       : textValue !== null ? `${name}${this._entity && name !== this._entity ? ` (${this._entity})` : ''}: ${textValue}`
-      : `${name} (${this._entity}): ${row.primaryPresentation.text}. Range ${formatNumericDisplay(row.min)} to ${formatNumericDisplay(row.max)}${row.displayUnit ? ` ${row.displayUnit}` : ''}.${markerDescription ? ` ${markerDescription}` : ''}${historySummary ? ` ${historySummary.text}.` : ''}`);
+      : `${name} (${this._entity}): ${row.primaryPresentation.text}. Range ${formatNumericDisplay(row.min, null, this._hass?.locale)} to ${formatNumericDisplay(row.max, null, this._hass?.locale)}${row.displayUnit ? ` ${row.displayUnit}` : ''}.${markerDescription ? ` ${markerDescription}` : ''}`);
     if (status || textValue !== null) return;
 
-    const model = buildBarRenderModel(row, this._normalized.entities[0], { height: 'var(--sbcp-row-height)' });
+    const model = buildBarRenderModel(row, this._resolvedAppearance, { height: 'var(--sbcp-row-height)' });
     // No initial/recovery motion; subsequent numeric updates use the shared timing.
     model.animated = model.animated && Boolean(this._previousRow);
     this._surface.dataset.barAnimated = model.animated ? 'true' : 'false';
     const renderKey = JSON.stringify(model);
-    const structureKey = JSON.stringify([model.baseline.configured, model.needle.configured, model.markers.map(marker => [marker.type, marker.id])]);
+    const structureKey = JSON.stringify([model.baseline.configured, model.markers.filter(marker => marker.type !== 'target').map(marker => [marker.type, marker.id])]);
     if (structureKey !== this._structureKey) {
       this._bar.innerHTML = renderBar(model);
       this._structureKey = structureKey;
@@ -287,7 +384,7 @@ export class SensorBarCardPlusFeature extends HTMLElement {
       const node = this._labelNodes.get(marker.id);
       node.hidden = true;
       node.dataset.lane = marker.lane;
-      setStyleIfChanged(node, '--marker-color', getEffectiveMarkerColor(marker));
+      setStyleIfChanged(node, '--marker-color', safeCssColor(getEffectiveMarkerColor(marker), '#888888'));
     }
     this._labels.hidden = Boolean(status);
     const required = row?.markerLabelLaneOccupancy?.above || row?.markerLabelLaneOccupancy?.below;

@@ -1,5 +1,7 @@
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
 const { expandFeatureGroups, featureGroup } = require('./feature-editor-test-utils.cjs');
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
+const { snapshotName } = require('./snapshot-name.cjs');
 async function mount(page, source, width, percentage = false) {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({ width, percentage }) => {
@@ -26,7 +28,7 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   const original = await page.evaluate(() => window.__physicalOriginal);
   expect(await saved(editor)).toEqual(original); expect(await page.evaluate(() => window.__physicalEvents)).toHaveLength(0);
   for (const name of ['Needle', 'Baseline']) {
-    await expect(name === 'Baseline' ? featureGroup(editor, 'baseline') : editor.locator('.inline-row').filter({ has: page.locator('#bar-needle-mode') })).toHaveScreenshot(`feature-${name.toLowerCase()}-${width}.png`);
+    await expectEditorLayout(name === 'Baseline' ? featureGroup(editor, 'baseline') : editor.locator('.inline-row').filter({ has: page.locator('#bar-needle-mode') }), expect);
   }
   expect(await editor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   await expect(featureGroup(editor, 'baseline')).toHaveAttribute('data-expanded', 'true');
@@ -39,21 +41,23 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   expect((await saved(editor)).baseline.at).toEqual({ ...original.baseline.at, value: 30 });
   await editor.getByLabel('Baseline entity', { exact: true }).fill('sensor.changed');
   await expect(editor.getByLabel('Baseline entity', { exact: true })).toBeFocused();
-  await editor.locator('#bar-needle-mode').selectOption('disabled');
+  await editor.locator('#bar-needle-mode').uncheck();
   const baseline = (await saved(editor)).baseline;
   expect((await saved(editor)).bar.needle).toBe(false);
   await editor.locator('#bar-needle-color').evaluate(el => { el.value = '#334455'; el.dispatchEvent(new Event('input', { bubbles: true })); });
   expect((await saved(editor)).bar.needle).toEqual({ show: false, color: '#334455' });
-  await editor.locator('#bar-needle-mode').selectOption('enabled');
+  await editor.locator('#bar-needle-mode').check();
   expect((await saved(editor)).baseline).toEqual(baseline);
   expect((await saved(editor)).bar.needle).toEqual({ show: true, color: '#334455' });
-  const above = editor.locator('[data-field="baseline-above-color-text-fallback"]');
+  await editor.locator('#baseline-above-paint-editor > summary').click();
+  await editor.locator('#baseline-below-paint-editor > summary').click();
+  const above = editor.locator('[data-field="baseline-above-paint-color-text-fallback"]');
   await above.fill('var(--accent-color)'); await expect(above).toBeFocused();
-  await editor.locator('#baseline-above-color-enabled').uncheck();
-  expect((await saved(editor)).baseline.above).toEqual({ future: true });
-  await editor.locator('#baseline-above-color-enabled').check();
-  expect((await saved(editor)).baseline.above).toEqual({ color: 'var(--accent-color)', future: true });
-  await editor.locator('[data-field="baseline-below-color-text-fallback"]').fill('var(--primary-color)');
+  await editor.locator('#baseline-above-paint-enabled').uncheck();
+  expect((await saved(editor)).baseline.above).toEqual({ paint: null, future: true });
+  await editor.locator('#baseline-above-paint-enabled').check();
+  expect((await saved(editor)).baseline.above).toEqual({ paint: {}, future: true });
+  await editor.locator('[data-field="baseline-below-paint-color-text-fallback"]').fill('var(--primary-color)');
   await editor.locator('#baseline-show').uncheck();
   const count = await page.evaluate(() => window.__physicalEvents.length);
   const before = await saved(editor);
@@ -77,7 +81,7 @@ for (const source of ['src', 'dist']) test(`Feature percentage Baseline and HA p
   await expect(editor.locator('#baseline-source-mode')).toHaveCount(0);
   await expect(editor.locator('#baseline-percent')).toHaveCount(0);
   await editor.locator('#baseline-show').check();
-  await editor.locator('#bar-needle-mode').selectOption('enabled');
+  await editor.locator('#bar-needle-mode').check();
   await editor.locator('[data-field="bar-needle-color-text-fallback"]').fill('red');
   await expect(editor.locator('[data-field="bar-needle-color-text-fallback"]')).toBeFocused();
   expect((await saved(editor)).baseline.at).toBe('50%');

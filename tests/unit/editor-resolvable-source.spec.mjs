@@ -1,3 +1,5 @@
+import { BASELINE_PAINTS } from '../../src/view-model/paint-destinations.js';
+import { setDestinationProperty } from '../../src/editor/shared/paint-destination.js';
 import { describe, expect, it } from 'vitest';
 import { readResolvableSourceParts, updateResolvableSourceParts, writeResolvableSourceParts } from '../../src/editor/shared/resolvable-source.js';
 import { renderResolvableSourceControls } from '../../src/editor/shared/resolvable-source-controls.js';
@@ -103,7 +105,7 @@ describe('shared source preservation through editor adapters', () => {
       cardValue: (editor, scope) => editor._setBaselineResolvablePart(scope, 'value', '25%'),
       cardInvalidValue: (editor, scope) => editor._setBaselineResolvablePart(scope, 'value', '101%'),
       cardEntity: (editor, scope) => editor._setBaselineResolvablePart(scope, 'entity', 'sensor.replacement'),
-      cardPresentation: (editor, scope) => editor._setBaselineDirectionalColor(scope, 'above', 'red'),
+      cardPresentation: (editor, scope) => setDestinationProperty(editor._createSectionContext(), scope, BASELINE_PAINTS[0], 'color', 'red'),
       featureValue: (config, rawValue) => patchFeatureBaselineSource(config, 'value', rawValue),
       featureInvalidValue: config => patchFeatureBaselineSource(config, 'value', '101%'),
       featureEntity: config => patchFeatureBaselineSource(config, 'entity', 'sensor.replacement'),

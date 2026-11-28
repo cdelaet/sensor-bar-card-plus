@@ -35,6 +35,33 @@ describe('numeric presentation formatting', () => {
     );
   });
 
+  it('honors each Home Assistant number format', () => {
+    const number = -1234567.89;
+    const cases = [
+      [{ language: 'nl-BE', number_format: 'comma_decimal' }, 'en-US'],
+      [{ language: 'en-US', number_format: 'decimal_comma' }, 'de'],
+      [{ language: 'en-US', number_format: 'space_comma' }, 'fr'],
+      [{ language: 'en-US', number_format: 'quote_decimal' }, 'de-CH'],
+      [{ language: 'en-US', number_format: 'none' }, 'en-US'],
+      [{ language: 'fr-FR', number_format: 'language' }, 'fr-FR'],
+    ];
+    for (const [locale, intlLocale] of cases) {
+      const options = { maximumFractionDigits: 2, ...(locale.number_format === 'none' ? { useGrouping: false } : {}) };
+      expect(formatNumericDisplay(number, null, locale)).toBe(number.toLocaleString(intlLocale, options));
+    }
+    expect(formatNumericDisplay(number, 1, { number_format: 'decimal_comma' })).toBe('-1.234.567,9');
+    expect(formatNumericDisplay(0, 2, { number_format: 'decimal_comma' })).toBe('0,00');
+    expect(formatNumericDisplay(Number.NaN, 2, { number_format: 'none' })).toBe('NaN');
+    expect(formatNumericDisplay('user text', null, { number_format: 'decimal_comma' })).toBe('user text');
+  });
+
+  it('uses system locale and language fallback when Home Assistant selects them', () => {
+    expect(formatNumericDisplay(1234.5, null, { language: 'fr-FR', number_format: 'language' }))
+      .toBe((1234.5).toLocaleString('fr-FR', { maximumFractionDigits: 2 }));
+    expect(formatNumericDisplay(1234.5, null, { language: 'fr-FR', number_format: 'system' }))
+      .toBe((1234.5).toLocaleString(undefined, { maximumFractionDigits: 2 }));
+  });
+
   it('keeps numeric values, numbers, and units separate', () => {
     expect(createNumericPresentation(42, 'W', 2)).toEqual({
       value: 42,

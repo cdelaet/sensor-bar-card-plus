@@ -20,10 +20,10 @@ async function edit(editor,id,value,eventType='input') {
  editor._handleField({type:eventType,target:control});await editor.updateComplete;return control;
 }
 async function segment(editor,field,index,value,eventType='change') {
- const control=editor.shadowRoot.querySelectorAll(`input[data-kind="segment-${field}"]`)[index];expect(control).toBeTruthy();control.value=value;
+ const control=editor._segmentsSection._getPaletteRoot(root).querySelectorAll(`input[data-kind="segment-${field}"]`)[index];expect(control).toBeTruthy();control.value=value;
  editor._handleField({type:eventType,target:control});await editor.updateComplete;return control;
 }
-function expectedAt(config,path,value) {const next=structuredClone(config);let node=next;for(const part of path.slice(0,-1))node=node[part];if(value===undefined)delete node[path.at(-1)];else node[path.at(-1)]=value;return next;}
+function expectedAt(config,path,value) {const next=structuredClone(config);let node=next;for(const part of path.slice(0,-1))node=node[part]??={};if(value===undefined)delete node[path.at(-1)];else node[path.at(-1)]=value;return next;}
 for(const source of ['src','dist']) describe(`Feature capability closure (${source})`,()=>{
  for(const [config,checked] of [[{type},true],[{type,bar:{animated:true}},true],[{type,bar:{animated:false}},false],[{type,animated:false},false],[{type,animated:false,bar:{animated:true}},true]]) it(`animation opens without emission for ${JSON.stringify(config)}`,async()=>{
   const {editor,events}=await setup(source,config);expect(editor.shadowRoot.querySelector('#bar-animated').checked).toBe(checked);expect(editor._config).toEqual(config);expect(events).toHaveLength(0);
@@ -88,7 +88,7 @@ for(const source of ['src','dist']) describe(`Feature capability closure (${sour
   expect(section._getValidSegmentDraft(root)).toEqual({from:80,color:'var(--high)'});section._commitSegmentDraft(root);await editor.updateComplete;
   expect(editor._config.bar.segments).toEqual([...config.bar.segments,{from:80,color:'var(--high)'}]);
   expect(section._getSegmentPreviewRows(root)).not.toEqual(committedPreview);
-  section.handle({type:'click',target:{dataset:{action:'remove-segment',index:'2'}}});await editor.updateComplete;expect(editor._config).toEqual(config);
+  section.handle({type:'click',target:{dataset:{action:'remove-segment',index:'2',paletteGeneration:String(section._getPaletteSession(root).generation)}}});await editor.updateComplete;expect(editor._config).toEqual(config);
   const count=events.length;await segment(editor,'to',0,'70');expect(editor._config).toEqual(config);expect(section._getSegmentRowValidationMessage(root,0)).toBe('Segments overlap.');expect(events).toHaveLength(count);
   await segment(editor,'to',0,'-1');expect(editor._config).toEqual(config);
  });
@@ -96,7 +96,8 @@ for(const source of ['src','dist']) describe(`Feature capability closure (${sour
   const config={type,bar:{fill_style:'bands',color:'#123456',segments:[{from:0,to:50,color:'red'},{from:60,to:100,color:'blue'}]}};
   const {editor,events}=await setup(source,config),section=editor._segmentsSection;
   expect(section._getSegmentDraftState(root).color).toBe('#123456');
-  section.handle({type:'click',target:{dataset:{action:'add-segment-from-undefined',from:'50',to:'60'}}});
+  const session=section._getPaletteSession(root);
+  section.handle({type:'click',target:{dataset:{action:'add-segment-from-undefined',from:'50',to:'60',paletteGeneration:String(session.generation)}}});
   await editor.updateComplete;
   expect(section._getSegmentDraftState(root)).toEqual({from:'50',to:'60',color:'#123456'});
   expect(editor._config).toEqual(config);expect(events).toHaveLength(0);
@@ -109,23 +110,21 @@ for(const source of ['src','dist']) describe(`Feature capability closure (${sour
   editor.setConfig({type,bar:{fill_style:'bands',segments:[{from:80,color:'red'},{from:0,color:'blue'}]}});await editor.updateComplete;
   expect(editor._segmentsSection._getSegmentRowValidationMessage(root,0)).toBe('From must be below To.');expect(editor._config.bar.segments.map(r=>r.from)).toEqual([80,0]);
  });
- const colors=[['bar-color-text-fallback',['bar','color']],['bar-needle-color-text-fallback',['bar','needle','color']],['baseline-above-color-text-fallback',['baseline','above','color']],['baseline-below-color-text-fallback',['baseline','below','color']],['target-color-text-fallback',['target','color']],['target-above-fill-color-text-fallback',['target','when_exceeded','fill_color']],['peak-color-text-fallback',['peak','color']],['floor-color-text-fallback',['floor','color']],['card-card-generic-marker-1-color-text-fallback',['markers',0,'color']]];
+ const colors=[['bar-color-text-fallback',['bar','color']],['bar-needle-color-text-fallback',['bar','needle','color']],['baseline-above-paint-color-text-fallback',['baseline','above','paint','color']],['baseline-below-paint-color-text-fallback',['baseline','below','paint','color']],['target-color-text-fallback',['target','color']],['target-above-paint-color-text-fallback',['target','when_above','paint','color']],['target-below-paint-color-text-fallback',['target','when_below','paint','color']],['peak-color-text-fallback',['peak','color']],['floor-color-text-fallback',['floor','color']],['card-card-generic-marker-1-color-text-fallback',['markers',0,'color']]];
  for(const [id,path] of colors)it(`${id} accepts direct CSS text verbatim, patches one path and retains invalid drafts`,async()=>{
-  const config=raw(),{editor,events,calls}=await setup(source,config);
+  const config=expectedAt(raw(),path,'var(--original-color)'),{editor,events,calls}=await setup(source,config);
   for(const color of ['#123456','#abc','red','rgb(1, 2, 3)','var(--warning-color)','  rgba(1, 2, 3, .5)  ']){
-   await edit(editor,`#${id}`,color);expect(editor._config).toEqual(expectedAt(config,path,color));
+   await edit(editor,`#${id}`,color);const expected=expectedAt(config,path,color);if(id.startsWith('baseline-'))delete expected.baseline[path[1]].color;if(id.startsWith('target-above-paint'))delete expected.target.when_exceeded.fill_color;expect(editor._config).toEqual(expected);
   }
-  const toggle=id.startsWith('baseline-')?id.replace('-text-fallback','-enabled'):id==='target-above-fill-color-text-fallback'?'target-above-fill-enabled':null;
-  if(toggle){const before=structuredClone(editor._config);await edit(editor,`#${toggle}`,false,'change');await edit(editor,`#${toggle}`,true,'change');expect(editor._config).toEqual(before);}
   const saved=structuredClone(editor._config),count=events.length;await edit(editor,`#${id}`,'var(');editor.context={entity_id:'sensor.changed'};editor.setConfig(editor._config);await editor.updateComplete;
   expect(editor._config).toEqual(saved);expect(events).toHaveLength(count);expect(editor.shadowRoot.querySelector(`#${id}`).value).toBe('var(');expect(calls).toContainEqual(['color','var(']);
  });
- it('Segment CSS drafts stay local through echo and reset on replacement, while hex Gradient Stops do not gain CSS entry',async()=>{
-  const {editor,events}=await setup(source);const control=editor.shadowRoot.querySelector('#segment-color-0-text-fallback');
+ it('Segment CSS drafts stay local through echo and reset on replacement, and hex Gradient Stop text stays editable',async()=>{
+  const config=raw();config.bar.color='var(--base-color)';const {editor,events}=await setup(source,config);const control=editor.shadowRoot.querySelector('#segment-color-0-text-fallback');
   await edit(editor,'#segment-color-0-text-fallback','rgb(');expect(events).toHaveLength(0);editor.hass={states:{}};await editor.updateComplete;expect(editor.shadowRoot.querySelector('#segment-color-0-text-fallback')).toBe(control);expect(control.value).toBe('rgb(');
   await edit(editor,'#segment-draft-color-text-fallback','bogus');expect(editor._segmentsSection._getValidSegmentDraft(root)).toBeNull();
-  editor.setConfig({type,bar:{fill_style:'bands',segments:[{from:0,color:'blue'}]}});await editor.updateComplete;expect(editor.shadowRoot.querySelector('#segment-color-0-text-fallback').value).toBe('blue');expect(editor._cssColorDrafts.size).toBe(0);
-  await edit(editor,'#bar-fill-style','gradient','change');expect(editor.shadowRoot.innerHTML).not.toContain('data-kind="gradient-color-text-fallback"');expect(editor.shadowRoot.innerHTML).not.toContain('data-kind="gradient-draft-color-text-fallback"');
+  editor.setConfig({type,bar:{fill_style:'bands',segments:[{from:0,color:'blue'}]}});await editor.updateComplete;expect(editor.shadowRoot.querySelector('#segment-color-0-text-fallback')?.value).toBe('blue');expect(editor._cssColorDrafts.size).toBe(0);
+  await edit(editor,'#bar-fill-style','gradient','change');expect(editor.shadowRoot.querySelector('#gradient-color-0-text-fallback').value).toMatch(/^#/);expect(editor.shadowRoot.querySelector('#gradient-draft-color-text-fallback').value).toMatch(/^#/);
  });
 });
 it('all four capabilities have exact source/dist template parity in picker/fallback environments',async()=>{

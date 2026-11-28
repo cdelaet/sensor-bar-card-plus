@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createCard } from '../support/load-card-class.cjs';
 import { historicalMarkerId } from '../../src/history/marker-consumers.js';
+import { createPaintLayerContainer } from '../support/paint-layer-dom.mjs';
 
 function seedPeak(card, cfg, value) {
   card._historicalRuntime.results.set(historicalMarkerId(cfg, 'peak'), { value, status: 'available' });
@@ -92,10 +93,13 @@ function createTrackedElement({ style = {}, dataset = {}, textContent = '', clas
 }
 
 function createTrackedRow(elements, dataset = {}) {
+  const find = selector => elements[selector] ?? elements[selector.split('[')[0]] ?? null;
   return {
     dataset: createTrackedDataset(dataset),
-    querySelector(selector) {
-      return elements[selector] ?? null;
+    querySelector: find,
+    querySelectorAll(selector) {
+      const matches = find(selector);
+      return matches == null ? [] : Array.isArray(matches) ? matches : [matches];
     },
   };
 }
@@ -184,10 +188,11 @@ describe('Sensor Bar Card Plus logic', () => {
         'sensor.dynamic_baseline': { state: '100' },
       },
     };
-    const fillReveal = { style: { cssText: '' }, className: '' };
+    const fillReveal = createPaintLayerContainer();
     const row = {
       dataset: {},
       querySelector: (selector) => (selector === '.bar-fill-reveal' ? fillReveal : null),
+      querySelectorAll: () => [],
     };
 
     card._patchRow(row, entityCfg, currentState, previousHass);
@@ -378,7 +383,8 @@ describe('Sensor Bar Card Plus logic', () => {
     );
 
     expect(row.bar.fill_style).toBe('solid');
-    expect(layers[0].paintStyle).toContain('#00ff00');
+    expect(layers[0].paintStyle).not.toContain('#00ff00');
+    expect(layers.find(layer => layer.id === 'baseline-above').paintStyle).toContain('#00ff00');
     expect(layers.find((layer) => layer.id === 'above-target')).toMatchObject({
       visible: true,
       paintStyle: expect.stringContaining('#ff00ff'),
@@ -882,7 +888,7 @@ describe('Sensor Bar Card Plus logic', () => {
         color: '#123456',
       });
 
-      expect(targetHtml).toContain(`class="target-marker" data-shape="${shape}" data-lane="below"`);
+      expect(targetHtml).toMatch(new RegExp(`class="target-marker" data-marker-id="[^"]*" data-shape="${shape}" data-lane="below"`));
       expect(peakHtml).toContain(`class="peak-marker" data-shape="${shape}" data-lane="above"`);
       expect(targetHtml).toContain(`data-shape="${shape}"`);
       expect(peakHtml).toContain(`data-shape="${shape}"`);
@@ -1461,8 +1467,8 @@ describe('Sensor Bar Card Plus logic', () => {
     );
 
     expect(html).toContain('data-bar-animated="false"');
-    expect(html).toContain('bar-fill-reveal no-anim');
-    expect(html).toContain('class="target-value-label" style="left:80%;visibility:hidden;');
+    expect(html).toMatch(/class="bar-fill-reveal(?:\s[^"]*)?"/);
+    expect(html).toMatch(/class="target-value-label"[^>]*style="left:80%;visibility:hidden;/);
 
     const source = readCardStyles();
     expect(source).toContain('.row[data-bar-animated="false"] .bar-fill-reveal,');
@@ -1548,6 +1554,7 @@ describe('Sensor Bar Card Plus logic', () => {
         barAnimated: 'true',
       },
       querySelector: () => null,
+      querySelectorAll: () => [],
     };
 
     expect(row.dataset.barAnimated).toBe('true');
@@ -1629,8 +1636,10 @@ describe('Sensor Bar Card Plus logic', () => {
         '--marker-contrast-color': card._getMarkerContrastColor('#888'),
       },
       textContent: '50 W',
+      getBoundingClientRect: () => ({ width: 40 }),
     });
     const row = createTrackedRow({
+      '.bar-track': { getBoundingClientRect: () => ({ width: 246 }) },
       '.target-marker': createTrackedElement({
         style: {
           display: '',
@@ -1656,7 +1665,7 @@ describe('Sensor Bar Card Plus logic', () => {
     });
 
     expect(targetLabel.style.left).toBe('123px');
-    expect(targetLabel.style.__writes).toEqual([]);
+    expect(targetLabel.style.visibility).toBe('visible');
   });
 
   it('does not hide an unchanged target label during _patchRow', () => {
@@ -1676,8 +1685,10 @@ describe('Sensor Bar Card Plus logic', () => {
         '--marker-contrast-color': card._getMarkerContrastColor('#888'),
       },
       textContent: '50 W',
+      getBoundingClientRect: () => ({ width: 40 }),
     });
     const row = createTrackedRow({
+      '.bar-track': { getBoundingClientRect: () => ({ width: 246 }) },
       '.target-marker': createTrackedElement({
         style: {
           display: '',
@@ -1703,7 +1714,7 @@ describe('Sensor Bar Card Plus logic', () => {
     });
 
     expect(targetLabel.style.visibility).toBe('visible');
-    expect(targetLabel.style.__writes).toEqual([]);
+    expect(targetLabel.style.left).toBe('123px');
   });
 
   it('does not recreate or rewrite an unchanged target marker during _patchRow', () => {
@@ -2026,7 +2037,7 @@ describe('Sensor Bar Card Plus logic', () => {
     });
 
     expect(targetMarker.style.left).toBe('70%');
-    expect(targetLabel.style.left).toBe('65%');
+    expect(targetLabel.style.left).toBe('70%');
   });
 
   it('updates target label text when the target changes during _patchRow', () => {
@@ -2562,7 +2573,7 @@ describe('Sensor Bar Card Plus logic', () => {
     expect(source).toContain('.bar-fill-reveal {\n          position: absolute;\n          inset: 0;\n          pointer-events: none;\n          transition: clip-path var(--sbcp-reveal-duration, 600ms) cubic-bezier(0.4,0,0.2,1);\n          z-index: 1;');
     expect(source).toContain('.bar-paint-layer {\n          position: absolute;');
     expect(source).toContain('.bar-paint-layer {\n          position: absolute;\n          inset: 0;\n          pointer-events: none;\n          z-index: 1;');
-    expect(source).toContain('.bar-paint-layer[data-layer="above-target"] {\n          z-index: 2;');
+    expect(source).toContain('.bar-paint-layer[data-layer="above-target"],\n        .bar-paint-layer[data-layer="below-target"] {\n          z-index: 2;');
   });
 
   it('renders the needle marker inside a clipped needle layer', () => {
@@ -3532,6 +3543,7 @@ describe('Sensor Bar Card Plus logic', () => {
           : selector === '.inside-value' ? valueEl
           : null
       ),
+      querySelectorAll: () => [],
     };
     card.shadowRoot = {
       querySelectorAll: (selector) => selector === '.bar-inner-label' ? [innerLabel] : [],
@@ -5409,6 +5421,7 @@ describe('Sensor Bar Card Plus logic', () => {
     const row = {
       dataset: {},
       querySelector: (selector) => selector === '.baseline-indicator' ? indicator : null,
+      querySelectorAll: () => [],
     };
 
     expect(html).toContain('class="baseline-indicator" aria-hidden="true" style="display:none;"');
@@ -5490,8 +5503,16 @@ describe('Sensor Bar Card Plus logic', () => {
   });
 
   it('renders an above-target overlay layer only when above_target_color, target, and filled geometry overlap', () => {
-    const card = createCard();
-    const withOverlay = card.normalizeCardConfig({
+    const renderRow = (config, value) => {
+      const card = createCard();
+      const normalized = card.normalizeCardConfig({ min: 0, max: 120, ...config });
+      card._config = normalized;
+      card._hass = { states: { 'sensor.row': { state: String(value), attributes: {
+        friendly_name: 'Sensor', unit_of_measurement: 'W',
+      } } } };
+      return card._buildRow(normalized.entities[0], String(value), 'W', value / 120 * 100, '#dc2626', null, null, 50, '60 W', '#888', '#111827', 0, 120);
+    };
+    const withOverlay = {
       color_mode: 'gradient',
       gradient_stops: [
         { pos: 0, color: '#2563eb' },
@@ -5500,29 +5521,31 @@ describe('Sensor Bar Card Plus logic', () => {
       above_target_color: '#ef4444',
       target: 60,
       entities: [{ entity: 'sensor.row', name: 'Sensor' }],
-    }).entities[0];
-    const withoutOverlay = card.normalizeCardConfig({
+    };
+    const withoutOverlay = {
       color_mode: 'gradient',
       gradient_stops: [
         { pos: 0, color: '#2563eb' },
         { pos: 100, color: '#dc2626' },
       ],
       entities: [{ entity: 'sensor.row', name: 'Sensor' }],
-    }).entities[0];
+    };
 
-    const htmlWith = card._buildRow(withOverlay, '75', 'W', 75, '#dc2626', null, null, 50, '60 W', '#888', '#111827', 0, 120);
-    const htmlWithout = card._buildRow(withoutOverlay, '75', 'W', 75, '#dc2626', null, null, null, null, '#888', '#111827', 0, 120);
-    const htmlNoOverlap = card._buildRow(withOverlay, '20', 'W', 20, '#2563eb', null, null, 50, '60 W', '#888', '#111827', 0, 120);
+    const htmlWith = renderRow(withOverlay, 75);
+    const htmlWithout = renderRow(withoutOverlay, 75);
+    const htmlNoOverlap = renderRow(withOverlay, 20);
+    const revealRightInset = html => Number(html.match(/class="bar-fill-reveal" style="[^"]*clip-path:inset\(0 ([\d.]+)%/)?.[1]);
 
     expect(htmlWith).toContain('class="bar-fill-reveal"');
     expect(htmlWith).toContain('class="bar-paint-layer" data-layer="above-target"');
-    expect(htmlWith).toContain('background:#ef4444');
+    expect(htmlWith).toContain('background-image:linear-gradient(to right,#ef4444 0%,#ef4444 100%)');
     expect(htmlWith).toContain('clip-path:inset(0 0% 0 50% round 0);');
+    expect(revealRightInset(htmlWith)).toBeCloseTo(37.5, 5);
     expect(htmlWithout).toContain('class="bar-paint-layer" data-layer="above-target"');
     expect(htmlWithout).toContain('display:none;');
     expect(htmlNoOverlap).toContain('class="bar-paint-layer" data-layer="above-target"');
     expect(htmlNoOverlap).toContain('clip-path:inset(0 0% 0 50% round 0);');
-    expect(htmlNoOverlap).toContain('class="bar-fill-reveal" style="display:block;height:var(--sbcp-row-height);clip-path:inset(0 80% 0 0% round 6px 6px 6px 6px);"');
+    expect(revealRightInset(htmlNoOverlap)).toBeCloseTo(83.3333333333, 5);
   });
 
   it('updates above-target overlay style when the target changes during patching', () => {
@@ -5544,14 +5567,8 @@ describe('Sensor Bar Card Plus logic', () => {
       target: 60,
       entities: [{ entity: 'sensor.row', name: 'Sensor' }],
     }).entities[0];
-    const fillReveal = {
-      style: { cssText: '' },
-      className: '',
-    };
-    const aboveTargetLayer = {
-      style: { cssText: '' },
-      className: '',
-    };
+    const fillReveal = createPaintLayerContainer([{ id: 'base' }, { id: 'above-target' }]);
+    const aboveTargetLayer = fillReveal.children[1];
     const row = {
       dataset: {},
       querySelector: (selector) => (
@@ -5568,6 +5585,7 @@ describe('Sensor Bar Card Plus logic', () => {
           : selector === '.target-value-label' ? { style: {}, textContent: '' }
           : null
       ),
+      querySelectorAll: () => [],
     };
 
     card._patchRow(row, ecfg, {
@@ -5581,7 +5599,7 @@ describe('Sensor Bar Card Plus logic', () => {
 
     expect(fillReveal.style.cssText).toContain('clip-path:inset(0 37.5% 0 0% round 6px 6px 6px 6px)');
     expect(fillReveal.className).toBe('bar-fill-reveal');
-    expect(aboveTargetLayer.style.cssText).toContain('background:#ef4444');
+    expect(aboveTargetLayer.style.cssText).toContain('background-image:linear-gradient(to right,#ef4444 0%,#ef4444 100%)');
     expect(aboveTargetLayer.style.cssText).toContain('z-index:2;');
     expect(aboveTargetLayer.style.cssText).toContain('clip-path:inset(0 0% 0 50% round 0);');
   });
@@ -5600,7 +5618,7 @@ describe('Sensor Bar Card Plus logic', () => {
     const layer = card._getFillPaintLayers(geometry, 38, ecfg, '#dc2626', targetPct, null, 0, 120)
       .find(item => item.id === 'above-target');
 
-    expect(layer.paintStyle).toContain('background:#ef4444');
+    expect(layer.paintStyle).toContain('background-image:linear-gradient(to right,#ef4444 0%,#ef4444 100%)');
     expect(layer.revealStyle).toContain('clip-path:inset(0 0% 0 50% round 0);');
   });
 

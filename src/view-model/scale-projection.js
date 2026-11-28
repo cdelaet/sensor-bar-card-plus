@@ -13,3 +13,11 @@ export function projectScaleInterval(startScalePercent, endScalePercent, directi
     end: Math.max(startPosition, endPosition),
   };
 }
+
+export function toScalePct(value, minValue, maxValue) {
+  if (!Number.isFinite(value)) return null;
+  const safeMin = Number.isFinite(minValue) ? minValue : 0;
+  const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
+  const range = safeMax - safeMin || 1;
+  return Math.min(100, Math.max(0, ((value - safeMin) / range) * 100));
+}

@@ -19,13 +19,54 @@ export function historyReason(result) {
   return null;
 }
 
-export function historyStatusSummary(peak, floor) {
-  const entries = [['Peak', peak], ['Floor', floor]].filter(([, item]) => item?.enabled
-    && (['pending', 'invalid', 'unavailable'].includes(item.status)
-      || (['partial', 'stale'].includes(item.status) && !item.visible)));
-  if (!entries.length) return null;
-  const reasons = entries.map(([name, item]) => ({ name, reason: item.reason }));
-  const text = reasons.length === 2 && reasons[0].reason === reasons[1].reason
-    ? `Peak and Floor: ${reasons[0].reason}` : reasons.map(({ name, reason }) => `${name}: ${reason}`).join('; ');
-  return { text, pending: entries.every(([, item]) => item.status === 'pending') };
+function historyConsequence(name, item) {
+  if (item.status === 'pending') return `${name} marker will be unavailable until history finishes loading.`;
+  if (item.status === 'invalid') return `${name} marker is unavailable because its configured history window is unsupported.`;
+  if (item.status === 'unavailable') return `${name} marker is unavailable until Recorder history can be read.`;
+  if (item.status === 'partial') return item.visible
+    ? `${name} marker uses incomplete observations and may miss the true extremum.`
+    : `${name} marker is unavailable because no usable observations were returned.`;
+  if (item.status === 'stale') return item.visible
+    ? `${name} marker uses a cached value from the last successful refresh.`
+    : `${name} marker is unavailable because no usable cached value is available.`;
+  return '';
+}
+
+function configuredWindowLabel(value) {
+  if (value === null || value === undefined || value === '') return 'unspecified';
+  if (typeof value === 'string') return value;
+  try { return JSON.stringify(value); } catch { return String(value); }
+}
+
+export function historyDiagnostics(entity, peak, floor) {
+  return [['peak', 'Peak', peak], ['floor', 'Floor', floor]].flatMap(([key, name, item]) => {
+    if (!item?.enabled) return [];
+    const diagnostics = [];
+    if (item.windowHelperIssue) {
+      const issue = item.windowHelperIssue;
+      const fallback = configuredWindowLabel(issue.fallback);
+      const message = issue.reason === 'unavailable'
+        ? `Dropdown Helper ${issue.helper} is unavailable; using static window “${fallback}”.`
+        : `Dropdown Helper ${issue.helper} selected unsupported option “${issue.option}”; using static window “${fallback}”.`;
+      diagnostics.push({ code: `history.window_helper.${issue.reason}`, severity: 'warning',
+        path: `history.${key}.window_entity`, entity,
+        area: `${name} marker · Window helper: ${issue.helper}`, reason: issue.reason, window: fallback, message });
+    }
+    if (!['pending', 'invalid', 'unavailable', 'partial', 'stale'].includes(item.status)) return diagnostics;
+    const severity = item.status === 'pending' ? 'info'
+      : ['partial', 'stale'].includes(item.status) ? 'warning' : 'error';
+    const window = configuredWindowLabel(item.window);
+    const reason = item.reason ?? 'History is unavailable';
+    diagnostics.push({
+      code: `history.marker.${item.status}`,
+      severity,
+      path: `history.${key}`,
+      entity,
+      area: `${name} marker · Configured window: ${window}`,
+      window,
+      reason,
+      message: `${reason}. ${historyConsequence(name, item)}`,
+    });
+    return diagnostics;
+  });
 }

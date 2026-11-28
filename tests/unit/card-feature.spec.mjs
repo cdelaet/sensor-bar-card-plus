@@ -4,6 +4,7 @@ import { loadCardClass } from '../support/load-card-class.cjs';
 import { normalizeCardConfig } from '../../src/config/normalize.js';
 import { historicalMarkerId } from '../../src/history/marker-consumers.js';
 import { buildBarRenderModel } from '../../src/view-model/bar-render-model.js';
+import { buildRowViewModel } from '../../src/view-model/row-view-model.js';
 
 const entity = 'sensor.power';
 const sensor = (value, attributes = {}, last_updated) => ({ state: String(value), attributes, last_updated });
@@ -20,6 +21,222 @@ async function update(element, value, others = {}) {
   element.hass = hass(value, others);
   await element.updateComplete;
 }
+
+it('rejects prototype-like and malformed Feature entity IDs', () => {
+  for (const entityId of ['__proto__', 'constructor', 'not.valid.id']) {
+    expect(() => feature({ type: 'custom:sensor-bar-card-plus-feature', entity: entityId }))
+      .toThrow(/valid entity id/);
+  }
+});
+
+it('Feature reconciliation reports a conflicting preset with its normal default fallback and no authoring warning', async () => {
+  const element = feature({ type: 'custom:sensor-bar-card-plus-feature', entity,
+    bar: { paint: { preset: 'Thermal', opacity: 45 } } });
+  element._paintPresetRegistry = {
+    status: 'ready', presets: Object.create(null), conflicts: Object.assign(Object.create(null), { Thermal: 2 }),
+  };
+  element.context = { entity_id: entity };
+  element.hass = hass(42);
+  await element.updateComplete;
+
+  expect(element._paintPresetDiagnostics).toContainEqual(expect.objectContaining({
+    code: 'paint_preset_conflict', reference: 'Thermal', fallback: 'inherited', entity,
+  }));
+  expect(element._diagnostics.warnings.some(warning => warning.code === 'paint_preset_duplicate_definition')).toBe(false);
+  expect(element._resolvedAppearance.bar.paint.opacity).toBe(45);
+});
+
+it.each(['Card', 'Tile Feature'])('%s applies preset opacity once to the base layer and refreshes registry values', async host => {
+  const classes = loadCardClass();
+  const paintPreset = Object.assign(Object.create(null), {
+    fill_style: 'solid', color: 'rgb(18 52 86 / 50%)', opacity: 42,
+  });
+  const registry = () => ({ status: 'ready', presets: Object.assign(Object.create(null), { translucent: paintPreset }) });
+  const raw = {
+    baseline: { at: 20, color: '#123456' },
+    target: { at: 80, color: '#abcdef' },
+    ...(host === 'Card'
+      ? { entities: [{ entity, bar: { paint: { preset: 'translucent' } } }] }
+      : { type: 'custom:sensor-bar-card-plus-feature', bar: { paint: { preset: 'translucent' } } }),
+  };
+  const original = structuredClone(raw);
+  const render = (appearance, row) => buildBarRenderModel(row, appearance, { height: 30 });
+  const expectPresetModel = (appearance, row, opacity) => {
+    const layers = render(appearance, row).fill.paintLayers;
+    expect(layers[0].paintStyle).toMatch(new RegExp(`opacity:${opacity};$`));
+    expect(layers[0].paintStyle.match(/opacity:/g)).toHaveLength(1);
+    expect(layers[0].paintStyle).toContain('rgb(18 52 86 / 50%)');
+    expect(layers.slice(1).every(layer => !layer.paintStyle.includes('opacity:'))).toBe(true);
+  };
+
+  let appearance;
+  let row;
+  let hostInstance;
+  if (host === 'Card') {
+    const card = new classes.card();
+    card._render = () => {};
+    card._logDiagnostics = () => {};
+    card.setConfig(raw);
+    card.hass = hass(42);
+    card._paintPresetRegistry = registry();
+    card._refreshPaintPresetResolutions();
+    const resolved = card._resolve(card._config.entities[0]);
+    appearance = resolved;
+    row = buildRowViewModel({ entityConfig: resolved, entityState: sensor(42) });
+    hostInstance = card;
+  } else {
+    const element = new classes.feature();
+    element._render = () => {};
+    element.setConfig(raw);
+    element._paintPresetRegistry = registry();
+    element.context = { entity_id: entity };
+    element.hass = hass(42);
+    await element.updateComplete;
+    appearance = element._resolvedAppearance;
+    row = element._row;
+    hostInstance = element;
+  }
+
+  expectPresetModel(appearance, row, '0.42');
+  paintPreset.opacity = 25;
+  if (host === 'Card') {
+    hostInstance._paintPresetRegistry = registry();
+    hostInstance._refreshPaintPresetResolutions();
+    appearance = hostInstance._resolve(hostInstance._config.entities[0]);
+    row = buildRowViewModel({ entityConfig: appearance, entityState: sensor(42) });
+  } else {
+    hostInstance._paintPresetRegistry = registry();
+    hostInstance._requestUpdate();
+    await hostInstance.updateComplete;
+    appearance = hostInstance._resolvedAppearance;
+    row = hostInstance._row;
+  }
+  expectPresetModel(appearance, row, '0.25');
+  expect(raw).toEqual(original);
+});
+
+it.each(['Card', 'Tile Feature'])('%s resolves Baseline presets without a Bar preset', async host => {
+  const classes = loadCardClass();
+  const raw = {
+    baseline: { at: 50, above: { paint: { preset: 'warm' } } },
+    ...(host === 'Card'
+      ? { entities: [{ entity }] }
+      : { type: 'custom:sensor-bar-card-plus-feature' }),
+  };
+  const registry = { status: 'ready', presets: Object.assign(Object.create(null), { warm: Object.assign(Object.create(null), {
+    fill_style: 'solid', color: '#ff5500', opacity: 35,
+  }) }) };
+  let appearance;
+  if (host === 'Card') {
+    const card = new classes.card();
+    card._render = () => {};
+    card._logDiagnostics = () => {};
+    card.setConfig(raw);
+    card.hass = hass(42);
+    card._paintPresetRegistry = registry;
+    card._refreshPaintPresetResolutions();
+    appearance = card._resolve(card._config.entities[0]);
+  } else {
+    const element = new classes.feature();
+    element._render = () => {};
+    element.setConfig(raw);
+    element._paintPresetRegistry = registry;
+    element.context = { entity_id: entity };
+    element.hass = hass(42);
+    await element.updateComplete;
+    appearance = element._resolvedAppearance;
+  }
+  expect(appearance.baseline.above.paint).toMatchObject({
+    fill_style: 'solid', color: '#ff5500', opacity: 35,
+  });
+});
+
+describe('Card preset authoring diagnostics', () => {
+  const createCard = config => {
+    const { card: Card } = loadCardClass();
+    const element = new Card();
+    element._render = () => {};
+    element._logDiagnostics = () => {};
+    element.setConfig({ entity, ...config });
+    return element;
+  };
+
+  const refresh = (element, registry) => {
+    element._paintPresetRegistry = registry;
+    element._refreshPaintPresetResolutions();
+    return element._diagnostics.warnings;
+  };
+
+  it('warns only cards that define shared names, including owners that do not consume them', () => {
+    const registry = {
+      status: 'ready',
+      presets: Object.assign(Object.create(null), {
+        Energy: Object.assign(Object.create(null), { fill_style: 'solid', color: 'green' }),
+        Sunset: Object.assign(Object.create(null), { fill_style: 'solid', color: 'orange' }),
+      }),
+      conflicts: Object.assign(Object.create(null), { Thermal: 3 }),
+    };
+    const cards = [
+      createCard({ preset_library: { paint: { Thermal: {}, Energy: {} } } }),
+      createCard({ preset_library: { paint: { Thermal: {}, Sunset: {} } } }),
+      createCard({ preset_library: { paint: { Thermal: {} } } }),
+      createCard({ bar: { paint: { preset: 'Thermal' } } }),
+      createCard({ bar: { paint: { preset: 'Energy' } } }),
+    ];
+    const warnings = cards.map(card => refresh(card, registry).filter(issue => issue.code === 'paint_preset_duplicate_definition'));
+
+    expect(warnings.slice(0, 3).map(items => items.map(issue => issue.reference))).toEqual([
+      ['Thermal'], ['Thermal'], ['Thermal'],
+    ]);
+    expect(warnings.slice(0, 3).flat().map(issue => issue.ownerCount)).toEqual([3, 3, 3]);
+    expect(warnings[0][0].message).toBe('Paint preset "Thermal" is defined by 3 Cards in this dashboard. Rename or remove this definition so only one Card defines it.');
+    expect(warnings[3]).toEqual([]);
+    expect(warnings[4]).toEqual([]);
+    expect(cards[0]._paintPresetDiagnostics.map(issue => issue.code)).toEqual(['paint_preset_duplicate_definition']);
+    expect(cards[3]._paintPresetDiagnostics.map(issue => issue.code)).toContain('paint_preset_conflict');
+    expect(cards[4]._paintPresetDiagnostics).toEqual([]);
+    expect(cards[4]._paintPresetEntityPaints.get(cards[4]._config.entities[0]).color).toBe('green');
+  });
+
+  it('reports separate duplicate names and counts even for identical library definitions', () => {
+    const library = { paint: { Thermal: { color: 'red' }, Energy: { color: 'green' } } };
+    const registry = { status: 'ready', presets: {}, conflicts: { Thermal: 2, Energy: 2 } };
+    const first = createCard({ preset_library: structuredClone(library) });
+    const second = createCard({ preset_library: structuredClone(library) });
+
+    for (const card of [first, second]) {
+      const warnings = refresh(card, registry).filter(issue => issue.code === 'paint_preset_duplicate_definition');
+      expect(warnings.map(issue => issue.reference)).toEqual(['Thermal', 'Energy']);
+      expect(warnings.map(issue => issue.ownerCount)).toEqual([2, 2]);
+      expect(warnings.map(issue => issue.area)).toEqual(['Shared Paint Presets', 'Shared Paint Presets']);
+    }
+  });
+
+  it('does not warn for empty libraries', () => {
+    const card = createCard({ preset_library: {} });
+    const warnings = refresh(card, { status: 'ready', presets: {}, conflicts: {} });
+    expect(warnings).toEqual([]);
+  });
+
+  it('uses own-property lookup for reserved names and tracks saved conflict changes without accumulation', () => {
+    const library = JSON.parse('{"paint":{"__proto__":{},"Thermal":{}}}');
+    const card = createCard({ preset_library: library });
+    const conflicts = JSON.parse('{"__proto__":2,"Thermal":2}');
+    const first = refresh(card, { status: 'ready', presets: {}, conflicts });
+    expect(first.filter(issue => issue.code === 'paint_preset_duplicate_definition').map(issue => issue.reference))
+      .toEqual(['__proto__', 'Thermal']);
+    expect(Object.getPrototypeOf(conflicts)).toBe(Object.prototype);
+
+    const changed = JSON.parse('{"__proto__":3,"Thermal":3}');
+    const updated = refresh(card, { status: 'ready', presets: {}, conflicts: changed });
+    expect(updated.filter(issue => issue.code === 'paint_preset_duplicate_definition').map(issue => issue.ownerCount))
+      .toEqual([3, 3]);
+    const repeated = refresh(card, { status: 'ready', presets: {}, conflicts: changed });
+    expect(repeated.filter(issue => issue.code === 'paint_preset_duplicate_definition')).toHaveLength(2);
+    const recovered = refresh(card, { status: 'ready', presets: { __proto__: {}, Thermal: {} }, conflicts: {} });
+    expect(recovered.filter(issue => issue.code === 'paint_preset_duplicate_definition')).toEqual([]);
+  });
+});
 
 describe('native feature registration', () => {
   it('warns and ignores unsupported extrema aliases in both runtime hosts', async () => {
@@ -229,7 +446,7 @@ describe('independent input reconciliation', () => {
     const element = feature({ entity, scale: { min: 50, max: 10 }, peak: { enabled: true, reset: 'invalid' } });
     await update(element, 42);
     expect(element._diagnostics.warnings.map(warning => warning.code)).toContain('scale.min_gt_max');
-    expect(element._diagnostics.warnings.map(warning => warning.code)).toContain('peak_marker.invalid_window');
+    expect(element._diagnostics.errors.map(error => error.code)).toContain('peak_marker.invalid_window');
   });
 });
 
@@ -271,7 +488,7 @@ describe('textual Feature primary presentation', () => {
 
 describe('historical Feature accessibility', () => {
   for (const source of ['src', 'dist']) {
-    it(`${source}: describes partial and stale markers on the accessible surface`, async () => {
+    it(`${source}: excludes legacy history status from the feature label`, async () => {
       const { feature: Feature } = loadCardClass({ source });
       const element = new Feature();
       element.style = { setProperty() {}, removeProperty() {} };
@@ -283,8 +500,9 @@ describe('historical Feature accessibility', () => {
         { type: 'floor', visible: true, showMarker: true, value: 10, historyStatus: 'stale' },
       ] };
       element._render(row, null);
-      expect(element._surface.getAttribute('aria-label')).toContain('Peak at 80; partial history');
-      expect(element._surface.getAttribute('aria-label')).toContain('Floor at 10; stale history');
+      expect(element._surface.getAttribute('aria-label')).not.toContain('partial history');
+      expect(element._surface.getAttribute('aria-label')).not.toContain('stale history');
+      expect(element.shadowRoot.querySelectorAll('.history-status-badge, .history-indicator')).toHaveLength(0);
       expect(element._surface.getAttribute('tabindex')).toBeNull();
     });
   }

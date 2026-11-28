@@ -115,6 +115,58 @@ describe('Scale Direction and Bar Direction', () => {
     expect(reverse.model.fill.geometry).toMatchObject({ start: 30, end: 100 });
   });
 
+  it('clamps out-of-Scale Targets and Baselines without diagnosing valid coordinates', () => {
+    for (const [direction, endpoint] of [['normal', 100], ['reverse', 0]]) {
+      const { normalized, row } = resolved({
+        scale: { min: 0, max: 100, direction },
+        target: { at: 120 },
+        baseline: { at: 120 },
+      });
+      const target = row.markers.find(marker => marker.type === 'target');
+
+      expect(target.position).toBe(endpoint);
+      expect(row.baselinePositionPercent).toBe(endpoint);
+      expect(validateNormalizedConfig(normalized).warnings.some(item => (
+        item.code === 'target.outside_scale' || item.code === 'baseline.outside_scale'
+      ))).toBe(false);
+    }
+  });
+
+  it('continues resolving percentage and dynamic Target and Baseline sources', () => {
+    const percentage = resolved({
+      scale: { min: 0, max: 100 },
+      target: { at: { percent: 50 } },
+      baseline: { at: { percent: 25 } },
+    });
+    expect(percentage.row.markers.find(marker => marker.type === 'target').position).toBe(50);
+    expect(percentage.row.baselinePositionPercent).toBe(25);
+    expect(validateNormalizedConfig(percentage.normalized).warnings).toEqual([]);
+
+    const normalized = normalizeCardConfig({
+      scale: { min: 0, max: 100 },
+      target: { at: { entity: 'sensor.target', fixed: 140 } },
+      baseline: { at: { entity: 'sensor.baseline', fixed: -20 } },
+      entities: [{ entity }],
+    });
+    const hass = { states: {
+      [entity]: state(30),
+      'sensor.target': state(140),
+      'sensor.baseline': state(-20),
+    } };
+    const row = buildRowViewModel({
+      hass,
+      cardConfig: normalized,
+      entityConfig: normalized.entities[0],
+      entityState: hass.states[entity],
+    });
+
+    expect(row.markers.find(marker => marker.type === 'target')).toMatchObject({ value: 140, position: 100 });
+    expect(row.baselinePercent).toBe(0);
+    expect(row.baselinePositionPercent).toBe(0);
+    expect(row.targetDiagnostics).toEqual([]);
+    expect(validateNormalizedConfig(normalized).warnings).toEqual([]);
+  });
+
   it('projects historical bands stops through a reversed Scale without changing their semantic colors', () => {
     const config = { scale: { min: 0, max: 100 }, bar: { fill_style: 'bands', color: '#aaaaaa', segments: [
       { from: '30%', to: '50%', color: '#0000ff' },
@@ -283,9 +335,12 @@ describe('Scale Direction and Bar Direction', () => {
     });
     const paint = segments.model.fill.paintLayers[0].paintStyle;
     expect(paint).toContain('linear-gradient(to right, #ff0000 0%, #ff0000 50%, #00ff00 50%, #00ff00 100%)');
-    expect(paint).toContain('#ff0000 0%,#ff0000 50%');
-    expect(paint).toContain('#0000ff 50%,#0000ff 100%');
-    expect(segments.model.fill.paintLayers[1].revealStyle).toContain('inset(0 50% 0 0');
+    expect(segments.model.fill.paintLayers.find(layer => layer.id === 'baseline-above').paintStyle)
+      .toContain('#ff0000 0%,#ff0000 50%');
+    expect(segments.model.fill.paintLayers.find(layer => layer.id === 'baseline-below').paintStyle)
+      .toContain('#0000ff 50%,#0000ff 100%');
+    expect(segments.model.fill.paintLayers.find(layer => layer.id === 'above-target').revealStyle)
+      .toContain('inset(0 50% 0 0');
 
     const gradient = resolved({
       scale: { min: 0, max: 100, direction: 'reverse' },

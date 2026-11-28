@@ -1,9 +1,9 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
-test('card and feature expose unavailable history without drawing markers', async ({ page }) => {
+test('card and feature report unavailable history without legacy marker diagnostics', async ({ page }) => {
   await page.goto('/tests/visual/fixtures/harness.html');
   await page.evaluate(async () => {
-    const config = { peak: { enabled: true }, floor: { enabled: true } };
+    const config = { peak: { enabled: true, window: 'today' }, floor: { enabled: true, window: '24h' } };
     const states = { 'sensor.power': { state: '40', attributes: {} } };
     const card = await window.__sbcpRenderCard({ config: { ...config, entities: ['sensor.power'] }, states });
     const feature = await window.__sbcpRenderFeature({ config, states, context: { entity_id: 'sensor.power' } });
@@ -15,50 +15,33 @@ test('card and feature expose unavailable history without drawing markers', asyn
     card._update(); feature._requestUpdate(); await feature.updateComplete;
   });
   for (const host of [page.locator('sensor-bar-card-plus'), page.locator('sensor-bar-card-plus-feature')]) {
-    const badge = host.locator('.history-status-badge');
-    await expect(badge).toBeVisible();
-    await expect(badge).toHaveAttribute('data-sbcp-tooltip', /Peak: Long-term statistics.*Floor: Statistics and Recorder units/);
-    await expect(badge).toHaveAttribute('aria-label', /Peak: Long-term statistics.*Floor: Statistics and Recorder units/);
-    await expect(badge).not.toHaveAttribute('title');
-    await badge.hover();
+    const messages = host.locator('.sbcp-messages');
+    await expect(messages).toBeVisible();
+    await expect(messages).toContainText('sensor.power · Peak marker · Configured window: today');
+    await expect(messages).toContainText('sensor.power · Floor marker · Configured window: 24h');
+    await expect(messages.locator('.sbcp-message[data-severity="error"]')).toHaveCount(2);
     await expect(host.locator('.peak-marker')).toBeHidden();
     await expect(host.locator('.floor-marker')).toBeHidden();
+    await expect(host.locator('.history-status-badge, .history-indicator')).toHaveCount(0);
+    await expect(host.locator('[data-history-status], [data-history-edge]')).toHaveCount(0);
   }
-  await expect(page.locator('sensor-bar-card-plus .row')).toHaveAttribute('aria-description', /Peak: Long-term statistics/);
-  await expect(page.locator('sensor-bar-card-plus-feature #surface')).toHaveAttribute('aria-label', /Floor: Statistics and Recorder units/);
 });
 
-test('historical markers expose shared tooltip descriptions in card and feature markup', async ({ page }) => {
-  await page.route('**/src/history/time-window.js', async route => {
-    const response = await route.fetch();
-    await route.fulfill({ response, body: (await response.text()).replace("from 'weekstart'", "from '/node_modules/weekstart/dist/es-module/main.js'") });
-  });
+test('invalid configured windows produce one error message with their configured value', async ({ page }) => {
   await page.goto('/tests/visual/fixtures/harness.html');
   await page.evaluate(async () => {
-    const { renderMarker, patchMarker } = await import('/src/render/bar-renderer.js');
-    const { barMarkerStyles } = await import('/src/render/bar-styles.js');
-    document.body.innerHTML = `<style>${barMarkerStyles}
-      .surface .bar-track *, .surface .marker-shape-svg path[data-shape] { pointer-events: none; }
-      .bar-track { position: relative; width: 300px; height: 40px; margin: 30px; }
-    </style><div class="bar-track" id="card"></div><div class="surface"><div class="bar-track" id="feature"></div></div>`;
-    for (const [id, type, status] of [['card', 'peak', 'partial'], ['feature', 'floor', 'stale']]) {
-      const marker = { type, id: type, visible: true, position: 50, historyStatus: status };
-      const root = document.getElementById(id);
-      root.innerHTML = renderMarker(marker);
-      window[`patch_${id}`] = next => patchMarker(root.firstElementChild, { ...marker, historyStatus: next });
-    }
+    const config = { peak: { enabled: true, window: '1441m' } };
+    const states = { 'sensor.power': { state: '40', attributes: {} } };
+    await window.__sbcpRenderCard({ config: { ...config, entities: ['sensor.power'] }, states });
+    await window.__sbcpRenderFeature({ config, states, context: { entity_id: 'sensor.power' } });
   });
-  for (const [id, title, glyph] of [['card', 'Partial history', '!'], ['feature', 'Stale history', '~']]) {
-    const indicator = page.locator(`#${id} .history-indicator`);
-    await expect(indicator).toHaveText(glyph);
-    await expect(indicator).toHaveAttribute('data-sbcp-tooltip', title);
-    await expect(indicator).toHaveAttribute('aria-label', new RegExp(title));
-    await expect(indicator).not.toHaveAttribute('title');
-    await indicator.hover();
-    await expect(indicator).toHaveCSS('pointer-events', 'auto');
-    await page.evaluate(id => window[`patch_${id}`]('available'), id);
-    await expect(indicator).toHaveText('');
-    await expect(indicator).not.toHaveAttribute('data-sbcp-tooltip');
+  for (const host of [page.locator('sensor-bar-card-plus'), page.locator('sensor-bar-card-plus-feature')]) {
+    const messages = host.locator('.sbcp-messages');
+    await expect(messages.locator('.sbcp-message')).toHaveCount(1);
+    await expect(messages.locator('.sbcp-message[data-severity="error"]')).toHaveCount(1);
+    await expect(messages).toContainText('sensor.power · Peak marker · Configured window: 1441m');
+    await expect(messages).toContainText('invalid or unsupported');
+    await expect(messages).toContainText('Peak marker is unavailable');
   }
 });
 

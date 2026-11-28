@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 const expectedStops = {
   bands: [0, 37.5, 37.5, 62.5, 62.5, 100],

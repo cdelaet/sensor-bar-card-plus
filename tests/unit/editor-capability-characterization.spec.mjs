@@ -5,9 +5,9 @@ import { getNormalizedResolvableNumericValue } from '../../src/config/resolve.js
 import { getSegmentsForRendering, getBasePaintGradient, getGradientInterpolationStops } from '../../src/view-model/bar-render-model.js';
 const root = { type: 'card' };
 for (const source of ['src', 'dist']) describe(`standalone capability baseline (${source})`, () => {
-  it('keeps animation runtime-only and source percentage controls absent', () => {
+  it('exposes Animated and keeps source percentage controls absent', () => {
     const editor = createEditor({source}); editor.setConfig({target:{at:'50%'},baseline:{at:{percent:35}},bar:{animated:false}});
-    expect(editor.shadowRoot.innerHTML).not.toContain('data-field="bar-animated"');
+    expect(editor.shadowRoot.querySelector('#bar-animated')?.checked).toBe(false);
     expect(editor._targetSection.render(root)).not.toContain('target-source-mode');
     expect(editor._baselineSection.render(root)).not.toContain('baseline-source-mode');
     expect(editor._getTargetResolvableValue(root).percent).toBe(50);
@@ -15,7 +15,7 @@ for (const source of ['src', 'dist']) describe(`standalone capability baseline (
   });
   it('keeps conditional CSS fallback, explicit end validation and drafts unchanged', () => {
     const editor = createEditor({source}); editor.setConfig({bar:{color:'#abc',segments:[{from:0,color:'red'},{from:50,color:'blue'}]}});
-    expect(editor.shadowRoot.innerHTML).not.toContain('data-field="bar-color-text-fallback"');
+    expect(editor.shadowRoot.innerHTML).toContain('data-field="bar-color-text-fallback"');
     expect(editor._segmentsSection._getSegmentRowValidationMessage(root,0)).toBe('Enter valid from/to values.');
     editor._segmentsSection._setSegmentDraftField(root,'from','80'); editor._segmentsSection._setSegmentDraftField(root,'to','');
     expect(editor._segmentsSection._getValidSegmentDraft(root)).toBeNull();

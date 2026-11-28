@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 async function mount(page, source, host, config = {}) {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
@@ -56,6 +56,7 @@ for (const source of ['src', 'dist']) test(`Standalone Target/Baseline Value dra
   await editor.locator('#card-group-marker-target').click();
   await editor.locator('[data-action="toggle-entity-overrides"]').click();
   await editor.locator('#entity-0-group-target').click();
+  await editor.locator('#card-group-entity-0-target-shared').click();
   const targetValue = editor.locator('#entity-0-target-value');
   await expect(targetValue).toHaveValue('30');
   const beforeTarget = await saved(editor), targetEventCount = await page.evaluate(() => window.__numericEvents.length);
@@ -67,6 +68,7 @@ for (const source of ['src', 'dist']) test(`Standalone Target/Baseline Value dra
   expect((await saved(editor)).entities[0].target.at).toEqual({ entity: { id: 'sensor.target', attribute: 'limit' }, percent: 35 });
 
   await editor.locator('#card-group-baseline').click();
+  await editor.locator('#entity-0-group-bar').click();
   await editor.locator('#entity-0-group-baseline').click();
   const baselineValue = editor.locator('#entity-0-baseline-value');
   await expect(baselineValue).toHaveValue('20%');
@@ -131,7 +133,11 @@ for (const source of ['src', 'dist']) for (const host of ['feature', 'standalone
     ['[data-kind="generic-marker-fixed"]', '75', el => (el._draftConfig ?? el._config).markers[0].at.fixed],
     ['[data-kind="generic-marker-label-precision"]', '3', el => (el._draftConfig ?? el._config).markers[0].label.precision],
   ];
-  for (const [selector, value, read] of cases) await replaceNumber(editor, page, selector, value, read);
+  for (const [selector, value, read] of cases) {
+    if (selector === '#target-value') await editor.locator('#card-group-target-shared').click();
+    if (selector === '#target-label-precision') await editor.locator('#card-group-target-labels').click();
+    await replaceNumber(editor, page, selector, value, read);
+  }
   await editor.locator('[data-kind="generic-marker-entity"]').fill('sensor.reference');
   expect((await saved(editor)).markers[0].at).toEqual({ entity: 'sensor.reference', fixed: 75 });
   const input = editor.locator('#scale-min'); await input.fill('');
@@ -165,6 +171,7 @@ for (const source of ['src', 'dist']) test(`Built-in direct Values ${source}: pe
   const editor = await mount(page, source, 'feature', initial);
   for (const [key, group] of [['target', 'marker-target'], ['baseline', 'baseline']]) {
     await editor.locator(`#card-group-${group}`).click();
+    if (key === 'target') await editor.locator('#card-group-target-shared').click();
     const input = editor.locator(`#${key}-value`);
     const before = await saved(editor); await input.fill(''); await echoAndRender(editor);
     expect(await saved(editor)).toEqual(before); await expect(input).toHaveValue(''); await expect(input).toBeFocused();
@@ -181,6 +188,7 @@ for (const source of ['src', 'dist']) test(`Built-in direct Values ${source}: pe
 
 for (const source of ['src', 'dist']) for (const host of ['feature', 'standalone']) test(`Palette numeric drafts ${host} ${source}: invalid boundary, Auto end and Gradient position`, async ({ page }) => {
   const editor = await mount(page, source, host, initial);
+  await editor.locator('#card-paint-editor > summary').click();
   await editor.locator('#card-group-segments').click(); const from = editor.locator('[data-kind="segment-from"]').first();
   for (const value of ['', '-', '.', '-.']) {
     const before = await saved(editor), count = await page.evaluate(() => window.__numericEvents.length);

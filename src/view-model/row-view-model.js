@@ -1,7 +1,7 @@
 import { getNormalizedResolvableNumericValue, getResolvedScale, resolveEntitySource, resolveEntityState } from '../config/resolve.js';
 import { getFiniteNumber } from '../config/normalize.js';
 import { projectScalePercent } from './scale-projection.js';
-import { historyReason, historyStatusSummary } from '../history/history-status.js';
+import { historyDiagnostics, historyReason } from '../history/history-status.js';
 import {
   createNumericPresentation,
   createMarkerLabelPresentation,
@@ -9,9 +9,12 @@ import {
 } from '../utils/format.js';
 import {
   buildMarkerModels,
+  createMarkerModel,
+  hasMarkerLabelContent,
   getMarkerLabelLaneOccupancy,
   getMarkerLaneOccupancy,
 } from './marker-view-model.js';
+import { resolveDirectionalTargets } from './directional-targets.js';
 import { getNeedleBorderColor } from './bar-render-model.js';
 
 function getDefaultEntityIcon(stateObj, entityId = '') {
@@ -85,12 +88,14 @@ function getNeedleState(entityConfig, numericValue, minValue, maxValue, baseline
   };
 }
 
-function getExtremumState(minValue, maxValue, result, enabled) {
+function getExtremumState(minValue, maxValue, result, enabled, window) {
   const value = enabled && ['available', 'partial', 'stale'].includes(result?.status)
     ? getFiniteNumber(result?.value) : null;
   return {
     value, percent: Number.isFinite(value) ? toScalePct(value, minValue, maxValue) : null,
     visible: Number.isFinite(value), status: result?.status ?? 'pending', enabled,
+    window: result?.configuredWindow ?? window,
+    windowHelperIssue: result?.windowHelperIssue ?? null,
     reason: enabled ? historyReason(result ?? { status: 'pending' }) : null,
   };
 }
@@ -132,27 +137,41 @@ export function buildRowViewModel(options) {
   const percent = numericValue !== null ? toScalePct(numericValue, safeMin, safeMax) : 0;
   const positionPercent = numericValue !== null ? projectScalePercent(percent, scaleDirection) : null;
   const decimal = entityConfig?.formatting?.decimal ?? null;
+  const numberLocale = hass?.locale ?? null;
   const primaryPresentation = numericValue === null
     ? createTextPresentation(rawState)
-    : createNumericPresentation(numericValue, displayUnit, decimal);
+    : createNumericPresentation(numericValue, displayUnit, decimal, numberLocale);
 
-  const targetValue = entityConfig?.target_marker?.enabled === false
-    ? null
-    : getNormalizedResolvableNumericValue(hass, entityConfig?.target_marker?.source, safeMin, safeMax);
+  const targets = resolveDirectionalTargets(entityConfig, hass, safeMin, safeMax);
+  const targetMarkers = targets.markerSides.map(side => {
+    const { marker, value } = targets[side];
+    const enabled = marker?.enabled !== false;
+    const label = Number.isFinite(value) ? createMarkerLabelPresentation(value, targetUnit,
+      marker?.label_precision ?? marker?.label_decimal ?? decimal, {
+        text: marker?.label_text, showValue: marker?.label_show_value, showUnit: marker?.label_show_unit,
+      }, numberLocale) : null;
+    return createMarkerModel({ id: side === 'above' ? 'target' : 'target-below', type: 'target',
+      value, position: Number.isFinite(value) ? projectScalePercent(toScalePct(value, safeMin, safeMax), scaleDirection) : null,
+      lane: 'below', visible: enabled && Number.isFinite(value), color: marker?.color,
+      shape: marker?.shape ?? 'diamond', direction: marker?.direction,
+      label, labelVisible: enabled && marker?.show_label === true && hasMarkerLabelContent({
+        text: marker.label_text, showValue: marker.label_show_value, showUnit: marker.label_show_unit,
+      }),
+    });
+  });
+  const firstTarget = targetMarkers[0];
+  const targetValue = firstTarget?.visible ? firstTarget.value : null;
   const targetPercent = targetValue !== null ? toScalePct(targetValue, safeMin, safeMax) : null;
-  const targetPositionPercent = projectScalePercent(targetPercent, scaleDirection);
-  const targetVisible = targetValue !== null;
-  const targetDecimal = entityConfig?.target_marker?.label_decimal ?? decimal;
+  const targetPaintPercent = !targets.invalidOrdering && (entityConfig?.target_above?.legacy !== true
+    || targets.above.marker?.enabled !== false) && Number.isFinite(targets.above.value)
+    ? toScalePct(targets.above.value, safeMin, safeMax) : null;
+  const targetBelowPaintPercent = !targets.invalidOrdering && Number.isFinite(targets.below.value)
+    ? toScalePct(targets.below.value, safeMin, safeMax) : null;
+  const targetPositionPercent = firstTarget?.position ?? null;
+  const targetVisible = firstTarget?.visible ?? false;
   const targetPresentation = targetValue !== null
-    ? createNumericPresentation(targetValue, targetUnit, targetDecimal)
-    : null;
-  const targetLabelPresentation = targetValue !== null
-    ? createMarkerLabelPresentation(targetValue, targetUnit, entityConfig?.target_marker?.label_precision ?? targetDecimal, {
-      text: entityConfig?.target_marker?.label_text,
-      showValue: entityConfig?.target_marker?.label_show_value,
-      showUnit: entityConfig?.target_marker?.label_show_unit,
-    })
-    : null;
+    ? createNumericPresentation(targetValue, targetUnit, targets[targets.markerSides[0]].marker?.label_decimal ?? decimal, numberLocale) : null;
+  const targetLabelPresentation = firstTarget?.label;
 
   const baselineValue = entityConfig?.baseline?.enabled === false
     ? null
@@ -161,31 +180,33 @@ export function buildRowViewModel(options) {
   const baselinePositionPercent = projectScalePercent(baselinePercent, scaleDirection);
   const baselineVisible = Number.isFinite(baselineValue);
 
-  const peakState = getExtremumState(safeMin, safeMax, historicalExtrema?.peak, entityConfig?.peak_marker?.show === true);
-  const floorState = getExtremumState(safeMin, safeMax, historicalExtrema?.floor, entityConfig?.floor_marker?.show === true);
+  const peakState = getExtremumState(safeMin, safeMax, historicalExtrema?.peak,
+    entityConfig?.peak_marker?.show === true, entityConfig?.peak_marker?.window);
+  const floorState = getExtremumState(safeMin, safeMax, historicalExtrema?.floor,
+    entityConfig?.floor_marker?.show === true, entityConfig?.floor_marker?.window);
   const peakDecimal = entityConfig?.peak_marker?.label_decimal ?? decimal;
   const floorDecimal = entityConfig?.floor_marker?.label_decimal ?? decimal;
   const peakLabelPrecision = entityConfig?.peak_marker?.label_precision ?? peakDecimal;
   const floorLabelPrecision = entityConfig?.floor_marker?.label_precision ?? floorDecimal;
   const peakPresentation = peakState.visible
-    ? createNumericPresentation(peakState.value, targetUnit, peakDecimal)
+    ? createNumericPresentation(peakState.value, targetUnit, peakDecimal, numberLocale)
     : null;
   const floorPresentation = floorState.visible
-    ? createNumericPresentation(floorState.value, targetUnit, floorDecimal)
+    ? createNumericPresentation(floorState.value, targetUnit, floorDecimal, numberLocale)
     : null;
   const peakLabelPresentation = peakState.visible
     ? createMarkerLabelPresentation(peakState.value, targetUnit, peakLabelPrecision, {
       text: entityConfig?.peak_marker?.label_text,
       showValue: entityConfig?.peak_marker?.label_show_value,
       showUnit: entityConfig?.peak_marker?.label_show_unit,
-    })
+    }, numberLocale)
     : null;
   const floorLabelPresentation = floorState.visible
     ? createMarkerLabelPresentation(floorState.value, targetUnit, floorLabelPrecision, {
       text: entityConfig?.floor_marker?.label_text,
       showValue: entityConfig?.floor_marker?.label_show_value,
       showUnit: entityConfig?.floor_marker?.label_show_unit,
-    })
+    }, numberLocale)
     : null;
   const genericMarkers = (entityConfig?.generic_markers ?? [])
     .filter((marker) => marker.accepted)
@@ -212,7 +233,7 @@ export function buildRowViewModel(options) {
           text: marker.label.text,
           showValue: marker.label.showValue,
           showUnit: marker.label.showUnit,
-        })
+        }, numberLocale)
         : null;
       return {
         id: marker.id,
@@ -229,7 +250,7 @@ export function buildRowViewModel(options) {
         labelVisible: marker.label.show,
       };
     });
-  const markers = buildMarkerModels({
+  const markers = [...targetMarkers, ...buildMarkerModels({
     entityConfig,
     targetValue,
     targetPosition: targetPositionPercent,
@@ -251,7 +272,7 @@ export function buildRowViewModel(options) {
     floorStatus: floorState.status,
     floorReason: floorState.reason,
     genericMarkers,
-  });
+  }).filter(marker => marker.type !== 'target')];
 
   return {
     entityId,
@@ -270,10 +291,14 @@ export function buildRowViewModel(options) {
     displayUnit: primaryPresentation.unit,
     primaryPresentation,
     unit: primaryPresentation.unit,
-    barColor: entityConfig?.bar?.color ?? null,
-    fillStyle: entityConfig?.bar?.fill_style ?? null,
+    barColor: entityConfig?.bar?.paint?.color ?? entityConfig?.bar?.color ?? null,
+    fillStyle: entityConfig?.bar?.paint?.fill_style ?? entityConfig?.bar?.fill_style ?? null,
     target: targetValue,
     targetPercent,
+    targetPaintPercent,
+    targetBelowPaintPercent,
+    targetOrderingInvalid: targets.invalidOrdering,
+    targetDiagnostics: targets.diagnostics,
     targetPositionPercent,
     targetDisplay: targetPresentation?.text ?? null,
     targetPresentation,
@@ -297,7 +322,7 @@ export function buildRowViewModel(options) {
     floorLabelPresentation,
     floorVisible: floorState.visible,
     floorStatus: floorState.status,
-    historyStatusSummary: historyStatusSummary(peakState, floorState),
+    historyDiagnostics: historyDiagnostics(entityId, peakState, floorState),
     markers,
     markerLaneOccupancy: getMarkerLaneOccupancy(entityConfig),
     markerLabelLaneOccupancy: getMarkerLabelLaneOccupancy(entityConfig),

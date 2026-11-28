@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 async function mount(page, source, host, nested = false, picker = false) {
   if (picker) await page.addInitScript(() => customElements.define('ha-entity-picker', class extends HTMLElement {}));

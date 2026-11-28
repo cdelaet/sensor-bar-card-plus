@@ -1,7 +1,24 @@
-import { isValidReset } from '../utils/extrema.js';
+import { getConfiguredTargetMarkers } from './directional-targets.js';
+import { getOverlayPaintDefaults } from './paint-defaults.js';
 import { canonicalizeHistoricalWindow, parseHistoricalWindow, isEligibleHistoricalWindow } from '../history/time-window.js';
+import { isSafeCssColorValue } from '../utils/css-values.js';
 
 export const UNSUPPORTED_EXTREMA_ALIASES = Symbol.for('sensor-bar-card-plus.unsupported-extrema-aliases');
+export const INVALID_PAINT_OPACITY = Symbol.for('sensor-bar-card-plus.invalid-paint-opacity');
+export const BAR_PAINT_DIAGNOSTICS = Symbol.for('sensor-bar-card-plus.bar-paint-diagnostics');
+export const PAINT_PROPERTY_SOURCES = Symbol.for('sensor-bar-card-plus.paint-property-sources');
+
+/** Normalize only opacity; private metadata retains the invalid input for later diagnostics. */
+export function normalizePaintOpacity(paint) {
+  const rawOpacity = paint.opacity;
+  const opacity = getFiniteNumber(rawOpacity);
+  const valid = Number.isFinite(opacity) && opacity >= 0 && opacity <= 100;
+  const normalized = { ...paint, opacity: valid ? opacity : 100 };
+  if (rawOpacity !== undefined && !valid) {
+    Object.defineProperty(normalized, INVALID_PAINT_OPACITY, { value: rawOpacity });
+  }
+  return normalized;
+}
 
 function recordUnsupportedExtremaAliases(normalized, raw) {
   const aliases = ['peak_marker', 'floor_marker'].filter(key => Object.prototype.hasOwnProperty.call(raw ?? {}, key));
@@ -10,6 +27,14 @@ function recordUnsupportedExtremaAliases(normalized, raw) {
 
 function normalizeAttribute(value) {
   return typeof value === 'string' && value !== '' ? value : null;
+}
+
+function normalizeWindowEntity(value) {
+  if (value === undefined || value === null || value === '') return { entity: null, invalid: false };
+  if (typeof value === 'string' && /^input_select\.[a-z0-9_]+$/i.test(value.trim())) {
+    return { entity: value.trim(), invalid: false };
+  }
+  return { entity: null, invalid: true };
 }
 
 function hasInvalidAttribute(value) {
@@ -123,19 +148,11 @@ export function normalizeStructuredResolvableValue(input, inheritedResolvable = 
   return normalizeResolvableValue(input, null);
 }
 
-function hasConfiguredMarkerSource(source) {
-  return !!source && (
-    getFiniteNumber(source.fixed ?? source.value) !== null
-    || Number.isFinite(source.percent)
-    || !!source.entity
-  );
-}
-
 function applyGenericMarkerCapacity(markers, config) {
   const occupied = {
     above: config?.peak_marker?.show === true ? 1 : 0,
     below: (config?.floor_marker?.show === true ? 1 : 0)
-      + (config?.target_marker?.enabled !== false && hasConfiguredMarkerSource(config?.target_marker?.source) ? 1 : 0),
+      + getConfiguredTargetMarkers(config).length,
   };
 
   return markers.map((marker) => {
@@ -258,9 +275,31 @@ export function normalizeBaselineDirectionConfig(input, inheritedDirection = nul
   if (input === null) {
     return { color: null };
   }
+  if (typeof input === 'string') input = { color: input };
   if (typeof input === 'object' && !Array.isArray(input)) {
+    const color = hasOwnConfigValue(input, 'color') ? input.color : inherited.color ?? null;
+    if (Object.prototype.hasOwnProperty.call(input, 'paint') && input.paint === null) {
+      return { color, paint: null };
+    }
+    const hasPaint = Object.prototype.hasOwnProperty.call(input, 'paint')
+      && input.paint !== undefined;
+    const inheritedPaint = inherited.paint;
+    if (!hasPaint && inheritedPaint === null && !hasOwnConfigValue(input, 'color')) return { color, paint: null };
+    if (!hasPaint && !inheritedPaint) return { color };
+
+    const defaults = getOverlayPaintDefaults();
+    const fallback = inheritedPaint ?? (inherited.paint !== null && inherited.color ? { ...defaults, color: inherited.color } : defaults);
+    const normalized = normalizeBarConfig({
+      bar: {
+        ...(hasPaint ? { paint: input.paint } : {}),
+        ...(input.color !== undefined ? { color: input.color } : {}),
+      },
+    }, { bar: { ...fallback, paint: fallback } }, { isCardScope: false });
     return {
-      color: input.color ?? null,
+      color: hasPaint ? normalized.paint.color : color,
+      paint: normalized.paint,
+      ...(normalized[BAR_PAINT_DIAGNOSTICS]
+        ? { [BAR_PAINT_DIAGNOSTICS]: normalized[BAR_PAINT_DIAGNOSTICS] } : {}),
     };
   }
   return {
@@ -270,6 +309,41 @@ export function normalizeBaselineDirectionConfig(input, inheritedDirection = nul
 
 export function normalizeOptionalEnabled(value) {
   return value === true ? true : value === false ? false : null;
+}
+
+/** Above Paint is independent of the shared Target source and marker. Preserve
+ * disable state and the selected scope's legacy rendering policy together. */
+export function normalizeTargetAboveConfig(config, parent = null) {
+  const inherited = parent?._normalized ? parent.target_above
+    : parent ? normalizeTargetAboveConfig(parent) : { legacy: false };
+  const paint = config?.target?.when_above?.paint;
+  const structuredColor = config?.target?.when_exceeded?.fill_color;
+  const legacyColor = structuredColor ?? config?.above_target_color ?? undefined;
+  if (paint === undefined && legacyColor === undefined) return { ...inherited };
+  // Released falsy colors suppress an inherited legacy overlay as well.
+  if (paint === undefined && !legacyColor) return { paint: null, legacy: true };
+  const normalized = normalizeBaselineDirectionConfig({
+    ...(paint !== undefined ? { paint } : { paint: {} }),
+    ...(legacyColor !== undefined ? { color: legacyColor } : {}),
+  }, inherited);
+  const issues = normalized[BAR_PAINT_DIAGNOSTICS];
+  return {
+    paint: normalized.paint,
+    legacy: paint === undefined,
+    ...(issues ? { [BAR_PAINT_DIAGNOSTICS]: issues.map(issue => ({ ...issue,
+      ...(issue.legacyPath ? { legacyPath: structuredColor != null ? 'target.when_exceeded.fill_color' : 'above_target_color' } : {}),
+    })) } : {}),
+  };
+}
+
+export function normalizeTargetBelowConfig(config, parent = null) {
+  if (config?._normalized) return config.target_below;
+  const inherited = parent?._normalized ? parent.target_below
+    : parent ? normalizeTargetBelowConfig(parent) : undefined;
+  const paint = config?.target?.when_below?.paint;
+  const normalized = normalizeBaselineDirectionConfig(paint === undefined ? undefined : { paint }, inherited ? { paint: inherited.paint } : null);
+  return { paint: normalized.paint,
+    ...(normalized[BAR_PAINT_DIAGNOSTICS] ? { [BAR_PAINT_DIAGNOSTICS]: normalized[BAR_PAINT_DIAGNOSTICS] } : {}) };
 }
 
 export function normalizeBaselineConfig(entityConfig, cardConfig) {
@@ -541,7 +615,117 @@ function hasExplicitColor(config) {
   return values.some((value) => value !== undefined && value !== null);
 }
 
-function getPaintExplicitness(config) {
+export const BAR_PAINT_ALIASES = {
+  color: [['bar', 'color'], ['color']],
+  fill_style: [['bar', 'fill_style'], ['bar', 'color_mode'], ['color_mode']],
+  solid_fill: [['bar', 'solid_fill']],
+  segments: [['bar', 'segments'], ['segments'], ['severity']],
+  gradient_stops: [['bar', 'gradient_stops'], ['gradient_stops']],
+};
+const barPaintAliases = BAR_PAINT_ALIASES;
+
+function paintAliasValue(config, path) {
+  return path.reduce((value, key) => value?.[key], config);
+}
+
+function isPaintObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isPaintColor(value) {
+  // Colors remain CSS strings, including variables and named colors. Reject
+  // only values that could escape an HTML attribute or add declarations.
+  // Do not make pure normalization depend on browser CSS.supports.
+  return isSafeCssColorValue(value);
+}
+
+function isValidGroupedPaintProperty(property, value) {
+  switch (property) {
+    case 'color': return isPaintColor(value);
+    case 'fill_style': return ['solid', 'gradient', 'bands', 'soft_bands', 'band_gradient'].includes(value);
+    case 'solid_fill': return typeof value === 'boolean';
+    case 'segments': {
+      if (!Array.isArray(value)) return false;
+      const normalized = normalizeGaugeSegments(value);
+      return normalized.length === value.length && normalized.every(segment => !segment.invalidBoundary && isPaintColor(segment.color));
+    }
+    case 'gradient_stops': return Array.isArray(value) && value.every(stop => {
+      const pos = parsePercentLiteral(stop?.pos) ?? getFiniteNumber(stop?.pos);
+      return isPaintObject(stop) && Number.isFinite(pos) && pos >= 0 && pos <= 100 && isPaintColor(stop.color);
+    });
+    default: return false;
+  }
+}
+
+function validPaintFallbacks(config, property) {
+  let result = config;
+  for (const path of barPaintAliases[property] ?? []) {
+    const value = paintAliasValue(config, path);
+    if (value === undefined) continue;
+    const severity = path.at(-1) === 'severity' && Array.isArray(value) ? normalizeSeverityToSegments(value) : null;
+    const valid = path.at(-1) === 'color_mode'
+      ? colorModeToFillStyle(value) !== null
+      : path.at(-1) === 'severity'
+        ? severity !== null && severity.length === value.length && severity.every(segment => isPaintColor(segment.color))
+        : isValidGroupedPaintProperty(property, value);
+    if (valid) continue;
+    if (result === config) {
+      result = { ...config, bar: { ...config?.bar } };
+      if (hasOwnConfigValue(config?.bar, EXPLICIT_SEGMENT_SPACE)) {
+        Object.defineProperty(result.bar, EXPLICIT_SEGMENT_SPACE, { value: config.bar[EXPLICIT_SEGMENT_SPACE] });
+      }
+    }
+    if (path.length === 1) delete result[path[0]];
+    else delete result.bar[path[1]];
+  }
+  return result;
+}
+
+// Adapt only grouped properties into the established bar/alias pipeline. Legacy
+// inputs retain their released normalization, including malformed-value handling.
+function groupedBarPaintInput(config, authored = config) {
+  const paint = config?.bar?.paint;
+  const diagnostics = [];
+  const overrides = {};
+  if (hasOwnConfigValue(config?.bar, EXPLICIT_SEGMENT_SPACE) || paint === undefined) return { config, paint, diagnostics, overrides };
+  if (!isPaintObject(paint)) {
+    diagnostics.push({ kind: 'invalid', property: null, input: paint });
+    return { config, paint: null, diagnostics, overrides };
+  }
+  for (const property of Object.keys(barPaintAliases)) {
+    if (!hasOwnConfigValue(paint, property) || paint[property] === undefined) continue;
+    if (!isValidGroupedPaintProperty(property, paint[property])) {
+      diagnostics.push({ kind: 'invalid', property, input: paint[property] });
+      // Only a new invalid grouped property opts into finding a valid fallback;
+      // do not tighten released legacy-only normalization.
+      config = validPaintFallbacks(config, property);
+      continue;
+    }
+    overrides[property] = paint[property];
+    const alias = barPaintAliases[property].find(path => paintAliasValue(authored, path) != null);
+    if (alias) diagnostics.push({ kind: 'legacy_conflict', property, legacyPath: alias.join('.') });
+  }
+  return { config: { ...config, bar: { ...config?.bar, ...overrides } }, paint, diagnostics, overrides };
+}
+
+function paintPropertySources(config, overrides, paint) {
+  const sources = {};
+  for (const [property, aliases] of Object.entries(barPaintAliases)) {
+    if (hasOwnConfigValue(overrides, property)) sources[property] = `bar.paint.${property}`;
+    else {
+      const alias = aliases.find(path => paintAliasValue(config, path) != null);
+      if (alias) sources[property] = alias.join('.');
+    }
+  }
+  if (isPaintObject(paint) && hasOwnConfigValue(paint, 'preset') && paint.preset !== undefined) {
+    sources.preset = 'bar.paint.preset';
+  }
+  if (isPaintObject(paint) && hasOwnConfigValue(paint, 'opacity') && paint.opacity !== undefined) sources.opacity = 'bar.paint.opacity';
+  return sources;
+}
+
+export function getPaintExplicitness(config) {
+  config = groupedBarPaintInput(config).config;
   const bar = config?.bar;
   const explicitPaintKeys = [
     [config, 'color_mode'],
@@ -640,6 +824,14 @@ export function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
     ?? cardConfig?.[PAINT_EXPLICITNESS]
     ?? getPaintExplicitness(cardConfig);
   const isCardScope = options.isCardScope ?? cardConfig == null;
+  const authored = options.rawConfig ?? entityConfig;
+  const local = groupedBarPaintInput(entityConfig, authored);
+  const inherited = groupedBarPaintInput(cardConfig);
+  entityConfig = local.config;
+  cardConfig = inherited.config;
+  for (const issue of local.diagnostics) {
+    if (issue.kind === 'invalid' && issue.property !== null) cardConfig = validPaintFallbacks(cardConfig, issue.property);
+  }
   const cardBar = cardConfig?.bar;
   const entityBar = entityConfig?.bar;
   // Normalized severity also uses percent space; only a configured legacy mode
@@ -670,7 +862,9 @@ export function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
     segments = normalizeSeverityToSegments(entityLegacySeverity);
     segment_space = 'percent';
   } else if (cardStructuredSegments !== null && cardStructuredSegments !== undefined) {
-    segments = cardStructuredSegments.map((segment) => ({ ...segment }));
+    segments = hasOwnConfigValue(inherited.overrides, 'segments')
+      ? normalizeGaugeSegments(cardStructuredSegments, { legacySegmentSpace: inheritedSegmentSpace })
+      : cardStructuredSegments.map((segment) => ({ ...segment }));
   } else if (cardTopLevelSegments !== null && cardTopLevelSegments !== undefined) {
     segments = normalizeGaugeSegments(cardTopLevelSegments);
   } else if (cardLegacySeverity !== null && cardLegacySeverity !== undefined) {
@@ -715,6 +909,27 @@ export function normalizeBarConfig(entityConfig, cardConfig, options = {}) {
     above_target_color: structuredAboveTargetColor ?? entityConfig.above_target_color ?? cardBar?.above_target_color ?? inheritedStructuredAboveTargetColor ?? cardConfig?.above_target_color ?? null,
   };
   Object.defineProperty(normalizedBar, EXPLICIT_SEGMENT_SPACE, { value: explicitSegmentSpace });
+  const localOpacity = isPaintObject(local.paint) && hasOwnConfigValue(local.paint, 'opacity') && local.paint.opacity !== undefined;
+  const inheritedPaint = cardBar?.paint;
+  const paint = normalizePaintOpacity({
+    ...(isPaintObject(inheritedPaint) ? inheritedPaint : {}),
+    ...(isPaintObject(local.paint) ? local.paint : {}),
+    ...Object.fromEntries(Object.keys(barPaintAliases).map(key => [key, normalizedBar[key]])),
+    opacity: localOpacity ? local.paint.opacity : inheritedPaint?.opacity,
+  });
+  if (!localOpacity && hasOwnConfigValue(inheritedPaint, INVALID_PAINT_OPACITY)) {
+    Object.defineProperty(paint, INVALID_PAINT_OPACITY, { value: inheritedPaint[INVALID_PAINT_OPACITY] });
+  }
+  if (localOpacity && hasOwnConfigValue(paint, INVALID_PAINT_OPACITY)) {
+    local.diagnostics.push({ kind: 'invalid', property: 'opacity', input: paint[INVALID_PAINT_OPACITY] });
+  }
+  let sourceConfig = authored;
+  for (const issue of local.diagnostics) {
+    if (issue.kind === 'invalid' && issue.property !== null) sourceConfig = validPaintFallbacks(sourceConfig, issue.property);
+  }
+  Object.defineProperty(paint, PAINT_PROPERTY_SOURCES, { value: paintPropertySources(sourceConfig, local.overrides, local.paint) });
+  normalizedBar.paint = paint;
+  if (local.diagnostics.length) Object.defineProperty(normalizedBar, BAR_PAINT_DIAGNOSTICS, { value: local.diagnostics });
   return normalizedBar;
 }
 
@@ -780,11 +995,18 @@ export function normalizeLayoutConfig(entityConfig, cardConfig) {
   };
 }
 
+export function normalizeDecimalPlaces(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = getFiniteNumber(value);
+  return Number.isInteger(number) && number >= 0 && number <= 20 ? number : null;
+}
+
 export function normalizeFormattingConfig(entityConfig, cardConfig) {
   const cardFormatting = cardConfig?.formatting;
   const entityFormatting = entityConfig?.formatting;
+  const decimal = entityFormatting?.decimal ?? entityConfig.decimal ?? cardFormatting?.decimal ?? cardConfig?.decimal ?? null;
   return {
-    decimal: entityFormatting?.decimal ?? entityConfig.decimal ?? cardFormatting?.decimal ?? cardConfig?.decimal ?? null,
+    decimal: normalizeDecimalPlaces(decimal),
     unit: entityFormatting?.unit ?? entityConfig.unit ?? cardFormatting?.unit ?? cardConfig?.unit ?? null,
   };
 }
@@ -850,6 +1072,17 @@ function isInvalidMarkerDirection(value) {
   );
 }
 
+export function getAuthoredSharedTargetSource(config) {
+  const raw = config?.target;
+  if (raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'at')) {
+    return normalizeStructuredResolvableValue(raw.at, null, null, { allowPercent: true });
+  }
+  if (raw !== undefined && raw !== null && typeof raw !== 'object' || config?.target_entity !== undefined) {
+    return normalizeResolvableValue(typeof raw === 'object' ? null : raw, config?.target_entity);
+  }
+  return undefined;
+}
+
 export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
   const cardTarget = cardConfig?.target_marker;
   const rawTarget = entityConfig?.target;
@@ -875,7 +1108,7 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
     const labelOptions = normalizeMarkerLabelConfig(rawTarget.label, inheritedTarget);
     const normalizedTarget = {
       enabled: normalizeOptionalEnabled(rawTarget.enabled) ?? inheritedTarget.enabled ?? null,
-      source: normalizeStructuredResolvableValue(rawTarget.at, inheritedTarget.source, null, { allowPercent: true }),
+      source: normalizeStructuredResolvableValue(rawTarget.at, rawTarget.at === undefined ? inheritedTarget.source : null, null, { allowPercent: true }),
       color: rawTarget.color ?? entityConfig.target_color ?? inheritedTarget.color,
       show_label: rawTarget.label?.show ?? entityConfig.show_target_label ?? inheritedTarget.show_label,
       shape: Object.prototype.hasOwnProperty.call(rawTarget, 'shape')
@@ -917,6 +1150,33 @@ export function normalizeTargetMarkerConfig(entityConfig, cardConfig) {
     normalizedTarget.label_decimal = labelDecimal;
   }
   return normalizedTarget;
+}
+
+/** Select whole sources before resolution. Marker properties inherit independently
+ * through Card shared/directional, Entity shared/directional defaults. */
+export function normalizeDirectionalTargets(config, parent = null) {
+  const inherited = parent?._normalized ? parent.target_directions
+    : parent ? normalizeDirectionalTargets(parent) : null;
+  const sharedSource = getAuthoredSharedTargetSource(config);
+  const raw = config?.target;
+  const hasShared = sharedSource !== undefined;
+  const result = {};
+  for (const side of ['above', 'below']) {
+    const direction = raw?.[`when_${side}`];
+    const hasDirectional = direction && Object.prototype.hasOwnProperty.call(direction, 'at');
+    const source = hasDirectional
+      ? normalizeStructuredResolvableValue(direction.at, null, null, { allowPercent: true })
+      : hasShared ? sharedSource : inherited?.[side]?.source ?? normalizeResolvableValue(null, null);
+    let marker = inherited?.[side]?.marker ?? normalizeTargetMarkerConfig({}, null);
+    marker = normalizeTargetMarkerConfig(config, { target_marker: marker });
+    marker = normalizeTargetMarkerConfig({ target: direction?.marker ?? {} }, { target_marker: marker });
+    delete marker.source;
+    const sourcePath = hasDirectional ? `target.when_${side}.at`
+      : hasShared ? 'target.at' : inherited?.[side]?.sourcePath ?? 'target.at';
+    result[side] = { source, marker, sourcePath,
+      sourceScope: hasDirectional || hasShared ? 'local' : inherited ? 'inherited' : 'default' };
+  }
+  return result;
 }
 
 function getRawExtremumConfig(config, key) {
@@ -964,12 +1224,15 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
   };
   const hasReset = rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, 'reset');
   const hasWindow = rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, 'window');
+  const hasWindowEntity = rawMarker && Object.prototype.hasOwnProperty.call(rawMarker, 'window_entity');
   const rawWindow = hasWindow ? rawMarker.window : hasReset ? rawMarker.reset : inherited.window ?? 'today';
-  const legacyInvalid = !hasWindow && hasReset && !isValidReset(rawWindow);
   const normalizedWindow = !hasWindow && hasReset && typeof rawWindow === 'string' && rawWindow.trim().toLowerCase() === 'never'
     ? 'today' : typeof rawWindow === 'string' ? rawWindow.trim().toLowerCase() : rawWindow;
   const window = canonicalizeHistoricalWindow(normalizedWindow);
-  const windowSpec = legacyInvalid || !isEligibleHistoricalWindow(window) ? null : parseHistoricalWindow(window);
+  const windowSpec = isEligibleHistoricalWindow(window) ? parseHistoricalWindow(window) : null;
+  const legacyInvalid = !hasWindow && hasReset && !windowSpec;
+  const windowEntityInput = hasWindowEntity ? rawMarker.window_entity : inherited.window_entity;
+  const windowEntity = normalizeWindowEntity(windowEntityInput);
   const rawLabel = rawMarker?.label;
   const label = normalizeLabelConfig(rawMarker, inherited);
   const normalized = {
@@ -986,6 +1249,9 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
       : normalizeMarkerDirection(inherited.direction),
     ...(isInvalidMarkerDirection(rawMarker?.direction) ? { direction_invalid: true } : {}),
     window, window_spec: windowSpec,
+    ...(windowEntity.entity ? { window_entity: windowEntity.entity }
+      : hasWindowEntity || inherited.window_entity_invalid ? { window_entity: null } : {}),
+    ...(windowEntity.invalid || (!hasWindowEntity && inherited.window_entity_invalid) ? { window_entity_invalid: true } : {}),
     ...(!windowSpec || (!hasWindow && !hasReset && inherited.window_invalid) ? { window_invalid: true } : {}),
     ...(legacyInvalid ? { window_invalid_source: 'reset' } : {}),
   };
@@ -1000,6 +1266,8 @@ function normalizeExtremumMarkerConfig(entityConfig, cardConfig, key, options = 
   const hasAdvancedConfig = key === 'floor'
     || hasReset
     || hasWindow
+    || hasWindowEntity
+    || !!windowEntity.entity
     || rawLabel !== undefined
     || inheritedAdvanced;
 
@@ -1040,13 +1308,18 @@ function normalizeLegacyMarkerFields(config) {
 }
 
 export function normalizeEntityConfig(entityConfig, cardConfig) {
+  const rawEntity = entityConfig.entity;
   const normalizedEntity = {
     ...entityConfig,
     _normalized: true,
-    entity: entityConfig.entity,
+    entity: typeof rawEntity === 'string' ? rawEntity.trim() : rawEntity,
     name: entityConfig.name ?? null,
     icon: entityConfig.icon,
   };
+  if (rawEntity !== undefined && rawEntity !== null && rawEntity !== ''
+    && (typeof rawEntity !== 'string' || !looksLikeEntityId(rawEntity))) {
+    normalizedEntity.entity_invalid = true;
+  }
   recordUnsupportedExtremaAliases(normalizedEntity, entityConfig);
 
   if (entityConfig.attribute !== undefined) {
@@ -1057,6 +1330,9 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
     else delete normalizedEntity.attribute_invalid;
   }
 
+  const rawEntityDecimal = entityConfig.formatting?.decimal ?? entityConfig.decimal ?? null;
+  if (rawEntityDecimal !== null && rawEntityDecimal !== undefined && rawEntityDecimal !== ''
+    && normalizeDecimalPlaces(rawEntityDecimal) === null) normalizedEntity.decimal_invalid = true;
   normalizedEntity.layout = normalizeLayoutConfig(entityConfig, cardConfig);
   normalizedEntity.scale = normalizeScaleConfig(entityConfig, cardConfig);
   normalizedEntity.bar = normalizeBarConfig(entityConfig, cardConfig, {
@@ -1067,6 +1343,9 @@ export function normalizeEntityConfig(entityConfig, cardConfig) {
   normalizedEntity.baseline = normalizeBaselineConfig(entityConfig, cardConfig);
   normalizedEntity.formatting = normalizeFormattingConfig(entityConfig, cardConfig);
   normalizedEntity.target_marker = normalizeTargetMarkerConfig(entityConfig, cardConfig);
+  normalizedEntity.target_directions = normalizeDirectionalTargets(entityConfig, cardConfig);
+  normalizedEntity.target_above = normalizeTargetAboveConfig(entityConfig, cardConfig);
+  normalizedEntity.target_below = normalizeTargetBelowConfig(entityConfig, cardConfig);
   normalizedEntity.peak_marker = normalizePeakMarkerConfig(entityConfig, cardConfig);
   normalizedEntity.floor_marker = normalizeFloorMarkerConfig(entityConfig, cardConfig);
   normalizeLegacyMarkerFields(normalizedEntity);
@@ -1139,15 +1418,19 @@ export function normalizeCardConfig(rawConfig) {
   };
   baseConfig._height_explicit = rawConfig?.layout?.height !== undefined || rawConfig?.height !== undefined;
 
-  if (baseConfig.entity && !baseConfig.entities) {
-    baseConfig.entities = [{
+  let entitiesInput = baseConfig.entities;
+  if (baseConfig.entity && (entitiesInput === undefined || entitiesInput === null)) {
+    entitiesInput = [{
       entity: baseConfig.entity,
       ...(baseConfig.attribute !== undefined ? { attribute: baseConfig.attribute } : {}),
       ...(baseConfig.name !== undefined ? { name: baseConfig.name } : {}),
     }];
   }
-  baseConfig.entities = baseConfig.entities.map((e) =>
-    typeof e === 'string' ? { entity: e } : e
+  const entitiesInvalid = entitiesInput !== undefined && entitiesInput !== null && !Array.isArray(entitiesInput);
+  baseConfig.entities = (Array.isArray(entitiesInput) ? entitiesInput : []).map((e) =>
+    typeof e === 'string'
+      ? { entity: e }
+      : (e && typeof e === 'object' && !Array.isArray(e) ? e : { entity: null })
   );
 
   const normalizedCard = {
@@ -1160,9 +1443,14 @@ export function normalizeCardConfig(rawConfig) {
     enumerable: false,
   });
 
+  const rawCardDecimal = baseConfig.formatting?.decimal ?? baseConfig.decimal ?? null;
+  if (rawCardDecimal !== null && rawCardDecimal !== undefined && rawCardDecimal !== ''
+    && normalizeDecimalPlaces(rawCardDecimal) === null) normalizedCard.decimal_invalid = true;
+  normalizedCard.entities_invalid = entitiesInvalid;
   normalizedCard.layout = normalizeLayoutConfig(baseConfig, null);
   normalizedCard.scale = normalizeScaleConfig(rawConfig, null);
   normalizedCard.bar = normalizeBarConfig(baseConfig, null, {
+    rawConfig,
     scopeExplicitness: cardPaintExplicitness,
     inheritedExplicitness: null,
     isCardScope: true,
@@ -1170,6 +1458,9 @@ export function normalizeCardConfig(rawConfig) {
   normalizedCard.baseline = normalizeBaselineConfig(baseConfig, null);
   normalizedCard.formatting = normalizeFormattingConfig(baseConfig, null);
   normalizedCard.target_marker = normalizeTargetMarkerConfig(baseConfig, null);
+  normalizedCard.target_directions = normalizeDirectionalTargets(rawConfig, null);
+  normalizedCard.target_above = normalizeTargetAboveConfig(baseConfig);
+  normalizedCard.target_below = normalizeTargetBelowConfig(baseConfig);
   normalizedCard.peak_marker = normalizePeakMarkerConfig(baseConfig, null);
   normalizedCard.floor_marker = normalizeFloorMarkerConfig(baseConfig, null);
   normalizeLegacyMarkerFields(normalizedCard);

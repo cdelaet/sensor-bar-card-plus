@@ -1,5 +1,7 @@
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
 const { expandFeatureGroups, featureGroup } = require('./feature-editor-test-utils.cjs');
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
+const { snapshotName } = require('./snapshot-name.cjs');
 async function mount(page, source, width, empty = false) {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({ width, empty }) => {
@@ -28,7 +30,7 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   for (const key of ['peak', 'floor']) {
     const section = featureGroup(editor, `marker-${key}`);
     await page.mouse.move(0, 0);
-    await expect(section).toHaveScreenshot(`feature-${key}-${width}.png`);
+    await expectEditorLayout(section, expect);
     const other = key === 'peak' ? 'floor' : 'peak', before = await saved(editor);
     await editor.locator(`#${key}-show`).uncheck(); await editor.locator(`#${key}-show`).check();
     const direction = editor.locator(`#${key}-direction`); await expect(direction.locator('option')).toHaveText(['Inward', 'Outward']);
@@ -47,7 +49,9 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
     // Headless native selects on this platform do not advance via arrows.
     // Protect focus/traversal; selectOption above covers actual change commits.
     await windowControl.selectOption('today'); await windowControl.press('ArrowDown'); await windowControl.press('Escape'); await expect(windowControl).toBeFocused();
-    await windowControl.press('Tab'); await expect(direction).toBeFocused();
+    const windowHelper = editor.locator(`#${key}-window-entity`);
+    await windowControl.press('Tab'); await expect(windowHelper).toBeFocused();
+    await windowHelper.press('Tab'); await expect(direction).toBeFocused();
     const config = await saved(editor), count = await page.evaluate(() => window.__extremaEvents.length);
     for (const invalid of ['0m', '1441m', '0h', '1s']) {
       await windowControl.evaluate((el, value) => { const option = new Option(value, value); el.add(option); el.value = value; el.dispatchEvent(new Event('change', { bubbles: true })); option.remove(); }, invalid);
@@ -71,13 +75,39 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
     for (const name of ['bar', 'target', 'baseline', 'markers', 'future']) expect(edited[name]).toEqual(original[name]);
   }
   const before = await saved(editor);
-  await editor.locator('#bar-needle-mode').selectOption('disabled'); await editor.locator('#baseline-show').check(); await editor.locator('#target-show').uncheck(); await editor.locator('#bar-fill-style').selectOption('bands');
+  await editor.locator('#bar-needle-mode').uncheck(); await editor.locator('#baseline-show').check(); await editor.locator('#target-show').uncheck(); await editor.locator('#bar-fill-style').selectOption('bands');
   await editor.locator('#formatting-unit').fill('W');
   expect((await saved(editor)).peak).toEqual(before.peak); expect((await saved(editor)).floor).toEqual(before.floor);
   const count = await page.evaluate(() => window.__extremaEvents.length);
   await editor.evaluate(async el => { el.context = { entity_id: 'sensor.changed' }; el.hass = { states: {} }; el.setConfig(el._config); await el.updateComplete; });
   expect(await page.evaluate(() => window.__extremaEvents.length)).toBe(count); expect((await saved(editor)).entity).toBeUndefined();
 });
+
+for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feature Needle pointer toggles after marker color edits ${width}px (${source})`, async ({ page }) => {
+  const editor = await mount(page, source, width);
+  const color = editor.locator('[data-field="peak-color-text-fallback"]');
+  const needle = editor.locator('#bar-needle-mode');
+  await expect(needle).toBeChecked();
+
+  await color.fill('var(--primary-color)');
+  await expect(color).toBeFocused();
+  const beforeDisable = await page.evaluate(() => window.__extremaEvents.length);
+  await needle.click();
+  await expect(needle).not.toBeChecked();
+  expect((await saved(editor)).bar.needle).toBe(false);
+  expect((await saved(editor)).peak.color).toBe('var(--primary-color)');
+  expect(await page.evaluate(() => window.__extremaEvents.length)).toBe(beforeDisable + 1);
+
+  await color.fill('var(--secondary-color)');
+  await expect(color).toBeFocused();
+  const beforeEnable = await page.evaluate(() => window.__extremaEvents.length);
+  await needle.click();
+  await expect(needle).toBeChecked();
+  expect((await saved(editor)).bar.needle).toBe(true);
+  expect((await saved(editor)).peak.color).toBe('var(--secondary-color)');
+  expect(await page.evaluate(() => window.__extremaEvents.length)).toBe(beforeEnable + 1);
+});
+
 for (const source of ['src', 'dist']) test(`Feature extrema (${source}): defaults, unsupported reset metadata and foreign replacement`, async ({ page }) => {
   const editor = await mount(page, source, 240, true);
   expect(await saved(editor)).toEqual({ type: 'custom:sensor-bar-card-plus-feature' });

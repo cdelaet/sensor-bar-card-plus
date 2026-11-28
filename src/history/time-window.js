@@ -4,6 +4,11 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const WEEK_MS = 7 * DAY_MS;
 
+// Calendar-year windows can be 366 days in leap years. Longer rolling or
+// absolute windows are rejected before any Recorder request is planned.
+export const MAX_HISTORICAL_WINDOW_DAYS = 366;
+export const MAX_HISTORICAL_WINDOW_MS = MAX_HISTORICAL_WINDOW_DAYS * DAY_MS;
+
 const CALENDAR_UNITS = new Set(['quarter_hour', 'hour', 'day', 'week', 'month', 'year']);
 const SHIFT_UNITS = new Set(['quarter_hour', 'hour', 'day', 'week', 'month', 'year']);
 const HISTORICAL_WINDOW_ALIASES = {
@@ -25,7 +30,8 @@ export function isEligibleHistoricalWindow(value) {
   if (!spec) return false;
   if (spec.kind !== 'rolling') return true;
   const duration = durationMilliseconds(spec.duration);
-  return duration <= DAY_MS || duration % HOUR_MS === 0;
+  return duration <= MAX_HISTORICAL_WINDOW_MS
+    && (duration <= DAY_MS || duration % HOUR_MS === 0);
 }
 
 export function parseHistoricalWindow(value) {
@@ -305,6 +311,9 @@ export function planHistoricalAcquisition(window, now = Date.now()) {
   if (!window || !Number.isFinite(window.start) || !Number.isFinite(window.end)
     || window.end <= window.start || !Number.isFinite(now)) throw new TypeError('A valid resolved window and current time are required');
   const invalid = reason => ({ mode: 'invalid', reason, window });
+  if (window.end - window.start > MAX_HISTORICAL_WINDOW_MS) {
+    return invalid(`History window exceeds the supported ${MAX_HISTORICAL_WINDOW_DAYS}-day limit`);
+  }
   if (window.end > now && !(window.semantics?.kind === 'calendar' && window.start === now && window.end === now + 1)) {
     return invalid('Future history is not available');
   }

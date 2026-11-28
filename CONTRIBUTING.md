@@ -15,7 +15,7 @@ npx playwright install chromium
 
 Implement card changes in `src/`. `npm run build` uses two independent esbuild builds to generate the tracked, self-contained ESM artifacts `dist/sensor-bar-card-plus.js` and `dist/sensor-bar-card-plus-editor.js`. Install both in the same directory; register only the core as a Home Assistant JavaScript Module resource. Card and Card Feature runtimes load immediately; their async `getConfigElement()` factories share one lazy editor import and return fresh editor instances. When source or build inputs change, regenerate and include both files. Do not edit generated bundles by hand.
 
-The build retains ES2018 lowering while preserving native dynamic import and `import.meta`. A deterministic pair identity hashes source, build script, package metadata, lockfile and esbuild version/options, excluding checkout paths. The companion exports that identity and its two constructors without registering elements. The core imports the fixed companion filename relative to its own module URL with a SHA-256 of final companion bytes in `sbcp_build`. It validates exact identity, runtime ownership and both editor tags before registering either. An explicit failed editor attempt can retry once using `sbcp_retry=1`; further failures require refresh. Display remains available if editor loading fails.
+The build retains ES2018 lowering while preserving native dynamic import and `import.meta`. A deterministic pair identity hashes source, build script, package metadata, lockfile and esbuild version/options, excluding checkout paths. The companion exports that identity and its two constructors without registering elements. The core imports the fixed companion filename relative to its own module URL with a SHA-256 of final companion bytes used as the `sbcp_build` cache-busting query key. It does not hash the fetched companion at runtime; integrity relies on the companion's exported deterministic build identity matching the core, plus runtime-ownership and editor-tag preflight before either tag is registered. An explicit failed editor attempt can retry once using `sbcp_retry=1`; further failures require refresh. Display remains available if editor loading fails.
 
 ~~~sh
 npm run build
@@ -34,38 +34,38 @@ The package scripts in `package.json` are:
 
 ~~~sh
 npm run test:unit
+npm run test:visual:fast
+npm run test:visual:complete
 npm run test:visual
 npm run verify-dist
 npm test
 ~~~
 
-`npm test` runs the build, unit tests, and Playwright visual tests in sequence. The unit suite checks configuration normalization, conversion, formatting, and card behavior. The Playwright suite checks rendered behavior including fill and Baseline cases, Target/Peak/Floor and generic reference markers, marker shapes and labels, responsive layouts, and clipping or rounded-edge regressions.
+`npm run test:visual:fast` runs high-value Chromium and WebKit browser journeys for lazy editor loading, source/dist Paint editing, Target Paint lifecycle, and keyboard navigation. Use it during everyday development. `npm run test:visual:complete` runs the complete Chromium/WebKit suite with two workers and snapshot updates disabled. Run this once locally before release candidates. `npm test` retains the build, unit, and complete visual sequence.
 
-GitHub's **Fast Validation** (`.github/workflows/validate.yml`) runs HACS validation, verifies both production bundles and their ESM syntax, runs focused native-browser lazy-loading checks, and runs unit tests on pushes to `main` and pull requests. It does not run the complete Playwright suite on ordinary pushes or pull requests.
+The visual harness gives every test its normal fresh Playwright context and page. To contain WebKit's long-run process leak, its worker fixture recycles the local WebKit browser after 50 completed contexts when none are active. Tracing remains on Playwright's normal test lifecycle; Chromium and remote `connectOptions` browsers are not recycled. The fixture reads Playwright's internal `_browserOptions` worker fixture so launch settings and trace directories stay consistent. A unit test asserts this fixture is still registered by the pinned Playwright version; review the compatibility assertion when upgrading Playwright.
 
-Before preparing a release, explicitly run **Full Validation** for the intended commit:
+GitHub's **Fast Validation** (`.github/workflows/validate.yml`) runs HACS, verifies committed dist reproducibility and ESM syntax, runs the complete unit suite, and runs the focused Chromium/WebKit browser regression on pushes to `main` and pull requests. Scheduled runs only perform HACS validation and cannot qualify a release. The browser smoke job checks both source and dist where the journey covers both. The exhaustive browser suite remains available as an optional manually dispatched workflow.
 
-~~~sh
-gh workflow run full-validation.yml --ref main
-~~~
-
-Full Validation runs HACS validation, dist verification, unit tests, and the complete Chromium and WebKit Playwright suite on macOS. The workflow run is tied to the exact `main` commit selected at dispatch; its run page and job summaries identify that SHA. Release preparation requires this successful Full Validation result for the exact same SHA; a successful Fast Validation run alone is insufficient.
+The developer's MacBook is the primary environment for complete visual regression testing. Release preparation requires successful Fast Validation for the exact current `main` SHA; the manual Full Validation workflow is optional and is not a release prerequisite.
 
 ## Visual regression snapshots
 
-The single canonical Playwright snapshot set is stored under `tests/visual/snapshots/`. The visual harness fixes the accent color, so screenshots do not depend on the developer's macOS accent preference.
+The single canonical Playwright snapshot set is stored under `tests/visual/snapshots/`, without an OS-version suffix. Snapshots cover SBCP-rendered bars, gradients, markers, labels, feature output and responsive composition. Editor controls use state/configuration, keyboard and geometry/containment assertions instead of pixel comparisons, since checkbox and select appearance is controlled by the OS. The visual harness pins locale and accent color.
 
-Run `npm run test:visual` to compare against the canonical snapshots. After an intentional visual change, run `npm run test:visual:update`, review every changed image, and commit intended snapshot changes with the code. Do not accept image changes blindly: snapshots should reflect intentional UI changes. The screenshot comparator allows up to 50 differing pixels at a per-pixel threshold of 0.2 to accommodate small macOS rasterization differences; this tolerance is not intended to mask layout or appearance changes. GitHub validation checks the same committed snapshot set with updates disabled.
+Run `npm run test:visual:complete` to compare against the canonical snapshots. After an intentional rendering change, generate snapshots locally with `npm run test:visual:update`, inspect every changed image, and commit only reviewed baselines. CI uses updates disabled and never generates or uploads replacement baselines. The comparator keeps its existing 50-pixel, 0.2 threshold for small rasterization differences; it is not raised to absorb layout or appearance changes.
 
 ## Release preparation
 
-After Full Validation succeeds for the current `main` commit, prepare the release draft:
+Before preparing a release candidate, set `package.json` to the intended version. If source or any build input changes, run `npm run build`, include both regenerated dist files, and confirm them with `npm run verify-dist`. The version, source and matching dist pair must be committed together.
+
+After the change is merged, wait for Fast Validation triggered by the push to the current `main` commit. The release workflow accepts only that successful Fast Validation push run for the exact `main` SHA; a branch dispatch, pull request run, or scheduled HACS-only run does not qualify. Then prepare the release draft:
 
 ~~~sh
-gh workflow run release-dist.yml --ref main -f version=1.10.0 -f title="Historical Peak and Floor"
+gh workflow run release-dist.yml --ref main -f version=1.11.0 -f title="Universal Paint and Dashboard Presets"
 ~~~
 
-The Release workflow checks that its commit is still the tip of `main`, requires successful Full Validation for that exact SHA, checks that the requested version matches `package.json`, refuses an existing tag or release, verifies both tracked dist files, and records each SHA-256 and size. It then creates and pushes the annotated `vX.Y.Z` tag, creates a DRAFT GitHub Release with the supplied title, and uploads the editor followed by the core. It verifies the exact two-asset set and downloads both to check bytes, hashes and sizes. The workflow never publishes the release.
+The Release workflow checks that its commit is still the tip of `main`, requires successful Fast Validation from a `push` event for that exact SHA (scheduled HACS-only and pull request runs do not qualify), checks that the requested version matches `package.json`, refuses an existing tag or release, verifies both tracked dist files, and records each SHA-256 and size. It then creates the annotated `vX.Y.Z` tag through the GitHub API, creates a DRAFT GitHub Release with the supplied title, and uploads the editor followed by the core. It verifies the exact two-asset set and downloads both to check bytes, hashes and sizes. The workflow never publishes the release.
 
 After the workflow succeeds, open the draft GitHub Release, paste and review the canonical release notes from the private `private/WHATS-NEW.md`, verify the title, notes, tag, and both attached JavaScript files, then manually click **Publish release**. Never publish an incomplete draft or a draft from a failed preparation run; repair and verify both matching assets first.
 

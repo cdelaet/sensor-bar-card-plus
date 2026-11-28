@@ -10,6 +10,8 @@ For focused, copyable configurations and visual comparisons, see the [Examples G
 - [Scope, inheritance, and replacement](#scope-inheritance-and-replacement)
 - [Configuration hierarchy](#configuration-tree)
 - [Property overview](#configuration-overview)
+- [Universal Paint](#universal-paint)
+- [Paint presets and shared libraries](#paint-presets-and-shared-libraries)
 - [Card-level options](#top-level-card-options)
 - [Entity-level options](#top-level-entity-options)
 - [Layout](#layout-options-and-responsive-behavior)
@@ -25,6 +27,7 @@ For focused, copyable configurations and visual comparisons, see the [Examples G
 - [Generic reference markers](#generic-reference-markers)
 - [Formatting](#formatting)
 - [Interaction and error behavior](#interaction-and-error-behavior)
+- [Universal Messages](#universal-messages)
 - [Peak and Floor history windows](#peak-and-floor-history-windows)
 - [Invalid and unsupported configuration](#invalid-and-unsupported-configuration)
 - [Compatibility and migration](#legacy-compatibility-and-migration)
@@ -52,6 +55,8 @@ Standalone row actions follow the same card-default and entity-override pattern:
 Settings are grouped by purpose. Applicable root settings also configure the Card Feature. In the standalone card, card-level settings supply row defaults; fields inside an `entities[]` entry override settings for that row.
 
 ```text
+title
+entity (standalone single-row shorthand / Card Feature parent override)
 layout
 ├── height
 ├── label
@@ -72,9 +77,14 @@ scale
 
 bar
 ├── direction
-├── fill_style
-├── color
-├── solid_fill
+├── paint
+│   ├── preset
+│   ├── fill_style
+│   ├── color
+│   ├── solid_fill
+│   ├── segments[]
+│   ├── gradient_stops[]
+│   └── opacity
 ├── animated
 ├── needle
 │   ├── show
@@ -87,34 +97,72 @@ bar
     ├── pos
     └── color
 
+bar compatibility aliases
+├── fill_style
+├── color
+├── solid_fill
+├── segments[]
+├── gradient_stops[]
+├── animated
+├── color_mode
+└── severity[]
+
 tap_action
 hold_action
 double_tap_action
 
+preset_library
+└── paint
+    └── <exact, case-sensitive name>
+        └── Paint definition
+
 entities[]
-├── entity
-├── attribute
+├── entity, attribute, name, icon
+├── layout, scale, bar
+├── baseline
+│   ├── at
+│   ├── above
+│   │   ├── color (legacy)
+│   │   └── paint
+│   └── below
+│       ├── color (legacy)
+│       └── paint
+├── target
+│   ├── at
+│   ├── when_above
+│   │   ├── at
+│   │   ├── marker
+│   │   └── paint
+│   └── when_below
+│       ├── at
+│       ├── marker
+│       └── paint
+├── peak, floor
+├── markers[]
+├── formatting
 ├── tap_action
 ├── hold_action
 └── double_tap_action
 
 target
 ├── enabled
-├── at (number, percentage string, or source object)
+├── at (shared number, percentage string, or source object)
 │   ├── fixed
 │   ├── entity
 │   └── percent
-├── color
-├── shape
-├── direction
-├── label
-│   ├── show
-│   ├── text
-│   ├── show_value
-│   ├── show_unit
-│   ├── precision
-│   └── decimal (compatibility alias)
-└── when_exceeded
+├── color (shared marker)
+├── shape (shared marker)
+├── direction (shared marker)
+├── label (shared marker)
+├── when_above
+│   ├── at (optional directional source)
+│   ├── marker
+│   └── paint
+├── when_below
+│   ├── at (optional directional source)
+│   ├── marker
+│   └── paint
+└── when_exceeded (legacy upper-fill input)
     └── fill_color
 
 baseline
@@ -124,15 +172,19 @@ baseline
 │   ├── entity
 │   └── percent
 ├── above
-│   └── color
+│   ├── color (legacy)
+│   └── paint
 └── below
-    └── color
+    ├── color (legacy)
+    └── paint
 
 peak
 ├── enabled
 ├── color
 ├── direction
-├── reset
+├── window
+├── window_entity
+├── reset (compatibility alias for window)
 └── label
     ├── show
     ├── text
@@ -145,7 +197,9 @@ floor
 ├── enabled
 ├── color
 ├── direction
-├── reset
+├── window
+├── window_entity
+├── reset (compatibility alias for window)
 └── label
     ├── show
     ├── text
@@ -176,6 +230,8 @@ formatting
 ├── decimal
 └── unit
 ```
+
+The Configuration Tree shows the card-level groups and their per-row counterparts; entity rows can override the groups listed under `entities[]`. Canonical v1.11 paths appear alongside the retained compatibility paths called out below. Paint destinations are available in standalone Cards, entity overrides, and the Card Feature where applicable. Legacy flat aliases are listed in the overview and [compatibility section](#legacy-compatibility-and-migration).
 
 ## Configuration Overview
 
@@ -208,6 +264,14 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | Path | Default | Values | Description | Card Feature |
 |---|---:|---|---|---|
 | `bar.direction` | `normal` | `normal`, `reverse` | Chooses whether reveal fill starts at the left or right physical edge. It does not move Scale values or Paint. An active Baseline supplies the fill origin; Needle mode has no reveal origin. | Yes |
+| `bar.paint.fill_style` | `bands` | `solid`, `gradient`, `bands`, `soft_bands`, `band_gradient` | Canonical Paint style. | Yes |
+| `bar.paint.color` | `#4a9eff` | CSS color | Base or fallback Paint color. | Yes |
+| `bar.paint.solid_fill` | `false` | boolean | Samples the current-value color uniformly across the revealed fill. | Yes |
+| `bar.paint.segments` | default bands | list | Canonical Paint segment palette. | Yes |
+| `bar.paint.gradient_stops` | `null` | list | Canonical gradient palette. | Yes |
+| `bar.paint.opacity` | `100` | number, 0–100 | Opacity of this Paint layer only; zero is valid. | Yes |
+| `bar.paint.preset` | absent | exact, case-sensitive name or `null` | Selects a dashboard Paint definition; a named preset replaces all six Paint properties before local overrides. | Yes |
+| `bar.paint` | default Bar Paint | object | Canonical grouped Paint configuration. It must be an object; `null` is invalid and does not disable Bar Paint. | Yes |
 | `bar.fill_style` | `bands` | `solid`, `gradient`, `bands`, `soft_bands`, `band_gradient` | Appearance of the visible fill. | Yes |
 | `bar.color` | `#4a9eff` | CSS color | Solid or fallback fill color. A color configured alone selects a solid bar unless an explicit fill style or palette is inherited. | Yes |
 | `bar.solid_fill` | `false` | boolean | Samples the active color and renders the revealed fill as one solid color. | Yes |
@@ -222,7 +286,88 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | `bar.gradient_stops[].pos` | required | number or percentage string | Semantic percentage from Scale minimum (`0`) to maximum (`100`): `50` and `50%` both mean the midpoint. Unlike Segment boundaries, bare numbers are not Scale values. Scale Direction determines physical placement. | Yes |
 | `bar.gradient_stops[].color` | — | hex color | Color at the gradient stop; interpolation requires supported hex colors. | Yes |
 
-### Baseline
+### Universal Paint
+
+Paint describes fill appearance independently of the region that uses it. The canonical six-property contract is `fill_style`, `color`, `solid_fill`, `segments`, `gradient_stops`, and `opacity`. A Paint object can also contain the `preset` reference described below; `preset` selects a definition and is not a seventh fill property.
+
+The five destinations are `bar.paint`, `baseline.above.paint`, `baseline.below.paint`, `target.when_above.paint`, and `target.when_below.paint`. Card Feature supports the applicable destinations with the same syntax. Each destination inherits only from the same destination at card scope. Baseline and Target Paint do not inherit from ordinary Bar Paint or from the opposite direction.
+
+```yaml
+bar:
+  paint:
+    fill_style: gradient
+    color: '#22c55e'
+    opacity: 85
+```
+
+The existing flat Bar properties (`bar.fill_style`, `bar.color`, `bar.solid_fill`, `bar.segments`, and `bar.gradient_stops`, including their released aliases) remain supported. At one scope, canonical grouped properties take precedence over equivalent legacy properties; legacy properties can supply omitted canonical properties. Local configuration takes precedence over inherited configuration. New YAML should use `bar.paint` for a full Paint definition.
+
+| Paint state | Result |
+|---|---|
+| Paint omitted | Inherit the same destination when available. Baseline/Target stay inactive when no same-destination paint is available. Bar retains its existing default. |
+| `bar.paint: null` | Invalid for ordinary Bar Paint. It produces a configuration diagnostic and follows Bar fallback handling; it does not disable the fill. |
+| `baseline.*.paint: null`, `target.*.paint: null` | Explicitly disable that Baseline or Target overlay destination, including equivalent local legacy fields. |
+| `paint: {}` | Explicitly enable the destination using inherited same-destination properties or standard Paint defaults. |
+| `paint.preset: null` | Opt out of an inherited preset while retaining applicable local properties and defaults; this does not disable Paint. |
+
+These default paths are distinct:
+
+| Resolution path | Effective defaults |
+|---|---|
+| Ordinary Bar with no Paint definition | Existing Bar defaults: `bands`, base color `#4a9eff`, `solid_fill: false`, the default three-band palette, no custom Gradient Stops, and opacity `100`. |
+| Explicitly enabled Baseline/Target overlay with an empty Paint object | `solid`, theme accent color, `solid_fill: false`, the standard Segment and Gradient Stop palettes, and opacity `100`. It remains isolated from Bar and opposite-side Paint. |
+| Missing/invalid preset reference | A diagnostic is reported; use inherited Paint from the same destination when available, otherwise the normal default for that destination. The card and other Paint destinations remain usable. |
+
+For a valid named preset, each omitted property uses that property's normal preset default, not the destination's inherited Paint. Local authored properties then override their matching preset properties.
+
+Supported `fill_style` values are `solid`, `gradient`, `bands`, `soft_bands`, and `band_gradient`. `solid_fill` samples the active color at the current value and paints the revealed Fill uniformly. `segments` and `gradient_stops` retain the documented [fill-style](#fill-styles-reference) formats. Paint coordinates remain anchored to the full Scale; clipping a layer does not rescale its palette. Paint layers are ordered Bar, Baseline, then Target, with markers, Needle, and labels above them. Each layer clips independently to its visible region. Opacity applies only to that Paint layer; it does not fade labels, separators, markers, or Needle.
+
+### Opacity
+
+`opacity` is a finite number from `0` to `100`, defaulting to `100`. Zero is valid and makes only that Paint layer fully transparent. Invalid opacity falls back to `100` without discarding other valid Paint properties. A selected preset's opacity follows the same rule as every other property: its value is used when defined, otherwise opacity defaults to `100`; it never inherits opacity from the parent Card. An explicitly authored local opacity overrides it.
+
+```yaml
+bar:
+  paint:
+    fill_style: solid
+    color: '#2563eb'
+    opacity: 65
+```
+
+### Paint presets and shared libraries
+
+Any standalone SBCP Card can contribute a dashboard Paint library under `preset_library.paint`. Each entry defines a named Paint preset using the six Paint properties; a definition does not include another `preset` reference:
+
+```yaml
+preset_library:
+  paint:
+    Warning:
+      fill_style: gradient
+      gradient_stops:
+        - { pos: 0, color: '#facc15' }
+        - { pos: 100, color: '#dc2626' }
+      opacity: 90
+```
+
+Defining a preset and referencing one are separate actions. A standalone Card defines presets by including them in its `preset_library.paint`; a Card or Card Feature references one by setting `preset` at a Paint destination. The Visual Editor offers the **Share Paint Presets** checkbox on each standalone Card, whether or not other Cards already contribute a library. Card Features can reference shared presets but cannot define a library.
+
+All standalone Card libraries on the current dashboard are merged by exact, case-sensitive preset name, including libraries on other views. Names defined by exactly one Card are available. A name defined by two or more Cards is a duplicate conflict, even when the Paint definitions are identical; only that name becomes unavailable, while unique names continue to work. Multiple empty libraries are valid. Each Card that defines a conflicting name displays a duplicate-definition warning in its Messages area. A Card or Feature that references a conflicting name receives a separate conflict-resolution warning and uses the normal fallback Paint for that destination. No Card identifiers, locations or manual linking are needed.
+
+Libraries are isolated between dashboards. Paint preset selection uses the saved dashboard registry, not the current unsaved editor draft. After creating a preset, save the Card and reopen its editor before selecting that preset, including within the same Card. Unsaved changes are not shared with other Cards. When no Card contributes a `preset_library`, the legacy `sbcp_fragments.paint_presets` fallback remains available. One or more Card libraries take precedence over that fallback, including when their Paint definitions are empty.
+
+Duplicate-definition warnings remain visible in Messages when the Paint Presets disclosure is collapsed. Conflicting definitions remain editable, renamable and removable; a conflicting name is unavailable for resolution until it becomes unique.
+
+Reference an exact, case-sensitive name at any Paint destination with `preset`. A selected preset is a complete replacement for that destination: start with its six properties, use each property's standard default when omitted, then apply any locally authored Paint properties as overrides. Omitted properties do not inherit from the previously configured destination or parent Card. For example, a preset without `opacity` uses `100` even if the parent Card's Paint uses another opacity. Editing one property keeps the preset reference and authors only that local override; the other properties continue to come from the preset or its defaults. Invalid or missing preset references produce a Messages diagnostic and fall back to same-destination inherited Paint, then standard defaults (ultimately the theme accent). They never fall back to ordinary Bar Paint for a Baseline or Target destination.
+
+Renaming or deleting a definition never rewrites existing references. After saved dashboard configuration updates the registry, a reference is missing if no Card defines that name, resolves against the remaining definition if exactly one Card defines it, and remains conflicted if multiple Cards still define it. Home Assistant's normal Save/Cancel actions apply to each Card's library edits.
+
+At Entity scope an omitted `preset` keeps ordinary Card-to-Entity inheritance, including the Card preset; choosing an explicit named preset replaces the inherited Paint as described above. The editor's **Inherited** selection removes only the local preset reference; **None** writes `preset: null` and keeps local Paint properties. Selecting a different named preset asks for confirmation only when local Paint overrides would be discarded. **Reapply preset** appears beside the selector when a named preset is explicitly selected and local Paint overrides exist. After confirmation it removes that destination's six local Paint properties and legacy aliases, retains the preset reference and unrelated destination settings, and resolves the preset again; cancel leaves the configuration unchanged. With no local overrides, the action is unavailable. Card and Feature selectors offer None and available names. The entity selector additionally offers Inherited. Reset actions are destination-specific: **Reset to default paint settings** at Card scope and **Reset to Card paint settings** for entity overrides remove local canonical and legacy configuration for that destination.
+
+## Paint controls in the Visual Editor
+
+The shared editor exposes **Enable Paint**, **Paint preset**, **Fill style**, **Base color**, **Solid fill**, **Segments**, **Gradient Stops**, and **Opacity**, as applicable to the selected destination. Enable Paint is distinct from enabling its marker or threshold. Inherited values remain distinguishable from local overrides. The Reset action affects only the current Paint destination. Home Assistant Save applies the configuration; Cancel discards the editor draft.
+
+### Baseline options
 
 | Path | Default | Values | Description | Card Feature |
 |---|---:|---|---|---|
@@ -231,10 +376,11 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | `baseline.at.fixed` | `null` | number | Fixed baseline value; fallback when the entity does not provide a usable number. | Yes |
 | `baseline.at.entity` | `null` | entity ID or `{ id, attribute }` | Dynamic baseline source; its usable numeric state/attribute takes precedence over `fixed`. | Yes |
 | `baseline.at.percent` | absent | number | Semantic percentage from Scale minimum (`0`) to maximum (`100`) in a source object; alternatively use `baseline.at: 50%`. Scale Direction controls its physical position. | Yes |
-| `baseline.above.color` | ordinary fill | CSS color | Optional color for the Scale region above Baseline. | Yes |
-| `baseline.below.color` | ordinary fill | CSS color | Optional color for the Scale region below Baseline. | Yes |
+| `baseline.above.paint` | no overlay | Paint object, `null` | Paint for the Scale region above Baseline. Does not inherit Bar Paint. | Yes |
+| `baseline.below.paint` | no overlay | Paint object, `null` | Paint for the Scale region below Baseline. Does not inherit Bar Paint. | Yes |
+| `baseline.above.color` / `baseline.below.color` | inherited fill | CSS color | Supported legacy side-color inputs. New configuration should use the corresponding `.paint.color`. | Yes |
 
-### Target
+### Target options
 
 | Path | Default | Values | Description | Card Feature |
 |---|---:|---|---|---|
@@ -243,6 +389,9 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | `target.at.fixed` | `null` | number | Fixed target value; fallback when the entity does not provide a usable number. | Yes |
 | `target.at.entity` | `null` | entity ID or `{ id, attribute }` | Dynamic target source; its usable numeric state/attribute takes precedence over `fixed`. | Yes |
 | `target.at.percent` | absent | number | Semantic percentage from Scale minimum (`0`) to maximum (`100`) in a source object; alternatively use `target.at: 50%`. Scale Direction controls its physical position. | Yes |
+| `target.when_above.at` / `target.when_below.at` | `target.at` | number, percentage string, or source object | Optional directional threshold. Each direction can override the shared Target source independently. | Yes |
+| `target.when_above.marker` / `target.when_below.marker` | shared marker settings | marker settings object | Independent directional marker configuration. A shared threshold shows one marker; distinct directional thresholds can show two. | Yes |
+| `target.when_above.paint` / `target.when_below.paint` | no overlay | Paint object, `null` | Canonical directional Target Paint. Above activates only above its threshold; Below only below its threshold. | Yes |
 | `target.shape` | `diamond` | `diamond`, `triangle` | Target marker shape. | Yes |
 | `target.color` | `#888888` | CSS color | Target marker color. | Yes |
 | `target.direction` | `inward` | `inward`, `outward` | Direction of the triangle Target; the diamond shape is not directional. Entity-level Target direction inherits the card-level value unless overridden. | Yes |
@@ -251,15 +400,16 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | `target.label.show_value` | `true` | boolean | Includes or omits the formatted Target value independently of text and unit. | Yes |
 | `target.label.show_unit` | `true` | boolean | Includes or omits the effective row unit independently of text and value. | Yes |
 | `target.label.precision` | inherited | number | Overrides the numeric component's precision; omitted values inherit `formatting.decimal`. The established `target.label.decimal` spelling remains accepted for existing configurations. | Yes |
-| `target.when_exceeded.fill_color` | absent | CSS color | Color over the revealed region above Target, including over Baseline-side colors. | Yes |
+| `target.when_exceeded.fill_color` | absent | CSS color | Legacy upper-Target color. Its Fill-mode reveal behavior is retained; see [Target](#target-marker). | Yes |
 
-### Peak
+### Peak options
 
 | Path | Default | Values | Description | Card Feature |
 |---|---:|---|---|---|
 | `peak.enabled` | `false` | boolean | Shows the Peak marker when a historical result is available. Omitted means hidden. | Yes |
 | `peak.color` | `#888888` | CSS color | Peak marker color. | Yes |
 | `peak.window` | `today` | calendar preset or rolling duration | Selects the Home Assistant history window used to calculate Peak. Legacy `peak.reset` is migrated by the editor; see [Peak and Floor history windows](#peak-and-floor-history-windows). | Yes |
+| `peak.window_entity` | absent | `input_select` entity ID | Uses the selected Dropdown Helper option as Peak's window. `peak.window` remains the static fallback. | Yes |
 | `peak.direction` | `inward` | `inward`, `outward` | Direction of the fixed triangle marker. Entity-level Peak direction inherits the card-level value unless overridden. | Yes |
 | `peak.label.show` | `false` | boolean | Shows the formatted Peak value label. | Yes — compact |
 | `peak.label.text` | absent | string | Optional plain text shown before the value and unit. | Yes |
@@ -267,13 +417,14 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | `peak.label.show_unit` | `true` | boolean | Includes or omits the effective row unit independently of text and value. | Yes |
 | `peak.label.precision` | inherited | number | Overrides the numeric component's precision; omitted values inherit `formatting.decimal`. `peak.label.decimal` remains accepted for existing configurations. | Yes |
 
-### Floor
+### Floor options
 
 | Path | Default | Values | Description | Card Feature |
 |---|---:|---|---|---|
 | `floor.enabled` | `false` | boolean | Shows the Floor marker when a historical result is available. Omitted means hidden. | Yes |
 | `floor.color` | `#888888` | CSS color | Floor marker color. | Yes |
 | `floor.window` | `today` | calendar preset or rolling duration | Selects the Home Assistant history window used to calculate Floor. Legacy `floor.reset` is migrated by the editor; see [Peak and Floor history windows](#peak-and-floor-history-windows). | Yes |
+| `floor.window_entity` | absent | `input_select` entity ID | Uses the selected Dropdown Helper option as Floor's window. `floor.window` remains the static fallback. | Yes |
 | `floor.direction` | `inward` | `inward`, `outward` | Direction of the fixed triangle marker. Entity-level Floor direction inherits the card-level value unless overridden. | Yes |
 | `floor.label.show` | `false` | boolean | Shows the formatted Floor value label. | Yes — compact |
 | `floor.label.text` | absent | string | Optional plain text shown before the value and unit. | Yes |
@@ -281,7 +432,7 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | `floor.label.show_unit` | `true` | boolean | Includes or omits the effective row unit independently of text and value. | Yes |
 | `floor.label.precision` | inherited | number | Overrides the numeric component's precision; omitted values inherit `formatting.decimal`. `floor.label.decimal` remains accepted for existing configurations. | Yes |
 
-### Generic reference markers
+### Generic reference marker options
 
 | Path | Default | Values | Description | Card Feature |
 |---|---:|---|---|---|
@@ -303,7 +454,7 @@ The Scale must have a minimum below its maximum. Two dynamic bounds are resolved
 | `markers[].label.precision` | inherited | number | Numeric label precision; defaults to the row's `formatting.decimal`. | Yes |
 | `markers[].label.decimal` | inherited | number | Compatibility alias for `label.precision`. | Yes |
 
-### Formatting
+### Formatting options
 
 | Path | Default | Values | Description | Card Feature |
 |---|---:|---|---|---|
@@ -319,6 +470,7 @@ Legacy flat options are listed separately in the Legacy Compatibility and Migrat
 | `title` | string | `—` | Optional Lovelace card title | — |
 | `entity` | string | `—` | Creates one row without an `entities` list | Yes — optional override |
 | `entities` | list | required unless using `entity` shorthand | Rows to render; items may be entity ID strings or entity objects | — |
+| `preset_library.paint` | name-to-Paint map | absent | Optional Paint Presets library shared by this standalone Card with its current dashboard. Multiple Cards may contribute libraries; unique names merge and duplicate names conflict. | — |
 | `layout` | object | see below | Default layout for all rows | — |
 | `scale` | object | `min: 0`, `max: 100`, `direction: normal` | Default Scale for all rows | Yes |
 | `bar` | object | see below | Default Bar direction, fill, Needle and animation settings | Yes |
@@ -369,7 +521,9 @@ Entity-level configuration supports the per-row groups and legacy aliases listed
 | `entities[].icon` | string or `false` | HA icon, then supported device-class/domain fallback | Overrides the icon; `false` removes it. Hero never shows an icon. | — |
 | `entities[].layout` | object | inherits card layout | Per-row layout override | — |
 | `entities[].scale` | object | inherits card Scale | Per-row Scale override | — |
-| `entities[].bar` | object | inherits card bar settings | Per-row fill and Needle override | — |
+| `entities[].bar` | object | inherits card bar settings | Per-row Paint, direction, fill and Needle override | — |
+| `entities[].baseline.above.paint` / `.below.paint` | Paint object or null | same destination inherited | Per-row directional Baseline Paint; does not inherit Bar Paint | — |
+| `entities[].target.when_above.paint` / `.when_below.paint` | Paint object or null | same destination inherited | Per-row directional Target Paint; see strict violation and legacy compatibility rules | — |
 | `entities[].target` | object/number | inherits card Target | Per-row Target override; percentages go under `at` | — |
 | `entities[].peak` | object | inherits card Peak | Per-row Peak override | — |
 | `entities[].floor` | object | inherits card Floor | Per-row Floor override | — |
@@ -699,11 +853,11 @@ For a Scale from −100 to 100, `at: 50` places Target at value 50 (three-quarte
 
 The structured fixed form `at: { fixed: 50 }` also means value 50. For Target and Baseline, `at: { percent: 50 }` is another percentage form. If a source object includes several supported sources, resolution tries a usable entity value, then a fixed fallback, then the percentage. Use `at: 50%` for a simple percentage position; **do not put `50%` inside `at.fixed`**. Generic Reference Markers also accept structured `at.percent` for compatibility and for an Entity-backed percentage fallback.
 
-With `target.enabled` omitted, a configured and resolved source shows Target automatically. `enabled: false` disables it; `enabled: true` cannot create a position if no source resolves. A configured Target reserves one below-lane slot while enabled, including while its dynamic position is temporarily unavailable.
+With `target.enabled` omitted, a configured and resolved source shows Target automatically. `enabled: false` disables it; `enabled: true` cannot create a position if no source resolves. A shared or coincident Target marker reserves one below-lane slot. Distinct enabled Above and Below markers can reserve two below-lane slots, including while their dynamic positions are temporarily unavailable. Marker visibility is independent from Paint activation: hiding a marker does not disable its Paint, and a visible marker can remain while equality or invalid ordering suppresses Paint.
 
 ## Complete example
 
-This card shows power in watts with a live upper limit and fixed fallback. Soft color bands indicate load ranges, Target follows a helper with a fallback, and Peak marks the highest observed value. The second row overrides only its name and displayed decimal precision.
+This card shows power in watts with a live upper limit and fixed fallback. Soft color bands use canonical `bar.paint`; directional Target Paint marks an upper-limit violation, and Peak marks the highest observed value. The second row overrides only its name and displayed decimal precision.
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -718,17 +872,18 @@ scale:
     entity: sensor.power_limit
     fixed: 3000
 bar:
-  fill_style: soft_bands
-  segments:
-    - from: 0%
-      to: 50%
-      color: '#22c55e'
-    - from: 50%
-      to: 80%
-      color: '#facc15'
-    - from: 80%
-      to: 100%
-      color: '#ef4444'
+  paint:
+    fill_style: soft_bands
+    segments:
+      - from: 0%
+        to: 50%
+        color: '#22c55e'
+      - from: 50%
+        to: 80%
+        color: '#facc15'
+      - from: 80%
+        to: 100%
+        color: '#ef4444'
 target:
   at:
     entity: sensor.power_target
@@ -736,8 +891,10 @@ target:
   label:
     show: true
     text: Limit
-  when_exceeded:
-    fill_color: '#dc2626'
+  when_above:
+    paint:
+      fill_style: solid
+      color: '#dc2626'
 peak:
   enabled: true
 formatting:
@@ -1262,7 +1419,7 @@ entities:
 
 ### Target and baseline interaction
 
-Target uses the same Scale and does not move the fill origin. `target.when_exceeded.fill_color` appears over the revealed region above Target, on top of both ordinary fill and Baseline-side colors. It does not replace the entire bar. If a Baseline-to-value interval includes positions above Target, that portion receives the exceeded color, whichever direction the fill extends from Baseline.
+Target uses the same Scale and does not move the fill origin. Canonical Target Paint activates only when the reading strictly violates the corresponding directional threshold. In Fill mode, an activated Above layer paints the revealed intersection above its threshold; Below does the same below its threshold. Target Paint appears above ordinary Bar and Baseline layers. Legacy `target.when_exceeded.fill_color` retains its established Fill-mode behavior without the violation gate: if a Baseline-to-value interval includes positions above Target, that portion receives the legacy upper color even when the reading remains below Target. Needle mode uses strict gating for canonical and legacy Target Paint alike, with color clipped to the threshold-to-reading interval. See [Directional Paint behavior](#directional-paint-behavior).
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -1325,6 +1482,25 @@ entities:
 
 ## Target Marker
 
+### Shared and directional thresholds
+
+`target.at` is the shared threshold. `target.when_above.at` and `target.when_below.at` optionally provide independent upper and lower thresholds. Each source can use fixed values, Scale percentages, entity state/attributes, or the existing fixed/percentage fallbacks. Source selection follows this order: entity directional, entity shared, card directional, then card shared. Once selected, an authored source replaces the inherited source as a whole; within it, a usable entity value takes precedence over fixed, then percentage fallback. An unavailable directional source uses only its own configured fallbacks and does not silently switch to the shared threshold.
+
+The directional `marker` objects configure each marker independently using the existing Target marker appearance, visibility, and label options. A shared threshold produces one marker. A single configured direction produces one marker; distinct directional thresholds can produce two. Coincident thresholds produce one marker, preferring the Above marker when both are enabled. Invalid ordering (lower threshold greater than upper) retains the markers but suppresses both Target Paint overlays. Equality is valid. The comparison uses resolved Scale values before physical projection, so Scale Direction does not change ordering. Target retains its existing marker-lane reservation behavior.
+
+### Directional Paint behavior
+
+Canonical Above and Below Paint uses a strict threshold violation. In Fill mode, the activated paint is clipped to the intersection of occupied/revealed fill and the corresponding permanent Scale region. In Needle mode, it is clipped to the threshold-to-current-reading interval. Equality activates neither direction. Invalid lower/upper ordering suppresses both directional Target layers.
+
+| Input and mode | When Paint activates | Painted region |
+|---|---|---|
+| Canonical Above/Below Paint, Fill | Above only when current value is strictly above the upper threshold; Below only when strictly below the lower threshold. | Intersection of revealed fill with threshold-to-Scale-edge region. |
+| Canonical Above/Below Paint, Needle | Above only strictly above; Below only strictly below. | Only the interval between threshold and current value. |
+| Legacy upper Target overlay, Fill | Retains the released behavior without a current-value violation gate. | Revealed portion above Target, including where a Baseline-origin reveal extends above Target while the reading is below it. |
+| Legacy upper Target overlay, Needle | Strict violation gate, same as canonical Above Paint; equality does not activate it. | Only the interval from Target to current reading while above Target. |
+
+Legacy Fill-mode compatibility applies to released `target.when_exceeded.fill_color` and `above_target_color` forms. Existing YAML does not need migration to retain that behavior. New configuration should use `target.when_above.paint` / `target.when_below.paint`. `target.color` remains marker color.
+
 Target marks a fixed value, a live entity-backed threshold, or a percentage position on the Scale. See [Target values and percentage positions](#target-values-and-percentage-positions) for the difference between `at: 50` and `at: 50%`, and supported source/fallback forms.
 
 Simple fixed target:
@@ -1369,17 +1545,15 @@ target:
   at: 50%
 ```
 
-Supported target features:
+Supported Target configuration includes:
 
-- fixed target values
-- entity-backed target values
-- percentage targets on the active scale
-- optional marker color
-- diamond by default, or `target.shape: triangle`; no other Target shapes are supported
-- optional target value label
-- optional `target.when_exceeded.fill_color`
+- A shared `target.at` threshold, or independent `target.when_above.at` and `target.when_below.at` sources. Sources can be fixed, percentage, or entity-backed with configured fallbacks.
+- Independent `target.when_above.marker` and `target.when_below.marker` appearance and visibility settings. Shared or coincident thresholds can show one marker; distinct thresholds can show two. Target markers support Diamond (default) and Triangle shapes.
+- Canonical `target.when_above.paint` and `target.when_below.paint`. Each side activates only on a strict threshold violation; equality activates neither. Invalid lower/upper ordering is diagnosed, suppresses both Target Paint layers, and retains normally visible markers.
+- Legacy `target.when_exceeded.fill_color` / `above_target_color` compatibility. Fill mode retains its released upper-overlay behavior; Needle mode applies strict violation gating to legacy and canonical Target Paint.
+- Optional Target labels using text, value, and unit components.
 
-Both the standalone Card and Card Feature Visual Editors use one Target Value field accepting a number for a fixed value or a `%` suffix for a percentage of the active Scale. Optional Entity and Attribute controls can coexist with the Value fallback. Entity/Attribute remains primary when it resolves, and per-entity Card settings inherit the card source until edited. These are editor presentations of the existing Target configuration model; no new configuration key is required.
+The Visual Editors organize these controls as **Shared Target**, **Above Target**, and **Below Target**. Shared settings supply threshold and marker defaults, while directional sections expose their optional threshold, independent marker settings, and Paint. At Entity scope, omitted settings inherit from the Card until edited.
 
 Migration note: The default Target marker is a diamond, making it easier to distinguish from Floor. To retain the previous triangle, set `target.shape: triangle`.
 
@@ -1399,7 +1573,7 @@ target:
     precision: 1
 ~~~
 
-`target.when_exceeded.fill_color` colors the revealed portion above Target. It appears over ordinary fill and any Baseline-side color there, including with `solid_fill`; it does not recolor the whole bar. See [Target and Baseline interaction](#target-and-baseline-interaction) for a combined example.
+`target.when_exceeded.fill_color` is a legacy upper-Target color input. Its Fill-mode reveal behavior remains compatible, including Baseline-origin fills; Needle mode follows strict violation gating. New configuration should use `target.when_above.paint`. See [Directional Paint behavior](#directional-paint-behavior).
 
 ~~~yaml
 target:
@@ -1570,7 +1744,7 @@ For a Card Feature, `formatting` applies to marker labels and the accessible val
 
 ### Decimal Precision
 
-Use `formatting.decimal` to display exactly how many fractional digits are shown per row, including trailing zeroes. Values are rounded to that precision; omitting the setting keeps the raw locale-aware numeric display.
+Use `formatting.decimal` to display exactly how many fractional digits are shown per row, including trailing zeroes. Values are rounded to that precision. When omitted, numeric values use Home Assistant's locale-aware default of up to two fractional digits; for example, `1234.567` displays as `1,234.57` with comma-decimal formatting. Set `formatting.decimal: 3` to retain all three fractional digits.
 
 For example, `decimal: 2` displays `42` as `42.00` and `100.8` as `100.80`.
 
@@ -1689,6 +1863,10 @@ The Card Feature does not accept these row-action options: the parent Home Assis
 
 If the row's entity cannot be found, the card shows an error in that row; other rows continue to render. An existing entity whose state is `unknown` or `unavailable` is displayed as text, as described under [Formatting](#formatting).
 
+## Universal Messages
+
+The standalone Card and Tile Feature show active configuration and runtime diagnostics in a shared **Messages** area at the bottom of their content. It is absent when there are no messages and collapsed by default. Its disclosure header shows severity icons and counts for Information, Warning, and Error messages. Each message identifies the affected entity and configuration, explains the problem, and describes the fallback or consequence. Messages update as runtime state changes and clear when the issue recovers; ordinary sensor unavailability remains inline and does not create a message by itself. Recorder status meanings are listed once in the table below.
+
 ## Peak and Floor history windows
 
 `peak.window` and `floor.window` select the history period used to calculate the maximum or minimum for the row's primary entity or configured scalar attribute. Both default to `today`. Calendar windows use Home Assistant's configured IANA timezone, including its daylight-saving transitions. Week boundaries use Home Assistant's explicit first-weekday preference when set, otherwise the first weekday associated with its locale. The current calendar window runs from its local boundary through now; a previous calendar window covers the complete prior period.
@@ -1704,25 +1882,45 @@ The Visual Editor offers these 24 presets:
 | `this_month`, `previous_month` | |
 | `this_year`, `previous_year` | |
 
-`quarterly` means the current 15-minute interval (`:00`, `:15`, `:30`, or `:45`), not a three-month quarter. Rolling windows count back from the current time; they are not aligned to calendar boundaries. YAML also accepts other positive integer durations written with `m`, `h`, `d`, or `w` (for example `45m` or `10d`) when eligible for the acquisition path. A duration longer than 24 hours must be a whole number of hours; unsupported or invalid values remain unavailable and produce a configuration diagnostic rather than silently selecting a different period.
+`quarterly` means the current 15-minute interval (`:00`, `:15`, `:30`, or `:45`), not a three-month quarter. Rolling windows count back from the current time; they are not aligned to calendar boundaries. YAML also accepts other positive integer durations written with `m`, `h`, `d`, or `w` (for example `45m` or `10d`) when eligible for the acquisition path. A duration longer than 24 hours must be a whole number of hours. Rolling and absolute windows are limited to 366 days (the longest calendar-year period, including leap years); longer values are rejected before any Recorder request is planned and produce a configuration diagnostic rather than silently selecting a different period.
+
+To change a marker's window from the dashboard, create a Dropdown Helper in Home Assistant and set its entity ID in `window_entity`:
+
+```yaml
+peak:
+  enabled: true
+  window: today
+  window_entity: input_select.peak_history_window
+floor:
+  enabled: true
+  window: yesterday
+  window_entity: input_select.floor_history_window
+```
+
+The helper's current option must be one of the supported calendar aliases or an eligible rolling duration, such as `today`, `previous_week`, `15m`, or `7d`. Peak and Floor can use separate helpers or the same helper. If its state is missing, unavailable, or unsupported, that marker uses its own static `window` and reports the fallback in Messages. The Visual Editor lists existing `input_select` helpers separately for Peak and Floor; it does not create helpers. At entity scope, the helper inherits with the rest of the marker settings and can be overridden independently.
 
 ### Recorder, statistics, and coverage
 
 Windows up to and including 24 hours use Home Assistant Recorder state history. Longer windows use Recorder long-term statistics for completed hours and raw state history for the current hour. The statistics source must provide compatible min/max metadata, and its unit must match the entity's unit. Entity attributes use raw state history only; Home Assistant does not provide long-term statistics for attributes, so attribute-based windows requiring the longer statistics path are unavailable.
 
-Recorder history availability depends on the instance's Recorder configuration and retention. A returned history response does not prove that the requested period is complete. SBCP reports `partial` when it detects missing or malformed intervals, ambiguous ordering, or an uncovered boundary. Unknown or unreported Recorder retention is not automatically called partial, so not every incomplete period can be detected. `pending` means acquisition is underway; `available` means a usable result was resolved without known incomplete coverage; `stale` means a prior result is being retained after refresh failed; `unavailable` means no usable value can be produced; and `invalid` identifies an invalid window or source. When there is no usable historical result, the marker is not placed using the current reading as a substitute.
+Live observations held while a dashboard is open are bounded per source. The default limit is 50,000 live samples plus compaction slack of up to 5,000 (the cap plus 10%, capped at 5,000). If a long session exceeds the limit, the oldest live transitions are compacted and active cache records share the compacted source history. Equal-timestamp live groups are collapsed to the effective or ambiguous representation used by Peak and Floor calculations; Recorder rows are preserved. `retentionFloor` is the first whole minute after discarded live transitions. Any Peak or Floor window that starts before that boundary is reported `partial`; windows starting at or after it retain exact calculations. Recorder revalidation can restore full coverage only when it provides complete contiguous statistics (or an explicitly complete raw response); a boundary observation alone is not treated as proof of completeness. Normal Recorder-backed windows and shorter sessions are unaffected.
 
-History indicators distinguish a visible historical marker from unresolved row status:
+Recorder history availability depends on the instance's Recorder configuration and retention. A returned history response does not prove that the requested period is complete. SBCP reports `partial` when it detects missing or malformed intervals, ambiguous ordering, or an uncovered boundary. Unknown or unreported Recorder retention is not automatically called partial, so not every incomplete period can be detected. When there is no usable historical result, the marker is not placed using the current reading as a substitute.
 
-| Where | State | Indicator | Tooltip |
-|---|---|---|---|
-| Visible Peak/Floor marker | `partial` | `!` on the marker | Says history is partial and gives the applicable reason. |
-| Visible Peak/Floor marker | `stale` | `~` on the marker | Says cached history is stale because refresh failed. |
-| Row-level badge | All unresolved enabled Peak/Floor results are pending | `…` | Says historical data is still loading. |
-| Row-level badge | Any unresolved enabled Peak/Floor result, including `unavailable`, `invalid`, or partial/stale history with no visible marker | `!` | Summarizes the affected marker(s) and the applicable reason. |
-| Visible Peak/Floor marker | Normally `available` | No indicator | No status tooltip is added. |
+Recorder diagnostics now appear in the shared **Messages** area rather than on Peak/Floor markers or as row-level badges. A message identifies the affected configuration (for example, Peak or Floor and its window), explains severity and the known problem, and describes the fallback or consequence. Messages update with runtime state and clear when the problem recovers. Ordinary sensor unavailability remains an inline state and does not by itself create a message.
 
-The row-level badge is omitted when the enabled Peak/Floor results need no unresolved-status badge; visible partial or stale markers carry their own indicator instead. Hover or keyboard-focus an indicator to show its explanation; on touch screens, tap it. Status text is also exposed through the row's accessible description. A status indicator describes known acquisition/resolution state; it cannot reveal Recorder data that was already removed or otherwise not reported.
+The history states retain these meanings:
+
+| State | Meaning |
+|---|---|
+| `pending` | Acquisition or resolution is underway. |
+| `available` | A usable result was resolved without known incomplete coverage. |
+| `partial` | SBCP detected incomplete, ambiguous, or uncovered history relevant to the result. |
+| `stale` | A prior result is retained after refresh failed. |
+| `unavailable` | No usable historical value can be produced. |
+| `invalid` | The configured window or source is invalid. |
+
+A returned Recorder response does not attest to complete retention or coverage. Unknown or unreported retention gaps may not be detectable, so `available` means no known incompleteness, not proof that every historical transition exists. A missing historical result is never replaced with the current reading. Status descriptions are delivered through Messages; removed marker indicators and their accessibility descriptions are not retained.
 
 Some local calendar boundaries in time zones with a non-whole-hour UTC offset cannot be represented by Home Assistant's UTC-hour statistics buckets. Those long-window requests can be unavailable; raw-history windows of 24 hours or less do not have that statistics boundary limitation.
 
@@ -1744,9 +1942,9 @@ Invalid configuration is reported through non-fatal diagnostics where applicable
 
 ## Legacy Compatibility and Migration
 
-The listed legacy aliases and compatibility forms remain accepted. Unlisted or accidental parser behavior is not part of the public configuration contract.
+The listed legacy aliases and compatibility forms remain accepted. Unlisted or accidental parser behavior is not part of the public configuration contract. The converter preserves recognized flat Bar fields in its minimal structured output for compatibility; new Paint authoring uses `bar.paint` with the six Paint properties.
 
-| Legacy | Structured equivalent | Card Feature |
+| Legacy | Recognized compatibility path | Card Feature |
 |---|---|---|
 | `color_mode: single` | `bar.fill_style: solid` | Yes |
 | `color_mode: gradient` | `bar.fill_style: gradient` | Yes |
@@ -1808,7 +2006,7 @@ entities:
     name: Power
 ```
 
-Structured:
+Structured (canonical grouped Paint syntax for new configuration):
 
 ```yaml
 type: custom:sensor-bar-card-plus
@@ -1823,14 +2021,15 @@ scale:
   max:
     fixed: 100
 bar:
-  fill_style: bands
-  segments:
-    - from: 0%
-      to: 50%
-      color: '#22c55e'
-    - from: 50%
-      to: 100%
-      color: '#ef4444'
+  paint:
+    fill_style: bands
+    segments:
+      - from: 0%
+        to: 50%
+        color: '#22c55e'
+      - from: 50%
+        to: 100%
+        color: '#ef4444'
 target:
   at:
     fixed: 65
@@ -1843,7 +2042,7 @@ entities:
 
 When migrating legacy `severity`, remember that legacy band numbers are percentages of the active scale. Use explicit `%` boundaries in structured `bar.segments` to retain that placement. Plain numeric segment boundaries now mean values on the active scale.
 
-`bar.fill_style` is the preferred structured syntax for new dashboards. The recognized `bar.color_mode` compatibility alias remains accepted and renders the corresponding fill style.
+New Paint authoring uses grouped `bar.paint` with the six Paint properties. Existing flat Bar fields such as `bar.fill_style`, `bar.color`, and `bar.segments` remain supported compatibility inputs; `bar.color_mode` is a recognized legacy alias.
 
 For a visual comparison, see the [Heritage Dashboard](../examples/dashboards/sensor-bar-card-plus-heritage.yaml).
 

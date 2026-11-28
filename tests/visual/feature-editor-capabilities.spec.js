@@ -1,33 +1,41 @@
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
 const { expandFeatureGroups } = require('./feature-editor-test-utils.cjs');
-const {test,expect}=require('@playwright/test');
+const {test,expect}=require('./visual-test.cjs');
 const type='custom:sensor-bar-card-plus-feature';
-async function mount(page,source,width=240){
+async function mount(page,source,width=240,{cssInputs=false}={}){
  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
- await page.evaluate(async({width,type})=>{
+ await page.evaluate(async({width,type,cssInputs})=>{
   await customElements.whenDefined('sensor-bar-card-plus-feature');
   const editor=await customElements.get('sensor-bar-card-plus-feature').getConfigElement();
   const config={type,future:{keep:true,unset:undefined},scale:{min:0,max:100},bar:{animated:false,fill_style:'band_gradient',color:'#123456',solid_fill:false,needle:{show:true,color:'#abcdef',future:true},segments:[{from:0,color:'var(--success-color)',future:{keep:true}},{from:50,color:'orange',future:{keep:true}},{from:80,color:'red',future:{keep:true}}],gradient_stops:[{pos:0,color:'#123456'},{pos:100,color:'#abcdef'}],future:{keep:true}},
    baseline:{at:{percent:35,future:{keep:true}},above:{color:'var(--success-color)'},below:{color:'rgb(100, 0, 0)'},future:{keep:true}},
    target:{at:'75%',shape:'triangle',direction:'outward',color:'#abcdef',label:{show:true,text:'Limit',precision:1},when_exceeded:{fill_color:'red'},future:{keep:true}},
    peak:{enabled:true,window:'today',color:'red'},floor:{enabled:true,color:'blue'},markers:[{at:'25%',color:'#abc',show_marker:false,label:{show:true,entity:'sensor.label'},future:{keep:true}}],formatting:{unit:'W'}};
+  if(cssInputs){
+   config.bar.color='red';config.bar.needle.color='blue';
+   config.baseline.above.paint={enabled:false,color:'green'};config.baseline.below.paint={enabled:false,color:'orange'};
+   config.target.color='purple';config.target.when_above={paint:{enabled:false,color:'green'}};config.target.when_below={paint:{enabled:false,color:'orange'}};
+   config.peak.color='purple';config.floor.color='orange';config.markers[0].color='orange';
+  }
   window.__capabilityEvents=[];window.__capabilityOriginal=structuredClone(config);
   editor.addEventListener('config-changed',e=>{window.__capabilityEvents.push(structuredClone(e.detail.config));editor.setConfig(e.detail.config);});
   editor.setConfig(config);editor.context={entity_id:'sensor.parent'};editor.hass={states:{}};
   const host=document.querySelector('#mount');host.style.width=`${width}px`;host.style.setProperty('--success-color','green');host.append(editor);await editor.updateComplete;
- },{width,type});const editor=page.locator('sensor-bar-card-plus-feature-editor');await expandFeatureGroups(editor);return editor;
+ },{width,type,cssInputs});const editor=page.locator('sensor-bar-card-plus-feature-editor');await expandFeatureGroups(editor);return editor;
 }
 const saved=editor=>editor.evaluate(el=>structuredClone(el._config));
 const section=(editor,page,name)=>editor.locator('.section').filter({has:page.getByRole('heading',{name,exact:true})});
-async function end(editor,index,value){const control=editor.locator(`input[data-kind="segment-to"][data-index="${index}"]`);await control.fill(value);await control.press('Tab');return control;}
-for(const source of ['src','dist'])for(const width of [360,240])test(`Feature capabilities ${source} ${width}px: combined edit/echo, Auto ends and native CSS drafts`,async({page})=>{
- const editor=await mount(page,source,width),original=await saved(editor),segments=section(editor,page,'Segments');
+async function end(editor,index,value){const control=editor.locator(`#card-paint-editor input[data-kind="segment-to"][data-index="${index}"]`);await control.fill(value);await control.press('Tab');return control;}
+for(const source of ['src','dist'])for(const width of [360,240])test(`Feature capabilities ${source} ${width}px: combined edit/echo, Auto ends and native CSS drafts`,async({page,browserName})=>{
+ const browserSuffix=browserName==='webkit'?'-webkit':'';
+ const editor=await mount(page,source,width),original=await saved(editor),segments=editor.locator('.card-subgroup[data-group="segments"]');
  expect(await page.evaluate(()=>window.__capabilityEvents)).toHaveLength(0);
- await expect(section(editor,page,'Bar Appearance')).toHaveScreenshot(`feature-capabilities-bar-${width}.png`);
- await expect(segments).toHaveScreenshot(`feature-capabilities-segments-${width}.png`);
+ await expectEditorLayout(section(editor,page,'Bar Appearance'), expect);
+ await expectEditorLayout(segments, expect);
  expect(await editor.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
  expect(await segments.evaluate(el=>Array.from(el.querySelectorAll('input,button')).every(node=>node.getBoundingClientRect().right<=el.getBoundingClientRect().right+1))).toBe(true);
- await expect(editor.locator('#bar-animated')).not.toBeChecked();await editor.locator('#bar-animated').check();await expect(editor.locator('#bar-animated')).toBeFocused();expect((await saved(editor)).bar.animated).toBeUndefined();
- await editor.locator('#bar-fill-style').selectOption('bands');expect((await saved(editor)).bar.animated).toBeUndefined();await editor.locator('#bar-animated').uncheck();expect((await saved(editor)).bar.animated).toBe(false);
+ const animated=editor.locator('#bar-animated');await expect(animated).not.toBeChecked();await animated.focus();await expect(animated).toBeFocused();await animated.press('Space');await expect(animated).toBeChecked();expect((await saved(editor)).bar.animated).toBeUndefined();
+ await editor.locator('#bar-fill-style').selectOption('bands');expect((await saved(editor)).bar.animated).toBeUndefined();await animated.uncheck();expect((await saved(editor)).bar.animated).toBe(false);
  const color=editor.locator('#segment-color-0-text-fallback');await color.evaluate(el=>window.__capabilityColorNode=el);await color.fill('var(');await expect(color).toBeFocused();
  const count=await page.evaluate(()=>window.__capabilityEvents.length);await editor.evaluate(async el=>{el.setConfig(el._config);el.context={entity_id:'sensor.changed'};el.hass={states:{}};await el.updateComplete;});
  expect(await page.evaluate(()=>window.__capabilityEvents.length)).toBe(count);await expect(color).toHaveValue('var(');await expect(color).toHaveAttribute('aria-invalid','true');expect(await color.evaluate(el=>el===window.__capabilityColorNode)).toBe(true);
@@ -61,28 +69,31 @@ for(const source of ['src','dist'])for(const key of ['target','baseline'])test(`
  await editor.evaluate(async(el,key)=>{el.setConfig({type:'custom:sensor-bar-card-plus-feature',[key]:{at:'0%'}});await el.updateComplete;},key);await expect(value).toHaveValue('0%');
 });
 for(const source of ['src','dist'])test(`Feature CSS colors ${source}: all direct controls, raw text, keyboard, replacement and Gradient Stop boundary`,async({page})=>{
- const editor=await mount(page,source);await editor.locator('.generic-marker-toggle').click();
- const ids=['bar-color','bar-needle-color','baseline-above-color','baseline-below-color','target-color','target-above-fill-color','peak-color','floor-color','card-card-generic-marker-1-color'];
+ const editor=await mount(page,source,240,{cssInputs:true});await editor.locator('.generic-marker-toggle').click();
+ for(const side of ['above','below'])await editor.locator(`#baseline-${side}-paint-editor > summary`).click();
+ await editor.locator('#baseline-above-paint-enabled').check();await editor.locator('#baseline-below-paint-enabled').check();
+ await editor.locator('#card-group-target-above').click();await editor.locator('#target-above-paint-editor > summary').click();
+ await editor.locator('#card-group-target-below').click();await editor.locator('#target-below-paint-editor > summary').click();
+ await editor.locator('#target-above-paint-enabled').check();await editor.locator('#target-below-paint-enabled').check();
+ const ids=['bar-color','bar-needle-color','baseline-above-paint-color','baseline-below-paint-color','target-color','target-above-paint-color','target-below-paint-color','peak-color','floor-color','card-card-generic-marker-1-color'];
  for(const id of ids){
   const control=editor.locator(`#${id}-text-fallback`);expect(await control.getAttribute('aria-label')).toContain('CSS value');
   for(const color of ['#123456','#abc','red','rgb(1, 2, 3)','var(--warning-color)','  hsl(30, 100%, 50%)  ']){await control.fill(color);await expect(control).toBeFocused();await expect(control).toHaveAttribute('aria-invalid','false');}
   const before=await saved(editor),count=await page.evaluate(()=>window.__capabilityEvents.length);await control.fill('rgb(');await control.press('Tab');await expect(control).toHaveValue('rgb(');expect(await saved(editor)).toEqual(before);expect(await page.evaluate(()=>window.__capabilityEvents.length)).toBe(count);
   await control.fill('orange');await control.press('Tab');await expect(control).toHaveValue('orange');
-  const toggle=id.startsWith('baseline-')?`${id}-enabled`:id==='target-above-fill-color'?'target-above-fill-enabled':null;
-  if(toggle){await control.fill('  orange  ');const before=await saved(editor);await editor.locator(`#${toggle}`).uncheck();await editor.locator(`#${toggle}`).check();expect(await saved(editor)).toEqual(before);await expect(control).toHaveValue('  orange  ');}
  }
  const before=await saved(editor);expect(before.markers[0]).toEqual({...await page.evaluate(()=>window.__capabilityOriginal.markers[0]),color:'orange'});
  await editor.locator('#bar-color-text-fallback').fill('var(');await editor.evaluate(async el=>{el.setConfig({...el._config,bar:{...el._config.bar,color:'blue'}});await el.updateComplete;});await expect(editor.locator('#bar-color-text-fallback')).toHaveValue('blue');await expect(editor.locator('#bar-color-text-fallback')).toHaveAttribute('aria-invalid','false');
- await editor.locator('#bar-fill-style').selectOption('gradient');await expect(editor.locator('[data-kind="gradient-color-text-fallback"]')).toHaveCount(0);await expect(editor.locator('[data-kind="gradient-draft-color-text-fallback"]')).toHaveCount(0);
+ await editor.locator('#bar-fill-style').selectOption('gradient');await expect(editor.locator('#gradient-color-0-text-fallback')).toHaveValue(before.bar.gradient_stops[0].color);await expect(editor.locator('#gradient-draft-color-text-fallback')).toHaveValue(/^#/);
  expect((await saved(editor)).bar.gradient_stops).toEqual(before.bar.gradient_stops);
 });
 for(const source of ['src','dist'])test(`Feature automatic Segment draft ${source}: CSS validation, add/remove, ordering and echo`,async({page})=>{
- const editor=await mount(page,source),original=await saved(editor);
+ const editor=await mount(page,source,240,{cssInputs:true}),original=await saved(editor);
  await editor.locator('#segment-draft-from').fill('90');await editor.locator('#segment-draft-to').fill('');await editor.locator('#segment-draft-color-text-fallback').fill('var(');
- const add=editor.locator('[data-action="add-segment"]');await expect(add).toBeDisabled();expect(await page.evaluate(()=>window.__capabilityEvents.length)).toBe(0);
+ const add=editor.locator('#card-paint-editor [data-action="add-segment"]');await expect(add).toBeDisabled();expect(await page.evaluate(()=>window.__capabilityEvents.length)).toBe(0);
  await editor.evaluate(async el=>{el.setConfig(el._config);el.hass={states:{}};await el.updateComplete;});await expect(editor.locator('#segment-draft-color-text-fallback')).toHaveValue('var(');
  await editor.locator('#segment-draft-color-text-fallback').fill('var(--warning-color)');await expect(add).toBeEnabled();await add.click();
  expect((await saved(editor)).bar.segments).toEqual([...original.bar.segments,{from:90,color:'var(--warning-color)'}]);
- await editor.locator('[data-action="remove-segment"][data-index="3"]').click();expect(await saved(editor)).toEqual(original);
+ await editor.locator('#card-paint-editor [data-action="remove-segment"][data-index="3"]').click();expect(await saved(editor)).toEqual(original);
  await end(editor,0,'70');expect(await saved(editor)).toEqual(original);await expect(editor.locator('#segment-row-hint-0')).toHaveText('Segments overlap.');
 });

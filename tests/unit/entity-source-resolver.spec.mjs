@@ -42,6 +42,13 @@ describe('resolveEntitySource', () => {
     expect(getEntityNumericValue(hass, 'sensor.unavailable', 'amount')).toBeNull();
   });
 
+  it('does not resolve prototype names or inherited state objects', () => {
+    const inherited = { states: Object.create({ 'sensor.inherited': { state: '9', attributes: {} } }) };
+    for (const entityId of ['__proto__', 'constructor', 'prototype', 'sensor.inherited']) {
+      expect(resolveEntitySource(inherited, entityId)).toMatchObject({ stateObj: null, found: false });
+    }
+  });
+
   it('keeps numeric coercion in the existing numeric wrapper', () => {
     const numericText = { states: { 'sensor.text': { state: 'state', attributes: { value: '12.5' } } } };
     expect(resolveEntitySource(numericText, 'sensor.text', 'value').value).toBe('12.5');

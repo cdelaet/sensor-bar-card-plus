@@ -1,10 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createEditor } from '../support/load-card-class.cjs';
 import { getPathValue } from '../../src/editor/shared/editor-config.js';
 import {
   getFillStyleValue, getEffectiveFillStyleValue, getBarColorValue,
   getEffectiveBarSolidFillValue, getBarAppearanceSummary, hasBarAppearanceOverride,
   handleBarAppearanceField, renderBarAppearanceSection, clearBarAppearanceOverride,
+  getBarPaintEditorState,
+  hasLocalBarPaintConfiguration, resetBarPaintConfiguration,
 } from '../../src/editor/sections/bar-appearance.js';
 
 const root = { type: 'card' };
@@ -43,6 +45,18 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     }
   });
 
+  it('keeps legacy color-only entity style inference when no preset applies', () => {
+    const { editor, events } = setup(source, { entities: [{ entity: 'sensor.power', color: '#123456' }] });
+    expect(editor._getEffectiveScopedFillStyleValue(row)).toBe('solid');
+    expect(editor.shadowRoot.querySelector('#entity-0-bar-fill-style').value).toBe('solid');
+    expect(events).toHaveLength(0);
+
+    const invalid = setup(source, { bar: { paint: { opacity: 120 } } }).editor;
+    expect(getBarPaintEditorState(invalid._createSectionContext(), root).diagnostics).toContainEqual({
+      code: 'paint_opacity_invalid', severity: 'warning', path: 'paint.opacity', reference: null, fallback: 'default_opacity',
+    });
+  });
+
   it('retains all legacy color modes, including nested read-only override behavior', () => {
     for (const [color_mode, expected] of [['single', 'solid'], ['gradient', 'gradient'], ['severity', 'bands'], ['severity_gradient', 'band_gradient']]) {
       const { editor } = setup(source, { color_mode, color: 'red', entities: [{ entity: 'sensor.power', color_mode, color: 'blue' }] });
@@ -55,9 +69,9 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     }
     const { editor } = setup(source, { entities: [{ entity: 'sensor.power', bar: { color_mode: 'single' } }] });
     expect(editor._getScopedFillStyleValue(row)).toBe('solid');
-    expect(editor._hasEntityBarAppearanceOverride(row)).toBe(false);
+    expect(editor._hasEntityBarAppearanceOverride(row)).toBe(true);
     editor._clearEntityBarAppearance(row);
-    expect(editor._draftConfig.entities[0].bar.color_mode).toBe('single');
+    expect(editor._draftConfig.entities[0].bar).toBeUndefined();
   });
 
   it('switches every fill style while retaining config echo, palettes and unrelated config', () => {
@@ -74,8 +88,9 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
       expect(editor._getFillStyleValue()).toBe(style);
       expect(editor._draftConfig.bar).toMatchObject({ fill_style: style, color: 'red', solid_fill: true, segments, gradient_stops, future: true });
       expect(editor._draftConfig.extra).toEqual({ keep: true });
-      expect(editor.shadowRoot.innerHTML.includes('Only used with Gradient fill style')).toBe(style !== 'gradient');
-      expect(editor.shadowRoot.innerHTML.includes('Only used with segment-based fill styles.')).toBe(!['bands', 'soft_bands', 'band_gradient'].includes(style));
+      const paint = editor.shadowRoot.querySelector('#card-paint-editor');
+      expect(paint.querySelector('div[data-palette-inactive="gradient-stops"]').getAttribute('hidden') !== null).toBe(style === 'gradient');
+      expect(paint.querySelector('div[data-palette-inactive="segments"]').getAttribute('hidden') !== null).toBe(['bands', 'soft_bands', 'band_gradient'].includes(style));
       expect(editor.shadowRoot.querySelector('#gradient-draft-pos')).toBeTruthy();
       expect(editor.shadowRoot.querySelector('#segment-draft-from')).toBeTruthy();
     }
@@ -89,7 +104,7 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     expect(editor._getBarAppearanceSummary(row)).toBe('soft bands • Custom color');
     expect(editor._getEffectiveScopedBarSolidFillValue(row)).toBe(false);
     edit(editor, 'entity-0-bar-inherit', true, 'change');
-    expect(events.at(-1).detail.config.entities[0]).toEqual({ entity: 'sensor.power', bar: { needle: { show: true }, future: true }, extra: true });
+    expect(events.at(-1).detail.config.entities[0]).toEqual({ entity: 'sensor.power', extra: true });
     expect(editor._getEffectiveScopedFillStyleValue(row)).toBe('gradient');
     expect(editor._getEffectiveScopedBarColorValue(row)).toBe('red');
     expect(editor._getEffectiveScopedBarSolidFillValue(row)).toBe(true);
@@ -97,6 +112,19 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     expect(editor._getBarAppearanceSummary(row)).toBe('Inherited');
     editor._render();
     expect(editor.shadowRoot.querySelector('#entity-0-bar-fill-style').value).toBe('gradient');
+  });
+
+  it('summarizes local default Bar settings as custom and refreshes the mounted summary', () => {
+    const { editor, events } = setup(source, { entities: [{ entity: 'sensor.power' }] });
+    const inherit = editor.shadowRoot.querySelector('#entity-0-bar-inherit');
+    expect(inherit.checked).toBe(true);
+    expect(editor._getBarAppearanceSummary(row)).toBe('Inherited');
+
+    edit(editor, 'entity-0-bar-opacity', '65');
+
+    expect(inherit.checked).toBe(false);
+    expect(editor._getBarAppearanceSummary(row)).toBe('Custom row settings');
+    expect(events.at(-1).detail.config.entities[0].bar.paint.opacity).toBe(65);
   });
 
   it('retains CSS color fallback, aliases, mounted input echoes and picker edits', () => {
@@ -108,7 +136,7 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     editor.setConfig(events.at(-1).detail.config);
     expect(editor.shadowRoot.querySelector('[data-field="bar-color-text-fallback"]')).toBe(control);
     expect(editor._draftConfig.color).toBeUndefined();
-    expect(editor._draftConfig.bar.color).toBe('var(--accent-color)');
+    expect(editor._draftConfig.bar.color).toBe(' var(--accent-color) ');
     expect(editor._getFillStyleValue()).toBe('solid');
     edit(editor, '[data-kind="entity-bar-color-text-fallback"]', 'blue');
     expect(editor._getEffectiveScopedBarColorValue(row)).toBe('blue');
@@ -116,7 +144,7 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     expect(editor._draftConfig.entities[0].bar.color).toBe('#abcdef');
   });
 
-  it('preserves default-color elision and false-solid-fill reverting to inheritance', () => {
+  it('preserves explicit default color and false-solid-fill overrides', () => {
     const { editor, events } = setup(source, {
       bar: { fill_style: 'gradient', color: 'red', solid_fill: true },
       entities: [{ entity: 'sensor.power', color: 'blue', bar: { solid_fill: false } }],
@@ -124,14 +152,183 @@ for (const source of ['src', 'dist']) describe(`Bar Appearance characterization 
     expect(editor._getEffectiveScopedBarSolidFillValue(row)).toBe(false);
     edit(editor, 'entity-0-bar-solid-fill', false, 'change');
     expect(editor._getScopedBarSolidFillValue(row)).toBe(false);
-    expect(editor._getEffectiveScopedBarSolidFillValue(row)).toBe(true);
+    expect(editor._getEffectiveScopedBarSolidFillValue(row)).toBe(false);
     editor._setScopedBarColor(row, '#4A9EFF');
-    expect(editor._getEffectiveScopedBarColorValue(row)).toBe('red');
-    expect(events.at(-1).detail.config.entities[0]).toEqual({ entity: 'sensor.power' });
+    expect(editor._getEffectiveScopedBarColorValue(row)).toBe('#4A9EFF');
+    expect(events.at(-1).detail.config.entities[0]).toEqual({ entity: 'sensor.power', bar: { color: '#4A9EFF', solid_fill: false } });
     edit(editor, 'bar-solid-fill', false, 'change');
     expect(editor._getEffectiveScopedBarSolidFillValue(root)).toBe(false);
     edit(editor, 'bar-solid-fill', true, 'change');
     expect(editor._draftConfig.bar.solid_fill).toBe(true);
+  });
+
+  it('edits canonical opacity including zero while preserving legacy paint and config echo', () => {
+    const { editor, events } = setup(source, {
+      extra: { keep: true },
+      bar: { fill_style: 'gradient', color: 'red', solid_fill: true, future: { keep: true }, paint: { opacity: 35, future: true } },
+    });
+    const input = editor.shadowRoot.querySelector('#bar-opacity');
+    expect(input.value).toBe('35');
+    expect(input.getAttribute('min')).toBe('0');
+    expect(input.getAttribute('max')).toBe('100');
+    expect(input.getAttribute('step')).toBe('any');
+    edit(editor, 'bar-opacity', '0');
+    expect(events.at(-1).detail.config).toEqual({
+      extra: { keep: true },
+      bar: { fill_style: 'gradient', color: 'red', solid_fill: true, future: { keep: true }, paint: { opacity: 0, future: true } },
+    });
+    editor.setConfig(events.at(-1).detail.config);
+    editor._render();
+    expect(editor.shadowRoot.querySelector('#bar-opacity').value).toBe('0');
+    expect(editor._draftConfig).toEqual(events.at(-1).detail.config);
+  });
+
+  it('replaces local paint when applying a preset and preserves overrides when clearing its reference', () => {
+    const { editor, events } = setup(source, { bar: { paint: { opacity: 35, color: '#abcdef', future: true } } });
+    const context = editor._createSectionContext();
+    const registry = { status: 'ready', presets: {
+      night: { fill_style: 'solid', color: '#112233', opacity: 42 },
+      soft: { fill_style: 'soft_bands', color: '#445566' },
+    } };
+    const before = getBarPaintEditorState(context, root, null, registry);
+    expect(before.presetOptions).toEqual([{ value: 'night', label: 'night' }, { value: 'soft', label: 'soft' }]);
+    const confirm = vi.fn(() => true);
+    expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: 'night' }, { confirm })).toBe(true);
+    expect(confirm).toHaveBeenCalledWith('night');
+    expect(editor._draftConfig.bar.paint).toEqual({ preset: 'night' });
+    expect(getBarPaintEditorState(context, root, null, registry).paint).toMatchObject({
+      fill_style: 'solid', color: '#112233', opacity: 42,
+    });
+    handleBarAppearanceField(context, { field: 'bar-fill-style', value: 'gradient' });
+    const configBeforeSamePreset = structuredClone(editor._draftConfig);
+    const eventCountBeforeSamePreset = events.length;
+    confirm.mockClear();
+    expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: 'night' }, { confirm })).toBe(true);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(events).toHaveLength(eventCountBeforeSamePreset);
+    expect(editor._draftConfig).toEqual(configBeforeSamePreset);
+    confirm.mockReturnValue(false);
+    expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: 'soft' }, { confirm })).toBe(false);
+    expect(editor._draftConfig.bar.paint).toEqual({ preset: 'night', fill_style: 'gradient' });
+    confirm.mockReturnValue(true);
+    expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: 'soft' }, { confirm })).toBe(true);
+    expect(editor._draftConfig.bar.paint).toEqual({ preset: 'soft' });
+
+    handleBarAppearanceField(context, { field: 'bar-opacity', value: 0 });
+    expect(editor._draftConfig.bar.paint.opacity).toBe(0);
+    expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: '' })).toBe(true);
+    expect(editor._draftConfig.bar.paint).toEqual({ preset: null, opacity: 0 });
+  });
+
+  it('selecting None retains local palette state', () => {
+    const { editor, events } = setup(source, { bar: { paint: {
+      preset: 'night', fill_style: 'bands', segments: [{ from: '15%', to: '100%', color: '#123456' }],
+    } } });
+    const context = editor._createSectionContext();
+    let cleared = false;
+    context.clearPaintPaletteState = () => { cleared = true; };
+
+    expect(handleBarAppearanceField(context, { field: 'bar-paint-preset', value: '' })).toBe(true);
+    expect(cleared).toBe(false);
+    expect(editor._draftConfig.bar.paint).toEqual({ preset: null, fill_style: 'bands', segments: [{ from: '15%', to: '100%', color: '#123456' }] });
+    expect(events).toHaveLength(1);
+  });
+
+  it('reports missing presets and retains the reference while using inherited paint', () => {
+    const { editor } = setup(source, { bar: { paint: { preset: 'missing', opacity: 0 }, color: 'red' } });
+    const state = getBarPaintEditorState(editor._createSectionContext(), root, null, { status: 'ready', presets: {} });
+    expect(state.presetReference).toBe('missing');
+    expect(state.presetOptions).toContainEqual({ value: 'missing', label: 'missing (unavailable)' });
+    expect(state.diagnostics).toContainEqual(expect.objectContaining({ code: 'paint_preset_missing', reference: 'missing' }));
+    expect(state.paint).toMatchObject({ color: 'red', opacity: 0 });
+  });
+
+  it('reports malformed preset definitions without discarding local overrides', () => {
+    const { editor } = setup(source, { bar: { paint: { preset: 'bad', opacity: 0 } } });
+    const state = getBarPaintEditorState(editor._createSectionContext(), root, null, {
+      status: 'ready', presets: { bad: { fill_style: 'invalid-style', color: '#123456' } },
+    });
+    expect(state.diagnostics).toContainEqual(expect.objectContaining({ code: 'paint_preset_invalid', reference: 'bad' }));
+    expect(state.paint.opacity).toBe(0);
+  });
+
+  it.each([
+    { bar: { paint: { preset: 'night', opacity: 0, fill_style: 'solid', future: true }, direction: 'reverse', needle: { show: true } } },
+    { bar: { paint: {}, direction: 'reverse', needle: { show: true } } },
+    { color_mode: 'single', color: '#123456', segments: [{ from: '0%', to: '100%', color: '#abcdef' }], extra: { keep: true } },
+  ])('resets grouped or legacy paint without touching unrelated config: %j', config => {
+    let current = structuredClone(config);
+    let clearedScope;
+    const context = {
+      read: (_scope, path) => getPathValue(current, path),
+      mutate: (_scope, mutation) => { current = mutation(current); return true; },
+      clearPaintPaletteState: scope => { clearedScope = scope; },
+    };
+
+    expect(hasLocalBarPaintConfiguration(context, root)).toBe(true);
+    expect(resetBarPaintConfiguration(context, root)).toBe(true);
+    expect(clearedScope).toBe(root);
+    expect(current).toEqual(config.bar
+      ? { bar: { direction: 'reverse', needle: { show: true } } }
+      : { extra: { keep: true } });
+    expect(hasLocalBarPaintConfiguration(context, root)).toBe(false);
+    expect(resetBarPaintConfiguration(context, root)).toBe(false);
+  });
+
+  it('renders destination reset labels and disables reset without local paint', () => {
+    const { editor } = setup(source, { entities: ['sensor.power'], bar: { direction: 'reverse' } });
+    const context = editor._createSectionContext();
+    const cardHtml = renderBarAppearanceSection(context, root);
+    const entityHtml = renderBarAppearanceSection(context, row);
+    expect(cardHtml).toContain('data-action="reset-paint" disabled>Reset to default paint settings</button>');
+    expect(entityHtml).toContain('data-action="reset-paint" data-index="0" disabled>Reset to Card paint settings</button>');
+  });
+
+  it('renders Animated beneath Bar Direction for Card and Entity and preserves independent overrides', () => {
+    const defaults = setup(source, { entities: [{ entity: 'sensor.power' }] });
+    expect(defaults.editor.shadowRoot.querySelector('#bar-animated').checked).toBe(true);
+    expect(defaults.editor.shadowRoot.querySelector('#entity-0-bar-animated').checked).toBe(true);
+    expect(defaults.events).toHaveLength(0);
+
+    const { editor, events } = setup(source, { bar: { animated: false }, entities: [{ entity: 'sensor.power' }] });
+    const cardControl = editor.shadowRoot.querySelector('#bar-animated');
+    const entityControl = editor.shadowRoot.querySelector('#entity-0-bar-animated');
+    expect(cardControl).toBeTruthy();
+    expect(entityControl).toBeTruthy();
+    expect(cardControl.checked).toBe(false);
+    expect(entityControl.checked).toBe(false);
+    const cardHtml = renderBarAppearanceSection(editor._createSectionContext(), root, () => '', { animation: true });
+    const entityHtml = renderBarAppearanceSection(editor._createSectionContext(), row, () => '', { animation: true });
+    expect(cardHtml.indexOf('Bar Direction')).toBeLessThan(cardHtml.indexOf('for="bar-animated"'));
+    expect(cardHtml.indexOf('for="bar-animated"')).toBeLessThan(cardHtml.indexOf('paint-editor'));
+    expect(entityHtml.indexOf('Bar Direction')).toBeLessThan(entityHtml.indexOf('for="entity-0-bar-animated"'));
+    expect(entityHtml.indexOf('for="entity-0-bar-animated"')).toBeLessThan(entityHtml.indexOf('paint-editor'));
+
+    cardControl.checked = true;
+    editor._handleFieldEvent({ target: cardControl });
+    expect(editor._draftConfig.bar).toBeUndefined();
+    expect(editor.shadowRoot.querySelector('#bar-animated')).toBe(cardControl);
+    expect(cardControl.checked).toBe(true);
+    expect(editor.shadowRoot.querySelector('#entity-0-bar-animated').checked).toBe(true);
+
+    const entity = editor.shadowRoot.querySelector('#entity-0-bar-animated');
+    entity.checked = false;
+    editor._handleFieldEvent({ target: entity });
+    expect(editor._draftConfig.entities[0].bar.animated).toBe(false);
+    expect(editor.shadowRoot.querySelector('#entity-0-bar-animated')).toBe(entity);
+    expect(entity.checked).toBe(false);
+    expect(events).toHaveLength(2);
+  });
+
+  it('counts legacy and canonical animation values as Entity Bar overrides and clears both on inheritance reset', () => {
+    for (const animatedConfig of [{ animated: false }, { bar: { animated: false } }]) {
+      const { editor } = setup(source, { entities: [{ entity: 'sensor.power', ...animatedConfig }] });
+      expect(hasBarAppearanceOverride(editor._createSectionContext(), row)).toBe(true);
+      clearBarAppearanceOverride(editor._createSectionContext(), row);
+      expect(editor._draftConfig.entities[0].animated).toBeUndefined();
+      expect(editor._draftConfig.entities[0].bar?.animated).toBeUndefined();
+      expect(hasBarAppearanceOverride(editor._createSectionContext(), row)).toBe(false);
+    }
   });
 });
 
@@ -169,13 +366,13 @@ describe('Bar Appearance with a root-only host context', () => {
     });
     expect(childCalls).toBe(1);
     expect(html).toContain('data-field="bar-fill-style" value="solid"');
-    expect(html).toContain('data-field="bar-color-text-fallback" value="red"');
+    expect(html).toContain('data-field="bar-color-text-fallback" data-paint-property="color" value="red"');
     expect(html.indexOf('id="host-child"')).toBeGreaterThan(html.indexOf('id="bar-color"'));
     expect(renderBarAppearanceSection(host.context, root)).not.toContain('host-child');
     expect(handleBarAppearanceField(host.context, { field: 'bar-fill-style', value: ' gradient ' })).toBe(true);
     expect(handleBarAppearanceField(host.context, { field: 'bar-color', value: ' var(--accent-color) ' })).toBe(true);
     expect(handleBarAppearanceField(host.context, { field: 'bar-solid-fill', value: true })).toBe(true);
-    expect(host.config()).toEqual({ extra: { keep: true }, bar: { future: true, fill_style: 'gradient', color: 'var(--accent-color)', solid_fill: true } });
+    expect(host.config()).toEqual({ extra: { keep: true }, bar: { future: true, fill_style: 'gradient', color: ' var(--accent-color) ', solid_fill: true } });
     expect(getEffectiveBarSolidFillValue(host.context, root)).toBe(true);
     expect(getBarAppearanceSummary(host.context, root)).toBe('gradient • Custom color');
     expect(hasBarAppearanceOverride(host.context, root)).toBe(true);
@@ -184,7 +381,7 @@ describe('Bar Appearance with a root-only host context', () => {
     expect(host.config().entities).toBeUndefined();
   });
 
-  it('elides defaults and clears only appearance fields without whole-config cleanup', () => {
+  it('retains explicit defaults and clears only appearance fields without whole-config cleanup', () => {
     const host = hostFor({
       color: 'blue', color_mode: 'gradient', solid_fill: true,
       bar: { fill_style: 'gradient', color: 'red', solid_fill: true, color_mode: 'single', needle: { show: true }, segments: [], future: true },
@@ -192,7 +389,7 @@ describe('Bar Appearance with a root-only host context', () => {
     });
     handleBarAppearanceField(host.context, { field: 'bar-color', value: '#4A9EFF' });
     expect(host.config().color).toBeUndefined();
-    expect(host.config().bar.color).toBeUndefined();
+    expect(host.config().bar.color).toBe('#4A9EFF');
     handleBarAppearanceField(host.context, { field: 'bar-solid-fill', value: false });
     expect(getEffectiveBarSolidFillValue(host.context, root)).toBe(false);
     // There is no top-level solid_fill alias in the existing appearance reader.
@@ -206,7 +403,7 @@ describe('Bar Appearance with a root-only host context', () => {
       solid_fill: true, extra: { keep: true },
       bar: { color_mode: 'single', needle: { show: true }, segments: [], future: true },
     });
-    expect(hasBarAppearanceOverride(host.context, root)).toBe(false);
+    expect(hasBarAppearanceOverride(host.context, root)).toBe(true);
     expect(getEffectiveFillStyleValue(host.context, root)).toBe('solid');
   });
 });

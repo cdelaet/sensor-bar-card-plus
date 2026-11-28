@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 const { PNG } = require('playwright-core/lib/utilsBundle');
 const state = (value, unit = 'W') => ({ state: String(value), attributes: { unit_of_measurement: unit } });
 const entity = 'sensor.power';
@@ -249,7 +249,7 @@ test('labels stay passive, add no tab stops and preserve primary unavailable/rec
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     return { hidden, visible: !root.querySelector('#labels').hidden && !node.hidden, persistent: node === before,
       ariaHidden: root.querySelector('#labels').getAttribute('aria-hidden'), pointer: getComputedStyle(node).pointerEvents,
-      controls: root.querySelectorAll('button, input, [tabindex]').length, motion: getComputedStyle(node).transitionDuration };
+      controls: root.querySelectorAll('#labels button, #labels input, #labels [tabindex]').length, motion: getComputedStyle(node).transitionDuration };
   });
   expect(result).toEqual({ hidden: true, visible: true, persistent: true, ariaHidden: 'true', pointer: 'none', controls: 0, motion: '0s' });
 });

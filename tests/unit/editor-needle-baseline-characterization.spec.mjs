@@ -1,3 +1,5 @@
+import { BASELINE_PAINTS } from '../../src/view-model/paint-destinations.js';
+import { setDestinationEnabled, resetDestinationPaint } from '../../src/editor/shared/paint-destination.js';
 import { describe, it, expect } from 'vitest';
 import { createEditor } from '../support/load-card-class.cjs';
 const root = { type: 'card' }, row = { type: 'entity', index: 0 };
@@ -39,14 +41,15 @@ for (const source of ['src', 'dist']) describe(`standalone Needle/Baseline chara
     editor._setBaselineResolvablePart(root, 'entity', 'sensor.b');
     expect(editor._draftConfig.baseline.at).toEqual({ entity: 'sensor.b', percent: 50 });
   });
-  it('retains directional-color drafts through echo, clearing and toggling', () => {
-    const editor = createEditor({ source }); editor.setConfig({ baseline: { at: { fixed: 0 }, above: { color: 'red' } } });
-    editor._setBaselineDirectionalColorEnabled(root, 'above', false);
+  it('disables Paint across echoes and resets to the matching inherited destination', () => {
+    const editor = createEditor({ source });
+    editor.setConfig({ baseline: { at: 0, above: { color: 'red' } }, entities: [{ entity: 'sensor.row' }] });
+    setDestinationEnabled(editor._createSectionContext(), row, BASELINE_PAINTS[0], false);
     editor.setConfig(editor._draftConfig); editor._render();
-    expect(editor._getBaselineColorDraft(root, 'above')).toBe('red');
-    editor._setBaselineDirectionalColorEnabled(root, 'above', true);
+    expect(editor._draftConfig.entities[0].baseline.above.paint).toBeNull();
+    resetDestinationPaint(editor._createSectionContext(), row, BASELINE_PAINTS[0]);
+    expect(editor._draftConfig.entities[0]).toEqual({ entity: 'sensor.row' });
     expect(editor._draftConfig.baseline.above.color).toBe('red');
-    editor._clearBaselineOverride(root); expect(editor._draftConfig.baseline).toBeUndefined();
   });
 
   it('edits Card Baseline as one Value with Entity/Attribute and fixed/percentage fallbacks', () => {
@@ -108,7 +111,8 @@ for (const source of ['src', 'dist']) describe(`standalone Needle/Baseline chara
     expect(rowMarkup).toContain('<label for="entity-0-baseline-show">Enable Baseline</label>');
     expect(rowMarkup).toContain('value="25"');
     expect(rowMarkup).toContain('value="red"');
-    expect(rowMarkup).toContain('id="entity-0-baseline-above-color-enabled" type="checkbox" data-kind="entity-baseline-above-color-enabled" data-index="0" checked');
+    expect(rowMarkup).toContain('id="entity-0-baseline-above-paint-enabled"');
+    expect(rowMarkup).toContain('data-paint-enabled="true" checked');
     expect(rowMarkup).not.toMatch(/id="entity-0-baseline-(?:show|value|above-color-enabled)[^>]* disabled/);
 
     editor._baselineSection.handleField({ kind: 'entity-baseline-show', index: 0, value: false });
@@ -119,9 +123,9 @@ for (const source of ['src', 'dist']) describe(`standalone Needle/Baseline chara
     expect(editor._draftConfig.baseline).toEqual({ enabled: true, at: 25, above: { color: 'red' } });
     expect(editor._baselineSection.render(row)).toContain('<label for="entity-0-baseline-show">Enable Baseline</label>');
 
-    editor._baselineSection.handleField({ kind: 'entity-baseline-above-color-enabled', index: 0, value: false });
-    expect(editor._draftConfig.entities[0].baseline.above).toEqual({ color: null });
-    expect(editor._baselineSection.render(row)).not.toContain('id="entity-0-baseline-above-color-enabled" type="checkbox" data-kind="entity-baseline-above-color-enabled" data-index="0" checked');
+    setDestinationEnabled(editor._createSectionContext(), row, BASELINE_PAINTS[0], false);
+    expect(editor._draftConfig.entities[0].baseline.above).toEqual({ paint: null });
+    expect(editor._baselineSection.render(row)).not.toContain('id="entity-0-baseline-above-paint-enabled" type="checkbox" data-kind="entity-baseline-above-paint-enabled" data-index="0" checked');
     editor._baselineSection.handleField({ kind: 'entity-baseline-inherit', index: 0, value: true });
     expect(editor._draftConfig.entities[0]).toEqual({ entity: 'sensor.row', future_row: true });
     expect(editor._baselineSection.render(row)).toContain('value="red"');

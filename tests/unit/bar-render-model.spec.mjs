@@ -38,6 +38,56 @@ describe('shared bar presentation without a card instance', () => {
     );
   });
 
+  it.each(['solid', 'gradient', 'bands', 'soft_bands', 'band_gradient'])('%s applies opacity to ordinary paint only', fillStyle => {
+    const appearance = normalizeCardConfig({ entities: [{ entity, bar: {
+      needle: true, paint: { fill_style: fillStyle, color: 'rgb(18 52 86 / 50%)', opacity: 40,
+        segments: [{ from: 0, to: 100, color: 'rgb(18 52 86 / 50%)' }] },
+    } }] }).entities[0];
+    const row = resolvedRow(appearance, 75);
+    const model = buildBarRenderModel(row, appearance, { height: 28 });
+    const [base, baselineAbove, baselineBelow, aboveTarget] = model.fill.paintLayers;
+
+    expect(base.paintStyle).toMatch(/opacity:0\.4;$/);
+    expect(base.paintStyle.match(/opacity:/g)).toHaveLength(1);
+    if (fillStyle === 'solid') expect(base.paintStyle).toContain('rgb(18 52 86 / 50%)');
+    expect([baselineAbove, baselineBelow, aboveTarget].every(layer => !layer.paintStyle.includes('opacity:'))).toBe(true);
+    expect(model.fill.revealStyle).toContain('clip-path:');
+    expect(model.needle.show).toBe(true);
+    expect(renderBar(model)).toContain('class="needle-marker"');
+  });
+
+  it.each([[0, 'opacity:0;'], [50, 'opacity:0.5;'], [100, '']])('uses opacity %s without changing the legacy default', opacity => {
+    const appearance = normalizeCardConfig({ entities: [{ entity, bar: { paint: { fill_style: 'solid', opacity } } }] }).entities[0];
+    const model = buildBarRenderModel(resolvedRow(appearance, 75), appearance, { height: 28 });
+    if (opacity < 100) expect(model.fill.paintLayers[0].paintStyle).toMatch(new RegExp(`opacity:${opacity / 100};$`));
+    else expect(model.fill.paintLayers[0].paintStyle).not.toContain('opacity:');
+    expect(model.fill.paintLayers.slice(1).every(layer => !layer.paintStyle.includes('opacity:'))).toBe(true);
+    const omitted = normalizeCardConfig({ entities: [{ entity, bar: { paint: { fill_style: 'solid' } } }] }).entities[0];
+    expect(buildBarRenderModel(resolvedRow(omitted, 75), omitted, { height: 28 }).fill.paintLayers[0].paintStyle)
+      .not.toContain('opacity:');
+    if (opacity === 100) {
+      expect(model.fill.paintLayers[0].paintStyle)
+        .toBe(buildBarRenderModel(resolvedRow(omitted, 75), omitted, { height: 28 }).fill.paintLayers[0].paintStyle);
+    }
+  });
+
+  it('renders inherited and invalid opacity through normalized paint values', () => {
+    const inherited = normalizeCardConfig({
+      bar: { paint: { opacity: 37 } },
+      entities: [{ entity, bar: { paint: { fill_style: 'solid' } } }],
+    }).entities[0];
+    const invalid = normalizeCardConfig({
+      entities: [{ entity, bar: { paint: { fill_style: 'solid', opacity: 'invalid' } } }],
+    }).entities[0];
+
+    expect(inherited.bar.paint.opacity).toBe(37);
+    expect(buildBarRenderModel(resolvedRow(inherited, 75), inherited, { height: 28 }).fill.paintLayers[0].paintStyle)
+      .toMatch(/opacity:0\.37;$/);
+    expect(invalid.bar.paint.opacity).toBe(100);
+    expect(buildBarRenderModel(resolvedRow(invalid, 75), invalid, { height: 28 }).fill.paintLayers[0].paintStyle)
+      .not.toContain('opacity:');
+  });
+
   it('restores historical gaps, multiple gaps, edge extension, and empty Segment behavior', () => {
     expect(getBandsGradientCss([
       { from: 10, to: 20, color: 'red' },

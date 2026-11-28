@@ -42,6 +42,16 @@ function createShadowRoot() {
       value: attrs.value ?? '',
       checked: Object.prototype.hasOwnProperty.call(attrs, 'checked'),
       disabled: Object.prototype.hasOwnProperty.call(attrs, 'disabled'),
+      contains(node) {
+        for (let parent = node; parent; parent = parent.parentElement) if (parent === this) return true;
+        return false;
+      },
+      querySelector(selector) {
+        return this.querySelectorAll(selector)[0] ?? null;
+      },
+      querySelectorAll(selector) {
+        return shadowRoot.querySelectorAll(selector).filter(node => node !== this && this.contains(node));
+      },
       _listeners: new Map(),
       addEventListener(type, listener) {
         const bucket = this._listeners.get(type) ?? [];
@@ -65,11 +75,21 @@ function createShadowRoot() {
 
   function parseElements(html) {
     const elements = [];
-    const tagRegex = /<([a-z0-9-]+)([^>]*)>/gi;
+    const parents = [];
+    const voidTags = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
+    const tagRegex = /<(\/?)([a-z0-9-]+)([^>]*)>/gi;
     let match;
     while ((match = tagRegex.exec(html))) {
-      const [, tagName, rawAttrs] = match;
-      elements.push(createElementNode(tagName, parseAttributes(rawAttrs)));
+      const [, closing, tagName, rawAttrs] = match;
+      if (closing) {
+        const index = parents.findLastIndex(node => node.tagName === tagName.toUpperCase());
+        if (index !== -1) parents.length = index;
+        continue;
+      }
+      const node = createElementNode(tagName, parseAttributes(rawAttrs));
+      node.parentElement = parents.at(-1) ?? null;
+      elements.push(node);
+      if (!voidTags.has(tagName.toLowerCase())) parents.push(node);
     }
     return elements;
   }
@@ -100,6 +120,9 @@ function createShadowRoot() {
       return null;
     },
     querySelectorAll(selector) {
+      if (selector.startsWith('#')) return state._elements.filter(element => element.id === selector.slice(1));
+      const field = selector.match(/^\[data-field="([^"]+)"\]$/);
+      if (field) return state._elements.filter(element => element.dataset.field === field[1]);
       if (selector.includes(',')) {
         return [...new Set(selector.split(',').flatMap(part => shadowRoot.querySelectorAll(part.trim())))];
       }
@@ -151,7 +174,7 @@ function createShadowRoot() {
   return shadowRoot;
 }
 
-function loadCardClass(options = {}) {
+function getCardClassBundles(options = {}) {
   const sourcePath = path.resolve(__dirname, '../../src/sensor-bar-card-plus.js');
   const distPath = path.resolve(__dirname, '../../dist/sensor-bar-card-plus.js');
   const filePath = options.source === 'dist' ? distPath : sourcePath;
@@ -179,7 +202,11 @@ function loadCardClass(options = {}) {
     };
     bundledSourceCache.set(cacheKey, bundles);
   }
+  return { bundles, filePath };
+}
 
+function loadCardClass(options = {}) {
+  const { bundles, filePath } = getCardClassBundles(options);
   const registry = new Map();
   const sandbox = {
     console,
@@ -276,6 +303,7 @@ function createEditor(options = {}) {
 }
 
 module.exports = {
+  getCardClassBundles,
   loadCardClass,
   loadElementClass,
   createCard,

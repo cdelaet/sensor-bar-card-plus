@@ -1,6 +1,31 @@
-const { test, expect } = require('@playwright/test');
-for (const width of [360, 240]) test(`standalone Reference markers ${width}px retain root/entity appearance, focus and identity`, async ({ page }) => {
-  await page.goto('/tests/visual/fixtures/harness.html');
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
+const { test, expect } = require('./visual-test.cjs');
+const { snapshotName } = require('./snapshot-name.cjs');
+
+async function expectHeaderControlsToFit(group) {
+  const collisions = await group.locator('.generic-marker-header').evaluateAll(headers => headers.flatMap(header => {
+    const bounds = header.getBoundingClientRect();
+    const toggle = header.querySelector('.generic-marker-toggle');
+    const toggleBounds = toggle.getBoundingClientRect();
+    const title = document.createRange();
+    title.selectNodeContents(toggle.querySelector('.generic-marker-title'));
+    const actions = [...header.querySelectorAll('.generic-marker-actions button')].map(button => button.getBoundingClientRect());
+    const controls = [toggleBounds, ...actions];
+    return controls.filter(rect =>
+      rect.left < bounds.left - 0.25 || rect.right > bounds.right + 0.25
+      || rect.top < bounds.top - 0.25 || rect.bottom > bounds.bottom + 0.25
+    ).concat([...title.getClientRects()].filter(rect =>
+      rect.left < toggleBounds.left - 0.25 || rect.right > toggleBounds.right + 0.25
+    ), controls.filter((rect, index) => controls.slice(index + 1).some(other =>
+      rect.left < other.right - 0.25 && rect.right > other.left + 0.25
+      && rect.top < other.bottom - 0.25 && rect.bottom > other.top + 0.25
+    ))).map(rect => rect.toJSON());
+  }));
+  expect(collisions).toEqual([]);
+}
+
+for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`standalone Reference markers ${width}px retain root/entity appearance, focus and identity (${source})`, async ({ page }) => {
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async width => {
     await customElements.whenDefined('sensor-bar-card-plus');
     const editor = await customElements.get('sensor-bar-card-plus').getConfigElement();
@@ -13,7 +38,8 @@ for (const width of [360, 240]) test(`standalone Reference markers ${width}px re
   await editor.locator('#card-group-generic-markers').click();
   const root = editor.locator('.card-subgroup[data-group="generic-markers"]');
   await root.locator('[data-action="toggle-generic-marker"]').first().click();
-  await expect(root).toHaveScreenshot(`reference-markers-root-${width}.png`);
+  await expectHeaderControlsToFit(root);
+  await expectEditorLayout(root, expect);
   const row = root.locator('.generic-marker-item').first(), id = await row.getAttribute('data-marker-ui-id');
   const text = row.locator('[data-kind="generic-marker-label-text"]');
   await text.evaluate(node => { window.__standaloneReferenceText = node; });
@@ -24,6 +50,7 @@ for (const width of [360, 240]) test(`standalone Reference markers ${width}px re
   await editor.locator('[data-action="toggle-entity-overrides"]').click(); await editor.locator('#entity-0-group-markers').click();
   const entity = editor.locator('.override-group:not(.card-subgroup)[data-group="markers"]');
   await entity.locator('[data-action="toggle-generic-marker"]').click();
-  await expect(entity).toHaveScreenshot(`reference-markers-entity-${width}.png`);
+  await expectHeaderControlsToFit(entity);
+  await expectEditorLayout(entity, expect);
   const value = entity.locator('[data-kind="generic-marker-fixed"]'); await value.fill('40%'); await expect(value).toBeFocused();
 });

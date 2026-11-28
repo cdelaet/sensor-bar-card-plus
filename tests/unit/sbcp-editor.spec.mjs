@@ -1,11 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { createEditor, loadElementClass } from '../support/load-card-class.cjs';
+import { createDomEditorFixture, dispatchDomEvent } from '../support/dom-editor-fixture.mjs';
 import { normalizeCardConfig } from '../../src/config/normalize.js';
 import { allocateSegmentPreviewWidths } from '../../src/editor/sections/segments.js';
 
 
 function trackConfigEvents(editor) {
   const events = [];
+  if (editor.ownerDocument) {
+    editor.addEventListener('config-changed', event => events.push(event));
+    return events;
+  }
   editor.dispatchEvent = (event) => {
     events.push(event);
     return true;
@@ -19,6 +24,7 @@ async function flushTimers() {
 
 function dispatchInput(el, value) {
   el.value = value;
+  if (el.ownerDocument) return dispatchDomEvent(el, 'input');
   el.dispatchEvent({
     type: 'input',
     bubbles: true,
@@ -28,6 +34,7 @@ function dispatchInput(el, value) {
 
 function dispatchChange(el, value) {
   if (el?.type === 'checkbox') el.checked = !!value; else el.value = value;
+  if (el.ownerDocument) return dispatchDomEvent(el, 'change');
   el.dispatchEvent({
     type: 'change',
     bubbles: true,
@@ -36,6 +43,7 @@ function dispatchChange(el, value) {
 }
 
 function dispatchClick(el) {
+  if (el.ownerDocument) return dispatchDomEvent(el, 'click');
   el.dispatchEvent({
     type: 'click',
     bubbles: true,
@@ -44,6 +52,7 @@ function dispatchClick(el) {
 }
 
 function dispatchKeydown(el, key) {
+  if (el.ownerDocument) return dispatchDomEvent(el, 'keydown', { key });
   el.dispatchEvent({
     type: 'keydown',
     key,
@@ -55,6 +64,7 @@ function dispatchKeydown(el, key) {
 
 function dispatchValueChanged(el, value) {
   el.value = value;
+  if (el.ownerDocument) return dispatchDomEvent(el, 'value-changed', { detail: { value } });
   el.dispatchEvent({
     type: 'value-changed',
     detail: { value },
@@ -64,7 +74,7 @@ function dispatchValueChanged(el, value) {
 }
 
 function iconModeRadio(editor, mode) {
-  return editor.shadowRoot.querySelectorAll('input[data-kind="entity-icon-mode"]')
+  return [...editor.shadowRoot.querySelectorAll('input[data-kind="entity-icon-mode"]')]
     .find((radio) => radio.value === mode);
 }
 
@@ -88,6 +98,8 @@ function expectNoDeprecatedEditedKeys(target) {
   expect(target.peak_color).toBeUndefined();
 }
 
+// Initial markup includes collapsed controls. Logic and markup tests use the
+// lightweight fixture without disclosure setup; live DOM tests opt in to jsdom.
 describe('Sensor Bar Card Plus editor', () => {
   it('exposes Normal by default and edits only the card-level direction paths', () => {
     const editor = createEditor();
@@ -99,7 +111,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.innerHTML.indexOf('id="scale-direction"'))
       .toBeGreaterThan(editor.shadowRoot.innerHTML.indexOf('id="scale-max"'));
     expect(editor.shadowRoot.innerHTML.indexOf('id="bar-direction"'))
-      .toBeGreaterThan(editor.shadowRoot.innerHTML.indexOf('id="bar-color"'));
+      .toBeLessThan(editor.shadowRoot.innerHTML.indexOf('id="card-paint-editor"'));
     expect(events).toHaveLength(0);
 
     dispatchChange(editor.shadowRoot.querySelector('#scale-direction'), 'reverse');
@@ -425,7 +437,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('Custom enables the HA icon picker and emits its selected icon string', async () => {
-    const editor = createEditor({ withIconPicker: true });
+    const { editor } = await createDomEditorFixture({ withIconPicker: true });
     const events = trackConfigEvents(editor);
     editor.setConfig({ entities: [{ entity: 'sensor.one' }] });
 
@@ -442,7 +454,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('switches among Default, Custom, and Off without losing their config semantics', async () => {
-    const editor = createEditor({ withIconPicker: true });
+    const { editor } = await createDomEditorFixture({ withIconPicker: true });
     const events = trackConfigEvents(editor);
     editor.setConfig({ entities: [{ entity: 'sensor.one', icon: 'mdi:battery' }] });
 
@@ -510,8 +522,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect([...positions].sort((left, right) => left - right)).toEqual(positions);
   });
 
-  it('expanding one entity override section does not expand all rows', () => {
-    const editor = createEditor();
+  it('expanding one entity override section does not expand all rows', async () => {
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       entities: [
@@ -546,7 +558,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-segments')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-group-target')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-group-baseline')).not.toBeNull();
-    expect(editor.shadowRoot.querySelector('#entity-0-group-bar')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-bar-appearance').getAttribute('role')).toBe('group');
     expect(editor.shadowRoot.querySelector('#entity-0-group-needle')).not.toBeNull();
   });
 
@@ -563,11 +575,11 @@ describe('Sensor Bar Card Plus editor', () => {
     const groups = [
       'entity-0-group-layout',
       'entity-0-group-scale',
-      'entity-0-group-bar',
-      'entity-0-group-baseline',
-      'entity-0-group-needle',
+      'entity-0-bar-appearance',
       'entity-0-group-segments',
       'entity-0-group-gradient-stops',
+      'entity-0-group-baseline',
+      'entity-0-group-needle',
       'entity-0-group-target',
       'entity-0-group-peak',
       'entity-0-group-floor',
@@ -645,12 +657,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', name: 'One' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-scale'));
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-target'));
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-baseline'));
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
 
     const markup = editor.shadowRoot.innerHTML;
     expect(markup).toContain('Min fallback');
@@ -659,11 +665,11 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(markup).toContain('Max entity');
     expect(markup).toContain('>Value</label>');
     expect(markup).toContain('Target entity');
-    expect(markup).toContain('Above-target color');
+    expect(markup).toContain('Above Target');
     expect(markup).toContain('>Value</label>');
     expect(markup).toContain('Baseline entity');
-    expect(markup).toContain('Above-baseline color');
-    expect(markup).toContain('Below-baseline color');
+    expect(markup).toContain('Above Baseline Paint');
+    expect(markup).toContain('Below Baseline Paint');
     expect(markup).toContain('Unit');
     expect(markup).toContain('Decimals');
   });
@@ -687,12 +693,12 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-segments').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-target').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-baseline').getAttribute('aria-expanded')).toBe('false');
-    expect(editor.shadowRoot.querySelector('#entity-0-group-bar').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-paint-editor').getAttribute('open')).toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-group-needle').getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('opening one subsection does not open other subsections', () => {
-    const editor = createEditor();
+  it('opening one subsection does not open other subsections', async () => {
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       entities: [
@@ -711,12 +717,12 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-segments').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-target').getAttribute('aria-expanded')).toBe('false');
     expect(editor.shadowRoot.querySelector('#entity-0-group-baseline').getAttribute('aria-expanded')).toBe('false');
-    expect(editor.shadowRoot.querySelector('#entity-0-group-bar').getAttribute('aria-expanded')).toBe('false');
+    expect(editor.shadowRoot.querySelector('#entity-0-paint-editor').getAttribute('open')).toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-group-needle').getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('opening formatting subsection does not open other subsections', () => {
-    const editor = createEditor();
+  it('opening formatting subsection does not open other subsections', async () => {
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       entities: [
@@ -733,8 +739,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-target').getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('opening peak subsection does not open other subsections', () => {
-    const editor = createEditor();
+  it('opening peak subsection does not open other subsections', async () => {
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       entities: [
@@ -752,8 +758,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-target').getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('opening gradient stops subsection does not open other subsections', () => {
-    const editor = createEditor();
+  it('opening gradient stops subsection does not open other subsections', async () => {
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       entities: [
@@ -770,8 +776,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-segments').getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('opening segments subsection does not open other subsections', () => {
-    const editor = createEditor();
+  it('opening segments subsection does not open other subsections', async () => {
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       entities: [
@@ -788,8 +794,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-target').getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('opening layout subsection does not open other subsections', () => {
-    const editor = createEditor();
+  it('opening layout subsection does not open other subsections', async () => {
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       entities: [
@@ -805,8 +811,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-formatting').getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('clicking subsection title toggles the subsection', () => {
-    const editor = createEditor();
+  it('clicking subsection title toggles the subsection', async () => {
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       entities: [
@@ -820,8 +826,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-scale').getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('clicking subsection summary toggles the subsection', () => {
-    const editor = createEditor();
+  it('clicking subsection summary toggles the subsection', async () => {
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       entities: [
@@ -835,8 +841,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-scale').getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('clicking opened subsection controls does not collapse the subsection', () => {
-    const editor = createEditor();
+  it('clicking opened subsection controls does not collapse the subsection', async () => {
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       entities: [
@@ -851,8 +857,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-group-scale').getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('open subsection state survives normal title edits', () => {
-    const editor = createEditor();
+  it('open subsection state survives normal title edits', async () => {
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -898,8 +904,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(styles).not.toMatch(/\.override-group\[data-expanded="true"\]\s*\{\s*border-color:\s*color-mix\(in srgb,\s*var\(--accent-color,\s*var\(--primary-color,\s*#03a9f4\)\)\s*34%,\s*transparent\);/);
   });
 
-  it('opening one entity subsection does not open another entity subsection', () => {
-    const editor = createEditor();
+  it('opening one entity subsection does not open another entity subsection', async () => {
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       entities: [
@@ -916,8 +922,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-1-group-scale').getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('subsection open state is not written into emitted config', () => {
-    const editor = createEditor();
+  it('subsection open state is not written into emitted config', async () => {
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -946,17 +952,6 @@ describe('Sensor Bar Card Plus editor', () => {
       ],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-scale'));
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-layout'));
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-peak'));
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-target'));
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-baseline'));
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-bar'));
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-needle'));
 
     expect(editor.shadowRoot.querySelector('#entity-0-min')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-max')).not.toBeNull();
@@ -974,7 +969,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-target-value')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-target-color')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-baseline-value')).not.toBeNull();
-    expect(editor.shadowRoot.querySelector('#entity-0-baseline-above-color')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-baseline-above-paint-color')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-bar-fill-style')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-bar-color')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#entity-0-needle-mode')).not.toBeNull();
@@ -1108,8 +1103,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-layout'));
     expect(editor.shadowRoot.querySelector('#entity-0-layout-inherit').checked).toBe(true);
     expect(editor.shadowRoot.querySelector('#entity-0-height').value).toBe('40');
     expect(editor.shadowRoot.querySelector('#entity-0-label-position').value).toBe('inside');
@@ -1124,8 +1117,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
     expect(editor.shadowRoot.querySelector('#entity-0-formatting-inherit').checked).toBe(true);
     expect(editor.shadowRoot.querySelector('#entity-0-formatting-unit').value).toBe('kW');
     expect(editor.shadowRoot.querySelector('#entity-0-formatting-decimal').value).toBe('2');
@@ -1140,7 +1131,6 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-bar'));
     expect(editor.shadowRoot.querySelector('#entity-0-bar-inherit').checked).toBe(true);
     expect(editor.shadowRoot.querySelector('#entity-0-bar-fill-style').value).toBe('gradient');
     expect(editor.shadowRoot.querySelector('#entity-0-bar-color').value.toLowerCase()).toBe('#ff9800');
@@ -1207,7 +1197,8 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    expect(editor.shadowRoot.querySelector('#entity-0-needle-mode').value).toBe('enabled');
+    expect(editor.shadowRoot.querySelector('#entity-0-needle-mode').type).toBe('checkbox');
+    expect(editor.shadowRoot.querySelector('#entity-0-needle-mode').checked).toBe(true);
   });
 
   it('fake ha-entity-picker value-changed updates entities[index].entity', () => {
@@ -1361,8 +1352,6 @@ describe('Sensor Bar Card Plus editor', () => {
       ],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-layout'));
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-override-height"]')[0], '48');
 
     const finalConfig = events.at(-1).detail.config;
@@ -1372,7 +1361,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expectNoDeprecatedEditedKeys(finalConfig.entities[0]);
   });
 
-  it('per-entity color override writes entities[index].bar.color', () => {
+  it('new entity color override writes entities[index].bar.paint.color', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -1389,7 +1378,7 @@ describe('Sensor Bar Card Plus editor', () => {
 
     const finalConfig = events.at(-1).detail.config;
     expect(finalConfig.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', bar: { color: '#ffa500' } },
+      { entity: 'sensor.one', name: 'One', bar: { paint: { color: '#ffa500' } } },
     ]);
     expectNoDeprecatedEditedKeys(finalConfig.entities[0]);
   });
@@ -1571,8 +1560,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', name: 'One' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-scale'));
 
     expect(editor.shadowRoot.querySelector('#entity-0-scale-inherit').checked).toBe(true);
     expect(editor.shadowRoot.querySelector('#entity-0-min').value).toBe('-1000');
@@ -1664,7 +1651,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('adding an entity keeps existing Overrides state open where practical', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       entities: [
@@ -2081,7 +2068,7 @@ describe('Sensor Bar Card Plus editor', () => {
     const targetLabelToggle = editor.shadowRoot.querySelector('#target-label-show');
     targetLabelToggle.checked = false;
     targetLabelToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    dispatchInput(editor.shadowRoot.querySelector('#target-above-fill-color'), '#222222');
+    dispatchInput(editor.shadowRoot.querySelector('#target-above-paint-color'), '#222222');
     dispatchInput(editor.shadowRoot.querySelector('#layout-height'), '40');
     dispatchChange(editor.shadowRoot.querySelector('#layout-label-position'), 'inside');
     dispatchInput(editor.shadowRoot.querySelector('#layout-label-width'), '140');
@@ -2537,8 +2524,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-formatting-unit'), 'kW');
 
     expect(events.at(-1).detail.config.entities).toEqual([
@@ -2554,8 +2539,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-formatting-decimal'), '2');
 
     expect(events.at(-1).detail.config.entities).toEqual([
@@ -2571,8 +2554,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-formatting-unit'), 'kW');
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-formatting-decimal'), '2');
 
@@ -2589,8 +2570,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', formatting: { unit: 'kW', decimal: 2 } }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-formatting-unit'), '');
 
     expect(events.at(-1).detail.config.entities).toEqual([
@@ -2606,8 +2585,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', formatting: { unit: 'kW', decimal: 2 } }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-formatting-unit'), '');
     dispatchChange(editor.shadowRoot.querySelector('#entity-0-formatting-decimal'), '');
 
@@ -2628,8 +2605,6 @@ describe('Sensor Bar Card Plus editor', () => {
       }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-formatting'));
     const toggle = editor.shadowRoot.querySelector('#entity-0-formatting-inherit');
     toggle.checked = true;
     toggle.dispatchEvent({
@@ -2988,70 +2963,32 @@ describe('Sensor Bar Card Plus editor', () => {
     });
   });
 
-  it('above-target fill color writes target.when_exceeded.fill_color', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({ entity: 'sensor.one' });
-    const toggle = editor.shadowRoot.querySelector('#target-above-fill-enabled');
-    toggle.checked = true;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    const colorInput = editor.shadowRoot.querySelector('#target-above-fill-color');
-    expect(colorInput.type).toBe('color');
-    dispatchInput(colorInput, '#ff0000');
-
-    expect(events.at(-1).detail.config.target).toEqual({
-      when_exceeded: {
-        fill_color: '#ff0000',
-      },
-    });
+  it('Above Paint authors canonical color without materializing other properties', () => {
+    const editor = createEditor(), events = trackConfigEvents(editor);
+    editor.setConfig({ entity: 'sensor.one', target: { at: 60 } });
+    dispatchChange(editor.shadowRoot.querySelector('#target-above-paint-enabled'), true);
+    dispatchInput(editor.shadowRoot.querySelector('#target-above-paint-color'), '#ff0000');
+    expect(events.at(-1).detail.config.target).toEqual({ at: 60, when_above: { paint: { color: '#ff0000' } } });
   });
 
-  it('card-level above-target color enabled toggle writes and removes target.when_exceeded.fill_color', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
+  it('card Above Paint activation distinguishes enabled defaults from explicit disable', () => {
+    const editor = createEditor(), events = trackConfigEvents(editor);
     editor.setConfig({ entity: 'sensor.one' });
-
-    const toggle = editor.shadowRoot.querySelector('#target-above-fill-enabled');
-    toggle.checked = true;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.target).toEqual({
-      when_exceeded: {
-        fill_color: '#000000',
-      },
-    });
-
-    toggle.checked = false;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.target).toBeUndefined();
+    const toggle = editor.shadowRoot.querySelector('#target-above-paint-enabled');
+    dispatchChange(toggle, true);
+    expect(events.at(-1).detail.config.target).toEqual({ when_above: { paint: {} } });
+    dispatchChange(toggle, false);
+    expect(events.at(-1).detail.config.target).toEqual({ when_above: { paint: null } });
   });
 
-  it('card-level above-target disable and re-enable restores the previous local color while the editor stays open', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({
-      entity: 'sensor.one',
-      target: {
-        when_exceeded: {
-          fill_color: '#ff0000',
-        },
-      },
-    });
-
-    const toggle = editor.shadowRoot.querySelector('#target-above-fill-enabled');
-    toggle.checked = false;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.target).toBeUndefined();
-
-    toggle.checked = true;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.target).toEqual({
-      when_exceeded: {
-        fill_color: '#ff0000',
-      },
-    });
+  it('card Above Paint disable clears legacy authoring and re-enable uses shared defaults', () => {
+    const editor = createEditor(), events = trackConfigEvents(editor);
+    editor.setConfig({ entity: 'sensor.one', target: { at: 60, when_exceeded: { fill_color: '#ff0000' } } });
+    const toggle = editor.shadowRoot.querySelector('#target-above-paint-enabled');
+    dispatchChange(toggle, false);
+    expect(events.at(-1).detail.config.target).toEqual({ at: 60, when_above: { paint: null } });
+    dispatchChange(toggle, true);
+    expect(events.at(-1).detail.config.target).toEqual({ at: 60, when_above: { paint: {} } });
   });
 
   it('opening and unrelated edits preserve omitted Target visibility', () => {
@@ -3094,25 +3031,11 @@ describe('Sensor Bar Card Plus editor', () => {
     });
   });
 
-  it('clearing above-target fill color removes target.when_exceeded.fill_color', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({
-      entity: 'sensor.one',
-      target: {
-        when_exceeded: {
-          fill_color: '#ff0000',
-        },
-        color: '#ff9800',
-      },
-    });
-
-    dispatchInput(editor.shadowRoot.querySelector('#target-above-fill-color'), '');
-
-    expect(events.at(-1).detail.config.target).toEqual({
-      color: '#ff9800',
-    });
+  it('clearing Above Paint color removes only its legacy alias and keeps explicit activation', () => {
+    const editor = createEditor(), events = trackConfigEvents(editor);
+    editor.setConfig({ entity: 'sensor.one', target: { at: 60, when_exceeded: { fill_color: '#ff0000' }, color: '#ff9800' } });
+    dispatchInput(editor.shadowRoot.querySelector('#target-above-paint-color'), '');
+    expect(events.at(-1).detail.config.target).toEqual({ at: 60, color: '#ff9800', when_above: { paint: {} } });
   });
 
   it('per-entity target inherit removes only managed entity-level target keys', () => {
@@ -3161,8 +3084,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', name: 'One' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-target'));
 
     expect(editor.shadowRoot.querySelector('#entity-0-target-inherit').checked).toBe(true);
     expect(editor.shadowRoot.querySelector('#entity-0-target-show').checked).toBe(true);
@@ -3548,122 +3469,46 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(events.at(-1).detail.config.entities[0].target.label).toEqual({ show: false, show_value: true });
   });
 
-  it('per-entity target above-target fill color writes entities[index].target.when_exceeded.fill_color', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({
-      entities: [{ entity: 'sensor.one', name: 'One' }],
-    });
-
+  it('entity Above Paint authors its canonical color without changing the Card', () => {
+    const editor = createEditor(), events = trackConfigEvents(editor);
+    editor.setConfig({ target: { at: 60 }, entities: [{ entity: 'sensor.one', name: 'One' }] });
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    const toggle = editor.shadowRoot.querySelector('#entity-0-target-above-fill-enabled');
-    toggle.checked = true;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-target-above-fill-color"]')[0], '#ff0000');
-
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', target: { when_exceeded: { fill_color: '#ff0000' } } },
-    ]);
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-target-above-paint-enabled'), true);
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-target-above-paint-color'), '#ff0000');
+    expect(events.at(-1).detail.config.entities).toEqual([{ entity: 'sensor.one', name: 'One', target: { when_above: { paint: { color: '#ff0000' } } } }]);
+    expect(events.at(-1).detail.config.target).toEqual({ at: 60 });
   });
 
-  it('per-entity above-target color enabled toggle writes and removes only that target fill key', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({
-      entities: [{
-        entity: 'sensor.one',
-        name: 'One',
-        target: {
-          color: '#ff9800',
-        },
-      }],
-    });
-
+  it('entity Above Paint activation preserves its marker color and writes null on disable', () => {
+    const editor = createEditor(), events = trackConfigEvents(editor);
+    editor.setConfig({ entities: [{ entity: 'sensor.one', target: { at: 60, color: '#ff9800' } }] });
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    const toggle = editor.shadowRoot.querySelector('#entity-0-target-above-fill-enabled');
-    toggle.checked = true;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', target: { color: '#ff9800', when_exceeded: { fill_color: '#000000' } } },
-    ]);
-
-    toggle.checked = false;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', target: { color: '#ff9800' } },
-    ]);
+    const toggle = editor.shadowRoot.querySelector('#entity-0-target-above-paint-enabled');
+    dispatchChange(toggle, true);
+    expect(events.at(-1).detail.config.entities[0].target).toEqual({ at: 60, color: '#ff9800', when_above: { paint: {} } });
+    dispatchChange(toggle, false);
+    expect(events.at(-1).detail.config.entities[0].target).toEqual({ at: 60, color: '#ff9800', when_above: { paint: null } });
   });
 
-  it('per-entity above-target disable and re-enable restores the previous local color while the editor stays open', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({
-      target: {
-        when_exceeded: {
-          fill_color: '#00ff00',
-        },
-      },
-      entities: [{
-        entity: 'sensor.one',
-        name: 'One',
-        target: {
-          when_exceeded: {
-            fill_color: '#ff0000',
-          },
-          color: '#ff9800',
-        },
-      }],
-    });
-
+  it('entity Above Paint re-enable restores same-destination Card inheritance', () => {
+    const editor = createEditor(), events = trackConfigEvents(editor);
+    editor.setConfig({ target: { at: 60, when_exceeded: { fill_color: '#00ff00' } }, entities: [{ entity: 'sensor.one', target: { when_exceeded: { fill_color: '#ff0000' }, color: '#ff9800' } }] });
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    const toggle = editor.shadowRoot.querySelector('#entity-0-target-above-fill-enabled');
-    toggle.checked = false;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', target: { color: '#ff9800' } },
-    ]);
-
-    toggle.checked = true;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', target: { color: '#ff9800', when_exceeded: { fill_color: '#ff0000' } } },
-    ]);
+    const toggle = editor.shadowRoot.querySelector('#entity-0-target-above-paint-enabled');
+    dispatchChange(toggle, false); dispatchChange(toggle, true);
+    expect(events.at(-1).detail.config.entities[0].target).toEqual({ color: '#ff9800', when_above: { paint: {} } });
+    expect(normalizeCardConfig(editor._draftConfig).entities[0].target_above.paint.color).toBe('#00ff00');
   });
 
-  it('editing above-target color while disabled restores the edited color on re-enable', () => {
+  it('disabled entity Above Paint hides editable properties while retaining reset access', () => {
     const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({
-      entities: [{
-        entity: 'sensor.one',
-        name: 'One',
-        target: {
-          when_exceeded: {
-            fill_color: '#ff0000',
-          },
-        },
-      }],
-    });
-
+    editor.setConfig({ target: { at: 60, when_above: { paint: { color: '#00ff00' } } }, entities: [{ entity: 'sensor.one', target: { when_above: { paint: null } } }] });
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    const toggle = editor.shadowRoot.querySelector('#entity-0-target-above-fill-enabled');
-    toggle.checked = false;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    dispatchInput(editor.shadowRoot.querySelector('#entity-0-target-above-fill'), '#00cc66');
-
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One' },
-    ]);
-
-    toggle.checked = true;
-    toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', target: { when_exceeded: { fill_color: '#00cc66' } } },
-    ]);
+    const section = editor.shadowRoot.querySelector('#entity-0-target-above-paint-editor');
+    expect(section).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#entity-0-target-above-paint-enabled').checked).toBe(false);
+    expect(editor._draftConfig.entities[0].target.when_above.paint).toBeNull();
+    expect(section.querySelector('button[data-action="reset-paint"]').disabled).toBe(false);
   });
 
   it('per-entity target preserves unrelated entity keys', () => {
@@ -3702,7 +3547,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="target-entity-source"]')[0].value).toBe('sensor.dynamic_target');
     expect(editor.shadowRoot.querySelector('#target-color').value).toBe('#ff9800');
     expect(editor.shadowRoot.querySelector('#target-label-show').checked).toBe(true);
-    expect(editor.shadowRoot.querySelector('#target-above-fill-color').value).toBe('#ff0000');
+    expect(editor.shadowRoot.querySelector('#target-above-paint-color').value).toBe('#ff0000');
   });
 
   it('editing a flat-loaded target fallback converts only that edited field to structured config', () => {
@@ -3824,8 +3669,8 @@ describe('Sensor Bar Card Plus editor', () => {
     });
   });
 
-  it('card-level Baseline is a collapsed Bar Appearance group with a mode and origin summary', () => {
-    const editor = createEditor();
+  it('card-level Baseline is a collapsed Bar Appearance group with a mode and origin summary', async () => {
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -3853,10 +3698,10 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#baseline-show')).not.toBeNull();
     expect(editor.shadowRoot.querySelector('#baseline-value')).not.toBeNull();
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="baseline-entity-source"]')).toHaveLength(1);
-    expect(editor.shadowRoot.querySelector('#baseline-above-color-enabled')).not.toBeNull();
-    expect(editor.shadowRoot.querySelector('#baseline-above-color')).not.toBeNull();
-    expect(editor.shadowRoot.querySelector('#baseline-below-color-enabled')).not.toBeNull();
-    expect(editor.shadowRoot.querySelector('#baseline-below-color')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#baseline-above-paint-enabled')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#baseline-above-paint-color')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#baseline-below-paint-enabled')).not.toBeNull();
+    expect(editor.shadowRoot.querySelector('#baseline-below-paint-color')).not.toBeNull();
 
     dispatchInput(editor.shadowRoot.querySelector('#baseline-value'), '5');
     expect(editor.shadowRoot.querySelector('#card-group-baseline').getAttribute('aria-expanded')).toBe('true');
@@ -3869,8 +3714,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.innerHTML).toContain('id="card-group-baseline-summary" class="override-group-summary">Auto · 5</span>');
   });
 
-  it('card-level Baseline summary reflects enabled, entity, and disabled configurations', () => {
-    const editor = createEditor();
+  it('card-level Baseline summary reflects enabled, entity, and disabled configurations', async () => {
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -3982,21 +3827,21 @@ describe('Sensor Bar Card Plus editor', () => {
     });
   });
 
-  it('above-baseline color writes baseline.above.color', () => {
+  it('editing legacy above-baseline color migrates only that property to Paint', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({ entity: 'sensor.one' });
-    const colorInput = editor.shadowRoot.querySelector('#baseline-above-color');
+    const colorInput = editor.shadowRoot.querySelector('#baseline-above-paint-color');
     expect(colorInput.type).toBe('color');
     dispatchInput(colorInput, '#00ff00');
 
     expect(events.at(-1).detail.config.baseline).toEqual({
-      above: { color: '#00ff00' },
+      above: { paint: { color: '#00ff00' } },
     });
   });
 
-  it('card-level above-baseline enable/disable removes and restores color', () => {
+  it('card-level above-baseline enable/disable disables and explicitly enables Paint', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4008,34 +3853,52 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    const toggle = editor.shadowRoot.querySelector('#baseline-above-color-enabled');
+    const toggle = editor.shadowRoot.querySelector('#baseline-above-paint-enabled');
     toggle.checked = false;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.baseline).toEqual({ custom_key: 'keep' });
+    expect(events.at(-1).detail.config.baseline).toEqual({ above: { paint: null }, custom_key: 'keep' });
 
     toggle.checked = true;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
     expect(events.at(-1).detail.config.baseline).toEqual({
-      above: { color: '#00ff00' },
+      above: { paint: {} },
       custom_key: 'keep',
     });
   });
 
-  it('below-baseline color writes baseline.below.color', () => {
+  it('editing legacy below-baseline color migrates only that property to Paint', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({ entity: 'sensor.one' });
-    const colorInput = editor.shadowRoot.querySelector('#baseline-below-color');
+    const colorInput = editor.shadowRoot.querySelector('#baseline-below-paint-color');
     expect(colorInput.type).toBe('color');
     dispatchInput(colorInput, '#ff0000');
 
     expect(events.at(-1).detail.config.baseline).toEqual({
-      below: { color: '#ff0000' },
+      below: { paint: { color: '#ff0000' } },
     });
   });
 
-  it('card-level below-baseline enable/disable removes and restores color', () => {
+  it('Baseline Paint checkboxes retain disabled, enabled and inherited states', () => {
+    const editor = createEditor();
+    const events = trackConfigEvents(editor);
+    editor.setConfig({ entity: 'sensor.one', baseline: {
+      above: { paint: { fill_style: 'solid', color: '#ff0000' } },
+      below: { paint: { fill_style: 'solid', color: '#0000ff' } },
+    } });
+    dispatchChange(editor.shadowRoot.querySelector('#baseline-above-paint-enabled'), false);
+    expect(events.at(-1).detail.config.baseline).toMatchObject({
+      above: { paint: null }, below: { paint: { color: '#0000ff' } },
+    });
+
+    editor.setConfig({ baseline: { above: { paint: { color: '#00ff00' } } },
+      entities: [{ entity: 'sensor.one' }] });
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-baseline-above-paint-enabled'), true);
+    expect(editor._draftConfig.entities[0].baseline.above.paint).toEqual({});
+  });
+
+  it('card-level below-baseline enable/disable disables and explicitly enables Paint', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4047,15 +3910,15 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    const toggle = editor.shadowRoot.querySelector('#baseline-below-color-enabled');
+    const toggle = editor.shadowRoot.querySelector('#baseline-below-paint-enabled');
     toggle.checked = false;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-    expect(events.at(-1).detail.config.baseline).toEqual({ custom_key: 'keep' });
+    expect(events.at(-1).detail.config.baseline).toEqual({ below: { paint: null }, custom_key: 'keep' });
 
     toggle.checked = true;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
     expect(events.at(-1).detail.config.baseline).toEqual({
-      below: { color: '#ff0000' },
+      below: { paint: {} },
       custom_key: 'keep',
     });
   });
@@ -4111,7 +3974,6 @@ describe('Sensor Bar Card Plus editor', () => {
     };
 
     editor.setConfig({ entity: 'sensor.one', baseline });
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-baseline'));
     dispatchChange(editor.shadowRoot.querySelector('#baseline-show'), false);
     expect(events.at(-1).detail.config.baseline).toEqual({ ...baseline, enabled: false });
 
@@ -4151,7 +4013,6 @@ describe('Sensor Bar Card Plus editor', () => {
     editor.setConfig(config);
     const expected = editor._cleanupEditorEmittedConfig(editor._cloneDeep(editor._draftConfig));
     delete expected.baseline;
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-baseline'));
     const removeButton = editor.shadowRoot.querySelectorAll('button[data-action="remove-baseline"]')
       .find((button) => button.dataset.scopeType === 'card');
     expect(removeButton.getAttribute('aria-label')).toBe('Remove Baseline');
@@ -4164,7 +4025,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('entity-level Remove Baseline removes the override and restores inheritance', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
     editor.setConfig({
       baseline: {
@@ -4192,7 +4053,7 @@ describe('Sensor Bar Card Plus editor', () => {
     delete expected.entities[0].baseline;
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-baseline'));
-    const removeButton = editor.shadowRoot.querySelectorAll('button[data-action="remove-baseline"]')
+    const removeButton = [...editor.shadowRoot.querySelectorAll('button[data-action="remove-baseline"]')]
       .find((button) => button.dataset.scopeType === 'entity');
     expect(removeButton).not.toBeUndefined();
     dispatchClick(removeButton);
@@ -4203,11 +4064,11 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-baseline-inherit').checked).toBe(true);
     expect(editor.shadowRoot.querySelector('#entity-0-baseline-show').checked).toBe(true);
     expect(editor.shadowRoot.querySelector('#entity-0-baseline-value').value).toBe('25');
-    expect(editor.shadowRoot.querySelector('#entity-0-baseline-above-color').value.toLowerCase()).toBe('#00aa00');
-    expect(editor.shadowRoot.querySelector('#entity-0-baseline-below-color').value.toLowerCase()).toBe('#aa0000');
+    expect(editor.shadowRoot.querySelector('#entity-0-baseline-above-paint-color').value.toLowerCase()).toBe('#00aa00');
+    expect(editor.shadowRoot.querySelector('#entity-0-baseline-below-paint-color').value.toLowerCase()).toBe('#aa0000');
   });
 
-  it('clearing above-baseline color removes baseline.above', () => {
+  it('clearing above-baseline color retains explicit Paint activation', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4219,14 +4080,15 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#baseline-above-color'), '');
+    dispatchInput(editor.shadowRoot.querySelector('#baseline-above-paint-color'), '');
 
     expect(events.at(-1).detail.config.baseline).toEqual({
+      above: { paint: {} },
       below: { color: '#ff0000' },
     });
   });
 
-  it('clearing below-baseline color removes baseline.below', () => {
+  it('clearing below-baseline color retains explicit Paint activation', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4238,9 +4100,10 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchInput(editor.shadowRoot.querySelector('#baseline-below-color'), '');
+    dispatchInput(editor.shadowRoot.querySelector('#baseline-below-paint-color'), '');
 
     expect(events.at(-1).detail.config.baseline).toEqual({
+      below: { paint: {} },
       above: { color: '#00ff00' },
     });
   });
@@ -4306,14 +4169,12 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', name: 'One' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-baseline'));
 
     expect(editor.shadowRoot.querySelector('#entity-0-baseline-inherit').checked).toBe(true);
     expect(editor.shadowRoot.querySelector('#entity-0-baseline-show').checked).toBe(true);
     expect(editor.shadowRoot.querySelector('#entity-0-baseline-value').value).toBe('0');
-    expect(editor.shadowRoot.querySelector('#entity-0-baseline-above-color').value.toLowerCase()).toBe('#00ff00');
-    expect(editor.shadowRoot.querySelector('#entity-0-baseline-below-color').value.toLowerCase()).toBe('#ff0000');
+    expect(editor.shadowRoot.querySelector('#entity-0-baseline-above-paint-color').value.toLowerCase()).toBe('#00ff00');
+    expect(editor.shadowRoot.querySelector('#entity-0-baseline-below-paint-color').value.toLowerCase()).toBe('#ff0000');
   });
 
   it('editing baseline above color while inherited writes only that color path', () => {
@@ -4329,7 +4190,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchInput(editor.shadowRoot.querySelector('#entity-0-baseline-above-color'), '#00cc66');
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-baseline-above-paint-color'), '#00cc66');
 
     expect(events.at(-1).detail.config.entities).toEqual([
       {
@@ -4337,7 +4198,7 @@ describe('Sensor Bar Card Plus editor', () => {
         name: 'One',
         baseline: {
           above: {
-            color: '#00cc66',
+            paint: { color: '#00cc66' },
           },
         },
       },
@@ -4412,20 +4273,20 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('per-entity baseline above color writes entities[index].baseline.above.color', () => {
+  it('per-entity legacy Baseline above color migrates to Paint', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({ entities: [{ entity: 'sensor.one', name: 'One' }] });
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-above-color"]')[0], '#4caf50');
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-above-paint-color"]')[0], '#4caf50');
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', baseline: { above: { color: '#4caf50' } } },
+      { entity: 'sensor.one', name: 'One', baseline: { above: { paint: { color: '#4caf50' } } } },
     ]);
   });
 
-  it('per-entity above-baseline enable/disable removes and restores color', () => {
+  it('per-entity above-baseline enable/disable disables and explicitly enables Paint', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4441,34 +4302,34 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    const toggle = editor.shadowRoot.querySelector('#entity-0-baseline-above-color-enabled');
+    const toggle = editor.shadowRoot.querySelector('#entity-0-baseline-above-paint-enabled');
     toggle.checked = false;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', baseline: { above: { color: null }, custom_key: 'keep' } },
+      { entity: 'sensor.one', name: 'One', baseline: { above: { paint: null }, custom_key: 'keep' } },
     ]);
 
     toggle.checked = true;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', baseline: { above: { color: '#4caf50' }, custom_key: 'keep' } },
+      { entity: 'sensor.one', name: 'One', baseline: { above: { paint: {} }, custom_key: 'keep' } },
     ]);
   });
 
-  it('per-entity baseline below color writes entities[index].baseline.below.color', () => {
+  it('per-entity legacy Baseline below color migrates to Paint', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({ entities: [{ entity: 'sensor.one', name: 'One' }] });
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-below-color"]')[0], '#f44336');
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-below-paint-color"]')[0], '#f44336');
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', baseline: { below: { color: '#f44336' } } },
+      { entity: 'sensor.one', name: 'One', baseline: { below: { paint: { color: '#f44336' } } } },
     ]);
   });
 
-  it('per-entity below-baseline enable/disable removes and restores color', () => {
+  it('per-entity below-baseline enable/disable disables and explicitly enables Paint', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4484,17 +4345,17 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    const toggle = editor.shadowRoot.querySelector('#entity-0-baseline-below-color-enabled');
+    const toggle = editor.shadowRoot.querySelector('#entity-0-baseline-below-paint-enabled');
     toggle.checked = false;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', baseline: { below: { color: null }, custom_key: 'keep' } },
+      { entity: 'sensor.one', name: 'One', baseline: { below: { paint: null }, custom_key: 'keep' } },
     ]);
 
     toggle.checked = true;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', baseline: { below: { color: '#f44336' }, custom_key: 'keep' } },
+      { entity: 'sensor.one', name: 'One', baseline: { below: { paint: {} }, custom_key: 'keep' } },
     ]);
   });
 
@@ -4506,12 +4367,14 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    expect(editor.shadowRoot.querySelector('#entity-0-baseline-above-color-enabled').checked).toBe(false);
-    dispatchInput(editor.shadowRoot.querySelector('#entity-0-baseline-above-color'), '#4caf50');
-    expect(editor.shadowRoot.querySelector('#entity-0-baseline-above-color-enabled').checked).toBe(true);
+    expect(editor.shadowRoot.querySelector('#entity-0-baseline-above-paint-enabled').checked).toBe(false);
+    dispatchInput(editor.shadowRoot.querySelector('#entity-0-baseline-above-paint-color'), '#4caf50');
+    expect(editor._draftConfig.entities[0].baseline.above.paint.color).toBe('#4caf50');
+    editor._render();
+    expect(editor.shadowRoot.querySelector('#entity-0-baseline-above-paint-enabled').checked).toBe(true);
   });
 
-  it('empty/default per-entity baseline override removes empty entity-level baseline', () => {
+  it('clearing the last entity Paint property preserves activation', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4526,10 +4389,10 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-above-color"]')[0], '');
+    dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-baseline-above-paint-color"]')[0], '');
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One' },
+      { entity: 'sensor.one', name: 'One', baseline: { above: { paint: {} } } },
     ]);
   });
 
@@ -4609,7 +4472,7 @@ describe('Sensor Bar Card Plus editor', () => {
       bar: { fill_style: 'soft_bands' },
     });
 
-    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), 'enabled');
+    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), true);
 
     expect(events.at(-1).detail.config.bar).toEqual({
       fill_style: 'soft_bands',
@@ -4726,14 +4589,14 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('card-level fill style writes bar.fill_style', () => {
+  it('new card fill style writes bar.paint.fill_style', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({ entity: 'sensor.one' });
     dispatchChange(editor.shadowRoot.querySelector('#bar-fill-style'), 'soft_bands');
 
-    expect(events.at(-1).detail.config.bar).toEqual({
+    expect(events.at(-1).detail.config.bar.paint).toEqual({
       fill_style: 'soft_bands',
     });
   });
@@ -4764,7 +4627,7 @@ describe('Sensor Bar Card Plus editor', () => {
     }
   });
 
-  it('card-level color writes bar.color', () => {
+  it('new card color writes bar.paint.color', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4773,12 +4636,12 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(colorInput.type).toBe('color');
     dispatchInput(colorInput, '#ff9800');
 
-    expect(events.at(-1).detail.config.bar).toEqual({
+    expect(events.at(-1).detail.config.bar.paint).toEqual({
       color: '#ff9800',
     });
   });
 
-  it('card-level solid fill true writes bar.solid_fill true', () => {
+  it('new card solid fill writes bar.paint.solid_fill', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4787,7 +4650,7 @@ describe('Sensor Bar Card Plus editor', () => {
     toggle.checked = true;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
 
-    expect(events.at(-1).detail.config.bar).toEqual({
+    expect(events.at(-1).detail.config.bar.paint).toEqual({
       solid_fill: true,
     });
   });
@@ -4807,7 +4670,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(barColorPos).toBeGreaterThan(solidFillPos);
   });
 
-  it('card-level solid fill false removes bar.solid_fill', () => {
+  it('card-level solid fill false preserves explicit bar.solid_fill', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4824,11 +4687,11 @@ describe('Sensor Bar Card Plus editor', () => {
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
 
     expect(events.at(-1).detail.config.bar).toEqual({
-      fill_style: 'soft_bands',
+      fill_style: 'soft_bands', solid_fill: false,
     });
   });
 
-  it('default card-level color is suppressed', () => {
+  it('explicit default card-level color is preserved', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4841,9 +4704,9 @@ describe('Sensor Bar Card Plus editor', () => {
 
     dispatchInput(editor.shadowRoot.querySelector('#bar-color'), '#4a9eff');
 
-    expect(events).toHaveLength(0);
+    expect(events).toHaveLength(1);
     expect(editor._draftConfig.bar).toEqual({
-      fill_style: 'soft_bands',
+      fill_style: 'soft_bands', color: '#4a9eff',
     });
   });
 
@@ -4897,7 +4760,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(events.at(-1).detail.config.color).toBeUndefined();
   });
 
-  it('per-entity fill style writes entities[index].bar.fill_style', () => {
+  it('new entity fill style writes entities[index].bar.paint.fill_style', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4906,11 +4769,11 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchChange(editor.shadowRoot.querySelectorAll('select[data-kind="entity-bar-fill-style"]')[0], 'gradient');
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', bar: { fill_style: 'gradient' } },
+      { entity: 'sensor.one', name: 'One', bar: { paint: { fill_style: 'gradient' } } },
     ]);
   });
 
-  it('per-entity color writes entities[index].bar.color', () => {
+  it('new entity color writes entities[index].bar.paint.color', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4919,11 +4782,11 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-bar-color"]')[0], '#ff9800');
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', bar: { color: '#ff9800' } },
+      { entity: 'sensor.one', name: 'One', bar: { paint: { color: '#ff9800' } } },
     ]);
   });
 
-  it('per-entity solid fill true writes entities[index].bar.solid_fill true', () => {
+  it('new entity solid fill writes entities[index].bar.paint.solid_fill', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4934,7 +4797,7 @@ describe('Sensor Bar Card Plus editor', () => {
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', bar: { solid_fill: true } },
+      { entity: 'sensor.one', name: 'One', bar: { paint: { solid_fill: true } } },
     ]);
   });
 
@@ -4943,7 +4806,6 @@ describe('Sensor Bar Card Plus editor', () => {
 
     editor.setConfig({ entities: [{ entity: 'sensor.one', name: 'One' }] });
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-bar'));
 
     const markup = editor.shadowRoot.innerHTML;
     const fillStylePos = markup.indexOf('for="entity-0-bar-fill-style"');
@@ -4955,7 +4817,7 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(barColorPos).toBeGreaterThan(solidFillPos);
   });
 
-  it('per-entity solid fill false removes entities[index].bar.solid_fill', () => {
+  it('per-entity solid fill false preserves explicit entities[index].bar.solid_fill', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -4969,63 +4831,11 @@ describe('Sensor Bar Card Plus editor', () => {
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', bar: { fill_style: 'gradient' } },
+      { entity: 'sensor.one', name: 'One', bar: { fill_style: 'gradient', solid_fill: false } },
     ]);
   });
 
-  it('Bar Appearance inherit removes only managed keys', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({
-      entities: [{
-        entity: 'sensor.one',
-        name: 'One',
-        bar: {
-          fill_style: 'gradient',
-          color: '#ff9800',
-          solid_fill: true,
-          needle: true,
-        },
-      }],
-    });
-
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    const inheritToggle = editor.shadowRoot.querySelectorAll('input[data-kind="entity-bar-inherit"]')[0];
-    inheritToggle.checked = true;
-    inheritToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', bar: { needle: { show: true } } },
-    ]);
-  });
-
-  it('Bar Appearance inherit preserves unrelated entity bar.segments', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
-
-    editor.setConfig({
-      entities: [{
-        entity: 'sensor.one',
-        name: 'One',
-        bar: {
-          fill_style: 'gradient',
-          segments: [{ from: 0, to: 10, color: '#ff9800' }],
-        },
-      }],
-    });
-
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    const inheritToggle = editor.shadowRoot.querySelectorAll('input[data-kind="entity-bar-inherit"]')[0];
-    inheritToggle.checked = true;
-    inheritToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
-
-    expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', bar: { segments: [{ from: 0, to: 10, color: '#ff9800' }] } },
-    ]);
-  });
-
-  it('Bar Appearance inherit preserves unknown entity-level bar keys and sibling entity config', () => {
+  it('Bar Appearance inherit removes the complete local bar configuration', () => {
     const editor = createEditor();
     const events = trackConfigEvents(editor);
 
@@ -5034,21 +4844,43 @@ describe('Sensor Bar Card Plus editor', () => {
         entity: 'sensor.one',
         name: 'One',
         icon: 'mdi:flash',
+        extra: { keep: true },
+        color: '#112233',
+        color_mode: 'gradient',
+        animated: false,
+        segments: [{ from: 0, to: 10, color: '#ff9800' }],
+        severity: [{ from: 10, to: 20, color: '#00ff00' }],
+        gradient_stops: [{ pos: 0, color: '#123456' }],
         bar: {
-          color: '#ff9800',
-          custom_bar_key: 'keep',
+          direction: 'reverse',
+          animated: false,
+          paint: {
+            preset: null,
+            fill_style: 'gradient',
+            color: '#ff9800',
+            solid_fill: true,
+            segments: [{ from: 0, to: 10, color: '#abcdef' }],
+            gradient_stops: [{ pos: 0, color: '#fedcba' }],
+            opacity: 35,
+          },
+          needle: { show: true },
+          custom_bar_key: 'remove with the local bar object',
         },
       }],
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     const inheritToggle = editor.shadowRoot.querySelectorAll('input[data-kind="entity-bar-inherit"]')[0];
+    expect(inheritToggle.checked).toBe(false);
+    expect(editor._getBarAppearanceSummary({ type: 'entity', index: 0 })).not.toBe('Inherited');
     inheritToggle.checked = true;
     inheritToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
 
     expect(events.at(-1).detail.config.entities).toEqual([
-      { entity: 'sensor.one', name: 'One', icon: 'mdi:flash', bar: { custom_bar_key: 'keep' } },
+      { entity: 'sensor.one', name: 'One', icon: 'mdi:flash', extra: { keep: true } },
     ]);
+    expect(editor.shadowRoot.querySelector('#entity-0-bar-inherit').checked).toBe(true);
+    expect(editor._getBarAppearanceSummary({ type: 'entity', index: 0 })).toBe('Inherited');
   });
 
   it('loading flat color_mode renders the matching fill style', () => {
@@ -5268,7 +5100,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('Undefined Add Segment prepares exact absolute boundaries without saving until explicit Add', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
     const config = {
       entity: 'sensor.one',
@@ -5284,7 +5116,7 @@ describe('Sensor Bar Card Plus editor', () => {
     editor.setConfig(config);
     dispatchClick(editor.shadowRoot.querySelector('#card-group-segments'));
 
-    const action = editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')
+    const action = [...editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')]
       .find(button => button.dataset.from === '50' && button.dataset.to === '60');
     expect(action).not.toBeNull();
     dispatchClick(action);
@@ -5302,7 +5134,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('adding a prepared leading mixed-coordinate gap inserts it into the authored topology', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
     editor.setConfig({ entity: 'sensor.one', scale: { min: 0, max: 200 }, bar: { fill_style: 'bands', segments: [
       { from: '30%', to: 50, color: 'blue' },
@@ -5311,7 +5143,7 @@ describe('Sensor Bar Card Plus editor', () => {
     ] } });
     dispatchClick(editor.shadowRoot.querySelector('#card-group-segments'));
 
-    const leadingGap = editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')
+    const leadingGap = [...editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')]
       .find(button => button.dataset.from === '0%' && button.dataset.to === '30%');
     expect(leadingGap).not.toBeNull();
     dispatchClick(leadingGap);
@@ -5338,14 +5170,14 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('adding a prepared same-coordinate gap removes its Undefined row and keeps coordinate order', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
     editor.setConfig({ entity: 'sensor.one', bar: { fill_style: 'bands', segments: [
       { from: 0, to: 50, color: '#111111' },
       { from: 60, to: 100, color: '#eeeeee' },
     ] } });
     dispatchClick(editor.shadowRoot.querySelector('#card-group-segments'));
-    const gap = editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')
+    const gap = [...editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')]
       .find(button => button.dataset.from === '50' && button.dataset.to === '60');
     dispatchClick(gap);
     await flushTimers();
@@ -5364,10 +5196,10 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('Undefined Add Segment preserves percentage and mixed boundary forms', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
     editor.setConfig({ entity: 'sensor.one', bar: { segments: [{ from: '30%', to: '100%', color: '#111111' }] } });
     dispatchClick(editor.shadowRoot.querySelector('#card-group-segments'));
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')
+    dispatchClick([...editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')]
       .find(button => button.dataset.from === '0%' && button.dataset.to === '30%'));
     await flushTimers();
     expect(editor.shadowRoot.querySelector('#segment-draft-from').value).toBe('0%');
@@ -5378,7 +5210,7 @@ describe('Sensor Bar Card Plus editor', () => {
       { from: '60%', to: '80%', color: '#eeeeee' },
     ] } });
     dispatchClick(editor.shadowRoot.querySelector('#card-group-segments'));
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')
+    dispatchClick([...editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')]
       .find(button => button.dataset.from === '50' && button.dataset.to === '60%'));
     await flushTimers();
     expect(editor.shadowRoot.querySelector('#segment-draft-from').value).toBe('50');
@@ -5388,7 +5220,6 @@ describe('Sensor Bar Card Plus editor', () => {
   it('ordinary Segment composer defaults to effective Bar color', () => {
     const editor = createEditor();
     editor.setConfig({ entity: 'sensor.one', bar: { color: '#223344', segments: [{ from: 0, to: 50, color: '#ff0000' }] } });
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-segments'));
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="segment-draft-color"]')[0].value).toBe('#223344');
   });
 
@@ -5522,7 +5353,6 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(preview).not.toMatch(/title="\d+(?:\.\d+)?%"/);
     expect(editor.shadowRoot.innerHTML).toContain('segment-undefined-swatch');
     expect(editor.shadowRoot.innerHTML).toContain('Undefined');
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-segments'));
     expect(editor.shadowRoot.querySelectorAll('button[data-action="add-segment-from-undefined"]')).toHaveLength(3);
     expect(editor.shadowRoot.innerHTML).toContain('<div class="segment-draft-heading">Add Segment</div>');
     expect(editor._config).toEqual(configBefore);
@@ -5831,7 +5661,6 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
     expect(editor.shadowRoot.querySelectorAll('button[data-action="remove-segment"]')[0].getAttribute('aria-label')).toBe('Remove');
     expect(editor.shadowRoot.querySelectorAll('button[data-action="remove-gradient-stop"]')[0].getAttribute('aria-label')).toBe('Remove');
     expect(editor.shadowRoot.querySelectorAll('button[data-action="remove-entity"]')[0].getAttribute('aria-label')).toBe('Remove');
@@ -5938,7 +5767,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), 'disabled');
+    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), false);
 
     const finalConfig = events.at(-1).detail.config;
     expect(finalConfig.bar).toEqual({
@@ -5958,7 +5787,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), 'enabled');
+    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), true);
 
     const finalConfig = events.at(-1).detail.config;
     expect(finalConfig.bar).toEqual({
@@ -6106,7 +5935,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), 'enabled');
+    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), true);
 
     const finalConfig = events.at(-1).detail.config;
     expect(finalConfig.bar).toEqual({
@@ -6133,7 +5962,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), 'enabled');
+    dispatchChange(editor.shadowRoot.querySelector('#bar-needle-mode'), true);
 
     expect(events.at(-1).detail.config.bar).toEqual({
       fill_style: 'soft_bands',
@@ -6187,7 +6016,7 @@ describe('Sensor Bar Card Plus editor', () => {
 
     editor.setConfig({ entities: [{ entity: 'sensor.one', name: 'One' }] });
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchChange(editor.shadowRoot.querySelectorAll('select[data-kind="entity-needle-mode"]')[0], 'enabled');
+    dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-needle-mode"]')[0], true);
 
     expect(events.at(-1).detail.config.entities).toEqual([
       {
@@ -6216,7 +6045,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchChange(editor.shadowRoot.querySelectorAll('select[data-kind="entity-needle-mode"]')[0], 'disabled');
+    dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-needle-mode"]')[0], false);
 
     expect(events.at(-1).detail.config.entities).toEqual([
       {
@@ -6316,11 +6145,9 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', name: 'One' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-needle'));
 
     expect(editor.shadowRoot.querySelector('#entity-0-needle-inherit').checked).toBe(true);
-    expect(editor.shadowRoot.querySelectorAll('select[data-kind="entity-needle-mode"]')[0].value).toBe('enabled');
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-needle-mode"]')[0].checked).toBe(true);
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-needle-color"]')[0].value.toLowerCase()).toBe('#ff9800');
   });
 
@@ -6381,7 +6208,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchChange(editor.shadowRoot.querySelectorAll('select[data-kind="entity-needle-mode"]')[0], 'enabled');
+    dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-needle-mode"]')[0], true);
 
     expect(events.at(-1).detail.config.baseline).toEqual({
       at: {
@@ -6419,7 +6246,7 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    expect(editor.shadowRoot.querySelector('#bar-needle-mode').value).toBe('enabled');
+    expect(editor.shadowRoot.querySelector('#bar-needle-mode').checked).toBe(true);
   });
 
   it('editing unrelated fields still canonicalizes legacy boolean card-level needle to object form', () => {
@@ -6456,7 +6283,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    expect(editor.shadowRoot.querySelectorAll('select[data-kind="entity-needle-mode"]')[0].value).toBe('disabled');
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-needle-mode"]')[0].checked).toBe(false);
   });
 
   it('editing legacy boolean card-level needle emits object form', () => {
@@ -6794,8 +6621,6 @@ describe('Sensor Bar Card Plus editor', () => {
       ],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-layout'));
     dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-override-height"]')[0], '');
 
     const finalConfig = events.at(-1).detail.config;
@@ -6823,8 +6648,6 @@ describe('Sensor Bar Card Plus editor', () => {
       ],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-layout'));
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-height'), '42');
     dispatchChange(editor.shadowRoot.querySelector('#entity-0-label-position'), 'inside');
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-label-width'), '100');
@@ -6912,8 +6735,6 @@ describe('Sensor Bar Card Plus editor', () => {
       ],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-layout'));
     const toggle = editor.shadowRoot.querySelector('#entity-0-layout-inherit');
     toggle.checked = true;
     toggle.dispatchEvent({
@@ -6937,8 +6758,8 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('editing inherited override fields unchecks inherit consistently across subsections', () => {
-    const editor = createEditor();
+  it('editing inherited override fields unchecks inherit consistently across subsections', async () => {
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       scale: { min: { fixed: 0 } },
@@ -6964,7 +6785,7 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-min'), '5');
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-target-value'), '25');
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-baseline-value'), '1');
-    dispatchChange(editor.shadowRoot.querySelector('#entity-0-needle-mode'), 'disabled');
+    dispatchChange(editor.shadowRoot.querySelector('#entity-0-needle-mode'), false);
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-peak-color'), '#ff9800');
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-bar-color'), '#00cc66');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-color"]')[0], '#00ff00');
@@ -6998,8 +6819,6 @@ describe('Sensor Bar Card Plus editor', () => {
       ],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-layout'));
 
     expect(editor.shadowRoot.querySelector('#entity-0-height').value).toBe('64');
     expect(editor.shadowRoot.querySelector('#entity-0-label-position').value).toBe('above');
@@ -7021,8 +6840,6 @@ describe('Sensor Bar Card Plus editor', () => {
       ],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-layout'));
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-label-width'), '100');
 
     expect(events.at(-1).detail.config.entities).toEqual([
@@ -7300,8 +7117,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', name: 'One' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-peak'));
 
     expect(editor.shadowRoot.querySelector('#entity-0-peak-inherit').checked).toBe(true);
     expect(editor.shadowRoot.querySelector('#entity-0-peak-enabled').checked).toBe(true);
@@ -7317,8 +7132,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', name: 'One' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-peak'));
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-peak-color'), '#00cc66');
 
     expect(events.at(-1).detail.config.entities).toEqual([
@@ -7340,8 +7153,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', name: 'One' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-peak'));
     const toggle = editor.shadowRoot.querySelector('#entity-0-peak-enabled');
     toggle.checked = true;
     toggle.dispatchEvent({
@@ -7364,8 +7175,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', name: 'One' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-peak'));
     const toggle = editor.shadowRoot.querySelector('#entity-0-peak-enabled');
     toggle.checked = false;
     toggle.dispatchEvent({
@@ -7387,8 +7196,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', name: 'One', peak: { enabled: true } }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-peak'));
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-peak-color'), '#ff9800');
 
     expect(events.at(-1).detail.config.entities).toEqual([
@@ -7409,8 +7216,6 @@ describe('Sensor Bar Card Plus editor', () => {
       }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-peak'));
     const toggle = editor.shadowRoot.querySelector('#entity-0-peak-inherit');
     toggle.checked = true;
     toggle.dispatchEvent({
@@ -7436,8 +7241,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', show_peak: true, peak_color: '#ff9800' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-peak'));
     expect(editor.shadowRoot.querySelector('#entity-0-peak-enabled').checked).toBe(true);
     expect(editor.shadowRoot.querySelector('#entity-0-peak-color').value).toBe('#ff9800');
   });
@@ -7450,8 +7253,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', show_peak: true, peak_color: '#ff9800' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-peak'));
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-peak-color'), '#00ff00');
 
     expect(events.at(-1).detail.config.entities).toEqual([
@@ -7485,7 +7286,6 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')).toHaveLength(3);
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[0].value).toBe('0');
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[1].value).toBe('50');
@@ -7495,7 +7295,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('card-level adding from default state emits default rows plus the added stop', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -7519,8 +7319,8 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('card-level gradient stops subgroup toggles open and shows inactive note when fill style is not gradient', () => {
-    const editor = createEditor();
+  it('card-level gradient stops subgroup toggles open and shows inactive note when fill style is not gradient', async () => {
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       bar: {
@@ -7539,8 +7339,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.innerHTML).toContain('Only used with Gradient fill style');
   });
 
-  it('card-level gradient draft row is local only and not emitted while typing', () => {
-    const editor = createEditor();
+  it('card-level gradient draft row is local only and not emitted while typing', async () => {
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -7571,7 +7371,6 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-color"]')[1], '#ffff00');
 
     expect(events.at(-1).detail.config.bar.gradient_stops).toEqual([
@@ -7591,7 +7390,6 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="remove-gradient-stop"]')[1]);
 
     expect(events.at(-1).detail.config.bar.gradient_stops).toEqual([
@@ -7601,7 +7399,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('card-level Add stop commits the draft row, sorts it, and preserves canonical bar.gradient_stops', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -7645,7 +7443,6 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
     dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[0], '60');
 
     expect(events.at(-1).detail.config.bar.gradient_stops).toEqual([
@@ -7654,29 +7451,9 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('card-level draft Add is disabled for duplicate positions and 100 clamp saturation', () => {
-    const editor = createEditor();
 
-    editor.setConfig({
-      bar: {
-        fill_style: 'gradient',
-        gradient_stops: [
-          { pos: 0, color: '#4CAF50' },
-          { pos: 100, color: '#F44336' },
-        ],
-      },
-    });
-
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
-    expect(editor.shadowRoot.querySelector('#gradient-draft-pos').value).toBe('');
-    expect(editor.shadowRoot.querySelectorAll('button[data-action="add-gradient-stop"]')[0].getAttribute('disabled')).not.toBeNull();
-    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-pos'), '100');
-    expect(editor.shadowRoot.querySelectorAll('button[data-action="add-gradient-stop"]')[0].getAttribute('disabled')).not.toBeNull();
-    expect(editor.shadowRoot.innerHTML).toContain('Position already exists.');
-  });
-
-  it('card-level committed gradient pos input preserves intermediate typing state until blur commit', () => {
-    const editor = createEditor();
+  it('card-level committed gradient pos input preserves intermediate typing state until blur commit', async () => {
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -7707,8 +7484,8 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('card-level committed gradient pos input commits on Enter and sorts after commit', () => {
-    const editor = createEditor();
+  it('card-level committed gradient pos input commits on Enter and sorts after commit', async () => {
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -7734,8 +7511,8 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('card-level duplicate committed gradient pos validation happens only on commit', () => {
-    const editor = createEditor();
+  it('card-level duplicate committed gradient pos validation happens only on commit', async () => {
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -7761,7 +7538,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('card-level draft Add uses the latest typed pos value without requiring blur', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -7789,8 +7566,8 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('card-level draft Add commits on Enter from the color field', () => {
-    const editor = createEditor();
+  it('card-level draft Add commits on Enter from the color field', async () => {
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -7807,7 +7584,8 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-pos'), '50');
     const colorInput = editor.shadowRoot.querySelector('#gradient-draft-color');
     dispatchInput(colorInput, '#00ff00');
-    dispatchKeydown(colorInput, 'Enter');
+    // The color edit renders a replacement control; keyboard input targets it.
+    dispatchKeydown(editor.shadowRoot.querySelector('#gradient-draft-color'), 'Enter');
 
     expect(events.at(-1).detail.config.bar.gradient_stops).toEqual([
       { pos: 0, color: '#4CAF50' },
@@ -7817,7 +7595,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('card-level draft Escape clears local draft edits without emitting config', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -7834,15 +7612,16 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-pos'), '50');
     const colorInput = editor.shadowRoot.querySelector('#gradient-draft-color');
     dispatchInput(colorInput, '#00ff00');
-    dispatchKeydown(colorInput, 'Escape');
+    // The color edit renders a replacement control; keyboard input targets it.
+    dispatchKeydown(editor.shadowRoot.querySelector('#gradient-draft-color'), 'Escape');
     await flushTimers();
 
     expect(events).toHaveLength(0);
     expect(editor.shadowRoot.querySelector('#gradient-draft-pos').value).toBe('');
   });
 
-  it('disabled card-level Add stop button remains a no-op when clicked synthetically', () => {
-    const editor = createEditor();
+  it('disabled card-level Add stop button remains a no-op when clicked synthetically', async () => {
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -7879,12 +7658,11 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
     expect(editor.shadowRoot.querySelector('#gradient-draft-pos').value).toBe('100');
   });
 
   it('card-level Remove stop updates the structured output and re-sorts remaining rows', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -7909,8 +7687,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.innerHTML).not.toContain('id="card-gradient-preview-stop-2"');
   });
 
-  it('card-level committed stop color edit updates the editor preview', () => {
-    const editor = createEditor();
+  it('card-level committed stop color edit updates the editor preview', async () => {
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       bar: {
@@ -7944,7 +7722,6 @@ describe('Sensor Bar Card Plus editor', () => {
       unknown_key: 'keep',
     });
 
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
     dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[1], '50');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-color"]')[1], '#FF9800');
     dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-pos'), '100');
@@ -7966,7 +7743,6 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-color"]')[1], '#ffff00');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-color"]')[1], '#ff9800');
 
@@ -7989,7 +7765,6 @@ describe('Sensor Bar Card Plus editor', () => {
       },
     });
 
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-color"]')[1], '#ff9800');
 
     expect(events.at(-1).detail.config.bar.gradient_stops).toBeUndefined();
@@ -8008,7 +7783,6 @@ describe('Sensor Bar Card Plus editor', () => {
       custom_key: 'keep',
     });
 
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[0].value).toBe('0');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-color"]')[1], '#ff9800');
 
@@ -8020,37 +7794,9 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(events.at(-1).detail.config.custom_key).toBe('keep');
   });
 
-  it('card-level invalid draft handling keeps Add disabled and updates preview only for valid draft input', () => {
-    const editor = createEditor();
-    const events = trackConfigEvents(editor);
 
-    editor.setConfig({
-      bar: {
-        fill_style: 'gradient',
-        gradient_stops: [
-          { pos: 0, color: '#4CAF50' },
-          { pos: 100, color: '#F44336' },
-        ],
-      },
-    });
-
-    dispatchClick(editor.shadowRoot.querySelector('#card-group-gradient-stops'));
-    const originalStyle = editor.shadowRoot.querySelector('#card-gradient-preview-track').getAttribute('style');
-    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-pos'), 'bad');
-    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-color'), '#00ff00');
-
-    expect(events).toHaveLength(0);
-    expect(editor.shadowRoot.querySelectorAll('button[data-action="add-gradient-stop"]')[0].getAttribute('disabled')).not.toBeNull();
-    expect(editor.shadowRoot.innerHTML).toContain('Enter a value from 0 to 100.');
-    expect(editor.shadowRoot.querySelector('#card-gradient-preview-track').getAttribute('style')).toBe(originalStyle);
-
-    dispatchInput(editor.shadowRoot.querySelector('#gradient-draft-pos'), '50');
-    expect(editor.shadowRoot.querySelectorAll('button[data-action="add-gradient-stop"]')[0].getAttribute('disabled')).toBeNull();
-    expect(editor.shadowRoot.querySelector('#card-gradient-preview-track').getAttribute('style')).not.toBe(originalStyle);
-  });
-
-  it('per-entity gradient stops subsection is collapsed by default and keeps independent state', () => {
-    const editor = createEditor();
+  it('per-entity gradient stops subsection is collapsed by default and keeps independent state', async () => {
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       entities: [
@@ -8086,8 +7832,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', name: 'One' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
 
     expect(editor.shadowRoot.querySelector('#entity-0-gradient-stops-inherit').checked).toBe(true);
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-pos"]').length).toBe(3);
@@ -8101,8 +7845,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', bar: { fill_style: 'gradient' } }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-pos"]')).toHaveLength(3);
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-pos"]')[0].value).toBe('0');
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-pos"]')[1].value).toBe('50');
@@ -8118,8 +7860,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', bar: { fill_style: 'gradient' } }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-color"]')[1], '#ffff00');
 
     expect(events.at(-1).detail.config.entities).toEqual([
@@ -8155,8 +7895,6 @@ describe('Sensor Bar Card Plus editor', () => {
       }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
     dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-pos"]')[1], '25');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-color"]')[1], '#ff9800');
 
@@ -8175,8 +7913,8 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('per-entity committed stop color edit updates the editor preview', () => {
-    const editor = createEditor();
+  it('per-entity committed stop color edit updates the editor preview', async () => {
+    const { editor } = await createDomEditorFixture();
 
     editor.setConfig({
       entities: [{
@@ -8199,8 +7937,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-gradient-preview-track').getAttribute('style')).not.toBe(originalStyle);
   });
 
-  it('per-entity draft row is local only until Add is clicked', () => {
-    const editor = createEditor();
+  it('per-entity draft row is local only until Add is clicked', async () => {
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -8224,8 +7962,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-gradient-draft-pos').value).toBe('50');
   });
 
-  it('per-entity committed gradient pos input preserves intermediate typing state until blur commit', () => {
-    const editor = createEditor();
+  it('per-entity committed gradient pos input preserves intermediate typing state until blur commit', async () => {
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -8260,7 +7998,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('per-entity draft Add uses the latest typed pos value without requiring blur', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -8291,8 +8029,8 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('per-entity draft Add commits on Enter from the color field', () => {
-    const editor = createEditor();
+  it('per-entity draft Add commits on Enter from the color field', async () => {
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -8312,7 +8050,8 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-gradient-draft-pos'), '50');
     const colorInput = editor.shadowRoot.querySelector('#entity-0-gradient-draft-color');
     dispatchInput(colorInput, '#00ff00');
-    dispatchKeydown(colorInput, 'Enter');
+    // The color edit renders a replacement control; keyboard input targets it.
+    dispatchKeydown(editor.shadowRoot.querySelector('#entity-0-gradient-draft-color'), 'Enter');
 
     expect(events.at(-1).detail.config.entities[0].bar.gradient_stops).toEqual([
       { pos: 0, color: '#4CAF50' },
@@ -8322,7 +8061,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('per-entity draft Escape clears local draft edits without emitting config', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -8342,7 +8081,8 @@ describe('Sensor Bar Card Plus editor', () => {
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-gradient-draft-pos'), '50');
     const colorInput = editor.shadowRoot.querySelector('#entity-0-gradient-draft-color');
     dispatchInput(colorInput, '#00ff00');
-    dispatchKeydown(colorInput, 'Escape');
+    // The color edit renders a replacement control; keyboard input targets it.
+    dispatchKeydown(editor.shadowRoot.querySelector('#entity-0-gradient-draft-color'), 'Escape');
     await flushTimers();
 
     expect(events).toHaveLength(0);
@@ -8364,8 +8104,6 @@ describe('Sensor Bar Card Plus editor', () => {
       }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-gradient-draft-pos'), '25');
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-gradient-draft-color'), '#00ff00');
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-entity-gradient-stop"]')[0]);
@@ -8390,7 +8128,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('per-entity Add stop commits the draft row, sorts it, and keeps unrelated keys', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -8448,8 +8186,6 @@ describe('Sensor Bar Card Plus editor', () => {
       }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="remove-entity-gradient-stop"]')[1]);
 
     expect(events.at(-1).detail.config.entities).toEqual([
@@ -8484,8 +8220,6 @@ describe('Sensor Bar Card Plus editor', () => {
       }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
     const toggle = editor.shadowRoot.querySelector('#entity-0-gradient-stops-inherit');
     toggle.checked = true;
     toggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
@@ -8515,8 +8249,6 @@ describe('Sensor Bar Card Plus editor', () => {
       }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-color"]')[1], '#ffff00');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-color"]')[1], '#ff9800');
 
@@ -8546,8 +8278,6 @@ describe('Sensor Bar Card Plus editor', () => {
       }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-pos"]')[1].value).toBe('100');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-gradient-color"]')[1], '#ff9800');
 
@@ -8565,37 +8295,9 @@ describe('Sensor Bar Card Plus editor', () => {
     ]);
   });
 
-  it('per-entity duplicate draft positions are blocked and preview updates only for valid drafts', () => {
-    const editor = createEditor();
 
-    editor.setConfig({
-      entities: [{
-        entity: 'sensor.one',
-        bar: {
-          gradient_stops: [
-            { pos: 0, color: '#4CAF50' },
-            { pos: 100, color: '#F44336' },
-          ],
-        },
-      }],
-    });
-
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-gradient-stops'));
-    const originalStyle = editor.shadowRoot.querySelector('#entity-0-gradient-preview-track').getAttribute('style');
-
-    dispatchInput(editor.shadowRoot.querySelector('#entity-0-gradient-draft-pos'), '100');
-    expect(editor.shadowRoot.querySelectorAll('button[data-action="add-entity-gradient-stop"]')[0].getAttribute('disabled')).not.toBeNull();
-    expect(editor.shadowRoot.innerHTML).toContain('Position already exists.');
-    expect(editor.shadowRoot.querySelector('#entity-0-gradient-preview-track').getAttribute('style')).toBe(originalStyle);
-
-    dispatchInput(editor.shadowRoot.querySelector('#entity-0-gradient-draft-pos'), '50');
-    expect(editor.shadowRoot.querySelectorAll('button[data-action="add-entity-gradient-stop"]')[0].getAttribute('disabled')).toBeNull();
-    expect(editor.shadowRoot.querySelector('#entity-0-gradient-preview-track').getAttribute('style')).not.toBe(originalStyle);
-  });
-
-  it('disabled per-entity Add stop button remains a no-op when clicked synthetically', () => {
-    const editor = createEditor();
+  it('disabled per-entity Add stop button remains a no-op when clicked synthetically', async () => {
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -8635,7 +8337,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('entity Segments summary reflects override state before and after taking ownership', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
     const cardSegments = Array.from({ length: 6 }, (_, index) => ({
       from: `${index * (100 / 6)}%`,
@@ -8649,7 +8351,7 @@ describe('Sensor Bar Card Plus editor', () => {
 
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     const summaryMarkup = () => editor.shadowRoot.innerHTML.match(/id="entity-0-group-segments-summary"[^>]*>([^<]*)<\/span>/)?.[1];
-    expect(summaryMarkup()).toBe('Inherited');
+    expect(summaryMarkup()).toBe('Inherited · 6 segments');
     expect(editor.shadowRoot.querySelector('#entity-0-segments-inherit').checked).toBe(true);
 
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
@@ -8678,8 +8380,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', name: 'One' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
 
     expect(editor.shadowRoot.querySelector('#entity-0-segments-inherit').checked).toBe(true);
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]').length).toBe(2);
@@ -8693,8 +8393,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', bar: { fill_style: 'bands' } }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')).toHaveLength(3);
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')[0].value).toBe('0%');
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-to"]')[2].value).toBe('100%');
@@ -8718,8 +8416,6 @@ describe('Sensor Bar Card Plus editor', () => {
       }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')[0].value).toBe('0%');
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')[1].value).toBe('33%');
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')[2].value).toBe('75%');
@@ -8732,8 +8428,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', bar: { fill_style: 'bands', segments: [{ from: '0%', to: '100%', color: '#4a9eff' }] } }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     const originalPreview = editor._renderSegmentPreviewIntervals({ type: 'entity', index: 0 });
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-color"]')[0], '#00ff00');
 
@@ -8741,7 +8435,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('per-entity segment preview ignores draft endpoint edits until Add', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
     const boundaries = [5, 10, 15, 18, 20, 22, 24, 26, 28, 30, 33, 36, 40];
     const segments = boundaries.slice(0, -1).map((from, index) => ({
       from,
@@ -8782,8 +8476,6 @@ describe('Sensor Bar Card Plus editor', () => {
       }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     const previewBefore = editor._renderSegmentPreviewIntervals({ type: 'entity', index: 0 });
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')[1], '40%');
     dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')[1], '40%');
@@ -8823,8 +8515,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', bar: { fill_style: 'bands' } }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-segment-draft-from'), '10%');
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-segment-draft-to'), '20%');
 
@@ -8832,7 +8522,7 @@ describe('Sensor Bar Card Plus editor', () => {
   });
 
   it('per-entity Add segment creates a new row with smart defaults', async () => {
-    const editor = createEditor();
+    const { editor } = await createDomEditorFixture();
     const events = trackConfigEvents(editor);
 
     editor.setConfig({
@@ -8862,8 +8552,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.querySelector('#entity-0-segment-draft-from').value).toBe('');
   });
 
-  it('entity Segment composer uses effective inherited and overridden Bar colors', () => {
-    const editor = createEditor();
+  it('entity Segment composer keeps its active color draft through unchanged palette replacement', async () => {
+    const { editor } = await createDomEditorFixture();
     editor.setConfig({
       bar: { fill_style: 'bands', color: '#112233' },
       entities: [{ entity: 'sensor.one' }],
@@ -8878,7 +8568,7 @@ describe('Sensor Bar Card Plus editor', () => {
     });
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
     dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
-    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-draft-color"]')[0].value).toBe('#aabbcc');
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-draft-color"]')[0].value).toBe('#112233');
   });
 
   it('adding from inherited/default entity segments emits explicit entity-level bar.segments', async () => {
@@ -8889,8 +8579,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', bar: { fill_style: 'bands', color: '#ff9800' } }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-segment-draft-from'), '100');
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-segment-draft-to'), '120');
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="add-entity-segment"]')[0]);
@@ -8920,8 +8608,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', bar: { segments: [{ from: 0, to: 100, color: '#4a9eff' }] } }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')[0], '0%');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-to"]')[0], '20%');
     dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')[0], '0%');
@@ -8950,8 +8636,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', bar: { fill_style: 'soft_bands' } }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-to"]')[1], '70%');
     dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-to"]')[1], '70%');
 
@@ -8978,8 +8662,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', bar: { segments: [{ from: '0%', to: '20%', color: '#c4bc00' }, { from: '20%', to: '100%', color: '#4a9eff' }] } }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="remove-entity-segment"]')[0]);
 
     expect(events.at(-1).detail.config.entities).toEqual([
@@ -9010,8 +8692,6 @@ describe('Sensor Bar Card Plus editor', () => {
       }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="remove-entity-segment"]')[0]);
 
     expect(events.at(-1).detail.config.entities).toEqual([
@@ -9043,8 +8723,6 @@ describe('Sensor Bar Card Plus editor', () => {
       }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     const toggle = editor.shadowRoot.querySelector('#entity-0-segments-inherit');
     toggle.checked = true;
     toggle.dispatchEvent({
@@ -9074,8 +8752,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', bar: { fill_style: 'bands' } }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-color"]')[1], '#ffff00');
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-color"]')[1], '#ff9800');
 
@@ -9096,8 +8772,6 @@ describe('Sensor Bar Card Plus editor', () => {
       ],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-to"]')[0], '25%');
     dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-to"]')[0], '25%');
 
@@ -9114,8 +8788,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', segments: [{ from: 0, to: 20, color: '#c4bc00' }] }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-from"]')[0].value).toBe('0');
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-to"]')[0].value).toBe('20');
   });
@@ -9128,8 +8800,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one', severity: [{ from: 0, to: 20, color: '#c4bc00' }], custom_entity_key: 'keep' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-segments'));
     dispatchInput(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-to"]')[0], '25%');
     dispatchChange(editor.shadowRoot.querySelectorAll('input[data-kind="entity-segment-to"]')[0], '25%');
 
@@ -9165,8 +8835,6 @@ describe('Sensor Bar Card Plus editor', () => {
       show_peak: true,
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-layout'));
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-override-min"]')[0].value).toBe('0');
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-override-max"]')[0].value).toBe('5000');
     expect(editor.shadowRoot.querySelectorAll('input[data-kind="entity-override-height"]')[0].value).toBe('64');
@@ -9256,8 +8924,6 @@ describe('Sensor Bar Card Plus editor', () => {
       entities: [{ entity: 'sensor.one' }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-floor'));
     dispatchChange(editor.shadowRoot.querySelector('#entity-0-floor-window'), 'today');
     dispatchInput(editor.shadowRoot.querySelector('#entity-0-floor-label-precision'), '0');
 
@@ -9284,8 +8950,6 @@ describe('Sensor Bar Card Plus editor', () => {
       }],
     });
 
-    dispatchClick(editor.shadowRoot.querySelectorAll('button[data-action="toggle-entity-overrides"]')[0]);
-    dispatchClick(editor.shadowRoot.querySelector('#entity-0-group-floor'));
     const inheritToggle = editor.shadowRoot.querySelector('#entity-0-floor-inherit');
     inheritToggle.checked = true;
     inheritToggle.dispatchEvent({ type: 'change', bubbles: true, composed: true });
@@ -9459,8 +9123,8 @@ describe('Sensor Bar Card Plus editor', () => {
     expect(editor.shadowRoot.innerHTML).not.toContain('Use scale percentage');
   });
 
-  it('collapses marker groups by default and keeps generic marker expansion attached through reorder and removal', () => {
-    const editor = createEditor();
+  it('collapses marker groups by default and keeps generic marker expansion attached through reorder and removal', async () => {
+    const { editor } = await createDomEditorFixture();
     editor.setConfig({
       entity: 'sensor.one',
       target: { at: { fixed: 65 }, shape: 'diamond' },

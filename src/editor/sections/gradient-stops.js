@@ -1,8 +1,9 @@
 import { parsePercentLiteral } from '../../config/normalize.js';
-import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumberValue,
-  setPathValue, deletePathValue, pruneEmptyObjectsInTarget } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeColorComparisonValue, renderColorInput } from '../shared/editor-controls.js';
-import { PaletteSection } from '../shared/palette-section.js';
+import { cloneDeep, serializeConfig, isObject, normalizeTextValue, normalizeNumberValue } from '../shared/editor-config.js';
+import { escapeAttribute, normalizeColorComparisonValue, renderColorInput, normalizeEditorColorValue, isValidCssColor, syncColorInput } from '../shared/editor-controls.js';
+import { PaletteRowSession, PaletteSection } from '../shared/palette-section.js';
+import { getDefaultPaintGradientStops } from '../shared/paint-editor-paint.js';
+import { safeCssColor } from '../../utils/css-values.js';
 
 export class GradientStopsSection extends PaletteSection {
   constructor(context, ui, array) {
@@ -11,10 +12,23 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   reset() {
+    this._paletteSessions = new Map();
     this._gradientStopsDrafts = new Map();
     this._gradientStopsUiRows = new Map();
-    this._gradientStopPosTexts = new Map();
     this._gradientStopValidationMessages = new Map();
+  }
+
+  clearScopeState(scope) {
+    const key = this._getGradientStopsDraftKey(scope);
+    this._gradientStopsDrafts.delete(key);
+    this._gradientStopsUiRows.delete(key);
+    this._paletteSessions.delete(key);
+    this._clearGradientStopScopeTextState(scope);
+  }
+
+  prepareExternalSync(scope) {
+    if (scope) this._gradientStopsUiRows.delete(this._getGradientStopsDraftKey(scope));
+    else this._gradientStopsUiRows.clear();
   }
 
   _setGradientStops(stops, options = {}) {
@@ -22,11 +36,7 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   _getDefaultGradientStops() {
-    return [
-      { pos: 0, color: '#4CAF50' },
-      { pos: 50, color: '#FF9800' },
-      { pos: 100, color: '#F44336' },
-    ];
+    return getDefaultPaintGradientStops();
   }
 
   _normalizeGradientStopPosValue(rawValue) {
@@ -52,7 +62,7 @@ export class GradientStopsSection extends PaletteSection {
           return null;
         }
         const pos = this._normalizeGradientStopPosValue(stop.pos);
-        const color = normalizeTextValue(stop.color).trim();
+        const color = normalizeEditorColorValue(stop.color);
         if (pos === null || !color) {
           return null;
         }
@@ -104,15 +114,29 @@ export class GradientStopsSection extends PaletteSection {
     return scope?.type === 'entity' ? `entity:${scope.index}` : 'card';
   }
 
+  _getPaletteSession(scope, rows = this._getScopedGradientStopsValue(scope)) {
+    const key = this._getGradientStopsDraftKey(scope);
+    if (!this._paletteSessions.has(key)) this._paletteSessions.set(key, new PaletteRowSession());
+    const session = this._paletteSessions.get(key);
+    if (session.reconcile(rows ?? [])) {
+      this._gradientStopsDrafts.set(key, this._createGradientStopDraftState(scope));
+      this._gradientStopsUiRows.delete(key);
+      const validationPrefix = `${key}:pos:`;
+      for (const validationKey of this._gradientStopValidationMessages.keys()) {
+        if (validationKey.startsWith(validationPrefix)) this._gradientStopValidationMessages.delete(validationKey);
+      }
+    }
+    return session;
+  }
+
   _getGradientStopPosTextKey(scope, stopIndex) {
-    return `${this._getGradientStopsDraftKey(scope)}:pos:${stopIndex}`;
+    return { session: this._getPaletteSession(scope), index: stopIndex };
   }
 
   _getGradientStopPosText(scope = { type: 'card' }, stopIndex, fallbackValue = '') {
-    const key = this._getGradientStopPosTextKey(scope, stopIndex);
-    if (this._gradientStopPosTexts.has(key)) {
-      return this._gradientStopPosTexts.get(key);
-    }
+    const { session, index } = this._getGradientStopPosTextKey(scope, stopIndex);
+    const draft = session.getDraft(index, 'pos');
+    if (draft !== undefined) return draft;
     if (fallbackValue === '' || fallbackValue === null || fallbackValue === undefined) {
       return '';
     }
@@ -120,23 +144,18 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   _setGradientStopPosText(scope, stopIndex, rawValue) {
-    this._gradientStopPosTexts.set(
-      this._getGradientStopPosTextKey(scope, stopIndex),
-      normalizeTextValue(rawValue),
-    );
+    const { session, index } = this._getGradientStopPosTextKey(scope, stopIndex);
+    session.setDraft(index, 'pos', normalizeTextValue(rawValue));
   }
 
   _clearGradientStopPosText(scope, stopIndex) {
-    this._gradientStopPosTexts.delete(this._getGradientStopPosTextKey(scope, stopIndex));
+    const { session, index } = this._getGradientStopPosTextKey(scope, stopIndex);
+    session.clearDraft(index, 'pos');
   }
 
   _clearGradientStopScopeTextState(scope) {
+    this._paletteSessions.get(this._getGradientStopsDraftKey(scope))?.drafts.clear();
     const prefix = `${this._getGradientStopsDraftKey(scope)}:pos:`;
-    for (const key of this._gradientStopPosTexts.keys()) {
-      if (key.startsWith(prefix)) {
-        this._gradientStopPosTexts.delete(key);
-      }
-    }
     for (const key of this._gradientStopValidationMessages.keys()) {
       if (key.startsWith(prefix)) {
         this._gradientStopValidationMessages.delete(key);
@@ -157,19 +176,13 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   _getStoredScopedGradientStops(scope = { type: 'card' }) {
-    const structuredValue = this.context.read(scope, ['bar', 'gradient_stops']);
-    if (structuredValue !== undefined) {
-      return structuredValue;
-    }
-    const legacyValue = this.context.read(scope, ['gradient_stops']);
-    if (legacyValue !== undefined) {
-      return legacyValue;
-    }
-    return null;
+    return this.readPaintProperty(scope, 'gradient_stops') ?? null;
   }
 
   _getFallbackGradientStops(scope = { type: 'card' }) {
     if (scope?.type === 'entity') {
+      const stored = this._getStoredScopedGradientStops({ type: 'card' });
+      if (Array.isArray(stored) && stored.length === 0) return [];
       const inheritedStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue({ type: 'card' }));
       return inheritedStops.length ? inheritedStops : this._getDefaultGradientStops();
     }
@@ -207,19 +220,20 @@ export class GradientStopsSection extends PaletteSection {
   _setGradientStopsDraftField(scope, field, rawValue) {
     const currentDraft = this._getGradientStopsDraftState(scope);
     const nextValue = field === 'color'
-      ? normalizeTextValue(rawValue).trim()
+      ? normalizeEditorColorValue(rawValue)
       : normalizeTextValue(rawValue);
     this._setGradientStopsDraftState(scope, {
       ...currentDraft,
       [field]: nextValue,
-    }, { refreshOnly: field === 'pos' });
+    }, { refreshOnly: true });
+    if (field === 'color') this._syncGradientDraftControls(scope);
   }
 
   _getValidGradientDraftStop(scope = { type: 'card' }) {
     const draft = this._getGradientStopsDraftState(scope);
     const pos = this._normalizeGradientStopPosValue(draft.pos);
     const color = normalizeTextValue(draft.color).trim();
-    if (pos === null || !color) {
+    if (pos === null || !color || !isValidCssColor(color)) {
       return null;
     }
     return { pos, color };
@@ -255,6 +269,7 @@ export class GradientStopsSection extends PaletteSection {
     if (!normalizedColor) {
       return 'Choose a color to add a stop.';
     }
+    if (!isValidCssColor(draft.color)) return 'Enter a valid CSS color.';
     if (this._hasGradientStopDuplicate(scope, this._normalizeGradientStopPosValue(draft.pos))) {
       return 'Position already exists.';
     }
@@ -273,17 +288,21 @@ export class GradientStopsSection extends PaletteSection {
     ));
   }
 
+  _isCurrentGradientStopRow(scope, stopIndex, target) {
+    const rows = this._getScopedGradientStopsValue(scope) ?? [];
+    const session = this._getPaletteSession(scope, rows);
+    const row = target?.closest?.('.gradient-stop-row');
+    const generation = Number(target?.dataset?.paletteGeneration ?? row?.dataset.paletteGeneration);
+    return Number.isInteger(stopIndex) && stopIndex >= 0 && rows[stopIndex] !== undefined
+      && generation === session.generation
+      && (!row || row.dataset.paletteGeneration === String(session.generation)
+        && row.dataset.paletteIndex === String(stopIndex));
+  }
+
   _clearGradientStopsOverride(scope) {
     const previousUiRowsJson = serializeConfig(this._getGradientStopsUiRows(scope) ?? []);
-    this._gradientStopsDrafts.delete(this._getGradientStopsDraftKey(scope));
-    this._gradientStopsUiRows.delete(this._getGradientStopsDraftKey(scope));
-    this._clearGradientStopScopeTextState(scope);
-    const applied = this.context.mutate(scope, (target) => {
-      let nextTarget = deletePathValue(target, ['bar', 'gradient_stops']);
-      nextTarget = deletePathValue(nextTarget, ['gradient_stops']);
-      nextTarget = pruneEmptyObjectsInTarget(nextTarget, ['bar']);
-      return nextTarget;
-    }, { rerender: true });
+    this.clearScopeState(scope);
+    const applied = this.clearPaintProperty(scope, 'gradient_stops');
     if (applied === false && previousUiRowsJson !== serializeConfig([])) {
       this.ui.render();
     }
@@ -335,13 +354,13 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   _refreshGradientDraftUi(scope = { type: 'card' }) {
-    if (!this.shadowRoot) {
+    const root = this._getPaletteRoot(scope);
+    if (!root) {
       return;
     }
-    const getById = this.shadowRoot.getElementById?.bind(this.shadowRoot)
-      ?? ((id) => this.shadowRoot.querySelector?.(`#${id}`) ?? null);
+    const getById = id => this._getShadowElementById(id, scope);
     const { previewId, trackId, hintId, addSelector, draftInputId } = this._getGradientPreviewDomIds(scope);
-    const addButton = this.shadowRoot.querySelector(addSelector);
+    const addButton = root.querySelector(addSelector);
     if (addButton) {
       addButton.disabled = !this._canAddGradientStop(scope);
     }
@@ -410,8 +429,21 @@ export class GradientStopsSection extends PaletteSection {
         ? { ...stop, pos: nextPos }
         : stop
     ));
+    const sortedStops = this._sanitizeGradientStopsForEmit(nextStops);
+    const nextIndex = sortedStops.findIndex(stop => stop.pos === nextPos);
+    const orderChanged = nextIndex !== stopIndex;
+    const rerender = this.array.patchOnly || orderChanged;
+    if (!this.array.patchOnly && orderChanged) {
+      const selector = scope?.type === 'entity'
+        ? `input[data-kind="entity-gradient-pos"][data-index="${scope.index}"][data-stop-index="${nextIndex}"]`
+        : `input[data-kind="gradient-pos"][data-index="${nextIndex}"]`;
+      this.ui.focus(selector, scope, { preserveViewport: true });
+    }
     this._clearGradientStopPosText(scope, stopIndex);
-    return this._setScopedGradientStops(scope, nextStops, { rerender: true }, { type: 'edit', index: stopIndex, field: 'pos', value: nextPos });
+    const session = this._getPaletteSession(scope, currentStops);
+    const row = inputEl?.closest?.('.gradient-stop-row');
+    if (row) row.dataset.paletteGeneration = String(session.generation);
+    return this._setScopedGradientStops(scope, nextStops, { rerender }, { type: 'edit', index: stopIndex, field: 'pos', value: nextPos });
   }
 
   _getScopedGradientStopsValue(scope) {
@@ -428,7 +460,7 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   _hasGradientStopsOverride(scope) {
-    if (this._getStoredScopedGradientStops(scope) !== null) {
+    if (this.ownsPaintProperty(scope, 'gradient_stops')) {
       return true;
     }
     const localRows = this._getGradientStopsUiRows(scope);
@@ -440,20 +472,13 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   _getGradientStopsSummary(scope) {
-    if (scope?.type === 'entity' && !this._hasGradientStopsOverride(scope)) {
-      return 'Inherited';
-    }
     const gradientStops = this._sanitizeGradientStopsForEmit(this._getScopedGradientStopsValue(scope));
     if (this.fillStyle(scope) !== 'gradient') {
       return 'Inactive fill style';
     }
-    if (!gradientStops.length) {
-      return scope?.type === 'entity' ? 'Inherited' : 'Default gradient';
-    }
-    if (this._isDefaultGradientStops(gradientStops)) {
-      return 'Default gradient';
-    }
-    return `${gradientStops.length} stops`;
+    const source = this.paintState(scope).sources.gradient_stops;
+    if (source === 'Default') return 'Default gradient';
+    return `${source === 'Inherited' || source === 'Preset' ? `${source} · ` : ''}${gradientStops.length} stops`;
   }
 
   _buildGradientPreviewEffectiveStops(scope = { type: 'card' }) {
@@ -472,12 +497,12 @@ export class GradientStopsSection extends PaletteSection {
     }
     const cssStops = stops
       .map((stop) => {
-        const color = normalizeTextValue(stop.color).trim();
+        const rawColor = normalizeTextValue(stop.color).trim();
         const pos = this._normalizeGradientStopPosValue(stop.p ?? stop.pos);
-        if (!color || pos === null) {
+        if (!rawColor || pos === null) {
           return null;
         }
-        return `${color} ${pos}%`;
+        return `${safeCssColor(rawColor, '#4a9eff')} ${pos}%`;
       })
       .filter(Boolean);
     if (!cssStops.length) {
@@ -516,10 +541,57 @@ export class GradientStopsSection extends PaletteSection {
   }
 
   _setScopedGradientStops(scope, rows, options = {}, operation) {
-    return this.array.write(scope, rows, options, operation);
+    const session = this._paletteSessions.get(this._getGradientStopsDraftKey(scope));
+    session?.record(rows);
+    const applied = this.array.write(scope, rows, options, operation);
+    if (applied !== false) session?.record(this._getScopedGradientStopsValue(scope));
+    return applied;
+  }
+
+  syncRows(scope = { type: 'card' }, { deferActivePointerSync = false } = {}) {
+    if (deferActivePointerSync && this._deferActivePointerSync(scope, () => this.syncRows(scope))) return false;
+    const entity = scope?.type === 'entity';
+    const index = Number(scope?.index);
+    const rows = this._getScopedGradientStopsValue(scope) ?? [];
+    const session = this._getPaletteSession(scope, rows);
+    const changed = this._syncRows(scope, {
+      inputSelector: entity ? `input[data-kind="entity-gradient-pos"][data-index="${index}"]` : 'input[data-kind="gradient-pos"]',
+      rowSelector: '.list-row.gradient-stop-row',
+      memberSelector: '.authored-gradient-stop-row',
+      generation: session.generation,
+      rowCount: rows.length,
+      draftSelector: entity ? `#entity-${index}-gradient-draft-pos` : '#gradient-draft-pos',
+    });
+    // A color edit keeps row identity but still changes the palette preview.
+    this._syncPaletteActivity(scope, 'gradient-stops', this.fillStyle(scope) === 'gradient', this._getGradientStopsSummary(scope));
+    if (this._getPaletteRoot(scope)?.ownerDocument) this._refreshGradientDraftUi(scope);
+    if (changed) this._syncGradientDraftControls(scope);
+    this._syncGradientColorInputs(scope, rows);
+    return changed;
+  }
+
+  _syncGradientColorInputs(scope, rows = this._getScopedGradientStopsValue(scope) ?? []) {
+    const prefix = scope?.type === 'entity' ? `entity-${scope.index}-` : '';
+    const root = this._getPaletteRoot(scope);
+    rows.forEach((stop, index) => syncColorInput(root, this.paletteId(`${prefix}gradient-color-${index}`),
+      stop?.color ?? '#4a9eff', '#4CAF50'));
+    syncColorInput(root, this.paletteId(`${prefix}gradient-draft-color`), this._getGradientStopsDraftState(scope).color, '#4CAF50');
+  }
+
+  _syncGradientDraftControls(scope) {
+    const entity = scope?.type === 'entity';
+    const prefix = entity ? `entity-${scope.index}-` : '';
+    const draft = this._getGradientStopsDraftState(scope);
+    const position = this._getShadowElementById(`${prefix}gradient-draft-pos`, scope);
+    if (position) position.value = draft.pos;
+    syncColorInput(this._getPaletteRoot(scope), this.paletteId(`${prefix}gradient-draft-color`), draft.color, '#4CAF50');
   }
 
   render(scope = { type: 'card' }, renderGroup = ({ content }) => content, { section = true } = {}) {
+    return this.scopeMarkup(this._renderPalette(scope, renderGroup, { section }));
+  }
+
+  _renderPalette(scope, renderGroup, { section }) {
     if (scope?.type === 'entity') {
       const index = scope.index;
       const entityGradientStops = this._getScopedGradientStopsValue(scope);
@@ -533,10 +605,7 @@ export class GradientStopsSection extends PaletteSection {
                           <label for="entity-${index}-gradient-stops-inherit">Inherit card settings</label>
                         </div>
                       </div>
-                      ${this.fillStyle(scope) !== 'gradient'
-                        ? '<div class="section-note">Only used with Gradient fill style</div>'
-                        : ''
-                      }
+                      <div class="section-note" data-palette-inactive="gradient-stops"${this.fillStyle(scope) === 'gradient' ? ' hidden' : ''}>Only used with Gradient fill style</div>
                       ${this._renderGradientPreview(scope, {
                         previewId: `entity-${index}-gradient-preview`,
                         trackId: `entity-${index}-gradient-preview-track`,
@@ -545,32 +614,37 @@ export class GradientStopsSection extends PaletteSection {
                         <label>Gradient stops</label>
                         <div class="list gradient-stop-list">
                           ${this._renderListRows(entityGradientStops, (stop, stopIndex) => `
-                            <div class="list-row gradient-stop-row">
-                              <input type="number" min="0" max="100" step="any" data-kind="entity-gradient-pos" data-index="${index}" data-stop-index="${stopIndex}" value="${escapeAttribute(this._getGradientStopPosText(scope, stopIndex, stop?.pos ?? ''))}" placeholder="0">
-                              ${renderColorInput({
-                                id: `entity-${index}-gradient-color-${stopIndex}`,
-                                kind: 'entity-gradient-color',
-                                index,
-                                value: stop?.color ?? '#4a9eff',
-                                fallbackHex: '#4CAF50',
-                                placeholder: 'CSS color value',
-                                extraDataset: { 'stop-index': stopIndex },
-                              })}
-                              <button type="button" data-action="remove-entity-gradient-stop" data-index="${index}" data-stop-index="${stopIndex}" aria-label="Remove" title="Remove">🗑</button>
+                            <div class="list-row gradient-stop-row authored-gradient-stop-row" data-palette-index="${stopIndex}" data-palette-generation="${this._getPaletteSession(scope, entityGradientStops).generation}">
+                              <input type="number" min="0" max="100" step="any" data-kind="entity-gradient-pos" data-index="${index}" data-stop-index="${stopIndex}" data-palette-generation="${this._getPaletteSession(scope, entityGradientStops).generation}" value="${escapeAttribute(this._getGradientStopPosText(scope, stopIndex, stop?.pos ?? ''))}" placeholder="0">
+                              <div class="palette-row-actions">
+                                ${renderColorInput({ palette: true,
+                                  id: `entity-${index}-gradient-color-${stopIndex}`,
+                                  kind: 'entity-gradient-color',
+                                  index,
+                                  value: stop?.color ?? '#4a9eff',
+                                  fallbackHex: '#4CAF50',
+                                  placeholder: 'CSS color value',
+                                  extraDataset: { 'stop-index': stopIndex, 'palette-generation': this._getPaletteSession(scope, entityGradientStops).generation },
+                                })}
+                                <button type="button" data-action="remove-entity-gradient-stop" data-index="${index}" data-stop-index="${stopIndex}" data-palette-generation="${this._getPaletteSession(scope, entityGradientStops).generation}" aria-label="Remove" title="Remove">🗑</button>
+                              </div>
                             </div>
                           `)}
                           <div class="gradient-stop-draft">
                             <div class="list-row gradient-stop-row">
-                              <input id="entity-${index}-gradient-draft-pos" type="number" min="0" max="100" step="any" data-kind="entity-gradient-draft-pos" data-index="${index}" value="${escapeAttribute(entityGradientDraft.pos)}" placeholder="0">
-                              ${renderColorInput({
-                                id: `entity-${index}-gradient-draft-color`,
-                                kind: 'entity-gradient-draft-color',
-                                index,
-                                value: entityGradientDraft.color,
-                                fallbackHex: '#4CAF50',
-                                placeholder: 'CSS color value',
-                              })}
-                              <button type="button" data-action="add-entity-gradient-stop" data-index="${index}"${this._canAddGradientStop(scope) ? '' : ' disabled'}>Add</button>
+                              <input id="entity-${index}-gradient-draft-pos" type="number" min="0" max="100" step="any" data-kind="entity-gradient-draft-pos" data-index="${index}" data-palette-generation="${this._getPaletteSession(scope, entityGradientStops).generation}" value="${escapeAttribute(entityGradientDraft.pos)}" placeholder="0">
+                              <div class="palette-row-actions">
+                                ${renderColorInput({ palette: true,
+                                  id: `entity-${index}-gradient-draft-color`,
+                                  kind: 'entity-gradient-draft-color',
+                                  index,
+                                  value: entityGradientDraft.color,
+                                  fallbackHex: '#4CAF50',
+                                  placeholder: 'CSS color value',
+                                  extraDataset: { 'palette-generation': this._getPaletteSession(scope, entityGradientStops).generation },
+                                })}
+                                <button type="button" data-action="add-entity-gradient-stop" data-index="${index}" data-palette-generation="${this._getPaletteSession(scope, entityGradientStops).generation}"${this._canAddGradientStop(scope) ? '' : ' disabled'}>Add</button>
+                              </div>
                             </div>
                             ${entityGradientDraftMessage
                               ? `<div id="entity-${index}-gradient-draft-hint" class="section-note">${escapeAttribute(entityGradientDraftMessage)}</div>`
@@ -592,10 +666,7 @@ export class GradientStopsSection extends PaletteSection {
 	            summary: gradientStopsSummary,
 	            inactive: gradientStopsInactive,
 	            content: `
-	              ${gradientStopsInactive
-	                ? '<div class="section-note">Only used with Gradient fill style</div>'
-	                : ''
-	              }
+	              <div class="section-note" data-palette-inactive="gradient-stops"${gradientStopsInactive ? '' : ' hidden'}>Only used with Gradient fill style</div>
 	              ${this._renderGradientPreview({ type: 'card' }, {
 	                previewId: 'card-gradient-preview',
 	                trackId: 'card-gradient-preview-track',
@@ -604,31 +675,37 @@ export class GradientStopsSection extends PaletteSection {
 	                <label>Gradient stops</label>
 	                <div class="list gradient-stop-list">
 	                  ${this._renderListRows(gradientStops, (stop, index) => `
-	                    <div class="list-row gradient-stop-row">
-	                      <input type="number" min="0" max="100" step="any" data-kind="gradient-pos" data-index="${index}" value="${escapeAttribute(this._getGradientStopPosText({ type: 'card' }, index, stop?.pos ?? ''))}" placeholder="0">
-	                      ${renderColorInput({
-	                        id: `gradient-color-${index}`,
-	                        kind: 'gradient-color',
-	                        index,
-	                        value: stop?.color ?? '#4a9eff',
-	                        fallbackHex: '#4CAF50',
-	                        placeholder: 'CSS color value',
-	                      })}
-	                      <button type="button" data-action="remove-gradient-stop" data-index="${index}" aria-label="Remove" title="Remove">🗑</button>
+	                    <div class="list-row gradient-stop-row authored-gradient-stop-row" data-palette-index="${index}" data-palette-generation="${this._getPaletteSession({ type: 'card' }, gradientStops).generation}">
+	                      <input type="number" min="0" max="100" step="any" data-kind="gradient-pos" data-index="${index}" data-palette-generation="${this._getPaletteSession({ type: 'card' }, gradientStops).generation}" value="${escapeAttribute(this._getGradientStopPosText({ type: 'card' }, index, stop?.pos ?? ''))}" placeholder="0">
+	                      <div class="palette-row-actions">
+	                        ${renderColorInput({ palette: true,
+	                          id: `gradient-color-${index}`,
+	                          kind: 'gradient-color',
+	                          index,
+	                          value: stop?.color ?? '#4a9eff',
+	                          fallbackHex: '#4CAF50',
+	                          placeholder: 'CSS color value',
+                            extraDataset: { 'palette-generation': this._getPaletteSession({ type: 'card' }, gradientStops).generation },
+	                        })}
+	                        <button type="button" data-action="remove-gradient-stop" data-index="${index}" data-palette-generation="${this._getPaletteSession({ type: 'card' }, gradientStops).generation}" aria-label="Remove" title="Remove">🗑</button>
+	                      </div>
 	                    </div>
 	                  `)}
 	                  <div class="gradient-stop-draft">
 	                    <div class="list-row gradient-stop-row">
-	                      <input id="gradient-draft-pos" type="number" min="0" max="100" step="any" data-kind="gradient-draft-pos" value="${escapeAttribute(gradientDraft.pos)}" placeholder="0">
-	                      ${renderColorInput({
-	                        id: 'gradient-draft-color',
-	                        kind: 'gradient-draft-color',
-	                        index: 'card',
-	                        value: gradientDraft.color,
-	                        fallbackHex: '#4CAF50',
-	                        placeholder: 'CSS color value',
-	                      })}
-	                      <button type="button" data-action="add-gradient-stop"${this._canAddGradientStop({ type: 'card' }) ? '' : ' disabled'}>Add</button>
+	                      <input id="gradient-draft-pos" type="number" min="0" max="100" step="any" data-kind="gradient-draft-pos" data-palette-generation="${this._getPaletteSession({ type: 'card' }, gradientStops).generation}" value="${escapeAttribute(gradientDraft.pos)}" placeholder="0">
+	                      <div class="palette-row-actions">
+	                        ${renderColorInput({ palette: true,
+	                          id: 'gradient-draft-color',
+	                          kind: 'gradient-draft-color',
+	                          index: 'card',
+	                          value: gradientDraft.color,
+	                          fallbackHex: '#4CAF50',
+	                          placeholder: 'CSS color value',
+                            extraDataset: { 'palette-generation': this._getPaletteSession({ type: 'card' }, gradientStops).generation },
+	                        })}
+	                        <button type="button" data-action="add-gradient-stop" data-palette-generation="${this._getPaletteSession({ type: 'card' }, gradientStops).generation}"${this._canAddGradientStop({ type: 'card' }) ? '' : ' disabled'}>Add</button>
+	                      </div>
 	                    </div>
 	                    ${gradientDraftMessage
 	                      ? `<div id="gradient-draft-hint" class="section-note">${escapeAttribute(gradientDraftMessage)}</div>`

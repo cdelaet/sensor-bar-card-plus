@@ -1,4 +1,5 @@
 const { expect } = require('@playwright/test');
+const { openTarget } = require('../target-test-utils.cjs');
 const { groups, selector } = require('./control-manifest.cjs');
 const marker = () => ({ at: { fixed: 50 }, color: 'red', label: { show: true, text: 'Label', precision: 1 }, future: 'marker metadata' });
 function seed(host) {
@@ -16,7 +17,7 @@ function seed(host) {
       entities: [{ entity: 'sensor.power', ...structuredClone(physical), layout: { height: 32, label: { position: 'hero', width: 150 }, hero: { value_size: 80 } } }, { entity: 'sensor.other', name: 'Other' }] } : {}) };
 }
 async function mount(page, host, config = seed(host), options = {}) {
-  await page.goto('/tests/visual/fixtures/harness.html');
+  await page.goto(`/tests/visual/fixtures/harness.html${options.source === 'dist' ? '?source=dist' : ''}`);
   await page.evaluate(async ({ host, config, options }) => {
     if (options.picker) customElements.define('ha-entity-picker', class extends HTMLElement {
       constructor() { super(); const root = this.attachShadow({mode:'open'}); root.innerHTML='<input aria-label="Entity picker">';
@@ -68,13 +69,47 @@ async function foreign(editor, config) {
 async function openDisclosure(control) { if(await control.getAttribute('aria-expanded')==='false') await control.click(); await expect(control).toHaveAttribute('aria-expanded','true'); }
 async function closeDisclosure(control) { if(await control.getAttribute('aria-expanded')==='true') await control.click(); await expect(control).toHaveAttribute('aria-expanded','false'); }
 async function openSection(editor, entry) {
+ const paintSection=['Bar Appearance','Segments','Gradient Stops'].includes(entry.section);
+ const entityNeedsBarParent=entry.scope==='entity'&&['Bar Appearance','Needle','Baseline','Segments','Gradient Stops'].includes(entry.section);
+ if(entityNeedsBarParent) {
+  await openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));
+  await openDisclosure(editor.locator('#entity-0-group-bar'));
+ }
+ if(paintSection) {
+  if(entry.scope==='entity') {
+   await openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));
+  }
+  const paint=editor.locator(entry.scope==='entity'?'#entity-0-paint-editor':'#card-paint-editor');
+  if(!await paint.evaluate(node=>node.open))await paint.locator('summary').click();
+ }
  if(entry.scope==='entity') {
   await openDisclosure(editor.locator('[data-action="toggle-entity-overrides"][data-index="0"]'));
   const slug={'References':'markers','Bar Appearance':'bar','Gradient Stops':'gradient-stops'}[entry.section]??entry.section.toLowerCase();
-  await openDisclosure(editor.locator(`#entity-0-group-${slug}`));
+  if(entry.section!=='Bar Appearance')await openDisclosure(editor.locator(`#entity-0-group-${slug}`));
  } else if(groups[entry.section]) {
   const group=editor.locator(`#card-group-${groups[entry.section]}`);
   if(await group.count())await openDisclosure(group);
+ }
+ if(entry.section==='Target') {
+  const targetDirection=entry.name?.match(/target-(above|below)-/)?.[1];
+  const targetPaintDirection=entry.name?.match(/target-(above|below)-paint/)?.[1];
+  await openTarget(editor,entry.scope==='entity'?'Entity':'Card',targetDirection?[targetDirection]:['shared','appearance','labels']);
+  if(targetPaintDirection) {
+   const paint=editor.locator(`#${entry.scope==='entity'?'entity-0-':''}target-${targetPaintDirection}-paint-editor`);
+   if(!await paint.evaluate(node=>node.open))await paint.locator(':scope > summary').click();
+   if(entry.name!==`target-${targetPaintDirection}-paint-enabled`) {
+    const enabled=paint.locator('[data-paint-enabled="true"]');
+    if(!await enabled.isChecked())await enabled.check();
+    await expect(enabled).toBeChecked();
+    await expect(paint.locator('.paint-editor-properties')).toBeVisible();
+   }
+  }
+ }
+ const baselinePaint = entry.name?.match(/baseline-(above|below)-paint-/);
+ if(baselinePaint) {
+  const paint = editor.locator(`#${entry.scope==='entity'?'entity-0-':''}baseline-${baselinePaint[1]}-paint-editor`);
+  if(!await paint.evaluate(node=>node.open))await paint.locator(':scope > summary').click();
+  await expect(paint).toHaveJSProperty('open',true);
  }
  if(entry.section==='References') {
   // data-scope-type lives on fields/buttons rather than the row in old templates.
@@ -219,15 +254,22 @@ async function fieldJourney(page,host,entry,options={}) {
    await commit(page,editor,()=>input.setChecked(checked));await expect(input).toBeChecked({checked});
    const config=await saved(page);
    const actual=read(config,entry.path)??(entry.scope==='entity'&&entry.name.includes('-label-')?read(config,entry.path.replace('entities.0.','')):undefined);
-   const fallback=/show-(?:value|unit|marker)$/.test(entry.name)||entry.name==='bar-animated';
-   expect(typeof actual==='string'?!!actual:actual??fallback,entry.id).toBe(checked);
+   const fallback=/show-(?:value|unit|marker)$/.test(entry.name)||['bar-animated','entity-bar-animated'].includes(entry.name);
+   const effective = entry.name.endsWith('-paint-enabled') ? actual != null : typeof actual==='string'?!!actual:actual??fallback;
+   expect(effective,entry.id).toBe(checked);
   }
  } else if(entry.type==='select') {
   for(value of entry.value) {
    await commit(page,editor,()=>input.selectOption(value));await expect(input).toHaveValue(value);
    const [actual,expected]=expectedValue(entry,value,await saved(page));expect(actual,entry.id).toEqual(expected);
   }
- } else if(entry.type==='color') await commit(page,editor,()=>colorPicker(input,value));
+ } else if(entry.type==='color') {
+  if(entry.name.includes('baseline-')) {
+   const css = control(editor,{...entry,name:`${entry.name}-text-fallback`});
+   await expect(css).toBeVisible();
+   await commit(page,editor,()=>css.fill(value));
+  } else await commit(page,editor,()=>colorPicker(input,value));
+ }
  else {
   if(entry.type==='css' && host==='feature') {
    const events=await count(page);await input.fill('rgb(');await expect(input).toHaveAttribute('aria-invalid','true');await echo(page,editor);

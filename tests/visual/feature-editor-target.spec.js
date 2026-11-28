@@ -1,5 +1,8 @@
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
 const { expandFeatureGroups, featureGroup } = require('./feature-editor-test-utils.cjs');
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
+const { snapshotName } = require('./snapshot-name.cjs');
+const { openTarget } = require('./target-test-utils.cjs');
 async function mount(page, source, width, percentage = false) {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({ width, percentage }) => {
@@ -25,7 +28,7 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   const editor = await mount(page, source, width), original = await page.evaluate(() => window.__targetOriginal);
   expect(await page.evaluate(() => window.__targetEvents)).toHaveLength(0);
   const section = featureGroup(editor, 'marker-target');
-  await expect(section).toHaveScreenshot(`feature-target-${width}.png`);
+  await expectEditorLayout(section, expect);
   expect(await editor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   await expect(section.locator('#target-direction option')).toHaveText(['Inward', 'Outward']);
   await expect(section.locator('#target-shape option')).toHaveText(['diamond', 'triangle']);
@@ -47,14 +50,20 @@ for (const source of ['src', 'dist']) for (const width of [360, 240]) test(`Feat
   expect(edited.target.label).toEqual({ ...original.target.label, text: 'Goal energy', show: false, show_value: false, show_unit: false, precision: 2 });
   expect(edited.target.at).toEqual({ value: 75, entity: 'sensor.changed', future: true });
   expect(edited.target.future).toBe(true);
-  await editor.locator('#target-above-fill-enabled').uncheck(); expect((await saved(editor)).target.when_exceeded).toEqual({ future: true });
-  await editor.locator('#target-above-fill-color').evaluate(el => { el.value = '#334455'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+  await openTarget(editor, 'Feature', ['above']);
+  const paint = editor.locator('#target-above-paint-editor');
+  await paint.locator(':scope > summary').click();
+  await paint.getByLabel('Enable Paint', { exact: true }).uncheck();
   expect((await saved(editor)).target.when_exceeded).toEqual({ future: true });
-  await editor.locator('#target-above-fill-enabled').check(); expect((await saved(editor)).target.when_exceeded).toEqual({ fill_color: '#334455', future: true });
+  expect((await saved(editor)).target.when_above.paint).toBeNull();
+  await paint.getByLabel('Enable Paint', { exact: true }).check();
+  await paint.locator('[data-field="target-above-paint-color-text-fallback"]').fill('#334455');
+  expect((await saved(editor)).target.when_above.paint).toEqual({ color: '#334455' });
+  await expect(editor.locator('#target-above-fill-enabled')).toHaveCount(0);
   await editor.locator('#target-show').uncheck();
   const before = await saved(editor);
   for (const key of ['baseline', 'bar', 'peak', 'floor', 'markers', 'future']) expect(before[key]).toEqual(original[key]);
-  await editor.locator('#bar-needle-mode').selectOption('disabled'); await editor.locator('#baseline-show').check();
+  await editor.locator('#bar-needle-mode').uncheck(); await editor.locator('#baseline-show').check();
   await editor.locator('#bar-fill-style').selectOption('bands'); await editor.locator('#bar-color').evaluate(el => { el.value = '#445566'; el.dispatchEvent(new Event('input', { bubbles: true })); });
   expect((await saved(editor)).target).toEqual(before.target);
   const echoCount = await page.evaluate(() => window.__targetEvents.length);

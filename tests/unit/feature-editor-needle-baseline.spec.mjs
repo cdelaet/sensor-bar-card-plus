@@ -43,7 +43,7 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
   for (const [field, value] of [['mode', 'enabled'], ['mode', 'disabled'], ['color', '#123456'], ['color', '#ffffff']]) {
     it(`patches Needle ${field} without touching Baseline, metadata, palettes or markers`, async () => {
       const config = raw(), { editor } = await setup(source, config);
-      await edit(editor, `#bar-needle-${field}`, value, field === 'mode' ? 'change' : 'input');
+      await edit(editor, `#bar-needle-${field}`, field === 'mode' ? value === 'enabled' : value, field === 'mode' ? 'change' : 'input');
       const expected = structuredClone(config);
       if (field === 'mode') expected.bar.needle.show = value === 'enabled';
       else if (value === '#ffffff') delete expected.bar.needle.color;
@@ -55,7 +55,7 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
   for (const boolean of [true, false]) it(`minimally converts boolean ${boolean} only when a color needs an object`, async () => {
     const config = raw(); config.bar.needle = boolean;
     const { editor } = await setup(source, config);
-    await edit(editor, '#bar-needle-mode', boolean ? 'disabled' : 'enabled', 'change');
+    await edit(editor, '#bar-needle-mode', !boolean, 'change');
     expect(editor._config.bar.needle).toBe(!boolean);
     await edit(editor, '#bar-needle-color', '#123456');
     expect(editor._config.bar.needle).toEqual({ show: !boolean, color: '#123456' });
@@ -63,8 +63,8 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
   });
   it('enables an absent Needle without materializing disabled defaults and works with every fill style', async () => {
     const { editor, events } = await setup(source, { type });
-    await edit(editor, '#bar-needle-mode', 'disabled', 'change'); expect(events).toHaveLength(0);
-    await edit(editor, '#bar-needle-mode', 'enabled', 'change'); expect(editor._config.bar.needle).toBe(true);
+    await edit(editor, '#bar-needle-mode', false, 'change'); expect(events).toHaveLength(0);
+    await edit(editor, '#bar-needle-mode', true, 'change'); expect(editor._config.bar.needle).toBe(true);
     for (const style of ['solid', 'gradient', 'bands', 'soft_bands', 'band_gradient']) {
       await edit(editor, '#bar-fill-style', style, 'change'); expect(editor.shadowRoot.querySelector('#bar-needle-mode')).toBeTruthy();
       expect(editor._config.bar.needle).toBe(true);
@@ -102,14 +102,17 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
   });
   for (const direction of ['above', 'below']) it(`patches/toggles ${direction} color without losing nested metadata or Needle`, async () => {
     const config = raw(), { editor } = await setup(source, config);
-    await edit(editor, `#baseline-${direction}-color`, '#123456');
-    expect(editor._config.baseline[direction]).toEqual({ ...config.baseline[direction], color: '#123456' });
-    await edit(editor, `#baseline-${direction}-color-enabled`, false, 'change');
-    const expected = structuredClone(config); delete expected.baseline[direction].color;
+    await edit(editor, `#baseline-${direction}-paint-color`, '#123456');
+    const editedDirection = structuredClone(config.baseline[direction]);
+    delete editedDirection.color;
+    editedDirection.paint = { color: '#123456' };
+    expect(editor._config.baseline[direction]).toEqual(editedDirection);
+    await edit(editor, `#baseline-${direction}-paint-enabled`, false, 'change');
+    const expected = structuredClone(config); delete expected.baseline[direction].color; expected.baseline[direction].paint = null;
     expect(editor._config).toEqual(expected);
     editor.context = { entity_id: 'sensor.changed' }; await editor.updateComplete;
-    await edit(editor, `#baseline-${direction}-color-enabled`, true, 'change');
-    expected.baseline[direction].color = '#123456'; expect(editor._config).toEqual(expected);
+    await edit(editor, `#baseline-${direction}-paint-enabled`, true, 'change');
+    expected.baseline[direction].paint = {}; expect(editor._config).toEqual(expected);
   });
   for (const [part, value] of [['fixed', '12'], ['entity', 'sensor.changed'], ['fixed', ''], ['entity', '']]) it(`patches only source ${part}=${value}`, async () => {
     const config = raw(), { editor, events } = await setup(source, config);
@@ -136,8 +139,8 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
   for (const at of [25, 'sensor.b', '50%', { percent: 50, ...metadata() }]) it(`preserves source representation ${JSON.stringify(at)} through unrelated Baseline/Needle edits`, async () => {
     const config = raw(); config.baseline.at = at;
     const { editor } = await setup(source, config);
-    await edit(editor, '#baseline-above-color', '#123456');
-    await edit(editor, '#bar-needle-mode', 'enabled', 'change');
+    await edit(editor, '#baseline-above-paint-color', '#123456');
+    await edit(editor, '#bar-needle-mode', true, 'change');
     expect(editor._config.baseline.at).toEqual(at);
     if (at === '50%') expect(editor.shadowRoot.querySelector('#baseline-value').value).toBe('50%');
     if (typeof at === 'object') expect(editor.shadowRoot.querySelector('#baseline-value').value).toBe('50%');
@@ -157,7 +160,7 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
     const { editor } = await setup(source, config);
     await edit(editor, '#baseline-value', '30'); expect(editor._config.baseline).toBe(30);
     await edit(editor, '#baseline-show', false, 'change'); expect(editor._config.baseline).toEqual({ at: 30, enabled: false });
-    await edit(editor, '#baseline-above-color', '#123456'); expect(editor._config.baseline).toEqual({ at: 30, enabled: false, above: { color: '#123456' } });
+    await edit(editor, '#baseline-above-paint-color', '#123456'); expect(editor._config.baseline).toEqual({ at: 30, enabled: false, above: { paint: { color: '#123456' } } });
     expect(editor._config.bar.needle).toEqual(config.bar.needle);
   });
   it('switches the direct Value between fixed and percent with Entity/Attribute retained', async () => {
@@ -205,14 +208,14 @@ for (const source of ['src', 'dist']) describe(`Feature Needle/Baseline (${sourc
     const standalone = new classes.editor(); standalone.setConfig(raw());
     for (const key of ['_needleSection', '_baselineSection']) {
       expect(editor[key].constructor).toBe(standalone[key].constructor);
-      expect(editor.shadowRoot.innerHTML).toContain(editor[key].render(root));
     }
-    expect(editor.shadowRoot.innerHTML).toContain(editor._baselineSection.render(root, options => editor._renderCardGroup(options)));
+    expect(editor.shadowRoot.innerHTML).toContain('id="baseline-above-paint-enabled"');
+    expect(editor.shadowRoot.innerHTML).toContain('id="baseline-below-paint-enabled"');
     expect(editor.shadowRoot.innerHTML).not.toContain('disabled="disabled"');
   });
   it('leaves visibility precedence to runtime and restores Needle when Baseline fails to resolve', async () => {
     const { editor, classes } = await setup(source);
-    await edit(editor, '#bar-needle-mode', 'enabled', 'change');
+    await edit(editor, '#bar-needle-mode', true, 'change');
     const feature = new classes.feature(); feature._render = () => {}; feature.setConfig(editor._config); feature.context = { entity_id: 'sensor.a' };
     feature.hass = { states: { 'sensor.a': { state: '30', attributes: {} }, 'sensor.b': { state: '10', attributes: {} } } };
     await feature.updateComplete;

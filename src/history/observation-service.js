@@ -1,4 +1,5 @@
 import { getFiniteNumber } from '../config/normalize.js';
+import { collapseEqualTimestamps } from './calculations.js';
 import { fetchPlannedHistory, fetchRecorderStatistics, historySourceKey } from './history-provider.js';
 import { HISTORY_DEBUG_TRACE, historyDebugEnabled, historyDebugId, historyDebugLog, historyDebugTime } from './history-debug.js';
 
@@ -71,9 +72,50 @@ function mergeObservations(...lists) {
   return [...merged.values()].sort(compareObservations);
 }
 
+function statisticsBucketsCoverFloor(buckets, start, floor) {
+  if (!Array.isArray(buckets) || !Number.isFinite(start) || !Number.isFinite(floor)) return false;
+  let cursor = start;
+  for (const bucket of [...buckets].sort((a, b) => a.start - b.start)) {
+    if (!Number.isFinite(bucket?.start) || !Number.isFinite(bucket?.end) || bucket.end <= start) continue;
+    if (bucket.start > floor) break;
+    if (bucket.start !== cursor) return false;
+    cursor = bucket.end;
+    if (cursor > floor) return true;
+  }
+  return false;
+}
+
+function collapseEqualTimestampGroups(observations) {
+  const result = [];
+  for (let index = 0; index < observations.length;) {
+    const timestamp = observations[index].timestamp;
+    let end = index + 1;
+    while (end < observations.length && observations[end].timestamp === timestamp) end += 1;
+    const group = observations.slice(index, end);
+    if (group.length <= 1) {
+      result.push(...group);
+    } else if (group.every(observation => observation.origin === 'live')) {
+      result.push(...collapseEqualTimestamps(group));
+    } else if (group.every(observation => observation.origin !== 'live')) {
+      result.push(...group);
+    } else {
+      // Preserve every Recorder row. Live rows in a mixed group only matter
+      // when they are the effective last transition, or when the group is
+      // ambiguous; retain that representation without keeping every transition.
+      const recorder = group.filter(observation => observation.origin !== 'live');
+      const effective = collapseEqualTimestamps(group)[0];
+      result.push(...recorder);
+      if (effective?.ambiguous) result.push({ ...effective, origin: 'live' });
+      else if (effective?.origin === 'live') result.push(effective);
+    }
+    index = end;
+  }
+  return result.sort(compareObservations);
+}
+
 export class SharedObservationService {
   constructor({ provider = fetchPlannedHistory, now = Date.now, ttlMs = 30000, maxEntries = 128,
-    maxConsumers = 256,
+    maxConsumers = 256, maxLiveObservations = 50000,
     requestTimeoutMs = 30000 } = {}) {
     if (typeof provider !== 'function') throw new TypeError('provider must be a function');
     this.provider = provider;
@@ -81,6 +123,8 @@ export class SharedObservationService {
     this.ttlMs = ttlMs;
     this.maxEntries = maxEntries;
     this.maxConsumers = maxConsumers;
+    this.maxLiveObservations = Math.max(1, Math.floor(maxLiveObservations));
+    this.liveCompactionSlack = Math.max(1, Math.min(5000, Math.floor(this.maxLiveObservations / 10)));
     this.requestTimeoutMs = requestTimeoutMs;
     this.cache = new Map();
     this.inflight = new Map();
@@ -455,9 +499,13 @@ export class SharedObservationService {
             coverage: { complete: false, kind: 'unknown', reason: 'History response omitted the requested source',
               requested: item.requestedWindow } };
         } else {
-          const activeLive = (this.sourceHistories.get(this._historyKey(item.sourceKey, item.window))?.observations ?? [])
+          const activeHistory = this.sourceHistories.get(this._historyKey(item.sourceKey, item.window));
+          const activeLive = (activeHistory?.observations ?? [])
             .filter((observation) => observation.origin === 'live');
           const cachedLive = previous?.observations.filter((observation) => observation.origin === 'live') ?? [];
+          const retentionFloor = Number.isFinite(activeHistory?.retentionFloor)
+            ? activeHistory.retentionFloor
+            : Number.isFinite(previous?.retentionFloor) ? previous.retentionFloor : null;
           const recorder = (response.observations ?? []).map((observation, index) => ({
             timestamp: observation.timestamp, value: observation.value, state: observation.state,
             order: observation.order ?? index, orderKnown: observation.orderKnown === true,
@@ -489,6 +537,10 @@ export class SharedObservationService {
             ...(retainedRecorder.length ? { retainedRawStart: previousHour } : {}),
             requestedWindow: item.requestedWindow,
             acquiredWindow: { start: queryWindow.start, end: Math.min(queryWindow.end, this.now()) },
+            ...(Number.isFinite(retentionFloor) ? { retentionFloor } : {}),
+            recorderBoundaryTimestamp: recorder
+              .filter(observation => observation.timestamp <= queryWindow.start)
+              .at(-1)?.timestamp ?? null,
             fetchedAt: this.now(),
             requestStartedAt: item.startedAt,
             acquisitionId: item.id,
@@ -515,7 +567,7 @@ export class SharedObservationService {
             if (cached.acquiredWindow && this._covers(record, cached.acquiredWindow)) {
               const cachedScope = cached.coverage?.requested ?? cached.requestedWindow ?? cached.acquiredWindow;
               if (this._coverageCovers(record, cachedScope, record.acquisitionMode)) {
-                this.cache.set(key, cloneRecord(record, { requestedWindow: cached.requestedWindow }));
+                this.cache.set(key, cloneRecord(record, { requestedWindow: cached.requestedWindow, cache: 'hit' }));
               }
             } else if (!cached.acquiredWindow || !record.acquiredWindow
               || (cached.acquiredWindow.start < record.acquiredWindow.end
@@ -610,15 +662,56 @@ export class SharedObservationService {
     this.cacheExpiryTimer?.unref?.();
   }
 
+  _recoverRetentionFloor(history, record) {
+    // Only a fresh acquisition can prove recovery. A cached record still
+    // carries old acquired-window/boundary metadata and must not lower a floor.
+    // Raw HA history cannot prove interval completeness; require an explicit
+    // complete response plus a fresh boundary. Statistics additionally require
+    // complete, contiguous buckets through the floor.
+    const floor = history?.retentionFloor;
+    if (!Number.isFinite(floor) || !record || record.stale || record.error
+      || record.cache !== 'miss' || record.coverage?.kind === 'incomplete') return;
+    const acquired = record.acquiredWindow;
+    if (!acquired || !Number.isFinite(acquired.start) || !Number.isFinite(acquired.end)
+      || acquired.start > floor || acquired.end < floor) return;
+    let recoveredStart = null;
+
+    if (record.statisticsWindow && record.statistics) {
+      const statsWindow = record.statisticsWindow;
+      const statsCover = Number.isFinite(statsWindow.start) && statsWindow.start <= floor
+        && Number.isFinite(statsWindow.end) && statsWindow.end > floor
+        && record.statistics.missingBuckets === 0
+        && record.coverage?.statistics?.kind !== 'incomplete'
+        && statisticsBucketsCoverFloor(record.statistics.buckets, statsWindow.start, floor);
+      if (statsCover) recoveredStart = Math.max(acquired.start, statsWindow.start);
+      else if (record.coverage?.complete === true && record.rawWindow
+        && record.rawWindow.start <= floor && record.rawWindow.end >= floor
+        && Number.isFinite(record.recorderBoundaryTimestamp)
+        && record.recorderBoundaryTimestamp <= record.rawWindow.start) {
+        recoveredStart = record.rawWindow.start;
+      }
+    } else if (record.coverage?.complete === true
+      && Number.isFinite(record.recorderBoundaryTimestamp)
+      && record.recorderBoundaryTimestamp <= acquired.start) {
+      recoveredStart = acquired.start;
+    }
+
+    if (recoveredStart !== null) {
+      const aligned = Math.ceil(recoveredStart / 60000) * 60000;
+      if (aligned < floor) history.retentionFloor = aligned;
+    }
+  }
+
   _consumerRecord(consumer, record, merge = true) {
     let incoming = record.observations ?? [];
+    let older = false;
     if (merge && record.acquiredWindow) {
       // A statistics refresh only replaces Recorder rows in its raw tail.
       // Retain the previous hour's rows for the statistics handoff.
       const acquired = record.statisticsWindow ? (record.rawWindow ?? { start: Infinity, end: Infinity }) : record.acquiredWindow;
       const windows = [...this.consumers.values()].filter((item) => item.family.history === consumer.family.history)
         .map((item) => item.window);
-      const older = Number.isFinite(record.acquisitionId) && Number.isFinite(consumer.recordMetadata?.acquisitionId)
+      older = Number.isFinite(record.acquisitionId) && Number.isFinite(consumer.recordMetadata?.acquisitionId)
         && record.acquisitionId < consumer.recordMetadata.acquisitionId;
       if (older) {
         incoming = incoming.filter((observation) => observation.origin === 'live');
@@ -646,6 +739,15 @@ export class SharedObservationService {
       }
     }
     if (merge) this._mergeIntoHistory(consumer, incoming);
+    const history = consumer.family.history;
+    // A cache record may outlive the history that produced its compacted
+    // observation array. Adopt its floor before deciding whether new Recorder
+    // evidence can safely lower it.
+    if (!Number.isFinite(history.retentionFloor) && Number.isFinite(record.retentionFloor)) {
+      history.retentionFloor = record.retentionFloor;
+    }
+    if (!older) this._recoverRetentionFloor(history, record);
+    if (!older && Number.isFinite(history.retentionFloor)) record.retentionFloor = history.retentionFloor;
     const observations = consumer.observations;
     const liveThrough = consumer.family.history.liveThrough ?? -Infinity;
     const historyStarts = [...this.consumers.values()]
@@ -656,6 +758,7 @@ export class SharedObservationService {
     return cloneRecord({
       ...base,
       ...record,
+      retentionFloor: consumer.family.history.retentionFloor ?? null,
       acquiredWindow: record.acquiredWindow ?? base.acquiredWindow ?? null,
       fetchedAt: record.fetchedAt ?? base.fetchedAt ?? null,
       retrievedAt: record.retrievedAt ?? base.retrievedAt ?? null,
@@ -711,6 +814,7 @@ export class SharedObservationService {
         owner.pruneHour = pruneHour;
       }
       history.push(incoming[0]);
+      this._compactLiveHistory(owner);
       return;
     }
     const merged = mergeObservations(original, incoming);
@@ -719,6 +823,31 @@ export class SharedObservationService {
     const boundaryTime = before.at(-1)?.timestamp;
     const boundary = before.filter((sample) => sample.timestamp === boundaryTime);
     consumer.observations = [...boundary, ...inOrAfter];
+    this._compactLiveHistory(owner);
+  }
+
+  _compactLiveHistory(history) {
+    const observations = history.observations;
+    const live = observations.filter(observation => observation.origin === 'live');
+    if (live.length <= this.maxLiveObservations + this.liveCompactionSlack) return;
+    const firstKept = live.length - this.maxLiveObservations;
+    const cutoff = live[firstKept]?.timestamp;
+    if (!Number.isFinite(cutoff)) return;
+    const boundaryTime = live[firstKept - 1]?.timestamp;
+    const next = observations.filter(observation => observation.origin !== 'live'
+      || observation.timestamp >= cutoff);
+    if (Number.isFinite(boundaryTime) && boundaryTime < cutoff) {
+      next.push(...observations.filter(observation => observation.origin === 'live'
+        && observation.timestamp === boundaryTime));
+      next.sort(compareObservations);
+    }
+    // A window that starts before this minute boundary may have lost a live
+    // transition. Keep the boundary sample for state continuity but require
+    // calculations to report partial coverage, never a silently wrong extremum.
+    const floor = Math.ceil(cutoff / 60000) * 60000;
+    history.observations = collapseEqualTimestampGroups(next);
+    history.retentionFloor = Number.isFinite(history.retentionFloor)
+      ? Math.max(history.retentionFloor, floor) : floor;
   }
 
   _decorateForActiveConsumers(source, window, record) {
@@ -751,7 +880,7 @@ export class SharedObservationService {
     if (!family) {
       let history = this.sourceHistories.get(historyKey);
       if (!history) {
-        history = { key: historyKey, observations: [], refs: 0 };
+        history = { key: historyKey, observations: [], refs: 0, retentionFloor: null };
         this.sourceHistories.set(historyKey, history);
       }
       history.refs += 1;
@@ -774,7 +903,7 @@ export class SharedObservationService {
     const cacheKey = this._cacheKey(normalized, window);
     const cached = this.cache.get(cacheKey);
     if (cached && (!family.recordMetadata || (cached.acquisitionId ?? 0) > (family.recordMetadata.acquisitionId ?? 0))) {
-      this._consumerRecord(consumer, cached);
+      this._consumerRecord(consumer, cloneRecord(cached, { cache: 'hit' }));
     }
     this.consumers.set(consumer.id, consumer);
     this._scheduleCacheExpiry();
@@ -801,7 +930,7 @@ export class SharedObservationService {
           const nextHistoryKey = this._historyKey(sourceKey, nextWindow);
           let history = this.sourceHistories.get(nextHistoryKey);
           if (!history) {
-            history = previousHistory.key === nextHistoryKey ? previousHistory : { key: nextHistoryKey, observations: [], refs: 0 };
+            history = previousHistory.key === nextHistoryKey ? previousHistory : { key: nextHistoryKey, observations: [], refs: 0, retentionFloor: null };
             this.sourceHistories.set(nextHistoryKey, history);
           }
           history.refs += 1;
@@ -816,7 +945,7 @@ export class SharedObservationService {
       const nextCached = this.cache.get(this._cacheKey(normalized, nextWindow));
       if (nextCached && (!consumer.recordMetadata
         || (nextCached.acquisitionId ?? 0) > (consumer.recordMetadata.acquisitionId ?? 0))) {
-        this._consumerRecord(consumer, nextCached);
+        this._consumerRecord(consumer, cloneRecord(nextCached, { cache: 'hit' }));
       }
       this._scheduleCacheExpiry();
     };
@@ -891,9 +1020,18 @@ export class SharedObservationService {
 
     for (const [key, record] of this.cache) {
       if (historySourceKey(record.source) !== sourceKey || !activeKeys.has(key)) continue;
-      const previous = record.observations;
-      if (!updatedHistories.has(previous)) updatedHistories.set(previous, mergeObservations(previous, [observation]));
-      record.observations = updatedHistories.get(previous);
+      const history = this.families.get(key)?.history;
+      if (history) {
+        // Active cache records are per-family views of the same source history.
+        // Keep the cache on the compacted shared array instead of growing an
+        // independent live copy that no compaction step owns.
+        record.observations = history.observations;
+        record.retentionFloor = history.retentionFloor ?? null;
+      } else {
+        const previous = record.observations;
+        if (!updatedHistories.has(previous)) updatedHistories.set(previous, mergeObservations(previous, [observation]));
+        record.observations = updatedHistories.get(previous);
+      }
       record.liveThrough = Math.max(record.liveThrough ?? -Infinity, observedAt);
       record.observedThrough = Math.max(record.observedThrough ?? -Infinity, observedAt);
       record.coverage = { ...record.coverage, liveObservedThrough: record.liveThrough };

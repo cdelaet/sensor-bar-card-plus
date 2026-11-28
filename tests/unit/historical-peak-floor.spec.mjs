@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { normalizeCardConfig } from '../../src/config/normalize.js';
 import { validateNormalizedConfig } from '../../src/config/validate.js';
 import { buildRowViewModel } from '../../src/view-model/row-view-model.js';
-import { renderMarker, patchMarker, renderHistoryStatus } from '../../src/render/bar-renderer.js';
+import { renderMarker, patchMarker } from '../../src/render/bar-renderer.js';
 import { historicalMarkerConsumers, historicalMarkerId } from '../../src/history/marker-consumers.js';
-import { resolveTimeWindow } from '../../src/history/time-window.js';
+import { isEligibleHistoricalWindow, parseHistoricalWindow, resolveTimeWindow } from '../../src/history/time-window.js';
 import { HistoricalValueResolver } from '../../src/history/value-resolver.js';
 import { SharedObservationService } from '../../src/history/observation-service.js';
 import { loadCardClass } from '../support/load-card-class.cjs';
@@ -74,9 +74,11 @@ describe('historical Peak/Floor', () => {
       expect(normalized.peak_marker.window_spec).toMatchObject({ kind, period });
       expect(normalized.peak_marker.window).toBe(canonical);
     }
-    const selected = normalizeCardConfig({ entity, peak: { window: 'last_week', reset: 'yearly' } });
+    const selected = normalizeCardConfig({ entity,
+      peak: { window: 'last_week', reset: 'yearly' }, floor: { window: 'today', reset: 'bad' } });
     expect(selected.peak_marker.window).toBe('previous_week'); expect(selected.peak.window).toBe('previous_week');
     expect(selected.peak).not.toHaveProperty('reset'); expect(selected.peak_marker.window_invalid).toBeUndefined();
+    expect(selected.floor_marker.window).toBe('today'); expect(selected.floor_marker.window_invalid).toBeUndefined();
     const entityAlias = normalizeCardConfig({ entity, entities: [{ entity, peak: { window: 'last_month' }, floor: { reset: 'yearly' } }] });
     expect(entityAlias.entities[0].peak_marker.window).toBe('previous_month');
     expect(entityAlias.entities[0].peak.window).toBe('previous_month');
@@ -85,13 +87,38 @@ describe('historical Peak/Floor', () => {
     const validCanonical = normalizeCardConfig({ entity, peak: { window: 'previous_week' }, floor: { window: 'previous_month' } });
     expect(validateNormalizedConfig(validCanonical).warnings.map(w => w.code)).not.toContain('peak_marker.invalid_window');
     expect(validateNormalizedConfig(validCanonical).warnings.map(w => w.code)).not.toContain('floor_marker.invalid_window');
-    const invalid = normalizeCardConfig({ entity, peak: { enabled: true, reset: '24h' } });
+    const invalid = normalizeCardConfig({ entity, peak: { enabled: true, reset: 'bogus' }, floor: { enabled: true, reset: '1441m' },
+      entities: [{ entity }, { entity: 'sensor.other', peak: { reset: '1441m' }, floor: { reset: 'bogus' } }] });
     expect(invalid.peak_marker.window_invalid).toBe(true);
+    expect(invalid.floor_marker.window_invalid).toBe(true);
     expect(invalid.entities[0].peak_marker.window_invalid).toBe(true);
+    expect(invalid.entities[0].floor_marker.window_invalid).toBe(true);
+    expect(invalid.entities[1].peak_marker.window_invalid).toBe(true);
+    expect(invalid.entities[1].floor_marker.window_invalid).toBe(true);
     expect(historicalMarkerConsumers(invalid.entities)).toHaveLength(0);
-    expect(validateNormalizedConfig(invalid).warnings.some(w => w.code === 'peak_marker.invalid_window')).toBe(true);
+    expect(validateNormalizedConfig(invalid).errors.map(w => w.code)).toEqual(expect.arrayContaining([
+      'peak_marker.invalid_window', 'floor_marker.invalid_window',
+    ]));
     expect(normalizeCardConfig({ entity, floor: { window: 'never' } }).floor_marker.window_invalid).toBe(true);
     expect(normalizeCardConfig({ entity, peak: { window: '__proto__' } }).peak_marker.window_invalid).toBe(true);
+    expect(normalizeCardConfig({ entity, peak: { window: '9999w' } }).peak_marker.window_invalid).toBe(true);
+  });
+
+  it('accepts eligible modern windows from legacy reset for Peak and Floor', () => {
+    const cases = [['24h', '24h'], ['7d', '7d'], ['yearly', 'this_year'], ['never', 'today']];
+    for (const key of ['peak', 'floor']) for (const [reset, expectedWindow] of cases) {
+      const legacy = normalizeCardConfig({ entity, [key]: { enabled: true, reset } });
+      const canonical = normalizeCardConfig({ entity, [key]: { enabled: true, window: expectedWindow } });
+      const marker = legacy[`${key}_marker`];
+      expect(isEligibleHistoricalWindow(marker.window)).toBe(true);
+      expect(marker.window).toBe(expectedWindow);
+      expect(marker.window_spec).toEqual(parseHistoricalWindow(expectedWindow));
+      expect(marker.window_spec).toEqual(canonical[`${key}_marker`].window_spec);
+      expect(marker.window_invalid).toBeUndefined();
+      expect(historicalMarkerConsumers(legacy.entities)).toContainEqual(expect.objectContaining({
+        spec: expect.objectContaining({ calculation: key === 'peak' ? 'max' : 'min', window: marker.window_spec }),
+      }));
+    }
   });
 
   it('retains correct status and never substitutes the live reading', () => {
@@ -102,37 +129,29 @@ describe('historical Peak/Floor', () => {
     }
     const partial = row('peak', { value: 80, status: 'partial' }, '99');
     expect(partial.peak).toBe(80); expect(partial.peakStatus).toBe('partial');
-    expect(renderMarker(partial.markers.find(m => m.type === 'peak'))).toContain('Partial history');
+    expect(partial.historyDiagnostics[0]).toMatchObject({ severity: 'warning', area: 'Peak marker · Configured window: today' });
+    expect(renderMarker(partial.markers.find(m => m.type === 'peak'))).not.toMatch(/[!~…]|data-sbcp-tooltip|data-history-status/);
     const stale = row('floor', { value: 20, status: 'stale' }, '1');
     expect(stale.floor).toBe(20); expect(stale.floorStatus).toBe('stale');
-    expect(renderMarker(stale.markers.find(m => m.type === 'floor'))).toContain('Stale history');
+    expect(stale.historyDiagnostics.find(diagnostic => diagnostic.area.startsWith('Floor'))).toMatchObject({ severity: 'warning' });
+    expect(renderMarker(stale.markers.find(m => m.type === 'floor'))).not.toMatch(/[!~…]|data-sbcp-tooltip|data-history-status/);
     expect(row('peak', { value: 70, status: 'available' }).peak).toBe(70);
   });
 
-  it('exposes partial and stale marker descriptions as keyboard tooltip triggers and clears them on recovery', () => {
+  it('removes legacy diagnostic glyphs and tooltips from marker markup and patches', () => {
     for (const [type, status, text] of [['peak', 'partial', 'Partial history'], ['floor', 'stale', 'Stale history']]) {
       const marker = row(type, { value: 20, status }).markers.find(item => item.type === type);
       const html = renderMarker(marker);
-      expect(html).toContain(`aria-label="${type === 'peak' ? 'Peak' : 'Floor'}: ${text}`);
-      expect(html).toContain(`data-sbcp-tooltip="${text}`);
-      expect(html).toContain('tabindex="0"');
-      expect(html).not.toContain('title=');
-      const attributes = {}; const element = { dataset: {}, style: { setProperty() {}, removeProperty() {} },
-        setAttribute: (name, value) => { attributes[name] = value; },
-        removeAttribute: name => { delete attributes[name]; }, querySelector: () => null };
-      const indicator = { attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute(name) { delete this.attributes[name]; } };
-      element.querySelector = () => indicator;
+      expect(html).not.toContain(text);
+      expect(html).not.toMatch(/data-sbcp-tooltip|history-indicator|data-history-status/);
+      const element = { dataset: {}, style: { setProperty() {}, removeProperty() {} },
+        setAttribute() {}, removeAttribute() {}, querySelector: () => null };
       patchMarker(element, marker);
-      expect(indicator.attributes['aria-label']).toContain(text);
-      expect(indicator.attributes['data-sbcp-tooltip']).toContain(text);
-      patchMarker(element, { ...marker, historyStatus: 'available' });
-      expect(indicator.attributes['aria-label']).toBeUndefined();
-      expect(indicator.attributes.role).toBeUndefined();
-      expect(indicator.attributes['data-sbcp-tooltip']).toBeUndefined();
+      expect(element.dataset.historyStatus).toBeUndefined();
     }
   });
 
-  it('renders one safe explanation when unavailable markers have different reasons', () => {
+  it('produces a separate safe message for each unavailable marker and keeps marker positions absent', () => {
     const config = normalizeCardConfig({ entity, peak: { enabled: true }, floor: { enabled: true } }).entities[0];
     const model = buildRowViewModel({ entityConfig: config, entityState: { state: '40', attributes: {} },
       historicalExtrema: {
@@ -140,13 +159,17 @@ describe('historical Peak/Floor', () => {
         floor: { status: 'unavailable', value: null, provenance: { coverage: { reason: 'Statistics and entity units are incompatible' } } },
       } });
     expect(model.peakVisible).toBe(false); expect(model.floorVisible).toBe(false);
-    expect(model.historyStatusSummary.text).toContain('Peak: Long-term statistics');
-    expect(model.historyStatusSummary.text).toContain('Floor: Statistics and Recorder units are incompatible');
-    expect(renderHistoryStatus(model.historyStatusSummary)).toContain(`data-sbcp-tooltip="${model.historyStatusSummary.text}`);
+    expect(model.historyDiagnostics).toHaveLength(2);
+    expect(model.historyDiagnostics.map(diagnostic => diagnostic.area)).toEqual([
+      'Peak marker · Configured window: today', 'Floor marker · Configured window: today',
+    ]);
+    expect(model.historyDiagnostics.map(diagnostic => diagnostic.severity)).toEqual(['error', 'error']);
+    expect(model.historyDiagnostics[0].message).toContain('Long-term statistics are unavailable');
+    expect(model.historyDiagnostics[1].message).toContain('Statistics and Recorder units are incompatible');
     expect(model.markers.find(item => item.type === 'peak').position).toBeNull();
   });
 
-  it('renders ordinary Recorder results without a partial badge while preserving unknown coverage', async () => {
+  it('does not diagnose ordinary Recorder results while preserving unknown coverage', async () => {
     const now = Date.parse('2026-05-13T12:00:00Z');
     const hass = { config: { time_zone: 'UTC' }, callWS: vi.fn(async () => ({ [entity]: [
       { s: '10', lu: Date.parse('2026-05-13T10:00:00Z') / 1000 },
@@ -163,7 +186,7 @@ describe('historical Peak/Floor', () => {
     }
   });
 
-  it('renders a partial badge for explicitly incomplete coverage', async () => {
+  it('reports explicitly incomplete coverage through the history diagnostics producer', async () => {
     const now = Date.parse('2026-05-13T12:00:00Z');
     const provider = async (_hass, sources, window) => new Map([[`${entity}\u0000`, {
       source: sources[0], observations: [{ timestamp: window.start + 1000, value: 80 }],
@@ -174,8 +197,9 @@ describe('historical Peak/Floor', () => {
       window: { kind: 'calendar', period: 'day' } }, { hass: { config: { time_zone: 'UTC' } } });
     expect(result).toMatchObject({ value: 80, status: 'partial' });
     const html = renderMarker(row('peak', result).markers.find(m => m.type === 'peak'));
-    expect(html).toContain('data-history-status="partial"');
-    expect(html).toContain('Partial history');
+    expect(html).not.toMatch(/data-sbcp-tooltip|history-indicator|data-history-status/);
+    expect(row('peak', result).historyDiagnostics.find(diagnostic => diagnostic.area.startsWith('Peak'))).toEqual(
+      expect.objectContaining({ severity: 'warning', message: expect.stringContaining('may miss the true extremum') }));
   });
 
   it('registers shared historical max and min for card and feature and preserves them across recreation', async () => {

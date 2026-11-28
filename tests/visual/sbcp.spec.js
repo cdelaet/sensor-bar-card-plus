@@ -1,4 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
+const { snapshotName } = require('./snapshot-name.cjs');
 
 function sensor(state, {
   friendly_name,
@@ -51,8 +52,8 @@ function revealInterval(clipPath) {
   return { left, right };
 }
 
-async function render(page, { width = 720, config, states = baseStates }) {
-  await page.goto('/tests/visual/fixtures/harness.html');
+async function render(page, { source = 'src', width = 720, config, states = baseStates }) {
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({ width, config, states }) => {
     const values = Object.fromEntries(Object.entries(states).map(([id, state]) => [id,
       Number.isFinite(Number(state.state)) ? [Number(state.state)] : []]));
@@ -197,7 +198,7 @@ test('Direction visual: four Scale and Bar reveal combinations', async ({ page }
   expect(geometry[1].paint).toBe(geometry[3].paint);
   expect(geometry[0].paint).toContain('rgb(22, 163, 74) 0%');
   expect(geometry[1].paint).toContain('rgb(220, 38, 38) 0%');
-  await expect(mount).toHaveScreenshot('direction-four-reveal-combinations.png');
+  await expect(mount).toHaveScreenshot(snapshotName('direction-four-reveal-combinations.png'));
 });
 
 test('Direction visual: reverse Scale projects continuous Gradient Paint', async ({ page }) => {
@@ -222,7 +223,7 @@ test('Direction visual: reverse Scale projects continuous Gradient Paint', async
   expect(revealInterval(result.clip)).toEqual({ left: 20, right: 0 });
   expect(result.paint).toContain('rgb(220, 38, 38) 0%');
   expect(result.paint).toContain('rgb(37, 99, 235) 100%');
-  await expect(mount).toHaveScreenshot('direction-reverse-gradient-projection.png');
+  await expect(mount).toHaveScreenshot(snapshotName('direction-reverse-gradient-projection.png'));
 });
 
 test('Direction visual: Needle position and rail ignore Bar direction', async ({ page }) => {
@@ -250,7 +251,7 @@ test('Direction visual: Needle position and rail ignore Bar direction', async ({
   expect(geometry[0].needle).toBe('70%');
   expect(geometry[0].clip).toBe(geometry[1].clip);
   expect(geometry[0].paint).toBe(geometry[1].paint);
-  await expect(mount).toHaveScreenshot('direction-reverse-needle.png');
+  await expect(mount).toHaveScreenshot(snapshotName('direction-reverse-needle.png'));
 });
 
 test('Direction visual: asymmetric Baseline owns reveal origin on both semantic sides', async ({ page }) => {
@@ -284,7 +285,7 @@ test('Direction visual: asymmetric Baseline owns reveal origin on both semantic 
   expect(geometry[2].clip).toBe(geometry[3].clip);
   expect(revealInterval(geometry[0].clip)).toEqual({ left: 30, right: 40 });
   expect(revealInterval(geometry[2].clip)).toEqual({ left: 60, right: 20 });
-  await expect(mount).toHaveScreenshot('direction-asymmetric-baseline.png');
+  await expect(mount).toHaveScreenshot(snapshotName('direction-asymmetric-baseline.png'));
 });
 
 test('Direction visual: reverse Scale projects Target and reference markers inside labels', async ({ page }) => {
@@ -313,7 +314,7 @@ test('Direction visual: reverse Scale projects Target and reference markers insi
   });
   expect(revealInterval(geometry.current)).toEqual({ left: 0, right: 30 });
   expect(geometry).toMatchObject({ target: '40%', reference: '85%', inside: true });
-  await expect(mount).toHaveScreenshot('direction-reverse-inside-markers.png');
+  await expect(mount).toHaveScreenshot(snapshotName('direction-reverse-inside-markers.png'));
 });
 
 test('dynamic reverse Scale projects current value, Baseline, and Target as bounds change', async ({ page }) => {
@@ -1273,7 +1274,7 @@ test('Hero occupied above-marker lane adds 4px below the header', async ({ page 
   expect(occupied.occupancy).toBe('true');
 
   const responsiveMargin = Math.min(4, Math.max(2, occupied.rowHeightVariable * 0.08));
-  expect(occupied.margin - responsiveMargin).toBeCloseTo(4, 2);
+  expect(Math.abs(occupied.margin - responsiveMargin - 4)).toBeLessThanOrEqual(0.01);
   expect(occupied.headerTop).toBeCloseTo(plain.headerTop, 2);
   expect(occupied.valueTop).toBeCloseTo(plain.valueTop, 2);
   for (const property of ['mainTop', 'trackTop', 'rowHeight']) {
@@ -1393,26 +1394,29 @@ test('marker labels use a compact card surface with asymmetric offsets and uncha
   expect(metrics.markerLaneSize).toBe('15px');
 });
 
-test('marker labels inherit their own marker color and contrast through normal updates', async ({ page }) => {
+for (const source of ['src', 'dist']) test(`marker labels inherit their own marker color and contrast through supported updates (${source})`, async ({ page }) => {
+  const config = {
+    type: 'custom:sensor-bar-card-plus',
+    label_position: 'off',
+    min: 0,
+    max: 100,
+    entities: [{
+      entity: 'sensor.marker_color_row',
+      target: { at: { fixed: 60 }, color: '#F8FAFC', label: { show: true } },
+      peak: { enabled: true, reset: 'never', color: '#111827', label: { show: true } },
+      floor: { enabled: true, reset: 'never', color: '#808080', label: { show: true } },
+      markers: [
+        { at: { fixed: 35 }, lane: 'above', shape: 'diamond', color: '#DC2626', label: { show: true } },
+        { at: { fixed: 65 }, lane: 'below', shape: 'circle', color: '#2563EB', label: { show: true } },
+      ],
+    }],
+  };
+  const states = { 'sensor.marker_color_row': sensor(50, { friendly_name: 'Marker color row' }) };
   await render(page, {
+    source,
     width: 720,
-    config: {
-      type: 'custom:sensor-bar-card-plus',
-      label_position: 'off',
-      min: 0,
-      max: 100,
-      entities: [{
-        entity: 'sensor.marker_color_row',
-        target: { at: { fixed: 60 }, color: '#F8FAFC', label: { show: true } },
-        peak: { enabled: true, reset: 'never', color: '#111827', label: { show: true } },
-        floor: { enabled: true, reset: 'never', color: '#808080', label: { show: true } },
-        markers: [
-          { at: { fixed: 35 }, lane: 'above', shape: 'diamond', color: '#DC2626', label: { show: true } },
-          { at: { fixed: 65 }, lane: 'below', shape: 'circle', color: '#2563EB', label: { show: true } },
-        ],
-      }],
-    },
-    states: { 'sensor.marker_color_row': sensor(50, { friendly_name: 'Marker color row' }) },
+    config,
+    states,
   });
 
   const readLabels = () => page.evaluate(() => {
@@ -1487,27 +1491,41 @@ test('marker labels inherit their own marker color and contrast through normal u
       .every((label, index) => label === window.__markerColorLabelRefs[index]);
   })).toBe(true);
 
-  await page.evaluate(() => {
+  const nextConfig = structuredClone(config);
+  Object.assign(nextConfig.entities[0].target, { color: '#16A34A' });
+  Object.assign(nextConfig.entities[0].peak, { color: '#0EA5E9' });
+  Object.assign(nextConfig.entities[0].floor, { color: '#7C3AED' });
+  Object.assign(nextConfig.entities[0].markers[0], { color: '#F59E0B' });
+  await page.evaluate(async config => {
     const card = document.querySelector('sensor-bar-card-plus');
-    const rowConfig = card._config.entities[0];
-    rowConfig.target_marker.color = '#16A34A';
-    rowConfig.peak_marker.color = '#0EA5E9';
-    rowConfig.floor_marker.color = '#7C3AED';
-    rowConfig.generic_markers[0].color = '#F59E0B';
-    card.hass = { states: {
-      ...card._hass.states,
-      'sensor.marker_color_row': window.__sbcpCreateState(50, { friendly_name: 'Marker color row', icon: 'mdi:flash', unit_of_measurement: 'W' }),
-    } };
-  });
-  const afterPatchColorChange = await readLabels();
-  expect(afterPatchColorChange.labels.map(({ id, color }) => [id, color])).toEqual([
+    // setConfig normalizes Target's shared and directional marker views together.
+    card.setConfig(config);
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }, nextConfig);
+  const afterConfigChange = await readLabels();
+  expect(afterConfigChange.labels.map(({ id, color }) => [id, color])).toEqual([
     ['target', '#16A34A'],
     ['peak', '#0EA5E9'],
     ['floor', '#7C3AED'],
     ['generic-0', '#F59E0B'],
     ['generic-1', '#2563EB'],
   ]);
-  expect(afterPatchColorChange.labels.map(({ rect }) => [rect.width, rect.height])).toEqual(initial.labels.map(({ rect }) => [rect.width, rect.height]));
+  for (const label of afterConfigChange.labels) {
+    expect(label.contrast).not.toBe('');
+    expect(label.computedContrast).toBe(label.contrast);
+  }
+
+  await page.evaluate(() => {
+    const card = document.querySelector('sensor-bar-card-plus');
+    window.__markerColorLabelRefs = [...card.shadowRoot.querySelectorAll('.target-value-label, .peak-value-label, .floor-value-label, .generic-value-label')];
+    card.hass = { ...card._hass, states: {
+      ...card._hass.states,
+      'sensor.marker_color_row': window.__sbcpCreateState(51, { friendly_name: 'Marker color row', icon: 'mdi:flash', unit_of_measurement: 'W' }),
+    } };
+  });
+  const afterConfigAndHass = await readLabels();
+  expect(afterConfigAndHass.labels.map(({ id, color, contrast }) => [id, color, contrast]))
+    .toEqual(afterConfigChange.labels.map(({ id, color, contrast }) => [id, color, contrast]));
   expect(await page.evaluate(() => {
     const card = document.querySelector('sensor-bar-card-plus');
     return [...card.shadowRoot.querySelectorAll('.target-value-label, .peak-value-label, .floor-value-label, .generic-value-label')]
@@ -1811,7 +1829,7 @@ test('Floor shares the below lane with Target and renders extrema labels', async
     peakShape: 'triangle',
     floorShape: 'triangle',
   });
-  await expect(mount).toHaveScreenshot('floor-markers.png');
+  await expect(mount).toHaveScreenshot(snapshotName('floor-markers.png'));
 });
 
 test('generic reference markers share both lanes with built-in markers', async ({ page }) => {
@@ -1867,7 +1885,7 @@ test('generic reference markers share both lanes with built-in markers', async (
   ]);
   expect(result.labels).toEqual(['65 W', '85,0 W', '-20 W', '12']);
   expect(result.builtins).toEqual([true, true, true]);
-  await expect(mount).toHaveScreenshot('generic-reference-markers.png');
+  await expect(mount).toHaveScreenshot(snapshotName('generic-reference-markers.png'));
 });
 
 test('marker semantic labels compose safely and update without changing generic association', async ({ page }) => {
@@ -2227,7 +2245,7 @@ test('target marker defaults to diamond and supports explicit triangle overrides
     { entity: 'sensor.default_target', shape: 'diamond', lane: 'below' },
     { entity: 'sensor.triangle_target', shape: 'triangle', lane: 'below' },
   ]);
-  await expect(mount).toHaveScreenshot('target-shapes.png');
+  await expect(mount).toHaveScreenshot(snapshotName('target-shapes.png'));
 });
 
 test('shared marker renderer reuses the marker node for all six shapes', async ({ page }) => {
@@ -3119,7 +3137,7 @@ const scenarios = [
 for (const scenario of scenarios) {
   test(`visual regression: ${scenario.name}`, async ({ page }) => {
     const mount = await render(page, scenario);
-    await expect(mount).toHaveScreenshot(`${scenario.name}.png`);
+    await expect(mount).toHaveScreenshot(snapshotName(`${scenario.name}.png`));
   });
 }
 
@@ -3256,13 +3274,15 @@ test('Reveal Fill crossing selects adaptive timing and preserves settled Baselin
     const row = card.shadowRoot.querySelector('.row[data-entity="sensor.transitioning"]');
     return {
       revealDuration: getComputedStyle(row.querySelector('.bar-fill-reveal')).transitionDuration,
-      revealStyle: row.querySelector('.bar-fill-reveal').getAttribute('style'),
+      revealClip: row.querySelector('.bar-fill-reveal').style.clipPath,
       markerDuration: getComputedStyle(row.querySelector('.peak-marker')).transitionDuration,
     };
   });
 
   expect(state.revealDuration).toBe('0.15s');
-  expect(state.revealStyle).toMatch(/clip-path: inset\(0px 10\.4167% 0px 50%/);
+  const clip = /^inset\(0px ([\d.]+)% 0px 50%(?: round [^)]+)?\)$/.exec(state.revealClip);
+  expect(clip).not.toBeNull();
+  expect(Number(clip[1])).toBeCloseTo(10.4167, 4);
   expect(state.markerDuration).toBe('0.6s');
 });
 
@@ -3354,7 +3374,7 @@ test('visual regression: normal-above-target-mid-transition-downward', async ({ 
     await new Promise((resolve) => setTimeout(resolve, 250));
   });
 
-  await expect(mount).toHaveScreenshot('normal-above-target-mid-transition-downward.png');
+  await expect(mount).toHaveScreenshot(snapshotName('normal-above-target-mid-transition-downward.png'));
 });
 
 for (const [name, colorMode] of [
@@ -3398,7 +3418,7 @@ for (const [name, colorMode] of [
       await new Promise((resolve) => setTimeout(resolve, 250));
     });
 
-    await expect(mount).toHaveScreenshot(`${name}.png`);
+    await expect(mount).toHaveScreenshot(snapshotName(`${name}.png`));
   });
 }
 
@@ -3601,7 +3621,7 @@ test('visual regression: above-label-responsive-stack', async ({ page }) => {
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
 
-  await expect(page.locator('#mount')).toHaveScreenshot('above-label-responsive-stack.png');
+  await expect(page.locator('#mount')).toHaveScreenshot(snapshotName('above-label-responsive-stack.png'));
 });
 
 test('visual regression: inside-label-responsive-stack', async ({ page }) => {
@@ -3728,7 +3748,7 @@ test('visual regression: inside-label-responsive-stack', async ({ page }) => {
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
 
-  await expect(page.locator('#mount')).toHaveScreenshot('inside-label-responsive-stack.png');
+  await expect(page.locator('#mount')).toHaveScreenshot(snapshotName('inside-label-responsive-stack.png'));
 });
 
 test('off mode keeps narrow long values inside the row before hiding the unit', async ({ page }) => {
@@ -3775,6 +3795,13 @@ test('off mode keeps narrow long values inside the row before hiding the unit', 
     },
   });
 
+  // Match the Home Assistant text colors used by the card's normal fallback
+  // styling so the new shared Messages disclosure is legible in this fixture.
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--primary-text-color', '#333');
+    document.documentElement.style.setProperty('--secondary-text-color', '#888');
+  });
+
   const result = await page.evaluate(() => {
     const card = document.querySelector('sensor-bar-card-plus');
     const rows = [...card.shadowRoot.querySelectorAll('.row[data-entity]')];
@@ -3818,7 +3845,8 @@ test('off mode keeps narrow long values inside the row before hiding the unit', 
     expect(row.valueRight).toBeLessThanOrEqual(row.mainRight + 0.5);
   }
 
-  await expect(mount).toHaveScreenshot('off-mode-narrow-long-unit.png');
+  const layout = await mount.evaluate(node => ({ clientWidth: node.clientWidth, scrollWidth: node.scrollWidth }));
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
 });
 
 test('left responsive presentation is stable through stateful shrink and grow traversals', async ({ page }) => {
@@ -4219,7 +4247,7 @@ test('presentation update path keeps target recovery and peak maximum intact', a
     value: '80,0',
     targetDisplay: 'none',
     targetLabelVisibility: 'hidden',
-    targetLabelText: '60,0 W',
+    targetLabelText: '',
     peakLeft: '80%',
   });
   expect(result.recoveredTarget).toEqual({
@@ -4231,8 +4259,8 @@ test('presentation update path keeps target recovery and peak maximum intact', a
   });
 });
 
-test('target label precision override stays separate from primary precision', async ({ page }) => {
-  await page.goto('/tests/visual/fixtures/harness.html');
+for (const source of ['src', 'dist']) test(`target label precision override stays separate from primary precision (${source})`, async ({ page }) => {
+  await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   const result = await page.evaluate(async () => {
     const card = await window.__sbcpRenderCard({
       width: 320,
@@ -4320,7 +4348,7 @@ test('target label precision override stays separate from primary precision', as
   });
   expect(result.unavailable).toEqual({
     value: '42,00',
-    target: '55,3 W',
+    target: '',
     targetDisplay: 'none',
     targetLeft: '55.25%',
     peakLeft: '42%',

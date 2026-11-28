@@ -75,7 +75,7 @@ for (const source of ['src', 'dist']) describe(`shared Feature palettes (${sourc
     const key = kind === 'segment' ? 'segments' : 'gradient_stops';
     expect(editor._config.bar[key].slice(0, 2)).toEqual(config.bar[key]);
     expect(editor._config.bar[key]).toHaveLength(3);
-    section.handle({ type: 'click', target: { dataset: { action: kind === 'segment' ? 'remove-segment' : 'remove-gradient-stop', index: '0' } } });
+    section.handle({ type: 'click', target: { dataset: { action: kind === 'segment' ? 'remove-segment' : 'remove-gradient-stop', index: '0', paletteGeneration: String(section._getPaletteSession(root).generation) } } });
     await editor.updateComplete;
     expect(editor._config.bar[key][0]).toEqual(config.bar[key][1]);
     expect(editor._config.bar[key]).toHaveLength(2);
@@ -123,17 +123,43 @@ for (const source of ['src', 'dist']) describe(`shared Feature palettes (${sourc
     expect(editor._config.bar).toEqual(config.bar);
     expect(editor._config.bar).not.toHaveProperty('gradient_stops');
   });
-  it('discards local drafts on foreign config replacement without emitting', async () => {
+  it('preserves palette drafts on unchanged external config replacement without emitting', async () => {
     const { editor, events, segment, gradient } = await setup(source, raw('gradient'));
     gradient._setGradientStopsDraftField(root, 'pos', '55');
     gradient._setGradientStopsDraftField(root, 'color', 'var(--accent-color)');
     segment._setSegmentDraftField(root, 'from', '-');
     await editor.updateComplete;
     editor.setConfig({ ...raw('gradient'), futureReplacement: true }); await editor.updateComplete;
-    expect(gradient._getGradientStopsDraftState(root).pos).toBe('100');
-    expect(gradient._getGradientStopsDraftState(root).color).toBe('red');
-    expect(segment._getSegmentDraftState(root).from).not.toBe('-');
-    expect(editor.shadowRoot.querySelector('#gradient-draft-pos').value).toBe('100');
+    expect(gradient._getGradientStopsDraftState(root).pos).toBe('55');
+    expect(gradient._getGradientStopsDraftState(root).color).toBe('var(--accent-color)');
+    expect(segment._getSegmentDraftState(root).from).toBe('-');
+    expect(editor.shadowRoot.querySelector('#gradient-draft-pos').value).toBe('55');
+    expect(events).toHaveLength(0);
+  });
+  it('rebuilds on external palette replacement and rejects stale field events', async () => {
+    const { editor, events, gradient } = await setup(source, raw('gradient'));
+    const oldInput = editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[0];
+    oldInput.value = '91';
+    editor._handleField({ type: 'input', target: oldInput });
+    expect(gradient._getGradientStopPosText(root, 0)).toBe('91');
+
+    const replacement = structuredClone(editor._config);
+    replacement.bar.gradient_stops = [
+      { pos: 0, color: '#111111' },
+      { pos: 45, color: '#222222' },
+      { pos: 80, color: '#333333' },
+    ];
+    editor.setConfig(replacement); await editor.updateComplete;
+
+    expect(editor.shadowRoot.querySelectorAll('input[data-kind="gradient-pos"]')[0]).not.toBe(oldInput);
+    expect(gradient._getGradientStopPosText(root, 0, replacement.bar.gradient_stops[0].pos)).toBe('0');
+    expect(editor._config).toEqual(replacement);
+    expect(oldInput.dataset.paletteGeneration).not.toBe(String(gradient._getPaletteSession(root).generation));
+    for (const type of ['keydown', 'change', 'blur']) {
+      editor._handleField({ type, key: 'Enter', target: oldInput, preventDefault() {} });
+    }
+    await editor.updateComplete;
+    expect(editor._config).toEqual(replacement);
     expect(events).toHaveLength(0);
   });
   it('does not persist displayed defaults until an explicit palette operation', async () => {
@@ -152,7 +178,7 @@ for (const source of ['src', 'dist']) describe(`shared Feature palettes (${sourc
     const segment = editor._segmentsSection, gradient = editor._gradientStopsSection;
     expect(segment.constructor).toBe(standalone._segmentsSection.constructor);
     expect(gradient.constructor).toBe(standalone._gradientStopsSection.constructor);
-    expect(editor.shadowRoot.innerHTML).toContain(segment.render(root, options => editor._renderCardGroup(options)));
+    expect(editor.shadowRoot.innerHTML).toContain(segment.render(root, options => editor._renderCardGroup(options), { section: false }));
     expect(standalone._renderSegmentPreview(root)).toBe(standalone._segmentsSection._renderSegmentPreview(root));
   });
 });

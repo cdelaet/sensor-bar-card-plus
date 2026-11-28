@@ -1,5 +1,7 @@
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
 const { expandFeatureGroups, featureGroup } = require('./feature-editor-test-utils.cjs');
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
+const { snapshotName } = require('./snapshot-name.cjs');
 async function mount(page, source, width, empty = false) {
   await page.goto(`/tests/visual/fixtures/harness.html?source=${source}`);
   await page.evaluate(async ({width,empty}) => {
@@ -29,7 +31,7 @@ for(const source of ['src','dist']) for(const width of [360,240]) test(`Feature 
   const section=featureGroup(editor,'generic-markers');
   await rows(editor).first().getByRole('button',{name:/Reference marker 1/}).click();
   await page.mouse.move(0, 0);
-  await expect(section).toHaveScreenshot(`feature-reference-markers-${width}.png`);
+  await expectEditorLayout(section, expect);
   expect(await editor.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
   expect(await section.evaluate(el=>Array.from(el.querySelectorAll('input,select,button')).filter(node=>node.getBoundingClientRect().width>0).every(node=>node.getBoundingClientRect().right<=el.getBoundingClientRect().right+1&&node.getBoundingClientRect().left>=el.getBoundingClientRect().left-1))).toBe(true);
   let row=rows(editor).first();const id=await row.getAttribute('data-marker-ui-id');
@@ -61,7 +63,7 @@ for(const source of ['src','dist']) for(const width of [360,240]) test(`Feature 
   const echoCount=await page.evaluate(()=>window.__referenceEvents.length);
   await editor.evaluate(async el=>{el.context={entity_id:'sensor.changed'};el.hass={states:{}};el.setConfig(el._config);await el.updateComplete;});
   expect(await page.evaluate(()=>window.__referenceEvents.length)).toBe(echoCount);await expect(field(row,'fixed')).toBeFocused();
-  await row.getByRole('button',{name:'Move marker down'}).click();
+  await row.getByRole('button',{name:'Move marker down'}).press('Enter');
   await expect(rows(editor).nth(1)).toHaveAttribute('data-marker-ui-id',id);await expect(rows(editor).nth(1)).toHaveAttribute('data-expanded','true');
   await expect(rows(editor).nth(1).getByRole('button',{name:'Move marker down'})).toBeFocused();
   expect((await saved(editor)).markers).toEqual([before.markers[1],before.markers[0],before.markers[2]]);
@@ -70,7 +72,7 @@ for(const source of ['src','dist']) for(const width of [360,240]) test(`Feature 
   await rows(editor).first().getByRole('button',{name:'Remove marker'}).click();await expect(rows(editor)).toHaveCount(3);
   expect((await saved(editor)).markers[0]).toEqual(before.markers[0]);await expect(rows(editor).first()).toHaveAttribute('data-marker-ui-id',id);
   const markers=(await saved(editor)).markers;
-  await editor.locator('#formatting-unit').fill('kW');await editor.locator('#bar-needle-mode').selectOption('disabled');await editor.locator('#baseline-show').check();await editor.locator('#target-show').uncheck();await editor.locator('#peak-show').uncheck();await editor.locator('#floor-show').uncheck();
+  await editor.locator('#formatting-unit').fill('kW');await editor.locator('#bar-needle-mode').uncheck();await editor.locator('#baseline-show').check();await editor.locator('#target-show').uncheck();await editor.locator('#peak-show').uncheck();await editor.locator('#floor-show').uncheck();
   await editor.locator('#scale-min').fill('5');await editor.locator('#bar-fill-style').selectOption('bands');
   await editor.locator('input[data-kind="segment-color"]').first().evaluate(el=>{el.value='#123456';el.dispatchEvent(new Event('input',{bubbles:true}));});
   expect((await saved(editor)).markers).toEqual(markers);expect((await saved(editor)).bar.animated).toBe(false);expect((await saved(editor)).entity).toBeUndefined();

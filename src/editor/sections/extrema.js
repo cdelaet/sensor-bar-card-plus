@@ -1,8 +1,7 @@
 import { cloneDeep, isObject, getPathValue, setPathValue, deletePathValue,
   pruneEmptyObjectsInTarget, normalizeTextValue, normalizeNumberValue } from '../shared/editor-config.js';
-import { escapeAttribute, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderWindowOptions, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
+import { escapeAttribute, normalizeEditorColorValue, normalizeColorComparisonValue, renderColorInput, renderWindowOptions, renderWindowHelperOptions, renderBuiltinMarkerLabelControls } from '../shared/editor-controls.js';
 import { getBuiltinMarkerLabelOptions, setBuiltinMarkerLabelField, getEffectiveMarkerDirection, setMarkerDirection } from '../shared/editor-marker-controls.js';
-import { isValidReset } from '../../utils/extrema.js';
 import { canonicalizeHistoricalWindow, parseHistoricalWindow, isEligibleHistoricalWindow } from '../../history/time-window.js';
 
 export function migrateExtremaConfig(config) {
@@ -24,9 +23,10 @@ export function migrateExtremaConfig(config) {
         if (windowChanged) rest.window = canonicalWindow;
       } else {
         const normalized = typeof reset === 'string' ? reset.trim().toLowerCase() : reset;
-        rest.window = isValidReset(reset)
-          ? normalized === 'never' ? 'today' : canonicalizeHistoricalWindow(normalized)
-          : parseHistoricalWindow(normalized) ? `invalid legacy reset: ${normalized}` : reset ?? null;
+        const migratedWindow = normalized === 'never' ? 'today' : canonicalizeHistoricalWindow(normalized);
+        rest.window = isEligibleHistoricalWindow(migratedWindow)
+          ? migratedWindow
+          : parseHistoricalWindow(migratedWindow) ? `invalid legacy reset: ${normalized}` : reset ?? null;
       }
       next[key] = rest;
       changed = true;
@@ -43,7 +43,7 @@ export function migrateExtremaConfig(config) {
 
 // Configuration controls only. No runtime extrema/history state lives here.
 export class ExtremaSection {
-  constructor(context, options = {}) { this.options = options; this.context = context; }
+  constructor(context) { this.context = context; }
 
   _getScopedPeakConfig(scope) {
     const rawPeak = this.context.read(scope, ['peak']);
@@ -88,6 +88,7 @@ export class ExtremaSection {
       Object.prototype.hasOwnProperty.call(peakValue, 'enabled')
       || Object.prototype.hasOwnProperty.call(peakValue, 'color')
       || Object.prototype.hasOwnProperty.call(peakValue, 'window')
+      || Object.prototype.hasOwnProperty.call(peakValue, 'window_entity')
       || Object.prototype.hasOwnProperty.call(peakValue, 'label')
       || Object.prototype.hasOwnProperty.call(peakValue, 'direction')
     )) {
@@ -100,7 +101,7 @@ export class ExtremaSection {
 
   _getPeakSummary(scope) {
     if (scope?.type === 'entity' && !this._hasPeakOverride(scope)) return 'Inherited';
-    const peak = this._getScopedPeakConfig(scope);
+    const peak = this._getEffectiveScopedPeakConfig(scope);
     if (peak.mode === 'disabled') return peak.color ? 'Disabled • Custom color' : 'Disabled';
     if (peak.mode === 'enabled') return peak.color ? 'Enabled • Custom color' : 'Enabled';
     if (peak.color) return 'Custom color';
@@ -112,6 +113,7 @@ export class ExtremaSection {
       let nextTarget = deletePathValue(target, ['peak', 'enabled']);
       nextTarget = deletePathValue(nextTarget, ['peak', 'color']);
       nextTarget = deletePathValue(nextTarget, ['peak', 'window']);
+      nextTarget = deletePathValue(nextTarget, ['peak', 'window_entity']);
       nextTarget = deletePathValue(nextTarget, ['peak', 'label']);
       nextTarget = deletePathValue(nextTarget, ['peak', 'direction']);
       nextTarget = deletePathValue(nextTarget, ['show_peak']);
@@ -156,7 +158,7 @@ export class ExtremaSection {
   }
 
   _setScopedPeakColor(scope, rawValue) {
-    const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
+    const normalizedValue = normalizeEditorColorValue(rawValue);
     const defaultColor = '#888';
     return this.context.mutate(scope, (target) => {
       let nextTarget = cloneDeep(target);
@@ -188,6 +190,8 @@ export class ExtremaSection {
       window: Object.prototype.hasOwnProperty.call(marker, 'window')
         ? (marker.window == null ? String(marker.window) : normalizeTextValue(marker.window).trim().toLowerCase() || '(empty)')
         : null,
+      windowEntity: typeof marker.window_entity === 'string' ? marker.window_entity : '',
+      hasWindowEntity: Object.prototype.hasOwnProperty.call(marker, 'window_entity'),
       labelShow: typeof label.show === 'boolean' ? label.show : null,
       labelText: typeof label.text === 'string' ? label.text.replace(/\s+/g, ' ').trim() : null,
       labelShowValue: typeof label.show_value === 'boolean' ? label.show_value : null,
@@ -201,7 +205,7 @@ export class ExtremaSection {
   _hasExtremumOverride(scope, key) {
     const marker = this.context.read(scope, [key]);
     if (!isObject(marker)) return false;
-    return ['enabled', 'color', 'window', 'label', 'direction'].some((field) => (
+    return ['enabled', 'color', 'window', 'window_entity', 'label', 'direction'].some((field) => (
       Object.prototype.hasOwnProperty.call(marker, field)
     ));
   }
@@ -211,6 +215,7 @@ export class ExtremaSection {
     if (scope?.type !== 'entity') {
       return {
         window: local.window ?? 'today',
+        windowEntity: local.windowEntity,
         labelShow: local.labelShow ?? false,
         labelText: local.labelText,
         labelShowValue: local.labelShowValue ?? true,
@@ -222,6 +227,7 @@ export class ExtremaSection {
     if (!this._hasExtremumOverride(scope, key)) {
       return {
         window: card.window ?? 'today',
+        windowEntity: card.windowEntity,
         labelShow: card.labelShow ?? false,
         labelText: card.labelText,
         labelShowValue: card.labelShowValue ?? true,
@@ -231,6 +237,7 @@ export class ExtremaSection {
     }
     return {
       window: local.window ?? card.window ?? 'today',
+      windowEntity: local.hasWindowEntity ? local.windowEntity : card.windowEntity,
       labelShow: local.labelShow ?? card.labelShow ?? false,
       labelText: Object.prototype.hasOwnProperty.call(this.context.read(scope, [key, 'label']) ?? {}, 'text') ? local.labelText : card.labelText,
       labelShowValue: local.labelShowValue ?? card.labelShowValue ?? true,
@@ -305,7 +312,7 @@ export class ExtremaSection {
   }
 
   _setScopedExtremumColor(scope, key, rawValue) {
-    const normalizedValue = normalizeEditorColorValue(rawValue, this.options.cssText);
+    const normalizedValue = normalizeEditorColorValue(rawValue);
     const defaultColor = '#888888';
     return this.context.mutate(scope, (target) => {
       let nextTarget = cloneDeep(target);
@@ -339,6 +346,23 @@ export class ExtremaSection {
       else nextTarget = deletePathValue(nextTarget, [key]);
       return nextTarget;
     }, { extremumEdit: { key, path: ['window'], value: normalized } });
+  }
+
+  _setScopedExtremumWindowEntity(scope, key, value) {
+    const helper = normalizeTextValue(value).trim();
+    if (helper && !/^input_select\.[a-z0-9_]+$/i.test(helper)) return false;
+    return this.context.mutate(scope, (target) => {
+      let nextTarget = cloneDeep(target);
+      const current = isObject(getPathValue(nextTarget, [key]))
+        ? cloneDeep(getPathValue(nextTarget, [key]))
+        : {};
+      if (helper) current.window_entity = helper;
+      else if (scope?.type === 'entity') current.window_entity = null;
+      else delete current.window_entity;
+      if (Object.keys(current).length) nextTarget = setPathValue(nextTarget, [key], current);
+      else nextTarget = deletePathValue(nextTarget, [key]);
+      return nextTarget;
+    }, { extremumEdit: { key, path: ['window_entity'], value: helper || undefined } });
   }
 
   _setScopedExtremumLabelShow(scope, key, value) {
@@ -383,7 +407,7 @@ export class ExtremaSection {
       const floor = isObject(getPathValue(nextTarget, ['floor']))
         ? cloneDeep(getPathValue(nextTarget, ['floor']))
         : {};
-      ['enabled', 'color', 'window', 'label', 'direction'].forEach((key) => delete floor[key]);
+      ['enabled', 'color', 'window', 'window_entity', 'label', 'direction'].forEach((key) => delete floor[key]);
       if (Object.keys(floor).length) nextTarget = setPathValue(nextTarget, ['floor'], floor);
       else nextTarget = deletePathValue(nextTarget, ['floor']);
       return nextTarget;
@@ -432,7 +456,7 @@ ${indent}                          <input id="entity-${index}-${key}-inherit" ty
                       </div>
                       <div class="field-row">
                         <label for="entity-${index}-${key}-color">${title} color</label>
-                        ${renderColorInput({ cssText: this.options.cssText, label: 'Marker color',
+                        ${renderColorInput({ label: `${title} color`,
                           id: `entity-${index}-${key}-color`,
                           kind: `entity-${key}-color`,
                           index,
@@ -447,6 +471,13 @@ ${indent}                          <input id="entity-${index}-${key}-inherit" ty
                           ${renderWindowOptions(marker.window)}
                         </select>
                         <small class="section-note">Recent rolling windows include completed minutes and the current minute; longer windows include completed hours and the current hour. Older history requires Home Assistant statistics.</small>
+                      </div>
+                      <div class="field-row">
+                        <label for="entity-${index}-${key}-window-entity">${title} window Dropdown Helper</label>
+                        <select id="entity-${index}-${key}-window-entity" data-kind="entity-${key}-window-entity" data-index="${index}" value="${escapeAttribute(marker.windowEntity ?? '')}">
+                          ${renderWindowHelperOptions(this.context.hass, marker.windowEntity)}
+                        </select>
+                        <small class="section-note">The selected helper option overrides this static window. If it is unavailable or unsupported, the static window is used.</small>
                       </div>
                       <div class="field-row">
                         <label for="entity-${index}-${key}-direction">Direction</label>
@@ -468,7 +499,7 @@ ${indent}                          `;
             </div>
             <div class="field-row">
               <label for="${key}-color">${title} color</label>
-              ${renderColorInput({ cssText: this.options.cssText, label: 'Marker color',
+            ${renderColorInput({ label: `${title} color`,
                 id: `${key}-color`,
                 field: `${key}-color`,
                 value: marker.color,
@@ -482,6 +513,13 @@ ${indent}                          `;
                 ${renderWindowOptions(marker.window)}
               </select>
               <small class="section-note">Recent rolling windows include completed minutes and the current minute; longer windows include completed hours and the current hour. Older history requires Home Assistant statistics.</small>
+            </div>
+            <div class="field-row">
+              <label for="${key}-window-entity">${title} window Dropdown Helper</label>
+              <select id="${key}-window-entity" data-field="${key}-window-entity" value="${escapeAttribute(marker.windowEntity ?? '')}">
+                ${renderWindowHelperOptions(this.context.hass, marker.windowEntity)}
+              </select>
+              <small class="section-note">The selected helper option overrides this static window. If it is unavailable or unsupported, the static window is used.</small>
             </div>
             <div class="field-row">
               <label for="${key}-direction">Direction</label>
@@ -513,6 +551,7 @@ ${indent}                          `;
     }
     if (option === 'color') { key === 'peak' ? this._setScopedPeakColor(scope, value) : this._setScopedExtremumColor(scope, key, value); return true; }
     if (option === 'window') { this._setScopedExtremumWindow(scope, key, value); return true; }
+    if (option === 'window-entity') { this._setScopedExtremumWindowEntity(scope, key, value); return true; }
     if (option === 'direction') { setMarkerDirection(this.context, scope, key, value); return true; }
     const label = option.match(/^label-(show|text|show-value|show-unit|precision)$/);
     if (label) {

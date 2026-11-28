@@ -1,26 +1,23 @@
-import { colorModeToFillStyle, getFiniteNumber, parsePercentLiteral } from '../config/normalize.js';
-import { projectScaleInterval, projectScalePercent } from './scale-projection.js';
+import * as paintCompiler from './paint-compiler.js';
+import { safeCssColor } from '../utils/css-values.js';
+import { projectScaleInterval, projectScalePercent, toScalePct } from './scale-projection.js';
+
+export {
+  inferSegmentEndValues,
+  hexToRgb,
+  getBandsGradientCss,
+  getSoftBandBlendWidthPct,
+  pushGradientColorStop,
+  resolveSegmentBoundaryPct,
+  segmentsNeedBoundaryResolution,
+  buildFullScaleGradientStyle,
+  rgbToCss,
+  buildSolidGradientStyle,
+} from './paint-compiler.js';
+export { toScalePct } from './scale-projection.js';
 
 // Pure calculations over normalized appearance and resolved scale positions.
 // Entity resolution, history and DOM lifetime belong to the presentation adapter.
-
-function resolveCssGradientStops(stops) {
-  let previousPosition = -Infinity;
-  return stops.map((stop) => {
-    previousPosition = Math.max(previousPosition, stop.p);
-    return { ...stop, p: previousPosition };
-  });
-}
-
-function projectGradientStops(stops, scaleDirection) {
-  if (scaleDirection !== 'reverse') return stops.map(stop => ({ ...stop }));
-
-  // CSS fixes decreasing stop positions by moving each stop to the previous
-  // stop's position. Resolve that semantic ordering before reflecting it.
-  return resolveCssGradientStops(stops)
-    .map(stop => ({ ...stop, p: 100 - stop.p }))
-    .reverse();
-}
 
 export function getRevealTransitionDuration(previousGeometry, nextGeometry) {
   if (!previousGeometry || !nextGeometry
@@ -48,344 +45,53 @@ export function getRevealTransitionDuration(previousGeometry, nextGeometry) {
   return crossesBaseline ? Math.min(ordinaryDuration, 300) : ordinaryDuration;
 }
 
-export function inferSegmentEndValues(segments, fallbackEnd = null) {
-  const sorted = [...segments].sort((a, b) => a.from - b.from);
-  return sorted.map((segment, index) => {
-    let to = Number.isFinite(segment.to) ? segment.to : null;
-    if (!Number.isFinite(to) && index < sorted.length - 1) {
-      to = sorted[index + 1].from;
-    }
-    if (!Number.isFinite(to) && Number.isFinite(fallbackEnd)) {
-      to = fallbackEnd;
-    }
-    return {
-      from: segment.from,
-      to,
-      color: segment.color,
-      label: segment.label ?? null,
-    };
-  });
-}
-
-export function hexToRgb(color) {
-  if (!color || typeof color !== 'string') return null;
-  const hex = color.replace('#', '').trim();
-  const full = hex.length === 3
-    ? hex.split('').map(c => c + c).join('')
-    : hex;
-  if (!/^[0-9a-fA-F]{6}$/.test(full)) return null;
-  return {
-    r: parseInt(full.slice(0, 2), 16),
-    g: parseInt(full.slice(2, 4), 16),
-    b: parseInt(full.slice(4, 6), 16),
-  };
+function ordinaryPaint(config) {
+  return config?.bar?.paint ? { ...config.bar.paint, segment_space: config.bar.segment_space } : config?.bar;
 }
 
 export function getSeverityInterpolationStops(ecfg, minValue = 0, maxValue = 100, preserveCssColors = false) {
-  const bands = getSegmentsForRendering(ecfg, minValue, maxValue);
-  const sorted = bands
-    .filter(s => Number.isFinite(s?.from) && Number.isFinite(s?.to) && s.from < s.to && s?.color)
-    .sort((a, b) => a.from - b.from);
-
-  if (!sorted.length) return [];
-
-  const stops = [];
-  for (let i = 0; i < sorted.length; i++) {
-    const band = sorted[i];
-    const rgb = hexToRgb(band.color);
-    if (!rgb && !preserveCssColors) continue;
-    let anchor;
-    if (i === 0) {
-      anchor = band.from;
-    } else if (i === sorted.length - 1) {
-      anchor = band.to;
-    } else {
-      anchor = band.from + ((band.to - band.from) / 2);
-    }
-    if (!stops.length || stops[stops.length - 1].p !== anchor) {
-      stops.push({ p: anchor, ...(rgb ?? { color: band.color }) });
-    }
-  }
-
-  return stops;
-}
-
-export function getBandsGradientCss(bands, _fallbackColor = '#4a9eff', scaleDirection = 'normal') {
-  const sorted = bands
-    .filter(s => Number.isFinite(s?.from) && Number.isFinite(s?.to) && s.from < s.to && s?.color)
-    .sort((a, b) => a.from - b.from);
-
-  if (!sorted.length) return null;
-
-  // Keep the released v1.8 semantics: each authored Segment contributes only
-  // its own flat-color endpoints. CSS interpolates gaps and extends the edge
-  // colors beyond the first and last Segment.
-  const stops = [];
-  for (const band of sorted) {
-    stops.push({ color: band.color, p: band.from }, { color: band.color, p: band.to });
-  }
-
-  const projectedStops = scaleDirection === 'reverse'
-    ? projectGradientStops(stops, scaleDirection)
-    : stops;
-  return `linear-gradient(to right, ${projectedStops.map(stop => `${stop.color} ${stop.p}%`).join(', ')})`;
+  return paintCompiler.getSeverityInterpolationStops(ordinaryPaint(ecfg), minValue, maxValue, preserveCssColors);
 }
 
 export function getSeverityBandGradientCss(ecfg, minValue = 0, maxValue = 100, scaleDirection = 'normal') {
-  return getBandsGradientCss(getSegmentsForRendering(ecfg, minValue, maxValue), ecfg.bar?.color ?? '#4a9eff', scaleDirection);
-}
-
-export function getSoftBandBlendWidthPct() {
-  return 1.5;
-}
-
-export function pushGradientColorStop(stops, pos, color) {
-  if (!Array.isArray(stops) || !color) return;
-  const clampedPos = Math.min(100, Math.max(0, pos));
-  const last = stops[stops.length - 1];
-  if (last && last.color === color && Math.abs(last.p - clampedPos) < 0.0001) return;
-  stops.push({ p: clampedPos, color });
+  return paintCompiler.getSeverityBandGradientCss(ordinaryPaint(ecfg), minValue, maxValue, scaleDirection);
 }
 
 export function getSoftBandGradientStops(ecfg, minValue = 0, maxValue = 100) {
-  const bands = getSegmentsForRendering(ecfg, minValue, maxValue);
-  const sorted = bands
-    .filter(s => Number.isFinite(s?.from) && Number.isFinite(s?.to) && s?.color)
-    .sort((a, b) => a.from - b.from);
-
-  if (!sorted.length) return [];
-
-  const blendWidth = getSoftBandBlendWidthPct();
-  const blendHalf = blendWidth / 2;
-  const stops = [];
-  pushGradientColorStop(stops, sorted[0].from, sorted[0].color);
-
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const current = sorted[i];
-    const next = sorted[i + 1];
-    const boundary = current.to;
-    const currentWidth = current.to - current.from;
-    const nextWidth = next.to - next.from;
-    const soften = currentWidth >= blendWidth && nextWidth >= blendWidth;
-
-    if (soften) {
-      pushGradientColorStop(stops, Math.max(current.from, boundary - blendHalf), current.color);
-      pushGradientColorStop(stops, Math.min(next.to, boundary + blendHalf), next.color);
-    } else {
-      pushGradientColorStop(stops, boundary, current.color);
-      pushGradientColorStop(stops, boundary, next.color);
-    }
-  }
-
-  pushGradientColorStop(stops, sorted[sorted.length - 1].to, sorted[sorted.length - 1].color);
-  return stops;
+  return paintCompiler.getSoftBandGradientStops(ordinaryPaint(ecfg), minValue, maxValue);
 }
 
 export function getSoftBandGradientCss(ecfg, minValue = 0, maxValue = 100, scaleDirection = 'normal') {
-  const stops = projectGradientStops(getSoftBandGradientStops(ecfg, minValue, maxValue), scaleDirection);
-  if (!stops.length) return null;
-  return `linear-gradient(to right, ${stops.map((stop) => `${stop.color} ${stop.p}%`).join(', ')})`;
-}
-
-export function resolveSegmentBoundaryPct(boundary, minValue, maxValue) {
-  if (boundary === null || boundary === undefined) return null;
-
-  if (typeof boundary === 'object' && !Array.isArray(boundary)) {
-    const fixed = getFiniteNumber(boundary.fixed);
-    if (Number.isFinite(fixed)) {
-      return toScalePct(fixed, minValue, maxValue);
-    }
-    if (Number.isFinite(boundary.percent)) {
-      return boundary.percent;
-    }
-    return null;
-  }
-
-  const percent = parsePercentLiteral(boundary);
-  if (Number.isFinite(percent)) {
-    return percent;
-  }
-
-  const fixed = getFiniteNumber(boundary);
-  return Number.isFinite(fixed) ? toScalePct(fixed, minValue, maxValue) : null;
+  return paintCompiler.getSoftBandGradientCss(ordinaryPaint(ecfg), minValue, maxValue, scaleDirection);
 }
 
 export function getEffectiveFillStyle(ecfg) {
-  return ecfg?.bar?.fill_style
-    ?? colorModeToFillStyle(ecfg?.bar?.color_mode)
-    ?? 'bands';
-}
-
-export function segmentsNeedBoundaryResolution(segments) {
-  return Array.isArray(segments) && segments.some((segment) => (
-    (segment?.from && typeof segment.from === 'object' && !Array.isArray(segment.from))
-    || (segment?.to && typeof segment.to === 'object' && !Array.isArray(segment.to))
-  ));
+  return paintCompiler.getEffectiveFillStyle(ordinaryPaint(ecfg));
 }
 
 export function getSegmentsForRendering(ecfg, minValue = 0, maxValue = 100) {
-  const safeMin = Number.isFinite(minValue) ? minValue : 0;
-  const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
-  const rawSegments = (Array.isArray(ecfg.bar?.segments) ? ecfg.bar.segments : [])
-    .filter((segment) => !segment?.invalidBoundary);
-  if (ecfg.bar?.segment_space === 'scale' || segmentsNeedBoundaryResolution(rawSegments)) {
-    const resolvedSegments = rawSegments
-      .map((segment) => ({
-        from: resolveSegmentBoundaryPct(segment.from, safeMin, safeMax),
-        to: resolveSegmentBoundaryPct(segment.to, safeMin, safeMax),
-        color: segment.color,
-        label: segment.label ?? null,
-      }))
-      .filter((segment) => Number.isFinite(segment.from) && segment.color);
-
-    return inferSegmentEndValues(resolvedSegments, 100)
-      .filter((segment) => Number.isFinite(segment.from) && Number.isFinite(segment.to)
-        && segment.from < segment.to && segment.color);
-  }
-
-  return inferSegmentEndValues(rawSegments, 100)
-    .filter((segment) => Number.isFinite(segment.from) && Number.isFinite(segment.to)
-      && segment.from < segment.to && segment.color);
+  return paintCompiler.getSegmentsForRendering(ordinaryPaint(ecfg), minValue, maxValue);
 }
 
 export function getColor(pct, ecfg, minValue = 0, maxValue = 100) {
-  const fillStyle = getEffectiveFillStyle(ecfg);
-  if (fillStyle === 'solid') return ecfg.bar.color;
-
-  if (fillStyle === 'gradient' || fillStyle === 'band_gradient' || fillStyle === 'soft_bands') {
-    let stops;
-    if (fillStyle === 'band_gradient') {
-      stops = getSeverityInterpolationStops(ecfg, minValue, maxValue);
-    } else if (fillStyle === 'soft_bands') {
-      stops = resolveCssGradientStops(getSoftBandGradientStops(ecfg, minValue, maxValue))
-        .map((stop) => {
-          const rgb = hexToRgb(stop.color);
-          return rgb ? { p: stop.p, ...rgb } : null;
-        })
-        .filter(Boolean);
-    } else if (ecfg.bar.gradient_stops && ecfg.bar.gradient_stops.length >= 2) {
-      stops = ecfg.bar.gradient_stops.map(s => {
-        const hex = s.color.replace('#','');
-        const full = hex.length === 3
-          ? hex.split('').map(c => c+c).join('')
-          : hex;
-        return { p: s.pos, r: parseInt(full.slice(0,2),16), g: parseInt(full.slice(2,4),16), b: parseInt(full.slice(4,6),16) };
-      });
-      stops.sort((a,b) => a.p - b.p);
-    } else {
-      stops = [
-        { p: 0,   r: 76,  g: 175, b: 80  },
-        { p: 50,  r: 255, g: 152, b: 0   },
-        { p: 100, r: 244, g: 67,  b: 54  },
-      ];
-    }
-    if (!stops || !stops.length) return ecfg.bar.color;
-    let lo = stops[0], hi = stops[stops.length - 1];
-    for (let i = 0; i < stops.length - 1; i++) {
-      if (pct >= stops[i].p && pct <= stops[i + 1].p) {
-        lo = stops[i]; hi = stops[i + 1]; break;
-      }
-    }
-    const t = lo.p === hi.p ? 0 : (pct - lo.p) / (hi.p - lo.p);
-    return `rgb(${Math.round(lo.r + t*(hi.r-lo.r))},${Math.round(lo.g + t*(hi.g-lo.g))},${Math.round(lo.b + t*(hi.b-lo.b))})`;
-  }
-
-  // Bands mode
-  for (const s of getSegmentsForRendering(ecfg, minValue, maxValue)) {
-    if (pct >= s.from && pct <= s.to) return s.color;
-  }
-  return ecfg.bar.color;
-}
-
-export function buildFullScaleGradientStyle(stops, scaleDirection = 'normal') {
-  if (!Array.isArray(stops) || !stops.length) return null;
-  const cssStops = projectGradientStops(stops, scaleDirection).map((stop) => {
-    const cssColor = stop.color ?? rgbToCss(stop);
-    return cssColor ? `${cssColor} ${stop.p}%` : null;
-  }).filter(Boolean);
-  if (!cssStops.length) return null;
-  return `background:linear-gradient(to right,${cssStops.join(',')});background-repeat:no-repeat;`;
+  return paintCompiler.getColor(pct, ordinaryPaint(ecfg), minValue, maxValue);
 }
 
 export function getGradientInterpolationStops(ecfg, minValue = 0, maxValue = 100) {
-  const fillStyle = getEffectiveFillStyle(ecfg);
-  if (fillStyle === 'band_gradient') {
-    // Painting accepts CSS colors directly; numeric color sampling still needs RGB.
-    return getSeverityInterpolationStops(ecfg, minValue, maxValue, true);
-  }
-
-  if (fillStyle === 'soft_bands') {
-    return getSoftBandGradientStops(ecfg, minValue, maxValue)
-      .map((stop) => {
-        const rgb = hexToRgb(stop.color);
-        return rgb ? { p: stop.p, ...rgb } : null;
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.p - b.p);
-  }
-
-  if (ecfg.bar.gradient_stops && ecfg.bar.gradient_stops.length >= 2) {
-    return ecfg.bar.gradient_stops
-      .map((s) => {
-        const rgb = hexToRgb(s.color);
-        return rgb ? { p: s.pos, ...rgb } : null;
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.p - b.p);
-  }
-
-  return [
-    { p: 0,   r: 76,  g: 175, b: 80  },
-    { p: 50,  r: 255, g: 152, b: 0   },
-    { p: 100, r: 244, g: 67,  b: 54  },
-  ];
-}
-
-export function rgbToCss(rgb) {
-  if (!rgb) return null;
-  return `rgb(${rgb.r},${rgb.g},${rgb.b})`;
-}
-
-export function buildSolidGradientStyle(color) {
-  return `linear-gradient(to right,${color} 0%,${color} 100%)`;
+  return paintCompiler.getGradientInterpolationStops(ordinaryPaint(ecfg), minValue, maxValue);
 }
 
 export function getBasePaintGradient(color, ecfg, minValue = 0, maxValue = 100, scaleDirection = 'normal') {
-  const fillStyle = getEffectiveFillStyle(ecfg);
-  if (ecfg.bar.solid_fill) {
-    return buildSolidGradientStyle(color);
-  }
-
-  if (fillStyle === 'bands') {
-    return getSeverityBandGradientCss(ecfg, minValue, maxValue, scaleDirection);
-  }
-
-  if (fillStyle === 'soft_bands') {
-    return getSoftBandGradientCss(ecfg, minValue, maxValue, scaleDirection);
-  }
-
-  if (fillStyle === 'gradient' || fillStyle === 'band_gradient') {
-    const stops = getGradientInterpolationStops(ecfg, minValue, maxValue);
-    return buildFullScaleGradientStyle(stops, scaleDirection)?.replace(/^background:/, '').replace(/;background-repeat:no-repeat;$/, '');
-  }
-
-  return buildSolidGradientStyle(color);
+  return paintCompiler.getBasePaintGradient(color, ordinaryPaint(ecfg), minValue, maxValue, scaleDirection);
 }
 
 export function getOverlayGradient(startPct, endPct, color) {
-  if (!color) return null;
+  const safeColor = safeCssColor(color, '');
+  if (!safeColor) return null;
   const start = Math.min(100, Math.max(0, startPct));
   const end = Math.min(100, Math.max(0, endPct));
   if (end <= start) return null;
-  return `linear-gradient(to right,transparent 0%,transparent ${start}%,${color} ${start}%,${color} ${end}%,transparent ${end}%,transparent 100%)`;
-}
-
-export function toScalePct(value, minValue, maxValue) {
-  if (!Number.isFinite(value)) return null;
-  const safeMin = Number.isFinite(minValue) ? minValue : 0;
-  const safeMax = Number.isFinite(maxValue) ? maxValue : 100;
-  const range = safeMax - safeMin || 1;
-  return Math.min(100, Math.max(0, ((value - safeMin) / range) * 100));
+  return `linear-gradient(to right,transparent 0%,transparent ${start}%,${safeColor} ${start}%,${safeColor} ${end}%,transparent ${end}%,transparent 100%)`;
 }
 
 export function getNormalizedPercent(valuePct, baselinePct = null) {
@@ -454,28 +160,82 @@ export function getAboveTargetLayerGeometry(targetPct = null, scaleDirection = '
   };
 }
 
-export function getFullScalePaintStyle(ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, scaleDirection = 'normal') {
-  const layers = [];
-  const basePaint = getBasePaintGradient(color, ecfg, minValue, maxValue, scaleDirection);
+export function getBelowTargetLayerGeometry(targetPct = null, scaleDirection = 'normal') {
+  if (!Number.isFinite(targetPct)) return null;
+  const interval = projectScaleInterval(0, targetPct, scaleDirection);
+  if (!interval || interval.start >= interval.end) return null;
+  return { start: interval.start, end: interval.end, hidden: false };
+}
+
+function getNeedleTargetLayerGeometry(targetPct, valuePct, side, scaleDirection) {
+  if (!Number.isFinite(targetPct) || !Number.isFinite(valuePct)) return null;
+  const targetPosition = projectScalePercent(targetPct, scaleDirection);
+  const valuePosition = projectScalePercent(valuePct, scaleDirection);
+  const reverse = scaleDirection === 'reverse';
+  return {
+    start: side === 'above' ? (reverse ? valuePosition : targetPosition) : (reverse ? targetPosition : valuePosition),
+    end: side === 'above' ? (reverse ? targetPosition : valuePosition) : (reverse ? valuePosition : targetPosition),
+    hidden: false,
+  };
+}
+
+function getNeedleTargetLayerRevealStyle(geometry) {
+  if (!geometry || !Number.isFinite(geometry.start) || !Number.isFinite(geometry.end)) {
+    return 'display:none;clip-path:inset(0 100% 0 0 round 0);';
+  }
+  const start = Math.min(100, Math.max(0, geometry.start));
+  const end = Math.min(100, Math.max(0, geometry.end));
+  return `display:block;clip-path:inset(0 ${100 - end}% 0 ${start}% round 0);`;
+}
+
+function getBaselinePaintGradients(ecfg, baselinePct, scaleDirection) {
   const clampedBaseline = Number.isFinite(baselinePct)
     ? Math.min(100, Math.max(0, baselinePct))
     : null;
 
-  if (Number.isFinite(clampedBaseline)) {
-    const belowColor = ecfg.baseline?.below?.color ?? null;
-    const aboveColor = ecfg.baseline?.above?.color ?? null;
-    const below = projectScaleInterval(0, clampedBaseline, scaleDirection);
-    const above = projectScaleInterval(clampedBaseline, 100, scaleDirection);
-    const belowOverlay = below ? getOverlayGradient(below.start, below.end, belowColor) : null;
-    const aboveOverlay = above ? getOverlayGradient(above.start, above.end, aboveColor) : null;
-    if (belowOverlay) layers.push(belowOverlay);
-    if (aboveOverlay) layers.push(aboveOverlay);
+  const below = projectScaleInterval(0, clampedBaseline, scaleDirection);
+  const above = projectScaleInterval(clampedBaseline, 100, scaleDirection);
+  return {
+    below: below ? getOverlayGradient(below.start, below.end, ecfg.baseline?.below?.color) : null,
+    above: above ? getOverlayGradient(above.start, above.end, ecfg.baseline?.above?.color) : null,
+  };
+}
+
+function getBaselinePaintLayer(side, ecfg, baselinePct, minValue, maxValue, scaleDirection, samplePercent) {
+  const direction = ecfg?.baseline?.[side];
+  if (!direction || direction.paint === null) return null;
+  const interval = side === 'below'
+    ? projectScaleInterval(0, baselinePct, scaleDirection)
+    : projectScaleInterval(baselinePct, 100, scaleDirection);
+  if (!interval) return null;
+  if (direction.paint && typeof direction.paint === 'object') {
+    const { gradient } = paintCompiler.compilePaint(direction.paint, {
+      minValue, maxValue, scaleDirection, samplePercent,
+    });
+    if (!gradient) return null;
+    const opacity = direction.paint.opacity ?? 100;
+    return {
+      paintStyle: `display:block;inset:0;background-image:${gradient};background-repeat:no-repeat;background-size:100% 100%;${opacity === 100 ? '' : `opacity:${opacity / 100};`}`,
+      revealStyle: getStaticLayerRevealStyle({ start: interval.start, end: interval.end, hidden: false }),
+    };
   }
+  const legacy = getBaselinePaintGradients(ecfg, baselinePct, scaleDirection)[side];
+  return legacy ? { paintStyle: getFullScaleBackgroundStyle([legacy]), revealStyle: 'display:block;' } : null;
+}
 
-  if (basePaint) layers.push(basePaint);
+function getFullScaleBackgroundStyle(gradients) {
+  const layers = gradients.filter(Boolean);
   if (!layers.length) return 'display:none;';
-
   return `display:block;inset:0;background-image:${layers.join(',')};background-repeat:no-repeat;background-size:100% 100%;`;
+}
+
+// Compatibility form for callers that still need one composed background.
+export function getFullScalePaintStyle(ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, scaleDirection = 'normal') {
+  const baseline = getBaselinePaintGradients(ecfg, baselinePct, scaleDirection);
+  return getFullScaleBackgroundStyle([
+    baseline.below, baseline.above,
+    getBasePaintGradient(color, ecfg, minValue, maxValue, scaleDirection),
+  ]);
 }
 
 export function getRevealShapeStyle(geometry, h) {
@@ -504,30 +264,83 @@ export function getStaticLayerRevealStyle(geometry) {
   return 'display:none;clip-path:inset(0 100% 0 0 round 0);';
 }
 
-export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, scaleDirection = 'normal') {
-  const basePaintStyle = getFullScalePaintStyle(ecfg, color, targetPct, baselinePct, minValue, maxValue, scaleDirection);
+export function getFillPaintLayers(geometry, h, ecfg, color, targetPct = null, baselinePct = null, minValue = 0, maxValue = 100, scaleDirection = 'normal', samplePercent = 0, needleActive = false, targetBelowPct = targetPct) {
+  const basePaintStyle = getFullScaleBackgroundStyle([
+    paintCompiler.compilePaint(ordinaryPaint(ecfg), { color, minValue, maxValue, scaleDirection, samplePercent }).gradient,
+  ]);
+  const opacity = ecfg?.bar?.paint?.opacity ?? 100;
   const baseLayer = {
     id: 'base',
     zIndex: 1,
     visible: true,
-    paintStyle: basePaintStyle,
+    paintStyle: opacity === 100 ? basePaintStyle : `${basePaintStyle}opacity:${opacity / 100};`,
     revealStyle: 'display:block;',
   };
 
-  const aboveTargetGeometry = getAboveTargetLayerGeometry(targetPct, scaleDirection);
+  // At equal z-indices, later nodes paint on top: Baseline-above covers
+  // ordinary fill, and Baseline-below covers both, matching background order.
+  // Keep inactive nodes too, allowing source recovery without rebuilding the bar.
+  const baselineLayers = ['above', 'below'].map(side => {
+    const layer = getBaselinePaintLayer(side, ecfg, baselinePct, minValue, maxValue, scaleDirection, samplePercent);
+    return {
+      id: `baseline-${side}`,
+      zIndex: 1,
+      visible: !!layer,
+      paintStyle: layer?.paintStyle ?? 'display:none;',
+      revealStyle: layer?.revealStyle ?? 'display:none;',
+    };
+  });
+
+  const aboveTargetViolation = Number.isFinite(samplePercent) && samplePercent > targetPct;
+  const aboveTargetGeometry = needleActive
+    ? getNeedleTargetLayerGeometry(targetPct, samplePercent, 'above', scaleDirection)
+    : getAboveTargetLayerGeometry(targetPct, scaleDirection);
+  const target = ecfg?.target_above;
+  const paint = target?.paint;
+  // The normalized destination is authoritative, including null. The mirror
+  // fallback serves old internal callers only, never a disabled destination.
+  const legacyColor = target === undefined ? safeCssColor(ecfg?.bar?.above_target_color, '') : '';
+  const active = !!aboveTargetGeometry && (paint
+    ? (needleActive ? aboveTargetViolation : target.legacy || aboveTargetViolation)
+    : !!legacyColor && (!needleActive || aboveTargetViolation));
+  const compiled = (active || needleActive && Number.isFinite(targetPct)) && paint
+    ? paintCompiler.compilePaint(paint, { minValue, maxValue, scaleDirection, samplePercent }) : null;
+  const targetStyle = compiled ? getFullScaleBackgroundStyle([compiled.gradient])
+    + (paint.opacity === 100 ? '' : `opacity:${(paint.opacity ?? 100) / 100};`)
+    : legacyColor ? `display:block;inset:0;background:${legacyColor};` : 'display:none;';
   const aboveTargetLayer = {
     id: 'above-target',
     zIndex: 2,
-    visible: !!(ecfg?.bar?.above_target_color && aboveTargetGeometry),
-    paintStyle: ecfg?.bar?.above_target_color
-      ? `display:block;inset:0;background:${ecfg.bar.above_target_color};`
-      : 'display:none;',
-    revealStyle: aboveTargetGeometry
-      ? getStaticLayerRevealStyle(aboveTargetGeometry)
-      : getStaticLayerRevealStyle({ start: 0, end: 0, hidden: true }),
+    visible: active,
+    paintStyle: targetStyle,
+    revealStyle: needleActive && (paint || legacyColor) && Number.isFinite(targetPct)
+      ? getNeedleTargetLayerRevealStyle(aboveTargetGeometry)
+      : active ? getStaticLayerRevealStyle(aboveTargetGeometry)
+        : getStaticLayerRevealStyle({ start: 0, end: 0, hidden: true }),
   };
 
-  return [baseLayer, aboveTargetLayer];
+  const belowTarget = ecfg?.target_below;
+  const belowPaint = belowTarget?.paint;
+  const belowTargetViolation = Number.isFinite(samplePercent) && samplePercent < targetBelowPct;
+  const belowGeometry = needleActive
+    ? getNeedleTargetLayerGeometry(targetBelowPct, samplePercent, 'below', scaleDirection)
+    : getBelowTargetLayerGeometry(targetBelowPct, scaleDirection);
+  const belowActive = !!belowGeometry && !!belowPaint && belowTargetViolation;
+  const belowCompiled = (belowActive || needleActive && Number.isFinite(targetBelowPct)) && belowPaint
+    ? paintCompiler.compilePaint(belowPaint, { minValue, maxValue, scaleDirection, samplePercent }) : null;
+  const belowTargetLayer = {
+    id: 'below-target',
+    zIndex: 2,
+    visible: belowActive,
+    paintStyle: belowCompiled ? getFullScaleBackgroundStyle([belowCompiled.gradient])
+      + (belowPaint.opacity === 100 ? '' : `opacity:${(belowPaint.opacity ?? 100) / 100};`) : 'display:none;',
+    revealStyle: needleActive && belowPaint && Number.isFinite(targetBelowPct)
+      ? getNeedleTargetLayerRevealStyle(belowGeometry)
+      : belowActive ? getStaticLayerRevealStyle(belowGeometry)
+        : getStaticLayerRevealStyle({ start: 0, end: 0, hidden: true }),
+  };
+
+  return [baseLayer, ...baselineLayers, aboveTargetLayer, belowTargetLayer];
 }
 
 export function getFillRenderState(
@@ -535,6 +348,7 @@ export function getFillRenderState(
   minValue = 0, maxValue = 100, needleActive = false,
   scaleDirection = ecfg?.scale?.direction ?? 'normal',
   barDirection = ecfg?.bar?.direction ?? 'normal',
+  targetBelowPct = targetScalePercent,
 ) {
   const valuePosition = projectScalePercent(scalePercent, scaleDirection);
   const baselinePosition = projectScalePercent(baselineScalePercent, scaleDirection);
@@ -580,10 +394,11 @@ export function getFillRenderState(
   }
   const paintLayers = getFillPaintLayers(
     geometry, h, ecfg, color, targetScalePercent, baselineScalePercent,
-    minValue, maxValue, scaleDirection,
+    minValue, maxValue, scaleDirection, scalePercent, needleActive, targetBelowPct,
   );
   return {
     geometry,
+    needleMode: needleActive,
     paintLayers,
     paintStyle: paintLayers[0]?.paintStyle ?? 'display:none;',
     revealStyle: getRevealShapeStyle(geometry, h),
@@ -732,9 +547,9 @@ export function buildBarRenderModel(row, appearance, { height, color = getColor(
       row.numericValue === null
         ? (Number.isFinite(baselinePercent) ? 0 : null)
         : row.percent,
-      height, appearance, color, row.targetPercent, baselinePercent,
+      height, appearance, color, (Object.hasOwn(row, 'targetPaintPercent') ? row.targetPaintPercent : row.targetPercent), baselinePercent,
       row.min, row.max, row.needle.show,
-      appearance.scale?.direction ?? 'normal', appearance.bar?.direction ?? 'normal',
+      appearance.scale?.direction ?? 'normal', appearance.bar?.direction ?? 'normal', (Object.hasOwn(row, 'targetBelowPaintPercent') ? row.targetBelowPaintPercent : row.targetPercent),
     ),
     baseline: {
       configured: baselineConfigured,

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createCard } from '../support/load-card-class.cjs';
 import { historicalMarkerId } from '../../src/history/marker-consumers.js';
+import { createPaintLayerContainer } from '../support/paint-layer-dom.mjs';
 
 const state = (value) => ({ state: String(value), attributes: { unit_of_measurement: 'W' } });
 const dynamicScale = { min: { entity: 'sensor.min' }, max: { entity: 'sensor.max' } };
@@ -34,13 +35,15 @@ function setup(config = {}, initial = snapshot(50, 0, 100)) {
       '.bar-fill-reveal', '.baseline-indicator', '.target-marker', '.peak-marker',
       '.floor-marker', '.needle-marker', '.value-right', '.target-value-label',
     ].map((selector) => [selector, element()]));
+    elements['.bar-fill-reveal'] = createPaintLayerContainer();
     const generic = element({ markerId: 'generic-0' });
     return {
       dataset: { rowIndex: String(index) },
       elements,
       generic,
-      querySelector: (selector) => elements[selector] ?? null,
-      querySelectorAll: (selector) => selector === '.generic-marker[data-marker-id]' ? [generic] : [],
+      querySelector: (selector) => elements[selector] ?? elements[selector.split('[')[0]] ?? null,
+      querySelectorAll: (selector) => selector === '.generic-marker[data-marker-id]' ? [generic]
+        : selector.startsWith('.target-marker') && elements['.target-marker'] ? [elements['.target-marker']] : [],
       addEventListener: () => {},
     };
   });

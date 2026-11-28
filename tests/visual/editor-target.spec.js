@@ -1,5 +1,8 @@
-const { test, expect } = require('@playwright/test');
-test('standalone Target root/entity controls, labels and focus retain their appearance', async ({ page }) => {
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
+const { test, expect } = require('./visual-test.cjs');
+const { openTarget } = require('./target-test-utils.cjs');
+test('standalone Target root/entity controls, labels and focus retain their appearance', async ({ page, browserName }) => {
+  const browserSuffix = browserName === 'webkit' ? '-webkit' : '';
   await page.goto('/tests/visual/fixtures/harness.html');
   await page.evaluate(async () => {
     await customElements.whenDefined('sensor-bar-card-plus');
@@ -9,8 +12,8 @@ test('standalone Target root/entity controls, labels and focus retain their appe
     document.querySelector('#mount').style.width = '360px'; document.querySelector('#mount').append(editor);
   });
   const editor = page.locator('sensor-bar-card-plus-editor');
-  await editor.locator('#card-group-marker-target').click();
-  await expect(editor.locator('.card-subgroup[data-group="marker-target"]')).toHaveScreenshot('target-root.png');
+  await openTarget(editor);
+  await expectEditorLayout(editor.locator('.card-subgroup[data-group="marker-target"]'), expect);
   const rootValue = editor.locator('#target-value');
   await expect(rootValue).toHaveAttribute('type', 'text'); await expect(rootValue).toHaveValue('70');
   await rootValue.fill('25%');
@@ -18,8 +21,8 @@ test('standalone Target root/entity controls, labels and focus retain their appe
   await rootValue.fill('70');
   expect((await editor.evaluate(el => el._draftConfig)).target.at).toEqual({ entity: { id: 'sensor.t', attribute: 'limit' }, fixed: 70 });
   await editor.locator('#target-label-text').fill('Target energy'); await expect(editor.locator('#target-label-text')).toBeFocused();
-  await editor.locator('button[data-action="toggle-entity-overrides"]').click(); await editor.locator('#entity-0-group-target').click();
-  await expect(editor.locator('.override-group:not(.card-subgroup)[data-group="target"]')).toHaveScreenshot('target-entity.png');
+  await editor.locator('button[data-action="toggle-entity-overrides"]').click(); await openTarget(editor, 'Entity');
+  await expectEditorLayout(editor.locator('.override-group:not(.card-subgroup)[data-group="target"]'), expect);
   const inherit = editor.locator('#entity-0-target-inherit'), show = editor.locator('#entity-0-target-show');
   await expect(inherit).toBeChecked(); await expect(show).toBeChecked(); await expect(show).not.toBeDisabled();
   const cardTarget = (await editor.evaluate(el => el._draftConfig)).target;

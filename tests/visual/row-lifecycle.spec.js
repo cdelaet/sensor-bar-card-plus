@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./visual-test.cjs');
 
 const ids = ['sensor.a', 'sensor.b', 'sensor.c'];
 const configRow = (entity, index) => ({ entity, name: `Row ${index}`, target: { at: 10 + index }, markers: [{ at: 40 + index }], peak: { enabled: true }, floor: { enabled: true } });

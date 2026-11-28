@@ -1,5 +1,7 @@
+import { getTargetSourceEntities } from '../config/directional-targets.js';
 import { createConfigEditor } from '../editor-loader.js';
 import { barTrackStyles, barMarkerStyles, getBarAnimationStyles } from '../render/bar-styles.js';
+import { initializeUniversalMessageArea, renderUniversalMessageArea, syncUniversalMessageArea, universalMessageStyles } from '../render/universal-messages.js';
 import { attachTooltips } from '../render/tooltip-controller.js';
 import {
   clampSupportedRowHeight,
@@ -43,6 +45,7 @@ import {
   getMarkerLaneOccupancy,
 } from '../view-model/marker-view-model.js';
 import { escapeHtml, setStyleIfChanged, setStyleTextIfChanged, setDatasetIfChanged, setClassNameIfChanged } from '../utils/dom.js';
+import { safeCssColor } from '../utils/css-values.js';
 import {
   formatDisplayWithUnit,
   formatNumericDisplay,
@@ -50,6 +53,11 @@ import {
 } from '../utils/format.js';
 import { HistoricalHostRuntime } from '../history/host-runtime.js';
 import { historicalMarkerConsumers, historicalMarkerResults } from '../history/marker-consumers.js';
+import { releasePaintPresetConsumer, syncPaintPresetConsumer } from '../dashboard/paint-preset-consumer.js';
+import { authoredPaintProperties, resolveScopedPaintPreset } from '../view-model/paint-preset-resolver.js';
+import { resolveDestinationPaint, scopeUsesPaintPreset } from '../view-model/paint-destinations.js';
+import { resolveBaselinePaints } from '../view-model/baseline-paint-resolver.js';
+import { resolveTargetAbovePaint, resolveTargetBelowPaint } from '../view-model/target-above-paint-resolver.js';
 import * as barRenderModel from '../view-model/bar-render-model.js';
 import * as barRenderer from '../render/bar-renderer.js';
 import { attachRowActionHandlers, resolveRowAction } from '../actions/row-actions.js';
@@ -181,6 +189,12 @@ import { attachRowActionHandlers, resolveRowAction } from '../actions/row-action
  *       max: 100
  */
 
+function getKnownState(states, entityId) {
+  if (!states || typeof entityId !== 'string' || !looksLikeEntityId(entityId)) return null;
+  const key = entityId.trim();
+  return Object.prototype.hasOwnProperty.call(states, key) ? states[key] : null;
+}
+
 export class SensorBarCard extends HTMLElement {
   static async getConfigElement() {
     return createConfigEditor('sensor-bar-card-plus-editor');
@@ -193,9 +207,18 @@ export class SensorBarCard extends HTMLElement {
     this._config = {};
     this._actionConfig = {};
     this._diagnostics = { warnings: [], errors: [] };
+    this._baseDiagnostics = this._diagnostics;
+    this._paintPresetHandle = null;
+    this._paintPresetRegistry = { status: 'loading', presets: {} };
+    this._paintPresetEntityPaints = new WeakMap();
+    this._paintPresetEntityBaselinePaints = new WeakMap();
+    this._paintPresetEntityTargetAbove = new WeakMap();
+    this._paintPresetEntityTargetBelow = new WeakMap();
+    this._paintPresetDiagnostics = [];
     this._lastDiagnosticsSignature = null;
     this._hass = null;
     this._historicalRuntime = new HistoricalHostRuntime();
+    this._historyDiagnostics = new Map();
     this._historicalUpdate = () => {
       if (this._historicalUpdateScheduled) return;
       this._historicalUpdateScheduled = true;
@@ -227,6 +250,7 @@ export class SensorBarCard extends HTMLElement {
 
   connectedCallback() {
     this._historicalRuntime.attach();
+    this._syncPaintPresetRegistry();
     this._tooltipController = attachTooltips(this.shadowRoot);
     window.addEventListener('resize', this._boundWindowResize, { passive: true });
     this._setupResizeObserver();
@@ -240,6 +264,8 @@ export class SensorBarCard extends HTMLElement {
 
   disconnectedCallback() {
     this._historicalRuntime.detach();
+    releasePaintPresetConsumer(this);
+    this._refreshPaintPresetResolutions();
     this._tooltipController?.destroy();
     this._tooltipController = null;
     this._rowGeneration += 1;
@@ -267,9 +293,14 @@ export class SensorBarCard extends HTMLElement {
     this._config = this.normalizeCardConfig(config);
     this._rowScales = new WeakMap();
     this._reconcileRowHistory(previousConfig?.entities ?? []);
-    this._historicalRuntime.setConsumers(historicalMarkerConsumers(this._config.entities), this._historicalUpdate);
-    this._diagnostics = validateNormalizedConfig(this._config);
+    this._historicalRuntime.setConsumers(historicalMarkerConsumers(this._config.entities, this._hass), this._historicalUpdate);
+    this._targetDiagnostics = new Map();
+    this._historyDiagnostics.clear();
+    this._baseDiagnostics = validateNormalizedConfig(this._config);
+    this._diagnostics = this._baseDiagnostics;
+    this._refreshPaintPresetResolutions();
     this._logDiagnostics();
+    this._syncPaintPresetRegistry();
     this._render();
   }
 
@@ -505,7 +536,10 @@ export class SensorBarCard extends HTMLElement {
   set hass(hass) {
     const oldHass = this._hass;
     this._hass = hass;
-    this._historicalRuntime.setHass(hass);
+    this._syncPaintPresetRegistry();
+    const rows = this._config?.entities ?? [];
+    const hasWindowHelper = rows.some(row => row.peak_marker?.window_entity || row.floor_marker?.window_entity);
+    this._historicalRuntime.setHass(hass, hasWindowHelper ? historicalMarkerConsumers(rows, hass) : null, this._historicalUpdate);
     if (!this._config.entities) return;
     
     if (!oldHass) {
@@ -521,12 +555,152 @@ export class SensorBarCard extends HTMLElement {
   // Merge global config with per-entity overrides
   _resolve(entityCfg) {
     const ecfg = entityCfg?._normalized ? entityCfg : this.normalizeEntityConfig(entityCfg, this._config);
-    const stateObj = this._hass?.states?.[ecfg.entity] ?? null;
+    const stateObj = getKnownState(this._hass?.states, ecfg.entity);
+    const resolvedBaselinePaints = this._paintPresetEntityBaselinePaints.get(entityCfg);
+    const targetAbove = this._paintPresetEntityTargetAbove.get(entityCfg)
+      ?? resolveTargetAbovePaint(ecfg.target_above, this._config.target_above, this._paintPresetRegistry);
+    const targetBelow = this._paintPresetEntityTargetBelow.get(entityCfg)
+      ?? resolveTargetBelowPaint(ecfg.target_below, this._config.target_below, this._paintPresetRegistry);
+    const baseline = resolvedBaselinePaints ? { ...ecfg.baseline } : ecfg.baseline;
+    if (resolvedBaselinePaints) for (const side of ['above', 'below']) {
+      if (Object.prototype.hasOwnProperty.call(resolvedBaselinePaints, side)) {
+        baseline[side] = { ...ecfg.baseline?.[side], paint: resolvedBaselinePaints[side] };
+      }
+    }
     return {
       ...ecfg,
+      ...(this._paintPresetEntityPaints.get(entityCfg) ? {
+        bar: { ...ecfg.bar, paint: this._paintPresetEntityPaints.get(entityCfg) },
+      } : {}),
+      ...(resolvedBaselinePaints ? { baseline } : {}),
+      target_above: targetAbove,
+      target_below: targetBelow,
       icon: ecfg.icon === false ? false : (ecfg.icon ?? stateObj?.attributes?.icon ?? this._getDefaultEntityIcon(stateObj, ecfg.entity)),
       name: ecfg.name ?? null,
     };
+  }
+
+  _refreshPaintPresetResolutions() {
+    this._paintPresetEntityPaints = new WeakMap();
+    this._paintPresetEntityBaselinePaints = new WeakMap();
+    this._paintPresetEntityTargetAbove = new WeakMap();
+    this._paintPresetEntityTargetBelow = new WeakMap();
+    this._paintPresetDiagnostics = [];
+    this._diagnostics = this._baseDiagnostics ?? { warnings: [], errors: [] };
+    if (!this._config) return;
+    const authoringDiagnostics = this._paintPresetAuthoringDiagnostics();
+    const inheritedProperties = authoredPaintProperties(this._config.bar.paint);
+    const entities = this._config.entities ?? [];
+    const rootBaseline = resolveBaselinePaints(this._config.baseline, null, this._paintPresetRegistry);
+    const rootTarget = resolveTargetAbovePaint(this._config.target_above, null, this._paintPresetRegistry);
+    const rootTargetBelow = resolveTargetBelowPaint(this._config.target_below, null, this._paintPresetRegistry);
+    const diagnostics = rootBaseline.diagnostics.map(diagnostic => ({
+      ...diagnostic, path: `baseline.${diagnostic.path}`, entity: null,
+    }));
+    diagnostics.push(...rootTarget.diagnostics.map(diagnostic => ({
+      ...diagnostic, path: `target.when_above.${diagnostic.path}`, entity: null,
+    })));
+    diagnostics.push(...rootTargetBelow.diagnostics.map(diagnostic => ({
+      ...diagnostic, path: `target.when_below.${diagnostic.path}`, entity: null,
+    })));
+    const base = this._baseDiagnostics ?? { warnings: [], errors: [] };
+    if (!Object.prototype.hasOwnProperty.call(inheritedProperties, 'preset')
+      && !entities.some(entity => Object.prototype.hasOwnProperty.call(authoredPaintProperties(entity.bar?.paint), 'preset'))
+      && !Object.keys(rootBaseline.paints).length
+      && !diagnostics.length
+      && this._config.target_above?.paint?.preset === undefined
+      && this._config.target_below?.paint?.preset === undefined
+      && !entities.some(entity => entity.target_above?.paint?.preset !== undefined)
+      && !entities.some(entity => entity.target_below?.paint?.preset !== undefined)
+      && !entities.some(entity => ['above', 'below'].some(side => entity.baseline?.[side]?.paint?.preset !== undefined))) {
+      this._paintPresetDiagnostics = authoringDiagnostics;
+      this._diagnostics = { ...base, warnings: [...(base.warnings ?? []), ...authoringDiagnostics] };
+      return;
+    }
+    const cardHasPreset = Object.prototype.hasOwnProperty.call(inheritedProperties, 'preset');
+    const root = cardHasPreset
+      ? resolveScopedPaintPreset({
+        inheritedPaint: this._config.bar.paint,
+        paint: {},
+        registry: this._paintPresetRegistry,
+      })
+      : { paint: this._config.bar.paint, diagnostics: [] };
+    diagnostics.push(...root.diagnostics.map(diagnostic => ({ ...diagnostic, path: `bar.${diagnostic.path}` })));
+    for (const entity of entities) {
+      const targetAbove = resolveTargetAbovePaint(entity.target_above, this._config.target_above, this._paintPresetRegistry);
+      this._paintPresetEntityTargetAbove.set(entity, targetAbove);
+      diagnostics.push(...targetAbove.diagnostics.map(diagnostic => ({
+        ...diagnostic, path: `entities.${entity.entity}.target.when_above.${diagnostic.path}`, entity: entity.entity,
+      })));
+      const targetBelow = resolveTargetBelowPaint(entity.target_below, this._config.target_below, this._paintPresetRegistry);
+      this._paintPresetEntityTargetBelow.set(entity, targetBelow);
+      diagnostics.push(...targetBelow.diagnostics.map(diagnostic => ({
+        ...diagnostic, path: `entities.${entity.entity}.target.when_below.${diagnostic.path}`, entity: entity.entity,
+      })));
+      const baseline = resolveBaselinePaints(entity.baseline, this._config.baseline, this._paintPresetRegistry);
+      if (Object.keys(baseline.paints).length) this._paintPresetEntityBaselinePaints.set(entity, baseline.paints);
+      diagnostics.push(...baseline.diagnostics.map(diagnostic => ({
+        ...diagnostic,
+        path: `entities.${entity.entity}.baseline.${diagnostic.path}`,
+        entity: entity.entity,
+      })));
+      const entityPaint = authoredPaintProperties(entity.bar?.paint);
+      if (!cardHasPreset && !Object.prototype.hasOwnProperty.call(entityPaint, 'preset')) continue;
+      const local = resolveDestinationPaint(entity.bar?.paint, this._config.bar.paint, this._paintPresetRegistry);
+      this._paintPresetEntityPaints.set(entity, local.paint);
+      diagnostics.push(...local.diagnostics.map(diagnostic => ({
+        ...diagnostic,
+        path: `entities.${entity.entity}.bar.${diagnostic.path}`,
+        entity: entity.entity,
+      })));
+    }
+    this._paintPresetDiagnostics = [...authoringDiagnostics, ...diagnostics];
+    this._diagnostics = {
+      ...base,
+      warnings: [...(base.warnings ?? []), ...authoringDiagnostics, ...diagnostics.map(diagnostic => ({
+        ...diagnostic,
+        message: `${diagnostic.code}: ${diagnostic.reference ?? 'paint'}`,
+      }))],
+    };
+  }
+
+  _paintPresetAuthoringDiagnostics() {
+    const library = this._actionConfig?.preset_library;
+    const paint = library && typeof library === 'object' && !Array.isArray(library) ? library.paint : null;
+    const conflicts = this._paintPresetRegistry?.conflicts;
+    if (!paint || typeof paint !== 'object' || Array.isArray(paint)
+      || !conflicts || typeof conflicts !== 'object' || Array.isArray(conflicts)) return [];
+    return Object.keys(paint)
+      .filter(name => Object.hasOwn(conflicts, name) && Number.isInteger(conflicts[name]) && conflicts[name] > 1)
+      .map(name => ({
+        code: 'paint_preset_duplicate_definition',
+        severity: 'warning',
+        path: `preset_library.paint.${name}`,
+        area: 'Shared Paint Presets',
+        reference: name,
+        ownerCount: conflicts[name],
+        message: `Paint preset "${name}" is defined by ${conflicts[name]} Cards in this dashboard. Rename or remove this definition so only one Card defines it.`,
+      }));
+  }
+
+  _syncPaintPresetRegistry() {
+    const actionEntities = Array.isArray(this._actionConfig?.entities) ? this._actionConfig.entities : [];
+    const usesPreset = scopeUsesPaintPreset(this._actionConfig)
+      || actionEntities.some(scopeUsesPaintPreset);
+    const ownsPresetLibrary = Object.hasOwn(this._actionConfig ?? {}, 'preset_library');
+    if (!this.isConnected || !this._hass?.connection || !(usesPreset || ownsPresetLibrary)) {
+      if (this._paintPresetHandle) {
+        releasePaintPresetConsumer(this);
+        this._refreshPaintPresetResolutions();
+      }
+      return;
+    }
+    syncPaintPresetConsumer(this, () => {
+      this._refreshPaintPresetResolutions();
+      this._logDiagnostics();
+      if (this._config?.entities && this._hass) this._update();
+      else this._syncUniversalMessages();
+    });
   }
 
   _getDefaultEntityIcon(stateObj, entityId = '') {
@@ -566,6 +740,9 @@ export class SensorBarCard extends HTMLElement {
 
   _shouldUpdate(oldHass, newHass) {
     if (!this._config || !this._config.entities) return true;
+
+    if (oldHass?.locale?.number_format !== newHass?.locale?.number_format
+      || oldHass?.locale?.language !== newHass?.locale?.language) return true;
     
     for (const entityCfg of this._config.entities) {
       const ecfg = this._resolve(entityCfg);
@@ -574,15 +751,17 @@ export class SensorBarCard extends HTMLElement {
         ecfg.scale?.min?.entity,
         ecfg.scale?.max?.entity,
         ecfg.baseline?.at?.entity,
-        ecfg.target_marker?.source?.entity,
+        ...getTargetSourceEntities(ecfg),
+        ecfg.peak_marker?.window_entity,
+        ecfg.floor_marker?.window_entity,
         ...(ecfg.generic_markers ?? [])
           .filter((marker) => marker.accepted)
           .flatMap((marker) => [marker.source?.entity, marker.label?.entity])
       ].filter(Boolean);
       
       for (const ent of entitiesToWatch) {
-        const oldState = oldHass.states[ent] ?? null;
-        const newState = newHass.states[ent] ?? null;
+        const oldState = getKnownState(oldHass?.states, ent);
+        const newState = getKnownState(newHass?.states, ent);
         if (oldState !== newState) {
           return true;
         }
@@ -638,7 +817,10 @@ export class SensorBarCard extends HTMLElement {
   }
   
   _positionTargetLabel(row) {
-    this._positionMarkerValueLabel(row, '.target-value-label', '.target-marker');
+    for (const label of row.querySelectorAll('.target-value-label[data-marker-id]')) {
+      const id = label.dataset.markerId;
+      this._positionMarkerValueLabel(row, `.target-value-label[data-marker-id="${id}"]`, `.target-marker[data-marker-id="${id}"]`);
+    }
   }
 
   _getMarkerLabel(markerEl) {
@@ -649,7 +831,7 @@ export class SensorBarCard extends HTMLElement {
       return [...row.querySelectorAll('.generic-value-label[data-marker-id]')]
         .find((label) => label.dataset.markerId === markerId) ?? null;
     }
-    const labelSelector = markerEl.matches('.target-marker') ? '.target-value-label'
+    const labelSelector = markerEl.matches('.target-marker') ? `.target-value-label[data-marker-id="${markerEl.dataset.markerId}"]`
       : markerEl.matches('.peak-marker') ? '.peak-value-label'
         : markerEl.matches('.floor-marker') ? '.floor-value-label' : null;
     return labelSelector ? row.querySelector(labelSelector) : null;
@@ -839,7 +1021,7 @@ export class SensorBarCard extends HTMLElement {
   }
 
   _formatNumericDisplay(rawVal, decimal = null) {
-    return formatNumericDisplay(rawVal, decimal);
+    return formatNumericDisplay(rawVal, decimal, this._hass?.locale);
   }
 
   _getNormalizedPercent(valuePct, baselinePct = null) {
@@ -1618,18 +1800,21 @@ ${barMarkerStyles}
           pointer-events: none;
           white-space: nowrap;
         }
+        ${universalMessageStyles}
       </style>
 
       <ha-card>
         <div class="card">
           <div class="card-title" style="display:none;"></div>
           <div class="rows"></div>
+          ${renderUniversalMessageArea()}
           <div class="measure-layer"></div>
         </div>
       </ha-card>
     `;
     this.shadowRoot.addEventListener('pointerover', this._boundMarkerPointerOver);
     this.shadowRoot.addEventListener('pointerout', this._boundMarkerPointerOut);
+    initializeUniversalMessageArea(this.shadowRoot.querySelector('.sbcp-messages'));
     this._baseDomReady = true;
   }
 
@@ -1650,7 +1835,16 @@ ${barMarkerStyles}
 
     this._setupResizeObserver();
     this._update();
+    this._syncUniversalMessages();
     this._schedulePostLayoutDensityPass();
+  }
+
+  _syncUniversalMessages() {
+    const diagnostics = {
+      ...this._diagnostics,
+      warnings: [...(this._diagnostics?.warnings ?? []), ...[...this._historyDiagnostics.values()].flat()],
+    };
+    syncUniversalMessageArea(this.shadowRoot.querySelector('.sbcp-messages'), diagnostics);
   }
 
   _setupResizeObserver() {
@@ -2934,7 +3128,7 @@ ${barMarkerStyles}
   }
 
   _getMarkerLabelColorStyle(marker) {
-    const color = this._getEffectiveMarkerColor(marker);
+    const color = safeCssColor(this._getEffectiveMarkerColor(marker), '#888888');
     return `--marker-color:${color};--marker-contrast-color:${this._getMarkerContrastColor(color)};`;
   }
 
@@ -2974,15 +3168,7 @@ ${barMarkerStyles}
   _getRowMarkerModels(rowViewModel, ecfg, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor) {
     if (rowViewModel?.markers) {
       return rowViewModel.markers.map((marker) => {
-        if (marker.type === 'target') {
-          return {
-            ...marker,
-            position: marker.position,
-            visible: targetPct !== null && targetPct !== undefined,
-            color: targetColor || marker.color,
-            label: marker.label ?? (targetDisplay === null ? null : { text: targetDisplay }),
-          };
-        }
+        if (marker.type === 'target') return marker;
         if (marker.type === 'floor') {
           return marker;
         }
@@ -3025,9 +3211,30 @@ ${barMarkerStyles}
     return barRenderer.patchMarker(markerEl, marker);
   }
 
+  _renderTargetLabel(marker) {
+    return `<div class="target-value-label" data-marker-id="${escapeHtml(marker.id)}" style="left:${marker.position ?? 0}%;visibility:hidden;${this._getMarkerLabelColorStyle(marker)}">${marker.visible && marker.label?.text ? escapeHtml(marker.label.text) : ''}</div>`;
+  }
+
+  _reconcileTargetLabels(row, markers) {
+    const targets = markers.filter(marker => marker.type === 'target' && marker.labelVisible);
+    const nodes = new Map([...row.querySelectorAll('.target-value-label')].map(node => [node.dataset.markerId ?? 'target', node]));
+    for (const [id, node] of nodes) if (!targets.some(marker => marker.id === id)) node.remove();
+    for (const marker of targets) {
+      let node = nodes.get(marker.id);
+      if (!node) {
+        row.querySelector('.bar-wrap')?.insertAdjacentHTML('beforeend', this._renderTargetLabel(marker));
+        node = row.querySelector(`.target-value-label[data-marker-id="${marker.id}"]`);
+      }
+      this._patchMarkerLabelAppearance(node, marker);
+      this._setTextIfChanged(node, marker.visible ? marker.label?.text ?? '' : '');
+      this._setStyleIfChanged(node, 'left', `${marker.position ?? 0}%`);
+      if (!marker.visible) this._setStyleIfChanged(node, 'visibility', 'hidden');
+    }
+  }
+
   _patchMarkerLabelAppearance(labelEl, marker) {
     if (!labelEl || !marker) return;
-    const markerColor = this._getEffectiveMarkerColor(marker);
+    const markerColor = safeCssColor(this._getEffectiveMarkerColor(marker), '#888888');
     this._setStyleIfChanged(labelEl, '--marker-color', markerColor);
     this._setStyleIfChanged(labelEl, '--marker-contrast-color', this._getMarkerContrastColor(markerColor));
   }
@@ -3038,16 +3245,26 @@ ${barMarkerStyles}
       cardConfig: this._config,
       entityConfig: ecfg,
       entityState: stateObj,
-      historicalExtrema: historicalMarkerResults(this._historicalRuntime, ecfg),
+      historicalExtrema: historicalMarkerResults(this._historicalRuntime, ecfg, this._hass),
       previousScale: this._rowScales.get(entityCfg),
     });
     this._rowScales.set(entityCfg, { min: rowViewModel.min, max: rowViewModel.max });
+    this._targetDiagnostics ??= new Map();
+    this._targetDiagnostics.set(entityCfg, rowViewModel.targetDiagnostics.map(issue => ({
+      ...issue, path: `entities[${this._config.entities.indexOf(entityCfg)}].target`,
+    })));
+    this._historyDiagnostics.set(entityCfg, rowViewModel.historyDiagnostics);
+    this._diagnostics = { ...this._diagnostics, warnings: [
+      ...(this._diagnostics?.warnings ?? []).filter(issue => issue.code !== 'target.invalid_ordering'),
+      ...[...this._targetDiagnostics.values()].flat(),
+    ] };
+    this._logDiagnostics();
     return rowViewModel;
   }
 
   _buildRow(entityCfg, stateDisplay, unit, pct, color, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor, minValue, maxValue, rowIndex = this._config.entities?.indexOf(entityCfg) ?? -1) {
     const ecfg = this._resolve(entityCfg);
-    const stateObj = this._hass?.states?.[entityCfg.entity] ?? null;
+    const stateObj = getKnownState(this._hass?.states, entityCfg.entity);
     const rowViewModel = stateObj
       ? this._buildRowViewModel(entityCfg, ecfg, stateObj)
       : null;
@@ -3058,6 +3275,8 @@ ${barMarkerStyles}
     const baselinePct = rowViewModel?.baselinePercent ?? this._resolveBaselinePct(ecfg, safeMin, safeMax);
     const lp   = layout.label.position;
     const h    = rowViewModel?.attributes?.baseHeight ?? layout.height;
+    const numericLabelWidth = getFiniteNumber(layout.label.width);
+    const labelWidth = numericLabelWidth === null ? 100 : Math.max(0, numericLabelWidth);
     const name = rowViewModel?.name
       ?? ecfg.name
       ?? stateObj?.attributes?.friendly_name
@@ -3065,7 +3284,6 @@ ${barMarkerStyles}
     const escapedEntityId = escapeHtml(rowViewModel?.entityId ?? entityCfg.entity);
     const escapedName = escapeHtml(name);
     const markerModels = this._getRowMarkerModels(rowViewModel, ecfg, peakPct, peakDisplay, targetPct, targetDisplay, peakColor, targetColor);
-    const targetMarkerModel = this._getMarkerModel(markerModels, 'target');
     const peakMarkerModel = this._getMarkerModel(markerModels, 'peak');
     const floorMarkerModel = this._getMarkerModel(markerModels, 'floor');
     const genericMarkerModels = markerModels.filter((marker) => marker.type === 'generic');
@@ -3076,12 +3294,12 @@ ${barMarkerStyles}
     const barModel = barRenderModel.buildBarRenderModel({
       percent: pct, min: safeMin, max: safeMax,
       targetPercent: targetPct, baselinePercent: baselinePct,
+      targetPaintPercent: rowViewModel?.targetPaintPercent,
+      targetBelowPaintPercent: rowViewModel?.targetBelowPaintPercent,
       needle: needleState, markers: markerModels,
     }, ecfg, { height: 'var(--sbcp-row-height)', color });
-    const targetValueLabel = targetMarkerModel?.labelVisible ? `
-      <div class="target-value-label" style="left:${Number.isFinite(targetMarkerModel.position) ? targetMarkerModel.position : 0}%;visibility:hidden;${this._getMarkerLabelColorStyle(targetMarkerModel)}">
-        ${targetMarkerModel.label?.text ? escapeHtml(targetMarkerModel.label.text) : ''}
-      </div>` : '';
+    const targetValueLabel = markerModels.filter(marker => marker.type === 'target' && marker.labelVisible)
+      .map(marker => this._renderTargetLabel(marker)).join('');
     const peakValueLabel = peakMarkerModel?.labelVisible ? `
       <div class="peak-value-label" style="left:${Number.isFinite(peakMarkerModel.position) ? peakMarkerModel.position : 0}%;visibility:hidden;${this._getMarkerLabelColorStyle(peakMarkerModel)}">
         ${peakMarkerModel.visible && peakMarkerModel.label?.text ? escapeHtml(peakMarkerModel.label.text) : ''}
@@ -3122,7 +3340,7 @@ ${barMarkerStyles}
       </div>` : '';
 
     const leftLabel  = lp === 'left'
-      ? `<div class="label-left" style="flex:0 1 min(${layout.label.width}px, var(--sbcp-left-label-share));max-width:min(${layout.label.width}px, var(--sbcp-left-label-share));"><span class="label-left-text">${escapedName}</span></div>`
+      ? `<div class="label-left" style="flex:0 1 min(${labelWidth}px, var(--sbcp-left-label-share));max-width:min(${labelWidth}px, var(--sbcp-left-label-share));"><span class="label-left-text">${escapedName}</span></div>`
       : '';
     const rightValue = lp !== 'inside' && lp !== 'above' && lp !== 'hero'
       ? `<div class="value-right" data-display="${this._encodeDataAttr(stateDisplay)}" data-unit="${this._encodeDataAttr(unit)}" data-hide-unit="false">${this._formatRightValueMarkup(stateDisplay, unit, false)}</div>`
@@ -3135,8 +3353,7 @@ ${barMarkerStyles}
       ? `<div class="icon-wrap"><ha-icon icon="${escapedIcon}"></ha-icon></div>`
       : '';
     return `
-      <div class="row" data-row-index="${rowIndex}" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${(rowViewModel?.attributes?.heightExplicit ?? layout.height_explicit) ? 'true' : 'false'}" data-bar-animated="${(rowViewModel?.attributes?.barAnimated ?? bar.animated) ? 'true' : 'false'}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? 'true' : 'false'}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? 'true' : 'false'}"${rowViewModel?.historyStatusSummary ? ` aria-description="${escapeHtml(rowViewModel.historyStatusSummary.text)}"` : ''}>
-        ${barRenderer.renderHistoryStatus(rowViewModel?.historyStatusSummary)}
+      <div class="row" data-row-index="${rowIndex}" data-entity="${escapedEntityId}" data-base-height="${h}" data-height-explicit="${(rowViewModel?.attributes?.heightExplicit ?? layout.height_explicit) ? 'true' : 'false'}" data-bar-animated="${(rowViewModel?.attributes?.barAnimated ?? bar.animated) ? 'true' : 'false'}" data-marker-label-lane-above="${markerLabelLaneOccupancy.above ? 'true' : 'false'}" data-marker-label-lane-below="${markerLabelLaneOccupancy.below ? 'true' : 'false'}">
         <div class="row-stack" style="--sbcp-row-height:${h}px;">
           ${aboveLabel}
           ${heroHeader}
@@ -3179,7 +3396,7 @@ ${barMarkerStyles}
         cardConfig: this._config,
         entityConfig: ecfg,
         entityState: previousStateObj,
-        historicalExtrema: historicalMarkerResults(this._historicalRuntime, ecfg),
+        historicalExtrema: historicalMarkerResults(this._historicalRuntime, ecfg, this._hass),
         previousScale,
       })
       : null;
@@ -3195,10 +3412,10 @@ ${barMarkerStyles}
     // Hover belongs to the card's external labels, never to the shared renderer.
     const hoveredMarker = this._markerHover?.marker;
     if (hoveredMarker && row.contains(hoveredMarker)) {
-      const marker = barModel.markers.find(candidate => candidate.type === 'generic'
+      const marker = barModel.markers.find(candidate => ['generic', 'target'].includes(candidate.type)
         ? hoveredMarker.dataset.markerId === candidate.id
         : hoveredMarker.matches(`.${candidate.type}-marker`));
-      if (marker && !marker.visible) this._clearMarkerHover(hoveredMarker);
+      if (!marker || !marker.visible) this._clearMarkerHover(hoveredMarker);
     }
     barRenderer.patchBar(row, barModel, { revealDuration });
     this._setDatasetIfChanged(row, 'baseHeight', rowViewModel.attributes.baseHeight);
@@ -3245,17 +3462,9 @@ ${barMarkerStyles}
       aboveLabel.innerHTML = `<span class="above-bar-label-name label-left-text">${escapeHtml(rowViewModel.name)}</span>${this._formatAboveValueMarkup(display, displayUnit, false)}`;
     }
 
-    const targetLabelEl = row.querySelector('.target-value-label');
     const peakLabelEl = row.querySelector('.peak-value-label');
     const floorLabelEl = row.querySelector('.floor-value-label');
     const markerModels = rowViewModel.markers ?? [];
-    const historyDescription = [...markerModels
-      .filter(marker => marker.visible && ['peak', 'floor'].includes(marker.type) && ['partial', 'stale'].includes(marker.historyStatus))
-      .map(marker => `${marker.type === 'peak' ? 'Peak' : 'Floor'}: ${marker.historyStatus === 'partial' ? 'partial' : 'stale'} history${marker.historyReason ? `: ${marker.historyReason}` : ''}`),
-      rowViewModel.historyStatusSummary?.text].filter(Boolean).join('. ');
-    barRenderer.patchHistoryStatus(row, rowViewModel.historyStatusSummary);
-    if (historyDescription) row.setAttribute?.('aria-description', historyDescription);
-    else row.removeAttribute?.('aria-description');
     (row.querySelectorAll?.('.generic-marker[data-marker-id]') ?? []).forEach((markerEl) => {
       const markerId = markerEl.dataset.markerId;
       const marker = this._getMarkerModel(markerModels, markerId);
@@ -3271,15 +3480,7 @@ ${barMarkerStyles}
         this._setStyleIfChanged(labelEl, 'visibility', 'hidden');
       }
     });
-    const targetMarkerModel = this._getMarkerModel(markerModels, 'target');
-    this._patchMarkerLabelAppearance(targetLabelEl, targetMarkerModel);
-    if (targetLabelEl) {
-      if (targetMarkerModel?.labelVisible && targetMarkerModel.visible && targetMarkerModel.label?.text) {
-        this._setTextIfChanged(targetLabelEl, targetMarkerModel.label?.text ?? null);
-      } else {
-        this._setStyleIfChanged(targetLabelEl, 'visibility', 'hidden');
-      }
-    }
+    this._reconcileTargetLabels(row, markerModels);
     const patchValueLabel = (labelEl, markerType) => {
       if (!labelEl) return;
       const marker = this._getMarkerModel(markerModels, markerType);
@@ -3304,11 +3505,12 @@ ${barMarkerStyles}
 
   _update(previousHass = null) {
     if (!this._hass || !this._config) return;
+    this._historyDiagnostics.clear();
     const rowsEl = this.shadowRoot.querySelector('.rows');
     if (!rowsEl) return;
 
     const entities = this._config.entities;
-    const presence = entities.map(entityCfg => !!this._hass.states[entityCfg.entity]);
+    const presence = entities.map(entityCfg => !!getKnownState(this._hass.states, entityCfg.entity));
     const presenceChanged = presence.some((present, index) => present !== this._rowPresence[index]);
 
     // First render: build all rows from scratch
@@ -3320,7 +3522,7 @@ ${barMarkerStyles}
       let html = '';
       for (let entityIndex = 0; entityIndex < entities.length; entityIndex++) {
         const entityCfg = entities[entityIndex];
-        const stateObj = this._hass.states[entityCfg.entity];
+        const stateObj = getKnownState(this._hass.states, entityCfg.entity);
         if (!stateObj) {
           html += `<div class="row" data-row-index="${entityIndex}"><span style="color:var(--error-color,red);font-size:12px;">Entity not found: ${escapeHtml(entityCfg.entity)}</span></div>`;
           continue;
@@ -3347,7 +3549,7 @@ ${barMarkerStyles}
       const builtRows = rowsEl.querySelectorAll('.row[data-entity]');
       builtRows.forEach((row) => {
         const entityCfg = entities[Number(row.dataset.rowIndex)];
-        const stateObj = entityCfg ? this._hass.states[entityCfg.entity] : null;
+        const stateObj = entityCfg ? getKnownState(this._hass.states, entityCfg.entity) : null;
         if (entityCfg && stateObj) {
           this._patchRow(row, entityCfg, stateObj);
         }
@@ -3357,6 +3559,7 @@ ${barMarkerStyles}
       // Attach the row gesture adapter after rebuilding present rows. Missing
       // entity warning rows are deliberately absent from this selector.
       this._attachRowActionHandlers(builtRows);
+      this._syncUniversalMessages();
       return;
     }
 
@@ -3365,10 +3568,11 @@ ${barMarkerStyles}
     for (const row of rows) {
       const entityCfg = entities[Number(row.dataset.rowIndex)];
       if (!entityCfg) continue;
-      const stateObj = this._hass.states[entityCfg.entity];
+      const stateObj = getKnownState(this._hass.states, entityCfg.entity);
       if (!stateObj) continue;
       this._patchRow(row, entityCfg, stateObj, previousHass);
     }
     this._runPostLayoutPasses(rows);
+    this._syncUniversalMessages();
   }
 }

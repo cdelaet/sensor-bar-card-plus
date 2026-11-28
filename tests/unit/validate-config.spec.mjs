@@ -8,7 +8,7 @@ function normalize(rawConfig) {
 }
 
 describe('validateNormalizedConfig', () => {
-  it.each(['peak', 'floor'])('validates %s duration policy at both scopes', marker => {
+  it.each(['peak', 'floor'])('reports unsupported %s windows at both scopes', marker => {
     for (const window of ['1440m', '24h', '1500m', '48h']) {
       const config = normalize({ [marker]: { enabled: true, window }, entities: [{ entity: 'sensor.one', [marker]: { window } }] });
       expect(config[`${marker}_marker`].window_invalid).toBeUndefined();
@@ -17,7 +17,7 @@ describe('validateNormalizedConfig', () => {
     const config = normalize({ [marker]: { enabled: true, window: '1441m' }, entities: [{ entity: 'sensor.one', [marker]: { window: '1441m' } }] });
     expect(config[`${marker}_marker`]).toMatchObject({ window: '1441m', window_invalid: true });
     expect(config.entities[0][`${marker}_marker`]).toMatchObject({ window: '1441m', window_invalid: true });
-    expect(validateNormalizedConfig(config).warnings.filter(item => item.code === `${marker}_marker.invalid_window`).length).toBeGreaterThanOrEqual(2);
+    expect(validateNormalizedConfig(config).errors.filter(item => item.code === `${marker}_marker.invalid_window`).length).toBeGreaterThanOrEqual(2);
   });
   it('warns on raw extrema aliases at card and entity scopes without using them', () => {
     const aliases = { peak_marker: { enabled: true, color: 'red', reset: 'daily' },
@@ -96,7 +96,19 @@ describe('validateNormalizedConfig', () => {
       markers: [{ at: { entity: 'sensor.anchor', attribute: 'position' } }],
     });
     expect(marker.generic_markers[0]).toMatchObject({ valid: false, invalidSource: true });
-    expect(validateNormalizedConfig(marker).warnings.map(item => item.code)).toContain('markers.invalid_source');
+    const markerWarnings = validateNormalizedConfig(marker).warnings;
+    expect(markerWarnings.map(item => item.code)).toContain('source.invalid_entity_source');
+    expect(markerWarnings.map(item => item.code)).not.toContain('markers.invalid_source');
+
+    const structuredMarker = normalize({
+      entities: [{ entity: 'sensor.primary' }],
+      markers: [{ at: { entity: { id: 'sensor.anchor', attribute: 'position' } } }],
+    });
+    expect(structuredMarker.generic_markers[0]).toMatchObject({
+      valid: true,
+      source: { entity: 'sensor.anchor', attribute: 'position' },
+    });
+    expect(validateNormalizedConfig(structuredMarker).warnings).toEqual([]);
 
     const markerLabel = normalize({
       entities: [{ entity: 'sensor.primary' }],
@@ -137,7 +149,8 @@ describe('validateNormalizedConfig', () => {
       markers: [{ at: { entity: { id: '', attribute: 'temperature' }, percent: 25 } }],
     });
     expect(invalid.entities[0].generic_markers[0]).toMatchObject({ valid: false, invalidSource: true });
-    expect(validateNormalizedConfig(invalid).warnings.map(item => item.code)).toContain('markers.invalid_source');
+    expect(validateNormalizedConfig(invalid).warnings.map(item => item.code)).toContain('source.invalid_entity_source');
+    expect(validateNormalizedConfig(invalid).warnings.map(item => item.code)).not.toContain('markers.invalid_source');
   });
 
   it('keeps entity-ID shorthand state-only and accepts unknown non-empty attribute names', () => {
@@ -239,9 +252,9 @@ describe('validateNormalizedConfig', () => {
     }));
   });
 
-  it('warns and leaves invalid marker resets unavailable', () => {
+  it('reports unsupported marker windows as errors and leaves markers unavailable', () => {
     const normalized = normalize({
-      peak: { enabled: true, reset: '60m' },
+      peak: { enabled: true, reset: '1441m' },
       floor: { enabled: true, reset: '1h30m' },
       entities: [{ entity: 'sensor.one' }],
     });
@@ -251,13 +264,13 @@ describe('validateNormalizedConfig', () => {
     expect(normalized.peak_marker.window_spec).toBeNull();
     expect(normalized.floor_marker.window_invalid).toBe(true);
     expect(normalized.floor_marker.window_spec).toBeNull();
-    expect(diagnostics.warnings).toEqual(expect.arrayContaining([
+    expect(diagnostics.errors).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: 'peak_marker.invalid_window' }),
       expect.objectContaining({ code: 'floor_marker.invalid_window' }),
     ]));
   });
 
-  it('warns and leaves non-string reset values unavailable', () => {
+  it('reports non-string reset values as errors and leaves markers unavailable', () => {
     for (const reset of [['15m'], {}, 15, null, true]) {
       const normalized = normalize({
         peak: { enabled: true, reset },
@@ -267,7 +280,7 @@ describe('validateNormalizedConfig', () => {
 
       expect(normalized.peak_marker.window_invalid).toBe(true);
       expect(normalized.peak_marker.window_spec).toBeNull();
-      expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
+      expect(diagnostics.errors).toContainEqual(expect.objectContaining({
         code: 'peak_marker.invalid_window',
       }));
     }
@@ -591,32 +604,44 @@ describe('validateNormalizedConfig', () => {
     }));
   });
 
-  it('warns when a fixed target is outside the fixed scale range', () => {
-    const diagnostics = validateNormalizedConfig(normalize({
-      min: 0,
-      max: 100,
-      target: 120,
-      entities: [{ entity: 'sensor.one' }],
-    }));
+  it('does not warn for valid fixed Targets or Baselines outside Scale at Card or Entity scope', () => {
+    const config = normalize({
+      scale: { min: 0, max: 100 },
+      target: { at: 120 },
+      baseline: { at: 140 },
+      entities: [{
+        entity: 'sensor.one',
+        target: { at: -20 },
+        baseline: { at: -40 },
+      }],
+    });
+    const diagnostics = validateNormalizedConfig(config);
 
-    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
-      code: 'target.outside_scale',
-      path: 'card',
-    }));
+    expect(config.target_marker.source.fixed).toBe(120);
+    expect(config.baseline.at.fixed).toBe(140);
+    expect(config.entities[0].target_marker.source.fixed).toBe(-20);
+    expect(config.entities[0].baseline.at.fixed).toBe(-40);
+    expect(diagnostics.warnings.some(item => ['target.outside_scale', 'baseline.outside_scale'].includes(item.code))).toBe(false);
   });
 
-  it('warns when a fixed baseline is outside the fixed scale range', () => {
-    const diagnostics = validateNormalizedConfig(normalize({
-      min: 0,
-      max: 100,
-      baseline: 120,
-      entities: [{ entity: 'sensor.one' }],
-    }));
+  it('preserves percentage and dynamic Target and Baseline sources without out-of-Scale warnings', () => {
+    const config = normalize({
+      scale: { min: 0, max: 100 },
+      target: { at: '50%' },
+      baseline: { at: { percent: 50 } },
+      entities: [{
+        entity: 'sensor.one',
+        target: { at: { entity: 'sensor.target', fixed: 120 } },
+        baseline: { at: { entity: 'sensor.baseline', fixed: -20 } },
+      }],
+    });
+    const diagnostics = validateNormalizedConfig(config);
 
-    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
-      code: 'baseline.outside_scale',
-      path: 'card',
-    }));
+    expect(config.target_marker.source.percent).toBe(50);
+    expect(config.baseline.at.percent).toBe(50);
+    expect(config.entities[0].target_marker.source).toMatchObject({ entity: 'sensor.target', fixed: 120 });
+    expect(config.entities[0].baseline.at).toMatchObject({ entity: 'sensor.baseline', fixed: -20 });
+    expect(diagnostics.warnings.some(item => ['target.outside_scale', 'baseline.outside_scale'].includes(item.code))).toBe(false);
   });
 
   it('warns when a segment starts above its end', () => {
@@ -635,7 +660,7 @@ describe('validateNormalizedConfig', () => {
     }));
   });
 
-  it('warns when a fixed segment boundary is outside the fixed scale range', () => {
+  it('accepts absolute Segment Paint ranges that extend beyond the visible fixed Scale', () => {
     const diagnostics = validateNormalizedConfig(normalize({
       min: 0,
       max: 100,
@@ -647,10 +672,13 @@ describe('validateNormalizedConfig', () => {
       },
     }));
 
-    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
-      code: 'segments.outside_scale',
-      path: 'card.bar.segments[0]',
-    }));
+    expect(diagnostics.warnings.some(item => item.code === 'segments.outside_scale')).toBe(false);
+    expect(normalize({
+      min: 0,
+      max: 100,
+      entities: [{ entity: 'sensor.one' }],
+      bar: { segments: [{ from: -10, to: 50, color: '#ff0000' }] },
+    }).bar.segments[0]).toMatchObject({ from: { fixed: -10 }, to: { fixed: 50 } });
   });
 
   it('warns when fixed segments overlap', () => {
@@ -726,6 +754,24 @@ describe('validateNormalizedConfig', () => {
     }));
   });
 
+  it('keeps out-of-range Gradient Stop warnings active', () => {
+    const diagnostics = validateNormalizedConfig(normalize({
+      entities: [{ entity: 'sensor.one' }],
+      bar: { fill_style: 'gradient', gradient_stops: [
+        { pos: -1, color: '#00ff00' },
+        { pos: 101, color: '#ff0000' },
+      ] },
+    }));
+
+    expect(diagnostics.warnings.filter(item => item.code === 'gradient_stops.outside_range')
+      .map(item => item.path).sort()).toEqual([
+        'card.bar.gradient_stops[0]',
+        'card.bar.gradient_stops[1]',
+        'entities[0].bar.gradient_stops[0]',
+        'entities[0].bar.gradient_stops[1]',
+      ]);
+  });
+
   it('does not warn on distinct gradient stop positions', () => {
     const diagnostics = validateNormalizedConfig(normalize({
       entities: [{ entity: 'sensor.one' }],
@@ -787,12 +833,14 @@ describe('validateNormalizedConfig', () => {
     ))).toBe(false);
   });
 
-  it('does not warn on fixed-range checks when values are entity-backed', () => {
+  it('does not range-check fixed Target or Baseline values against a dynamic Scale', () => {
     const diagnostics = validateNormalizedConfig(normalize({
-      min_entity: 'sensor.min',
-      max_entity: 'sensor.max',
-      target_entity: 'sensor.target',
-      baseline: 'sensor.baseline',
+      scale: {
+        min: { entity: 'sensor.min', fixed: 0 },
+        max: { entity: 'sensor.max', fixed: 100 },
+      },
+      target: { at: 120 },
+      baseline: { at: 140 },
       entities: [{ entity: 'sensor.one' }],
     }));
 
@@ -803,18 +851,67 @@ describe('validateNormalizedConfig', () => {
     ))).toBe(false);
   });
 
-  it('warns on duplicate entity ids', () => {
+  it('allows repeated entity rows and keeps their attribute and visual settings independent', () => {
+    const config = normalize({
+      scale: { min: 0, max: 100 },
+      entities: [
+        { entity: 'sensor.one', attribute: 'temperature', bar: { color: 'red' }, target: { at: 120 } },
+        { entity: 'sensor.one', attribute: 'humidity', bar: { color: 'blue' }, scale: { min: 0, max: 200 }, target: { at: 150 } },
+      ],
+    });
+    const diagnostics = validateNormalizedConfig(config);
+
+    expect(config.entities.map(row => row.attribute)).toEqual(['temperature', 'humidity']);
+    expect(config.entities.map(row => row.bar.paint.color)).toEqual(['red', 'blue']);
+    expect(diagnostics.warnings.some(item => item.code === 'entities.duplicate_entity')).toBe(false);
+    expect(diagnostics.warnings.some(item => ['target.outside_scale', 'baseline.outside_scale'].includes(item.code))).toBe(false);
+  });
+
+  it('keeps malformed attribute diagnostics scoped when repeated rows share an entity id', () => {
     const diagnostics = validateNormalizedConfig(normalize({
       entities: [
-        { entity: 'sensor.one' },
-        { entity: 'sensor.one' },
+        { entity: 'sensor.one', attribute: 42 },
+        { entity: 'sensor.one', attribute: false },
       ],
     }));
 
-    expect(diagnostics.warnings).toContainEqual(expect.objectContaining({
-      code: 'entities.duplicate_entity',
-      path: 'entities[1]',
-      entity: 'sensor.one',
+    expect(diagnostics.warnings.filter(item => item.code === 'source.invalid_attribute').map(({ path, entity }) => ({ path, entity })))
+      .toEqual([
+        { path: 'entities[0].attribute', entity: 'sensor.one' },
+        { path: 'entities[1].attribute', entity: 'sensor.one' },
+      ]);
+  });
+
+  it('clears the malformed EntitySource diagnostic after the structured source is corrected', () => {
+    const malformed = normalize({ entities: [], markers: [{ at: { entity: 'sensor.anchor', attribute: 'position' } }] });
+    const before = validateNormalizedConfig(malformed).warnings;
+    expect(before.filter(item => item.path === 'markers[0].at').map(item => item.code))
+      .toEqual(['source.invalid_entity_source']);
+
+    const corrected = normalize({ entities: [], markers: [{ at: { entity: { id: 'sensor.anchor', attribute: 'position' } } }] });
+    expect(validateNormalizedConfig(corrected).warnings).toEqual([]);
+  });
+
+  it('warns for malformed and prototype-like entity IDs', () => {
+    const config = normalize({ entities: [
+      { entity: '__proto__' }, { entity: 'constructor' }, { entity: 'not.valid.id' },
+    ] });
+    expect(config.entities.map(entity => entity.entity_invalid)).toEqual([true, true, true]);
+    expect(validateNormalizedConfig(config).warnings
+      .filter(item => item.code === 'entities.invalid_entity')
+      .map(item => item.path)).toEqual(['entities[0].entity', 'entities[1].entity', 'entities[2].entity']);
+  });
+
+  it('retains invalid Scale warnings after removing Target and Baseline range warnings', () => {
+    const diagnostics = validateNormalizedConfig(normalize({
+      scale: { min: 100, max: 0 },
+      target: { at: 120 },
+      baseline: { at: 120 },
+      entities: [{ entity: 'sensor.one' }],
     }));
+
+    expect(diagnostics.warnings.some(item => item.code === 'scale.min_gt_max')).toBe(true);
+    expect(diagnostics.warnings.some(item => item.code === 'target.outside_scale')).toBe(false);
+    expect(diagnostics.warnings.some(item => item.code === 'baseline.outside_scale')).toBe(false);
   });
 });

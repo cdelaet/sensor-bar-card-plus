@@ -11,7 +11,7 @@ function field(name, section, type, path, value, options) { add('field', name, s
 function kind(name, section, type, path, value, options) { add('kind', name, section, type, path, value, options); }
 function color(route, name, section, path, options = {}) {
   add(route, name, section, 'color', path, '#334455', options);
-  add(route, `${name}-text-fallback`, section, 'css', path, 'rgb(10, 120, 200)', { conditional: true, ...options });
+  add(route, `${name}-text-fallback`, section, 'css', path, 'rgb(10, 120, 200)', options);
 }
 field('title', 'Basics', 'text', 'title', 'Acceptance title', { hosts: ['standalone'], clear: true });
 for (const edge of ['min', 'max']) {
@@ -27,8 +27,32 @@ for (const marker of ['target', 'peak', 'floor']) {
     kind('target-entity-source', section, 'entity', 'target.at.entity', 'sensor.changed');
     kind('target-attribute', section, 'text', null, 'temperature', { hosts: ['feature'], conditional: true, journey: 'sources' });
     field('target-shape', section, 'select', 'target.shape', ['triangle', 'diamond']);
-    field('target-above-fill-enabled', section, 'checkbox', 'target.when_exceeded.fill_color', null);
-    color('field', 'target-above-fill-color', section, 'target.when_exceeded.fill_color');
+    field('target-above-paint-enabled', section, 'checkbox', 'target.when_above.paint', null);
+    field('target-above-paint-fill_style', section, 'select', 'target.when_above.paint.fill_style', ['gradient', 'bands', 'solid']);
+    field('target-above-paint-solid_fill', section, 'checkbox', 'target.when_above.paint.solid_fill', null);
+    field('target-above-paint-opacity', section, 'number', 'target.when_above.paint.opacity', '37');
+    field('target-above-paint-preset', section, 'select', 'target.when_above.paint.preset', [''], { journey: 'paint-preset' });
+    color('field', 'target-above-paint-color', section, 'target.when_above.paint.color');
+    field('target-below-paint-enabled', section, 'checkbox', 'target.when_below.paint', null);
+    field('target-below-paint-fill_style', section, 'select', 'target.when_below.paint.fill_style', ['gradient', 'bands', 'solid']);
+    field('target-below-paint-solid_fill', section, 'checkbox', 'target.when_below.paint.solid_fill', null);
+    field('target-below-paint-opacity', section, 'number', 'target.when_below.paint.opacity', '37');
+    field('target-below-paint-preset', section, 'select', 'target.when_below.paint.preset', [''], { journey: 'paint-preset' });
+    color('field', 'target-below-paint-color', section, 'target.when_below.paint.color');
+    for (const side of ['above', 'below']) {
+      field(`target-${side}-value`, section, 'value', `target.when_${side}.at`, '75%', { journey: 'directional' });
+      kind(`target-${side}-entity-source`, section, 'entity', `target.when_${side}.at.entity`, 'sensor.changed', { journey: 'directional' });
+      kind(`target-${side}-attribute`, section, 'text', null, 'temperature', { conditional: true, journey: 'directional' });
+      field(`target-${side}-show`, section, 'checkbox', `target.when_${side}.marker.enabled`, null, { journey: 'directional' });
+      field(`target-${side}-shape`, section, 'select', `target.when_${side}.marker.shape`, ['triangle', 'diamond'], { journey: 'directional' });
+      field(`target-${side}-direction`, section, 'select', `target.when_${side}.marker.direction`, ['outward', 'inward'], { journey: 'directional' });
+      color('field', `target-${side}-color`, section, `target.when_${side}.marker.color`, { journey: 'directional' });
+      for (const [suffix, type, value, key] of [
+        ['label-show', 'checkbox', null, 'show'], ['label-text', 'text', 'Directional label', 'text'],
+        ['label-show-value', 'checkbox', null, 'show_value'], ['label-show-unit', 'checkbox', null, 'show_unit'],
+        ['label-precision', 'number', '3', 'precision'],
+      ]) field(`target-${side}-${suffix}`, section, type, `target.when_${side}.marker.label.${key}`, value, { journey: 'directional' });
+    }
   } else {
     field(`${marker}-show`, section, 'checkbox', `${marker}.enabled`, null);
     field(`${marker}-window`, section, 'select', `${marker}.window`, ['15m', '48h', 'today']);
@@ -43,18 +67,24 @@ for (const marker of ['target', 'peak', 'floor']) {
 }
 field('bar-fill-style', 'Bar Appearance', 'select', 'bar.fill_style', ['gradient', 'soft_bands', 'band_gradient', 'solid']);
 field('bar-solid-fill', 'Bar Appearance', 'checkbox', 'bar.solid_fill', null);
+field('bar-opacity', 'Bar Appearance', 'number', 'bar.paint.opacity', '37');
+field('bar-paint-preset', 'Bar Appearance', 'select', 'bar.paint.preset', [''], { journey: 'paint-preset' });
 field('bar-direction', 'Bar Appearance', 'select', 'bar.direction', ['normal', 'reverse'], { journey: 'direction' });
-field('bar-animated', 'Bar Appearance', 'checkbox', 'bar.animated', null, { hosts: ['feature'] });
+field('bar-animated', 'Bar Appearance', 'checkbox', 'bar.animated', null);
 color('field', 'bar-color', 'Bar Appearance', 'bar.color');
-field('bar-needle-mode', 'Needle', 'select', 'bar.needle.show', ['disabled', 'enabled']);
+field('bar-needle-mode', 'Needle', 'checkbox', 'bar.needle.show', null);
 color('field', 'bar-needle-color', 'Needle', 'bar.needle.color');
 field('baseline-show', 'Baseline', 'checkbox', 'baseline.enabled', null);
 field('baseline-value', 'Baseline', 'value', null, '75%', { journey: 'sources' });
 kind('baseline-entity-source', 'Baseline', 'entity', 'baseline.at.entity', 'sensor.changed');
 kind('baseline-attribute', 'Baseline', 'text', null, 'temperature', { hosts: ['feature'], conditional: true, journey: 'sources' });
 for (const side of ['above', 'below']) {
-  field(`baseline-${side}-color-enabled`, 'Baseline', 'checkbox', `baseline.${side}.color`, null);
-  color('field', `baseline-${side}-color`, 'Baseline', `baseline.${side}.color`);
+  field(`baseline-${side}-paint-enabled`, 'Baseline', 'checkbox', `baseline.${side}.paint`, null);
+  field(`baseline-${side}-paint-fill_style`, 'Baseline', 'select', `baseline.${side}.paint.fill_style`, ['gradient', 'bands', 'solid']);
+  field(`baseline-${side}-paint-solid_fill`, 'Baseline', 'checkbox', `baseline.${side}.paint.solid_fill`, null);
+  field(`baseline-${side}-paint-opacity`, 'Baseline', 'number', `baseline.${side}.paint.opacity`, '37');
+  field(`baseline-${side}-paint-preset`, 'Baseline', 'select', `baseline.${side}.paint.preset`, [''], { journey: 'paint-preset' });
+  color('field', `baseline-${side}-paint-color`, 'Baseline', `baseline.${side}.paint.color`);
 }
 for (const [suffix, type, value, path] of [
   ['fixed','text','75%',null], ['entity','entity','sensor.changed',null], ['attribute','text','temperature',null], ['lane','select',['above','below'],'lane'],
@@ -78,10 +108,16 @@ for (const family of ['segment','gradient']) {
     color('kind', `${family}-${draft}color`,section,null,{journey:'palettes',structural:true});
   }
 }
-// Segment CSS text is a Feature capability; existing non-hex Gradient Stop
-// fallback is tested as a restricted fallback, never as arbitrary CSS support.
+// Palette CSS controls use dedicated row-editing journeys.
 for (const entry of controls.filter(c=>c.section==='Segments' && c.type==='css')) entry.hosts=['feature'];
 for(const entry of controls.filter(c=>c.section==='Gradient Stops'&&c.type==='css')) entry.type='legacy-color';
+for (const entry of controls.filter(c=>c.section==='Segments' && c.name.endsWith('color-text-fallback'))) {
+ entry.hosts=['standalone','feature'];entry.type='legacy-color';entry.journey='palettes';
+}
+kind('preset-master','Bar Appearance','checkbox',null,null,{hosts:['standalone'],journey:'paint-source',structural:true});
+for (const key of ['peak','floor']) {
+ field(`${key}-window-entity`,'Peak Floor','select',`${key}.window_entity`,'input_select.shared_window',{journey:'history'});
+}
 const entityNames = {
  'scale-direction':'entity-scale-direction','bar-direction':'entity-bar-direction',
  'scale-min':'entity-override-min','scale-max':'entity-override-max',
@@ -92,10 +128,14 @@ const entityNames = {
 };
 // Explicit scope translation reuses shared semantics while exercising the actual
 // standalone entity controls. Root config/other entity must stay untouched.
-for (const entry of [...controls].filter(c => c.hosts.includes('standalone') && !['Basics','References'].includes(c.section))) {
+for (const entry of [...controls].filter(c => c.hosts.includes('standalone') && !['Basics','References'].includes(c.section) && c.name !== 'preset-master'
+  && !(c.section === 'Segments' && c.name.endsWith('color-text-fallback')))) {
   const name = entityNames[entry.name] ?? `entity-${entry.name}`;
   controls.push({...entry, id:`kind:${name}`,route:'kind',name,hosts:['standalone'],scope:'entity',
     path:entry.path && `entities.0.${entry.path}`, journey:entry.journey, clear:false});
+}
+for (const name of ['entity-segment-color-text-fallback', 'entity-segment-draft-color-text-fallback']) {
+ kind(name, 'Segments', 'legacy-color', null, 'rgb(10, 120, 200)', { hosts:['standalone'], scope:'entity', journey:'palettes', structural:true });
 }
 for (const section of ['Scale','Target','Peak','Floor','References','Bar Appearance','Baseline','Needle','Segments','Gradient Stops','Layout','Formatting']) {
  const slug = {'References':'markers','Bar Appearance':'bar','Gradient Stops':'gradient-stops'}[section] ?? section.toLowerCase();
@@ -118,6 +158,10 @@ for (const [section,names,hosts,journey] of [
  ['Baseline',['remove-baseline'],['standalone','feature'],'sources'],
  ['Segments',['add-segment','remove-segment','add-entity-segment','remove-entity-segment'],['standalone','feature'],'palettes'],
  ['Gradient Stops',['add-gradient-stop','remove-gradient-stop','add-entity-gradient-stop','remove-entity-gradient-stop'],['standalone','feature'],'palettes'],
+ ['Target',['toggle-target-group'],['standalone','feature'],'disclosures'],
+ ['Target',['clear-target-property'],['standalone','feature'],'directional'],
+ ['Bar Appearance',['clear-paint-property','reset-paint'],['standalone','feature'],'paint-source'],
+ ['Bar Appearance',['reapply-paint-preset'],['standalone','feature'],'paint-preset'],
 ]) for (const name of names) add('action',name,section,'button',null,null,{hosts:name.includes('-entity-')?['standalone']:hosts,journey,structural:true,echo:journey!=='disclosures'});
 const inventory = controls.filter(c=>c.hosts.length);
 const selector = entry => `[data-${entry.route}="${entry.name}"]${entry.scope==='entity'?'[data-index="0"]':''}`;

@@ -78,7 +78,7 @@ Sensor Bar Card Plus currently supports three major visualization models.
 
 Traditional bar behavior.
 
-The fill grows from the minimum value toward the current value.
+The fill runs from its origin to the current value. By default, the origin is the Scale minimum; an active Baseline supplies a different origin.
 
 Best for:
 
@@ -112,6 +112,12 @@ See:
 - `baseline/bidirectional-power.yaml`
 - `baseline/av-calibration.yaml`
 - `energy/grid-import-export.yaml`
+
+---
+
+## Universal Paint and presets
+
+All five Paint destinations use the same fill controls. A selected named preset supplies all six Paint properties, standard defaults fill any omissions, and local properties override only their matching preset properties. See the [Universal Paint examples](../../docs/examples.md#universal-paint-and-presets) for multiple Cards sharing preset libraries, a consuming Card, and the **Reapply preset** action.
 
 ---
 

@@ -1,4 +1,6 @@
-const { test, expect } = require('@playwright/test');
+const { expectEditorLayout } = require('./editor-visual-assertions.cjs');
+const { test, expect } = require('./visual-test.cjs');
+const { snapshotName } = require('./snapshot-name.cjs');
 
 const type = 'custom:sensor-bar-card-plus-feature';
 async function mountEditor(page, { source = 'src', width = 360, context = { entity_id: 'sensor.parent' }, config = { type } } = {}) {
@@ -19,28 +21,30 @@ async function mountEditor(page, { source = 'src', width = 360, context = { enti
     document.querySelector('#mount').append(editor);
     await editor.updateComplete;
   }, { width, context, config });
-  return page.locator('sensor-bar-card-plus-feature-editor');
+  const editor = page.locator('sensor-bar-card-plus-feature-editor');
+  await editor.locator('#card-paint-editor > summary').click();
+  return editor;
 }
 const configOf = editor => editor.evaluate(element => structuredClone(element._config));
 
 for (const source of ['src', 'dist']) test(`public discovery and inherited/explicit entity UX (${source})`, async ({ page }) => {
   const editor = await mountEditor(page, { source });
   expect(await page.evaluate(() => window.customCardFeatures.find(feature => feature.type === 'sensor-bar-card-plus-feature').configurable)).toBe(true);
-  await expect(editor.getByRole('status')).toHaveText('Using parent card entity: sensor.parent');
+  await expect(editor.locator('#feature-entity-status')).toHaveText('Using parent card entity: sensor.parent');
   expect(await page.evaluate(() => window.__featureEditorEvents)).toHaveLength(0);
   await editor.locator('#formatting-unit').fill('W');
   expect((await configOf(editor)).entity).toBeUndefined();
   await editor.getByLabel('Use explicit entity').check();
   await editor.getByLabel('Entity override', { exact: true }).fill('input_number.override');
-  await expect(editor.getByRole('status')).toHaveText('Using explicit entity: input_number.override');
+  await expect(editor.locator('#feature-entity-status')).toHaveText('Using explicit entity: input_number.override');
   await editor.evaluate(element => { element.context = { entity_id: 'sensor.changed_parent' }; });
-  await expect(editor.getByRole('status')).toHaveText('Using explicit entity: input_number.override');
+  await expect(editor.locator('#feature-entity-status')).toHaveText('Using explicit entity: input_number.override');
   await editor.getByLabel('Use explicit entity').uncheck();
-  await expect(editor.getByRole('status')).toHaveText('Using parent card entity: sensor.changed_parent');
+  await expect(editor.locator('#feature-entity-status')).toHaveText('Using parent card entity: sensor.changed_parent');
   expect((await configOf(editor)).entity).toBeUndefined();
   const before = await page.evaluate(() => window.__featureEditorEvents.length);
   await editor.evaluate(element => { element.context = { entity_id: 'sensor.last_parent' }; });
-  await expect(editor.getByRole('status')).toHaveText('Using parent card entity: sensor.last_parent');
+  await expect(editor.locator('#feature-entity-status')).toHaveText('Using parent card entity: sensor.last_parent');
   expect(await page.evaluate(() => window.__featureEditorEvents.length)).toBe(before);
   expect(await page.evaluate(() => window.__featureEditorEvents.every(event => event.bubbles && event.composed))).toBe(true);
 });
@@ -80,20 +84,23 @@ test('shared fields preserve raw advanced config, focused nodes and config echoe
 
 test('Area/no-parent entity requirement and narrow layout stay usable', async ({ page }) => {
   const editor = await mountEditor(page, { width: 240, context: { area_id: 'kitchen' } });
-  await expect(editor.getByRole('status')).toHaveText('An entity is required. Select an entity below.');
+  await expect(editor.locator('#feature-entity-status')).toHaveText('An entity is required. Select an entity below.');
   expect(await page.evaluate(() => window.__featureEditorEvents)).toHaveLength(0);
   await editor.getByLabel('Entity override', { exact: true }).fill('sensor.custom');
-  await expect(editor.getByRole('status')).toHaveText('Using explicit entity: sensor.custom');
-  await editor.getByLabel('Use explicit entity').uncheck();
-  await expect(editor.getByRole('status')).toContainText('An entity is required');
-  await editor.getByRole('status').click();
+  await expect(editor.locator('#feature-entity-status')).toHaveText('Using explicit entity: sensor.custom');
+  await editor.getByLabel('Use explicit entity').click();
+  await expect(editor.locator('#feature-entity-status')).toContainText('An entity is required');
+  expect((await configOf(editor)).entity).toBeUndefined();
+  expect(await page.evaluate(() => window.__featureEditorEvents.at(-1).config.entity)).toBeUndefined();
+  await editor.locator('#feature-entity-status').click();
+  await expect(editor.getByLabel('Use explicit entity')).toHaveCount(0);
   await expect(editor.locator('#scale-min')).toBeVisible();
   expect(await editor.evaluate(element => Array.from(element.shadowRoot.querySelectorAll('.section, input, select')).every(node => {
     const host = element.getBoundingClientRect();
     const rect = node.getBoundingClientRect();
     return rect.width === 0 || rect.left >= host.left - 1 && rect.right <= host.right + 1;
   }))).toBe(true);
-  await expect(editor).toHaveScreenshot('feature-editor-required-narrow.png');
+  await expectEditorLayout(editor, expect);
 });
 
 test('HA picker value-changed shape supports explicit and Scale sources', async ({ page }) => {
@@ -104,7 +111,7 @@ test('HA picker value-changed shape supports explicit and Scale sources', async 
   await editor.locator('ha-entity-picker[data-kind="feature-entity-source"]').evaluate(picker => {
     picker.dispatchEvent(new CustomEvent('value-changed', { bubbles: true, composed: true, detail: { value: 'sensor.custom_picker_id' } }));
   });
-  await expect(editor.getByRole('status')).toHaveText('Using explicit entity: sensor.custom_picker_id');
+  await expect(editor.locator('#feature-entity-status')).toHaveText('Using explicit entity: sensor.custom_picker_id');
   await editor.locator('ha-entity-picker[data-kind="scale-max-entity-source"]').evaluate(picker => {
     picker.dispatchEvent(new CustomEvent('value-changed', { bubbles: true, composed: true, detail: { value: 'sensor.maximum' } }));
   });
@@ -122,7 +129,8 @@ test('late HA picker loading and CSS-to-hex typing preserve focus', async ({ pag
   await fallback.fill('#ff0000');
   await expect(fallback).toBeFocused();
   await editor.locator('#formatting-unit').fill('W');
-  await expect(fallback).toHaveCount(1);
+  await expect(fallback).toHaveValue('#ff0000');
+  await expect(editor.locator('#bar-color')).toHaveValue('#ff0000');
   await expect(editor.locator('#formatting-unit')).toBeFocused();
   await page.evaluate(() => { customElements.define('ha-entity-picker', class extends HTMLElement {}); });
   await expect(editor.locator('ha-entity-picker[data-kind="scale-min-entity-source"]')).toHaveCount(1);
@@ -135,7 +143,8 @@ test('late HA picker loading and CSS-to-hex typing preserve focus', async ({ pag
   expect(await page.evaluate(() => window.__featureEditorEvents.length)).toBe(eventCount);
 });
 
-test('Feature editor inherited composition has a focused visual baseline', async ({ page }) => {
+test('Feature editor inherited composition has a focused visual baseline', async ({ page, browserName }) => {
+  const browserSuffix = browserName === 'webkit' ? '-webkit' : '';
   const editor = await mountEditor(page, { config: { type, scale: { min: 0, max: 100 }, formatting: { unit: 'W', decimal: 1 }, bar: { fill_style: 'gradient', color: 'var(--accent-color)' } } });
-  await expect(editor).toHaveScreenshot('feature-editor-inherited.png');
+  await expectEditorLayout(editor, expect);
 });
