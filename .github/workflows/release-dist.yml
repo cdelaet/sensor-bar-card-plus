@@ -331,7 +331,7 @@ jobs:
             echo "Version: $RELEASE_VERSION"
             echo "Tag: $RELEASE_TAG"
             echo "Commit: $RELEASE_SHA"
-            echo "Full Validation run: $VALIDATION_RUN_URL"
+            echo "Fast Validation run: $VALIDATION_RUN_URL"
             echo "Artifact: dist/sensor-bar-card-plus.js"
             echo "SHA-256: $CORE_SHA256 (downloaded release asset verified)"
             echo "Artifact: dist/sensor-bar-card-plus-editor.js"

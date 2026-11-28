@@ -43,6 +43,8 @@ npm test
 
 `npm run test:visual:fast` runs high-value Chromium and WebKit browser journeys for lazy editor loading, source/dist Paint editing, Target Paint lifecycle, and keyboard navigation. Use it during everyday development. `npm run test:visual:complete` runs the complete Chromium/WebKit suite with two workers and snapshot updates disabled. Run this once locally before release candidates. `npm test` retains the build, unit, and complete visual sequence.
 
+The visual harness gives every test its normal fresh Playwright context and page. To contain WebKit's long-run process leak, its worker fixture recycles the local WebKit browser after 50 completed contexts when none are active. Tracing remains on Playwright's normal test lifecycle; Chromium and remote `connectOptions` browsers are not recycled. The fixture reads Playwright's internal `_browserOptions` worker fixture so launch settings and trace directories stay consistent. A unit test asserts this fixture is still registered by the pinned Playwright version; review the compatibility assertion when upgrading Playwright.
+
 GitHub's **Fast Validation** (`.github/workflows/validate.yml`) runs HACS, verifies committed dist reproducibility and ESM syntax, runs the complete unit suite, and runs the focused Chromium/WebKit browser regression on pushes to `main` and pull requests. Scheduled runs only perform HACS validation and cannot qualify a release. The browser smoke job checks both source and dist where the journey covers both. The exhaustive browser suite remains available as an optional manually dispatched workflow.
 
 The developer's MacBook is the primary environment for complete visual regression testing. Release preparation requires successful Fast Validation for the exact current `main` SHA; the manual Full Validation workflow is optional and is not a release prerequisite.
@@ -55,7 +57,9 @@ Run `npm run test:visual:complete` to compare against the canonical snapshots. A
 
 ## Release preparation
 
-After Fast Validation succeeds for the current `main` commit, prepare the release draft:
+Before preparing a release candidate, set `package.json` to the intended version. If source or any build input changes, run `npm run build`, include both regenerated dist files, and confirm them with `npm run verify-dist`. The version, source and matching dist pair must be committed together.
+
+After the change is merged, wait for Fast Validation triggered by the push to the current `main` commit. The release workflow accepts only that successful Fast Validation push run for the exact `main` SHA; a branch dispatch, pull request run, or scheduled HACS-only run does not qualify. Then prepare the release draft:
 
 ~~~sh
 gh workflow run release-dist.yml --ref main -f version=1.11.0 -f title="Universal Paint and Dashboard Presets"
